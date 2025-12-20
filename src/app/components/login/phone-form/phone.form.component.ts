@@ -222,7 +222,9 @@ export class PhoneFormComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.recaptchaVerifier) {
       try { // Use try-catch for clear() as it might throw if not rendered
         this.recaptchaVerifier.clear();
-      } catch (e) { }
+      } catch (e) {
+        // ignore
+      }
     }
     if (this.windowRef) {
       // Don't fully nullify windowRef properties as they might be shared, 

@@ -56,12 +56,13 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
 
     // Priority:
     // 1. `firebaseRole` (Standard Stripe Extension metadata)
-    const role = subData.firebaseRole;
+    // 2. `role` (Fallback/Legacy field often populated by extension)
+    const role = subData.firebaseRole || subData.role;
 
-    console.log(`[reconcileClaims] Metadata check - firebaseRole: ${subData.firebaseRole}`);
+    console.log(`[reconcileClaims] Metadata check - firebaseRole: ${subData.firebaseRole}, role: ${subData.role}, final: ${role}`);
 
     if (!role) {
-        throw new HttpsError('failed-precondition', 'Subscription found but no role (firebaseRole) defined in metadata.');
+        throw new HttpsError('failed-precondition', 'Subscription found but no role (firebaseRole or role) defined in metadata.');
     }
 
     // Set custom user claims on this specific user

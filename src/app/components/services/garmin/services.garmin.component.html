@@ -7,60 +7,57 @@
 
     <div class="service-container">
 
-      <!-- 1. Connectivity Section -->
-      <mat-card class="connectivity-card" [class.locked]="!hasProAccess" (click)="!hasProAccess && triggerUpsell()">
-        @if (!hasProAccess) {
-        <div class="lock-overlay">
-          <mat-icon class="lock-icon-large">lock</mat-icon>
-          <span class="pro-badge">PRO</span>
-        </div>
-        }
-        <mat-card-header>
-          @if (!isConnectedToService()) {
-          <mat-card-subtitle class="tab-subtitle">
-            <span>Connect to Garmin Health API</span>
-            <mat-icon matTooltip="NOTE: Automatic sync happens for activities done after this date">
-              info
-            </mat-icon>
-          </mat-card-subtitle>
-          }
-          @if (isConnectedToService()) {
-          <mat-card-subtitle>Connected</mat-card-subtitle>
-          }
-        </mat-card-header>
-        <mat-divider></mat-divider>
-        <mat-card-content class="feature-card-content" style="align-items: flex-start; text-align: left;">
-          <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
-
-          @if (isConnectedToService()) {
-          <mat-list style="width: 100%">
-            <div mat-subheader>Accounts</div>
-            <mat-list-item style="text-align: left">
-              <mat-icon mat-list-icon>account_circle</mat-icon>
-              <div mat-line>{{ serviceTokens[0].userID }} </div>
-              <div mat-line>Connected at {{serviceTokens[0].dateCreated | date:'medium'}}</div>
-            </mat-list-item>
-          </mat-list>
-          }
-
-          @if (isConnectedToService()) {
-          <button class="big" mat-flat-button color="warn" [disabled]="isLoading"
-            (click)="deauthorizeService($event)">Disconnect
-          </button>
-          }
-
-          @if (!isConnectedToService()) {
-          <button mat-stroked-button class="big" mat-flat-button color="primary"
-            [disabled]="!user || this.isGuest || isLoading" (click)="connectWithService($event)">
-            Connect with Garmin
-          </button>
-          }
-        </mat-card-content>
-      </mat-card>
-
-      <!-- 2. Pro Features Grid -->
+      <!-- Pro Features Grid -->
       <h3 class="section-title">Pro Tools</h3>
       <div class="features-grid">
+
+        <!-- Connectivity Card (Now inside Pro Grid) -->
+        <mat-card class="feature-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
+          (click)="!hasProAccess && triggerUpsell()">
+          @if (!hasProAccess) {
+          <div class="lock-overlay">
+            <mat-icon class="lock-icon-large">lock</mat-icon>
+            <span class="pro-badge">PRO</span>
+          </div>
+          }
+          <mat-card-header>
+            <mat-card-subtitle class="tab-subtitle">
+              <mat-icon>sync</mat-icon>
+              <span>{{ isConnectedToService() ? 'Connected' : 'Connect Account' }}</span>
+            </mat-card-subtitle>
+          </mat-card-header>
+          <mat-divider></mat-divider>
+          <mat-card-content class="feature-card-content" style="align-items: stretch; text-align: left;">
+            <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
+
+            @if (isConnectedToService()) {
+            <mat-list style="width: 100%; padding: 0;">
+              <mat-list-item style="height: auto; padding: 8px 0;">
+                <mat-icon matListItemIcon style="margin-right: 8px;">account_circle</mat-icon>
+                <div matListItemTitle style="font-size: 0.9rem;">{{ serviceTokens[0].userID }} </div>
+                <div matListItemLine style="font-size: 0.8rem; opacity: 0.7;">Connected: {{serviceTokens[0].dateCreated
+                  | date:'short'}}</div>
+              </mat-list-item>
+            </mat-list>
+            }
+
+            <div style="margin-top: auto; padding-top: 16px;">
+              @if (!isConnectedToService()) {
+              <button mat-flat-button color="primary" style="width: 100%"
+                [disabled]="!user || this.isGuest || isLoading" (click)="connectWithService($event)">
+                <mat-icon>link</mat-icon> Connect
+              </button>
+              }
+
+              @if (isConnectedToService()) {
+              <button mat-stroked-button color="warn" style="width: 100%" [disabled]="isLoading"
+                (click)="deauthorizeService($event)">
+                <mat-icon>link_off</mat-icon> Disconnect
+              </button>
+              }
+            </div>
+          </mat-card-content>
+        </mat-card>
 
         <!-- History Import Card -->
         <mat-card class="feature-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"

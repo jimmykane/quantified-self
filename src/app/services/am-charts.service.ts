@@ -24,10 +24,10 @@ export class AmChartsService {
      */
     async load(): Promise<AmChartsModules> {
         if (!this.loader) {
-            this.loader = Promise.all([
-                import('@amcharts/amcharts4/core'),
-                import('@amcharts/amcharts4/charts')
-            ]).then(([core, charts]) => {
+            this.loader = (async () => {
+                const core = await import('@amcharts/amcharts4/core');
+                const charts = await import('@amcharts/amcharts4/charts');
+
                 // Run configuration outside Angular zone to prevent excessive change detection
                 this.zone.runOutsideAngular(() => {
                     // Global Options
@@ -40,7 +40,7 @@ export class AmChartsService {
                 const modules = { core, charts };
                 this.cachedModules = modules;
                 return modules;
-            });
+            })();
         }
         return this.loader;
     }

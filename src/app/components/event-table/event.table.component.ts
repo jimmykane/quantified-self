@@ -98,8 +98,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.processChanges();
     }
     if (this.user && simpleChanges.user) {
-      this.selectedColumns = this.user.settings.dashboardSettings.tableSettings.selectedColumns
-      this.paginator._changePageSize(this.user.settings.dashboardSettings.tableSettings.eventsPerPage);
+      this.selectedColumns = this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserService.getDefaultSelectedTableColumns();
+      this.paginator?._changePageSize(this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 10);
     }
   }
 
@@ -221,8 +221,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     let columns = [
       'Checkbox',
       'Start Date',
-      ...this.selectedColumns.sort(function (a, b) {
-        return AppUserService.getDefaultSelectedTableColumns().indexOf(a) - AppUserService.getDefaultSelectedTableColumns().indexOf(b);
+      ...(this.selectedColumns || []).sort(function (a, b) {
+        const defaultColumns = AppUserService.getDefaultSelectedTableColumns();
+        return defaultColumns.indexOf(a) - defaultColumns.indexOf(b);
       }),
       'Actions'
     ]

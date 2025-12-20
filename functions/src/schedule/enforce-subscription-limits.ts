@@ -6,6 +6,7 @@ import { deauthorizeGarminHealthAPIForUser } from '../garmin/auth/wrapper';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
 import { GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
+import { GRACE_PERIOD_DAYS } from '../shared/limits';
 
 /**
  * Disconnects external services (Garmin, Suunto, COROS) for users who have no active pro subscription.
@@ -58,7 +59,7 @@ export const enforceSubscriptionLimits = onSchedule({
             } else {
                 // FAIL-SAFE: Trigger might have failed. Initialize grace period now.
                 const newGracePeriodUntil = admin.firestore.Timestamp.fromDate(
-                    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                    new Date(Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000)
                 );
                 console.log(`FAIL-SAFE: No grace period found for non-pro user ${uid}. Initializing to ${newGracePeriodUntil.toDate().toISOString()}.`);
                 await admin.firestore().doc(`users/${uid}`).set({

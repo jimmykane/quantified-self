@@ -3,8 +3,7 @@ import type * as am4charts from '@amcharts/amcharts4/charts';
 
 
 export abstract class ChartHelper {
-  static async getWaterMark(waterMarkText: string): Promise<am4core.Label> {
-    const am4Core = await import('@amcharts/amcharts4/core');
+  static getWaterMark(am4Core: typeof am4core, waterMarkText: string): am4core.Label {
     const watermark = new am4Core.Label();
     watermark.text = waterMarkText || 'Quantified-Self.io';
     watermark.align = 'right';
@@ -14,12 +13,11 @@ export abstract class ChartHelper {
     watermark.marginRight = 15;
     watermark.marginBottom = 15;
     watermark.zIndex = 100;
-    watermark.filters.push(await this.getShadowFilter());
+    watermark.filters.push(this.getShadowFilter(am4Core));
     return watermark;
   }
 
-  static async getShadowFilter(size: number = 1): Promise<am4core.DropShadowFilter> {
-    const am4Core = await import('@amcharts/amcharts4/core');
+  static getShadowFilter(am4Core: typeof am4core, size: number = 1): am4core.DropShadowFilter {
     const shadow = new am4Core.DropShadowFilter();
     shadow.dx = size;
     shadow.dy = size;

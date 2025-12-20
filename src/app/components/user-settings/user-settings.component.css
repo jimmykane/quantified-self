@@ -1,25 +1,316 @@
-/* Global .qs-form styles handle width and spacing now. */
-
-/* Kept specific button margin if needed, but .qs-form-actions handles valid buttons usually. */
-/* If there are specific buttons outside actions, they might strictly need this, but best to remove generic overrides. */
-
-
-/* Removed ::ng-deep .mat-checkbox-layout override */
-
-.checkbox {
-  text-align: right;
+:host {
+  --sidebar-width: 260px;
+  --sidebar-bg: #f8f9fa;
+  --accent-color: #3f51b5;
+  --text-primary: #2c3e50;
+  --text-secondary: #7f8c8d;
+  --card-bg: #ffffff;
+  --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  --section-spacing: 24px;
 }
 
-mat-card {
-  /*margin-bottom: 1em;*/
+/* User Profile Header Card */
+.user-profile-header .header-content {
+  display: flex;
+  align-items: center;
+  gap: 24px;
 }
 
-mat-slide-toggle {
+.user-profile-header .avatar-container {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+  flex-shrink: 0;
+  border: 2px solid var(--primary-color, #3f51b5);
+}
+
+.user-profile-header .user-info {
+  flex: 1;
+}
+
+.user-profile-header .name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.user-profile-header .name-row h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 500;
+  color: #333;
+}
+
+.dark-theme .user-profile-header .name-row h2 {
+  color: #fff;
+}
+
+.user-profile-header .user-id {
+  margin: 0 0 4px 0;
+  font-size: 0.8rem;
+  opacity: 0.6;
+  font-family: monospace;
+}
+
+.user-profile-header .user-bio {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  opacity: 0.8;
+}
+
+.user-profile-header .actions {
+  margin-left: auto;
+}
+
+@media (max-width: 600px) {
+  .user-profile-header .header-content {
+    flex-direction: column;
+    text-align: center;
+    gap: 16px;
+  }
+
+  .user-profile-header .name-row {
+    justify-content: center;
+  }
+
+  .user-profile-header .actions {
+    margin-left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+}
+
+.settings-container {
   display: block;
+  min-height: calc(100vh - 64px);
+  background-color: #f4f7f6;
+  font-family: 'Inter', sans-serif;
+  position: relative;
 }
 
-.smaller {
-  font-size: 75%;
+/* Horizontal Chip Navigation */
+.settings-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background-color: rgba(244, 247, 246, 0.95);
+  backdrop-filter: blur(10px);
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  margin-bottom: 24px;
 }
 
-/* Removed ::ng-deep .mat-tab-label override */
+.nav-list {
+  display: flex;
+  gap: 12px;
+  list-style: none;
+  padding: 0 40px;
+  /* Aligns with content padding */
+  margin: 0 auto;
+  max-width: 900px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE/Edge */
+}
+
+.nav-list::-webkit-scrollbar {
+  display: none;
+  /* Chrome/Safari */
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 500;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  background-color: white;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  white-space: nowrap;
+}
+
+.nav-item mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  margin-right: 4px;
+}
+
+.nav-item:hover {
+  background-color: #f0f0f0;
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.nav-item.active {
+  background-color: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+  box-shadow: 0 4px 12px rgba(63, 81, 181, 0.2);
+}
+
+.nav-item.active mat-icon {
+  color: white;
+  /* Ensure icon is white when active */
+}
+
+/* Mobile Responsive Adjustments */
+@media (max-width: 600px) {
+  .nav-list {
+    padding: 0 16px;
+  }
+
+  .settings-content {
+    padding: 24px 16px;
+  }
+}
+
+/* Main Content Area */
+.settings-content {
+  flex: 1;
+  padding: 40px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.section-header {
+  margin-bottom: 32px;
+}
+
+.section-header h1 {
+  margin: 0 0 8px 0;
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.section-header p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 1rem;
+}
+
+/* Redesigned Card Styling */
+.settings-card {
+  background: var(--card-bg);
+  border-radius: 12px;
+  box-shadow: var(--card-shadow);
+  margin-bottom: var(--section-spacing);
+  overflow: hidden;
+}
+
+.card-content {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.danger-card {
+  border: 1px solid #ffccd2;
+  background-color: #fffafb;
+}
+
+.danger-title {
+  color: #d32f2f;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .settings-container {
+    flex-direction: column;
+  }
+
+  .settings-sidebar {
+    width: 100%;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid #e0e0e0;
+    position: relative;
+    padding: 12px 0;
+  }
+
+  .nav-list {
+    display: flex;
+    overflow-x: auto;
+    padding: 0 16px;
+  }
+
+  .nav-item {
+    padding: 12px 16px;
+    white-space: nowrap;
+    border-right: none;
+  }
+
+  .nav-item.active {
+    border-right: none;
+    border-bottom: 3px solid var(--accent-color);
+  }
+
+  .settings-content {
+    padding: 24px 16px;
+  }
+}
+
+/* Save Button Styles */
+.qs-form-actions-floating {
+  position: fixed;
+  bottom: 40px;
+  right: 40px;
+  z-index: 100;
+}
+
+.mobile-save-bar {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 16px;
+  background: white;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+}
+
+.mobile-save-bar button {
+  width: 100%;
+}
+
+@media (max-width: 768px) {
+  .qs-form-actions-floating {
+    display: none;
+  }
+
+  .mobile-save-bar {
+    display: block;
+  }
+
+  /* Add padding to bottom of content to avoid overlap with sticky bar */
+  .settings-content {
+    padding-bottom: 80px;
+  }
+}
+
+.qs-form-actions-floating button[disabled],
+.mobile-save-bar button[disabled] {
+  opacity: 0.5;
+  filter: grayscale(1);
+  pointer-events: none;
+}

@@ -50,6 +50,7 @@ export class UserSettingsComponent implements OnChanges {
   public consentToDelete: boolean;
   public errorDeleting;
   public errorSaving;
+  public activeSection: 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units' = 'profile';
 
   public xAxisTypes = XAxisTypes;
 

@@ -1,6 +1,7 @@
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { reconcileClaims } from './claims';
+import { GRACE_PERIOD_DAYS } from '../shared/limits';
 
 /**
  * Triggered whenever a subscription document is created or updated.
@@ -41,7 +42,7 @@ export const onSubscriptionUpdated = onDocumentWritten({
             // If they don't have a grace period yet, set it to 30 days from now
             if (!userData?.gracePeriodUntil) {
                 const gracePeriodUntil = admin.firestore.Timestamp.fromDate(
-                    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                    new Date(Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000)
                 );
                 console.log(`[onSubscriptionUpdated] Setting gracePeriodUntil: ${gracePeriodUntil.toDate().toISOString()} for user ${uid}`);
                 await admin.firestore().doc(`users/${uid}`).set({
@@ -108,7 +109,7 @@ export const onSubscriptionUpdated = onDocumentWritten({
             const userDoc = await admin.firestore().doc(`users/${uid}`).get();
             if (!userDoc.data()?.gracePeriodUntil) {
                 const gracePeriodUntil = admin.firestore.Timestamp.fromDate(
-                    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                    new Date(Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000)
                 );
                 await admin.firestore().doc(`users/${uid}`).set({ gracePeriodUntil }, { merge: true });
             }
