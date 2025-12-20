@@ -1,6 +1,21 @@
 {
   "indexes": [
     {
+      "collectionGroup": "customers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "stripeId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "COROSAPIHistoryImportWorkoutQueue",
       "queryScope": "COLLECTION",
       "fields": [
