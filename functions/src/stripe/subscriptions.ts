@@ -8,7 +8,7 @@ import { reconcileClaims } from './claims';
  */
 export const onSubscriptionUpdated = onDocumentWritten({
     document: 'customers/{uid}/subscriptions/{subscriptionId}',
-    region: 'europe-west2'
+    region: 'europe-west3'
 }, async (event) => {
     const uid = event.params.uid;
 

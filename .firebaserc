@@ -18,6 +18,7 @@
     "quantified-self-io": {
       "extensionInstances": {
         "delete-user-data": "622a8f0879e14d41f31a2238ec44297b25c70a3a8075a6a501397165684156dc",
+        "firestore-send-email": "ba51cccdc379441519ac73ea22ba7dce798d173068f3413c110b2b36d8583fbc",
         "firestore-stripe-payments": "464639e27d23dc66952a2b4615cbde63874dc3319877058ba5ffeaf71556d843"
       }
     }
