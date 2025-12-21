@@ -50,6 +50,15 @@ nav[mat-tab-nav-bar] {
   /* Standard icon color */
 }
 
+/* Header Logo */
+mat-icon.header-logo {
+  margin-left: 16px;
+  width: 36px;
+  height: 36px;
+  font-size: 36px;
+  /* Ensure resizing works */
+}
+
 /* Utilities */
 .fill-space {
   flex: 1 1 auto;

@@ -151,163 +151,163 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   private addIconsToRegistry() {
     this.matIconRegistry.addSvgIcon(
       'logo',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/app/logo.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/app/logo.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'logo-font',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/app/logo-font.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/app/logo-font.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'suunto',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/suunto.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/suunto.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'garmin',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/garmin.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/garmin.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'coros',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/coros.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/coros.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'amcharts',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/amcharts.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/amcharts.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'firebase',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/firebase.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/firebase.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'patreon',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/patreon.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/patreon.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'patreon-word',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/patreon-word.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/patreon-word.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'google_logo_light',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/google_logo_light.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/google_logo_light.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'facebook_logo',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/facebook_logo.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/facebook_logo.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'twitter_logo',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/twitter_logo.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/twitter_logo.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'github_logo',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/github_logo.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/github_logo.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'jetbrains_logo',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/logos/jetbrains.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/jetbrains.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'heart_rate',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/heart-rate.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/heart-rate.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'heart_pulse',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/heart-pulse.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/heart-pulse.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'energy',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/energy.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/energy.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'power',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/power.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/power.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'arrow_up_right',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/arrow-up-right.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/arrow-up-right.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'arrow_down_right',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/arrow-down-right.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/arrow-down-right.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'swimmer',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/swimmer.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/swimmer.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'tte',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/tte.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/tte.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'epoc',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/epoc.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/epoc.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'gas',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/gas.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/gas.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'gap',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/gap.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/gap.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'heat-map',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/heat-map.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/heat-map.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'spiral',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/spiral.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/spiral.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'chart',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/chart.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/chart.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'dashboard',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/dashboard.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/dashboard.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'stacked-chart',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/stacked-chart.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/stacked-chart.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'bar-chart',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/bar-chart.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/bar-chart.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'route',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/route.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/route.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'watch-sync',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/watch-sync.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/watch-sync.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'chart-types',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/chart-types.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/chart-types.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'moving-time',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/moving-time.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/moving-time.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'file-csv',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/file-csv.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/file-csv.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'dark-mode',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/dark-mode.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/dark-mode.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'paypal',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/paypal.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/paypal.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'lap-type-manual',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/lap-types/manual.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/lap-types/manual.svg')
     );
     this.matIconRegistry.addSvgIcon(
       'lap-type-interval',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('../assets/icons/lap-types/interval.svg')
+      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/lap-types/interval.svg')
     );
   }
 
