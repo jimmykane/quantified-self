@@ -11,7 +11,7 @@ if (admin.apps.length === 0) {
 }
 
 const TEMPLATES_COLLECTION = 'email_templates';
-const TEMPLATES_DIR = path.join(__dirname, '../templates');
+const TEMPLATES_DIR = path.join(__dirname, '../../templates');
 
 const TEMPLATE_SUBJECTS: { [key: string]: string } = {
     'subscription_upgrade': "You've upgraded to {{new_role}}!",
