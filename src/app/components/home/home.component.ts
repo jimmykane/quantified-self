@@ -12,14 +12,15 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 })
 export class HomeComponent {
 
-  public serviceNames = ServiceNames
+  public serviceNames = ServiceNames;
+  public currentYear = new Date().getFullYear();
 
   constructor(public authService: AppAuthService, public router: Router) {
 
   }
 
   @HostListener('window:resize', ['$event'])
-  getColumnsToDisplayDependingOnScreenSize(event?) {
+  getColumnsToDisplayDependingOnScreenSize(event?: any) {
     return window.innerWidth < 600 ? 1 : 2;
   }
 

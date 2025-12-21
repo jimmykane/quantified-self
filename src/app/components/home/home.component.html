@@ -1,151 +1,149 @@
-<section class="component-container">
-  <mat-card class="mat-elevation-z0 compoent-container">
-    <mat-card-header>
-      <mat-icon style="height: 48px !important" mat-card-avatar svgIcon="logo" (click)="navigateToDashboardOrLogin()">
-      </mat-icon>
-      <mat-card-title>
-        Quantified Self
-      </mat-card-title>
-      <mat-card-subtitle>
-        A free professional analytical tool for your activity data
-      </mat-card-subtitle>
-    </mat-card-header>
-    <mat-list>
-      <div mat-subheader>Features</div>
-      <mat-list-item>
-        <mat-icon matListItemIcon>dashboard</mat-icon>
-        <span matListItemTitle>Dashboard</span>
-        <span matListItemLine>Build it the way you like it</span>
-      </mat-list-item>
-      <mat-list-item>
-        <mat-icon matListItemIcon>multiline_chart</mat-icon>
-        <span matListItemTitle>Activity analysis</span>
-        <span matListItemLine>Zoom, select or combine</span>
-      </mat-list-item>
-      <mat-list-item>
-        <mat-icon matListItemIcon>sync</mat-icon>
-        <span matListItemTitle>Realtime sync</span>
-        <span matListItemLine>For all your devices</span>
-      </mat-list-item>
-    </mat-list>
-  </mat-card>
-  <mat-card class="mat-elevation-z0 compoent-container">
-    <mat-card-header>
-      <mat-icon mat-card-avatar svgIcon="dashboard">
-      </mat-icon>
-      <mat-card-title>
-        Your dashboard
-      </mat-card-title>
-      <mat-card-subtitle>
-        Build your dashboard, the way you like it
-      </mat-card-subtitle>
-    </mat-card-header>
-    <mat-list>
-      <div mat-subheader>Choose</div>
-      <mat-list-item>
-        <mat-icon matListItemIcon svgIcon="chart-types"></mat-icon>
-        <span matListItemTitle>Charts</span>
-        <span matListItemLine>7 Chart types to choose among</span>
-      </mat-list-item>
-      <mat-list-item>
-        <mat-icon matListItemIcon svgIcon="heat-map"></mat-icon>
-        <span matListItemTitle>Heatmaps and clusters</span>
-        <span matListItemLine>12 map styles to choose among</span>
-      </mat-list-item>
-      <mat-list-item>
-        <mat-icon matListItemIcon>table_chart</mat-icon>
-        <span matListItemTitle>Tabular data</span>
-        <span matListItemLine>Sort, filter for quick access</span>
-      </mat-list-item>
-    </mat-list>
-  </mat-card>
-  <mat-card class="mat-elevation-z0 compoent-container">
-    <mat-card-header>
-      <mat-icon mat-card-avatar svgIcon="chart">
-      </mat-icon>
-      <mat-card-title>
-        Detailed analysis
-      </mat-card-title>
-      <mat-card-subtitle>
-        Dig into your data
-      </mat-card-subtitle>
-    </mat-card-header>
-    <mat-list>
-      <div mat-subheader>Features</div>
-      <mat-list-item>
-        <mat-icon matListItemIcon svgIcon="stacked-chart"></mat-icon>
-        <span matListItemTitle>Charts</span>
-        <span matListItemLine>Detailed and configurable</span>
-      </mat-list-item>
-      <mat-list-item>
-        <mat-icon matListItemIcon>map</mat-icon>
-        <span matListItemTitle>Map</span>
-        <span matListItemLine>Check your GPS track</span>
-      </mat-list-item>
-      <mat-list-item>
-        <mat-icon matListItemIcon svgIcon="bar-chart"></mat-icon>
-        <span matListItemTitle>Zones</span>
-        <span matListItemLine>HR, Power and Speed Zones</span>
-      </mat-list-item>
-    </mat-list>
-  </mat-card>
+<div class="split-container">
 
-  <mat-card class="mat-elevation-z0 compoent-container">
-    <mat-card-header>
-      <mat-icon mat-card-avatar svgIcon="watch-sync">
-      </mat-icon>
-      <mat-card-title>
-        A hub for your fitness data
-      </mat-card-title>
-      <mat-card-subtitle>
-        Garmin or Suunto it doesn't matter
-      </mat-card-subtitle>
-    </mat-card-header>
-    <mat-list>
-      <div mat-subheader>Features</div>
-      <mat-list-item>
-        <mat-icon matListItemIcon>cloud_done</mat-icon>
-        <span matListItemTitle>Automatic sync</span>
-        <span matListItemLine>Realtime and reliable sync</span>
-      </mat-list-item>
-      <mat-list-item>
-        <mat-icon matListItemIcon>history</mat-icon>
-        <span matListItemTitle>History import</span>
-        <span matListItemLine>Import all your data</span>
-      </mat-list-item>
-      <mat-list-item>
-        <mat-icon matListItemIcon>cloud_upload</mat-icon>
-        <span matListItemTitle>Manual upload</span>
-        <span matListItemLine>Supports FIT, TCX and GPX</span>
-      </mat-list-item>
-    </mat-list>
-  </mat-card>
-  <mat-card class="mat-elevation-z0 footer">
-    <div class="footer-row">
-      <mat-icon class="firebase" svgIcon="jetbrains_logo"
-        onclick="window.open('https://jetbrains.com/?ref=quantified-self.io')"></mat-icon>
-      <mat-icon class="firebase" svgIcon="firebase"
-        onclick="window.open('https://firebase.google.com/?ref=quantified-self.io')"></mat-icon>
-      <mat-icon class="amcharts" svgIcon="amcharts"
-        onclick="window.open('https://amcharts.com/?ref=quantified-self.io')"></mat-icon>
+  <!-- Left Column: Hero -->
+  <div class="hero-section">
+    <div class="brand-header">
+      <mat-icon class="brand-logo" svgIcon="logo"></mat-icon>
+      <span class="brand-name">Quantified Self</span>
     </div>
 
-    <mat-divider [inset]="true" style="width: 80%; margin: 10px 0;"></mat-divider>
+    <h1>Professional Grade <br>Fitness Analytics.</h1>
+    <p class="subtitle">
+      Unlock the full potential of your performance data.
+      Our platform transforms raw telemetry into actionable insights.
+      <br><br>
+      Join a community of athletes who own their data.
+    </p>
 
-    <div class="footer-row">
-      <mat-icon class="large-svg-icon" svgIcon="suunto"
-        (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.SuuntoApp } });"></mat-icon>
-      <mat-icon class="large-svg-icon-coros" svgIcon="coros"
-        (click)="router.navigate(['/services'],{ queryParams: { serviceName: serviceNames.COROSAPI }});"></mat-icon>
-      <mat-icon class="large-svg-icon" svgIcon="garmin"
-        (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.GarminHealthAPI }});"></mat-icon>
+    <div class="cta-container">
+      <button mat-flat-button color="accent" class="btn-large" (click)="navigateToDashboardOrLogin()">
+        Get Started Free
+        <mat-icon>arrow_forward</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <!-- Right Side: Grid Feature List -->
+  <div class="features-section">
+
+    <!-- Feature 1 -->
+    <div class="feature-card elevation-2">
+      <div class="card-header">
+        <mat-icon class="card-icon" svgIcon="dashboard"></mat-icon>
+        <h3 class="card-title">Customizable Environment</h3>
+      </div>
+      <p class="card-text">
+        Engineer your perfect analytical workspace. Drag, drop, and configure tailored widgets to visualize what
+        matters.
+      </p>
+      <div class="tag-list">
+        <span class="tag">Drag & Drop</span>
+        <span class="tag">Widgets</span>
+        <span class="tag">Personalized</span>
+      </div>
     </div>
 
-    <mat-divider [inset]="true" style="width: 80%; margin: 10px 0;"></mat-divider>
-
-    <div class="footer-row" style="cursor: pointer; margin-top: 10px;" routerLink="/policies">
-      <mat-icon>policy</mat-icon>
-      <span style="margin-left: 8px;">Privacy & Policies</span>
+    <!-- Feature 2 -->
+    <div class="feature-card elevation-2">
+      <div class="card-header">
+        <mat-icon class="card-icon" svgIcon="chart"></mat-icon>
+        <h3 class="card-title">Multi-dimensional Analysis</h3>
+      </div>
+      <p class="card-text">
+        Visualize gradient, intensity, and speed across 12 distinct map styles and advanced charts.
+      </p>
+      <div class="tag-list">
+        <span class="tag">7 Chart Types</span>
+        <span class="tag">Heatmaps</span>
+        <span class="tag">Clusters</span>
+      </div>
     </div>
-  </mat-card>
-</section>
+
+    <!-- Feature 3 -->
+    <div class="feature-card elevation-2">
+      <div class="card-header">
+        <mat-icon class="card-icon" svgIcon="bar-chart"></mat-icon>
+        <h3 class="card-title">Granular Zone Metrics</h3>
+      </div>
+      <p class="card-text">
+        Deep dive into physiological output. Analyze precise Heart Rate, Power, and Speed distributions.
+      </p>
+      <div class="tag-list">
+        <span class="tag">HR Analysis</span>
+        <span class="tag">Power Curve</span>
+        <span class="tag">Speed Dist.</span>
+      </div>
+    </div>
+
+    <!-- Feature 4 -->
+    <div class="feature-card elevation-2">
+      <div class="card-header">
+        <mat-icon class="card-icon" svgIcon="watch-sync"></mat-icon>
+        <h3 class="card-title">Universal Device Sync</h3>
+      </div>
+      <p class="card-text">
+        Seamlessly integrate with leading fitness ecosystems. Your history remains synchronized in real-time.
+      </p>
+      <div class="tag-list">
+        <span class="tag"
+          (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.GarminHealthAPI }});"
+          style="cursor: pointer;">Garmin</span>
+        <span class="tag"
+          (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.SuuntoApp } });"
+          style="cursor: pointer;">Suunto</span>
+        <span class="tag"
+          (click)="router.navigate(['/services'],{ queryParams: { serviceName: serviceNames.COROSAPI }});"
+          style="cursor: pointer;">COROS</span>
+      </div>
+    </div>
+
+    <!-- Feature 5 (Spans full width) -->
+    <div class="feature-card elevation-2 full-width">
+      <div class="card-header">
+        <mat-icon class="card-icon">security</mat-icon>
+        <h3 class="card-title">Data Sovereignty & Privacy</h3>
+      </div>
+      <div class="card-content-wrapper">
+        <p class="card-text">
+          Your data belongs to you. Enjoy full export capabilities (FIT, TCX, GPX) and transparent policies without
+          hidden paywalls or data mining.
+        </p>
+        <div class="tag-list">
+          <span class="tag">FIT/TCX/GPX Imports</span>
+          <span class="tag">Strict Privacy</span>
+          <span class="tag" routerLink="/policies" style="cursor: pointer;">Privacy Policy</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="footer rich-footer">
+  <div class="footer-row partners">
+    <mat-icon class="firebase" svgIcon="jetbrains_logo"
+      onclick="window.open('https://jetbrains.com/?ref=quantified-self.io')"></mat-icon>
+    <mat-icon class="firebase" svgIcon="firebase"
+      onclick="window.open('https://firebase.google.com/?ref=quantified-self.io')"></mat-icon>
+    <mat-icon class="amcharts" svgIcon="amcharts"
+      onclick="window.open('https://amcharts.com/?ref=quantified-self.io')"></mat-icon>
+  </div>
+
+  <mat-divider [inset]="true" class="footer-divider"></mat-divider>
+
+  <div class="footer-row devices">
+    <mat-icon class="large-svg-icon" svgIcon="suunto"
+      (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.SuuntoApp } });"></mat-icon>
+    <mat-icon class="large-svg-icon-coros" svgIcon="coros"
+      (click)="router.navigate(['/services'],{ queryParams: { serviceName: serviceNames.COROSAPI }});"></mat-icon>
+    <mat-icon class="large-svg-icon" svgIcon="garmin"
+      (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.GarminHealthAPI }});"></mat-icon>
+  </div>
+
+  <mat-divider [inset]="true" class="footer-divider"></mat-divider>
+
+  <div class="footer-row bottom-row">
+    <span class="privacy-link" routerLink="/policies">Privacy & Policies</span>
+    <span class="copyright">&copy; {{ currentYear }} Quantified Self</span>
+  </div>
+</div>
