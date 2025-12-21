@@ -28,7 +28,8 @@
     "logs": "firebase functions:log",
     "test": "vitest run -c ./vitest.config.ts",
     "test:watch": "vitest -c ./vitest.config.ts",
-    "test:coverage": "vitest run --coverage -c ./vitest.config.ts"
+    "test:coverage": "vitest run --coverage -c ./vitest.config.ts",
+    "seed-emails": "ts-node src/scripts/seed-email-templates.ts"
   },
   "engines": {
     "node": "20"

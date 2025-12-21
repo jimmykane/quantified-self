@@ -1,6 +1,7 @@
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { reconcileClaims } from './claims';
+import { checkAndSendSubscriptionEmails } from './email-triggers';
 import { GRACE_PERIOD_DAYS } from '../shared/limits';
 
 /**
@@ -60,46 +61,18 @@ export const onSubscriptionUpdated = onDocumentWritten({
 
             // Reconcile claims immediately since they are active
             await reconcileClaims(uid);
+        }
 
-            // --------------------------------------------------------------------------------
-            // Send Thank You Email (Idempotent)
-            // --------------------------------------------------------------------------------
-            if (activeSnapshot?.docs && activeSnapshot.docs.length > 0) {
-                const subData = activeSnapshot.docs[0].data();
-                // Ensure we only welcome them for the role they just bought
-                const role = subData.role;
-
-                if (role) {
-                    // Use a deterministic ID so we don't send this email multiple times for the same subscription
-                    // e.g., "welcome_email_sub_12345"
-                    const subscriptionId = activeSnapshot.docs[0].id; // Use actual subscription ID from snapshot
-                    const mailDocId = `welcome_email_${subscriptionId}`;
-                    const mailRef = admin.firestore().collection('mail').doc(mailDocId);
-
-                    const mailDoc = await mailRef.get();
-
-                    if (!mailDoc.exists) {
-                        // Fetch user email to be sure
-                        const userRecord = await admin.auth().getUser(uid);
-                        if (userRecord.email) {
-                            console.log(`[onSubscriptionUpdated] Queuing welcome email for user ${uid}, subscription ${subscriptionId}`);
-                            await mailRef.set({
-                                to: userRecord.email,
-                                template: {
-                                    name: 'welcome_email',
-                                    data: {
-                                        role: role,
-                                    },
-                                },
-                            });
-                        } else {
-                            console.warn(`[onSubscriptionUpdated] User ${uid} has no email address. Cannot send welcome email.`);
-                        }
-                    } else {
-                        console.log(`[onSubscriptionUpdated] Welcome email already sent for subscription ${subscriptionId}. Skipping.`);
-                    }
-                }
-            }
+        // Check for email triggers (Welcome, Upgrade, Downgrade, Cancellation)
+        // using the specific change that triggered this event.
+        if (event.data) {
+            await checkAndSendSubscriptionEmails(
+                uid,
+                event.params.subscriptionId,
+                event.data.before.data(),
+                event.data.after.data(),
+                event.id
+            );
         }
 
     } catch (e: any) {
