@@ -99,6 +99,7 @@ export { cleanupEventFile } from './events/cleanup';
 export { restoreUserClaims } from './stripe/claims';
 export { onSubscriptionUpdated } from './stripe/subscriptions';
 export { enforceSubscriptionLimits } from './schedule/enforce-subscription-limits';
+export { checkSubscriptionNotifications } from './schedule/notifications';
 export { cleanupUserAccounts } from './users/cleanup';
 export { deleteSelf } from './user/user';
 
