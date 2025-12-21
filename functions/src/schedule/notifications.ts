@@ -31,8 +31,7 @@ export const checkSubscriptionNotifications = onSchedule('every 24 hours', async
 
     console.log(`Found ${snapshot.size} subscriptions expiring between ${threeDaysFromNow.toISOString()} and ${fourDaysFromNow.toISOString()}`);
 
-    const batch = db.batch();
-    let batchCount = 0;
+
 
     for (const doc of snapshot.docs) {
         const sub = doc.data();
