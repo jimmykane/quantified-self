@@ -67,6 +67,7 @@ export const checkSubscriptionNotifications = onSchedule('every 24 hours', async
 
         await mailRef.set({
             toUids: [uid],
+            from: 'Quantified Self <hello@quantified-self.io>',
             template: {
                 name: 'subscription_expiring_soon',
                 data: {
@@ -119,6 +120,7 @@ export const checkSubscriptionNotifications = onSchedule('every 24 hours', async
 
         await mailRef.set({
             toUids: [uid],
+            from: 'Quantified Self <hello@quantified-self.io>',
             template: {
                 name: 'grace_period_ending',
                 data: {

@@ -29,7 +29,8 @@
     "test": "vitest run -c ./vitest.config.ts",
     "test:watch": "vitest -c ./vitest.config.ts",
     "test:coverage": "vitest run --coverage -c ./vitest.config.ts",
-    "seed-emails": "ts-node src/scripts/seed-email-templates.ts"
+    "seed-emails": "ts-node src/scripts/seed-email-templates.ts",
+    "test-emails": "ts-node src/scripts/test-all-emails.ts"
   },
   "engines": {
     "node": "20"

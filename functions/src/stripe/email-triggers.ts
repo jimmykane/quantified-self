@@ -47,6 +47,7 @@ export async function checkAndSendSubscriptionEmails(
                 console.log(`[checkAndSendSubscriptionEmails] Queuing welcome email for user ${uid}, subscription ${subscriptionId}`);
                 await mailRef.set({
                     to: userRecord.email,
+                    from: 'Quantified Self <hello@quantified-self.io>',
                     template: {
                         name: 'welcome_email',
                         data: {
@@ -81,6 +82,7 @@ export async function checkAndSendSubscriptionEmails(
                 console.log(`[checkAndSendSubscriptionEmails] Queuing UPGRADE email for user ${uid}`);
                 await mailRef.set({
                     to: userRecord.email,
+                    from: 'Quantified Self <hello@quantified-self.io>',
                     template: {
                         name: 'subscription_upgrade',
                         data: {
@@ -99,6 +101,7 @@ export async function checkAndSendSubscriptionEmails(
                 console.log(`[checkAndSendSubscriptionEmails] Queuing DOWNGRADE email for user ${uid}`);
                 await mailRef.set({
                     to: userRecord.email,
+                    from: 'Quantified Self <hello@quantified-self.io>',
                     template: {
                         name: 'subscription_downgrade',
                         data: {
@@ -131,6 +134,7 @@ export async function checkAndSendSubscriptionEmails(
                     console.log(`[checkAndSendSubscriptionEmails] Queuing CANCELLATION email for user ${uid}`);
                     await mailRef.set({
                         to: userRecord.email,
+                        from: 'Quantified Self <hello@quantified-self.io>',
                         template: {
                             name: 'subscription_cancellation',
                             data: {
