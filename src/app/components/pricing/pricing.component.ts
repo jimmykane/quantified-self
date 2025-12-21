@@ -37,13 +37,27 @@ export class PricingComponent implements OnInit {
     async ngOnInit(): Promise<void> {
         this.products$ = this.paymentService.getProducts();
 
+        // Initial load
         const role = await this.userService.getSubscriptionRole();
-        // Strict assignment: We trust the backend. If it's null, it's null (No Plan).
         this.currentRole = role;
         this.isLoadingRole = false;
 
+        // Reactive update: specific to subscription changes
+        // When the subscriptions collection updates (Stripe extension sync), 
+        // we force-refresh the user token to get the new claims (set by Cloud Function).
         this.activeSubscriptions$ = this.paymentService.getUserSubscriptions().pipe(
-            map(subs => subs.filter(sub => sub.role !== 'free'))
+            map(subs => {
+                // Trigger token refresh in background when subs change
+                // distinctUntilChanged handling is implicit via Firestore subscription emission behavior usually,
+                // but checking if role actually matches current might be good optimization.
+                // For now, simple trigger is robust.
+                this.userService.getSubscriptionRole().then(newRole => {
+                    if (this.currentRole !== newRole) {
+                        this.currentRole = newRole;
+                    }
+                });
+                return subs.filter(sub => sub.role !== 'free');
+            })
         );
     }
 

@@ -545,8 +545,10 @@ export class AppUserService implements OnDestroy {
     try {
       // Force refresh to ensure we have latest claims
       const tokenResult = await user.getIdTokenResult(true);
+      console.log('[AppUserService] DEBUG: Full Token Result:', tokenResult);
+      console.log('[AppUserService] DEBUG: Custom Claims:', tokenResult.claims);
       const role = (tokenResult.claims['stripeRole'] as StripeRole) || null;
-      console.log(`AppUserService: getSubscriptionRole - User: ${user.uid}, Role: ${role}, Claims:`, tokenResult.claims);
+      console.log(`AppUserService: getSubscriptionRole - User: ${user.uid}, Role: ${role}`);
       return role;
     } catch (e) {
       console.error('AppUserService: getSubscriptionRole - Error getting token result', e);
