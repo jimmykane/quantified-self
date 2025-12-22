@@ -1,55 +1,47 @@
 <section class="component-container">
   <app-shade [isActive]="!isInitialized"></app-shade>
-  <!--  <ng-container *ngIf="(targetUser) && isInitialized">-->
+
   @if ((targetUser || user) && isInitialized) {
-    <mat-card-header>
-      <div mat-card-avatar class="avatar"
-        [style.backgroundImage]="'url('+ ((targetUser || user).photoURL ? (targetUser || user).photoURL :  'https://ui-avatars.com/api/?name=' + ((targetUser || user).displayName || 'Guest'))  +')'">
-      </div>
+  <!-- Profile Card Wrapper -->
+  <div class="profile-card">
+    <div class="avatar"
+      [style.backgroundImage]="'url('+ ((targetUser || user).photoURL ? (targetUser || user).photoURL :  'https://ui-avatars.com/api/?name=' + ((targetUser || user).displayName || 'Guest'))  +')'">
+    </div>
+    <div class="profile-info">
       <mat-card-title>
         {{(targetUser || user).displayName || "Guest"}}
       </mat-card-title>
       @if ((targetUser || user).description) {
-        <mat-card-subtitle>{{ (targetUser || user).description }}</mat-card-subtitle>
+      <mat-card-subtitle>{{ (targetUser || user).description }}</mat-card-subtitle>
       }
       @if (!(targetUser || user).description) {
-        <mat-card-subtitle>
-          No description available
-        </mat-card-subtitle>
+      <mat-card-subtitle>
+        No description available
+      </mat-card-subtitle>
       }
-    </mat-card-header>
-    <mat-divider style="margin-bottom: 1em"></mat-divider>
+    </div>
+  </div>
   }
 
-  @if (user) {
-    <app-event-search
-      [isLoading]="isLoading"
-      [selectedDateRange]="user.settings.dashboardSettings.dateRange"
-      [selectedStartDate]="searchStartDate"
-      [selectedEndDate]="searchEndDate"
-      [startOfTheWeek]="startOfTheWeek"
-      [selectedActivityTypes]="user.settings.dashboardSettings.activityTypes"
-      (searchChange)="search($event)">
+  <div class="dashboard-content">
+    @if (user) {
+    <app-event-search [isLoading]="isLoading" [selectedDateRange]="user.settings.dashboardSettings.dateRange"
+      [selectedStartDate]="searchStartDate" [selectedEndDate]="searchEndDate" [startOfTheWeek]="startOfTheWeek"
+      [selectedActivityTypes]="user.settings.dashboardSettings.activityTypes" (searchChange)="search($event)">
     </app-event-search>
-  }
+    }
 
-  @if (user) {
-    <mat-divider  [inset]="false"></mat-divider>
-  }
+    <!-- Removed mat-divider in favor of CSS spacing/gap -->
 
-  <!--  <app-events-map *ngIf="user" [isLoading]="isLoading" [events]="events" [theme]="user.settings.mapSettings.theme"></app-events-map>-->
-
-  @if (user) {
-    <app-summaries
-      [isLoading]="isLoading"
-      [user]="user"
-      [showActions]="!targetUser || targetUser.uid === user.uid"
+    @if (user) {
+    <app-summaries [isLoading]="isLoading" [user]="user" [showActions]="!targetUser || targetUser.uid === user.uid"
       [events]="events">
     </app-summaries>
-  }
+    }
 
-  @if (user) {
-    <app-event-table [targetUser]="targetUser"
-    [isLoading]="isLoading" [user]="user" [showActions]="!targetUser || targetUser.uid === user.uid" [events]="events"></app-event-table>
-  }
+    @if (user) {
+    <app-event-table [targetUser]="targetUser" [isLoading]="isLoading" [user]="user"
+      [showActions]="!targetUser || targetUser.uid === user.uid" [events]="events"></app-event-table>
+    }
+  </div>
 </section>

@@ -1,13 +1,116 @@
-section {
-  /*padding: ;*/
+:host {
+  display: block;
   min-height: 100vh;
-  padding: 1em;
+  background: var(--background-color, #f5f7fa);
+  /* Fallback or use app var */
+  font-family: 'Inter', 'Roboto', sans-serif;
+  color: #333;
 }
 
-.avatar{
-  background-size: cover;
+section.component-container {
+  width: 95%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 1rem;
+  box-sizing: border-box;
+  animation: fadeIn 0.8s ease-out;
 }
-app-event-search{
-  margin-bottom: 1em;
+
+/* Header / Profile Card */
+.profile-card {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 20px;
+  padding: 2rem;
+  margin-bottom: 2rem;
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.05),
+    0 2px 4px -1px rgba(0, 0, 0, 0.03),
+    0 10px 15px -3px rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.profile-card:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 10px 20px -5px rgba(0, 0, 0, 0.08),
+    0 4px 6px -2px rgba(0, 0, 0, 0.04);
+}
+
+.avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border: 3px solid #fff;
+  flex-shrink: 0;
+}
+
+.profile-info {
+  display: flex;
+  flex-direction: column;
+}
+
+mat-card-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: #1a202c;
+  letter-spacing: -0.02em;
+}
+
+mat-card-subtitle {
+  font-size: 1rem;
+  color: #718096;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+/* Components separation */
+.dashboard-content {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* Ensure child components take full width and handle their own internal layout */
+app-event-search,
+app-summaries,
+app-event-table {
+  width: 100%;
   display: block;
+}
+
+/* Fade in animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Utilities for overrides */
+.hidden {
+  display: none;
+}
+
+mat-divider {
+  border-top-color: rgba(0, 0, 0, 0.06);
+  margin: 2rem 0;
 }
