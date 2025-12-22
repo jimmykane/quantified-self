@@ -3,6 +3,8 @@ import { PricingComponent } from './pricing.component';
 import { AppUserService } from '../../services/app.user.service';
 import { AppPaymentService } from '../../services/app.payment.service';
 import { of } from 'rxjs';
+import { Auth } from '@angular/fire/auth';
+import { Router } from '@angular/router';
 
 class MockAppPaymentService {
     getProducts() {
@@ -38,13 +40,27 @@ describe('PricingComponent', () => {
     let component: PricingComponent;
     let fixture: ComponentFixture<PricingComponent>;
 
+
+
     beforeEach(async () => {
         await TestBed.configureTestingModule({
             imports: [PricingComponent],
             providers: [
                 { provide: AppPaymentService, useClass: MockAppPaymentService },
                 { provide: AppUserService, useClass: MockAppUserService },
-                { provide: MatDialog, useClass: MockMatDialog }
+                { provide: MatDialog, useClass: MockMatDialog },
+                {
+                    provide: Auth,
+                    useValue: {
+                        currentUser: { uid: 'test-uid' }
+                    }
+                },
+                {
+                    provide: Router,
+                    useValue: {
+                        navigate: vi.fn()
+                    }
+                }
             ]
         }).compileComponents();
 

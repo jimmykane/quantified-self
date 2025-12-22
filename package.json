@@ -15,6 +15,7 @@
     "build-prod-and-deploy-beta": "npm run clean && npm run build-production && npm run firebase-hosting-beta",
     "build-and-deploy-prod": "npm run clean && npm run build-production && firebase deploy --only hosting:production,storage",
     "test": "vitest",
+    "test:rules": "npx firebase emulators:exec --only firestore 'npx vitest run --config vitest.rules.config.ts'",
     "test-coverage": "vitest run --coverage",
     "lint": "ng lint",
     "e2e": "ng e2e"
