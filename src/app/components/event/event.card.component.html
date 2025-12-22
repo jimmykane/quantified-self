@@ -44,6 +44,7 @@
   }
 
   <!-- Chart Section -->
+  @if (event && targetUserID && currentUser) {
   <mat-card class="dashboard-card chart-section glass-card">
     <app-event-card-chart [showAllData]="showAllData" [showLaps]="showChartLaps" [useAnimations]="useChartAnimations"
       [disableGrouping]="chartDisableGrouping" [hideAllSeriesOnInit]="chartHideAllSeriesOnInit"
@@ -57,6 +58,7 @@
       [waterMark]="currentUser ? currentUser.brandText : null" [event]="event">
     </app-event-card-chart>
   </mat-card>
+  }
 
   <!-- Details Section (Laps & Devices) -->
   @if (hasLaps(event) || hasDevices(event)) {

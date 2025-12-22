@@ -85,12 +85,27 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   async ngOnInit() {
+    // Subscribe to selected activities
+    this.subscriptions.push(this.activitySelectionService.selectedActivities.changed.asObservable().subscribe((selectedActivities) => {
+      this.selectedActivities = selectedActivities.source.selected;
+      this.changeDetectorRef.detectChanges();
+    }));
+
     this.subscriptions.push(this.route.data.subscribe((data: { event: EventInterface }) => {
       this.event = data.event;
       this.activitySelectionService.selectedActivities.clear();
       this.activitySelectionService.selectedActivities.select(...this.event.getActivities());
+      // Fallback/Initial set
+      this.selectedActivities = this.event.getActivities();
 
       this.targetUserID = this.route.snapshot.paramMap.get('userID');
+      console.log('[EventCardComponent] Initialized.', {
+        event: this.event,
+        activities: this.event.getActivities().length,
+        hasPositions: this.hasPositions(this.event),
+        targetUserID: this.targetUserID,
+        selectedActivities: this.selectedActivities.length
+      });
       this.changeDetectorRef.detectChanges();
     }));
 
@@ -144,11 +159,7 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.changeDetectorRef.detectChanges();
     }));
 
-    // Subscribe to selected activities
-    this.subscriptions.push(this.activitySelectionService.selectedActivities.changed.asObservable().subscribe((selectedActivities) => {
-      this.selectedActivities = selectedActivities.source.selected;
-      this.changeDetectorRef.detectChanges();
-    }));
+
   }
 
 
