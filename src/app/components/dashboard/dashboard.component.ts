@@ -137,7 +137,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         : this.events.length ? of(this.events) : this.eventService
           .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit);
       return returnObservable
-        .pipe(throttleTime(2000, asyncScheduler, { leading: true, trailing: true }))
         .pipe(map((eventsArray) => {
           const t0 = performance.now();
           if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
