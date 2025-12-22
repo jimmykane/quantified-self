@@ -1,3 +1,4 @@
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { EventCardComponent } from './event.card.component';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -52,21 +53,21 @@ describe('EventCardComponent', () => {
         };
 
         mockUserService = {
-            getUserChartDataTypesToUse: jasmine.createSpy('getUserChartDataTypesToUse').and.returnValue(['speed']),
-            // Mock static methods if used in template or standard usage, though static methods are hard to mock directly with jasmine spies without wrappers
+            getUserChartDataTypesToUse: vi.fn().mockReturnValue(['speed']),
+            // Mock static methods if used in template or standard usage
         };
 
         mockActivitySelectionService = {
             selectedActivities: {
-                clear: jasmine.createSpy('clear'),
-                select: jasmine.createSpy('select'),
+                clear: vi.fn(),
+                select: vi.fn(),
                 changed: {
                     asObservable: () => of({ source: { selected: [] } })
                 }
             }
         };
 
-        mockSnackBar = jasmine.createSpyObj('MatSnackBar', ['open']);
+        mockSnackBar = { open: vi.fn() };
 
         mockThemeService = {
             getChartTheme: () => of('Light'),
@@ -74,7 +75,7 @@ describe('EventCardComponent', () => {
             getMapTheme: () => of('Light')
         };
 
-        mockRouter = jasmine.createSpyObj('Router', ['navigate']);
+        mockRouter = { navigate: vi.fn() };
 
         await TestBed.configureTestingModule({
             declarations: [EventCardComponent],

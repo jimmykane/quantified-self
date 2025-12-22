@@ -7,16 +7,17 @@ import { AppEventService } from '../services/app.event.service';
 import { AppUserService } from '../services/app.user.service';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { eventResolver } from './event.resolver';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 describe('eventResolver', () => {
     const executeResolver: ResolveFn<EventInterface> = (...resolverParameters) =>
         TestBed.runInInjectionContext(() => eventResolver(...resolverParameters));
 
-    let eventServiceSpy: jasmine.SpyObj<AppEventService>;
-    let userServiceSpy: jasmine.SpyObj<AppUserService>;
-    let authServiceSpy: jasmine.SpyObj<AppAuthService>;
-    let routerSpy: jasmine.SpyObj<Router>;
-    let snackBarSpy: jasmine.SpyObj<MatSnackBar>;
+    let eventServiceSpy: any;
+    let userServiceSpy: any;
+    let authServiceSpy: any;
+    let routerSpy: any;
+    let snackBarSpy: any;
 
     const mockUser = new User('testUser');
     mockUser.settings = {
@@ -25,11 +26,11 @@ describe('eventResolver', () => {
     } as any;
 
     beforeEach(() => {
-        eventServiceSpy = jasmine.createSpyObj('AppEventService', ['getEventActivitiesAndSomeStreams']);
-        userServiceSpy = jasmine.createSpyObj('AppUserService', ['getUserChartDataTypesToUse']);
-        authServiceSpy = jasmine.createSpyObj('AppAuthService', [], { user$: of(mockUser) });
-        routerSpy = jasmine.createSpyObj('Router', ['navigate']);
-        snackBarSpy = jasmine.createSpyObj('MatSnackBar', ['open']);
+        eventServiceSpy = { getEventActivitiesAndSomeStreams: vi.fn() };
+        userServiceSpy = { getUserChartDataTypesToUse: vi.fn() };
+        authServiceSpy = { user$: of(mockUser) };
+        routerSpy = { navigate: vi.fn() };
+        snackBarSpy = { open: vi.fn() };
 
         TestBed.configureTestingModule({
             providers: [
@@ -46,14 +47,14 @@ describe('eventResolver', () => {
         expect(executeResolver).toBeTruthy();
     });
 
-    it('should resolve with event when event is found', (done) => {
+    it('should resolve with event when event is found', () => new Promise<void>(done => {
         const mockEvent = { id: 'testEvent' } as any;
-        eventServiceSpy.getEventActivitiesAndSomeStreams.and.returnValue(of(mockEvent));
-        userServiceSpy.getUserChartDataTypesToUse.and.returnValue([]);
+        eventServiceSpy.getEventActivitiesAndSomeStreams.mockReturnValue(of(mockEvent));
+        userServiceSpy.getUserChartDataTypesToUse.mockReturnValue([]);
 
         const route = new ActivatedRouteSnapshot();
         // Use Object.defineProperty to mock paramMap.get since it's read-only/managed by Angular
-        spyOn(route.paramMap, 'get').and.callFake((key) => {
+        vi.spyOn(route.paramMap, 'get').mockImplementation((key) => {
             if (key === 'eventID') return '123';
             if (key === 'userID') return '456';
             return null;
@@ -66,11 +67,11 @@ describe('eventResolver', () => {
             expect(eventServiceSpy.getEventActivitiesAndSomeStreams).toHaveBeenCalled();
             done();
         });
-    });
+    }));
 
     it('should redirect to dashboard if eventID or userID is missing', () => {
         const route = new ActivatedRouteSnapshot();
-        spyOn(route.paramMap, 'get').and.returnValue(null);
+        vi.spyOn(route.paramMap, 'get').mockReturnValue(null);
         const state = {} as RouterStateSnapshot;
 
         executeResolver(route, state);
@@ -78,12 +79,12 @@ describe('eventResolver', () => {
         expect(routerSpy.navigate).toHaveBeenCalledWith(['/dashboard']);
     });
 
-    it('should redirect to dashboard if event service returns null', (done) => {
-        eventServiceSpy.getEventActivitiesAndSomeStreams.and.returnValue(of(null));
-        userServiceSpy.getUserChartDataTypesToUse.and.returnValue([]);
+    it('should redirect to dashboard if event service returns null', () => new Promise<void>(done => {
+        eventServiceSpy.getEventActivitiesAndSomeStreams.mockReturnValue(of(null));
+        userServiceSpy.getUserChartDataTypesToUse.mockReturnValue([]);
 
         const route = new ActivatedRouteSnapshot();
-        spyOn(route.paramMap, 'get').and.callFake((key) => {
+        vi.spyOn(route.paramMap, 'get').mockImplementation((key) => {
             if (key === 'eventID') return '123';
             if (key === 'userID') return '456';
             return null;
@@ -96,14 +97,14 @@ describe('eventResolver', () => {
             expect(snackBarSpy.open).toHaveBeenCalled();
             done();
         });
-    });
+    }));
 
-    it('should handle errors and redirect to dashboard', (done) => {
-        eventServiceSpy.getEventActivitiesAndSomeStreams.and.returnValue(throwError(() => new Error('Error')));
-        userServiceSpy.getUserChartDataTypesToUse.and.returnValue([]);
+    it('should handle errors and redirect to dashboard', () => new Promise<void>(done => {
+        eventServiceSpy.getEventActivitiesAndSomeStreams.mockReturnValue(throwError(() => new Error('Error')));
+        userServiceSpy.getUserChartDataTypesToUse.mockReturnValue([]);
 
         const route = new ActivatedRouteSnapshot();
-        spyOn(route.paramMap, 'get').and.callFake((key) => {
+        vi.spyOn(route.paramMap, 'get').mockImplementation((key) => {
             if (key === 'eventID') return '123';
             if (key === 'userID') return '456';
             return null;
@@ -119,5 +120,5 @@ describe('eventResolver', () => {
                 done();
             }
         });
-    });
+    }));
 });

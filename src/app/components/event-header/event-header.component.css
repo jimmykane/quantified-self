@@ -23,3 +23,35 @@ mat-form-field {
 }
 
 /* Removed ::ng-deep overrides for disabled form fields and inputs */
+
+.headers-align .mat-expansion-panel-header-title,
+.headers-align .mat-expansion-panel-header-description {
+  flex-basis: 0;
+}
+
+.headers-align .mat-expansion-panel-header-description {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.expansion-content {
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.split-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.half-width {
+  flex: 1;
+  min-width: 200px;
+}
+
+mat-form-field {
+  width: 100%;
+}

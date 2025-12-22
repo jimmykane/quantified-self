@@ -9,6 +9,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { ChangeDetectorRef, NO_ERRORS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 import { User, EventInterface } from '@sports-alliance/sports-lib';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 describe('DashboardComponent', () => {
     let component: DashboardComponent;
@@ -42,16 +43,16 @@ describe('DashboardComponent', () => {
         };
 
         mockEventService = {
-            getEventsBy: jasmine.createSpy('getEventsBy').and.returnValue(of([{ id: 'event1' }]))
+            getEventsBy: vi.fn().mockReturnValue(of([{ id: 'event1' }]))
         };
 
         mockUserService = {
-            getUserByID: jasmine.createSpy('getUserByID').and.returnValue(of(new User('targetUser'))),
-            shouldShowPromo: jasmine.createSpy('shouldShowPromo').and.returnValue(false),
-            updateUserProperties: jasmine.createSpy('updateUserProperties').and.returnValue(Promise.resolve())
+            getUserByID: vi.fn().mockReturnValue(of(new User('targetUser'))),
+            shouldShowPromo: vi.fn().mockReturnValue(false),
+            updateUserProperties: vi.fn().mockReturnValue(Promise.resolve())
         };
 
-        mockRouter = jasmine.createSpyObj('Router', ['navigate']);
+        mockRouter = { navigate: vi.fn() };
 
         mockActivatedRoute = {
             snapshot: {
@@ -61,8 +62,8 @@ describe('DashboardComponent', () => {
             }
         };
 
-        mockDialog = jasmine.createSpyObj('MatDialog', ['open']);
-        mockSnackBar = jasmine.createSpyObj('MatSnackBar', ['open']);
+        mockDialog = { open: vi.fn() };
+        mockSnackBar = { open: vi.fn() };
 
         await TestBed.configureTestingModule({
             declarations: [DashboardComponent],
@@ -96,7 +97,7 @@ describe('DashboardComponent', () => {
 
         expect(mockEventService.getEventsBy).toHaveBeenCalled();
         expect(component.events.length).toBe(1);
-        expect(component.isLoading).toBeFalse();
+        expect(component.isLoading).toBe(false);
     }));
 
     it('should not have throttle delay on data loading', fakeAsync(() => {
