@@ -127,7 +127,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
       }
     });
-    this.processChanges();
+    if (this.events) {
+      this.processChanges();
+    }
   }
 
   checkBoxClick(row) {
@@ -285,6 +287,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   private processChanges() {
+    if (!this.events) {
+      return;
+    }
 
     this.selection.clear();
     // this.data = new MatTableDataSource<any>(data);

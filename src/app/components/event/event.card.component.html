@@ -4,7 +4,7 @@
 
   @if (event) {
   <!-- Header Section -->
-  <mat-card class="dashboard-card header-section">
+  <mat-card class="dashboard-card header-section glass-card">
     <app-event-header [event]="event" [user]='currentUser'
       [isOwner]="currentUser && (currentUser.uid === targetUserID)">
     </app-event-header>
@@ -16,7 +16,7 @@
   </mat-card>
 
   <!-- Stats Section -->
-  <mat-card class="dashboard-card stats-section">
+  <mat-card class="dashboard-card stats-section glass-card">
     <app-event-card-stats-grid [event]="event" [selectedActivities]="selectedActivities"
       [unitSettings]="userUnitSettings">
     </app-event-card-stats-grid>
@@ -36,7 +36,7 @@
 
   <!-- Map Section -->
   @if (event && targetUserID && hasPositions(event)) {
-  <mat-card class="dashboard-card map-section">
+  <mat-card class="dashboard-card map-section glass-card">
     <app-event-card-map [selectedActivities]="selectedActivities" [targetUserID]="targetUserID" [user]="currentUser"
       [event]="event" [showLaps]="showMapLaps" [showPoints]="showMapPoints" [lapTypes]="mapLapTypes"
       [showArrows]="showMapArrows" [strokeWidth]="mapStrokeWidth" [theme]="mapTheme">
@@ -45,7 +45,7 @@
   }
 
   <!-- Chart Section -->
-  <mat-card class="dashboard-card chart-section">
+  <mat-card class="dashboard-card chart-section glass-card">
     <app-event-card-chart [showAllData]="showAllData" [showLaps]="showChartLaps" [useAnimations]="useChartAnimations"
       [disableGrouping]="chartDisableGrouping" [hideAllSeriesOnInit]="chartHideAllSeriesOnInit"
       [gainAndLossThreshold]="chartGainAndLossThreshold" [stackYAxes]="stackChartYAxes" [showGrid]="showChartGrid"
@@ -61,7 +61,7 @@
 
   <!-- Details Section (Laps & Devices) -->
   @if (hasLaps(event) || hasDevices(event)) {
-  <mat-card class="dashboard-card details-section">
+  <mat-card class="dashboard-card details-section glass-card">
     @if (hasLaps(event)) {
     <app-event-card-laps [selectedActivities]="selectedActivities" [unitSettings]="userUnitSettings" [event]="event">
     </app-event-card-laps>

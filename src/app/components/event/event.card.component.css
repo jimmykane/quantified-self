@@ -3,7 +3,7 @@
 .event-dashboard-container {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 2rem;
   /* Standard material gap */
   padding: 16px;
   max-width: 1600px;
@@ -14,9 +14,8 @@
 
 
 /* Specific section tweaks if needed */
-.header-section {
-  /* maybe some specific styling */
-}
+/* Specific section tweaks if needed */
+/* .header-section { } removed empty rule */
 
 /* Map should typically be full bleed */
 .map-section {
