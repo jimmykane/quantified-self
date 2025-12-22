@@ -19,7 +19,7 @@ const routes: Routes = [
   {
     path: 'pricing',
     loadComponent: () => import('./components/pricing/pricing.component').then(m => m.PricingComponent),
-    canMatch: [authGuard, onboardingGuard],
+    // Public route
     data: { title: 'Pricing' }
   },
   {

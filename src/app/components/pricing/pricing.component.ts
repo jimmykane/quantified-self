@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -8,6 +8,8 @@ import { AppPaymentService, StripeProduct, StripeSubscription } from '../../serv
 import { AppUserService } from '../../services/app.user.service';
 import { Observable, map } from 'rxjs';
 import { StripeRole } from '../../models/stripe-role.model';
+import { Router } from '@angular/router';
+import { Auth } from '@angular/fire/auth';
 
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
@@ -25,6 +27,9 @@ export class PricingComponent implements OnInit {
     currentRole: StripeRole | null = null;
     isLoading = false;
     loadingPriceId: string | null = null;
+
+    private auth = inject(Auth);
+    private router = inject(Router);
 
     constructor(
         private paymentService: AppPaymentService,
@@ -62,6 +67,11 @@ export class PricingComponent implements OnInit {
     }
 
     async subscribe(price: any) {
+        if (!this.auth.currentUser) {
+            this.router.navigate(['/login'], { queryParams: { returnUrl: '/pricing' } });
+            return;
+        }
+
         // Handle both price object and legacy string ID for backward compatibility
         const priceId = typeof price === 'string' ? price : price.id;
         this.loadingPriceId = priceId;
@@ -84,7 +94,7 @@ export class PricingComponent implements OnInit {
         try {
             await this.paymentService.appendCheckoutSession(price);
         } catch (error) {
-            if (error.message === 'User cancelled redirection to portal.') {
+            if ((error as any).message === 'User cancelled redirection to portal.') {
                 // User cancelled the dialog, just stop loading
                 console.log('User cancelled subscription management.');
             } else {
@@ -127,6 +137,11 @@ export class PricingComponent implements OnInit {
     activeSubscriptions$: Observable<StripeSubscription[]> | null = null;
 
     async restorePurchases() {
+        if (!this.auth.currentUser) {
+            this.router.navigate(['/login'], { queryParams: { returnUrl: '/pricing' } });
+            return;
+        }
+
         this.isLoading = true;
         try {
             await this.paymentService.restorePurchases();
