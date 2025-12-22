@@ -34,11 +34,7 @@ export class PromoDialogComponent implements OnInit {
     logEvent(this.analytics, 'promo_popup_shown');
   }
 
-  async becomeAPatron() {
-    logEvent(this.analytics, 'become_a_patron_click');
-    window.open('https://www.patreon.com/dimitrioskanellopoulos');
-    return this.userService.setLastSeenPromoToNow(this.user);
-  }
+
 
   async gitHubSponsor() {
     logEvent(this.analytics, 'github_sponsor');

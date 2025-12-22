@@ -1,12 +1,9 @@
-<section class="mat-elevation-z0"
-          (drop)="getFiles($event);"
-          ondragenter="event.stopPropagation(); event.preventDefault();"
-          ondragover="event.stopPropagation(); event.preventDefault();this.classList.add('drag');"
-          ondragleave="event.stopPropagation(); event.preventDefault();this.classList.remove('drag');">
-  <button mat-flat-button  color="primary" (click)="inputFile.click()">
+<section class="mat-elevation-z0" (drop)="getFiles($event);"
+  ondragenter="event.stopPropagation(); event.preventDefault();"
+  ondragover="event.stopPropagation(); event.preventDefault();this.classList.add('drag');"
+  ondragleave="event.stopPropagation(); event.preventDefault();this.classList.remove('drag');">
+  <button mat-flat-button color="primary" (click)="inputFile.click()">
     Open or drag and drop file
   </button>
-  <input #inputFile type="file" accept=".fit" multiple  style="display: none;"
-         (change)="getFiles($event)"/>
+  <input #inputFile type="file" accept=".fit" multiple style="display: none;" (change)="getFiles($event)" />
 </section>
-<button mat-stroked-button class="full" onclick="window.open('https://www.patreon.com/dimitrioskanellopoulos')">Support this project on Patreon</button>

@@ -66,10 +66,7 @@ export class SideNavComponent implements OnInit, OnDestroy {
     window.open('https://paypal.me/DKanellopoulos');
   }
 
-  async becomeAPatron() {
-    logEvent(this.analytics, 'become_a_patron_click');
-    window.open('https://www.patreon.com/dimitrioskanellopoulos');
-  }
+
 
   async gitHubSponsor() {
     logEvent(this.analytics, 'github_sponsor');
