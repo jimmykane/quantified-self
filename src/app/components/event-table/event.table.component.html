@@ -54,8 +54,8 @@
         <td mat-cell matRipple *matCellDef="let row"
           (click)="(column === 'Checkbox' ? ($event.preventDefault() || $event.stopPropagation() || checkBoxClick(row)) : false)">
           @if (column === 'Checkbox') {
-          <mat-checkbox (click)="$event.preventDefault();$event.stopPropagation();checkBoxClick(row);"
-            (change)="$event ? checkBoxClick(row) : null" [checked]="selection.isSelected(row)">
+          <mat-checkbox (click)="$event.stopPropagation()" (change)="$event ? checkBoxClick(row) : null"
+            [checked]="selection.isSelected(row)">
           </mat-checkbox>
           }
           @if (column === 'Actions') {
