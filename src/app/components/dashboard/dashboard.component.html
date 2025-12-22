@@ -3,7 +3,7 @@
 
   @if ((targetUser || user) && isInitialized) {
   <!-- Profile Card Wrapper -->
-  <div class="profile-card">
+  <div class="profile-card glass-card">
     <div class="avatar"
       [style.backgroundImage]="'url('+ ((targetUser || user).photoURL ? (targetUser || user).photoURL :  'https://ui-avatars.com/api/?name=' + ((targetUser || user).displayName || 'Guest'))  +')'">
     </div>

@@ -25,12 +25,17 @@
   width: 50px;
 }
 
+/* Increase width for the Start Date column to fit full date */
+.mat-column-Start-Date {
+  min-width: 200px;
+  width: 220px;
+  white-space: nowrap;
+}
+
 /* Remove forced paddings and justifications that break theme */
 /* Standard material table styles should apply */
 
-.mat-row {
-  /* Let material decide row height */
-}
+/* mat-row rule removed */
 
 mat-icon {
   vertical-align: middle;
