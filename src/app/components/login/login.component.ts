@@ -8,7 +8,6 @@ import { take } from 'rxjs/operators';
 import { AppUserService } from '../../services/app.user.service';
 import * as Sentry from '@sentry/browser';
 import { Auth, signInWithCustomToken, authState } from '@angular/fire/auth';
-import { PhoneFormComponent } from './phone-form/phone.form.component';
 import { Analytics, logEvent } from '@angular/fire/analytics';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
@@ -22,16 +21,16 @@ import { Subscription } from 'rxjs';
 })
 export class LoginComponent implements OnInit, OnDestroy {
 
-  isLoading: boolean;
+  isLoading: boolean = false;
   signInProviders = SignInProviders;
   email: string = '';
-  private userSubscription: Subscription;
+  private userSubscription: Subscription | undefined;
   private auth = inject(Auth);
   private analytics = inject(Analytics);
 
 
   @HostListener('window:tokensReceived', ['$event'])
-  async tokensReceived(event) {
+  async tokensReceived(event: any) {
     this.isLoading = true;
     const loggedInUser = await signInWithCustomToken(this.auth, event.detail.firebaseAuthToken);
     return this.redirectOrShowDataPrivacyDialog(loggedInUser);
@@ -135,13 +134,10 @@ export class LoginComponent implements OnInit, OnDestroy {
           .then(handleResult)
           .catch(handleError);
         break;
-      case SignInProviders.PhoneNumber:
-        this.showPhoneNumberForm();
-        break;
     }
   }
 
-  private async redirectOrShowDataPrivacyDialog(loginServiceUser) {
+  private async redirectOrShowDataPrivacyDialog(loginServiceUser: any) {
     this.isLoading = true;
     try {
       const databaseUser = await this.userService.getUserByID(loginServiceUser.user.uid).pipe(take(1)).toPromise();
@@ -159,24 +155,8 @@ export class LoginComponent implements OnInit, OnDestroy {
 
 
   @HostListener('window:resize', ['$event'])
-  getColumnsToDisplayDependingOnScreenSize(event?) {
+  getColumnsToDisplayDependingOnScreenSize(event?: any) {
     return window.innerWidth < 600 ? 1 : window.innerWidth < 900 ? 2 : 3;
-  }
-
-  private showPhoneNumberForm() {
-    const dialogRef = this.dialog.open(PhoneFormComponent, {
-      width: '86vw',
-      maxWidth: '86vw',
-      disableClose: false,
-      data: {},
-    });
-
-    dialogRef.afterClosed().subscribe(result => {
-      if (result && result.user) {
-        this.redirectOrShowDataPrivacyDialog(result.user)
-      }
-      this.isLoading = false;
-    });
   }
 
   ngOnDestroy(): void {
@@ -190,6 +170,5 @@ export class LoginComponent implements OnInit, OnDestroy {
 
 export enum SignInProviders {
   Google,
-  PhoneNumber,
   Email
 }
