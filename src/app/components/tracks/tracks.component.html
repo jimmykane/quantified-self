@@ -1,14 +1,9 @@
 <mat-card class="mat-elevation-z0">
   @if (user) {
-    <app-event-search
-      [startOfTheWeek]="user.settings.unitSettings.startOfTheWeek"
-      [showDatePicker]="false"
-      [showActivityTypePicker]="false"
-      [dateRangesToShow]="dateRangesToShow"
-      [selectedDateRange]="user.settings.myTracksSettings.dateRange"
-      (searchChange)="search($event)"
-      >
-    </app-event-search>
+  <app-event-search [startOfTheWeek]="user.settings.unitSettings.startOfTheWeek" [showDatePicker]="false"
+    [showActivityTypePicker]="false" [dateRangesToShow]="dateRangesToShow"
+    [selectedDateRange]="user.settings.myTracksSettings?.dateRange" (searchChange)="search($event)">
+  </app-event-search>
   }
 
   <!--  <app-event-search-->
@@ -19,6 +14,6 @@
   <!--    [startOfTheWeek]="startOfTheWeek"-->
   <!--    [selectedActivityTypes]="user.settings.dashboardSettings.activityTypes"-->
   <!--    (searchChange)="search($event)">-->
-<!--  </app-event-search>-->
-<div #mapDiv id="map"></div>
+  <!--  </app-event-search>-->
+  <div #mapDiv id="map"></div>
 </mat-card>

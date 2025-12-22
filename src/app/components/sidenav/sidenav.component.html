@@ -30,9 +30,16 @@
   }
 
   @if (user) {
-  <mat-list-item routerLinkActive="active" routerLink="/mytracks" (click)="sideNav.close();">
+  <mat-list-item routerLinkActive="active" [routerLink]="isProUser ? '/mytracks' : '/pricing'"
+    (click)="sideNav.close();">
     <mat-icon svgIcon="heat-map"></mat-icon>
     <span>My Tracks <span class="mat-small">(Beta)</span></span>
+    <span class="fill-space"></span>
+    @if (!isProUser) {
+    <mat-icon style="margin-right: 0;" class="mat-small">lock</mat-icon>
+    <span class="pro-badge"
+      style="font-size: 0.7em; font-weight: bold; color: var(--accent-color); margin-left: 4px;">PRO</span>
+    }
   </mat-list-item>
   }
 

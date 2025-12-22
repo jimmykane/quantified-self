@@ -55,6 +55,12 @@ export class SideNavComponent implements OnInit, OnDestroy {
     })
   }
 
+  get isProUser(): boolean {
+    if (!this.user) return false;
+    const stripeRole = (this.user as any).stripeRole;
+    return stripeRole === 'pro' || stripeRole === 'basic' || (this.user as any).isPro === true;
+  }
+
   async donate() {
     logEvent(this.analytics, 'donate_click', { method: 'PayPal' });
     window.open('https://paypal.me/DKanellopoulos');

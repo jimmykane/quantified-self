@@ -78,6 +78,11 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.map = this.initMap()
     this.centerMapToStartingLocation(this.map);
     this.user = await this.authService.user$.pipe(take(1)).toPromise();
+    if (!this.user.settings.myTracksSettings) {
+      this.user.settings.myTracksSettings = {
+        dateRange: DateRanges.thisWeek
+      };
+    }
     await this.loadTracksMapForUserByDateRange(this.user, this.map, this.user.settings.myTracksSettings.dateRange)
   }
 
