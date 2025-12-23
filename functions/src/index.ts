@@ -33,6 +33,8 @@ if (admin.apps.length === 0) {
   }
 }
 
+admin.firestore().settings({ ignoreUndefinedProperties: true });
+
 // Coros Auth
 export {
   getCOROSAPIAuthRequestTokenRedirectURI,
