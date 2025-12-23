@@ -55,55 +55,9 @@ mat-card-header mat-icon {
 }
 
 /* --- Pill Tabs Styling --- */
-::ng-deep .pill-tabs .mat-mdc-tab-group,
-::ng-deep .pill-tabs .mat-mdc-tab-nav-bar {
-  --mdc-tab-indicator-active-indicator-height: 100%;
-  --mdc-tab-indicator-active-indicator-shape: 9999px;
-  --mat-tab-header-active-label-text-color: var(--mat-app-on-surface);
-  --mat-tab-header-active-focus-label-text-color: var(--mat-app-on-surface);
-  --mat-tab-header-inactive-label-text-color: var(--mat-app-on-surface-variant);
-  --mat-tab-header-inactive-focus-label-text-color: var(--mat-app-on-surface-variant);
-}
-
-::ng-deep .pill-tabs .mdc-tab-indicator__content--underline {
-  display: none;
-  /* Hide default underline */
-}
-
-::ng-deep .pill-tabs .mat-mdc-tab-header {
-  border-bottom: none;
-  /* Remove bottom border */
-}
-
-::ng-deep .pill-tabs .mdc-tab {
-  min-width: unset;
-  padding: 0 24px;
-  margin-right: 8px;
-  height: 36px;
-  border-radius: 9999px !important;
-  border: none;
-  /* No border for cleaner chip look */
-  background-color: rgba(0, 0, 0, 0.05);
-  /* Light grey background for chip feel */
-  transition: all 0.2s ease-in-out;
-}
-
-::ng-deep .pill-tabs .mdc-tab--active {
-  background-color: var(--mat-app-primary) !important;
-  color: var(--mat-app-on-primary) !important;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-  /* Add depth */
-}
-
-/* Fix text color for active state if variable is not enough */
-::ng-deep .pill-tabs .mdc-tab--active .mdc-tab__text-label {
-  color: var(--mat-app-on-primary) !important;
-  font-weight: 700 !important;
-  /* Make it bold */
-}
-
-::ng-deep .pill-tabs .mat-mdc-tab-body-wrapper {
-  margin-top: 1.5rem;
+/* Standard Material Tabs (No Overrides) */
+::ng-deep .mat-mdc-tab-body-wrapper {
+  margin-top: 1rem;
 }
 
 .tab-content-wrapper {

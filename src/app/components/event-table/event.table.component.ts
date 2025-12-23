@@ -18,6 +18,7 @@ import { MatCard } from '@angular/material/card';
 import { MatPaginator, MatPaginatorIntl, PageEvent } from '@angular/material/paginator';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatSort } from '@angular/material/sort';
+import { AppEventInterface } from '../../../../functions/src/shared/app-event.interface';
 import { MatTableDataSource } from '@angular/material/table';
 import { SelectionModel } from '@angular/cdk/collections';
 import { DatePipe } from '@angular/common';
@@ -163,10 +164,70 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     });
     // Now we can clear the selection
     this.selection.clear();
-    const events = await Promise.all(promises);
-    const mergedEvent = EventUtilities.mergeEvents(events);
+
+    // 1. Fetch Events
+    const events: any[] = await Promise.all(promises);
+
+    // 2. Collect Original Files from source events
+    const validOriginalFiles: { data: any, extension: string }[] = [];
+
+    // We need to fetch the actual file data for each event
+    // The 'events' array contains full Event objects, hopefully with originalFile metadata from getEventActivitiesAndAllStreams -> getEventAndActivities logic
+
+    const fileFetchPromises: Promise<void>[] = [];
+
+    for (const evt of events) {
+      console.log('[EventTable] processing event for merge files:', evt.getID(), 'hasArray:', !!evt.originalFiles, 'hasLegacy:', !!evt.originalFile);
+      console.log('[EventTable] raw keys on evt instance:', Object.keys(evt));
+      // Check for array
+      if (evt.originalFiles && Array.isArray(evt.originalFiles)) {
+        for (const fileMeta of evt.originalFiles) {
+          fileFetchPromises.push((async () => {
+            try {
+              const buffer = await this.eventService.downloadFile(fileMeta.path);
+              // Extract extension from path
+              const parts = fileMeta.path.split('.');
+              const ext = parts[parts.length - 1];
+              validOriginalFiles.push({ data: buffer, extension: ext });
+            } catch (e) {
+              console.error('Failed to download source file for merge', fileMeta, e);
+            }
+          })());
+        }
+      }
+      // Check for single legacy
+      else if (evt.originalFile && evt.originalFile.path) {
+        fileFetchPromises.push((async () => {
+          try {
+            const buffer = await this.eventService.downloadFile(evt.originalFile.path);
+            const parts = evt.originalFile.path.split('.');
+            const ext = parts[parts.length - 1];
+            validOriginalFiles.push({ data: buffer, extension: ext });
+          } catch (e) {
+            console.error('Failed to download source file for merge', evt.originalFile, e);
+          }
+        })());
+      }
+    }
+
     try {
-      await this.eventService.writeAllEventData(this.user, mergedEvent);
+      if (fileFetchPromises.length > 0) {
+        await Promise.all(fileFetchPromises);
+      }
+    } catch (e) {
+      console.warn('Error fetching some original files, proceeding with merge anyway', e);
+    }
+
+    console.log('[EventTable] Total collected original files:', validOriginalFiles.length);
+
+
+    const mergedEvent = EventUtilities.mergeEvents(events) as AppEventInterface; // Use AppEventInterface
+
+    try {
+      // Pass the collected files to the writer
+      // Note: writeAllEventData signature updated to accept array
+      await this.eventService.writeAllEventData(this.user, mergedEvent, validOriginalFiles);
+
       logEvent(this.analytics, 'merge_events');
       await this.router.navigate(['/user', this.user.uid, 'event', mergedEvent.getID()], {});
       this.snackBar.open('Events merged', null, {
@@ -195,9 +256,18 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
       this.unsubscribeFromAll();
       const deletePromises = [];
-      this.selection.selected.map(selected => selected.Event).forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
+      const eventsToDelete = this.selection.selected.map(selected => selected.Event);
+      eventsToDelete.forEach((event) => deletePromises.push(this.eventService.deleteAllEventData(this.user, event.getID())));
       this.selection.clear();
       await Promise.all(deletePromises);
+
+      // Update local view
+      if (this.events) {
+        const deletedIds = new Set(eventsToDelete.map(e => e.getID()));
+        this.events = this.events.filter(e => !deletedIds.has(e.getID()));
+        this.processChanges();
+      }
+
       logEvent(this.analytics, 'delete_events');
       this.snackBar.open('Events deleted', null, {
         duration: 2000,

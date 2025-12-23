@@ -28,12 +28,14 @@ import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
 import { EventImporterGPX } from '@sports-alliance/sports-lib';
 import { EventImporterSuuntoSML } from '@sports-alliance/sports-lib';
+import { EventUtilities } from '@sports-alliance/sports-lib';
 
 
 import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
 
 import { AppUserService } from './app.user.service';
 import { USAGE_LIMITS } from '../../../functions/src/shared/limits';
+import { AppEventInterface } from '../../../functions/src/shared/app-event.interface'; // Import Shared Interface
 
 @Injectable({
   providedIn: 'root',
@@ -49,39 +51,44 @@ export class AppEventService implements OnDestroy {
     private windowService: AppWindowService) {
   }
 
-  public getEventAndActivities(user: User, eventID: string): Observable<EventInterface> {
+  public getEventAndActivities(user: User, eventID: string): Observable<AppEventInterface> {
     // See
     // https://stackoverflow.com/questions/42939978/avoiding-nested-subscribes-with-combine-latest-when-one-observable-depends-on-th
     const eventDoc = doc(this.firestore, 'users', user.uid, 'events', eventID);
     return combineLatest([
       docData(eventDoc).pipe(
         map(eventSnapshot => {
+          console.log('[AppEventService] docData emitted:', !!eventSnapshot);
           if (!eventSnapshot) return null;
           const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
-          if (unknownTypes.length > 0) {
-            const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
-            if (newUnknownTypes.length > 0) {
-              newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
-              Sentry.captureMessage('Unknown Data Types in getEventAndActivities', { extra: { types: newUnknownTypes, eventID } });
-            }
+          console.log('[AppEventService] sanitizedJson:', !!sanitizedJson);
+          const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventID) as AppEventInterface;
+
+          // Hydrate with original file(s) info if present
+          const rawData = eventSnapshot as any;
+          console.log('[AppEventService] raw snapshot keys for SINGLE event:', Object.keys(rawData));
+
+          if (rawData.originalFiles) {
+            console.log('[AppEventService] Hydrating originalFiles (Single):', rawData.originalFiles.length);
+            event.originalFiles = rawData.originalFiles;
           }
-          const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventID);
-          if ((eventSnapshot as any).originalFile) {
-            Object.assign(event, { originalFile: (eventSnapshot as any).originalFile });
-            console.log('[AppEventService] Patch applied in getEventAndActivities for', eventID, 'Has it?', !!(event as any).originalFile);
+          if (rawData.originalFile) {
+            console.log('[AppEventService] Hydrating originalFile (Single):', rawData.originalFile.path);
+            event.originalFile = rawData.originalFile;
           }
+
           return event;
         })),
       this.getActivities(user, eventID),
     ]).pipe(catchError((error) => {
       if (error && error.code && error.code === 'permission-denied') {
-        return of([null, null] as [EventInterface | null, ActivityInterface[] | null]);
+        return of([null, null] as [AppEventInterface | null, ActivityInterface[] | null]);
       }
       console.error('Error fetching event or activities:', error);
       Sentry.captureException(error);
 
-      return of([null, null] as [EventInterface | null, ActivityInterface[] | null]); // @todo fix this
-    })).pipe(map(([event, activities]: [EventInterface, ActivityInterface[]]) => {
+      return of([null, null] as [AppEventInterface | null, ActivityInterface[] | null]); // @todo fix this
+    })).pipe(map(([event, activities]: [AppEventInterface, ActivityInterface[]]) => {
       if (!event) {
         return null;
       }
@@ -223,7 +230,7 @@ export class AppEventService implements OnDestroy {
     return combineLatest(x).pipe(map(arrayOfArrays => arrayOfArrays.reduce((a, b) => a.concat(b), [])));
   }
 
-  public async writeAllEventData(user: User, event: EventInterface, originalFile?: { data: any, extension: string }) {
+  public async writeAllEventData(user: User, event: AppEventInterface, originalFiles?: { data: any, extension: string }[] | { data: any, extension: string }) {
     // 1. Check Pro Status
     const userService = this.injector.get(AppUserService);
     const isPro = await userService.isPro();
@@ -272,7 +279,7 @@ export class AppEventService implements OnDestroy {
     }
 
     const writer = new EventWriter(adapter, storageAdapter);
-    await writer.writeAllEventData(user.uid, event, originalFile);
+    await writer.writeAllEventData(user.uid, event, originalFiles);
   }
 
   public async setEvent(user: User, event: EventInterface) {
@@ -343,18 +350,31 @@ export class AppEventService implements OnDestroy {
    * @param streamTypes
    * @private
    */
-  public attachStreamsToEventWithActivities(user: User, event: EventInterface, streamTypes?: string[]): Observable<EventInterface> {
+  public attachStreamsToEventWithActivities(user: User, event: AppEventInterface, streamTypes?: string[]): Observable<EventInterface> {
     // Check if we have an original file to parse instead of fetching from Firestore
-    console.log(`[AppEventService] attachStreams for ${event.getID()}. Has originalFile?`, !!(event as any).originalFile);
-    console.log(`[AppEventService] attachStreams for ${event.getID()}. Has originalFile?`, !!(event as any).originalFile);
-    console.log('[AppEventService] Event props:', JSON.stringify(event));
-    console.log('[AppEventService] Event keys:', Object.keys(event));
-    console.log('[AppEventService] originalFile via bracket:', (event as any)['originalFile']);
-    console.log('[AppEventService] originalFile descriptor:', Object.getOwnPropertyDescriptor(event, 'originalFile'));
+    console.log(`[AppEventService] attachStreams for ${event.getID()}. Has originalFile?`, !!event.originalFile);
+    console.log(`[AppEventService] attachStreams for ${event.getID()}. Has originalFiles?`, !!event.originalFiles);
 
-    if ((event as any).originalFile && (event as any).originalFile.path) {
-      console.log('[AppEventService] Using client-side parsing for', event.getID());
-      return from(this.caclulateStreamsFromOriginalFile(event)).pipe(
+    if (event.originalFiles && event.originalFiles.length > 0) {
+      console.log('[AppEventService] Using client-side parsing for (Multiple)', event.getID());
+      return from(this.calculateStreamsFromWithOrchestration(event)).pipe(
+        map((fullEvent) => {
+          if (!fullEvent) return event;
+          const existingID = event.getID();
+          event.clearActivities();
+          event.addActivities(fullEvent.getActivities());
+          return event;
+        }),
+        catchError((e) => {
+          console.error('Failed to parse original files, falling back to legacy streams', e);
+          return this.attachStreamsLegacy(user, event, streamTypes);
+        })
+      );
+    }
+
+    if (event.originalFile && event.originalFile.path) {
+      console.log('[AppEventService] Using client-side parsing for (Single)', event.getID());
+      return from(this.calculateStreamsFromWithOrchestration(event)).pipe(
         map((fullEvent) => {
           if (!fullEvent) return event;
           // Merge logic: Copy activities/streams from fullEvent to event
@@ -395,23 +415,46 @@ export class AppEventService implements OnDestroy {
       }));
   }
 
-  private async caclulateStreamsFromOriginalFile(event: EventInterface): Promise<EventInterface> {
-    console.log('Calculating streams from original file for event', event.getID());
-    const originalFile = (event as any).originalFile;
+  private async calculateStreamsFromWithOrchestration(event: AppEventInterface): Promise<EventInterface> {
+    console.log('Calculating streams orchestration for event', event.getID());
+
+    // 1. Array Strategy
+    if (event.originalFiles && event.originalFiles.length > 0) {
+      console.log(`Orchestrating fetch and merge for ${event.originalFiles.length} files`);
+      const promises = event.originalFiles.map(fileMeta => this.fetchAndParseOneFile(fileMeta));
+      const parsedEvents = await Promise.all(promises);
+
+      // remove nulls if any failure
+      const validEvents = parsedEvents.filter(e => !!e);
+      if (validEvents.length === 0) return null;
+
+      if (validEvents.length === 1) return validEvents[0];
+
+      return EventUtilities.mergeEvents(validEvents);
+    }
+
+    // 2. Legacy Single Strategy
+    const originalFile = event.originalFile;
     if (!originalFile || !originalFile.path) {
       console.warn('Original file path missing', originalFile);
       return null;
     }
+    return this.fetchAndParseOneFile(originalFile);
+  }
 
+  public async downloadFile(path: string): Promise<ArrayBuffer> {
+    const fileRef = ref(this.storage, path);
+    return getBytes(fileRef);
+  }
+
+  private async fetchAndParseOneFile(fileMeta: { path: string, bucket?: string }): Promise<EventInterface> {
     try {
-      const fileRef = ref(this.storage, originalFile.path);
-      console.log('Fetching file bytes from', originalFile.path);
+      const fileRef = ref(this.storage, fileMeta.path);
+      console.log('Fetching file bytes from', fileMeta.path);
       const arrayBuffer = await getBytes(fileRef);
       console.log('File bytes fetched, size:', arrayBuffer.byteLength);
 
-      // Determine extension. using path or explicit extension if we had it
-      // path is user/uid/events/id/original.fit
-      const parts = originalFile.path.split('.');
+      const parts = fileMeta.path.split('.');
       const extension = parts[parts.length - 1].toLowerCase();
       console.log('Parsing file with extension:', extension);
 
@@ -436,11 +479,13 @@ export class AppEventService implements OnDestroy {
       } else {
         throw new Error(`Unsupported original file extension: ${extension}`);
       }
-      console.log('File parsed successfully');
       return newEvent;
     } catch (e) {
-      console.error('Error in caclulateStreamsFromOriginalFile', e);
-      throw e;
+      console.error('Error in fetchAndParseOneFile', e);
+      // throw e; // Don't throw to allow partial success in array? 
+      // Actually if one fails in array, what do we do? 
+      // For now, let's return null and filter it out, logging error
+      return null;
     }
   }
 
@@ -497,12 +542,27 @@ export class AppEventService implements OnDestroy {
             Sentry.captureMessage('Unknown Data Types in _getEvents', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
           }
         }
-        const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id);
-        if ((eventSnapshot as any).originalFile) {
-          // Force assignment using Object.assign or defineProperty in case of sealed keys?
-          // (event as any).originalFile = (eventSnapshot as any).originalFile;
-          Object.assign(event, { originalFile: (eventSnapshot as any).originalFile });
+        const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id) as AppEventInterface;
+        console.log('[AppEventService] importer created event instance');
+
+        // Hydrate with original file(s) info if present
+        const rawData = eventSnapshot as any;
+        console.log('[AppEventService] raw snapshot keys:', Object.keys(rawData));
+
+        if (rawData.originalFiles) {
+          console.log('[AppEventService] Found originalFiles in snapshot:', rawData.originalFiles.length);
+          event.originalFiles = rawData.originalFiles;
         }
+        if (rawData.originalFile) {
+          console.log('[AppEventService] Found originalFile in snapshot:', rawData.originalFile.path);
+          event.originalFile = rawData.originalFile;
+        }
+
+        console.log('[AppEventService] Hydration complete for', eventSnapshot.id, {
+          hasFiles: !!event.originalFiles,
+          hasFile: !!event.originalFile
+        });
+
         return event;
       })
     }));
@@ -521,10 +581,27 @@ export class AppEventService implements OnDestroy {
             Sentry.captureMessage('Unknown Data Types in _getEventsAndActivities', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
           }
         }
-        const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id);
-        if ((eventSnapshot as any).originalFile) {
-          Object.assign(event, { originalFile: (eventSnapshot as any).originalFile });
+        const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id) as AppEventInterface;
+        console.log('[AppEventService] importer created event instance');
+
+        // Hydrate with original file(s) info if present
+        const rawData = eventSnapshot as any;
+        console.log('[AppEventService] raw snapshot keys:', Object.keys(rawData));
+
+        if (rawData.originalFiles) {
+          console.log('[AppEventService] Hydrating originalFiles:', rawData.originalFiles.length);
+          event.originalFiles = rawData.originalFiles;
         }
+        if (rawData.originalFile) {
+          console.log('[AppEventService] Hydrating originalFile:', rawData.originalFile.path);
+          event.originalFile = rawData.originalFile;
+        }
+
+        console.log('[AppEventService] Hydration complete for', eventSnapshot.id, {
+          hasFiles: !!event.originalFiles,
+          hasFile: !!event.originalFile
+        });
+
         events.push(event);
         return events;
       }, []);
@@ -625,4 +702,3 @@ export class AppEventService implements OnDestroy {
     return snapshot.data().count;
   }
 }
-
