@@ -148,4 +148,37 @@ describe('parseWorkoutQueueItemForServiceName', () => {
         // Check that the update contained the high retry count
         expect(updateCallArgs.retryCount).toBeGreaterThanOrEqual(20);
     });
+
+    it('should log a warning if no token is found', async () => {
+        const consoleSpy = vi.spyOn(console, 'warn');
+        const updateMock = vi.fn().mockResolvedValue(undefined);
+
+        const queueItem = {
+            id: 'test-item-missing',
+            userName: 'test-user',
+            workoutID: 'test-workout',
+            retryCount: 0,
+            totalRetryCount: 0, // Explicitly init with 0 to avoid undefined + 20 = NaN if code relies on +=
+            // queue.ts: queueItem.totalRetryCount = queueItem.totalRetryCount || 0;
+            ref: {
+                update: updateMock
+            }
+        };
+
+        // Mock empty token retrieval
+        mockGet.mockResolvedValue({
+            size: 0,
+            docs: []
+        });
+
+        // Execute
+        await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, queueItem as any);
+
+        // Verify
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('No token found'));
+
+        // Verify retry count increase
+        expect(queueItem.retryCount).toBeGreaterThanOrEqual(20);
+        expect(updateMock).toHaveBeenCalled();
+    });
 });

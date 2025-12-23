@@ -70,14 +70,14 @@ vi.mock('firebase-admin', () => {
 vi.mock('simple-oauth2', () => ({
     AuthorizationCode: class {
         authorizeURL() {
- return 'https://mock-auth-url.com';
-}
+            return 'https://mock-auth-url.com';
+        }
         getToken() {
- return Promise.resolve({ token: {} });
-}
+            return Promise.resolve({ token: {} });
+        }
         createToken(token: any) {
- return { expired: () => false, refresh: () => Promise.resolve({ token: {} }), token };
-}
+            return { expired: () => false, refresh: () => Promise.resolve({ token: {} }), token };
+        }
     },
 }));
 

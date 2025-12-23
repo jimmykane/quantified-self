@@ -202,7 +202,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
 
   // If there is no token for the user skip @todo or retry in case the user reconnects?
   if (!tokenQuerySnapshots.size) {
-    console.error(`No token found for queue item ${queueItem.id} increasing count to max`);
+    console.warn(`No token found for queue item ${queueItem.id} increasing count to max`);
     return increaseRetryCountForQueueItem(queueItem, serviceName, new Error('No tokens found'), 20);
   }
 
