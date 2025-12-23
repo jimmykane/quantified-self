@@ -1,20 +1,15 @@
-import {ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges} from '@angular/core';
-import {EventInterface} from '@sports-alliance/sports-lib';
-import {User} from '@sports-alliance/sports-lib';
-import {Privacy} from '@sports-alliance/sports-lib';
-import {AppEventService} from '../../services/app.event.service';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import {DataFeeling, Feelings} from '@sports-alliance/sports-lib';
-import {isNumber} from '@sports-alliance/sports-lib';
-import {DataRPE, RPEBorgCR10SCale} from '@sports-alliance/sports-lib';
-import {EnumeratorHelpers} from '../../helpers/enumerator-helpers';
+import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { EventInterface, User, ActivityInterface, UserUnitSettingsInterface, Privacy, DataFeeling, Feelings, isNumber, DataRPE, RPEBorgCR10SCale } from '@sports-alliance/sports-lib';
+import { AppEventService } from '../../services/app.event.service';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { EnumeratorHelpers } from '../../helpers/enumerator-helpers';
 
 @Component({
-    selector: 'app-event-header',
-    templateUrl: './event-header.component.html',
-    styleUrls: ['./event-header.component.css'],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    standalone: false
+  selector: 'app-event-header',
+  templateUrl: './event-header.component.html',
+  styleUrls: ['./event-header.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 
 export class EventHeaderComponent implements OnChanges {
@@ -23,6 +18,9 @@ export class EventHeaderComponent implements OnChanges {
   @Input() showType = true;
   @Input() showIcon = false;
   @Input() isOwner = false;
+  @Input() selectedActivities: ActivityInterface[] = [];
+  @Input() unitSettings: UserUnitSettingsInterface;
+  @Input() statsToShow: string[] = [];
 
   feeling: Feelings;
   rpe: RPEBorgCR10SCale;

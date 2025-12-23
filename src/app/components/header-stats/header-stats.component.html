@@ -1,19 +1,38 @@
 <mat-card-subtitle>
-  <section>
+  <!-- Grid Layout -->
+  @if (layout === 'grid') {
+  <section class="grid">
     @for (stat of stats; track stat) {
-    <mat-card class="mat-elevation-z0 item">
-      <mat-card-header class="no-margin">
-        <div mat-card-avatar>
-          <app-data-type-icon [size]="'24px'" [vAlign]="'top'" [dataType]="stat.getType()"></app-data-type-icon>
-        </div>
-        <mat-card-subtitle>
+    <div class="stat-item">
+      <div class="stat-avatar">
+        <app-data-type-icon [size]="'20px'" [vAlign]="'top'" [dataType]="stat.getType()"></app-data-type-icon>
+      </div>
+      <div class="stat-content">
+        <div class="stat-label">
           {{stat.getDisplayType()}}
-        </mat-card-subtitle>
-        <mat-card-title>
+        </div>
+        <div class="stat-value-grid">
           {{stat.getDisplayValue()}} {{stat.getDisplayUnit()}}
-        </mat-card-title>
-      </mat-card-header>
-    </mat-card>
+        </div>
+      </div>
+    </div>
     }
   </section>
+  }
+
+  <!-- Condensed Layout (Chips) -->
+  @if (layout === 'condensed') {
+  <section class="condensed">
+    <mat-chip-set role="list">
+      @for (stat of stats; track stat) {
+      <mat-chip role="listitem" [matTooltip]="stat.getDisplayType()" class="stat-chip" [highlighted]="false"
+        [disableRipple]="true">
+        <app-data-type-icon matChipAvatar [size]="'18px'" [vAlign]="'middle'"
+          [dataType]="stat.getType()"></app-data-type-icon>
+        <span class="stat-value">{{stat.getDisplayValue()}} {{stat.getDisplayUnit()}}</span>
+      </mat-chip>
+      }
+    </mat-chip-set>
+  </section>
+  }
 </mat-card-subtitle>

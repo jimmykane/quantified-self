@@ -11,11 +11,7 @@
   margin: 0 auto;
 }
 
-
-
 /* Specific section tweaks if needed */
-/* Specific section tweaks if needed */
-/* .header-section { } removed empty rule */
 
 /* Map should typically be full bleed */
 .map-section {
@@ -32,4 +28,95 @@ mat-card-header mat-icon {
   display: flex;
   align-content: center;
   align-items: center;
+}
+
+/* --- V2 Layout Tweaks --- */
+.condensed-stats-row {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.responsive-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* Inside tabs, we might want cards to be flatter or blend in.
+   "no-shadow" helper to remove elevation if we want them to feel like part of the background,
+   OR keep them as cards. User didn't specify, but nested cards usually look better without double padding/shadow.
+   Let's keep them distinct for now, but remove margin/padding if needed.
+*/
+.no-shadow {
+  box-shadow: none !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+/* --- Pill Tabs Styling --- */
+::ng-deep .pill-tabs .mat-mdc-tab-group,
+::ng-deep .pill-tabs .mat-mdc-tab-nav-bar {
+  --mdc-tab-indicator-active-indicator-height: 100%;
+  --mdc-tab-indicator-active-indicator-shape: 9999px;
+  --mat-tab-header-active-label-text-color: var(--mat-app-on-surface);
+  --mat-tab-header-active-focus-label-text-color: var(--mat-app-on-surface);
+  --mat-tab-header-inactive-label-text-color: var(--mat-app-on-surface-variant);
+  --mat-tab-header-inactive-focus-label-text-color: var(--mat-app-on-surface-variant);
+}
+
+::ng-deep .pill-tabs .mdc-tab-indicator__content--underline {
+  display: none;
+  /* Hide default underline */
+}
+
+::ng-deep .pill-tabs .mat-mdc-tab-header {
+  border-bottom: none;
+  /* Remove bottom border */
+}
+
+::ng-deep .pill-tabs .mdc-tab {
+  min-width: unset;
+  padding: 0 24px;
+  margin-right: 8px;
+  height: 36px;
+  border-radius: 9999px !important;
+  border: none;
+  /* No border for cleaner chip look */
+  background-color: rgba(0, 0, 0, 0.05);
+  /* Light grey background for chip feel */
+  transition: all 0.2s ease-in-out;
+}
+
+::ng-deep .pill-tabs .mdc-tab--active {
+  background-color: var(--mat-app-primary) !important;
+  color: var(--mat-app-on-primary) !important;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  /* Add depth */
+}
+
+/* Fix text color for active state if variable is not enough */
+::ng-deep .pill-tabs .mdc-tab--active .mdc-tab__text-label {
+  color: var(--mat-app-on-primary) !important;
+  font-weight: 700 !important;
+  /* Make it bold */
+}
+
+::ng-deep .pill-tabs .mat-mdc-tab-body-wrapper {
+  margin-top: 1.5rem;
+}
+
+.tab-content-wrapper {
+  /* Optional: specific padding for tab content if not provided by children */
+  padding: 0.5rem 0;
+}
+
+/* Ensure the container for tabs also has glass effect or transparent to blend */
+/* Ensure the container for tabs also has glass effect or transparent to blend */
+/* Ensure identical padding and sizing for alignment */
+.secondary-details-container,
+.dashboard-card.header-section {
+  padding: 16px !important;
+  box-sizing: border-box;
+  width: 100%;
 }

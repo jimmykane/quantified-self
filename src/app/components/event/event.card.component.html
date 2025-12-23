@@ -2,11 +2,12 @@
 
 
   @if (event) {
-  <!-- Header Section -->
+  <!-- 1. HEADER SECTION (Sticky / Summary) -->
   <mat-card class="dashboard-card header-section glass-card">
-    <app-event-header [event]="event" [user]='currentUser'
-      [isOwner]="currentUser && (currentUser.uid === targetUserID)">
+    <app-event-header [event]="event" [user]='currentUser' [isOwner]="currentUser && (currentUser.uid === targetUserID)"
+      [selectedActivities]="selectedActivities" [unitSettings]="userUnitSettings" [statsToShow]="basicStatsTypes">
     </app-event-header>
+
     @if (event.getActivities().length > 1) {
     <mat-divider></mat-divider>
     <app-activities-toggles [event]="event" [user]="currentUser" [isOwner]="isOwner()">
@@ -14,65 +15,99 @@
     }
   </mat-card>
 
-  <!-- Stats Section -->
-  <mat-card class="dashboard-card stats-section glass-card">
-    <app-event-card-stats-grid [event]="event" [selectedActivities]="selectedActivities"
-      [unitSettings]="userUnitSettings">
-    </app-event-card-stats-grid>
+  <!-- 2. TABS SECTION -->
+  <div class="secondary-details-container glass-card dashboard-card">
+    <mat-tab-group mat-stretch-tabs="false" animationDuration="0ms" class="pill-tabs">
 
-    @if (hasIntensityZones(event)) {
-    <mat-divider></mat-divider>
-    <app-event-intensity-zones [activities]="selectedActivities" [useAnimations]="useChartAnimations"
-      [chartTheme]="chartTheme">
-    </app-event-intensity-zones>
-    }
+      <!-- TAB 1: OVERVIEW (Default) -->
+      <mat-tab label="Overview">
+        <ng-template matTabContent>
+          <div class="tab-content-wrapper responsive-grid">
 
-    <mat-divider></mat-divider>
-    <app-event-stats-table [selectedActivities]="selectedActivities" [userUnitSettings]="userUnitSettings"
-      [event]="event">
-    </app-event-stats-table>
-  </mat-card>
+            <!-- Stats Grid (Basic + Advanced) -->
+            <mat-card class="dashboard-card stats-section glass-card no-shadow">
+              <app-event-card-stats-grid [event]="event" [selectedActivities]="selectedActivities"
+                [unitSettings]="userUnitSettings">
+              </app-event-card-stats-grid>
+            </mat-card>
 
-  <!-- Map Section -->
-  @if (event && targetUserID && hasPositions(event)) {
-  <mat-card class="dashboard-card map-section glass-card">
-    <app-event-card-map [selectedActivities]="selectedActivities" [targetUserID]="targetUserID" [user]="currentUser"
-      [event]="event" [showLaps]="showMapLaps" [showPoints]="showMapPoints" [lapTypes]="mapLapTypes"
-      [showArrows]="showMapArrows" [strokeWidth]="mapStrokeWidth" [theme]="mapTheme">
-    </app-event-card-map>
-  </mat-card>
-  }
+            <!-- Map Section -->
+            @if (event && targetUserID && hasPositions(event)) {
+            <mat-card class="dashboard-card map-section glass-card no-shadow">
+              <app-event-card-map [selectedActivities]="selectedActivities" [targetUserID]="targetUserID"
+                [user]="currentUser" [event]="event" [showLaps]="showMapLaps" [showPoints]="showMapPoints"
+                [lapTypes]="mapLapTypes" [showArrows]="showMapArrows" [strokeWidth]="mapStrokeWidth" [theme]="mapTheme">
+              </app-event-card-map>
+            </mat-card>
+            }
 
-  <!-- Chart Section -->
-  @if (event && targetUserID && currentUser) {
-  <mat-card class="dashboard-card chart-section glass-card">
-    <app-event-card-chart [showAllData]="showAllData" [showLaps]="showChartLaps" [useAnimations]="useChartAnimations"
-      [disableGrouping]="chartDisableGrouping" [hideAllSeriesOnInit]="chartHideAllSeriesOnInit"
-      [gainAndLossThreshold]="chartGainAndLossThreshold" [stackYAxes]="stackChartYAxes" [showGrid]="showChartGrid"
-      [lapTypes]="chartLapTypes" [xAxisType]="chartXAxisType" [strokeWidth]="chartStrokeWidth"
-      [strokeOpacity]="chartStrokeOpacity" [extraMaxForPower]="chartExtraMaxForPower"
-      [extraMaxForPace]="chartExtraMaxForPace" [fillOpacity]="chartFillOpacity"
-      [selectedActivities]="selectedActivities" [targetUserID]="targetUserID" [dataTypesToUse]="chartDataTypesToUse"
-      [userUnitSettings]="userUnitSettings" [user]="currentUser" [downSamplingLevel]="chartDownSamplingLevel"
-      [chartCursorBehaviour]="chartCursorBehaviour" [chartTheme]="chartTheme"
-      [waterMark]="currentUser ? currentUser.brandText : null" [event]="event">
-    </app-event-card-chart>
-  </mat-card>
-  }
+            <!-- Chart Section -->
+            @if (event && targetUserID && currentUser) {
+            <mat-card class="dashboard-card chart-section glass-card no-shadow">
+              <app-event-card-chart [showAllData]="showAllData" [showLaps]="showChartLaps"
+                [useAnimations]="useChartAnimations" [disableGrouping]="chartDisableGrouping"
+                [hideAllSeriesOnInit]="chartHideAllSeriesOnInit" [gainAndLossThreshold]="chartGainAndLossThreshold"
+                [stackYAxes]="stackChartYAxes" [showGrid]="showChartGrid" [lapTypes]="chartLapTypes"
+                [xAxisType]="chartXAxisType" [strokeWidth]="chartStrokeWidth" [strokeOpacity]="chartStrokeOpacity"
+                [extraMaxForPower]="chartExtraMaxForPower" [extraMaxForPace]="chartExtraMaxForPace"
+                [fillOpacity]="chartFillOpacity" [selectedActivities]="selectedActivities" [targetUserID]="targetUserID"
+                [dataTypesToUse]="chartDataTypesToUse" [userUnitSettings]="userUnitSettings" [user]="currentUser"
+                [downSamplingLevel]="chartDownSamplingLevel" [chartCursorBehaviour]="chartCursorBehaviour"
+                [chartTheme]="chartTheme" [waterMark]="currentUser ? currentUser.brandText : null" [event]="event">
+              </app-event-card-chart>
+            </mat-card>
+            }
 
-  <!-- Details Section (Laps & Devices) -->
-  @if (hasLaps(event) || hasDevices(event)) {
-  <mat-card class="dashboard-card details-section glass-card">
-    @if (hasLaps(event)) {
-    <app-event-card-laps [selectedActivities]="selectedActivities" [unitSettings]="userUnitSettings" [event]="event">
-    </app-event-card-laps>
-    }
-    @if (hasDevices(event)) {
-    @if (hasLaps(event)) { <mat-divider></mat-divider> }
-    <app-event-card-devices [selectedActivities]="selectedActivities" [event]="event">
-    </app-event-card-devices>
-    }
-  </mat-card>
-  }
+          </div>
+        </ng-template>
+      </mat-tab>
+
+      <!-- TAB 2: LAPS -->
+      @if (hasLaps(event)) {
+      <mat-tab label="Laps">
+        <ng-template matTabContent>
+          <div class="tab-content-wrapper">
+            <app-event-card-laps [selectedActivities]="selectedActivities" [unitSettings]="userUnitSettings"
+              [event]="event">
+            </app-event-card-laps>
+          </div>
+        </ng-template>
+      </mat-tab>
+      }
+
+      <!-- TAB 3: ANALYSIS -->
+      <mat-tab label="Analysis">
+        <ng-template matTabContent>
+          <div class="tab-content-wrapper">
+            <app-event-stats-table [selectedActivities]="selectedActivities" [userUnitSettings]="userUnitSettings"
+              [event]="event">
+            </app-event-stats-table>
+          </div>
+        </ng-template>
+      </mat-tab>
+
+      <!-- TAB 4: DETAILS -->
+      @if (hasIntensityZones(event) || hasDevices(event)) {
+      <mat-tab label="Details">
+        <ng-template matTabContent>
+          <div class="tab-content-wrapper">
+            @if (hasIntensityZones(event)) {
+            <app-event-intensity-zones [activities]="selectedActivities" [useAnimations]="useChartAnimations"
+              [chartTheme]="chartTheme">
+            </app-event-intensity-zones>
+            }
+
+            @if (hasDevices(event)) {
+            @if (hasIntensityZones(event)) { <mat-divider></mat-divider> }
+            <app-event-card-devices [selectedActivities]="selectedActivities" [event]="event">
+            </app-event-card-devices>
+            }
+          </div>
+        </ng-template>
+      </mat-tab>
+      }
+
+    </mat-tab-group>
+  </div>
   }
 </div>

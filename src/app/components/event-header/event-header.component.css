@@ -14,8 +14,33 @@ mat-card-subtitle {
   width: auto;
 }
 
+mat-card-header {
+  display: flex;
+  align-items: center;
+  /* Vertically center everything */
+  gap: 1rem;
+  /* Space between avatars, title, and stats */
+}
+
 mat-card-header .mat-card-title {
-  /*font-size: 1.3em;*/
+  font-size: 1.1rem;
+  font-weight: 400;
+  margin: 0;
+  white-space: nowrap;
+  /* Keep date on one line */
+  display: flex;
+  align-items: center;
+}
+
+.date-display {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.time-separator {
+  font-size: 0.8em;
+  opacity: 0.6;
 }
 
 mat-form-field {
@@ -31,6 +56,17 @@ mat-form-field {
 
 .headers-align .mat-expansion-panel-header-description {
   justify-content: space-between;
+  align-items: center;
+}
+
+.header-stats-row {
+  margin: 0;
+  /* Remove top margin so it sits inline if space permits or wraps cleanly */
+  padding: 0;
+  border: none;
+  flex: 1;
+  /* Allow stats to take up content space */
+  display: flex;
   align-items: center;
 }
 

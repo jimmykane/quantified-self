@@ -15,52 +15,77 @@
 /*}*/
 
 
-mat-card.item {
-  margin: 0;
-  padding: 0;
-  min-width: 120px;
-  margin-bottom: 1em;
-  height: auto;
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Reduced gap */
+  min-width: unset;
+  /* Allow it to shrink */
+  margin-bottom: 0.5em;
+  /* Tighter vertical spacing */
 }
 
-::ng-deep .no-margin .mat-card-header-text{
-  margin-left: 12px !important;
+.stat-avatar {
+  flex-shrink: 0;
+  opacity: 0.8;
 }
 
-
-mat-card:last-child{
-  margin-bottom: 0;
+.stat-content {
+  display: flex;
+  flex-direction: column;
 }
 
-.mat-card-title {
-  font-size: 1.1em;
+.stat-label {
+  font-size: 0.75rem;
+  /* Smaller label */
+  line-height: 1.1;
+  opacity: 0.6;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.stat-value-grid {
+  font-size: 0.95rem;
+  /* Smaller value */
+  font-weight: 600;
   white-space: nowrap;
-  margin: 0;
+  line-height: 1.2;
 }
 
-mat-card-subtitle {
-  font-size: 0.9em;
-  margin: 0;
-  line-height: 1.3em;
-}
-
-.mat-card-avatar {
-  height: auto;
-  width: auto;
-  padding-top: 3px;
-  /*flex-shrink: unset;*/
-}
-
-
-section {
-  padding: 1rem;
+section.grid {
+  padding: 0.5rem 0;
+  /* Reduced padding */
   display: grid;
-  grid-template-columns: repeat(auto-fill, 160px);
-  justify-content: space-around;
+  /* Denser grid: min 140px is good for "list" feel in columns */
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 1rem 0.5rem;
+  /* Vertical 1rem, horizontal 0.5rem */
+}
+
+section.condensed {
+  display: block;
+  /* Let chips flow */
+  padding: 0;
+}
+
+/* Chip Styles */
+.stat-chip {
+  --mdc-chip-elevated-container-color: transparent !important;
+  /* Make chips transparent like pills */
+  --mdc-chip-label-text-color: var(--mat-app-on-surface);
+  border: 1px solid var(--mat-app-outline-variant);
+  font-weight: 500;
+}
+
+.stat-value {
+  font-weight: 600;
+  font-size: 0.95rem;
 }
 
 @media only screen and (min-width: 768px) {
-  section {
+  section.grid {
     grid-gap: 1rem 6rem;
   }
 }

@@ -29,6 +29,7 @@ import { DataGradeAdjustedSpeedAvg } from '@sports-alliance/sports-lib';
 import { DataMovingTime } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { ActivityUtilities } from '@sports-alliance/sports-lib';
+import { AppUserService } from '../../../services/app.user.service';
 
 @Component({
   selector: 'app-event-card-stats-grid',
@@ -41,11 +42,12 @@ import { ActivityUtilities } from '@sports-alliance/sports-lib';
 
 export class EventCardStatsGridComponent implements OnChanges {
   @Input() event: EventInterface;
-  @Input() selectedActivities: ActivityInterface[];
-  @Input() unitSettings?: UserUnitSettingsInterface;
+  @Input() selectedActivities: ActivityInterface[] = [];
+  @Input() unitSettings = AppUserService.getDefaultUserUnitSettings();
+  @Input('statsToShow') statsToShowInput: string[]; // Optional override
+  @Input() layout: 'grid' | 'condensed' = 'grid';
 
-
-  public statsToShow = [];
+  public statsToShow: string[] = [];
   public stats: DataInterface[];
 
   ngOnChanges() {
@@ -62,6 +64,11 @@ export class EventCardStatsGridComponent implements OnChanges {
 
     } else {
       this.stats = ActivityUtilities.getSummaryStatsForActivities(this.selectedActivities);
+    }
+
+    if (this.statsToShowInput) {
+      this.statsToShow = this.statsToShowInput;
+      return;
     }
 
     const activityTypes = (<DataActivityTypes>this.event.getStat(DataActivityTypes.type)).getValue();

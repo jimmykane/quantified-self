@@ -1,19 +1,20 @@
-import {ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges} from '@angular/core';
-import {DataInterface} from '@sports-alliance/sports-lib';
-import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib';
-import {DynamicDataLoader} from '@sports-alliance/sports-lib';
+import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { DataInterface } from '@sports-alliance/sports-lib';
+import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 
 @Component({
-    selector: 'app-header-stats',
-    templateUrl: './header-stats.component.html',
-    styleUrls: ['./header-stats.component.css'],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    standalone: false
+  selector: 'app-header-stats',
+  templateUrl: './header-stats.component.html',
+  styleUrls: ['./header-stats.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 export class HeaderStatsComponent implements OnChanges {
   @Input() statsToShow: string[];
   @Input() stats: DataInterface[] = [];
   @Input() unitSettings?: UserUnitSettingsInterface;
+  @Input() layout: 'grid' | 'condensed' = 'grid';
 
   ngOnChanges(changes: SimpleChanges): void {
     this.stats = this.statsToShow.reduce((accu, statType) => {

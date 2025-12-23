@@ -4,24 +4,22 @@
     <app-privacy-icon [privacy]="event.privacy" (click)="toggleEventPrivacy()"></app-privacy-icon>
   </div>
   <mat-card-title>
-    <span>
-      <b>{{ event.startDate | date:"d" }}</b>
-    </span>
-    <span style="font-size: 1em">
-      {{ event.startDate | date:"MMM " }}
-    </span>
-    <span style="font-size: 0.8em">
-      <b>{{ event.startDate | date:"yyyy" }}</b>
-    </span>
-    <span style="font-size: 0.7em;">
-      at {{ event.startDate | date:"h:mm:ss a" }}
+    <span class="date-display">
+      <b>{{ event.startDate | date:"d MMM yyyy" }}</b>
+      <span class="time-separator">at</span>
+      {{ event.startDate | date:"shortTime" }}
     </span>
   </mat-card-title>
 
-  <mat-card-subtitle style="font-size: 1.0em;">
-    <b>{{event.getActivityTypesAsString()}}</b> for {{event.getDuration().getDisplayValue(false, false)}}
-    and {{event.getDistance().getDisplayValue()}}{{event.getDistance().getDisplayUnit()}}
-  </mat-card-subtitle>
+
+
+  @if (statsToShow && statsToShow.length) {
+  <div class="header-stats-row">
+    <app-event-card-stats-grid [event]="event" [selectedActivities]="selectedActivities" [statsToShow]="statsToShow"
+      [unitSettings]="unitSettings" [layout]="'condensed'">
+    </app-event-card-stats-grid>
+  </div>
+  }
 
 
   @if (isOwner) {
@@ -30,7 +28,7 @@
 </mat-card-header>
 
 <mat-accordion class="headers-align">
-  <mat-expansion-panel [hideToggle]="true" [expanded]="!event.name || !event.description">
+  <mat-expansion-panel [hideToggle]="true" [expanded]="false">
     <mat-expansion-panel-header>
       <mat-panel-title>
         Details
