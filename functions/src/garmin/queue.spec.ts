@@ -137,4 +137,36 @@ describe('processGarminHealthAPIActivityQueueItem', () => {
             20 // Should abort retries
         );
     });
+
+    it('should log a warning if no token is found', async () => {
+        const consoleSpy = vi.spyOn(console, 'warn');
+        const queueItem = {
+            id: 'test-item-no-token',
+            userID: 'test-user-missing',
+            activityFileID: 'file-id',
+            activityFileType: 'FIT',
+            token: 'token',
+            retryCount: 0,
+            manual: false,
+            startTimeInSeconds: 12345
+        };
+
+        // Mock empty token retrieval
+        mockGet.mockResolvedValue({
+            size: 0,
+            docs: []
+        });
+
+        // Execute
+        await processGarminHealthAPIActivityQueueItem(queueItem as any);
+
+        // Verify
+        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('No token found'));
+        expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
+            queueItem,
+            ServiceNames.GarminHealthAPI,
+            expect.any(Error),
+            20
+        );
+    });
 });

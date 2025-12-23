@@ -79,7 +79,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
   const tokenQuerySnapshots = await admin.firestore().collection('garminHealthAPITokens').where('userID', '==', queueItem['userID']).get();
 
   if (!tokenQuerySnapshots.size) {
-    console.error(`No token found for queue item ${queueItem.id} and userID ${queueItem.userID} increasing count just in case`);
+    console.warn(`No token found for queue item ${queueItem.id} and userID ${queueItem.userID} increasing count just in case`);
     return increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, new Error('No tokens found'), 20);
   }
 
