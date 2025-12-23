@@ -21,31 +21,58 @@ export class AppEventColorService {
   }
 
   public getActivityColor(activities: ActivityInterface[], activity: ActivityInterface): string {
+    const activityID = activity.getID();
+    const creatorName = activity.creator.name || 'Unknown';
+
     // Get the index of the requested activity among all activities
-    const activityIndex = activities.findIndex((eventActivity) => {
-      return activity.getID() === eventActivity.getID();
+    // If ID is missing, fallback to reference matching or index-in-array if possible
+    let activityIndex = activities.findIndex((eventActivity) => {
+      const id = eventActivity.getID();
+      return activityID && id ? activityID === id : activity === eventActivity;
     });
-    if (!AppDeviceColors[activity.creator.name]) {
-      return this.getColorByNumber(activityIndex + 5 /* + 10 = pretty */);
+
+    // If still not found, return a default color based on a safe fallback
+    if (activityIndex === -1) {
+      console.warn('[AppEventColorService] Activity not found in provided array, using default offset');
+      activityIndex = 0;
+    }
+
+    console.log('[AppEventColorService] getActivityColor', {
+      activityID,
+      activityIndex,
+      creator: creatorName,
+      totalActivities: activities.length
+    });
+
+    const deviceColors = AppDeviceColors as any;
+
+    if (!deviceColors[creatorName]) {
+      const color = this.getColorByNumber(activityIndex + 5 /* + 10 = pretty */);
+      console.log('[AppEventColorService] No device color, using fallback:', color);
+      return color;
     }
 
     // Find the activities that have the same creator
-    const sameCreatorActivities = activities.filter(eventActivity => eventActivity.creator.name === activity.creator.name);
-    // If there are no activities with the same creator return the color of this creator
-    if (!sameCreatorActivities.length) {
-      return AppDeviceColors[activity.creator.name];
-    }
+    const sameCreatorActivities = activities.filter(eventActivity => eventActivity.creator.name === creatorName);
     // Get the index on the same creator activities
     const sameCreatorActivitiesActivityIndex = sameCreatorActivities.findIndex((eventActivity) => {
-      return activity === eventActivity
+      const id = eventActivity.getID();
+      return activityID && id ? activityID === id : activity === eventActivity;
     });
+
+    console.log('[AppEventColorService] sameCreator index:', sameCreatorActivitiesActivityIndex);
 
     // If its the first one return the color
     if (sameCreatorActivitiesActivityIndex === 0) {
-      return AppDeviceColors[activity.creator.name];
+      const color = deviceColors[creatorName];
+      console.log('[AppEventColorService] First for creator, using device color:', color);
+      return color;
     }
+
     // Else it's not the first one, then return the global activity index color
-    return this.getColorByNumber(activityIndex);
+    const color = this.getColorByNumber(activityIndex);
+    console.log('[AppEventColorService] Subsequent for creator, using unique color:', color);
+    return color;
   }
 
   getColorForActivityTypeByActivityTypeGroup(activityType: ActivityTypes): string {

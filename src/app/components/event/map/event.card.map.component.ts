@@ -190,7 +190,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   onMapReady(map: google.maps.Map) {
-    this.fitBoundsToActivities();
+    setTimeout(() => this.fitBoundsToActivities(), 500);
   }
 
   openLapMarkerInfoWindow(lap) {
@@ -402,17 +402,30 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       };
     }
 
-    // Fit bounds after a short delay to ensure map is ready
-    setTimeout(() => this.fitBoundsToActivities(), 100);
+    // Fit bounds after a short delay to ensure map is ready and container has size
+    setTimeout(() => this.fitBoundsToActivities(), 500);
   }
 
   private fitBoundsToActivities() {
-    if (!this.googleMap?.googleMap || !this.activitiesMapData.length) return;
+    if (!this.googleMap?.googleMap || !this.activitiesMapData.length) {
+      console.log('[EventCardMapComponent] Skipping fitBounds. mapReady:', !!this.googleMap?.googleMap, 'dataLength:', this.activitiesMapData.length);
+      return;
+    }
 
     const allPositions = this.activitiesMapData.reduce((arr, data) => arr.concat(data.positions), []);
+    console.log('[EventCardMapComponent] fitBoundsToActivities called for', allPositions.length, 'total positions across', this.activitiesMapData.length, 'activities');
+
+    if (allPositions.length === 0) return;
+
     const bounds = this.getBounds(allPositions);
+    console.log('[EventCardMapComponent] Computed bounds:', JSON.stringify(bounds));
 
     this.googleMap.googleMap.fitBounds(bounds);
+
+    // Log final zoom after a short delay to see what Google decided
+    setTimeout(() => {
+      console.log('[EventCardMapComponent] Final zoom after fitBounds:', this.googleMap.googleMap.getZoom());
+    }, 200);
   }
 
   private unSubscribeFromAll() {

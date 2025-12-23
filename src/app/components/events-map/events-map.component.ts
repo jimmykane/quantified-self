@@ -270,14 +270,15 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
           this.loading();
           this.selectedEventPositionsByActivity = [];
           const activities = await this.eventService.getActivities(this.user, event.getID()).pipe(take(1)).toPromise();
+          if (!activities) return;
           for (const activity of activities) {
             const streams = await this.eventService.getStreamsByTypes(
               this.user.uid, event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type]
             ).pipe(take(1)).toPromise();
-            activity.addStreams(streams);
+            activity.addStreams(streams || []);
             this.selectedEventPositionsByActivity.push({
               activity: activity,
-              color: this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[activity.type]),
+              color: this.eventColorService.getActivityColor(activities, activity),
               positions: activity.getSquashedPositionData()
             });
           }

@@ -22,8 +22,11 @@ export abstract class MapAbstractDirective extends LoadingAbstractDirective {
     super(changeDetector)
   }
 
-  getBounds(postions: DataPositionInterface[]): LiteralBounds {
-    if (!postions.length) {
+  getBounds(positions: DataPositionInterface[]): LiteralBounds {
+    // Filter out potential 0,0 points which are often GPS noise/start-up errors
+    const validPositions = positions.filter(p => p.latitudeDegrees !== 0 || p.longitudeDegrees !== 0);
+
+    if (!validPositions.length) {
       return <LiteralBounds>{
         east: 0,
         west: 0,
@@ -31,27 +34,29 @@ export abstract class MapAbstractDirective extends LoadingAbstractDirective {
         south: 0,
       };
     }
-    const mostEast = postions.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+    const mostEast = validPositions.reduce((acc, latLongPair) => {
       return (acc.longitudeDegrees < latLongPair.longitudeDegrees) ? latLongPair : acc;
     });
-    const mostWest = postions.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+    const mostWest = validPositions.reduce((acc, latLongPair) => {
       return (acc.longitudeDegrees > latLongPair.longitudeDegrees) ? latLongPair : acc;
     });
 
-    const mostNorth = postions.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+    const mostNorth = validPositions.reduce((acc, latLongPair) => {
       return (acc.latitudeDegrees < latLongPair.latitudeDegrees) ? latLongPair : acc;
     });
 
-    const mostSouth = postions.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+    const mostSouth = validPositions.reduce((acc, latLongPair) => {
       return (acc.latitudeDegrees > latLongPair.latitudeDegrees) ? latLongPair : acc;
     });
 
-    return <LiteralBounds>{
+    const bounds = <LiteralBounds>{
       east: mostEast.longitudeDegrees,
       west: mostWest.longitudeDegrees,
       north: mostNorth.latitudeDegrees,
       south: mostSouth.latitudeDegrees,
     };
+    console.log('[MapAbstractDirective] getBounds result:', bounds, 'from', validPositions.length, 'valid points');
+    return bounds;
   }
 
   getStyles(mapTheme: MapThemes) {
