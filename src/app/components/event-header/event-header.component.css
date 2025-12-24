@@ -1,6 +1,17 @@
-mat-card {
-  padding-top: 0;
-  padding-bottom: 0;
+mat-expansion-panel {
+  box-shadow: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+}
+
+mat-expansion-panel-header {
+  padding: 0 16px;
+  /* Match card padding if needed */
+}
+
+/* Remove default dividers if they appear */
+::ng-deep .mat-expansion-panel-spacing {
+  margin: 0 !important;
 }
 
 mat-card-subtitle {
@@ -8,21 +19,32 @@ mat-card-subtitle {
   /* color: unset !important; */
 }
 
-.mat-card-avatar {
+/* Target specifically the avatar container */
+/* Target specifically the avatar container */
+.header-avatar {
   text-align: center;
-  height: auto;
-  width: auto;
+  height: 40px;
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 0;
+  /* spacing handled by gap */
 }
 
-mat-card-header {
+.custom-card-header {
   display: flex;
   align-items: center;
   /* Vertically center everything */
   gap: 1rem;
   /* Space between avatars, title, and stats */
+  flex-wrap: wrap;
+  /* Allow wrapping on small screens */
+  padding-top: 0;
+  margin-bottom: 0.5rem;
 }
 
-mat-card-header .mat-card-title {
+.header-title {
   font-size: 1.1rem;
   font-weight: 400;
   margin: 0;
@@ -68,6 +90,8 @@ mat-form-field {
   /* Allow stats to take up content space */
   display: flex;
   align-items: center;
+  min-width: 300px;
+  /* Ensure it breaks to new line if too narrow */
 }
 
 .expansion-content {
@@ -90,4 +114,25 @@ mat-form-field {
 
 mat-form-field {
   width: 100%;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 600px) {
+  .custom-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .header-stats-row {
+    width: 100%;
+    margin-top: 0.5rem;
+  }
+
+  /* Ensure actions align properly on mobile */
+  ::ng-deep app-event-actions {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
+  }
 }

@@ -1,17 +1,15 @@
 <!-- Event details -->
-<mat-card-header>
-  <div mat-card-avatar>
+<div class="custom-card-header">
+  <div class="header-avatar">
     <app-privacy-icon [privacy]="event.privacy" (click)="toggleEventPrivacy()"></app-privacy-icon>
   </div>
-  <mat-card-title>
+  <div class="header-title">
     <span class="date-display">
       <b>{{ event.startDate | date:"d MMM yyyy" }}</b>
       <span class="time-separator">at</span>
       {{ event.startDate | date:"shortTime" }}
     </span>
-  </mat-card-title>
-
-
+  </div>
 
   @if (statsToShow && statsToShow.length) {
   <div class="header-stats-row">
@@ -25,7 +23,7 @@
   @if (isOwner) {
   <app-event-actions [user]="user" [event]="event" [showDownloadOriginal]="true" align="end"></app-event-actions>
   }
-</mat-card-header>
+</div>
 
 <mat-accordion class="headers-align">
   <mat-expansion-panel [hideToggle]="true" [expanded]="false">

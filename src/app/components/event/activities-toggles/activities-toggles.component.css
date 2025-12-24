@@ -1,9 +1,17 @@
-.flex{
+/* Remove default card styles as we are inside another card likely */
+mat-card {
+  box-shadow: none !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+.flex {
   display: flex;
   flex-wrap: wrap;
 }
 
-.flex-header{
+.flex-header {
   max-width: 50%;
   width: 50%;
 }

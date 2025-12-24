@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges, ChangeDetectorRef } from '@angular/core';
 import { EventInterface, User, ActivityInterface, UserUnitSettingsInterface, Privacy, DataFeeling, Feelings, isNumber, DataRPE, RPEBorgCR10SCale } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -27,7 +27,7 @@ export class EventHeaderComponent implements OnChanges {
   feelings = EnumeratorHelpers.getNumericEnumKeyValue(Feelings);
   rpeBorgCR10SCale = EnumeratorHelpers.getNumericEnumKeyValue(RPEBorgCR10SCale);
 
-  constructor(private eventService: AppEventService, private snackBar: MatSnackBar) {
+  constructor(private eventService: AppEventService, private snackBar: MatSnackBar, private cd: ChangeDetectorRef) {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -46,7 +46,12 @@ export class EventHeaderComponent implements OnChanges {
     if (!this.user) {
       return
     }
-    return this.eventService.setEventPrivacy(this.user, this.event.getID(), this.event.privacy === Privacy.Private ? Privacy.Public : Privacy.Private);
+    // Optimistically toggle locally
+    this.event.privacy = this.event.privacy === Privacy.Private ? Privacy.Public : Privacy.Private;
+    this.cd.markForCheck(); // Trigger detection immediately
+
+    // Then call service
+    await this.eventService.setEventPrivacy(this.user, this.event.getID(), this.event.privacy);
   }
 
   returnZero() {
