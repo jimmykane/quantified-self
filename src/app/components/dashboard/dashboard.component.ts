@@ -15,7 +15,7 @@ import { Analytics, logEvent } from '@angular/fire/analytics';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { PromoDialogComponent } from '../promo-dialog/promo-dialog.component';
-import { getDatesForDateRange } from 'app/helpers/date-range-helper';
+import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { WhereFilterOp } from 'firebase/firestore';
 
 

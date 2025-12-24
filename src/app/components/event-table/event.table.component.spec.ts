@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed, waitForAsync } from '@angular/core/testing';
 import { EventTableComponent } from './event.table.component';
 import { AppEventService } from '../../services/app.event.service';
 import { AppUserService } from '../../services/app.user.service';
@@ -10,16 +10,40 @@ import { AppEventColorService } from '../../services/color/app.event.color.servi
 import { DatePipe } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of, Subject, delay } from 'rxjs';
-import { User, EventInterface } from '@sports-alliance/sports-lib';
+import { User, EventInterface, EventUtilities } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Analytics } from '@angular/fire/analytics';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 
+// Mock MatTableDataSource
+vi.mock('@angular/material/table', () => ({
+    MatTableDataSource: class {
+        data = [];
+        paginator = null;
+        sort = null;
+        sortingDataAccessor = null;
+        filter = '';
+        connect() { return of([]); }
+        disconnect() { }
+    }
+}));
 // Mock Analytics module
 vi.mock('@angular/fire/analytics', () => ({
     Analytics: class { },
     logEvent: vi.fn()
 }));
+
+class MockActivity {
+    startDate = new Date();
+    endDate = new Date();
+    type = 'Run';
+    creator = { name: 'Garmin' };
+    getStartDate() { return this.startDate; }
+    toJSON() { return {}; }
+    getID() { return 'activity1'; }
+    setID(id: any) { return this; }
+    getStats() { return []; }
+}
 
 // Mock Event Interface
 class MockEvent {
@@ -36,6 +60,15 @@ class MockEvent {
     name = 'Test Run';
     description = 'Test Description';
     toJSON() { return {}; }
+    getFirstActivity() { return new MockActivity(); }
+    getStartDate() { return this.startDate; }
+    getActivities() { return [new MockActivity()]; }
+    clearActivities() { }
+    addActivities() { }
+    setName(name: string) { this.name = name; return this; }
+    getPrivacy() { return this.privacy; }
+    getName() { return this.name; }
+    getDescription() { return this.description; }
 }
 
 describe('EventTableComponent', () => {
@@ -63,9 +96,9 @@ describe('EventTableComponent', () => {
     beforeEach(async () => {
         mockEventService = {
             deleteAllEventData: vi.fn().mockReturnValue(Promise.resolve(true)),
-            getEventActivitiesAndAllStreams: vi.fn(),
-            writeAllEventData: vi.fn(),
-            downloadFile: vi.fn()
+            getEventActivitiesAndAllStreams: vi.fn().mockReturnValue(of(new MockEvent('event_mocked'))),
+            writeAllEventData: vi.fn().mockReturnValue(Promise.resolve()),
+            downloadFile: vi.fn().mockReturnValue(Promise.resolve(new ArrayBuffer(8)))
         };
 
         mockUserService = {
@@ -78,7 +111,7 @@ describe('EventTableComponent', () => {
 
         mockBottomSheet = {
             open: vi.fn().mockReturnValue({
-                afterDismissed: () => of(true).pipe(delay(1))
+                afterDismissed: () => of(true)
             })
         };
 
@@ -114,6 +147,9 @@ describe('EventTableComponent', () => {
             new MockEvent('event3') as any
         ];
 
+        // Ensure mock is set
+        mockEventService.getEventActivitiesAndAllStreams.mockReturnValue(of(new MockEvent('event_mocked')));
+
         // Mock ViewChildren
         component.sort = {
             sortChange: new Subject(),
@@ -122,10 +158,14 @@ describe('EventTableComponent', () => {
         } as any;
 
         component.paginator = {
-            _changePageSize: vi.fn()
+            _changePageSize: vi.fn(),
+            page: new Subject()
         } as any;
 
         fixture.detectChanges();
+
+        // Spy on EventUtilities.mergeEvents
+        vi.spyOn(EventUtilities, 'mergeEvents').mockReturnValue(new MockEvent('merged_event') as any);
     });
 
     it('should create', () => {
@@ -137,27 +177,16 @@ describe('EventTableComponent', () => {
         expect(component.data.data.length).toBe(3);
     });
 
-    // it('should remove deleted events from view after deleteSelection', fakeAsync(() => {
-    //     // Initialize View
-    //     component.ngAfterViewInit();
+    it('should call mergeSelection', async () => {
+        const e1 = new MockEvent('event1');
+        const e2 = new MockEvent('event2');
+        component.selection.select({ 'Event': e1 } as any);
+        component.selection.select({ 'Event': e2 } as any);
+        fixture.detectChanges();
 
-    //     // Select 'event2'
-    //     const event2Row = component.data.data.find((row: any) => row['Event'].getID() === 'event2');
-    //     component.selection.select(event2Row);
+        await component.mergeSelection(new Event('click'));
 
-    //     expect(component.selection.selected.length).toBe(1);
-
-    //     // Trigger Delete
-    //     component.deleteSelection();
-    //     tick(1); // Wait for delay(1) of dialog
-    //     tick(); // Wait for promise resolution
-
-    //     expect(mockEventService.deleteAllEventData).toHaveBeenCalledWith(mockUser, 'event2');
-
-    //     expect(component.events.length).toBe(2);
-    //     expect(component.events.find(e => e.getID() === 'event2')).toBeUndefined();
-
-    //     expect(component.data.data.length).toBe(2);
-    //     expect(component.data.data.find((row: any) => row['Event'].getID() === 'event2')).toBeUndefined();
-    // }));
+        expect(mockEventService.getEventActivitiesAndAllStreams).toHaveBeenCalled();
+        expect(mockRouter.navigate).toHaveBeenCalled();
+    });
 });

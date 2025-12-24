@@ -23,10 +23,9 @@ import { MatTableDataSource } from '@angular/material/table';
 import { SelectionModel } from '@angular/cdk/collections';
 import { DatePipe } from '@angular/common';
 import { EventInterface } from '@sports-alliance/sports-lib';
-import { EventUtilities } from '@sports-alliance/sports-lib';
-import { debounceTime, take } from 'rxjs/operators';
-import { User } from '@sports-alliance/sports-lib';
-import { Subject, Subscription } from 'rxjs';
+import { EventUtilities, User } from '@sports-alliance/sports-lib';
+import { debounceTime, take, map } from 'rxjs/operators';
+import { firstValueFrom, Subject, Subscription } from 'rxjs';
 import * as Sentry from '@sentry/browser';
 import { rowsAnimation } from '../../animations/animations';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
@@ -160,7 +159,18 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     // First fetch them complete
     const promises: Promise<EventInterface>[] = [];
     this.selection.selected.forEach((selected) => {
-      promises.push(this.eventService.getEventActivitiesAndAllStreams(this.user, selected.Event.getID()).pipe(take(1)).toPromise());
+      const obs = this.eventService.getEventActivitiesAndAllStreams(this.user, selected.Event.getID());
+      if (obs) {
+        promises.push(firstValueFrom(obs.pipe(
+          take(1),
+          map(e => {
+            if (e && !(e as any).getStartDate) {
+              (e as any).getStartDate = () => e.startDate || new Date();
+            }
+            return e;
+          })
+        )) as Promise<EventInterface>);
+      }
     });
     // Now we can clear the selection
     this.selection.clear();
@@ -171,14 +181,13 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     // 2. Collect Original Files from source events
     const validOriginalFiles: { data: any, extension: string }[] = [];
 
+
     // We need to fetch the actual file data for each event
     // The 'events' array contains full Event objects, hopefully with originalFile metadata from getEventActivitiesAndAllStreams -> getEventAndActivities logic
 
     const fileFetchPromises: Promise<void>[] = [];
 
     for (const evt of events) {
-      console.log('[EventTable] processing event for merge files:', evt.getID(), 'hasArray:', !!evt.originalFiles, 'hasLegacy:', !!evt.originalFile);
-      console.log('[EventTable] raw keys on evt instance:', Object.keys(evt));
       // Check for array
       if (evt.originalFiles && Array.isArray(evt.originalFiles)) {
         for (const fileMeta of evt.originalFiles) {
@@ -218,8 +227,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       console.warn('Error fetching some original files, proceeding with merge anyway', e);
     }
 
-    console.log('[EventTable] Total collected original files:', validOriginalFiles.length);
-
+    events.forEach((e) => {
+      if (e && !(e as any).getStartDate) {
+        (e as any).getStartDate = () => e.startDate || new Date();
+      }
+    });
 
     const mergedEvent = EventUtilities.mergeEvents(events) as AppEventInterface; // Use AppEventInterface
 

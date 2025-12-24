@@ -109,13 +109,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.selectedActivities = this.event.getActivities();
 
       this.targetUserID = this.route.snapshot.paramMap.get('userID');
-      console.log('[EventCardComponent] Initialized.', {
-        event: this.event,
-        activities: this.event.getActivities().length,
-        hasPositions: this.hasPositions(this.event),
-        targetUserID: this.targetUserID,
-        selectedActivities: this.selectedActivities.length
-      });
       this.changeDetectorRef.detectChanges();
     }));
 

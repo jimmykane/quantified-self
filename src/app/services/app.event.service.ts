@@ -430,7 +430,17 @@ export class AppEventService implements OnDestroy {
 
       if (validEvents.length === 1) return validEvents[0];
 
-      return EventUtilities.mergeEvents(validEvents);
+      const merged = EventUtilities.mergeEvents(validEvents);
+      const activityIDs = new Set<string>();
+      merged.getActivities().forEach((activity, index) => {
+        const currentID = activity.getID();
+        if (activityIDs.has(currentID)) {
+          // Only append if collision detected
+          activity.setID(`${currentID}_${index}`);
+        }
+        activityIDs.add(activity.getID());
+      });
+      return merged;
     }
 
     // 2. Legacy Single Strategy

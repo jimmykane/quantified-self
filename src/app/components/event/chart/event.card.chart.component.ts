@@ -11,7 +11,7 @@ import {
   SimpleChanges,
 } from '@angular/core';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface, ActivityTypes } from '@sports-alliance/sports-lib';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import type * as am4core from '@amcharts/amcharts4/core';
 import type * as am4charts from '@amcharts/amcharts4/charts';
@@ -1080,15 +1080,24 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     if (this.hideAllSeriesOnInit) {
       return true
     } else if (this.chartSettingsLocalStorageService.getSeriesIDsToShow(this.event).length) {
-      if (this.chartSettingsLocalStorageService.getSeriesIDsToShow(this.event).indexOf(series.id) === -1) {
+      const storedIDs = this.chartSettingsLocalStorageService.getSeriesIDsToShow(this.event);
+      // Try to match exact or loose (ignoring the merge index suffix)
+      // Suffix is usually _0, _1 etc. before the stream type (which starts with capital D for Data...)
+      const normalize = (id: string) => id.replace(/_\d+(?=[A-Z])/, '');
+      const normalizedSeriesID = normalize(series.id);
+      const isVisible = storedIDs.indexOf(series.id) !== -1 || storedIDs.some(id => normalize(id) === normalizedSeriesID);
+      if (!isVisible) {
         return true
       }
     } else {
       // Else try to check what we should show by default
-      if ([...AppUserService.getDefaultChartDataTypesToShowOnLoad(), ...ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(series.dummyData.activity.type)]
-        .reduce((accu, dataType) => {
+      const activityType = (ActivityTypes as any)[series.dummyData.activity.type] !== undefined ? (ActivityTypes as any)[series.dummyData.activity.type] : series.dummyData.activity.type;
+      const defaultTypes = [...AppUserService.getDefaultChartDataTypesToShowOnLoad(), ...ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(activityType)]
+        .reduce((accu: string[], dataType) => {
           return [...accu, ...DynamicDataLoader.getUnitBasedDataTypesFromDataType(dataType, this.userUnitSettings)]
-        }, []).indexOf(series.dummyData.stream.type) === -1) {
+        }, []);
+
+      if (defaultTypes.indexOf(series.dummyData.stream.type) === -1) {
         return true
       }
     }
