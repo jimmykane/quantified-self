@@ -8,6 +8,12 @@
       [selectedActivities]="selectedActivities" [unitSettings]="userUnitSettings" [statsToShow]="basicStatsTypes">
     </app-event-header>
 
+    <mat-divider></mat-divider>
+
+    <app-event-card-stats-grid [event]="event" [selectedActivities]="selectedActivities"
+      [unitSettings]="userUnitSettings">
+    </app-event-card-stats-grid>
+
     @if (event.getActivities().length > 1) {
     <mat-divider></mat-divider>
     <app-activities-toggles [event]="event" [user]="currentUser" [isOwner]="isOwner()">
@@ -25,11 +31,6 @@
           <div class="tab-content-wrapper responsive-grid">
 
             <!-- Stats Grid (Basic + Advanced) -->
-            <mat-card class="dashboard-card stats-section glass-card no-shadow">
-              <app-event-card-stats-grid [event]="event" [selectedActivities]="selectedActivities"
-                [unitSettings]="userUnitSettings">
-              </app-event-card-stats-grid>
-            </mat-card>
 
             <!-- Map Section -->
             @if (event && targetUserID && hasPositions(event)) {

@@ -56,7 +56,19 @@ mat-icon.header-logo {
   width: 36px;
   height: 36px;
   font-size: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  /* Ensure it centers in the parent flex container */
+  line-height: 1;
   /* Ensure resizing works */
+}
+
+.hamburger-link {
+  margin-right: 8px;
+  /* Ensure it's not squashed */
+  flex-shrink: 0;
 }
 
 /* Utilities */

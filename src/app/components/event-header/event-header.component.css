@@ -1,25 +1,8 @@
-mat-expansion-panel {
-  box-shadow: none !important;
-  background: transparent !important;
-  border-radius: 0 !important;
-}
-
-mat-expansion-panel-header {
-  padding: 0 16px;
-  /* Match card padding if needed */
-}
-
-/* Remove default dividers if they appear */
-::ng-deep .mat-expansion-panel-spacing {
-  margin: 0 !important;
-}
-
 mat-card-subtitle {
   margin-bottom: 0;
   /* color: unset !important; */
 }
 
-/* Target specifically the avatar container */
 /* Target specifically the avatar container */
 .header-avatar {
   text-align: center;
@@ -65,52 +48,6 @@ mat-card-subtitle {
   opacity: 0.6;
 }
 
-mat-form-field {
-  width: 100%;
-}
-
-/* Removed ::ng-deep overrides for disabled form fields and inputs */
-
-.headers-align .mat-expansion-panel-header-title,
-.headers-align .mat-expansion-panel-header-description {
-  flex-basis: 0;
-}
-
-.headers-align .mat-expansion-panel-header-description {
-  justify-content: space-between;
-  align-items: center;
-}
-
-.header-stats-row {
-  margin: 0;
-  /* Remove top margin so it sits inline if space permits or wraps cleanly */
-  padding: 0;
-  border: none;
-  flex: 1;
-  /* Allow stats to take up content space */
-  display: flex;
-  align-items: center;
-  min-width: 300px;
-  /* Ensure it breaks to new line if too narrow */
-}
-
-.expansion-content {
-  padding-top: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.split-row {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.half-width {
-  flex: 1;
-  min-width: 200px;
-}
 
 mat-form-field {
   width: 100%;
@@ -124,10 +61,6 @@ mat-form-field {
     gap: 0.5rem;
   }
 
-  .header-stats-row {
-    width: 100%;
-    margin-top: 0.5rem;
-  }
 
   /* Ensure actions align properly on mobile */
   ::ng-deep app-event-actions {

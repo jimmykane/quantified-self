@@ -11,83 +11,14 @@
     </span>
   </div>
 
-  @if (statsToShow && statsToShow.length) {
-  <div class="header-stats-row">
-    <app-event-card-stats-grid [event]="event" [selectedActivities]="selectedActivities" [statsToShow]="statsToShow"
-      [unitSettings]="unitSettings" [layout]="'condensed'">
-    </app-event-card-stats-grid>
-  </div>
+
+
+  @if (isOwner) {
+  <button mat-icon-button (click)="openEditDetails()">
+    <mat-icon>edit</mat-icon>
+  </button>
   }
-
-
   @if (isOwner) {
   <app-event-actions [user]="user" [event]="event" [showDownloadOriginal]="true" align="end"></app-event-actions>
   }
 </div>
-
-<mat-accordion class="headers-align">
-  <mat-expansion-panel [hideToggle]="true" [expanded]="false">
-    <mat-expansion-panel-header>
-      <mat-panel-title>
-        Details
-      </mat-panel-title>
-      <mat-panel-description>
-        {{ event.name || 'Add details' }}
-        <mat-icon>edit</mat-icon>
-      </mat-panel-description>
-    </mat-expansion-panel-header>
-
-    <div class="expansion-content">
-      <mat-card-subtitle style="margin-top: 0.1em; margin-bottom: 0; color: unset;">
-        <mat-form-field appearance="outline">
-          <mat-label>Name</mat-label>
-          <input matInput [disabled]="!isOwner" [placeholder]="'Add a name'" (change)="saveEventName(event.name, event)"
-            (keydown.enter)='$event.target.blur()' [(ngModel)]='event.name' [type]="'text'">
-        </mat-form-field>
-      </mat-card-subtitle>
-
-      @if (isOwner || event.description) {
-      <mat-card-subtitle style="margin-top: 0em; margin-bottom: 0; color: unset;">
-        <mat-form-field appearance="outline">
-          <mat-label>Description</mat-label>
-          <textarea matInput rows="3" [disabled]="!isOwner" [placeholder]="'Add a description'"
-            (change)="saveEventDescription(event.description, event)" (keydown.enter)='$event.target.blur()'
-            [(ngModel)]='event.description'>
-          </textarea>
-        </mat-form-field>
-      </mat-card-subtitle>
-      }
-
-      @if (isOwner || feeling || rpe ) {
-      <div class="split-row">
-        @if (isOwner || feeling) {
-        <mat-form-field appearance="outline" class="half-width">
-          <mat-label>Feeling</mat-label>
-          <mat-select [disabled]="!isOwner" (selectionChange)="saveEventFeeling(feeling, event)" [(ngModel)]='feeling'
-            [placeholder]="'Feeling'">
-            @for (selectOption of feelings | keyvalue : returnZero; track selectOption) {
-            <mat-option [disabled]="!isOwner" [value]="selectOption.value">
-              {{selectOption.key}}
-            </mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-        }
-        @if (rpe || isOwner) {
-        <mat-form-field appearance="outline" class="half-width">
-          <mat-label>RPE</mat-label>
-          <mat-select [disabled]="!isOwner" (selectionChange)="saveEventRPE(rpe, event)" [(ngModel)]='rpe'
-            [placeholder]="'Rating of Perceived Exertion'">
-            @for (selectOption of rpeBorgCR10SCale | keyvalue : returnZero; track selectOption) {
-            <mat-option [disabled]="!isOwner" [value]="selectOption.value">
-              {{selectOption.key}}
-            </mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-        }
-      </div>
-      }
-    </div>
-  </mat-expansion-panel>
-</mat-accordion>

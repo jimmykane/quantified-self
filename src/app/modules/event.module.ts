@@ -21,6 +21,7 @@ import { ActivityToggleComponent } from '../components/event/activity-toggle/act
 import { EventIntensityZonesComponent } from '../components/event/intensity-zones/event.intensity-zones.component';
 import { LapTypeIconComponent } from '../components/lap-type-icon/lap-type-icon.component';
 import { GoogleMapsModule } from '@angular/google-maps';
+import { EventDetailsBottomSheetComponent } from '../components/event-header/event-details-bottom-sheet/event-details-bottom-sheet.component';
 
 
 @NgModule({
@@ -45,6 +46,7 @@ import { GoogleMapsModule } from '@angular/google-maps';
         EventCardChartActionsComponent,
         EventCardDevicesComponent,
         EventHeaderComponent,
+        EventDetailsBottomSheetComponent,
         HeaderStatsComponent,
         ActivitiesTogglesComponent,
         ActivityActionsComponent,

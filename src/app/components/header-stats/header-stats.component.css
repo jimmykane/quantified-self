@@ -1,79 +1,76 @@
-/*::ng-deep app-data-type-icon mat-icon{*/
-/*  font-size: 18px !important;*/
-/*  width: 18px !important;*/
-/*  height: 18px !important;*/
-/*  vertical-align: top !important;*/
-/*}*/
+:host {
+  display: block;
+  width: 100%;
+}
 
-/*section.item{*/
-/*  white-space:nowrap;*/
-/*  display: inline-block;*/
-/*  !*margin-right: 1em;*!*/
-/*  min-width: 25%;*/
-/*  min-height: 2.5em;*/
-/*  !*text-align: center;*!*/
-/*}*/
-
-
-
+/* Base Stat Item */
 .stat-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  /* Reduced gap */
-  min-width: unset;
-  /* Allow it to shrink */
-  margin-bottom: 0.5em;
-  /* Tighter vertical spacing */
+  gap: 12px;
+  padding: 4px 0;
+  min-width: 0;
+  /* Prevent flex item overflow */
 }
 
+/* Icon / Avatar Area */
 .stat-avatar {
   flex-shrink: 0;
-  opacity: 0.8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .stat-content {
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  /* crucial for text-overflow */
 }
 
 .stat-label {
-  font-size: 0.75rem;
-  /* Smaller label */
-  line-height: 1.1;
-  opacity: 0.6;
+  font-size: 0.7rem;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.05em;
+  color: var(--mat-app-on-surface-variant);
+  opacity: 0.8;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stat-value-grid {
-  font-size: 0.95rem;
-  /* Smaller value */
-  font-weight: 600;
-  white-space: nowrap;
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--mat-app-on-surface);
   line-height: 1.2;
+  white-space: nowrap;
 }
 
+/* Grid Container */
 section.grid {
-  padding: 0.5rem 0;
-  /* Reduced padding */
   display: grid;
-  /* Denser grid: min 140px is good for "list" feel in columns */
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 1rem 0.5rem;
-  /* Vertical 1rem, horizontal 0.5rem */
+  /* Responsive grid: columns around 140px wide */
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1rem 1.5rem;
+  /* Row gap, Column gap */
+  padding: 0.5rem 0;
 }
 
+/* Condensed (Chips) Container */
 section.condensed {
-  display: block;
-  /* Let chips flow */
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   padding: 0;
 }
 
 /* Chip Styles */
 .stat-chip {
   --mdc-chip-elevated-container-color: transparent !important;
-  /* Make chips transparent like pills */
   --mdc-chip-label-text-color: var(--mat-app-on-surface);
   border: 1px solid var(--mat-app-outline-variant);
   font-weight: 500;
@@ -84,8 +81,10 @@ section.condensed {
   font-size: 0.95rem;
 }
 
+/* Desktop Styles */
 @media only screen and (min-width: 768px) {
   section.grid {
-    grid-gap: 1rem 6rem;
+    column-gap: 2rem;
+    /* More breathing room on desktop */
   }
 }
