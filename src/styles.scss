@@ -8,25 +8,28 @@
 // Be sure that you only ever include this mixin once!
 @include mat.core();
 
-// Define the palettes for your theme using the Material Design palettes available in palette.scss
-// (imported above). For each palette, you can optionally specify a default, lighter, and darker
-// hue. Available color palettes: https://material.io/design/color/
-$app-primary: mat.m2-define-palette(mat.$m2-indigo-palette);
-$app-accent: mat.m2-define-palette(mat.$m2-pink-palette, A200, A100, A400);
+// Light Theme Palettes (Royal Blue)
+// A classic, trustworthy blue with a warm distinctive accent
+$light-primary: mat.m2-define-palette(mat.$m2-blue-palette);
+$light-accent: mat.m2-define-palette(mat.$m2-amber-palette, A200, A100, A400);
+$light-warn: mat.m2-define-palette(mat.$m2-red-palette);
 
-// The warn palette is optional (defaults to red).
-$app-warn: mat.m2-define-palette(mat.$m2-red-palette);
+// Dark Theme Palettes (Deep Ocean)
+// Dark blue-grey background with a bright, electric blue accent
+$dark-primary: mat.m2-define-palette(mat.$m2-blue-grey-palette);
+$dark-accent: mat.m2-define-palette(mat.$m2-light-blue-palette, A200, A100, A400);
+$dark-warn: mat.m2-define-palette(mat.$m2-red-palette);
 
 // Create the theme object. A theme consists of configurations for individual
 // theming systems such as "color" or "typography".
-$app-light-theme: mat.m2-define-light-theme((color: (primary: $app-primary,
-        accent: $app-accent,
-        warn: $app-warn,
+$app-light-theme: mat.m2-define-light-theme((color: (primary: $light-primary,
+        accent: $light-accent,
+        warn: $light-warn,
       )));
 
-$app-dark-theme: mat.m2-define-dark-theme((color: (primary: $app-primary,
-        accent: $app-accent,
-        warn: $app-warn,
+$app-dark-theme: mat.m2-define-dark-theme((color: (primary: $dark-primary,
+        accent: $dark-accent,
+        warn: $dark-warn,
       )));
 
 // Include theme styles for core and each component used in your app.
