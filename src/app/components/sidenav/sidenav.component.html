@@ -65,6 +65,13 @@
     <mat-icon>card_membership</mat-icon>
     Subscription
   </mat-list-item>
+
+  @if (isAdminUser) {
+  <mat-list-item routerLinkActive="active" routerLink="/admin" (click)="sideNav.close();">
+    <mat-icon>admin_panel_settings</mat-icon>
+    Admin
+  </mat-list-item>
+  }
   }
 
   <mat-list-item (click)="$event.stopPropagation(); $event.preventDefault(); themeService.toggleTheme()">

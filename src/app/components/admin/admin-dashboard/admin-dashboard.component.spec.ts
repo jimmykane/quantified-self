@@ -43,8 +43,8 @@ describe('AdminDashboardComponent', () => {
         };
 
         await TestBed.configureTestingModule({
-            declarations: [AdminDashboardComponent],
             imports: [
+                AdminDashboardComponent,
                 MatTableModule,
                 MatPaginatorModule,
                 MatSortModule,

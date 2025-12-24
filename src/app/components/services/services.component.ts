@@ -21,16 +21,16 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
   standalone: false
 })
 export class ServicesComponent implements OnInit, OnDestroy {
-  public suuntoAppLinkFormGroup: UntypedFormGroup;
+  public suuntoAppLinkFormGroup!: UntypedFormGroup;
   public isLoading = false;
-  public user: User;
-  public isGuest: boolean;
-  public suuntoAppTokens: Auth2ServiceTokenInterface[];
-  public selectedTabIndex = 0;
+  public user!: User;
+  public isGuest = false;
+  public suuntoAppTokens: Auth2ServiceTokenInterface[] = [];
+  public activeSection: 'suunto' | 'garmin' | 'coros' = 'suunto';
   public serviceNames = ServiceNames;
   public hasProAccess = false;
 
-  private userSubscription: Subscription;
+  private userSubscription!: Subscription;
 
   constructor(private http: HttpClient, private fileService: AppFileService,
     private eventService: AppEventService,
@@ -45,19 +45,19 @@ export class ServicesComponent implements OnInit, OnDestroy {
   async ngOnInit() {
     this.isLoading = true;
     this.userSubscription = this.authService.user$.subscribe((async (user) => {
-      this.user = user;
       if (!user) {
         this.isLoading = false;
         this.snackBar.open('You must login if you want to use the service features', 'OK', {
-          duration: null,
+          duration: undefined,
         });
         return
       }
+      this.user = user;
       this.isGuest = !!(user as any)?.isAnonymous;
       if (this.isGuest) {
         this.isLoading = false;
         this.snackBar.open('You must login with a non-guest account if you want to use the service features', 'OK', {
-          duration: null,
+          duration: undefined,
         });
         return;
       }
@@ -65,12 +65,14 @@ export class ServicesComponent implements OnInit, OnDestroy {
       // Check for Pro Role via Claims (Force Refresh)
       this.hasProAccess = await this.userService.isPro();
 
-      const indexMap = {
-        [ServiceNames.SuuntoApp]: 0,
-        [ServiceNames.GarminHealthAPI]: 1,
-        [ServiceNames.COROSAPI]: 2,
+      const serviceNameParam = this.route.snapshot.queryParamMap.get('serviceName');
+      if (serviceNameParam === ServiceNames.GarminHealthAPI) {
+        this.activeSection = 'garmin';
+      } else if (serviceNameParam === ServiceNames.COROSAPI) {
+        this.activeSection = 'coros';
+      } else {
+        this.activeSection = 'suunto';
       }
-      this.selectedTabIndex = indexMap[this.route.snapshot.queryParamMap.get('serviceName')] || 0;
       this.isLoading = false;
     }))
 

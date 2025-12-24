@@ -24,13 +24,13 @@ export class SideNavComponent implements OnInit, OnDestroy {
   public events: EventInterface[] = [];
   public appVersion = environment.appVersion;
 
-  public user: User;
+  public user: User | null = null;
 
-  public appTheme: AppThemes
+  public appTheme!: AppThemes
   public appThemes = AppThemes;
 
-  private userSubscription: Subscription
-  private themeSubscription: Subscription
+  private userSubscription!: Subscription
+  private themeSubscription!: Subscription
   private analytics = inject(Analytics);
 
   constructor(
@@ -43,15 +43,19 @@ export class SideNavComponent implements OnInit, OnDestroy {
     private router: Router) {
   }
 
+  public isAdminUser = false;
+
   ngOnInit() {
     this.themeSubscription = this.themeService.getAppTheme().subscribe(theme => {
       this.appTheme = theme
     })
-    this.userSubscription = this.authService.user$.subscribe((user) => {
+    this.userSubscription = this.authService.user$.subscribe(async (user) => {
       this.user = user;
-      // if (!user) {
-      //   return
-      // }
+      if (user) {
+        this.isAdminUser = await this.userService.isAdmin();
+      } else {
+        this.isAdminUser = false;
+      }
     })
   }
 
@@ -84,7 +88,7 @@ export class SideNavComponent implements OnInit, OnDestroy {
       await this.authService.signOut();
       localStorage.clear();
       this.windowService.windowRef.location.reload();
-      this.snackBar.open('Signed out', null, {
+      this.snackBar.open('Signed out', undefined, {
         duration: 2000,
       });
     });

@@ -32,10 +32,11 @@ import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
 })
 
 export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
-  public event: EventInterface;
-  public targetUserID: string;
-  public currentUser: User;
+  public event!: EventInterface;
+  public targetUserID!: string;
+  public currentUser!: User;
   public selectedActivities: ActivityInterface[] = [];
+  public activeSection: 'overview' | 'laps' | 'analysis' | 'details' = 'overview';
 
   public userUnitSettings = AppUserService.getDefaultUserUnitSettings();
   public showAllData = false;
@@ -54,14 +55,14 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public chartExtraMaxForPower: number = AppUserService.getDefaultExtraMaxForPower();
   public chartExtraMaxForPace: number = AppUserService.getDefaultExtraMaxForPace();
   public chartGainAndLossThreshold: number = AppUserService.getDefaultGainAndLossThreshold();
-  public chartDataTypesToUse: string[];
+  public chartDataTypesToUse!: string[];
   public showMapLaps = true;
   public showMapPoints = false;
   public showMapArrows = true;
   public chartDownSamplingLevel = AppUserService.getDefaultDownSamplingLevel();
-  public chartTheme: ChartThemes;
-  public appTheme: AppThemes;
-  public mapTheme: MapThemes;
+  public chartTheme!: ChartThemes;
+  public appTheme!: AppThemes;
+  public mapTheme!: MapThemes;
   public mapStrokeWidth: number = AppUserService.getDefaultMapStrokeWidth();
   public chartCursorBehaviour: ChartCursorBehaviours = AppUserService.getDefaultChartCursorBehaviour();
 
