@@ -1,17 +1,49 @@
-
 import functionsTest from 'firebase-functions-test';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
 // Hoist mocks
-const { authBuilderMock, deauthorizeServiceMock, deauthorizeGarminMock, firestoreMock, getServiceConfigMock } = vi.hoisted(() => {
+const { authBuilderMock, deauthorizeServiceMock, deauthorizeGarminMock, firestoreMock, getServiceConfigMock, batchMock, whereMock } = vi.hoisted(() => {
     const onDeleteMock = vi.fn((handler) => handler);
     const userMock = vi.fn(() => ({ onDelete: onDeleteMock }));
 
     const deleteMock = vi.fn().mockResolvedValue({});
     const docMock = vi.fn(() => ({ delete: deleteMock }));
-    const collectionMock = vi.fn(() => ({ doc: docMock }));
-    const firestore = vi.fn(() => ({ collection: collectionMock }));
+
+    // Define mocks first
+    const querySnapshotMock = {
+        docs: [
+            { id: 'doc1', ref: 'ref1' },
+            { id: 'doc2', ref: 'ref2' },
+        ],
+    };
+
+    const whereMock = vi.fn().mockReturnValue({
+        get: vi.fn().mockResolvedValue(querySnapshotMock)
+    });
+
+    const collectionMock = vi.fn((collectionName) => {
+        if (collectionName === 'mail') {
+            return {
+                where: whereMock,
+                doc: docMock
+            };
+        }
+        return {
+            doc: docMock,
+            where: whereMock
+        };
+    });
+
+    const batchMock = {
+        delete: vi.fn(),
+        commit: vi.fn(),
+    };
+
+    const firestore = vi.fn(() => ({
+        collection: collectionMock,
+        batch: vi.fn(() => batchMock)
+    }));
 
     return {
         authBuilderMock: { user: userMock },
@@ -19,6 +51,8 @@ const { authBuilderMock, deauthorizeServiceMock, deauthorizeGarminMock, firestor
         deauthorizeGarminMock: vi.fn(),
         firestoreMock: firestore,
         getServiceConfigMock: vi.fn(),
+        batchMock,
+        whereMock
     };
 });
 
@@ -58,6 +92,9 @@ describe('cleanupUserAccounts', () => {
 
         // Setup default mocks
         getServiceConfigMock.mockReturnValue({ tokenCollectionName: 'mockCollection' });
+
+        // Reset batch/where mocks specific behavior if needed
+        batchMock.commit.mockResolvedValue({});
     });
 
     afterEach(() => {
@@ -80,9 +117,6 @@ describe('cleanupUserAccounts', () => {
 
         // Verify COROS
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.COROSAPI);
-        // Should happen twice (once for Suunto, once for COROS)
-        // Removing explicit count check as there might be internal calls we don't care about
-        // expect(firestoreMock).toHaveBeenCalledTimes(2); 
 
         // Verify Garmin
         expect(deauthorizeGarminMock).toHaveBeenCalledWith('testUser123');
@@ -112,19 +146,11 @@ describe('cleanupUserAccounts', () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
 
-        // Make Suunto doc deletion fail
-        // The mock structure is firestore().collection().doc().delete()
-        // We want the deletion to fail.
-        // Since deleteMock is hoisted but exposed via the mock factory... wait, I can access it if I export it or grab it from the module?
-        // Ah, I cannot access the hoisted variables directly in the test body unless I returned them.
-        // In the hoist block: return { ..., firestoreMock, ... }
-        // But `deleteMock` is NOT returned. It's inside the factory for `firestoreMock`.
-        // However, `firestoreMock` returns an object with `collection` which returns object with `doc` which returns object with `delete`.
-        // So I can get the delete spy from `firestoreMock().collection().doc().delete`.
-
-        const deleteSpy = firestoreMock().collection('any').doc('any').delete;
-        // Make it reject once
-        deleteSpy.mockRejectedValueOnce(new Error('Firestore delete failed'));
+        // Make Suunto doc deletion fail (via the doc().delete mock)
+        const collectionObj = firestoreMock().collection('mockCollection');
+        const docObj = collectionObj.doc('testUser123');
+        // @ts-ignore
+        docObj.delete.mockRejectedValueOnce(new Error('Firestore delete failed'));
 
         await wrapped(user, { eventId: 'eventId' } as any);
 
@@ -136,5 +162,41 @@ describe('cleanupUserAccounts', () => {
 
         // Verify Garmin was still called
         expect(deauthorizeGarminMock).toHaveBeenCalledWith('testUser123');
+    });
+
+    it('should query and delete emails for the user', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123', email: 'test@example.com' });
+
+        const uidDocs = { docs: [{ id: 'mail1', ref: 'ref1' }] };
+        const emailDocs = { docs: [{ id: 'mail2', ref: 'ref2' }] };
+
+        // Fix: where() returns an object with get(), which returns the promise.
+        // The mock definition logic for whereMock was:
+        // const whereMock = vi.fn().mockReturnValue({
+        //     get: vi.fn().mockResolvedValue(querySnapshotMock)
+        // });
+
+        // We need to override the inner `get` behavior.
+        const getMock = vi.fn();
+        getMock
+            .mockResolvedValueOnce(uidDocs)
+            .mockResolvedValueOnce(emailDocs);
+
+        whereMock.mockReturnValue({ get: getMock });
+
+        await wrapped(user, { eventId: 'eventId' } as any);
+
+        expect(firestoreMock().collection).toHaveBeenCalledWith('mail');
+
+        // Verify Queries
+        expect(whereMock).toHaveBeenCalledWith('toUids', 'array-contains', 'testUser123');
+        expect(whereMock).toHaveBeenCalledWith('to', '==', 'test@example.com');
+
+        // Verify Deletion
+        // expect(firestoreMock().batch).toHaveBeenCalled(); // Removed as firestoreMock returns new instance with new batch spy each time
+        expect(batchMock.delete).toHaveBeenCalledWith('ref1');
+        expect(batchMock.delete).toHaveBeenCalledWith('ref2');
+        expect(batchMock.commit).toHaveBeenCalled();
     });
 });
