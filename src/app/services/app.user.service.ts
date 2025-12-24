@@ -566,6 +566,20 @@ export class AppUserService implements OnDestroy {
     return role === 'pro';
   }
 
+  public async isAdmin(): Promise<boolean> {
+    const user = await firstValueFrom(authState(this.auth).pipe(take(1)));
+    if (!user) {
+      return false;
+    }
+    try {
+      const tokenResult = await user.getIdTokenResult();
+      return tokenResult.claims['admin'] === true;
+    } catch (e) {
+      console.error('AppUserService: isAdmin - Error getting token result', e);
+      return false;
+    }
+  }
+
   /**
    * Returns true if the user has any level of paid access (basic or pro)
    */

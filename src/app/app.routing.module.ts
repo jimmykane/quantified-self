@@ -3,6 +3,7 @@ import { RouterModule, Routes } from '@angular/router';
 import { authGuard } from './authentication/app.auth.guard';
 import { proGuard } from './authentication/pro.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
+import { adminGuard } from './authentication/admin.guard';
 
 const routes: Routes = [
   {
@@ -15,6 +16,12 @@ const routes: Routes = [
     loadComponent: () => import('./components/onboarding/onboarding.component').then(m => m.OnboardingComponent),
     canMatch: [authGuard],
     data: { title: 'Welcome' }
+  },
+  {
+    path: 'admin',
+    loadChildren: () => import('./modules/admin.module').then(m => m.AdminModule),
+    canMatch: [authGuard, adminGuard],
+    data: { title: 'Admin Dashboard', animation: 'Admin' }
   },
   {
     path: 'pricing',
