@@ -21,19 +21,10 @@ const routes: Routes = [
 ];
 
 @NgModule({
-    declarations: [
-        AdminDashboardComponent
-    ],
     imports: [
         CommonModule,
         RouterModule.forChild(routes),
-        MatTableModule,
-        MatPaginatorModule,
-        MatSortModule,
-        MatInputModule,
-        MatFormFieldModule,
-        MatIconModule,
-        MatProgressSpinnerModule
+        AdminDashboardComponent
     ]
 })
 export class AdminModule { }
