@@ -20,47 +20,50 @@ async function cleanupQueue() {
     today.setHours(0, 0, 0, 0);
     const todayTimestamp = today.getTime();
 
-    console.log(`--- Cleanup Starting ---`);
+    console.log(`--- Cleanup Starting (High Performance Mode) ---`);
     console.log(`Target: Items created before ${today.toISOString()} (${todayTimestamp})`);
     console.log(`------------------------`);
 
+    const bulkWriter = admin.firestore().bulkWriter();
+    // Verify connection/writer availability?
+    // bulkWriter.onWriteError((error) => {
+    //    console.warn('Write error (will retry):', error.message);
+    //    return true; // Retry
+    // });
+
+    let totalDeleted = 0;
+
     for (const collectionName of COLLECTIONS) {
-        console.log(`\nProcessing: ${collectionName}`);
-        let deletedCount = 0;
+        console.log(`\nQueueing deletions for: ${collectionName}`);
 
         try {
-            while (true) {
-                const snapshot = await admin.firestore()
-                    .collection(collectionName)
-                    .where('dateCreated', '<', todayTimestamp)
-                    .limit(500)
-                    .get();
+            // Use stream() for memory efficiency and continuous feeding
+            const queryStream = admin.firestore()
+                .collection(collectionName)
+                .where('dateCreated', '<', todayTimestamp)
+                .stream();
 
-                if (snapshot.empty) {
-                    break;
+            let collectionCount = 0;
+            for await (const doc of queryStream) {
+                bulkWriter.delete((doc as any).ref);
+                collectionCount++;
+                totalDeleted++;
+                if (totalDeleted % 1000 === 0) {
+                    process.stdout.write(`\rQueued ${totalDeleted} deletions...`);
                 }
-
-                const batch = admin.firestore().batch();
-                snapshot.docs.forEach((doc) => {
-                    batch.delete(doc.ref);
-                });
-
-                await batch.commit();
-                deletedCount += snapshot.size;
-                // Move cursor to start of line and print progress
-                process.stdout.write(`\rDeleted ${deletedCount} items...`);
             }
+            console.log(` - Queued ${collectionCount} items for modification`);
 
-            // Get final count
-            const remainingSnapshot = await admin.firestore().collection(collectionName).count().get();
-            console.log(`\nResults for ${collectionName}:`);
-            console.log(` - Deleted: ${deletedCount}`);
-            console.log(` - Remaining: ${remainingSnapshot.data().count}`);
         } catch (error) {
-            console.error(`\nError processing ${collectionName}:`, error);
+            console.error(`\nError queuing ${collectionName}:`, error);
         }
     }
-    console.log(`\n--- Cleanup Complete ---`);
+
+    console.log(`\n\nFlushing bulk writer...`);
+    await bulkWriter.close();
+
+    console.log(`--- Cleanup Complete ---`);
+    console.log(`Total items deleted: ${totalDeleted}`);
 }
 
 cleanupQueue()
