@@ -6,7 +6,12 @@ if (admin.apps.length === 0) {
     admin.initializeApp();
 }
 
-const uid = 'IjMQrlcqXYf6j4SZ3kDzX27MjNz2';
+const uid = process.argv[2];
+
+if (!uid) {
+    console.error('Usage: npx ts-node src/scripts/set-admin-claim.ts <uid>');
+    process.exit(1);
+}
 
 async function setAdminClaim() {
     try {
@@ -15,9 +20,9 @@ async function setAdminClaim() {
 
         // Verify
         const user = await admin.auth().getUser(uid);
-        console.log('Current custom claims:', user.customClaims);
+        console.log(`Current custom claims for ${uid}:`, user.customClaims);
     } catch (error) {
-        console.error('Error setting admin claim:', error);
+        console.error(`Error setting admin claim for ${uid}:`, error);
     }
 }
 
