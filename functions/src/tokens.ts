@@ -26,8 +26,8 @@ export async function refreshTokens(querySnapshot: QuerySnapshot, serviceName: S
     try {
       await getTokenData(authToken, serviceName, true);
       count++;
-    } catch (e: any) {
-      console.error(`Error parsing token #${count} of ${querySnapshot.size} and id ${authToken.id}`);
+    } catch (e) {
+      console.error(`Error parsing token #${count} of ${querySnapshot.size} and id ${authToken.id}`, e);
     }
   }
   console.log(`Parsed ${count} auth tokens out of ${querySnapshot.size}`);
@@ -90,13 +90,17 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
     console.log(`Successfully refreshed token ${doc.id}`);
   } catch (e: any) {
     console.error(`Could not refresh token for user ${doc.id}`, e);
-    if (e.isBoom && e.output.statusCode === 401) {
-      console.log(`Error with code 401 deleting token ${doc.id}`);
+    // If it's a 401 (Unauthorized) or 400 (Bad Request with invalid_grant), delete the token as it's no longer valid.
+    const statusCode = e.statusCode || (e.output && e.output.statusCode);
+    const errorDescription = e.message || (e.error && (e.error.error_description || e.error.error));
+
+    if (statusCode === 401 || (statusCode === 400 && String(errorDescription).toLowerCase().includes('invalid_grant'))) {
+      console.log(`Error with code ${statusCode} ('${errorDescription}') deleting token ${doc.id}`);
       try {
         await doc.ref.delete();
-        console.log(`Deleted token ${doc.id} because of   response '${e.message}'`);
-      } catch (e: any) {
-        console.error(`Could not delete token ${doc.id}`);
+        console.log(`Deleted token ${doc.id} because it's no longer valid.`);
+      } catch (deleteError: any) {
+        console.error(`Could not delete token ${doc.id}`, deleteError);
       }
     }
     throw e;

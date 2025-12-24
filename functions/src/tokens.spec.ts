@@ -187,18 +187,52 @@ describe('tokens', () => {
             expect(mockDoc.ref.update).toHaveBeenCalled();
         });
 
-        it('should delete token on 401 error', async () => {
+        it('should delete token on 401 Boom error', async () => {
             mockToken.expired.mockReturnValue(true);
             const error: any = new Error('Unauthorized');
-            error.isBoom = true;
             error.output = { statusCode: 401 };
-
             mockToken.refresh.mockRejectedValue(error);
 
             await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
                 .rejects.toThrow('Unauthorized');
 
             expect(mockDoc.ref.delete).toHaveBeenCalled();
+        });
+
+        it('should delete token on standard 401 error', async () => {
+            mockToken.expired.mockReturnValue(true);
+            const error: any = new Error('Unauthorized');
+            error.statusCode = 401;
+            mockToken.refresh.mockRejectedValue(error);
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
+                .rejects.toThrow('Unauthorized');
+
+            expect(mockDoc.ref.delete).toHaveBeenCalled();
+        });
+
+        it('should delete token on 400 invalid_grant error', async () => {
+            mockToken.expired.mockReturnValue(true);
+            const error: any = new Error('invalid_grant');
+            error.statusCode = 400;
+            mockToken.refresh.mockRejectedValue(error);
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
+                .rejects.toThrow('invalid_grant');
+
+            expect(mockDoc.ref.delete).toHaveBeenCalled();
+        });
+
+        it('should NOT delete token on generic 500 error', async () => {
+            mockToken.expired.mockReturnValue(true);
+            const error: any = new Error('Server Error');
+            error.statusCode = 500;
+            mockToken.refresh.mockRejectedValue(error);
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
+                .rejects.toThrow('Server Error');
+
+            expect(mockDoc.ref.delete).not.toHaveBeenCalled();
         });
     });
 

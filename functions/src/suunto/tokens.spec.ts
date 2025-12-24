@@ -26,10 +26,11 @@ describe('Suunto Token Refresh Scheduler', () => {
         vi.clearAllMocks();
     });
 
-    it('should query and refresh Suunto tokens', async () => {
+    it('should query and refresh Suunto tokens (proactive and missing)', async () => {
         const firestore = admin.firestore();
         const mockSnapshot = { size: 3, docs: [] };
-        // Chain: collectionGroup('tokens').where('dateRefreshed', '<=', ...).limit(50).get()
+
+        // Mock chain for where filters
         const getMock = vi.fn().mockResolvedValue(mockSnapshot);
         const limitMock = vi.fn().mockReturnValue({ get: getMock });
         const whereMock = vi.fn().mockReturnValue({ limit: limitMock });
@@ -38,6 +39,15 @@ describe('Suunto Token Refresh Scheduler', () => {
         await (refreshSuuntoAppRefreshTokens as any)({});
 
         expect(firestore.collectionGroup).toHaveBeenCalledWith('tokens');
+        // Should have been called twice (once for <= 90 days, once for == null)
+        expect(whereMock).toHaveBeenCalledTimes(2);
+        // The first where call for Query 1
+        expect(whereMock).toHaveBeenCalledWith('dateRefreshed', '<=', expect.any(Number));
+        // The first where call for Query 2
+        expect(whereMock).toHaveBeenCalledWith('dateRefreshed', '==', null);
+
+        // tokens.refreshTokens should be called twice
+        expect(tokens.refreshTokens).toHaveBeenCalledTimes(2);
         expect(tokens.refreshTokens).toHaveBeenCalledWith(mockSnapshot, SERVICE_NAME);
     });
 });

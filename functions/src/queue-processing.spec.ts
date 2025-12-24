@@ -177,8 +177,8 @@ describe('parseWorkoutQueueItemForServiceName', () => {
         // Verify
         expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('No token found'));
 
-        // Verify retry count increase
-        expect(queueItem.retryCount).toBeGreaterThanOrEqual(20);
+        // Verify retry count increase (grace period)
+        expect(queueItem.retryCount).toBe(1);
         expect(updateMock).toHaveBeenCalled();
     });
 });

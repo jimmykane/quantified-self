@@ -126,7 +126,7 @@ describe('queue', () => {
                 dateCreated: Date.now(),
             };
 
-            await increaseRetryCountForQueueItem(queueItem, ServiceNames.SuuntoApp, new Error('Test error'));
+            await increaseRetryCountForQueueItem(queueItem, new Error('Test error'));
 
             expect(queueItem.retryCount).toBe(1);
             expect(queueItem.totalRetryCount).toBe(1);
@@ -147,7 +147,7 @@ describe('queue', () => {
                 dateCreated: Date.now(),
             };
 
-            await increaseRetryCountForQueueItem(queueItem, ServiceNames.SuuntoApp, new Error('Big error'), 10);
+            await increaseRetryCountForQueueItem(queueItem, new Error('Big error'), 10);
 
             expect(queueItem.retryCount).toBe(10);
             expect(queueItem.totalRetryCount).toBe(10);
@@ -168,7 +168,7 @@ describe('queue', () => {
                 dateCreated: Date.now(),
             };
 
-            await increaseRetryCountForQueueItem(queueItem, ServiceNames.COROSAPI, new Error('New error'));
+            await increaseRetryCountForQueueItem(queueItem, new Error('New error'));
 
             expect(queueItem.errors).toHaveLength(2);
             expect(queueItem.errors![1].error).toBe('New error');
@@ -183,7 +183,7 @@ describe('queue', () => {
             };
 
             await expect(
-                increaseRetryCountForQueueItem(queueItem, ServiceNames.SuuntoApp, new Error('Test'))
+                increaseRetryCountForQueueItem(queueItem, new Error('Test'))
             ).rejects.toThrow('No docuemnt reference supplied');
         });
 
@@ -199,7 +199,7 @@ describe('queue', () => {
                 dateCreated: Date.now(),
             };
 
-            await increaseRetryCountForQueueItem(queueItem, ServiceNames.SuuntoApp, new Error('Test'));
+            await increaseRetryCountForQueueItem(queueItem, new Error('Test'));
 
             expect(mockUpdate).toHaveBeenCalled();
             const updateArg = mockUpdate.mock.calls[0][0];
@@ -221,7 +221,7 @@ describe('queue', () => {
                 dateCreated: Date.now(),
             };
 
-            await updateToProcessed(queueItem, ServiceNames.SuuntoApp);
+            await updateToProcessed(queueItem);
 
             expect(mockUpdate).toHaveBeenCalledWith(
                 expect.objectContaining({
@@ -240,7 +240,7 @@ describe('queue', () => {
             };
 
             await expect(
-                updateToProcessed(queueItem, ServiceNames.SuuntoApp)
+                updateToProcessed(queueItem)
             ).rejects.toThrow('No docuemnt reference supplied');
         });
     });
