@@ -251,8 +251,6 @@ export const listUsers = onCall({
         const enrichedUsers = await enrichUsers(pageUsers, db);
 
         // Debug: Count users with photoURL
-        const usersWithPhoto = enrichedUsers.filter(u => u.photoURL).length;
-        console.log(`Returning page ${page} with ${enrichedUsers.length} enriched users (total: ${totalCount}, ~${enrichedUsers.length * 4} Firestore reads, ${usersWithPhoto} with photos)`);
 
         return {
             users: enrichedUsers,
