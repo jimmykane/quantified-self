@@ -304,6 +304,14 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     );
   }
 
+  public onLogoClick() {
+    if (this.authState) {
+      this.router.navigate(['/dashboard']);
+    } else {
+      this.router.navigate(['/']);
+    }
+  }
+
   public toggleSidenav() {
     this.sideNavService.toggle();
   }
