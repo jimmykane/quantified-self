@@ -1,4 +1,6 @@
-import {Injectable} from '@angular/core';
+import { Injectable } from '@angular/core';
+import { saveAs } from 'file-saver';
+import JSZip from 'jszip';
 
 
 @Injectable({
@@ -6,13 +8,16 @@ import {Injectable} from '@angular/core';
 })
 export class AppFileService {
   public downloadFile(blob: Blob, name: string, extension: string): void {
-    const url = window.URL.createObjectURL(blob);
-    const element = document.createElement('a');
-    element.href = url;
-    element.download = [name, extension].join('.');
-    element.style.display = 'none';
-    document.body.appendChild(element);
-    element.click();
-    element.parentNode.removeChild(element);
+    saveAs(blob, [name, extension].join('.'));
+  }
+
+  public async downloadAsZip(files: { data: Blob | ArrayBuffer, fileName: string }[], zipFileName: string): Promise<void> {
+    const zip = new JSZip();
+    files.forEach(file => {
+      zip.file(file.fileName, file.data);
+    });
+
+    const content = await zip.generateAsync({ type: 'blob' });
+    saveAs(content, zipFileName);
   }
 }
