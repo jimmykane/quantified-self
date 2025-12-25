@@ -18,8 +18,7 @@ import {
   ServiceNames
 } from '@sports-alliance/sports-lib';
 import { EventExporterGPX } from '@sports-alliance/sports-lib';
-import { StreamEncoder } from '../helpers/stream.encoder';
-import { CompressedJSONStreamInterface } from '@sports-alliance/sports-lib';
+
 import { EventWriter, FirestoreAdapter, StorageAdapter } from '../../../functions/src/shared/event-writer';
 import { Bytes } from 'firebase/firestore';
 import { Storage, ref, uploadBytes, getBytes } from '@angular/fire/storage';
@@ -687,11 +686,11 @@ export class AppEventService implements OnDestroy {
   */
 
   private processStreamDocumentSnapshot(streamSnapshot: DocumentSnapshot): StreamInterface {
-    return EventImporterJSON.getStreamFromJSON(StreamEncoder.decompressStream(<CompressedJSONStreamInterface>streamSnapshot.data()));
+    return EventImporterJSON.getStreamFromJSON(<any>streamSnapshot.data());
   }
 
   private processStreamQueryDocumentSnapshot(queryDocumentSnapshot: QueryDocumentSnapshot): StreamInterface {
-    return EventImporterJSON.getStreamFromJSON(StreamEncoder.decompressStream(<CompressedJSONStreamInterface>queryDocumentSnapshot.data()));
+    return EventImporterJSON.getStreamFromJSON(<any>queryDocumentSnapshot.data());
   }
 
   // From https://github.com/angular/angularfire2/issues/1400
