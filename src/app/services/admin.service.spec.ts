@@ -97,4 +97,16 @@ describe('AdminService', () => {
             expect(garminCallback?.pending).toBe(1); // 1 collection
         });
     });
+
+    it('should return total user count', async () => {
+        vi.mocked(getCountFromServer).mockResolvedValue({ data: () => ({ count: 180 }) } as any);
+
+        await TestBed.runInInjectionContext(async () => {
+            const count$ = service.getTotalUserCount();
+            const count = await firstValueFrom(count$);
+
+            expect(count).toBe(180);
+            expect(collection).toHaveBeenCalledWith(expect.anything(), 'users');
+        });
+    });
 });
