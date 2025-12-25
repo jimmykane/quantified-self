@@ -6,57 +6,63 @@
     <mat-icon>share</mat-icon>
     <span>Share</span>
   </button>
-  <button  mat-menu-item (click)="editEvent()">
+  <button mat-menu-item (click)="editEvent()">
     <mat-icon>drive_file_rename_outline</mat-icon>
     <span>Edit settings</span>
   </button>
   @if (event.getActivities().length === 1) {
-    <button mat-menu-item (click)="editEventActivity()">
-      <mat-icon>edit</mat-icon>
-      <span>Edit activity</span>
-    </button>
+  <button mat-menu-item (click)="editEventActivity()">
+    <mat-icon>edit</mat-icon>
+    <span>Edit activity</span>
+  </button>
   }
 
   @if (event.getActivities().length === 1 && hasDistance()) {
-    <button mat-menu-item (click)="cropEventActivity()">
-      <mat-icon>crop</mat-icon>
-      <span>Crop activity</span>
-    </button>
+  <button mat-menu-item (click)="cropEventActivity()">
+    <mat-icon>crop</mat-icon>
+    <span>Crop activity</span>
+  </button>
   }
   <!--<button mat-menu-item (click)="downloadEventAsTCX(event)">-->
   <!--<mat-icon>file_download</mat-icon>-->
   <!--<span>Download as TCX</span>-->
-<!--</button>-->
-<button mat-menu-item (click)="reGenerateStatistics()">
-  <mat-icon>autorenew</mat-icon>
-  <span>Refresh activity statistics <mat-icon  class="toolTip" matTooltip="This will re-calculate statistics like distance, ascent, descent etc...">info</mat-icon>
-</span>
-</button>
-<button mat-menu-item (click)="downloadJSON()">
-  <mat-icon>file_download</mat-icon>
-  <span>Download as JSON</span>
-</button>
-@if (hasPositionalData()) {
+  <!--</button>-->
+  <button mat-menu-item (click)="reGenerateStatistics()">
+    <mat-icon>autorenew</mat-icon>
+    <span>Refresh activity statistics <mat-icon class="toolTip"
+        matTooltip="This will re-calculate statistics like distance, ascent, descent etc...">info</mat-icon>
+    </span>
+  </button>
+  <button mat-menu-item (click)="downloadJSON()">
+    <mat-icon>file_download</mat-icon>
+    <span>Download as JSON</span>
+  </button>
+  @if (hasPositionalData()) {
   <button mat-menu-item (click)="downloadGPX()">
     <mat-icon>file_download</mat-icon>
     <span>Download as GPX</span>
   </button>
-}
-@if (suuntoAppServiceMetaData) {
+  }
+  @if (suuntoAppServiceMetaData) {
   <button mat-menu-item (click)="downloadSuuntoFIT()">
     <mat-icon>file_download</mat-icon>
     <span>Download Suunto FIT file</span>
   </button>
-}
+  }
 
-@if (corosAPIServiceMetaData) {
-  <button mat-menu-item (click)="downloadCOROSFIT()">
-    <mat-icon>file_download</mat-icon>
-    <span>Download COROS FIT file</span>
+
+
+
+  @if ((event['originalFiles'] && event['originalFiles'].length > 0) || (event['originalFile'] &&
+  event['originalFile'].path)) {
+  <button mat-menu-item (click)="downloadOriginals()">
+    <mat-icon>cloud_download</mat-icon>
+    <span>Download original(s)</span>
   </button>
-}
-<button mat-menu-item (click)="delete()">
-  <mat-icon>delete</mat-icon>
-  <span>Delete</span>
-</button>
+  }
+
+  <button mat-menu-item (click)="delete()">
+    <mat-icon>delete</mat-icon>
+    <span>Delete</span>
+  </button>
 </mat-menu>

@@ -24,7 +24,7 @@ import * as Sentry from '@sentry/browser';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Auth, getIdToken } from '@angular/fire/auth';
 import {
-  COROSAPIEventMetaDataInterface, GarminHealthAPIEventMetaDataInterface,
+  GarminHealthAPIEventMetaDataInterface,
   ServiceNames,
   SuuntoAppEventMetaDataInterface
 } from '@sports-alliance/sports-lib';
@@ -42,12 +42,12 @@ import { AppWindowService } from '../../services/app.window.service';
   standalone: false
 })
 export class EventActionsComponent implements OnInit, OnDestroy {
-  @Input() event: EventInterface;
-  @Input() user: User;
+  @Input() event!: EventInterface;
+  @Input() user!: User;
   @Input() showDownloadOriginal = false;
 
   public suuntoAppServiceMetaData: SuuntoAppEventMetaDataInterface;
-  public corosAPIServiceMetaData: COROSAPIEventMetaDataInterface;
+
   public garminHealthAPIServiceMetaData: GarminHealthAPIEventMetaDataInterface;
   private deleteConfirmationSubscription;
   private auth = inject(Auth);
@@ -84,8 +84,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     }
     this.suuntoAppServiceMetaData = <SuuntoAppEventMetaDataInterface>(await this.eventService.getEventMetaData(this.user, this.event.getID(), ServiceNames.SuuntoApp)
       .pipe(take(1)).toPromise());
-    this.corosAPIServiceMetaData = <COROSAPIEventMetaDataInterface>(await this.eventService.getEventMetaData(this.user, this.event.getID(), ServiceNames.COROSAPI)
-      .pipe(take(1)).toPromise());
+
     this.garminHealthAPIServiceMetaData = <GarminHealthAPIEventMetaDataInterface>(await this.eventService.getEventMetaData(this.user, this.event.getID(), ServiceNames.GarminHealthAPI)
       .pipe(take(1)).toPromise());
     this.changeDetectorRef.detectChanges();
@@ -228,17 +227,41 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     }
   }
 
-  async downloadCOROSFIT() {
+  async downloadOriginals() {
+    this.snackBar.open('Preparing download...', undefined, { duration: 2000 });
     try {
-      this.windowService.windowRef.open(this.corosAPIServiceMetaData.serviceFITFileURI,)
-      logEvent(this.analytics, 'downloaded_fit_file', { method: ServiceNames.COROSAPI });
-    } catch (e) {
-      this.snackBar.open(`Could not download original fit file due to ${e.message}`, undefined, {
-        duration: 5000,
-      });
-      Sentry.captureException(e);
+      const eventAny = this.event as any;
+      if (eventAny.originalFiles && eventAny.originalFiles.length > 0) {
+        // Multiple files -> ZIP
+        const filesToZip = [];
+        for (const fileMeta of eventAny.originalFiles) {
+          const arrayBuffer = await this.eventService.downloadFile(fileMeta.path);
+          const parts = fileMeta.path.split('/');
+          const fileName = parts[parts.length - 1]; // Use basename
+          filesToZip.push({ data: arrayBuffer, fileName });
+        }
+        await this.fileService.downloadAsZip(filesToZip, `${this.getFileName(this.event)}.zip`);
+        logEvent(this.analytics, 'downloaded_original_files_zip');
+
+      } else if (eventAny.originalFile && eventAny.originalFile.path) {
+        // Single file -> Direct download
+        const arrayBuffer = await this.eventService.downloadFile(eventAny.originalFile.path);
+        const parts = eventAny.originalFile.path.split('.');
+        const ext = parts[parts.length - 1];
+        const blob = new Blob([arrayBuffer]); // Type unknown, default blob
+        this.fileService.downloadFile(blob, this.getFileName(this.event), ext);
+        logEvent(this.analytics, 'downloaded_original_file');
+      } else {
+        this.snackBar.open('No original files found.', undefined, { duration: 3000 });
+      }
+    } catch (error: any) {
+      console.error('Download failed', error);
+      this.snackBar.open('Failed to download original files.', undefined, { duration: 3000 });
+      Sentry.captureException(error);
     }
   }
+
+
 
   async delete() {
     const deleteConfirmationBottomSheet = this.deleteConfirmationBottomSheet.open(DeleteConfirmationComponent, {
