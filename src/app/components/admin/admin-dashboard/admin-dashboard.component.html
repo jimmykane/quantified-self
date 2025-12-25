@@ -88,6 +88,18 @@
         </div>
     </div>
 
+    <!-- Total Users Stat -->
+    <div class="glass-card stat-card users" style="margin-bottom: 24px; max-width: 250px;">
+        <div class="stat-header">
+            <mat-icon>people</mat-icon>
+            <span>Total Users</span>
+        </div>
+        <div class="stat-value" *ngIf="totalUserCount !== null">{{ totalUserCount }}</div>
+        <div class="spinner-container" *ngIf="totalUserCount === null">
+            <mat-spinner diameter="24"></mat-spinner>
+        </div>
+    </div>
+
     <div class="glass-card filter-container">
         <mat-form-field appearance="outline" class="search-field">
             <mat-label>Search users</mat-label>

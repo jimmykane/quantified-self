@@ -347,6 +347,14 @@ table {
     border-bottom: 4px solid #ef4444;
 }
 
+.stat-card.users .stat-value {
+    color: #6366f1;
+}
+
+.stat-card.users {
+    border-bottom: 4px solid #6366f1;
+}
+
 @media (max-width: 768px) {
     .stats-grid {
         grid-template-columns: 1fr;

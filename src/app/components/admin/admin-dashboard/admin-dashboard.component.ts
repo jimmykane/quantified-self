@@ -63,6 +63,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     // Queue stats
     queueStats: QueueStats | null = null;
     isLoadingStats = false;
+    totalUserCount: number | null = null;
 
     // Cleanup
     private destroy$ = new Subject<void>();
@@ -87,6 +88,9 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         // Initial fetch
         this.fetchUsers();
         this.fetchQueueStats();
+        this.adminService.getTotalUserCount().subscribe(count => {
+            this.totalUserCount = count;
+        });
     }
 
     fetchQueueStats(): void {
