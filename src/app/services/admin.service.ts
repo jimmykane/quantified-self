@@ -1,8 +1,8 @@
 import { inject, Injectable } from '@angular/core';
 import { collection, Firestore, getCountFromServer, query, where } from '@angular/fire/firestore';
 import { Functions, httpsCallableFromURL } from '@angular/fire/functions';
-import { from, Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { from, Observable, timer } from 'rxjs';
+import { map, switchMap } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 
 export interface AdminUser {
@@ -120,6 +120,9 @@ export class AdminService {
             return { pending, succeeded, failed };
         };
 
-        return from(fetchStats());
+        // Poll every 10 seconds for "hot" updates
+        return timer(0, 10000).pipe(
+            switchMap(() => from(fetchStats()))
+        );
     }
 }
