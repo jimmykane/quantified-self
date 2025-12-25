@@ -266,6 +266,31 @@ export const listUsers = onCall({
 });
 
 /**
+ * Gets the total number of users in the system.
+ */
+export const getUserCount = onCall({
+    region: 'europe-west2',
+    cors: ALLOWED_CORS_ORIGINS,
+    memory: '256MiB',
+}, async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    }
+    if (request.auth.token.admin !== true) {
+        throw new HttpsError('permission-denied', 'Only admins can call this function.');
+    }
+
+    try {
+        const db = admin.firestore();
+        const snapshot = await db.collection('users').count().get();
+        return { count: snapshot.data().count };
+    } catch (error: unknown) {
+        console.error('Error getting user count:', error);
+        throw new HttpsError('internal', 'Failed to get user count');
+    }
+});
+
+/**
  * Gets aggregated statistics for all workout queues.
  * Uses efficient Firestore count() queries.
  */
@@ -284,41 +309,56 @@ export const getQueueStats = onCall({
         throw new HttpsError('permission-denied', 'Only admins can call this function.');
     }
 
-    const QUEUE_COLLECTIONS = [
-        'suuntoAppWorkoutQueue',
-        'suuntoAppHistoryImportActivityQueue',
-        'COROSAPIWorkoutQueue',
-        'COROSAPIHistoryImportWorkoutQueue',
-        'garminHealthAPIActivityQueue'
-    ];
+    const PROVIDER_QUEUES: Record<string, string[]> = {
+        'Suunto': ['suuntoAppWorkoutQueue', 'suuntoAppHistoryImportActivityQueue'],
+        'COROS': ['COROSAPIWorkoutQueue', 'COROSAPIHistoryImportWorkoutQueue'],
+        'Garmin': ['garminHealthAPIActivityQueue']
+    };
 
     try {
         const db = admin.firestore();
-        let pending = 0;
-        let succeeded = 0;
-        let failed = 0;
+        let totalPending = 0;
+        let totalSucceeded = 0;
+        let totalFailed = 0;
+        const providers: { name: string; pending: number; succeeded: number; failed: number }[] = [];
 
-        // Use Promise.all with efficient count() queries
-        await Promise.all(QUEUE_COLLECTIONS.map(async (collectionName) => {
-            const col = db.collection(collectionName);
+        // Map over providers to get individual and total stats
+        for (const [providerName, collections] of Object.entries(PROVIDER_QUEUES)) {
+            let providerPending = 0;
+            let providerSucceeded = 0;
+            let providerFailed = 0;
 
-            const [p, s, f] = await Promise.all([
-                col.where('processed', '==', false).where('retryCount', '<', 10).count().get(),
-                col.where('processed', '==', true).count().get(),
-                col.where('processed', '==', false).where('retryCount', '>=', 10).count().get()
-            ]);
+            await Promise.all(collections.map(async (collectionName) => {
+                const col = db.collection(collectionName);
 
-            pending += p.data().count;
-            succeeded += s.data().count;
-            failed += f.data().count;
-        }));
+                const [p, s, f] = await Promise.all([
+                    col.where('processed', '==', false).where('retryCount', '<', 10).count().get(),
+                    col.where('processed', '==', true).count().get(),
+                    col.where('processed', '==', false).where('retryCount', '>=', 10).count().get()
+                ]);
 
-        console.log(`Queue stats: Pending=${pending}, Succeeded=${succeeded}, Failed=${failed}`);
+                providerPending += p.data().count;
+                providerSucceeded += s.data().count;
+                providerFailed += f.data().count;
+            }));
+
+            totalPending += providerPending;
+            totalSucceeded += providerSucceeded;
+            totalFailed += providerFailed;
+
+            providers.push({
+                name: providerName,
+                pending: providerPending,
+                succeeded: providerSucceeded,
+                failed: providerFailed
+            });
+        }
 
         return {
-            pending,
-            succeeded,
-            failed
+            pending: totalPending,
+            succeeded: totalSucceeded,
+            failed: totalFailed,
+            providers
         };
     } catch (error: unknown) {
         console.error('Error getting queue stats:', error);

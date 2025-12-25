@@ -1,14 +1,10 @@
 import * as functions from 'firebase-functions/v1';
 import { addToQueueForCOROS } from '../queue';
 
-import { SERVICE_NAME } from './constants';
 import { COROSAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 import { generateIDFromParts } from '../utils';
 import { config } from '../config';
 
-
-const TIMEOUT_IN_SECONDS = 300;
-const MEMORY = '2GB';
 const SUCCESS_RESPONSE = {
   'message': 'ok',
   'result': '0000',

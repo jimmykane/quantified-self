@@ -121,7 +121,7 @@ export { enforceSubscriptionLimits } from './schedule/enforce-subscription-limit
 export { checkSubscriptionNotifications } from './schedule/notifications';
 export { cleanupUserAccounts } from './users/cleanup';
 export { deleteSelf } from './user/user';
-export { listUsers } from './users/admin';
+export { listUsers, getQueueStats, getUserCount } from './users/admin';
 
 // Missing / Deleted Functions (Not Exported)
 // - addCookieAndRedirect

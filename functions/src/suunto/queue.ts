@@ -1,11 +1,7 @@
 import * as functions from 'firebase-functions/v1';
 import { addToQueueForSuunto } from '../queue';
 
-import { ServiceNames } from '@sports-alliance/sports-lib';
 import { config } from '../config';
-
-const TIMEOUT_IN_SECONDS = 540;
-const MEMORY = '4GB';
 
 export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,

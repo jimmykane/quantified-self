@@ -5,13 +5,20 @@ import { environment } from '../../environments/environment';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { firstValueFrom } from 'rxjs';
 
-// Create a mock for listUsers function
+// Create a mock for Cloud Functions
 const mockListUsers = vi.fn();
+const mockGetQueueStats = vi.fn();
+const mockGetUserCount = vi.fn();
 
 // Mock the Angular Fire Functions
 vi.mock('@angular/fire/functions', () => ({
     Functions: vi.fn(),
-    httpsCallableFromURL: vi.fn(() => mockListUsers)
+    httpsCallableFromURL: vi.fn((functions, name) => {
+        if (name === environment.functions.listUsers) return mockListUsers;
+        if (name === environment.functions.getQueueStats) return mockGetQueueStats;
+        if (name === environment.functions.getUserCount) return mockGetUserCount;
+        return vi.fn();
+    })
 }));
 
 vi.mock('@angular/fire/firestore', () => ({
@@ -22,8 +29,8 @@ vi.mock('@angular/fire/firestore', () => ({
     getCountFromServer: vi.fn()
 }));
 
-import { Firestore, collection, getCountFromServer } from '@angular/fire/firestore';
-import { EnvironmentInjector, runInInjectionContext } from '@angular/core';
+import { Firestore } from '@angular/fire/firestore';
+import { EnvironmentInjector } from '@angular/core';
 
 describe('AdminService', () => {
     let service: AdminService;
@@ -35,7 +42,7 @@ describe('AdminService', () => {
                 AdminService,
                 { provide: Functions, useValue: {} },
                 { provide: Firestore, useValue: {} },
-                { provide: EnvironmentInjector, useValue: { get: () => { } } } // Mock injector
+                { provide: EnvironmentInjector, useValue: { get: () => { } } }
             ]
         });
         service = TestBed.inject(AdminService);
@@ -43,8 +50,8 @@ describe('AdminService', () => {
 
         // Clear mock calls
         mockListUsers.mockClear();
-        vi.mocked(collection).mockClear();
-        vi.mocked(getCountFromServer).mockClear();
+        mockGetQueueStats.mockClear();
+        mockGetUserCount.mockClear();
     });
 
     it('should be created', () => {
@@ -56,57 +63,33 @@ describe('AdminService', () => {
             { uid: '1', email: 'test@test.com', customClaims: { admin: true }, metadata: { lastSignInTime: 'now', creationTime: 'then' }, disabled: false }
         ];
 
-        // Mock the return value of the cloud function call
         mockListUsers.mockReturnValue(Promise.resolve({ data: { users: mockUsers } }));
 
         const users$ = service.getUsers();
         const users = await firstValueFrom(users$);
 
-        expect(httpsCallableFromURL).toHaveBeenCalledWith(functions, environment.functions.listUsers);
         expect(mockListUsers).toHaveBeenCalled();
         expect(users.users).toEqual(mockUsers);
     });
 
-    it('should aggregate queue stats by provider', async () => {
-        // Mock getCountFromServer to return different values based on calls
-        // We have 5 collections * 3 queries each = 15 calls
-        // 1. Suunto x2 (pending/success/failed)
-        // 2. COROS x2
-        // 3. Garmin x1
+    it('should call getQueueStats Cloud Function', async () => {
+        const mockStats = { pending: 5, succeeded: 10, failed: 2, providers: [] };
+        mockGetQueueStats.mockReturnValue(Promise.resolve({ data: mockStats }));
 
-        vi.mocked(getCountFromServer).mockResolvedValue({ data: () => ({ count: 1 }) } as any);
+        const stats$ = service.getQueueStatsDirect();
+        const stats = await firstValueFrom(stats$);
 
-        // We need to run inside injection context because of runInInjectionContext usage
-        await TestBed.runInInjectionContext(async () => {
-            const stats$ = service.getQueueStatsDirect();
-            const stats = await firstValueFrom(stats$);
-
-            // 5 collections * 1 pending each = 5
-            expect(stats.pending).toBe(5);
-            expect(stats.succeeded).toBe(5);
-            expect(stats.failed).toBe(5);
-
-            expect(stats.providers.length).toBe(3);
-            const suuntoCallback = stats.providers.find(p => p.name === 'Suunto');
-            expect(suuntoCallback?.pending).toBe(2); // 2 collections
-
-            const corosCallback = stats.providers.find(p => p.name === 'COROS');
-            expect(corosCallback?.pending).toBe(2); // 2 collections
-
-            const garminCallback = stats.providers.find(p => p.name === 'Garmin');
-            expect(garminCallback?.pending).toBe(1); // 1 collection
-        });
+        expect(mockGetQueueStats).toHaveBeenCalled();
+        expect(stats).toEqual(mockStats);
     });
 
-    it('should return total user count', async () => {
-        vi.mocked(getCountFromServer).mockResolvedValue({ data: () => ({ count: 180 }) } as any);
+    it('should return total user count from Cloud Function', async () => {
+        mockGetUserCount.mockReturnValue(Promise.resolve({ data: { count: 180 } }));
 
-        await TestBed.runInInjectionContext(async () => {
-            const count$ = service.getTotalUserCount();
-            const count = await firstValueFrom(count$);
+        const count$ = service.getTotalUserCount();
+        const count = await firstValueFrom(count$);
 
-            expect(count).toBe(180);
-            expect(collection).toHaveBeenCalledWith(expect.anything(), 'users');
-        });
+        expect(mockGetUserCount).toHaveBeenCalled();
+        expect(count).toBe(180);
     });
 });

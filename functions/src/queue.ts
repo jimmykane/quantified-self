@@ -6,7 +6,6 @@ import { processGarminHealthAPIActivityQueueItem } from './garmin/queue';
 import {
   COROSAPIWorkoutQueueItemInterface,
   GarminHealthAPIActivityQueueItemInterface,
-  QueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface,
 } from './queue/queue-item.interface';
 import { generateIDFromParts, setEvent, UsageLimitExceededError } from './utils';
@@ -85,44 +84,46 @@ export async function parseQueueItems(serviceName: ServiceNames, fromHistoryQueu
   console.log(`Parsed ${count} queue items out of ${querySnapshot.size}`);
 }
 
-const TIMEOUT_IN_SECONDS = 300;
-const MEMORY = '2GB';
+const TIMEOUT_DEFAULT = 300;
+const MEMORY_DEFAULT = '2GB';
+const TIMEOUT_HIGH = 540;
+const MEMORY_HIGH = '4GB';
 
 export const parseGarminHealthAPIActivityQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_IN_SECONDS,
-  memory: MEMORY,
+  timeoutSeconds: TIMEOUT_HIGH,
+  memory: MEMORY_HIGH,
   maxInstances: 1,
 }).pubsub.schedule('every 20 minutes').onRun(async () => {
   await parseQueueItems(ServiceNames.GarminHealthAPI);
 });
 
 export const parseCOROSAPIWorkoutQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_IN_SECONDS,
-  memory: MEMORY,
+  timeoutSeconds: TIMEOUT_DEFAULT,
+  memory: MEMORY_DEFAULT,
   maxInstances: 1,
 }).pubsub.schedule('every 20 minutes').onRun(async () => {
   await parseQueueItems(ServiceNames.COROSAPI);
 });
 
 export const parseCOROSAPIHistoryImportWorkoutQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_IN_SECONDS,
-  memory: MEMORY,
+  timeoutSeconds: TIMEOUT_DEFAULT,
+  memory: MEMORY_DEFAULT,
   maxInstances: 1,
 }).pubsub.schedule('every 20 minutes').onRun(async () => {
   await parseQueueItems(ServiceNames.COROSAPI, true);
 });
 
 export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_IN_SECONDS,
-  memory: MEMORY,
+  timeoutSeconds: TIMEOUT_HIGH,
+  memory: MEMORY_HIGH,
   maxInstances: 1,
 }).pubsub.schedule('every 20 minutes').onRun(async () => {
   await parseQueueItems(ServiceNames.SuuntoApp);
 });
 
 export const parseSuuntoAppHistoryImportActivityQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_IN_SECONDS,
-  memory: MEMORY,
+  timeoutSeconds: TIMEOUT_HIGH,
+  memory: MEMORY_HIGH,
   maxInstances: 1,
 }).pubsub.schedule('every 20 minutes').onRun(async () => {
   await parseQueueItems(ServiceNames.SuuntoApp, true);

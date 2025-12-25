@@ -16,15 +16,11 @@ import * as xmldom from 'xmldom';
 import {
   GarminHealthAPIEventMetaData,
 } from '@sports-alliance/sports-lib';
-import { ServiceNames } from '@sports-alliance/sports-lib';
 interface RequestError extends Error {
   statusCode?: number;
 }
 
-
 const GARMIN_ACTIVITY_URI = 'https://apis.garmin.com/wellness-api/rest/activityFile';
-const TIMEOUT_IN_SECONDS = 540;
-const MEMORY = '4GB';
 
 export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,

@@ -79,6 +79,11 @@ export class AdminService {
 
     private injector = inject(EnvironmentInjector);
 
+    private getUserCountFn = httpsCallableFromURL<void, { count: number }>(
+        this.functions,
+        environment.functions.getUserCount
+    );
+
     getUsers(params: ListUsersParams = {}): Observable<ListUsersResponse> {
         return from(this.listUsersFn({
             page: params.page ?? 0,
@@ -97,66 +102,17 @@ export class AdminService {
         );
     }
 
-    async getQueueStatsDirectAsync(): Promise<QueueStats> {
-        const PROVIDER_QUEUES = {
-            'Suunto': ['suuntoAppWorkoutQueue', 'suuntoAppHistoryImportActivityQueue'],
-            'COROS': ['COROSAPIWorkoutQueue', 'COROSAPIHistoryImportWorkoutQueue'],
-            'Garmin': ['garminHealthAPIActivityQueue']
-        };
-
-        let totalPending = 0;
-        let totalSucceeded = 0;
-        let totalFailed = 0;
-        const providers: QueueStats['providers'] = [];
-
-        for (const [providerName, collections] of Object.entries(PROVIDER_QUEUES)) {
-            let providerPending = 0;
-            let providerSucceeded = 0;
-            let providerFailed = 0;
-
-            await Promise.all(collections.map(async (collectionName) => {
-                const col = collection(this.firestore, collectionName);
-                const [p, s, f] = await Promise.all([
-                    getCountFromServer(query(col, where('processed', '==', false), where('retryCount', '<', 10))),
-                    getCountFromServer(query(col, where('processed', '==', true))),
-                    getCountFromServer(query(col, where('processed', '==', false), where('retryCount', '>=', 10)))
-                ]);
-                providerPending += p.data().count;
-                providerSucceeded += s.data().count;
-                providerFailed += f.data().count;
-            }));
-
-            totalPending += providerPending;
-            totalSucceeded += providerSucceeded;
-            totalFailed += providerFailed;
-
-            providers.push({
-                name: providerName,
-                pending: providerPending,
-                succeeded: providerSucceeded,
-                failed: providerFailed
-            });
-        }
-
-        return {
-            pending: totalPending,
-            succeeded: totalSucceeded,
-            failed: totalFailed,
-            providers: providers
-        };
-    }
-
     getQueueStatsDirect(): Observable<QueueStats> {
         // Poll every 10 seconds for "hot" updates
         return timer(0, 10000).pipe(
-            switchMap(() => from(this.getQueueStatsDirectAsync()))
+            switchMap(() => from(this.getQueueStatsFn())),
+            map(result => result.data)
         );
     }
 
     getTotalUserCount(): Observable<number> {
-        const col = collection(this.firestore, 'users');
-        return from(getCountFromServer(col)).pipe(
-            map(snapshot => snapshot.data().count)
+        return from(this.getUserCountFn()).pipe(
+            map(result => result.data.count)
         );
     }
 }

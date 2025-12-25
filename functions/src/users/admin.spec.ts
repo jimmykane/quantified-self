@@ -50,7 +50,7 @@ vi.mock('../utils', () => ({
     ALLOWED_CORS_ORIGINS: ['*']
 }));
 
-import { listUsers, getQueueStats } from './admin';
+import { listUsers, getQueueStats, getUserCount } from './admin';
 
 describe('listUsers Cloud Function', () => {
     beforeEach(() => {
@@ -249,10 +249,42 @@ describe('getQueueStats Cloud Function', () => {
         expect(result).toEqual({
             pending: 25,
             succeeded: 25,
-            failed: 25
+            failed: 25,
+            providers: [
+                { name: 'Suunto', pending: 10, succeeded: 10, failed: 10 },
+                { name: 'COROS', pending: 10, succeeded: 10, failed: 10 },
+                { name: 'Garmin', pending: 5, succeeded: 5, failed: 5 }
+            ]
         });
 
         expect(mockCollection).toHaveBeenCalledWith('suuntoAppWorkoutQueue');
         expect(mockCollection).toHaveBeenCalledWith('garminHealthAPIActivityQueue');
+    });
+});
+
+describe('getUserCount Cloud Function', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('should return total user count', async () => {
+        const request = {
+            auth: { uid: 'admin-uid', token: { admin: true } }
+        } as unknown as CallableRequest<any>;
+
+        const mockCountGet = vi.fn().mockResolvedValue({
+            data: () => ({ count: 150 })
+        });
+
+        mockCollection.mockReturnValue({
+            count: vi.fn().mockReturnValue({
+                get: mockCountGet
+            })
+        });
+
+        const result = await (getUserCount as any)(request);
+
+        expect(result).toEqual({ count: 150 });
+        expect(mockCollection).toHaveBeenCalledWith('users');
     });
 });
