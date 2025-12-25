@@ -105,18 +105,19 @@ export class AdminService {
         };
 
         const fetchStats = async (): Promise<QueueStats> => {
-            return runInInjectionContext(this.injector, async () => {
-                let totalPending = 0;
-                let totalSucceeded = 0;
-                let totalFailed = 0;
-                const providers: QueueStats['providers'] = [];
 
-                for (const [providerName, collections] of Object.entries(PROVIDER_QUEUES)) {
-                    let providerPending = 0;
-                    let providerSucceeded = 0;
-                    let providerFailed = 0;
+            let totalPending = 0;
+            let totalSucceeded = 0;
+            let totalFailed = 0;
+            const providers: QueueStats['providers'] = [];
 
-                    await Promise.all(collections.map(async (collectionName) => {
+            for (const [providerName, collections] of Object.entries(PROVIDER_QUEUES)) {
+                let providerPending = 0;
+                let providerSucceeded = 0;
+                let providerFailed = 0;
+
+                await Promise.all(collections.map(async (collectionName) => {
+                    await runInInjectionContext(this.injector, async () => {
                         const col = collection(this.firestore, collectionName);
 
                         const [p, s, f] = await Promise.all([
@@ -128,28 +129,29 @@ export class AdminService {
                         providerPending += p.data().count;
                         providerSucceeded += s.data().count;
                         providerFailed += f.data().count;
-                    }));
-
-                    totalPending += providerPending;
-                    totalSucceeded += providerSucceeded;
-                    totalFailed += providerFailed;
-
-                    providers.push({
-                        name: providerName,
-                        pending: providerPending,
-                        succeeded: providerSucceeded,
-                        failed: providerFailed
                     });
-                }
+                }));
 
-                return {
-                    pending: totalPending,
-                    succeeded: totalSucceeded,
-                    failed: totalFailed,
-                    providers: providers
-                };
-            });
+                totalPending += providerPending;
+                totalSucceeded += providerSucceeded;
+                totalFailed += providerFailed;
+
+                providers.push({
+                    name: providerName,
+                    pending: providerPending,
+                    succeeded: providerSucceeded,
+                    failed: providerFailed
+                });
+            }
+
+            return {
+                pending: totalPending,
+                succeeded: totalSucceeded,
+                failed: totalFailed,
+                providers: providers
+            };
         };
+
 
         // Poll every 10 seconds for "hot" updates
         return timer(0, 10000).pipe(

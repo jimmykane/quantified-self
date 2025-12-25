@@ -1,4 +1,4 @@
-import { inject, Injectable, OnDestroy } from '@angular/core';
+import { inject, Injectable, OnDestroy, EnvironmentInjector, runInInjectionContext } from '@angular/core';
 import { Observable, from, firstValueFrom } from 'rxjs';
 import { StripeRole } from '../models/stripe-role.model';
 import { User } from '@sports-alliance/sports-lib';
@@ -99,6 +99,7 @@ export class AppUserService implements OnDestroy {
   private firestore = inject(Firestore);
   private auth = inject(Auth);
   private functions = inject(Functions);
+  private injector = inject(EnvironmentInjector);
 
   static getDefaultChartTheme(): ChartThemes {
     return ChartThemes.Material;
@@ -537,7 +538,7 @@ export class AppUserService implements OnDestroy {
   // ...
 
   public async getSubscriptionRole(): Promise<StripeRole | null> {
-    const user = await firstValueFrom(authState(this.auth).pipe(take(1)));
+    const user = await runInInjectionContext(this.injector, () => firstValueFrom(authState(this.auth).pipe(take(1))));
     if (!user) {
       console.warn('AppUserService: getSubscriptionRole - No current user');
       return null;
@@ -569,7 +570,7 @@ export class AppUserService implements OnDestroy {
   }
 
   public async isAdmin(): Promise<boolean> {
-    const user = await firstValueFrom(authState(this.auth).pipe(take(1)));
+    const user = await runInInjectionContext(this.injector, () => firstValueFrom(authState(this.auth).pipe(take(1))));
     if (!user) {
       return false;
     }
