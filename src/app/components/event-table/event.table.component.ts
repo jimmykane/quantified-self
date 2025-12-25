@@ -178,7 +178,15 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.selection.clear();
 
     // 1. Fetch Events
-    const events: any[] = await Promise.all(promises);
+    let events: any[];
+    try {
+      events = await Promise.all(promises);
+    } catch (e: any) {
+      console.error('Merge failed during event fetch', e);
+      this.loaded();
+      this.snackBar.open(e.message || 'Error loading events for merge', 'Close', { duration: 5000, panelClass: ['error-snackbar'] });
+      return;
+    }
 
     // 2. Collect Original Files from source events
     const validOriginalFiles: { data: any, extension: string, startDate: Date }[] = [];
@@ -200,7 +208,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
               const parts = fileMeta.path.split('.');
               const ext = parts[parts.length - 1];
               const eventStartDate = this.fileService.toDate(evt.startDate);
-              validOriginalFiles.push({ data: buffer, extension: ext, startDate: fileMeta.startDate || eventStartDate });
+              validOriginalFiles.push({ data: buffer, extension: ext, startDate: fileMeta.startDate || eventStartDate || new Date() });
             } catch (e) {
               console.error('Failed to download source file for merge', fileMeta, e);
             }
@@ -215,7 +223,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
             const parts = evt.originalFile.path.split('.');
             const ext = parts[parts.length - 1];
             const eventStartDate = this.fileService.toDate(evt.startDate);
-            validOriginalFiles.push({ data: buffer, extension: ext, startDate: evt.originalFile.startDate || eventStartDate });
+            validOriginalFiles.push({ data: buffer, extension: ext, startDate: evt.originalFile.startDate || eventStartDate || new Date() });
           } catch (e) {
             console.error('Failed to download source file for merge', evt.originalFile, e);
           }

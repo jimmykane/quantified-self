@@ -80,6 +80,8 @@ export class AppEventService implements OnDestroy {
                 } else if (typeof file.startDate === 'string') {
                   file.startDate = new Date(file.startDate);
                 }
+              } else {
+                throw new Error('Event Metadata Error: Missing startDate for file ' + file.path);
               }
               return file;
             });
