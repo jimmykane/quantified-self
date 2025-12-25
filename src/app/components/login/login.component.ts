@@ -134,6 +134,11 @@ export class LoginComponent implements OnInit, OnDestroy {
           .then(handleResult)
           .catch(handleError);
         break;
+      case SignInProviders.GitHub:
+        this.authService.githubLogin()
+          .then(handleResult)
+          .catch(handleError);
+        break;
     }
   }
 
@@ -170,5 +175,6 @@ export class LoginComponent implements OnInit, OnDestroy {
 
 export enum SignInProviders {
   Google,
+  GitHub,
   Email
 }

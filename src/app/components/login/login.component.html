@@ -35,6 +35,10 @@
           <mat-icon class="google-icon" svgIcon="google_logo_light"></mat-icon>
           Sign in with Google
         </button>
+        <button mat-stroked-button (click)="signInWithProvider(signInProviders.GitHub)" class="social-button">
+          <mat-icon class="github-icon" svgIcon="github_logo"></mat-icon>
+          Sign in with GitHub
+        </button>
       </div>
     </div>
   </mat-card>

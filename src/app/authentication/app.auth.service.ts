@@ -2,7 +2,7 @@ import { inject, Injectable, EnvironmentInjector, runInInjectionContext, NgZone 
 import { Observable, of } from 'rxjs';
 import { map, shareReplay, switchMap, take } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Auth, user, signInWithPopup, getRedirectResult, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, sendPasswordResetEmail, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword } from '@angular/fire/auth';
+import { Auth, user, signInWithPopup, getRedirectResult, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, sendPasswordResetEmail, GoogleAuthProvider, GithubAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword } from '@angular/fire/auth';
 import { Firestore, doc, onSnapshot, terminate, clearIndexedDbPersistence } from '@angular/fire/firestore';
 import { User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../services/app.user.service';
@@ -16,7 +16,7 @@ import { environment } from '../../environments/environment';
 export class AppAuthService {
   public user$: Observable<User | null>;
   // store the URL so we can redirect after logging in
-  redirectUrl: string;
+  redirectUrl: string = '';
 
   private firestore = inject(Firestore);
   private auth = inject(Auth);
@@ -34,49 +34,50 @@ export class AppAuthService {
       switchMap(user => {
         if (user) {
           return new Observable<User | null>(observer => {
-            const userDoc = doc(this.firestore, `users/${user.uid}`);
-            const unsubscribe = onSnapshot(userDoc, async (snap) => {
-              // Get current claims
-              const tokenResult = await user.getIdTokenResult();
-              const stripeRole = tokenResult.claims['stripeRole'] as string || null;
+            return runInInjectionContext(this.injector, () => {
+              const userDoc = doc(this.firestore, `users/${user.uid}`);
+              const unsubscribe = onSnapshot(userDoc, async (snap) => {
+                // Get current claims
+                const tokenResult = await user.getIdTokenResult();
+                const stripeRole = tokenResult.claims['stripeRole'] as string || null;
 
-              const dbUser = snap.data() as User;
-              let emittedUser: User | null = null;
-              if (dbUser) {
-                // Attach the uid to the object
-                dbUser.uid = user.uid;
-                // Merge the stripe role from the token claims
-                (dbUser as any).stripeRole = stripeRole;
-                emittedUser = dbUser;
-              } else {
-                // If the user doesn't exist in Firestore yet, create a synthetic object
-                // to avoid breaking the rest of the app that expects a User object.
-                emittedUser = {
-                  uid: user.uid,
-                  email: user.email,
-                  displayName: user.displayName,
-                  photoURL: user.photoURL,
-                  emailVerified: user.emailVerified,
-                  settings: this.userService.fillMissingAppSettings({} as any),
-                  // Explicitly set policy flags to false for safety
-                  acceptedPrivacyPolicy: false,
-                  acceptedDataPolicy: false,
-                  acceptedTrackingPolicy: false,
-                  acceptedDiagnosticsPolicy: false,
-                  isAnonymous: user.isAnonymous,
-                  stripeRole: stripeRole,
-                  creationDate: new Date(user.metadata.creationTime),
-                  lastSignInDate: new Date(user.metadata.lastSignInTime)
-                } as unknown as User;
-              }
-              this.zone.run(() => {
-                runInInjectionContext(this.injector, () => {
+                const dbUser = snap.data() as User;
+                let emittedUser: User | null = null;
+                if (dbUser) {
+                  // Attach the uid to the object
+                  dbUser.uid = user.uid;
+                  // Merge the stripe role from the token claims
+                  (dbUser as any).stripeRole = stripeRole;
+                  emittedUser = dbUser;
+                } else {
+                  // If the user doesn't exist in Firestore yet, create a synthetic object
+                  // to avoid breaking the rest of the app that expects a User object.
+                  // This is common for new users who haven't had their Firestore doc created yet by triggers.
+                  emittedUser = {
+                    uid: user.uid,
+                    email: user.email,
+                    displayName: user.displayName,
+                    photoURL: user.photoURL,
+                    emailVerified: user.emailVerified,
+                    settings: this.userService.fillMissingAppSettings({} as any),
+                    // Explicitly set policy flags to false for safety
+                    acceptedPrivacyPolicy: false,
+                    acceptedDataPolicy: false,
+                    acceptedTrackingPolicy: false,
+                    acceptedDiagnosticsPolicy: false,
+                    isAnonymous: user.isAnonymous,
+                    stripeRole: stripeRole,
+                    creationDate: new Date(user.metadata.creationTime!), // types fixed
+                    lastSignInDate: new Date(user.metadata.lastSignInTime!) // types fixed
+                  } as unknown as User;
+                }
+                this.zone.run(() => {
                   observer.next(emittedUser);
                 });
-              });
-            }, error => observer.error(error));
+              }, error => observer.error(error));
 
-            return () => unsubscribe();
+              return () => unsubscribe();
+            });
           });
         } else {
           return of(null);
@@ -90,7 +91,8 @@ export class AppAuthService {
    * Get the current user value (snapshot) from the observable
    */
   async getUser(): Promise<User | null> {
-    return this.user$.pipe(take(1)).toPromise();
+    const user = await this.user$.pipe(take(1)).toPromise();
+    return user || null;
   }
 
   // Get the underlying Firebase Auth instance for modular functions
@@ -133,6 +135,11 @@ export class AppAuthService {
 
   async googleLogin() {
     const provider = new GoogleAuthProvider();
+    return this.signInWithProvider(provider);
+  }
+
+  async githubLogin() {
+    const provider = new GithubAuthProvider();
     return this.signInWithProvider(provider);
   }
 
@@ -183,7 +190,7 @@ export class AppAuthService {
   async emailSignUp(email: string, password: string) {
     try {
       return createUserWithEmailAndPassword(this.auth, email, password);
-    } catch (e) {
+    } catch (e: any) {
       this.handleError(e);
       throw e;
     }
@@ -192,7 +199,7 @@ export class AppAuthService {
   async emailLogin(email: string, password: string) {
     try {
       return signInWithEmailAndPassword(this.auth, email, password);
-    } catch (e) {
+    } catch (e: any) {
       this.handleError(e);
       throw e;
     }
@@ -202,10 +209,10 @@ export class AppAuthService {
   async resetPassword(email: string) {
     try {
       await sendPasswordResetEmail(this.auth, email);
-      this.snackBar.open(`Password update email sent`, null, {
+      this.snackBar.open(`Password update email sent`, undefined, {
         duration: 2000
       });
-    } catch (error) {
+    } catch (error: any) {
       this.handleError(error);
     }
   }
@@ -220,7 +227,7 @@ export class AppAuthService {
   // If error, console log and notify user
   private handleError(error: Error) {
     console.error(error);
-    this.snackBar.open(`Could not login due to error ${error.message} `, null, {
+    this.snackBar.open(`Could not login due to error ${error.message} `, undefined, {
       duration: 2000
     });
   }
