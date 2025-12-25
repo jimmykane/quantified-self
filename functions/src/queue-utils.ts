@@ -3,7 +3,7 @@ import { QueueItemInterface } from './queue/queue-item.interface';
 
 export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterface, error: Error, incrementBy = 1, bulkWriter?: admin.firestore.BulkWriter) {
     if (!queueItem.ref) {
-        throw new Error(`No docuemnt reference supplied for queue item ${queueItem.id}`);
+        throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
     }
     queueItem.retryCount += incrementBy;
     queueItem.totalRetryCount = queueItem.totalRetryCount || 0;
@@ -33,7 +33,7 @@ export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterfa
 
 export async function updateToProcessed(queueItem: QueueItemInterface, bulkWriter?: admin.firestore.BulkWriter) {
     if (!queueItem.ref) {
-        throw new Error(`No docuemnt reference supplied for queue item ${queueItem.id}`);
+        throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
     }
     try {
         const ref = queueItem.ref;

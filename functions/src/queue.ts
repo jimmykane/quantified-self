@@ -10,7 +10,7 @@ import {
 } from './queue/queue-item.interface';
 import { generateIDFromParts, setEvent, UsageLimitExceededError, enqueueWorkoutTask } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { getServiceWorkoutQueueName } from './history';
+import { getServiceWorkoutQueueName } from './shared/queue-names';
 import {
   COROSAPIAuth2ServiceTokenInterface,
   SuuntoAPIAuth2ServiceTokenInterface,
@@ -203,7 +203,11 @@ export function getWorkoutForService(
 }
 
 
-export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNames, queueItem: COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>) {
+export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNames, queueItem: COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface | GarminHealthAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>) {
+  if (serviceName === ServiceNames.GarminHealthAPI) {
+    return processGarminHealthAPIActivityQueueItem(queueItem as GarminHealthAPIActivityQueueItemInterface, bulkWriter, tokenCache, usageCache, pendingWrites);
+  }
+
   console.log(`Processing queue item ${queueItem.id} at retry count ${queueItem.retryCount}`);
   // queueItem is never undefined for query queueItem snapshots
   let tokenQuerySnapshots: admin.firestore.QuerySnapshot | undefined;

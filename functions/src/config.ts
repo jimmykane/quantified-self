@@ -1,15 +1,8 @@
+import * as admin from 'firebase-admin';
 import * as dotenv from 'dotenv';
 
-// Load .env file automatically for local development/deployment analysis
+// Load .env file automatically for local development
 dotenv.config();
-
-/**
- * Centralized configuration module
- * Replaces deprecated functions.config() calls with process.env
- *
- * Firebase Functions automatically loads .env files at runtime.
- * For local development/testing, ensure environment variables are set.
- */
 
 interface SuuntoAppConfig {
     client_id: string;
@@ -27,10 +20,18 @@ interface GarminHealthApiConfig {
     consumer_secret: string;
 }
 
+interface CloudTasksConfig {
+    projectId: string | undefined;
+    location: string;
+    queue: string;
+    serviceAccountEmail: string;
+}
+
 interface AppConfig {
     suuntoapp: SuuntoAppConfig;
     corosapi: CorosApiConfig;
     garminhealthapi: GarminHealthApiConfig;
+    cloudtasks: CloudTasksConfig;
 }
 
 function getEnvVar(name: string): string {
@@ -59,6 +60,14 @@ export const config: AppConfig = {
         return {
             consumer_key: getEnvVar('GARMINHEALTHAPI_CONSUMER_KEY'),
             consumer_secret: getEnvVar('GARMINHEALTHAPI_CONSUMER_SECRET'),
+        };
+    },
+    get cloudtasks() {
+        return {
+            projectId: process.env.GCLOUD_PROJECT || admin.instanceId().app.options.projectId,
+            location: 'europe-west2',
+            queue: 'processWorkoutTask',
+            serviceAccountEmail: `${process.env.GCLOUD_PROJECT || admin.instanceId().app.options.projectId}@appspot.gserviceaccount.com`,
         };
     },
 };

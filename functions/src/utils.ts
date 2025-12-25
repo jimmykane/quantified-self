@@ -12,8 +12,8 @@ import {
 
 import * as crypto from 'crypto';
 import * as base58 from 'bs58';
+import { CloudTasksClient } from '@google-cloud/tasks';
 import { EventWriter, FirestoreAdapter, StorageAdapter } from './shared/event-writer';
-import { getFunctions } from 'firebase-admin/functions';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
 
@@ -285,17 +285,41 @@ export async function assertProServiceAccess(userID: string): Promise<void> {
  * @param serviceName The service (Garmin, Suunto, Coros)
  * @param queueItemId The ID of the document in the {serviceName}Queue collection
  */
+import { config } from './config';
+
 export async function enqueueWorkoutTask(serviceName: ServiceNames, queueItemId: string) {
+  const client = new CloudTasksClient();
+
+  const { projectId, location, queue, serviceAccountEmail } = config.cloudtasks;
+
+  if (!projectId) {
+    throw new Error('Project ID is not defined in config');
+  }
+
+  const url = `https://${location}-${projectId}.cloudfunctions.net/${queue}`;
+  const parent = client.queuePath(projectId, location, queue);
+
+  const payload = { data: { queueItemId, serviceName } };
+
+  const task = {
+    httpRequest: {
+      httpMethod: 'POST' as const,
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: Buffer.from(JSON.stringify(payload)).toString('base64'),
+      oidcToken: {
+        serviceAccountEmail,
+      },
+    },
+  };
+
   try {
-    const queue = getFunctions().taskQueue('processWorkoutTask', 'europe-west2');
-    await queue.enqueue({
-      queueItemId,
-      serviceName,
-    });
-    console.log(`[Dispatcher] Successfully enqueued task for ${serviceName}:${queueItemId}`);
+    console.log(`[Dispatcher] Attempting to enqueue task for ${serviceName}:${queueItemId} to ${url} in project ${projectId}`);
+    const [response] = await client.createTask({ parent, task });
+    console.log(`[Dispatcher] Successfully enqueued task: ${response.name}`);
   } catch (error) {
-    // We don't throw here to avoid failing the webhook entirely.
-    // The "Safety Net" polling will pick it up later if dispatch fails.
     console.error(`[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`, error);
   }
 }

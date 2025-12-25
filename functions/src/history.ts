@@ -2,18 +2,13 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as admin from 'firebase-admin';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { getTokenData } from './tokens';
-import {
-  SUUNTOAPP_HISTORY_IMPORT_WORKOUT_QUEUE_COLLECTION_NAME,
-  SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME,
-} from './suunto/constants';
 import * as requestPromise from './request-helper';
 import { config } from './config';
 import { generateIDFromParts } from './utils';
 import { COROSAPIWorkoutQueueItemInterface, SuuntoAppWorkoutQueueItemInterface } from './queue/queue-item.interface';
 import { getServiceConfig } from './OAuth2';
+import { getServiceWorkoutQueueName } from './shared/queue-names';
 import {
-  COROSAPI_HISTORY_IMPORT_WORKOUT_QUEUE_COLLECTION_NAME,
-  COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
   PRODUCTION_URL,
   STAGING_URL,
   USE_STAGING,
@@ -22,7 +17,6 @@ import {
   COROSAPIAuth2ServiceTokenInterface,
   SuuntoAPIAuth2ServiceTokenInterface,
 } from '@sports-alliance/sports-lib';
-import { GARMIN_HEALTHAPI_WORKOUT_QUEUE_COLLECTION_NAME } from './garmin/constants';
 import { convertCOROSWorkoutsToQueueItems } from './coros/queue';
 
 const BATCH_SIZE = 450;
@@ -101,32 +95,7 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
   console.log(`Total: ${totalProcessedWorkoutsCount} workouts via ${processedBatchesCount} batches added to queue for user ${userID}`);
 }
 
-function getServiceHistoryImportWorkoutQueueName(serviceName: ServiceNames): string {
-  switch (serviceName) {
-    default:
-      throw new Error('Not implemented');
-    case ServiceNames.SuuntoApp:
-      return SUUNTOAPP_HISTORY_IMPORT_WORKOUT_QUEUE_COLLECTION_NAME;
-    case ServiceNames.COROSAPI:
-      return COROSAPI_HISTORY_IMPORT_WORKOUT_QUEUE_COLLECTION_NAME;
-  }
-}
-
-export function getServiceWorkoutQueueName(serviceName: ServiceNames, historyQueue = false): string {
-  if (historyQueue) {
-    return getServiceHistoryImportWorkoutQueueName(serviceName);
-  }
-  switch (serviceName) {
-    default:
-      throw new Error('Not implemented');
-    case ServiceNames.GarminHealthAPI:
-      return GARMIN_HEALTHAPI_WORKOUT_QUEUE_COLLECTION_NAME;
-    case ServiceNames.SuuntoApp:
-      return SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME;
-    case ServiceNames.COROSAPI:
-      return COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME;
-  }
-}
+// getServiceWorkoutQueueName moved to shared/queue-names.ts
 
 export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceToken: COROSAPIAuth2ServiceTokenInterface | SuuntoAPIAuth2ServiceTokenInterface, startDate: Date, endDate: Date): Promise<SuuntoAppWorkoutQueueItemInterface | COROSAPIWorkoutQueueItemInterface[]> {
   let result;
