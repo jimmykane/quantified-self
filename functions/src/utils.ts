@@ -89,7 +89,7 @@ export function isCorsAllowed(req: Request) {
   });
 }
 
-export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminHealthAPIEventMetaData | COROSAPIEventMetaData, originalFile?: { data: any, extension: string, startDate?: Date }, bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>) {
+export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminHealthAPIEventMetaData | COROSAPIEventMetaData, originalFile?: { data: any, extension: string, startDate: Date }, bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>) {
   // Enforce Usage Limit
   await checkEventUsageLimit(userID, usageCache, pendingWrites);
 

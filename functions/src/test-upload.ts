@@ -29,7 +29,8 @@ export const testEventUpload = functions.region('europe-west2').https.onRequest(
         const fileData = (req.rawBody && req.rawBody.length > 0) ? req.rawBody : Buffer.from('Dummy FIT file content');
         const originalFile = {
             data: fileData,
-            extension: 'fit'
+            extension: 'fit',
+            startDate: new Date()
         };
 
         // Dummy Metadata
