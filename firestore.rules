@@ -21,6 +21,10 @@ service cloud.firestore {
       return request.auth != null && !('stripeRole' in request.auth.token);
     }
 
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
     // Make sure the uid of the requesting user matches name of the user
     // document. The wildcard expression {userId} makes the userId variable
     // available in rules.
@@ -121,23 +125,28 @@ service cloud.firestore {
     }
 
     match /garminHealthAPIActivityQueue/{userID} {
-      allow read, write: if false;
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     match /COROSAPIWorkoutQueue/{userID} {
-      allow read, write: if false;
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     match /COROSAPIHistoryImportWorkoutQueue/{userID} {
-      allow read, write: if false;
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     match /suuntoAppWorkoutQueue/{userID} {
-       allow read, write: if false;
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     match /suuntoAppHistoryImportActivityQueue/{userID} {
-         allow read, write: if false;
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
 

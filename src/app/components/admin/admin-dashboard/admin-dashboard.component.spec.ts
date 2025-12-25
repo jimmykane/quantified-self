@@ -1,22 +1,22 @@
-
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AdminDashboardComponent } from './admin-dashboard.component';
-import { AdminService, AdminUser } from '../../../services/admin.service';
+import { AdminService, AdminUser, ListUsersResponse } from '../../../services/admin.service';
 import { of, throwError } from 'rxjs';
 import { MatTableModule } from '@angular/material/table';
-import { MatPaginatorModule } from '@angular/material/paginator';
-import { MatSortModule } from '@angular/material/sort';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatSortModule, Sort } from '@angular/material/sort';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { FormsModule } from '@angular/forms';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 describe('AdminDashboardComponent', () => {
     let component: AdminDashboardComponent;
     let fixture: ComponentFixture<AdminDashboardComponent>;
-    let adminServiceSpy: any;
+    let adminServiceSpy: { getUsers: ReturnType<typeof vi.fn> };
 
     const mockUsers: AdminUser[] = [
         {
@@ -37,9 +37,16 @@ describe('AdminDashboardComponent', () => {
         }
     ];
 
+    const mockResponse: ListUsersResponse = {
+        users: mockUsers,
+        totalCount: 2,
+        page: 0,
+        pageSize: 25
+    };
+
     beforeEach(async () => {
         adminServiceSpy = {
-            getUsers: vi.fn().mockReturnValue(of(mockUsers))
+            getUsers: vi.fn().mockReturnValue(of(mockResponse))
         };
 
         await TestBed.configureTestingModule({
@@ -52,7 +59,8 @@ describe('AdminDashboardComponent', () => {
                 MatFormFieldModule,
                 MatIconModule,
                 MatProgressSpinnerModule,
-                NoopAnimationsModule
+                NoopAnimationsModule,
+                FormsModule
             ],
             providers: [
                 { provide: AdminService, useValue: adminServiceSpy }
@@ -68,9 +76,16 @@ describe('AdminDashboardComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('should fetch users on init', () => {
-        expect(adminServiceSpy.getUsers).toHaveBeenCalled();
-        expect(component.dataSource.data).toEqual(mockUsers);
+    it('should fetch users on init with correct parameters', () => {
+        expect(adminServiceSpy.getUsers).toHaveBeenCalledWith({
+            page: 0,
+            pageSize: 25,
+            searchTerm: undefined,
+            sortField: 'email',
+            sortDirection: 'asc'
+        });
+        expect(component.users).toEqual(mockUsers);
+        expect(component.totalCount).toBe(2);
         expect(component.isLoading).toBe(false);
     });
 
@@ -81,11 +96,33 @@ describe('AdminDashboardComponent', () => {
         expect(component.isLoading).toBe(false);
     });
 
-    it('should filter results', () => {
-        component.dataSource.data = mockUsers;
-        const event = { target: { value: 'user1' } } as any;
-        component.applyFilter(event);
-        expect(component.dataSource.filter).toBe('user1');
+    it('should trigger fetch on page change', () => {
+        vi.clearAllMocks();
+        const pageEvent: PageEvent = { pageIndex: 1, pageSize: 50, length: 100 };
+        component.onPageChange(pageEvent);
+
+        expect(component.currentPage).toBe(1);
+        expect(component.pageSize).toBe(50);
+        expect(adminServiceSpy.getUsers).toHaveBeenCalledWith({
+            page: 1,
+            pageSize: 50,
+            searchTerm: undefined,
+            sortField: 'email',
+            sortDirection: 'asc'
+        });
+    });
+
+    it('should trigger fetch on sort change and reset to page 0', () => {
+        component.currentPage = 5; // Simulate being on page 5
+        vi.clearAllMocks();
+
+        const sortEvent: Sort = { active: 'displayName', direction: 'desc' };
+        component.onSortChange(sortEvent);
+
+        expect(component.sortField).toBe('displayName');
+        expect(component.sortDirection).toBe('desc');
+        expect(component.currentPage).toBe(0); // Should reset
+        expect(adminServiceSpy.getUsers).toHaveBeenCalled();
     });
 
     it('should return correct role', () => {
@@ -96,5 +133,15 @@ describe('AdminDashboardComponent', () => {
     it('should correctly identify admin', () => {
         expect(component.isAdmin(mockUsers[0])).toBe(true);
         expect(component.isAdmin(mockUsers[1])).toBe(false);
+    });
+
+    it('should update searchTerm on input and reset page on clear', () => {
+        // Test clear search resets state
+        component.searchTerm = 'existing';
+        component.currentPage = 3;
+
+        component.clearSearch();
+
+        expect(component.searchTerm).toBe('');
     });
 });
