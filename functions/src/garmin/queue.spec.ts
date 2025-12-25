@@ -132,7 +132,6 @@ describe('processGarminHealthAPIActivityQueueItem', () => {
         expect(mockSetEvent).toHaveBeenCalled();
         expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
             queueItem,
-            ServiceNames.GarminHealthAPI,
             expect.any(UsageLimitExceededError),
             20 // Should abort retries
         );
@@ -164,7 +163,6 @@ describe('processGarminHealthAPIActivityQueueItem', () => {
         expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('No token found'));
         expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
             queueItem,
-            ServiceNames.GarminHealthAPI,
             expect.any(Error),
             20
         );

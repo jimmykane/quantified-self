@@ -80,7 +80,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
 
   if (!tokenQuerySnapshots.size) {
     console.warn(`No token found for queue item ${queueItem.id} and userID ${queueItem.userID} increasing count just in case`);
-    return increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, new Error('No tokens found'), 20);
+    return increaseRetryCountForQueueItem(queueItem, new Error('No tokens found'), 20);
   }
 
   const serviceToken = tokenQuerySnapshots.docs[0].data();
@@ -110,13 +110,13 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
     const e = error as RequestError;
     if (e.statusCode === 400) {
       console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 403, increasing retry by 20 URL: ${url}`));
-      await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e, 20);
+      await increaseRetryCountForQueueItem(queueItem, e, 20);
     } else if (e.statusCode === 500) {
       console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 500 increasing retry by 20 URL: ${url}`));
-      await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e, 20);
+      await increaseRetryCountForQueueItem(queueItem, e, 20);
     } else {
       console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}  URL: ${url}`));
-      await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e);
+      await increaseRetryCountForQueueItem(queueItem, e);
     }
     console.timeEnd('DownloadFile');
     return;
@@ -173,18 +173,18 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
     await setEvent(tokenQuerySnapshots.docs[0].id, generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()]), event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase() });
     console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${tokenQuerySnapshots.docs[0].id} and token user ${serviceToken.userID}`);
     // For each ended so we can set it to processed
-    return updateToProcessed(queueItem, ServiceNames.GarminHealthAPI);
+    return updateToProcessed(queueItem);
   } catch (e: unknown) {
     // @todo should delete meta etc
     console.error(e);
     if (e instanceof UsageLimitExceededError) {
       console.error(new Error(`Usage limit exceeded for ${queueItem.id}. Aborting retries. ${e.message}`));
-      await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, e, 20);
+      await increaseRetryCountForQueueItem(queueItem, e, 20);
       return;
     }
     const err = e instanceof Error ? e : new Error(String(e));
     console.log(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.userID} to ${queueItem.retryCount + 1} due to ${err.message}`));
-    await increaseRetryCountForQueueItem(queueItem, ServiceNames.GarminHealthAPI, err);
+    await increaseRetryCountForQueueItem(queueItem, err);
   }
 }
 
