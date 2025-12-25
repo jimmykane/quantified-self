@@ -1,17 +1,17 @@
 import { TestBed } from '@angular/core/testing';
 import { AdminService } from './admin.service';
 import { Functions, httpsCallableFromURL } from '@angular/fire/functions';
-import { of } from 'rxjs';
 import { environment } from '../../environments/environment';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { firstValueFrom } from 'rxjs';
 
 // Create a mock for listUsers function
-const mockListUsers = jest.fn();
+const mockListUsers = vi.fn();
 
 // Mock the Angular Fire Functions
-// We need to mock httpsCallableFromURL to return our mock function
-jest.mock('@angular/fire/functions', () => ({
-    Functions: jest.fn(),
-    httpsCallableFromURL: jest.fn(() => mockListUsers)
+vi.mock('@angular/fire/functions', () => ({
+    Functions: vi.fn(),
+    httpsCallableFromURL: vi.fn(() => mockListUsers)
 }));
 
 
@@ -37,7 +37,7 @@ describe('AdminService', () => {
         expect(service).toBeTruthy();
     });
 
-    it('should call listUsers Cloud Function and return users', (done) => {
+    it('should call listUsers Cloud Function and return users', async () => {
         const mockUsers = [
             { uid: '1', email: 'test@test.com', customClaims: { admin: true }, metadata: { lastSignInTime: 'now', creationTime: 'then' }, disabled: false }
         ];
@@ -45,14 +45,11 @@ describe('AdminService', () => {
         // Mock the return value of the cloud function call
         mockListUsers.mockReturnValue(Promise.resolve({ data: { users: mockUsers } }));
 
-        service.getUsers().subscribe({
-            next: (users) => {
-                expect(httpsCallableFromURL).toHaveBeenCalledWith(functions, environment.functions.listUsers);
-                expect(mockListUsers).toHaveBeenCalled();
-                expect(users).toEqual(mockUsers);
-                done();
-            },
-            error: (e) => done.fail(e)
-        });
+        const users$ = service.getUsers();
+        const users = await firstValueFrom(users$);
+
+        expect(httpsCallableFromURL).toHaveBeenCalledWith(functions, environment.functions.listUsers);
+        expect(mockListUsers).toHaveBeenCalled();
+        expect(users).toEqual(mockUsers);
     });
 });
