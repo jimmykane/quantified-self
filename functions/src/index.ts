@@ -56,6 +56,7 @@ export {
 // Garmin Auth
 export {
   deauthorizeGarminHealthAPI,
+  deauthorizeGarminHealthAPIUsers,
   getGarminHealthAPIAuthRequestTokenRedirectURI,
   requestAndSetGarminHealthAPIAccessToken,
 } from './garmin/auth/wrapper';
@@ -112,6 +113,7 @@ export { refreshSuuntoAppRefreshTokens } from './suunto/tokens';
 export { stWorkoutDownloadAsFit } from './suunto/st-workout-download-as-fit';
 export { importActivityToSuuntoApp } from './suunto/activities';
 export { importRouteToSuuntoApp } from './suunto/routes';
+export { getSuuntoFITFile } from './suunto/get-suunto-fit-file';
 
 // Events
 export { cleanupEventFile } from './events/cleanup';
@@ -122,6 +124,9 @@ export { checkSubscriptionNotifications } from './schedule/notifications';
 export { cleanupUserAccounts } from './users/cleanup';
 export { deleteSelf } from './user/user';
 export { listUsers, getQueueStats, getUserCount } from './users/admin';
+
+// Tasks
+export { processWorkoutTask } from './tasks/workout-processor';
 
 // Missing / Deleted Functions (Not Exported)
 // - addCookieAndRedirect

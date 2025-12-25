@@ -3,7 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock dependencies
 const mockSetCustomUserClaims = vi.fn();
 const mockAuth = {
-    setCustomUserClaims: mockSetCustomUserClaims
+    setCustomUserClaims: mockSetCustomUserClaims,
+    getUser: vi.fn().mockResolvedValue({ customClaims: {} })
 };
 
 const mockGet = vi.fn();

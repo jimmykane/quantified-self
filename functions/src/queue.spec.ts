@@ -102,9 +102,8 @@ vi.mock('./request-helper', () => ({
 }));
 
 // Import after mocks are set up
+import { increaseRetryCountForQueueItem, updateToProcessed } from './queue-utils';
 import {
-    increaseRetryCountForQueueItem,
-    updateToProcessed,
     addToQueueForSuunto,
     addToQueueForGarmin,
     addToQueueForCOROS,

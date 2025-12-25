@@ -13,6 +13,8 @@ import {
 import * as crypto from 'crypto';
 import * as base58 from 'bs58';
 import { EventWriter, FirestoreAdapter, StorageAdapter } from './shared/event-writer';
+import { getFunctions } from 'firebase-admin/functions';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 
 
 export function generateIDFromPartsOld(parts: string[]): string {
@@ -226,13 +228,15 @@ export class UsageLimitExceededError extends Error {
 import { USAGE_LIMITS } from './shared/limits';
 
 export async function checkEventUsageLimit(userID: string, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<void> {
+  const role = await getUserRole(userID);
+  if (role === 'pro') return;
+
   let roleData: { role: string, limit: number, currentCount: number };
 
   if (usageCache) {
     let usagePromise = usageCache.get(userID);
     if (!usagePromise) {
       usagePromise = (async () => {
-        const role = await getUserRole(userID);
         const limit = USAGE_LIMITS[role] || 10;
         const eventsCollection = admin.firestore().collection('users').doc(userID).collection('events');
         const snapshot = await eventsCollection.count().get();
@@ -242,14 +246,13 @@ export async function checkEventUsageLimit(userID: string, usageCache?: Map<stri
     }
     roleData = await usagePromise;
   } else {
-    const role = await getUserRole(userID);
     const limit = USAGE_LIMITS[role] || 10;
     const eventsCollection = admin.firestore().collection('users').doc(userID).collection('events');
     const snapshot = await eventsCollection.count().get();
     roleData = { role, limit, currentCount: snapshot.data().count };
   }
 
-  const { role, limit, currentCount } = roleData;
+  const { limit, currentCount } = roleData;
 
   // Pro: Unlimited
   if (role === 'pro') return;
@@ -269,10 +272,31 @@ export async function checkEventUsageLimit(userID: string, usageCache?: Map<stri
   }
 }
 
+
 export async function assertProServiceAccess(userID: string): Promise<void> {
   const role = await getUserRole(userID);
   if (role !== 'pro') {
     throw new Error(`Service sync is a Pro feature. Your current role is: ${role}. Please upgrade to Pro.`);
+  }
+}
+
+/**
+ * Enqueues a task to process a single workout queue item.
+ * @param serviceName The service (Garmin, Suunto, Coros)
+ * @param queueItemId The ID of the document in the {serviceName}Queue collection
+ */
+export async function enqueueWorkoutTask(serviceName: ServiceNames, queueItemId: string) {
+  try {
+    const queue = getFunctions().taskQueue('processWorkoutTask', 'europe-west2');
+    await queue.enqueue({
+      queueItemId,
+      serviceName,
+    });
+    console.log(`[Dispatcher] Successfully enqueued task for ${serviceName}:${queueItemId}`);
+  } catch (error) {
+    // We don't throw here to avoid failing the webhook entirely.
+    // The "Safety Net" polling will pick it up later if dispatch fails.
+    console.error(`[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`, error);
   }
 }
 

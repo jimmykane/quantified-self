@@ -4,6 +4,7 @@
   "main": "lib/index.js",
   "license": "MIT",
   "dependencies": {
+    "@google-cloud/tasks": "^6.2.1",
     "@sports-alliance/sports-lib": "^6.1.1",
     "blob": "^0.1.0",
     "bs58": "^4.0.1",

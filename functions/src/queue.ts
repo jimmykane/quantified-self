@@ -8,7 +8,7 @@ import {
   GarminHealthAPIActivityQueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface,
 } from './queue/queue-item.interface';
-import { generateIDFromParts, setEvent, UsageLimitExceededError } from './utils';
+import { generateIDFromParts, setEvent, UsageLimitExceededError, enqueueWorkoutTask } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getServiceWorkoutQueueName } from './history';
 import {
@@ -93,7 +93,7 @@ export const parseGarminHealthAPIActivityQueue = functions.region('europe-west2'
   timeoutSeconds: TIMEOUT_HIGH,
   memory: MEMORY_HIGH,
   maxInstances: 1,
-}).pubsub.schedule('every 20 minutes').onRun(async () => {
+}).pubsub.schedule('0 * * * *').onRun(async () => {
   await parseQueueItems(ServiceNames.GarminHealthAPI);
 });
 
@@ -101,7 +101,7 @@ export const parseCOROSAPIWorkoutQueue = functions.region('europe-west2').runWit
   timeoutSeconds: TIMEOUT_DEFAULT,
   memory: MEMORY_DEFAULT,
   maxInstances: 1,
-}).pubsub.schedule('every 20 minutes').onRun(async () => {
+}).pubsub.schedule('0 * * * *').onRun(async () => {
   await parseQueueItems(ServiceNames.COROSAPI);
 });
 
@@ -109,7 +109,7 @@ export const parseCOROSAPIHistoryImportWorkoutQueue = functions.region('europe-w
   timeoutSeconds: TIMEOUT_DEFAULT,
   memory: MEMORY_DEFAULT,
   maxInstances: 1,
-}).pubsub.schedule('every 20 minutes').onRun(async () => {
+}).pubsub.schedule('0 * * * *').onRun(async () => {
   await parseQueueItems(ServiceNames.COROSAPI, true);
 });
 
@@ -117,7 +117,7 @@ export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runW
   timeoutSeconds: TIMEOUT_HIGH,
   memory: MEMORY_HIGH,
   maxInstances: 1,
-}).pubsub.schedule('every 20 minutes').onRun(async () => {
+}).pubsub.schedule('0 * * * *').onRun(async () => {
   await parseQueueItems(ServiceNames.SuuntoApp);
 });
 
@@ -125,7 +125,7 @@ export const parseSuuntoAppHistoryImportActivityQueue = functions.region('europe
   timeoutSeconds: TIMEOUT_HIGH,
   memory: MEMORY_HIGH,
   maxInstances: 1,
-}).pubsub.schedule('every 20 minutes').onRun(async () => {
+}).pubsub.schedule('0 * * * *').onRun(async () => {
   await parseQueueItems(ServiceNames.SuuntoApp, true);
 });
 
@@ -365,5 +365,7 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
   await queueItemDocument.set(Object.assign(queueItem, {
     expireAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + 1000 * 60 * 60 * 24 * 7)),
   }));
+  // Dispatch a Cloud Task for immediate processing
+  await enqueueWorkoutTask(serviceName, queueItem.id);
   return queueItemDocument;
 }

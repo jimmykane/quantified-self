@@ -88,10 +88,18 @@ describe('EventWriter', () => {
         expect(setDocFn).toHaveBeenCalledWith(
             ['users', 'user-1', 'events', 'event-1'],
             expect.objectContaining({
-                originalFile: {
+                originalFile: expect.objectContaining({
                     path: 'users/user-1/events/event-1/original.fit',
                     bucket: 'quantified-self-io',
-                }
+                    startDate: originalFile.startDate,
+                }),
+                originalFiles: expect.arrayContaining([
+                    expect.objectContaining({
+                        path: 'users/user-1/events/event-1/original.fit',
+                        bucket: 'quantified-self-io',
+                        startDate: originalFile.startDate,
+                    })
+                ])
             })
         );
     });

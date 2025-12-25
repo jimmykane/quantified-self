@@ -66,14 +66,16 @@ vi.mock('./auth/auth', () => ({
     })
 }));
 
-// Mock parent queue functions
-// We can mock increaseRetryCountForQueueItem here because it is IMPORTED in garmin/queue.ts
-// unlike the previous case where it was in the same file.
-vi.mock('../queue', () => ({
+// Mock queue utilities
+vi.mock('../queue-utils', () => ({
     increaseRetryCountForQueueItem: mockIncreaseRetryCountForQueueItem,
+    updateToProcessed: vi.fn(),
+}));
+
+// Mock parent queue functions
+vi.mock('../queue', () => ({
     addToQueueForGarmin: vi.fn(),
     parseQueueItems: vi.fn(),
-    updateToProcessed: vi.fn(),
 }));
 
 // Mock firebase-admin
