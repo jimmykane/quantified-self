@@ -2,6 +2,7 @@
 // For more information: https://material.angular.io/guide/theming
 @use '@angular/material' as mat;
 @use 'sass:map';
+@use 'styles/forms';
 
 // Include the common styles for Angular Material. We include this here so that you only
 // have to load a single css file for Angular Material in your app.
@@ -52,7 +53,6 @@ $app-dark-theme: mat.m2-define-dark-theme((color: (primary: $dark-primary,
 
 
 // ... (existing imports)
-@import 'styles/forms';
 
 
 // Apply global background and color based on theme
@@ -302,7 +302,8 @@ mat-card {
     flex-direction: column;
     justify-content: center;
 
-    h1, h2 {
+    h1,
+    h2 {
       margin: 0;
       font-size: 1.5rem;
       font-weight: 500;
@@ -327,7 +328,8 @@ mat-card {
 
 /* Dark Theme specific overrides for header card */
 .dark-theme .app-header-card {
-  background: var(--mat-app-surface) !important; /* Ensure it stays surface color */
+  background: var(--mat-app-surface) !important;
+  /* Ensure it stays surface color */
   border-color: rgba(255, 255, 255, 0.1);
 }
 
