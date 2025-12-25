@@ -70,6 +70,20 @@ describe('utils', () => {
             expect(isCorsAllowed(mockReq)).toBe(true);
         });
 
+        it('should allow localhost:4201 (https)', () => {
+            const mockReq = {
+                get: vi.fn().mockReturnValue('https://localhost:4201'),
+            } as any;
+            expect(isCorsAllowed(mockReq)).toBe(true);
+        });
+
+        it('should allow localhost:8080', () => {
+            const mockReq = {
+                get: vi.fn().mockReturnValue('http://localhost:8080'),
+            } as any;
+            expect(isCorsAllowed(mockReq)).toBe(true);
+        });
+
         it('should allow quantified-self.io', () => {
             const mockReq = {
                 get: vi.fn().mockReturnValue('https://quantified-self.io'),
