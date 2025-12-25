@@ -8,6 +8,6 @@ export interface AppEventInterface extends EventInterface {
     originalFiles?: {
         path: string;
         bucket?: string;
-        startDate?: Date;  // Original activity start date (for merged events)
+        startDate: Date;  // Original activity start date (for merged events)
     }[];
 }

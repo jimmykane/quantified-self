@@ -15,7 +15,7 @@ export interface StorageAdapter {
 export class EventWriter {
     constructor(private adapter: FirestoreAdapter, private storageAdapter?: StorageAdapter, private bucketName?: string) { }
 
-    public async writeAllEventData(userID: string, event: AppEventInterface, originalFiles?: { data: any, extension: string }[] | { data: any, extension: string }): Promise<void> {
+    public async writeAllEventData(userID: string, event: AppEventInterface, originalFiles?: { data: any, extension: string, startDate: Date }[] | { data: any, extension: string, startDate: Date }): Promise<void> {
         console.log('[EventWriter] writeAllEventData called', { userID, eventID: event.getID(), adapterPresent: !!this.storageAdapter });
         const writePromises: Promise<void>[] = [];
 
@@ -48,7 +48,7 @@ export class EventWriter {
             delete (eventJSON as any).activities;
 
             // Normalize input to array or single
-            let filesToUpload: { data: any, extension: string, startDate?: Date }[] = [];
+            let filesToUpload: { data: any, extension: string, startDate: Date }[] = [];
             if (originalFiles) {
                 if (Array.isArray(originalFiles)) {
                     filesToUpload = originalFiles;

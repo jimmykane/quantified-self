@@ -181,7 +181,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     const events: any[] = await Promise.all(promises);
 
     // 2. Collect Original Files from source events
-    const validOriginalFiles: { data: any, extension: string, startDate?: Date }[] = [];
+    const validOriginalFiles: { data: any, extension: string, startDate: Date }[] = [];
 
 
     // We need to fetch the actual file data for each event
