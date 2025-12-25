@@ -54,6 +54,10 @@ vi.mock('firebase-admin', () => {
     const mockFirestore = {
         collection: vi.fn(() => mockCollection),
         collectionGroup: vi.fn(() => mockCollection),
+        bulkWriter: vi.fn(() => ({
+            update: vi.fn(),
+            close: vi.fn().mockResolvedValue(undefined),
+        })),
     };
 
     return {

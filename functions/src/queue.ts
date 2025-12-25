@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import pLimit from 'p-limit';
 import { processGarminHealthAPIActivityQueueItem } from './garmin/queue';
 import {
   COROSAPIWorkoutQueueItemInterface,
@@ -19,7 +20,7 @@ import { getTokenData } from './tokens';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 
-export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterface, error: Error, incrementBy = 1) {
+export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterface, error: Error, incrementBy = 1, bulkWriter?: admin.firestore.BulkWriter) {
   if (!queueItem.ref) {
     throw new Error(`No docuemnt reference supplied for queue item ${queueItem.id}`);
   }
@@ -36,7 +37,12 @@ export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterfa
   try {
     const ref = queueItem.ref;
     queueItem.ref = undefined;
-    await ref.update(JSON.parse(JSON.stringify(queueItem)));
+    const updateData = JSON.parse(JSON.stringify(queueItem));
+    if (bulkWriter) {
+      void bulkWriter.update(ref, updateData);
+    } else {
+      await ref.update(updateData);
+    }
     queueItem.ref = ref;
     console.info(`Updated retry count for ${queueItem.id} to ${queueItem.retryCount}`);
   } catch {
@@ -44,17 +50,22 @@ export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterfa
   }
 }
 
-export async function updateToProcessed(queueItem: QueueItemInterface) {
+export async function updateToProcessed(queueItem: QueueItemInterface, bulkWriter?: admin.firestore.BulkWriter) {
   if (!queueItem.ref) {
     throw new Error(`No docuemnt reference supplied for queue item ${queueItem.id}`);
   }
   try {
     const ref = queueItem.ref;
     queueItem.ref = undefined;
-    await ref.update({
+    const updateData = {
       'processed': true,
       'processedAt': (new Date()).getTime(),
-    });
+    };
+    if (bulkWriter) {
+      void bulkWriter.update(ref, updateData);
+    } else {
+      await ref.update(updateData);
+    }
     console.log(`Updated to processed  ${queueItem.id}`);
   } catch {
     console.error(new Error(`Could not update processed state for ${queueItem.id}`));
@@ -73,37 +84,47 @@ export async function parseQueueItems(serviceName: ServiceNames, fromHistoryQueu
   console.log(`Found ${querySnapshot.size} queue items to process`);
   let count = 0;
   console.time('ParseQueueItems');
-  for (const queueItem of querySnapshot.docs) {
-    try {
-      switch (serviceName) {
-        default:
-          throw new Error('Not Implemented');
-        case ServiceNames.COROSAPI:
-          await parseWorkoutQueueItemForServiceName(serviceName, <COROSAPIWorkoutQueueItemInterface>Object.assign({
-            id: queueItem.id,
-            ref: queueItem.ref,
-          }, queueItem.data()));
-          break;
-        case ServiceNames.SuuntoApp:
-          await parseWorkoutQueueItemForServiceName(serviceName, <SuuntoAppWorkoutQueueItemInterface>Object.assign({
-            id: queueItem.id,
-            ref: queueItem.ref,
-          }, queueItem.data()));
-          break;
-        case ServiceNames.GarminHealthAPI:
-          await processGarminHealthAPIActivityQueueItem(Object.assign({
-            id: queueItem.id,
-            ref: queueItem.ref,
-          }, <GarminHealthAPIActivityQueueItemInterface>queueItem.data()));
-          break;
+
+  const bulkWriter = admin.firestore().bulkWriter();
+  const limit = pLimit(20);
+
+  const promises = querySnapshot.docs.map(async (queueItem) => {
+    return limit(async () => {
+      try {
+        switch (serviceName) {
+          default:
+            throw new Error('Not Implemented');
+          case ServiceNames.COROSAPI:
+            await parseWorkoutQueueItemForServiceName(serviceName, <COROSAPIWorkoutQueueItemInterface>Object.assign({
+              id: queueItem.id,
+              ref: queueItem.ref,
+            }, queueItem.data()), bulkWriter);
+            break;
+          case ServiceNames.SuuntoApp:
+            await parseWorkoutQueueItemForServiceName(serviceName, <SuuntoAppWorkoutQueueItemInterface>Object.assign({
+              id: queueItem.id,
+              ref: queueItem.ref,
+            }, queueItem.data()), bulkWriter);
+            break;
+          case ServiceNames.GarminHealthAPI:
+            await processGarminHealthAPIActivityQueueItem(Object.assign({
+              id: queueItem.id,
+              ref: queueItem.ref,
+            }, <GarminHealthAPIActivityQueueItemInterface>queueItem.data()), bulkWriter);
+            break;
+        }
+        count++;
+        console.log(`Parsed queue item ${count}/${querySnapshot.size} and id ${queueItem.id}`);
+        // console.timeLog('ParseQueueItems'); // timeLog might be noisy in parallel
+      } catch (e: any) {
+        console.error(new Error(`Error parsing queue item ${queueItem.id}: ${e.message}`));
       }
-      count++;
-      console.log(`Parsed queue item ${count}/${querySnapshot.size} and id ${queueItem.id}`);
-      console.timeLog('ParseQueueItems');
-    } catch {
-      console.error(new Error(`Error parsing queue item #${count} of ${querySnapshot.size} and id ${queueItem.id}`));
-    }
-  }
+    });
+  });
+
+  await Promise.all(promises);
+  await bulkWriter.close();
+
   console.timeEnd('ParseQueueItems');
   console.log(`Parsed ${count} queue items out of ${querySnapshot.size}`);
 }
@@ -181,7 +202,7 @@ export function getWorkoutForService(
 }
 
 
-export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNames, queueItem: COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface) {
+export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNames, queueItem: COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter) {
   console.log(`Processing queue item ${queueItem.id} at retry count ${queueItem.retryCount}`);
   // queueItem is never undefined for query queueItem snapshots
   let tokenQuerySnapshots;
@@ -198,13 +219,13 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     }
   } catch (e: any) {
     console.error(e);
-    return increaseRetryCountForQueueItem(queueItem, e);
+    return increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
   }
 
   // If there is no token for the user, give them a few chances to reconnect
   if (!tokenQuerySnapshots.size) {
     console.warn(`No token found for queue item ${queueItem.id}. Retrying a few times in case of reconnection.`);
-    return increaseRetryCountForQueueItem(queueItem, new Error('No tokens found'), 1);
+    return increaseRetryCountForQueueItem(queueItem, new Error('No tokens found'), 1, bulkWriter);
   }
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
@@ -244,20 +265,20 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           result = await getWorkoutForService(serviceName, queueItem, serviceToken);
         } catch (retryError: any) {
           console.error(new Error(`Could not get workout for ${queueItem.id} even after force refresh: ${retryError.message}`));
-          await increaseRetryCountForQueueItem(queueItem, retryError);
+          await increaseRetryCountForQueueItem(queueItem, retryError, 1, bulkWriter);
           continue;
         }
       } else if (e.statusCode === 403) {
         console.error(new Error(`Could not get workout for ${queueItem.id} due to 403, increasing retry by 20`));
-        await increaseRetryCountForQueueItem(queueItem, e, 20);
+        await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
         continue;
       } else if (e.statusCode === 500) {
         console.error(new Error(`Could not get workout for ${queueItem.id} due to 500 increasing retry by 20`));
-        await increaseRetryCountForQueueItem(queueItem, e, 20);
+        await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
         continue;
       } else {
         console.error(new Error(`Could not get workout for ${queueItem.id}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}`));
-        await increaseRetryCountForQueueItem(queueItem, e);
+        await increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
         continue;
       }
     }
@@ -292,21 +313,21 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       console.error(e);
       if (e instanceof UsageLimitExceededError) {
         console.error(new Error(`Usage limit exceeded for ${queueItem.id}. Aborting retries. ${e.message}`));
-        await increaseRetryCountForQueueItem(queueItem, e, 20); // Stop retries
+        await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter); // Stop retries
         continue;
       }
       console.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.openId || serviceToken.userName} to ${queueItem.retryCount + 1} due to ${e.message}`));
-      await increaseRetryCountForQueueItem(queueItem, e);
+      await increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
       continue;
     }
     // If we made it here, the workout was processed successfully for at least one token.
     // We can stop and mark as processed.
-    return updateToProcessed(queueItem);
+    return updateToProcessed(queueItem, bulkWriter);
   }
 
   // If we finished the loop without returning, it means every token attempt failed.
   console.error(new Error(`Could not process ANY tokens for ${queueItem.id} after checking all ${tokenQuerySnapshots.size} tokens. Increasing retry count.`));
-  return increaseRetryCountForQueueItem(queueItem, new Error('All token processing attempts failed'));
+  return increaseRetryCountForQueueItem(queueItem, new Error('All token processing attempts failed'), 1, bulkWriter);
 }
 
 async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface | GarminHealthAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames): Promise<admin.firestore.DocumentReference> {
