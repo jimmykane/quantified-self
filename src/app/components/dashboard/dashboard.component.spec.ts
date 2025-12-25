@@ -9,6 +9,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { ChangeDetectorRef, NO_ERRORS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 import { User, EventInterface } from '@sports-alliance/sports-lib';
+import { Analytics } from '@angular/fire/analytics';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 describe('DashboardComponent', () => {
@@ -74,7 +75,8 @@ describe('DashboardComponent', () => {
                 { provide: Router, useValue: mockRouter },
                 { provide: ActivatedRoute, useValue: mockActivatedRoute },
                 { provide: MatDialog, useValue: mockDialog },
-                { provide: MatSnackBar, useValue: mockSnackBar }
+                { provide: MatSnackBar, useValue: mockSnackBar },
+                { provide: Analytics, useValue: {} }
             ],
             schemas: [NO_ERRORS_SCHEMA]
         })

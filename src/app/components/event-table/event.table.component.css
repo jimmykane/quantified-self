@@ -6,7 +6,7 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  align-content: space-between;
+  align-items: center;
 }
 
 .buttons {
@@ -70,4 +70,10 @@ tr.mat-row:hover td:not(.mat-table-sticky) {
 
 tr.mat-row:focus {
   outline: none;
+}
+
+::ng-deep .no-border .mdc-notched-outline__leading,
+::ng-deep .no-border .mdc-notched-outline__notch,
+::ng-deep .no-border .mdc-notched-outline__trailing {
+  border-color: transparent !important;
 }

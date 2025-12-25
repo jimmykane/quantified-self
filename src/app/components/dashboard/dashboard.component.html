@@ -1,27 +1,7 @@
 <section class="component-container">
   <app-shade [isActive]="!isInitialized"></app-shade>
 
-  @if ((targetUser || user) && isInitialized) {
-  <!-- Profile Card Wrapper -->
-  <div class="profile-card glass-card">
-    <div class="avatar"
-      [style.backgroundImage]="'url('+ ((targetUser || user).photoURL ? (targetUser || user).photoURL :  'https://ui-avatars.com/api/?name=' + ((targetUser || user).displayName || 'Guest'))  +')'">
-    </div>
-    <div class="profile-info">
-      <mat-card-title>
-        {{(targetUser || user).displayName || "Guest"}}
-      </mat-card-title>
-      @if ((targetUser || user).description) {
-      <mat-card-subtitle>{{ (targetUser || user).description }}</mat-card-subtitle>
-      }
-      @if (!(targetUser || user).description) {
-      <mat-card-subtitle>
-        No description available
-      </mat-card-subtitle>
-      }
-    </div>
-  </div>
-  }
+
 
   <div class="dashboard-content">
     @if (user) {

@@ -263,3 +263,98 @@ mat-card {
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2) !important;
   }
 }
+
+/* Global App Header Card Standard */
+.app-header-card {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 40px;
+  background: var(--mat-app-surface) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05) !important;
+  border: 1px solid var(--mat-app-outline-variant);
+  gap: 24px;
+  margin-bottom: 24px;
+  position: relative;
+  overflow: hidden;
+
+  /* Inner Structural Classes */
+  .header-content {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex: 1;
+  }
+
+  .header-avatar {
+    flex-shrink: 0;
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+  }
+
+  .header-info {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+
+    h1, h2 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 500;
+      line-height: 1.2;
+    }
+
+    p {
+      margin: 4px 0 0 0;
+      font-size: 0.95rem;
+      color: var(--mat-app-on-surface-variant);
+      opacity: 0.8;
+    }
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+}
+
+/* Dark Theme specific overrides for header card */
+.dark-theme .app-header-card {
+  background: var(--mat-app-surface) !important; /* Ensure it stays surface color */
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Mobile Responsive */
+@media (max-width: 600px) {
+  .app-header-card {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 20px;
+    gap: 16px;
+
+    .header-content {
+      width: 100%;
+      flex-direction: column;
+      gap: 16px;
+      text-align: center;
+    }
+
+    .header-info {
+      align-items: center;
+    }
+
+    .header-actions {
+      width: 100%;
+      justify-content: center;
+      margin-left: 0;
+      margin-top: 8px;
+    }
+  }
+}

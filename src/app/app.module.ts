@@ -16,6 +16,7 @@ import { provideStorage, getStorage } from '@angular/fire/storage';
 import * as Sentry from '@sentry/angular';
 import { MaterialModule } from './modules/material.module';
 import { ClipboardModule } from '@angular/cdk/clipboard';
+import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { ServiceWorkerModule } from '@angular/service-worker';
 import { UploadActivitiesComponent } from './components/upload/upload-activities/upload-activities.component';
 import { AppFilesInfoSheetService } from './services/upload/app-files-info-sheet.service';
@@ -64,6 +65,7 @@ import { OnboardingComponent } from './components/onboarding/onboarding.componen
     provideFunctions(() => getFunctions(undefined, 'europe-west2')),
     providePerformance(() => getPerformance()),
     provideAnalytics(() => getAnalytics()),
+    { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } }
   ]
 })
 export class AppModule {

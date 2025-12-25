@@ -16,51 +16,7 @@ section.component-container {
   animation: fadeIn 0.8s ease-out;
 }
 
-/* Header / Profile Card */
-.profile-card {
-  width: 100%;
-  box-sizing: border-box;
-  /* Glass styles moved to .glass-card global class */
-  padding: 2rem;
-  margin-bottom: 2rem;
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-}
 
-/* Hover styles also in .glass-card */
-
-
-.avatar {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background-size: cover;
-  background-position: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  border: 3px solid #fff;
-  flex-shrink: 0;
-}
-
-.profile-info {
-  display: flex;
-  flex-direction: column;
-}
-
-mat-card-title {
-  font-size: 1.75rem;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
-  color: #1a202c;
-  letter-spacing: -0.02em;
-}
-
-mat-card-subtitle {
-  font-size: 1rem;
-  color: #718096;
-  font-weight: 400;
-  line-height: 1.5;
-}
 
 /* Components separation */
 .dashboard-content {
