@@ -21,6 +21,9 @@ import { AppActivitySelectionService } from '../../services/activity-selection-s
 
 
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { EventStatsBottomSheetComponent } from './stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
+import { EventDetailsBottomSheetComponent } from '../event-header/event-details-bottom-sheet/event-details-bottom-sheet.component';
 
 
 @Component({
@@ -36,7 +39,6 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   public targetUserID!: string;
   public currentUser!: User;
   public selectedActivities: ActivityInterface[] = [];
-  public activeSection: 'overview' | 'laps' | 'analysis' | 'details' = 'overview';
 
   public userUnitSettings = AppUserService.getDefaultUserUnitSettings();
   public showAllData = false;
@@ -89,7 +91,8 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     private userService: AppUserService,
     private activitySelectionService: AppActivitySelectionService,
     private snackBar: MatSnackBar,
-    private themeService: AppThemeService) {
+    private themeService: AppThemeService,
+    private bottomSheet: MatBottomSheet) {
   }
 
   ngOnChanges() {
@@ -193,5 +196,21 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
   hasPositions(event: EventInterface): boolean {
     return !!this.event.getActivities().filter(a => a.hasPositionData()).length
+  }
+
+  openDetailedStats() {
+    this.bottomSheet.open(EventStatsBottomSheetComponent, {
+      data: {
+        event: this.event,
+        selectedActivities: this.selectedActivities,
+        userUnitSettings: this.userUnitSettings
+      }
+    });
+  }
+
+  openEditDetails() {
+    this.bottomSheet.open(EventDetailsBottomSheetComponent, {
+      data: { event: this.event, user: this.currentUser }
+    });
   }
 }

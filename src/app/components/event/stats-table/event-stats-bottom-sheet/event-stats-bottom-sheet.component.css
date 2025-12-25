@@ -1,0 +1,20 @@
+.bottom-sheet-container {
+    padding: 1rem;
+}
+
+.bottom-sheet-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.bottom-sheet-header h2 {
+    margin: 0;
+    font-weight: 500;
+}
+
+.bottom-sheet-content {
+    max-height: 80vh;
+    overflow-y: auto;
+}

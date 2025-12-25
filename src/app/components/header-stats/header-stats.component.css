@@ -9,14 +9,14 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: 10px;
   min-width: 0;
   border: 1px solid var(--mat-app-outline-variant);
   border-radius: 8px;
   background-color: var(--mat-app-surface-container-low);
   transition: all 0.2s ease-in-out;
   text-align: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .stat-item:hover {
@@ -32,6 +32,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-bottom: 2px;
 }
 
 .stat-content {
@@ -43,19 +44,19 @@
 }
 
 .stat-label {
-  font-size: 0.75rem;
+  font-size: 0.65rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--mat-app-on-surface-variant);
-  opacity: 0.7;
-  line-height: 1.2;
+  opacity: 0.8;
+  line-height: 1.1;
   white-space: nowrap;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .stat-value-grid {
-  font-size: 1.2rem;
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--mat-app-on-surface);
   line-height: 1.2;
@@ -65,9 +66,9 @@
 /* Grid Container */
 section.grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 12px;
-  padding: 12px 0;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+  padding: 8px 0;
 }
 
 /* Condensed (Chips) Container */

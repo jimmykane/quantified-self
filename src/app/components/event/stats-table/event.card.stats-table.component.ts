@@ -26,6 +26,7 @@ export class EventCardStatsTableComponent implements OnChanges {
   @Input() event: EventInterface;
   @Input() userUnitSettings: UserUnitSettingsInterface;
   @Input() selectedActivities: ActivityInterface[];
+  @Input() showAsExpansion = true;
   data: MatTableDataSource<object>;
   columns: string[];
   appColors = AppColors;

@@ -1,0 +1,14 @@
+<div class="bottom-sheet-container">
+    <div class="bottom-sheet-header">
+        <h2 mat-dialog-title>Detailed Statistics</h2>
+        <button mat-icon-button (click)="close()">
+            <mat-icon>close</mat-icon>
+        </button>
+    </div>
+
+    <div class="bottom-sheet-content">
+        <app-event-stats-table [event]="data.event" [selectedActivities]="data.selectedActivities"
+            [userUnitSettings]="data.userUnitSettings" [showAsExpansion]="false">
+        </app-event-stats-table>
+    </div>
+</div>

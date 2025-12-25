@@ -1,3 +1,4 @@
+@if (showAsExpansion) {
 <mat-accordion>
   <mat-expansion-panel class="mat-elevation-z0">
     <mat-expansion-panel-header style="padding: 0 16px 0 0; height: 40px !important;">
@@ -7,58 +8,65 @@
       </mat-panel-title>
     </mat-expansion-panel-header>
 
-
-    <mat-form-field>
-      <mat-label>Filter</mat-label>
-      <input matInput (keyup)="applyFilter($event)" placeholder="Type or value">
-    </mat-form-field>
-    <mat-table [dataSource]="data">
-      @for (column of columns; track column) {
-      <ng-container [matColumnDef]="column">
-        <mat-header-cell *matHeaderCellDef [ngStyle]="{'color': getColumnHeaderColor(column)}">
-          @if (column !== 'Difference') {
-          <span>
-            {{getColumnHeaderName(column)}}
-          </span>
-          }
-          @if (column === 'Difference') {
-          <span>
-            {{column}}
-            <mat-icon class="tooltip"
-              matTooltip="Up to 2% of difference is acceptable, up to 5% it gets worse and more than 5% it's bad">info_outline</mat-icon>
-          </span>
-          }
-        </mat-header-cell>
-        <mat-cell *matCellDef="let row">
-          @if (column === 'Difference' && row[column]) {
-          <span>
-            {{ row[column].display }}
-            @if (row[column].percent <= 2) { <span [ngStyle]="{'color': appColors.Green}">
-              {{ row[column].percent.toFixed(1) }}%
-          </span>
-          }
-          @if (row[column].percent > 2 && row[column].percent <= 5) { <span [ngStyle]="{'color': appColors.Orange}">
-            {{ row[column].percent.toFixed(1) }}%
-            </span>
-            }
-            @if (row[column].percent > 5) {
-            <span [ngStyle]="{'color': appColors.Red}">
-              {{ row[column].percent.toFixed(1) }}%
-            </span>
-            }
-            </span>
-            }
-            @if (column !== 'Difference') {
-            <span>{{ row[column] }}</span>
-            }
-        </mat-cell>
-      </ng-container>
-      }
-      <mat-header-row *matHeaderRowDef="columns; sticky: true;"></mat-header-row>
-      <mat-row *matRowDef="let row; columns: columns;">
-      </mat-row>
-    </mat-table>
+    <ng-container *ngTemplateOutlet="tableContent"></ng-container>
 
   </mat-expansion-panel>
 </mat-accordion>
 <mat-divider [inset]="true"></mat-divider>
+} @else {
+<ng-container *ngTemplateOutlet="tableContent"></ng-container>
+}
+
+
+<ng-template #tableContent>
+  <mat-form-field>
+    <mat-label>Filter</mat-label>
+    <input matInput (keyup)="applyFilter($event)" placeholder="Type or value">
+  </mat-form-field>
+  <mat-table [dataSource]="data">
+    @for (column of columns; track column) {
+    <ng-container [matColumnDef]="column">
+      <mat-header-cell *matHeaderCellDef [ngStyle]="{'color': getColumnHeaderColor(column)}">
+        @if (column !== 'Difference') {
+        <span>
+          {{getColumnHeaderName(column)}}
+        </span>
+        }
+        @if (column === 'Difference') {
+        <span>
+          {{column}}
+          <mat-icon class="tooltip"
+            matTooltip="Up to 2% of difference is acceptable, up to 5% it gets worse and more than 5% it's bad">info_outline</mat-icon>
+        </span>
+        }
+      </mat-header-cell>
+      <mat-cell *matCellDef="let row">
+        @if (column === 'Difference' && row[column]) {
+        <span>
+          {{ row[column].display }}
+          @if (row[column].percent <= 2) { <span [ngStyle]="{'color': appColors.Green}">
+            {{ row[column].percent.toFixed(1) }}%
+        </span>
+        }
+        @if (row[column].percent > 2 && row[column].percent <= 5) { <span [ngStyle]="{'color': appColors.Orange}">
+          {{ row[column].percent.toFixed(1) }}%
+          </span>
+          }
+          @if (row[column].percent > 5) {
+          <span [ngStyle]="{'color': appColors.Red}">
+            {{ row[column].percent.toFixed(1) }}%
+          </span>
+          }
+          </span>
+          }
+          @if (column !== 'Difference') {
+          <span>{{ row[column] }}</span>
+          }
+      </mat-cell>
+    </ng-container>
+    }
+    <mat-header-row *matHeaderRowDef="columns; sticky: true;"></mat-header-row>
+    <mat-row *matRowDef="let row; columns: columns;">
+    </mat-row>
+  </mat-table>
+</ng-template>
