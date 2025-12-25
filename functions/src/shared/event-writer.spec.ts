@@ -1,14 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventWriter, FirestoreAdapter } from './event-writer';
-import { EventInterface } from '@sports-alliance/sports-lib';
-import { ActivityInterface } from '@sports-alliance/sports-lib';
-import { StreamInterface } from '@sports-alliance/sports-lib';
-import { CompressedJSONStreamInterface, CompressionMethods } from '@sports-alliance/sports-lib';
 
-// Mock Pako since it's used internally
-vi.mock('pako', () => ({
-    gzip: vi.fn((data) => new Uint8Array(Buffer.from(data))),
-}));
+
+
 
 describe('EventWriter', () => {
     let adapter: FirestoreAdapter;
@@ -80,7 +74,8 @@ describe('EventWriter', () => {
     it('should upload original file if provided', async () => {
         const originalFile = {
             data: Buffer.from('test'),
-            extension: 'fit'
+            extension: 'fit',
+            startDate: new Date(),
         };
         await writer.writeAllEventData('user-1', eventMock, originalFile);
 
@@ -116,7 +111,7 @@ describe('EventWriter', () => {
         // Streams are no longer written, so this test just ensures no stream writes occur
         await writer.writeAllEventData('user-1', eventMock);
         const setDocFn = adapter.setDoc as any;
-        const streamCall = setDocFn.mock.calls.find(call => call[0].includes('streams'));
+        const streamCall = setDocFn.mock.calls.find((call: any) => call[0].includes('streams'));
         expect(streamCall).toBeUndefined();
     });
 
@@ -125,7 +120,7 @@ describe('EventWriter', () => {
         const setDocFn = adapter.setDoc as any;
 
         // Find the activity write call
-        const activityCall = setDocFn.mock.calls.find(call =>
+        const activityCall = setDocFn.mock.calls.find((call: any) =>
             call[0].includes('activities') && !call[0].includes('streams')
         );
 
@@ -143,7 +138,7 @@ describe('EventWriter', () => {
         const setDocFn = adapter.setDoc as any;
 
         // Find the event write call (shortest path ending in event-1)
-        const eventCall = setDocFn.mock.calls.find(call =>
+        const eventCall = setDocFn.mock.calls.find((call: any) =>
             call[0].length === 4 && call[0][3] === 'event-1'
         );
 
