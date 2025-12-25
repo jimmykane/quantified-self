@@ -70,7 +70,19 @@ export class AppEventService implements OnDestroy {
 
           if (rawData.originalFiles) {
             console.log('[AppEventService] Hydrating originalFiles (Single):', rawData.originalFiles.length);
-            event.originalFiles = rawData.originalFiles;
+            event.originalFiles = rawData.originalFiles.map((file: any) => {
+              if (file.startDate) {
+                // Convert Firestore Timestamp to Date
+                if (file.startDate.toDate && typeof file.startDate.toDate === 'function') {
+                  file.startDate = file.startDate.toDate();
+                } else if (file.startDate.seconds !== undefined) {
+                  file.startDate = new Date(file.startDate.seconds * 1000 + (file.startDate.nanoseconds || 0) / 1000000);
+                } else if (typeof file.startDate === 'string') {
+                  file.startDate = new Date(file.startDate);
+                }
+              }
+              return file;
+            });
           }
           if (rawData.originalFile) {
             console.log('[AppEventService] Hydrating originalFile (Single):', rawData.originalFile.path);
@@ -230,7 +242,7 @@ export class AppEventService implements OnDestroy {
     return combineLatest(x).pipe(map(arrayOfArrays => arrayOfArrays.reduce((a, b) => a.concat(b), [])));
   }
 
-  public async writeAllEventData(user: User, event: AppEventInterface, originalFiles?: { data: any, extension: string }[] | { data: any, extension: string }) {
+  public async writeAllEventData(user: User, event: AppEventInterface, originalFiles?: { data: any, extension: string, startDate?: Date }[] | { data: any, extension: string, startDate?: Date }) {
     // 1. Check Pro Status
     const userService = this.injector.get(AppUserService);
     const isPro = await userService.isPro();

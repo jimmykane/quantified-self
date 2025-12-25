@@ -39,6 +39,7 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { EventsExportFormComponent } from '../events-export-form/events-export.form.component';
 import { MatDialog } from '@angular/material/dialog';
 import { OrderByDirection } from 'firebase/firestore';
+import { AppFileService } from '../../services/app.file.service';
 
 
 @Component({
@@ -83,6 +84,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     changeDetector: ChangeDetectorRef,
     private eventColorService: AppEventColorService,
     private dialog: MatDialog,
+    private fileService: AppFileService,
     private router: Router, private datePipe: DatePipe) {
     super(changeDetector);
   }
@@ -179,7 +181,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     const events: any[] = await Promise.all(promises);
 
     // 2. Collect Original Files from source events
-    const validOriginalFiles: { data: any, extension: string }[] = [];
+    const validOriginalFiles: { data: any, extension: string, startDate?: Date }[] = [];
 
 
     // We need to fetch the actual file data for each event
@@ -197,7 +199,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
               // Extract extension from path
               const parts = fileMeta.path.split('.');
               const ext = parts[parts.length - 1];
-              validOriginalFiles.push({ data: buffer, extension: ext });
+              const eventStartDate = this.fileService.toDate(evt.startDate);
+              validOriginalFiles.push({ data: buffer, extension: ext, startDate: fileMeta.startDate || eventStartDate });
             } catch (e) {
               console.error('Failed to download source file for merge', fileMeta, e);
             }
@@ -211,7 +214,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
             const buffer = await this.eventService.downloadFile(evt.originalFile.path);
             const parts = evt.originalFile.path.split('.');
             const ext = parts[parts.length - 1];
-            validOriginalFiles.push({ data: buffer, extension: ext });
+            const eventStartDate = this.fileService.toDate(evt.startDate);
+            validOriginalFiles.push({ data: buffer, extension: ext, startDate: evt.originalFile.startDate || eventStartDate });
           } catch (e) {
             console.error('Failed to download source file for merge', evt.originalFile, e);
           }
@@ -238,6 +242,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     try {
       // Pass the collected files to the writer
       // Note: writeAllEventData signature updated to accept array
+      console.log('[EventTable] Merging event. Source events:', events);
+      console.log('[EventTable] Valid original files to write:', validOriginalFiles);
       await this.eventService.writeAllEventData(this.user, mergedEvent, validOriginalFiles);
 
       logEvent(this.analytics, 'merge_events');
@@ -297,6 +303,99 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         user: this.user,
       },
     });
+  }
+
+  public async downloadOriginals() {
+    this.loading();
+    try {
+      const selectedEvents = this.selection.selected.map(s => s.Event) as EventInterface[];
+      if (selectedEvents.length === 0) {
+        this.snackBar.open('No events selected', null, { duration: 2000 });
+        this.loaded();
+        return;
+      }
+
+      // Collect all file metadata from selected events
+      const filesToDownload: { path: string, fileName: string }[] = [];
+      let minDate: Date | null = null;
+      let maxDate: Date | null = null;
+
+      for (const event of selectedEvents) {
+        // Use shared utility for date conversion
+        const startDate = this.fileService.toDate(event.startDate);
+
+        if (startDate) {
+          if (!minDate || startDate < minDate) minDate = startDate;
+          if (!maxDate || startDate > maxDate) maxDate = startDate;
+        }
+
+        const appEvent = event as any;
+        const eventId = event.getID ? event.getID() : null;
+        console.log(`[EventTable] Processing event for download: ${eventId}`, event);
+        console.log(`[EventTable] originalFiles metadata:`, appEvent.originalFiles);
+
+        // Handle array of original files
+        if (appEvent.originalFiles && Array.isArray(appEvent.originalFiles) && appEvent.originalFiles.length > 0) {
+          const totalFiles = appEvent.originalFiles.length;
+          appEvent.originalFiles.forEach((fileMeta: any, index: number) => {
+            if (fileMeta.path) {
+              const extension = this.fileService.getExtensionFromPath(fileMeta.path);
+              // Use fileMeta.startDate if available, fallback to event startDate
+              const fileDate = this.fileService.toDate(fileMeta.startDate) || startDate;
+              const fileName = this.fileService.generateDateBasedFilename(
+                fileDate, extension, index + 1, totalFiles, eventId
+              );
+              filesToDownload.push({ path: fileMeta.path, fileName });
+            }
+          });
+        }
+        // Handle legacy single original file
+        else if (appEvent.originalFile && appEvent.originalFile.path) {
+          const extension = this.fileService.getExtensionFromPath(appEvent.originalFile.path);
+          const fileName = this.fileService.generateDateBasedFilename(startDate, extension, undefined, undefined, eventId);
+          filesToDownload.push({ path: appEvent.originalFile.path, fileName });
+        }
+      }
+
+      if (filesToDownload.length === 0) {
+        this.snackBar.open('No original files available for selected events', null, { duration: 3000 });
+        this.loaded();
+        return;
+      }
+
+      // Download all files
+      const downloadedFiles: { data: ArrayBuffer, fileName: string }[] = [];
+      for (const file of filesToDownload) {
+        try {
+          const data = await this.eventService.downloadFile(file.path);
+          downloadedFiles.push({ data, fileName: file.fileName });
+        } catch (e) {
+          console.error('Failed to download file:', file.path, e);
+          // Continue with other files
+        }
+      }
+
+      if (downloadedFiles.length === 0) {
+        this.snackBar.open('Failed to download any files', null, { duration: 3000 });
+        this.loaded();
+        return;
+      }
+
+      // Generate ZIP filename using shared utility
+      const zipFileName = this.fileService.generateDateRangeZipFilename(minDate, maxDate);
+
+      // Create and download ZIP
+      await this.fileService.downloadAsZip(downloadedFiles, zipFileName);
+
+      logEvent(this.analytics, 'download_originals', { count: downloadedFiles.length });
+      this.snackBar.open(`Downloaded ${downloadedFiles.length} file(s)`, null, { duration: 2000 });
+    } catch (e) {
+      console.error('Error downloading originals:', e);
+      Sentry.captureException(e);
+      this.snackBar.open('Error downloading files', null, { duration: 3000 });
+    } finally {
+      this.loaded();
+    }
   }
 
   // Todo cache this please

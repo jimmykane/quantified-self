@@ -1,14 +1,30 @@
-/*mat-slide-toggle{*/
-/*  max-width: 50%;*/
-/*  width: 50%;*/
-/*}*/
+/* Toggle Actions Container - Inline Pill Style */
+section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 0;
+}
 
-/*section{*/
-/*  display: flex;*/
-/*  flex-wrap: wrap;*/
-/*}*/
+/* Compact Toggle Styling */
+mat-slide-toggle {
+  --mdc-switch-track-height: 20px;
+  --mdc-switch-track-width: 36px;
+  font-size: 0.85rem;
+}
 
+mat-slide-toggle span {
+  font-weight: 500;
+  color: var(--mat-app-on-surface);
+  opacity: 0.9;
+}
 
-mat-slide-toggle{
-  display: block;
+/* Responsive: Stack on mobile */
+@media (max-width: 600px) {
+  section {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
 }

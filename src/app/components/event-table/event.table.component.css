@@ -12,6 +12,7 @@
 .buttons {
   display: flex;
   align-items: center;
+  gap: 8px;
 }
 
 /* Allow columns to size naturally or use flex */
@@ -76,4 +77,14 @@ tr.mat-row:focus {
 ::ng-deep .no-border .mdc-notched-outline__notch,
 ::ng-deep .no-border .mdc-notched-outline__trailing {
   border-color: transparent !important;
+}
+
+/* Force smaller badges for table actions */
+.buttons ::ng-deep .mat-badge-content {
+  width: 16px !important;
+  height: 16px !important;
+  line-height: 16px !important;
+  font-size: 10px !important;
+  font-family: 'QSFont', sans-serif !important;
+  font-weight: 600 !important;
 }

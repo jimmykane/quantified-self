@@ -9,18 +9,26 @@
     @if (selection.selected.length) {
     <section class="buttons">
       @if (this.selection.selected.length > 1) {
-      <button mat-icon-button matTooltip="Merge {{selection.selected.length}} events"
+      <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="primary" matBadgeSize="small"
+        matTooltip="Merge {{selection.selected.length}} events"
         (click)="$event.preventDefault(); $event.stopPropagation();mergeSelection($event)">
-        <mat-icon matBadge="{{selection.selected.length}}" matBadgeColor="primary">compare_arrows</mat-icon>
+        <mat-icon>compare_arrows</mat-icon>
       </button>
       }
-      <button mat-icon-button matTooltip="Download as csv {{selection.selected.length}} events"
+      <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="accent" matBadgeSize="small"
+        matTooltip="Download as csv {{selection.selected.length}} events"
         (click)="$event.preventDefault(); $event.stopPropagation(); downloadAsCSV($event)">
-        <mat-icon matBadge="{{selection.selected.length}}" matBadgeColor="accent" svgIcon="file-csv"></mat-icon>
+        <mat-icon svgIcon="file-csv"></mat-icon>
       </button>
-      <button mat-icon-button matTooltip="Delete {{selection.selected.length}} events"
+      <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="primary" matBadgeSize="small"
+        matTooltip="Download original files"
+        (click)="$event.preventDefault(); $event.stopPropagation(); downloadOriginals()">
+        <mat-icon>folder_zip</mat-icon>
+      </button>
+      <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="warn" matBadgeSize="small"
+        matTooltip="Delete {{selection.selected.length}} events"
         (click)="$event.preventDefault(); $event.stopPropagation();deleteSelection()">
-        <mat-icon matBadge="{{selection.selected.length}}" matBadgeColor="warn">delete</mat-icon>
+        <mat-icon>delete</mat-icon>
       </button>
     </section>
     }

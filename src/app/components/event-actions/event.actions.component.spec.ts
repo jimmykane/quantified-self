@@ -31,6 +31,27 @@ describe('EventActionsComponent', () => {
         mockFileService = {
             downloadAsZip: vi.fn(),
             downloadFile: vi.fn(),
+            toDate: vi.fn((rawDate: any) => {
+                if (!rawDate) return null;
+                if (rawDate instanceof Date) return rawDate;
+                if (rawDate.toDate && typeof rawDate.toDate === 'function') return rawDate.toDate();
+                if (typeof rawDate === 'number') return new Date(rawDate);
+                if (typeof rawDate === 'string') return new Date(rawDate);
+                return null;
+            }),
+            generateDateBasedFilename: vi.fn((date, extension, _index, _totalFiles, fallbackId) => {
+                const dateStr = date ? date.toISOString().split('T')[0] : null;
+                const baseStr = dateStr || fallbackId || 'activity';
+                return `${baseStr}.${extension}`;
+            }),
+            generateDateRangeZipFilename: vi.fn((minDate, _maxDate, suffix = 'originals') => {
+                const dateStr = minDate ? minDate.toISOString().split('T')[0] : 'unknown';
+                return `${dateStr}_${suffix}.zip`;
+            }),
+            getExtensionFromPath: vi.fn((path: string) => {
+                const parts = path.split('.');
+                return parts.length > 1 ? parts[parts.length - 1] : 'fit';
+            })
         };
         mockSnackBar = {
             open: vi.fn(),

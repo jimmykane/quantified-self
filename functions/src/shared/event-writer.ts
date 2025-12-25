@@ -48,7 +48,7 @@ export class EventWriter {
             delete (eventJSON as any).activities;
 
             // Normalize input to array or single
-            let filesToUpload: { data: any, extension: string }[] = [];
+            let filesToUpload: { data: any, extension: string, startDate?: Date }[] = [];
             if (originalFiles) {
                 if (Array.isArray(originalFiles)) {
                     filesToUpload = originalFiles;
@@ -58,7 +58,7 @@ export class EventWriter {
             }
 
             if (filesToUpload.length > 0 && this.storageAdapter) {
-                const uploadedFilesMetadata: { path: string, bucket?: string }[] = [];
+                const uploadedFilesMetadata: { path: string, bucket?: string, startDate?: Date }[] = [];
 
                 for (let i = 0; i < filesToUpload.length; i++) {
                     const file = filesToUpload[i];
@@ -82,6 +82,7 @@ export class EventWriter {
                     uploadedFilesMetadata.push({
                         path: filePath,
                         bucket: this.storageAdapter.getBucketName?.() || this.bucketName,
+                        startDate: file.startDate,
                     });
                 }
 

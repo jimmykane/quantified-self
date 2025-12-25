@@ -105,8 +105,13 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.changeDetectorRef.detectChanges();
     }));
 
-    this.subscriptions.push(this.route.data.subscribe((data: { event: EventInterface }) => {
+    this.subscriptions.push(this.route.data.subscribe((data: any) => {
       this.event = data.event;
+      console.log('[EventCard] Event data loaded:', this.event);
+      console.log('[EventCard] Event metadata (originalFiles):', (this.event as any).originalFiles);
+      console.log('[EventCard] Event metadata (originalFile):', (this.event as any).originalFile);
+      this.event.getActivities().forEach(a => console.log(`[EventCard] Activity ${a.getID()}:`, a));
+
       this.activitySelectionService.selectedActivities.clear();
       this.activitySelectionService.selectedActivities.select(...this.event.getActivities());
       // Fallback/Initial set

@@ -87,7 +87,11 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
         logEvent(this.analytics, 'downloaded_fit_file', { method: ServiceNames.SuuntoApp });
       } else {
         const newEvent = await EventImporterFIT.getFromArrayBuffer(result);
-        await this.eventService.writeAllEventData(this.user, newEvent);
+        await this.eventService.writeAllEventData(this.user, newEvent, {
+          data: result,
+          extension: 'fit',
+          startDate: newEvent.startDate
+        });
         logEvent(this.analytics, 'imported_fit_file', { method: ServiceNames.SuuntoApp });
         await this.router.navigate(['/user', this.user.uid, 'event', newEvent.getID()], {});
       }

@@ -123,7 +123,8 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
         try {
           await this.eventService.writeAllEventData(this.user, newEvent, {
             data: fileReaderResult as any, // ArrayBuffer or string
-            extension: file.extension
+            extension: file.extension,
+            startDate: newEvent.startDate
           });
           // Refresh count
           await this.calculateRemainingUploads();

@@ -3,8 +3,8 @@
 .event-dashboard-container {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
-  /* Standard material gap */
+  gap: 0.5rem;
+  /* Tight gap between sections */
   padding: 16px;
   max-width: 1600px;
   /* Prevent it from getting too wide on huge screens */
@@ -32,7 +32,7 @@ mat-card-header mat-icon {
 
 /* --- V2 Layout Tweaks --- */
 .secondary-details-container {
-  margin-top: 2rem;
+  margin-top: 0.5rem;
 }
 
 .condensed-stats-row {
@@ -43,7 +43,7 @@ mat-card-header mat-icon {
 .responsive-grid {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 0.5rem;
 }
 
 /* Inside tabs, we might want cards to be flatter or blend in.

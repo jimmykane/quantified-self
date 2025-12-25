@@ -21,7 +21,7 @@ import { AmChartsService } from '../../../services/am-charts.service';
 import { Subscription } from 'rxjs';
 import { AppEventService } from '../../../services/app.event.service';
 import { DataAltitude } from '@sports-alliance/sports-lib';
-import { debounceTime } from 'rxjs/operators';
+import { debounceTime, take } from 'rxjs/operators';
 import { StreamInterface } from '@sports-alliance/sports-lib';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { DataPace, DataPaceMinutesPerMile } from '@sports-alliance/sports-lib';
@@ -97,6 +97,7 @@ import {
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppEventInterface } from '../../../../../functions/src/shared/app-event.interface';
 import { AppColors } from '../../../services/color/app.colors';
 import { ActivityUtilities } from '@sports-alliance/sports-lib';
 
@@ -148,6 +149,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   private streamsSubscription: Subscription;
   private activitiesCursorSubscription: Subscription;
+
+  private activitiesWithAllStreamsFetched = new Set<string>();
 
   constructor(changeDetector: ChangeDetectorRef,
     protected zone: NgZone,
@@ -767,6 +770,12 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   private async processChanges() {
     this.loading();
 
+    const appEvent = this.event as AppEventInterface;
+    console.log('[EventCardChart] processChanges called for event:', this.event.getID());
+    console.log('[EventCardChart] Full event object:', this.event);
+    console.log('[EventCardChart] originalFile:', appEvent.originalFile);
+    console.log('[EventCardChart] originalFiles:', appEvent.originalFiles);
+
     // Listen to cursor changes
     this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
       debounceTime(250)
@@ -815,21 +824,51 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       }
     }
 
+    // Lazy load additional streams if "Show All Data" is enabled and we are not using client-side parsing (original files)
+    if (this.showAllData && !appEvent.originalFile && (!appEvent.originalFiles || appEvent.originalFiles.length === 0)) {
+      const user = new User(this.targetUserID);
+      const fetchPromises = this.selectedActivities
+        .filter(activity => !this.activitiesWithAllStreamsFetched.has(activity.getID()))
+        .map(activity => {
+          return this.eventService.getAllStreams(user, this.event.getID(), activity.getID())
+            .pipe(take(1))
+            .toPromise()
+            .then(streams => {
+              if (streams && streams.length) {
+                activity.addStreams(streams);
+                this.activitiesWithAllStreamsFetched.add(activity.getID());
+              }
+            });
+        });
+      if (fetchPromises.length > 0) {
+        await Promise.all(fetchPromises);
+      }
+    }
+
     const series = this.selectedActivities.reduce((seriesArray, activity) => {
       const streams = activity.getAllStreams();
       if (!streams.length) {
         return seriesArray;
       }
 
-      // These need to be unit based and activty based?
+      // Determine which data types to show based on showAllData toggle
+      const allowedDataTypes = this.showAllData
+        ? null // null means show all
+        : [...DynamicDataLoader.basicDataTypes, ...this.dataTypesToUse];
+
+      // These need to be unit based and activity based?
       const shouldRemoveSpeed = DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataSpeed.type, this.userUnitSettings).indexOf(DataSpeed.type) === -1
       const shouldRemoveGradeAdjustedSpeed = DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataGradeAdjustedSpeed.type, this.userUnitSettings).indexOf(DataGradeAdjustedSpeed.type) === -1
-      // const shouldRemoveGradeAdjustedSpeed = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataGradeAdjustedSpeed.type) === -1 || (ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(ActivityTypes[activity.type]).indexOf(DataGradeAdjustedSpeed.type) === -1);
       const shouldRemoveDistance = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataDistance.type) === -1;
 
       // @todo should do the same with distance (miles) and vertical speed
       [...new Set(ActivityUtilities.createUnitStreamsFromStreams(streams, activity.type, DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings)).concat(streams))]
         .filter((stream) => {
+          // First, filter by showAllData toggle
+          if (allowedDataTypes !== null && !allowedDataTypes.includes(stream.type)) {
+            return false;
+          }
+
           switch (stream.type) {
             case DataDistance.type:
               return !shouldRemoveDistance;

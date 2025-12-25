@@ -231,25 +231,41 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     this.snackBar.open('Preparing download...', undefined, { duration: 2000 });
     try {
       const eventAny = this.event as any;
+      const eventDate = this.fileService.toDate(this.event.startDate);
+      const eventId = this.event.getID ? this.event.getID() : undefined;
+      console.log(`[EventActions] Starting download for event: ${eventId}`, this.event);
+      console.log(`[EventActions] eventAny structure:`, eventAny);
+
       if (eventAny.originalFiles && eventAny.originalFiles.length > 0) {
         // Multiple files -> ZIP
-        const filesToZip = [];
-        for (const fileMeta of eventAny.originalFiles) {
+        const filesToZip: { data: ArrayBuffer, fileName: string }[] = [];
+        const totalFiles = eventAny.originalFiles.length;
+
+        for (let i = 0; i < totalFiles; i++) {
+          const fileMeta = eventAny.originalFiles[i];
           const arrayBuffer = await this.eventService.downloadFile(fileMeta.path);
-          const parts = fileMeta.path.split('/');
-          const fileName = parts[parts.length - 1]; // Use basename
+          const extension = this.fileService.getExtensionFromPath(fileMeta.path);
+          // Use fileMeta.startDate if available, fallback to eventDate
+          const fileDate = this.fileService.toDate(fileMeta.startDate) || eventDate;
+          const fileName = this.fileService.generateDateBasedFilename(
+            fileDate, extension, i + 1, totalFiles, eventId
+          );
           filesToZip.push({ data: arrayBuffer, fileName });
         }
-        await this.fileService.downloadAsZip(filesToZip, `${this.getFileName(this.event)}.zip`);
+
+        const zipFileName = this.fileService.generateDateRangeZipFilename(eventDate, eventDate);
+        await this.fileService.downloadAsZip(filesToZip, zipFileName);
         logEvent(this.analytics, 'downloaded_original_files_zip');
 
       } else if (eventAny.originalFile && eventAny.originalFile.path) {
         // Single file -> Direct download
         const arrayBuffer = await this.eventService.downloadFile(eventAny.originalFile.path);
-        const parts = eventAny.originalFile.path.split('.');
-        const ext = parts[parts.length - 1];
-        const blob = new Blob([arrayBuffer]); // Type unknown, default blob
-        this.fileService.downloadFile(blob, this.getFileName(this.event), ext);
+        const extension = this.fileService.getExtensionFromPath(eventAny.originalFile.path);
+        const fileName = this.fileService.generateDateBasedFilename(eventDate, extension, undefined, undefined, eventId);
+        const blob = new Blob([arrayBuffer]);
+        // Download with basename (without extension) and extension separately
+        const baseNameWithoutExt = fileName.replace(`.${extension}`, '');
+        this.fileService.downloadFile(blob, baseNameWithoutExt, extension);
         logEvent(this.analytics, 'downloaded_original_file');
       } else {
         this.snackBar.open('No original files found.', undefined, { duration: 3000 });
@@ -284,8 +300,10 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     }
   }
 
-  private getFileName(event): string {
-    return `${this.event.startDate.toISOString()}#${this.event.getActivityTypesAsString()}`
+  private getFileName(event: EventInterface): string {
+    const eventDate = this.fileService.toDate(event.startDate);
+    const dateStr = eventDate ? eventDate.toISOString() : 'unknown';
+    return `${dateStr}#${event.getActivityTypesAsString()}`
   }
 
 }
