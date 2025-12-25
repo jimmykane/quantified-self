@@ -562,6 +562,8 @@ export class AppUserService implements OnDestroy {
   }
 
   public async isPro(): Promise<boolean> {
+    const isAdmin = await this.isAdmin();
+    if (isAdmin) return true;
     const role = await this.getSubscriptionRole();
     return role === 'pro';
   }
@@ -584,6 +586,8 @@ export class AppUserService implements OnDestroy {
    * Returns true if the user has any level of paid access (basic or pro)
    */
   public async hasPaidAccess(): Promise<boolean> {
+    const isAdmin = await this.isAdmin();
+    if (isAdmin) return true;
     const role = await this.getSubscriptionRole();
     return role === 'pro' || role === 'basic';
   }

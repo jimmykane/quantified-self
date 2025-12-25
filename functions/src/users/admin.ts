@@ -1,7 +1,5 @@
-
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
-import { ALLOWED_CORS_ORIGINS } from '../utils';
 
 /**
  * Lists all users with their custom claims and metadata.
@@ -9,7 +7,7 @@ import { ALLOWED_CORS_ORIGINS } from '../utils';
  */
 export const listUsers = onCall({
     region: 'europe-west2',
-    cors: ALLOWED_CORS_ORIGINS,
+    cors: true,
     memory: '1GiB',
 }, async (request) => {
     // 1. Check authentication

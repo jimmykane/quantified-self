@@ -15,12 +15,19 @@ if (!uid) {
 
 async function setAdminClaim() {
     try {
-        await admin.auth().setCustomUserClaims(uid, { admin: true });
+        // Fetch existing claims to avoid overwriting them
+        const user = await admin.auth().getUser(uid);
+        const existingClaims = user.customClaims || {};
+
+        await admin.auth().setCustomUserClaims(uid, {
+            ...existingClaims,
+            admin: true
+        });
         console.log(`Successfully set admin claim for user: ${uid}`);
 
         // Verify
-        const user = await admin.auth().getUser(uid);
-        console.log(`Current custom claims for ${uid}:`, user.customClaims);
+        const updatedUser = await admin.auth().getUser(uid);
+        console.log(`Current custom claims for ${uid}:`, updatedUser.customClaims);
     } catch (error) {
         console.error(`Error setting admin claim for ${uid}:`, error);
     }

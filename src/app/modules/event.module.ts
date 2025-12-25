@@ -22,6 +22,7 @@ import { EventIntensityZonesComponent } from '../components/event/intensity-zone
 import { LapTypeIconComponent } from '../components/lap-type-icon/lap-type-icon.component';
 import { GoogleMapsModule } from '@angular/google-maps';
 import { EventDetailsBottomSheetComponent } from '../components/event-header/event-details-bottom-sheet/event-details-bottom-sheet.component';
+import { EventStatsBottomSheetComponent } from '../components/event/stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
 
 
 @NgModule({
@@ -47,6 +48,7 @@ import { EventDetailsBottomSheetComponent } from '../components/event-header/eve
         EventCardDevicesComponent,
         EventHeaderComponent,
         EventDetailsBottomSheetComponent,
+        EventStatsBottomSheetComponent,
         HeaderStatsComponent,
         ActivitiesTogglesComponent,
         ActivityActionsComponent,

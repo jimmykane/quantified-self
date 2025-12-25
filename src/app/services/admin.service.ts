@@ -1,8 +1,8 @@
-
 import { inject, Injectable } from '@angular/core';
-import { Functions, httpsCallable } from '@angular/fire/functions';
+import { Functions, httpsCallableFromURL } from '@angular/fire/functions';
 import { from, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
 
 export interface AdminUser {
     uid: string;
@@ -28,7 +28,7 @@ export class AdminService {
     private functions = inject(Functions);
 
     getUsers(): Observable<AdminUser[]> {
-        const listUsers = httpsCallable<{ users: AdminUser[] }, { users: AdminUser[] }>(this.functions, 'listUsers');
+        const listUsers = httpsCallableFromURL<{ users: AdminUser[] }, { users: AdminUser[] }>(this.functions, environment.functions.listUsers);
         return from(listUsers()).pipe(
             map(result => result.data.users)
         );

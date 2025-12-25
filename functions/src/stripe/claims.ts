@@ -1,10 +1,9 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
-import { ALLOWED_CORS_ORIGINS } from '../utils';
 
 export const restoreUserClaims = onCall({
     region: 'europe-west2',
-    cors: ALLOWED_CORS_ORIGINS
+    cors: true
 }, async (request) => {
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
@@ -66,7 +65,15 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
 
     // Set custom user claims on this specific user
     console.log(`[reconcileClaims] Final decision - Setting claims for user ${uid} to role: ${role}`);
-    await admin.auth().setCustomUserClaims(uid, { stripeRole: role });
+
+    // Fetch existing claims to avoid overwriting other claims like 'admin'
+    const user = await admin.auth().getUser(uid);
+    const existingClaims = user.customClaims || {};
+
+    await admin.auth().setCustomUserClaims(uid, {
+        ...existingClaims,
+        stripeRole: role
+    });
 
     return { role };
 }

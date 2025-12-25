@@ -86,7 +86,12 @@ export const onSubscriptionUpdated = onDocumentWritten({
                 );
                 await admin.firestore().doc(`users/${uid}`).set({ gracePeriodUntil }, { merge: true });
             }
-            await admin.auth().setCustomUserClaims(uid, { stripeRole: 'free' });
+            const user = await admin.auth().getUser(uid);
+            const existingClaims = user.customClaims || {};
+            await admin.auth().setCustomUserClaims(uid, {
+                ...existingClaims,
+                stripeRole: 'free'
+            });
             return;
         }
         console.error(`[onSubscriptionUpdated] Error for user ${uid}:`, e);
