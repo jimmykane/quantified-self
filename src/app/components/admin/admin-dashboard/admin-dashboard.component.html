@@ -38,6 +38,56 @@
         </div>
     </div>
 
+    <!-- Detailed Provider Queue Stats -->
+    <div class="glass-card table-container" *ngIf="queueStats?.providers?.length" style="margin-bottom: 24px;">
+        <h3 style="margin: 16px; color: #333; font-size: 1.1rem; font-weight: 500;">Provider Queue Status</h3>
+        <div class="table-wrapper">
+            <table mat-table [dataSource]="queueStats?.providers || []">
+                <!-- Provider Column -->
+                <ng-container matColumnDef="provider">
+                    <th mat-header-cell *matHeaderCellDef> Provider </th>
+                    <td mat-cell *matCellDef="let stat">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <img [src]="getServiceLogo(stat.name)" [alt]="stat.name" style="height: 24px; width: 24px;">
+                            <span style="font-weight: 500;">{{ stat.name }}</span>
+                        </div>
+                    </td>
+                </ng-container>
+
+                <!-- Pending Column -->
+                <ng-container matColumnDef="pending">
+                    <th mat-header-cell *matHeaderCellDef> Pending </th>
+                    <td mat-cell *matCellDef="let stat">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="status-dot" [class.active]="stat.pending > 0"></span>
+                            {{ stat.pending }}
+                        </div>
+                    </td>
+                </ng-container>
+
+                <!-- Succeeded Column -->
+                <ng-container matColumnDef="succeeded">
+                    <th mat-header-cell *matHeaderCellDef> Succeeded </th>
+                    <td mat-cell *matCellDef="let stat" style="color: #4caf50;"> {{ stat.succeeded }} </td>
+                </ng-container>
+
+                <!-- Failed Column -->
+                <ng-container matColumnDef="failed">
+                    <th mat-header-cell *matHeaderCellDef> Failed </th>
+                    <td mat-cell *matCellDef="let stat">
+                        <span [style.color]="stat.failed > 0 ? '#f44336' : 'inherit'"
+                            [style.fontWeight]="stat.failed > 0 ? '500' : 'normal'">
+                            {{ stat.failed }}
+                        </span>
+                    </td>
+                </ng-container>
+
+                <tr mat-header-row *matHeaderRowDef="['provider', 'pending', 'succeeded', 'failed']"></tr>
+                <tr mat-row *matRowDef="let row; columns: ['provider', 'pending', 'succeeded', 'failed'];"></tr>
+            </table>
+        </div>
+    </div>
+
     <div class="glass-card filter-container">
         <mat-form-field appearance="outline" class="search-field">
             <mat-label>Search users</mat-label>

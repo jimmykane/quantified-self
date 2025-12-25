@@ -386,3 +386,21 @@ table {
 :host-context(.dark-theme) .provider-apple {
     color: #ffffff;
 }
+
+/* Provider Queue Stats Status Dot */
+.status-dot {
+    height: 8px;
+    width: 8px;
+    border-radius: 50%;
+    background-color: #cbd5e1;
+    display: inline-block;
+}
+
+.status-dot.active {
+    background-color: #f59e0b;
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+}
+
+:host-context(.dark-theme) .status-dot {
+    background-color: rgba(255, 255, 255, 0.2);
+}

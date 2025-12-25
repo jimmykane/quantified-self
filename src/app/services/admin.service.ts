@@ -1,4 +1,4 @@
-import { inject, Injectable } from '@angular/core';
+import { inject, Injectable, EnvironmentInjector, runInInjectionContext } from '@angular/core';
 import { collection, Firestore, getCountFromServer, query, where } from '@angular/fire/firestore';
 import { Functions, httpsCallableFromURL } from '@angular/fire/functions';
 import { from, Observable, timer } from 'rxjs';
@@ -52,6 +52,12 @@ export interface QueueStats {
     pending: number;
     succeeded: number;
     failed: number;
+    providers: {
+        name: string;
+        pending: number;
+        succeeded: number;
+        failed: number;
+    }[];
 }
 
 @Injectable({
@@ -61,13 +67,20 @@ export class AdminService {
     private functions = inject(Functions);
     private firestore = inject(Firestore);
 
-    getUsers(params: ListUsersParams = {}): Observable<ListUsersResponse> {
-        const listUsers = httpsCallableFromURL<ListUsersParams, ListUsersResponse>(
-            this.functions,
-            environment.functions.listUsers
-        );
+    private listUsersFn = httpsCallableFromURL<ListUsersParams, ListUsersResponse>(
+        this.functions,
+        environment.functions.listUsers
+    );
 
-        return from(listUsers({
+    private getQueueStatsFn = httpsCallableFromURL<void, QueueStats>(
+        this.functions,
+        environment.functions.getQueueStats
+    );
+
+    private injector = inject(EnvironmentInjector);
+
+    getUsers(params: ListUsersParams = {}): Observable<ListUsersResponse> {
+        return from(this.listUsersFn({
             page: params.page ?? 0,
             pageSize: params.pageSize ?? 25,
             searchTerm: params.searchTerm,
@@ -79,45 +92,63 @@ export class AdminService {
     }
 
     getQueueStats(): Observable<QueueStats> {
-        const getQueueStats = httpsCallableFromURL<void, QueueStats>(
-            this.functions,
-            environment.functions.getQueueStats
-        );
-
-        return from(getQueueStats()).pipe(
+        return from(this.getQueueStatsFn()).pipe(
             map(result => result.data)
         );
     }
 
     getQueueStatsDirect(): Observable<QueueStats> {
-        const QUEUE_COLLECTIONS = [
-            'suuntoAppWorkoutQueue',
-            'suuntoAppHistoryImportActivityQueue',
-            'COROSAPIWorkoutQueue',
-            'COROSAPIHistoryImportWorkoutQueue',
-            'garminHealthAPIActivityQueue'
-        ];
+        const PROVIDER_QUEUES = {
+            'Suunto': ['suuntoAppWorkoutQueue', 'suuntoAppHistoryImportActivityQueue'],
+            'COROS': ['COROSAPIWorkoutQueue', 'COROSAPIHistoryImportWorkoutQueue'],
+            'Garmin': ['garminHealthAPIActivityQueue']
+        };
 
         const fetchStats = async (): Promise<QueueStats> => {
-            let pending = 0;
-            let succeeded = 0;
-            let failed = 0;
+            return runInInjectionContext(this.injector, async () => {
+                let totalPending = 0;
+                let totalSucceeded = 0;
+                let totalFailed = 0;
+                const providers: QueueStats['providers'] = [];
 
-            await Promise.all(QUEUE_COLLECTIONS.map(async (collectionName) => {
-                const col = collection(this.firestore, collectionName);
+                for (const [providerName, collections] of Object.entries(PROVIDER_QUEUES)) {
+                    let providerPending = 0;
+                    let providerSucceeded = 0;
+                    let providerFailed = 0;
 
-                const [p, s, f] = await Promise.all([
-                    getCountFromServer(query(col, where('processed', '==', false), where('retryCount', '<', 10))),
-                    getCountFromServer(query(col, where('processed', '==', true))),
-                    getCountFromServer(query(col, where('processed', '==', false), where('retryCount', '>=', 10)))
-                ]);
+                    await Promise.all(collections.map(async (collectionName) => {
+                        const col = collection(this.firestore, collectionName);
 
-                pending += p.data().count;
-                succeeded += s.data().count;
-                failed += f.data().count;
-            }));
+                        const [p, s, f] = await Promise.all([
+                            getCountFromServer(query(col, where('processed', '==', false), where('retryCount', '<', 10))),
+                            getCountFromServer(query(col, where('processed', '==', true))),
+                            getCountFromServer(query(col, where('processed', '==', false), where('retryCount', '>=', 10)))
+                        ]);
 
-            return { pending, succeeded, failed };
+                        providerPending += p.data().count;
+                        providerSucceeded += s.data().count;
+                        providerFailed += f.data().count;
+                    }));
+
+                    totalPending += providerPending;
+                    totalSucceeded += providerSucceeded;
+                    totalFailed += providerFailed;
+
+                    providers.push({
+                        name: providerName,
+                        pending: providerPending,
+                        succeeded: providerSucceeded,
+                        failed: providerFailed
+                    });
+                }
+
+                return {
+                    pending: totalPending,
+                    succeeded: totalSucceeded,
+                    failed: totalFailed,
+                    providers: providers
+                };
+            });
         };
 
         // Poll every 10 seconds for "hot" updates
