@@ -87,9 +87,9 @@ export function isCorsAllowed(req: Request) {
   });
 }
 
-export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminHealthAPIEventMetaData | COROSAPIEventMetaData, originalFile?: { data: any, extension: string, startDate?: Date }) {
+export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminHealthAPIEventMetaData | COROSAPIEventMetaData, originalFile?: { data: any, extension: string, startDate?: Date }, bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>) {
   // Enforce Usage Limit
-  await checkEventUsageLimit(userID);
+  await checkEventUsageLimit(userID, usageCache, pendingWrites);
 
   event.setID(eventID);
 
@@ -125,7 +125,11 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
       for (let i = 2; i < path.length; i += 2) {
         docRef = docRef.collection(path[i]).doc(path[i + 1]);
       }
-      await docRef.set(data);
+      if (bulkWriter) {
+        void bulkWriter.set(docRef, data);
+      } else {
+        await docRef.set(data);
+      }
     },
     createBlob: (data: Uint8Array) => {
       return Buffer.from(data);
@@ -150,14 +154,19 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
   await writer.writeAllEventData(userID, event, originalFile);
 
   // Write Metadata (not handled by EventWriter)
-  await admin.firestore()
+  const metaRef = admin.firestore()
     .collection('users')
     .doc(userID)
     .collection('events')
     .doc(<string>event.getID())
     .collection('metaData')
-    .doc(metaData.serviceName)
-    .set(metaData.toJSON());
+    .doc(metaData.serviceName);
+
+  if (bulkWriter) {
+    void bulkWriter.set(metaRef, metaData.toJSON());
+  } else {
+    await metaRef.set(metaData.toJSON());
+  }
 }
 
 /**
@@ -216,23 +225,47 @@ export class UsageLimitExceededError extends Error {
 
 import { USAGE_LIMITS } from './shared/limits';
 
-export async function checkEventUsageLimit(userID: string): Promise<void> {
-  const role = await getUserRole(userID);
+export async function checkEventUsageLimit(userID: string, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<void> {
+  let roleData: { role: string, limit: number, currentCount: number };
+
+  if (usageCache) {
+    let usagePromise = usageCache.get(userID);
+    if (!usagePromise) {
+      usagePromise = (async () => {
+        const role = await getUserRole(userID);
+        const limit = USAGE_LIMITS[role] || 10;
+        const eventsCollection = admin.firestore().collection('users').doc(userID).collection('events');
+        const snapshot = await eventsCollection.count().get();
+        return { role, limit, currentCount: snapshot.data().count };
+      })();
+      usageCache.set(userID, usagePromise);
+    }
+    roleData = await usagePromise;
+  } else {
+    const role = await getUserRole(userID);
+    const limit = USAGE_LIMITS[role] || 10;
+    const eventsCollection = admin.firestore().collection('users').doc(userID).collection('events');
+    const snapshot = await eventsCollection.count().get();
+    roleData = { role, limit, currentCount: snapshot.data().count };
+  }
+
+  const { role, limit, currentCount } = roleData;
 
   // Pro: Unlimited
   if (role === 'pro') return;
 
-  const limit = USAGE_LIMITS[role] || 10; // Default to free limit
+  const currentPending = (pendingWrites?.get(userID) || 0);
+  const totalCount = currentCount + currentPending;
 
-  // Efficiently count documents
-  const eventsCollection = admin.firestore().collection('users').doc(userID).collection('events');
-  const snapshot = await eventsCollection.count().get();
-  const currentCount = snapshot.data().count;
+  console.log(`[UsageCheck] User: ${userID}, Role: ${role}, Count: ${currentCount}, Pending: ${currentPending}, Limit: ${limit}`);
 
-  console.log(`[UsageCheck] User: ${userID}, Role: ${role}, Count: ${currentCount}, Limit: ${limit}`);
+  if (totalCount >= limit) {
+    throw new UsageLimitExceededError(`Upload limit reached for ${role} tier. You have ${currentCount} events (+${currentPending} pending). Limit is ${limit}. Please upgrade to upload more.`);
+  }
 
-  if (currentCount >= limit) {
-    throw new UsageLimitExceededError(`Upload limit reached for ${role} tier. You have ${currentCount} events. Limit is ${limit}. Please upgrade to upload more.`);
+  // If we passed the check, increment pending writes
+  if (pendingWrites) {
+    pendingWrites.set(userID, currentPending + 1);
   }
 }
 

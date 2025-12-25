@@ -67,16 +67,17 @@ describe('Queue Processing Benchmark', () => {
         vi.clearAllMocks();
     });
 
-    it('should process items in parallel', async () => {
+    it('should process items in parallel and cache tokens', async () => {
         const itemCount = 20;
         const delayPerItem = 50; // ms
+        const uniqueUsers = 2; // Only 2 users for 20 items
 
         // Create mock docs
         const docs = Array.from({ length: itemCount }).map((_, i) => ({
             id: `doc-${i}`,
             ref: { update: mockUpdate },
             data: () => ({
-                userName: `user-${i}`,
+                userName: `user-${i % uniqueUsers}`, // Cycle through users
                 workoutID: `workout-${i}`,
                 retryCount: 0
             })
@@ -93,16 +94,18 @@ describe('Queue Processing Benchmark', () => {
         };
         mockFirestore.collection.mockReturnValue(mockQuery);
 
-        // Mock token query (used inside parseWorkoutQueueItemForServiceName)
+        // Mock token query
+        const mockTokenGet = vi.fn().mockResolvedValue({
+            size: 1,
+            docs: [{
+                id: 'token-doc',
+                ref: { parent: { parent: { id: 'user-id' } } }
+            }]
+        });
+
         mockFirestore.collectionGroup.mockReturnValue({
             where: vi.fn().mockReturnValue({
-                get: vi.fn().mockResolvedValue({
-                    size: 1,
-                    docs: [{
-                        id: 'token-doc',
-                        ref: { parent: { parent: { id: 'user-id' } } }
-                    }]
-                })
+                get: mockTokenGet
             })
         });
 
@@ -119,13 +122,11 @@ describe('Queue Processing Benchmark', () => {
         const duration = end - start;
         console.timeEnd('Benchmark');
 
-        console.log(`Processed ${itemCount} items in ${duration}ms (Delay per item: ${delayPerItem}ms)`);
+        console.log(`Benchmark with caching: ${duration}ms`);
+        // With item delay of 50ms and 20 parallel items, it should take ~50-100ms
+        expect(duration).toBeLessThan(500);
 
-        // If sequential: 20 * 50 = 1000ms minimum
-        // If parallel (limit > 1): significantly less
-
-        // Assertions will depend on implementation
-        // For now, we just want to see the time.
-        // Once optimized, we expect duration < (itemCount * delayPerItem / 2)
+        // Verify that token fetch was only called for each unique user
+        expect(mockTokenGet).toHaveBeenCalledTimes(uniqueUsers);
     });
 });

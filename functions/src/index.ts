@@ -67,9 +67,13 @@ export {
 
 export {
   insertCOROSAPIWorkoutDataToQueue,
+} from './coros/queue';
+
+export {
   parseCOROSAPIHistoryImportWorkoutQueue,
   parseCOROSAPIWorkoutQueue,
-} from './coros/queue';
+} from './queue';
+
 
 // Suunto Queue & History
 export {
@@ -78,15 +82,23 @@ export {
 
 export {
   insertSuuntoAppActivityToQueue,
+} from './suunto/queue';
+
+export {
   parseSuuntoAppActivityQueue,
   parseSuuntoAppHistoryImportActivityQueue,
-} from './suunto/queue';
+} from './queue';
+
 
 // Garmin Queue & Backfill
 export {
   insertGarminHealthAPIActivityFileToQueue,
-  parseGarminHealthAPIActivityQueue,
 } from './garmin/queue';
+
+export {
+  parseGarminHealthAPIActivityQueue,
+} from './queue';
+
 
 export {
   backfillHealthAPIActivities,
@@ -99,6 +111,7 @@ export { refreshSuuntoAppRefreshTokens } from './suunto/tokens';
 // Suunto Utils
 export { stWorkoutDownloadAsFit } from './suunto/st-workout-download-as-fit';
 export { importActivityToSuuntoApp } from './suunto/activities';
+export { importRouteToSuuntoApp } from './suunto/routes';
 
 // Events
 export { cleanupEventFile } from './events/cleanup';

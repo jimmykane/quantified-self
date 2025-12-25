@@ -1,5 +1,7 @@
+import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 import pLimit from 'p-limit';
+import { increaseRetryCountForQueueItem, updateToProcessed } from './queue-utils';
 import { processGarminHealthAPIActivityQueueItem } from './garmin/queue';
 import {
   COROSAPIWorkoutQueueItemInterface,
@@ -20,57 +22,7 @@ import { getTokenData } from './tokens';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 
-export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterface, error: Error, incrementBy = 1, bulkWriter?: admin.firestore.BulkWriter) {
-  if (!queueItem.ref) {
-    throw new Error(`No docuemnt reference supplied for queue item ${queueItem.id}`);
-  }
-  queueItem.retryCount += incrementBy;
-  queueItem.totalRetryCount = queueItem.totalRetryCount || 0;
-  queueItem.totalRetryCount += incrementBy;
-  queueItem.errors = queueItem.errors || [];
-  queueItem.errors.push({
-    error: error.message,
-    atRetryCount: queueItem.totalRetryCount,
-    date: (new Date()).getTime(),
-  });
 
-  try {
-    const ref = queueItem.ref;
-    queueItem.ref = undefined;
-    const updateData = JSON.parse(JSON.stringify(queueItem));
-    if (bulkWriter) {
-      void bulkWriter.update(ref, updateData);
-    } else {
-      await ref.update(updateData);
-    }
-    queueItem.ref = ref;
-    console.info(`Updated retry count for ${queueItem.id} to ${queueItem.retryCount}`);
-  } catch {
-    console.error(new Error(`Could not update retry count on ${queueItem.id}`));
-  }
-}
-
-export async function updateToProcessed(queueItem: QueueItemInterface, bulkWriter?: admin.firestore.BulkWriter) {
-  if (!queueItem.ref) {
-    throw new Error(`No docuemnt reference supplied for queue item ${queueItem.id}`);
-  }
-  try {
-    const ref = queueItem.ref;
-    queueItem.ref = undefined;
-    const updateData = {
-      'processed': true,
-      'processedAt': (new Date()).getTime(),
-    };
-    if (bulkWriter) {
-      void bulkWriter.update(ref, updateData);
-    } else {
-      await ref.update(updateData);
-    }
-    console.log(`Updated to processed  ${queueItem.id}`);
-  } catch {
-    console.error(new Error(`Could not update processed state for ${queueItem.id}`));
-  }
-}
 
 export async function parseQueueItems(serviceName: ServiceNames, fromHistoryQueue = false) {
   const RETRY_COUNT = 10;
@@ -87,6 +39,9 @@ export async function parseQueueItems(serviceName: ServiceNames, fromHistoryQueu
 
   const bulkWriter = admin.firestore().bulkWriter();
   const limit = pLimit(20);
+  const tokenCache = new Map<string, Promise<admin.firestore.QuerySnapshot>>();
+  const usageCache = new Map<string, Promise<{ role: string, limit: number, currentCount: number }>>();
+  const pendingWrites = new Map<string, number>();
 
   const promises = querySnapshot.docs.map(async (queueItem) => {
     return limit(async () => {
@@ -98,26 +53,27 @@ export async function parseQueueItems(serviceName: ServiceNames, fromHistoryQueu
             await parseWorkoutQueueItemForServiceName(serviceName, <COROSAPIWorkoutQueueItemInterface>Object.assign({
               id: queueItem.id,
               ref: queueItem.ref,
-            }, queueItem.data()), bulkWriter);
+            }, queueItem.data()), bulkWriter, tokenCache, usageCache, pendingWrites);
             break;
           case ServiceNames.SuuntoApp:
             await parseWorkoutQueueItemForServiceName(serviceName, <SuuntoAppWorkoutQueueItemInterface>Object.assign({
               id: queueItem.id,
               ref: queueItem.ref,
-            }, queueItem.data()), bulkWriter);
+            }, queueItem.data()), bulkWriter, tokenCache, usageCache, pendingWrites);
             break;
           case ServiceNames.GarminHealthAPI:
             await processGarminHealthAPIActivityQueueItem(Object.assign({
               id: queueItem.id,
               ref: queueItem.ref,
-            }, <GarminHealthAPIActivityQueueItemInterface>queueItem.data()), bulkWriter);
+            }, <GarminHealthAPIActivityQueueItemInterface>queueItem.data()), bulkWriter, tokenCache, usageCache, pendingWrites);
             break;
         }
         count++;
         console.log(`Parsed queue item ${count}/${querySnapshot.size} and id ${queueItem.id}`);
         // console.timeLog('ParseQueueItems'); // timeLog might be noisy in parallel
-      } catch (e: any) {
-        console.error(new Error(`Error parsing queue item ${queueItem.id}: ${e.message}`));
+      } catch (e: unknown) {
+        const error = e as Error;
+        console.error(new Error(`Error parsing queue item ${queueItem.id}: ${error.message}`));
       }
     });
   });
@@ -128,6 +84,50 @@ export async function parseQueueItems(serviceName: ServiceNames, fromHistoryQueu
   console.timeEnd('ParseQueueItems');
   console.log(`Parsed ${count} queue items out of ${querySnapshot.size}`);
 }
+
+const TIMEOUT_IN_SECONDS = 300;
+const MEMORY = '2GB';
+
+export const parseGarminHealthAPIActivityQueue = functions.region('europe-west2').runWith({
+  timeoutSeconds: TIMEOUT_IN_SECONDS,
+  memory: MEMORY,
+  maxInstances: 1,
+}).pubsub.schedule('every 20 minutes').onRun(async () => {
+  await parseQueueItems(ServiceNames.GarminHealthAPI);
+});
+
+export const parseCOROSAPIWorkoutQueue = functions.region('europe-west2').runWith({
+  timeoutSeconds: TIMEOUT_IN_SECONDS,
+  memory: MEMORY,
+  maxInstances: 1,
+}).pubsub.schedule('every 20 minutes').onRun(async () => {
+  await parseQueueItems(ServiceNames.COROSAPI);
+});
+
+export const parseCOROSAPIHistoryImportWorkoutQueue = functions.region('europe-west2').runWith({
+  timeoutSeconds: TIMEOUT_IN_SECONDS,
+  memory: MEMORY,
+  maxInstances: 1,
+}).pubsub.schedule('every 20 minutes').onRun(async () => {
+  await parseQueueItems(ServiceNames.COROSAPI, true);
+});
+
+export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runWith({
+  timeoutSeconds: TIMEOUT_IN_SECONDS,
+  memory: MEMORY,
+  maxInstances: 1,
+}).pubsub.schedule('every 20 minutes').onRun(async () => {
+  await parseQueueItems(ServiceNames.SuuntoApp);
+});
+
+export const parseSuuntoAppHistoryImportActivityQueue = functions.region('europe-west2').runWith({
+  timeoutSeconds: TIMEOUT_IN_SECONDS,
+  memory: MEMORY,
+  maxInstances: 1,
+}).pubsub.schedule('every 20 minutes').onRun(async () => {
+  await parseQueueItems(ServiceNames.SuuntoApp, true);
+});
+
 
 
 /**
@@ -202,24 +202,53 @@ export function getWorkoutForService(
 }
 
 
-export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNames, queueItem: COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter) {
+export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNames, queueItem: COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>) {
   console.log(`Processing queue item ${queueItem.id} at retry count ${queueItem.retryCount}`);
   // queueItem is never undefined for query queueItem snapshots
-  let tokenQuerySnapshots;
-  try {
-    switch (serviceName) {
-      default:
-        throw new Error('Not Implemented');
-      case ServiceNames.COROSAPI:
-        tokenQuerySnapshots = await admin.firestore().collectionGroup('tokens').where('openId', '==', (queueItem as COROSAPIWorkoutQueueItemInterface).openId).get();
-        break;
-      case ServiceNames.SuuntoApp:
-        tokenQuerySnapshots = await admin.firestore().collectionGroup('tokens').where('userName', '==', (queueItem as SuuntoAppWorkoutQueueItemInterface).userName).get();
-        break;
+  let tokenQuerySnapshots: admin.firestore.QuerySnapshot | undefined;
+  const userKey = `${serviceName}:${(queueItem as COROSAPIWorkoutQueueItemInterface).openId || (queueItem as SuuntoAppWorkoutQueueItemInterface).userName}`;
+
+  if (tokenCache) {
+    let tokenPromise = tokenCache.get(userKey);
+    if (!tokenPromise) {
+      tokenPromise = (async () => {
+        switch (serviceName) {
+          default:
+            throw new Error('Not Implemented');
+          case ServiceNames.COROSAPI:
+            return admin.firestore().collectionGroup('tokens').where('openId', '==', (queueItem as COROSAPIWorkoutQueueItemInterface).openId).get();
+          case ServiceNames.SuuntoApp:
+            return admin.firestore().collectionGroup('tokens').where('userName', '==', (queueItem as SuuntoAppWorkoutQueueItemInterface).userName).get();
+        }
+      })();
+      tokenCache.set(userKey, tokenPromise);
     }
-  } catch (e: any) {
-    console.error(e);
-    return increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
+    try {
+      tokenQuerySnapshots = await tokenPromise;
+    } catch (e: unknown) {
+      const error = e as Error;
+      console.error(error);
+      // If the promise fails, we might want to remove it from cache so next ones can retry,
+      // but for this batch execution it might be better to just fail.
+      return increaseRetryCountForQueueItem(queueItem, error, 1, bulkWriter);
+    }
+  } else {
+    try {
+      switch (serviceName) {
+        default:
+          throw new Error('Not Implemented');
+        case ServiceNames.COROSAPI:
+          tokenQuerySnapshots = await admin.firestore().collectionGroup('tokens').where('openId', '==', (queueItem as COROSAPIWorkoutQueueItemInterface).openId).get();
+          break;
+        case ServiceNames.SuuntoApp:
+          tokenQuerySnapshots = await admin.firestore().collectionGroup('tokens').where('userName', '==', (queueItem as SuuntoAppWorkoutQueueItemInterface).userName).get();
+          break;
+      }
+    } catch (e: unknown) {
+      const error = e as Error;
+      console.error(error);
+      return increaseRetryCountForQueueItem(queueItem, error, 1, bulkWriter);
+    }
   }
 
   // If there is no token for the user, give them a few chances to reconnect
@@ -296,13 +325,13 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         case ServiceNames.COROSAPI: {
           const corosWorkoutQueueItem = queueItem as COROSAPIWorkoutQueueItemInterface;
           const corosMetaData = new COROSAPIEventMetaData(corosWorkoutQueueItem.workoutID, corosWorkoutQueueItem.openId, corosWorkoutQueueItem.FITFileURI, new Date());
-          await setEvent(parentID, generateIDFromParts([corosWorkoutQueueItem.openId, corosWorkoutQueueItem.workoutID, corosWorkoutQueueItem.FITFileURI]), event, corosMetaData, { data: result, extension: 'fit' });
+          await setEvent(parentID, generateIDFromParts([corosWorkoutQueueItem.openId, corosWorkoutQueueItem.workoutID, corosWorkoutQueueItem.FITFileURI]), event, corosMetaData, { data: result, extension: 'fit' }, bulkWriter, usageCache, pendingWrites);
           break;
         }
         case ServiceNames.SuuntoApp: {
           const suuntoWorkoutQueueItem = queueItem as SuuntoAppWorkoutQueueItemInterface;
           const suuntoMetaData = new SuuntoAppEventMetaData(suuntoWorkoutQueueItem.workoutID, suuntoWorkoutQueueItem.userName, new Date());
-          await setEvent(parentID, generateIDFromParts([suuntoWorkoutQueueItem.userName, suuntoWorkoutQueueItem.workoutID]), event, suuntoMetaData, { data: result, extension: 'fit' });
+          await setEvent(parentID, generateIDFromParts([suuntoWorkoutQueueItem.userName, suuntoWorkoutQueueItem.workoutID]), event, suuntoMetaData, { data: result, extension: 'fit' }, bulkWriter, usageCache, pendingWrites);
         }
       }
       console.timeEnd('InsertEvent');

@@ -1,11 +1,8 @@
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
-import {
-  addToQueueForGarmin,
-  increaseRetryCountForQueueItem,
-  parseQueueItems,
-  updateToProcessed,
-} from '../queue';
+import { addToQueueForGarmin } from '../queue';
+import { increaseRetryCountForQueueItem, updateToProcessed } from '../queue-utils';
+
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { generateIDFromParts, setEvent, UsageLimitExceededError } from '../utils';
 import { GarminHealthAPIAuth } from './auth/auth';
@@ -65,18 +62,29 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
 });
 
 
-export const parseGarminHealthAPIActivityQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_IN_SECONDS,
-  memory: MEMORY,
-  maxInstances: 1,
-}).pubsub.schedule('every 20 minutes').onRun(async () => {
-  await parseQueueItems(ServiceNames.GarminHealthAPI);
-});
 
-export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminHealthAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter) {
+
+export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminHealthAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>) {
   console.log(`Processing queue item ${queueItem.id} and userID ${queueItem.userID} at retry count ${queueItem.retryCount}`);
   // queueItem is never undefined for query queueItem snapshots
-  const tokenQuerySnapshots = await admin.firestore().collection('garminHealthAPITokens').where('userID', '==', queueItem['userID']).get();
+  let tokenQuerySnapshots: admin.firestore.QuerySnapshot | undefined;
+  const userKey = `GarminHealthAPI:${queueItem['userID']}`;
+
+  if (tokenCache) {
+    let tokenPromise = tokenCache.get(userKey);
+    if (!tokenPromise) {
+      tokenPromise = admin.firestore().collection('garminHealthAPITokens').where('userID', '==', queueItem['userID']).get();
+      tokenCache.set(userKey, tokenPromise);
+    }
+    try {
+      tokenQuerySnapshots = await tokenPromise;
+    } catch (e: any) {
+      console.error(e);
+      return increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
+    }
+  } else {
+    tokenQuerySnapshots = await admin.firestore().collection('garminHealthAPITokens').where('userID', '==', queueItem['userID']).get();
+  }
 
   if (!tokenQuerySnapshots.size) {
     console.warn(`No token found for queue item ${queueItem.id} and userID ${queueItem.userID} increasing count just in case`);
@@ -170,7 +178,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
       queueItem.manual || false,
       queueItem.startTimeInSeconds || 0, // 0 is ok here I suppose
       new Date());
-    await setEvent(tokenQuerySnapshots.docs[0].id, generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()]), event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase() });
+    await setEvent(tokenQuerySnapshots.docs[0].id, generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()]), event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase() }, bulkWriter, usageCache, pendingWrites);
     console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${tokenQuerySnapshots.docs[0].id} and token user ${serviceToken.userID}`);
     // For each ended so we can set it to processed
     return updateToProcessed(queueItem, bulkWriter);

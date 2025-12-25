@@ -1,5 +1,6 @@
 import * as functions from 'firebase-functions/v1';
-import { addToQueueForSuunto, parseQueueItems } from '../queue';
+import { addToQueueForSuunto } from '../queue';
+
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { config } from '../config';
 
@@ -39,18 +40,4 @@ export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').r
   res.status(200).send();
 });
 
-export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_IN_SECONDS,
-  memory: MEMORY,
-  maxInstances: 1,
-}).pubsub.schedule('every 20 minutes').onRun(async (context) => {
-  await parseQueueItems(ServiceNames.SuuntoApp);
-});
 
-export const parseSuuntoAppHistoryImportActivityQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_IN_SECONDS,
-  memory: MEMORY,
-  maxInstances: 1,
-}).pubsub.schedule('every 20 minutes').onRun(async (context) => {
-  await parseQueueItems(ServiceNames.SuuntoApp, true);
-});

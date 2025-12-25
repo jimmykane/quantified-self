@@ -1,5 +1,6 @@
 import * as functions from 'firebase-functions/v1';
-import { addToQueueForCOROS, parseQueueItems } from '../queue';
+import { addToQueueForCOROS } from '../queue';
+
 import { SERVICE_NAME } from './constants';
 import { COROSAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 import { generateIDFromParts } from '../utils';
@@ -58,21 +59,7 @@ export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2')
   res.status(200).send(SUCCESS_RESPONSE);
 });
 
-export const parseCOROSAPIWorkoutQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_IN_SECONDS,
-  memory: MEMORY,
-  maxInstances: 1,
-}).pubsub.schedule('every 20 minutes').onRun(async (context) => {
-  await parseQueueItems(SERVICE_NAME);
-});
 
-export const parseCOROSAPIHistoryImportWorkoutQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_IN_SECONDS,
-  memory: MEMORY,
-  maxInstances: 1,
-}).pubsub.schedule('every 20 minutes').onRun(async (context) => {
-  await parseQueueItems(SERVICE_NAME, true);
-});
 
 export function convertCOROSWorkoutsToQueueItems(workouts: any[], openId?: string): COROSAPIWorkoutQueueItemInterface[] {
   // find the triathlon
