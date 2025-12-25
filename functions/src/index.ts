@@ -33,7 +33,11 @@ if (admin.apps.length === 0) {
   }
 }
 
-admin.firestore().settings({ ignoreUndefinedProperties: true });
+try {
+  admin.firestore().settings({ ignoreUndefinedProperties: true });
+} catch (e) {
+  console.warn('Firestore settings already set or could not be set:', e);
+}
 
 // Coros Auth
 export {
