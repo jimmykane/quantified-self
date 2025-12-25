@@ -88,6 +88,7 @@ async function cleanupFirestore() {
     const args = process.argv.slice(2);
     const dryRun = args.includes('--dry-run');
     const force = args.includes('--force');
+    const disconnectOnly = args.includes('--disconnect-only');
     const collectionsArg = args.find(arg => arg.startsWith('--collections='));
 
     let targetCollections = COLLECTION_GROUPS;
@@ -103,6 +104,7 @@ async function cleanupFirestore() {
     console.log(`=============================================`);
     console.log(`Firestore Cleanup Script`);
     console.log(`Mode: ${dryRun ? 'DRY RUN' : 'EXECUTION'}`);
+    console.log(`Disconnect Only: ${disconnectOnly}`);
     console.log(`Collections: ${targetCollections.join(', ')}`);
     console.log(`=============================================`);
 
@@ -112,7 +114,10 @@ async function cleanupFirestore() {
     }
 
     if (!dryRun && !force) {
-        const proceed = await confirm('DANGER: This will permanently delete data. Proceed?');
+        const message = disconnectOnly
+            ? 'This will deauthorize users from selected services. Proceed?'
+            : 'DANGER: This will permanently delete data. Proceed?';
+        const proceed = await confirm(message);
         if (!proceed) {
             console.log('Operation cancelled.');
             process.exit(0);
@@ -125,6 +130,11 @@ async function cleanupFirestore() {
         if (DEAUTH_CONFIG[collection]) {
             await deauthorize(collection, dryRun);
         }
+    }
+
+    if (disconnectOnly) {
+        console.log('\nDisconnect-only mode active. Skipping deletion phase.');
+        return;
     }
 
     // 2. Deletion phase

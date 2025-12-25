@@ -115,6 +115,19 @@ describe('Cleanup Firestore Script', () => {
         expect(deauthorizeServiceForUser).toHaveBeenCalled();
     });
 
+    it('should operate in disconnect-only mode skipping deletion', async () => {
+        process.argv = ['node', 'script.ts', '--disconnect-only', '--force'];
+
+        const db = admin.firestore();
+        const bulkWriter = db.bulkWriter();
+
+        await cleanupFirestore();
+
+        // Should deauth (assuming all collections default)
+        // But should NOT delete
+        expect(bulkWriter.delete).not.toHaveBeenCalled();
+    });
+
     it('should stop and exit if cancelled (when not using --force)', async () => {
         process.argv = ['node', 'script.ts', '--collections=streams'];
 
