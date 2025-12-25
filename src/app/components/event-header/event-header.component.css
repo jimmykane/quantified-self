@@ -1,56 +1,62 @@
 mat-card-subtitle {
   margin-bottom: 0;
-  /* color: unset !important; */
 }
 
-/* Target specifically the avatar container */
+:host {
+  display: block;
+  margin-bottom: 24px;
+}
+
+/* Use the global .app-header-card class instead of local styles */
+.custom-card-header {
+  /* Inherits from global .app-header-card */
+}
+
+/* Avatar/Icon area */
 .header-avatar {
-  text-align: center;
-  height: 40px;
-  width: 40px;
+  flex-shrink: 0;
+  width: 80px;
+  /* Match settings avatar container if we want sizing parity, or keep auto */
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-right: 0;
-  /* spacing handled by gap */
 }
 
-.custom-card-header {
-  display: flex;
-  align-items: center;
-  /* Vertically center everything */
-  gap: 1rem;
-  /* Space between avatars, title, and stats */
-  flex-wrap: wrap;
-  /* Allow wrapping on small screens */
-  padding-top: 0;
-  margin-bottom: 0.5rem;
-}
-
+/* Title area */
 .header-title {
-  font-size: 1.1rem;
-  font-weight: 400;
-  margin: 0;
-  white-space: nowrap;
-  /* Keep date on one line */
+  flex-grow: 1;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .date-display {
+  font-size: 1.5rem;
+  /* Match settings h2 size */
+  font-weight: 500;
+  color: var(--mat-app-on-surface);
+  letter-spacing: -0.01em;
   display: flex;
   align-items: baseline;
-  gap: 0.4rem;
+  gap: 8px;
+}
+
+.date-display b {
+  font-weight: 700;
 }
 
 .time-separator {
-  font-size: 0.8em;
-  opacity: 0.6;
+  font-size: 1rem;
+  color: var(--mat-app-on-surface-variant);
+  font-weight: 400;
+  margin: 0 4px;
 }
 
-
-mat-form-field {
-  width: 100%;
+/* Actions Container */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Mobile Responsiveness */
@@ -58,20 +64,17 @@ mat-form-field {
   .custom-card-header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.5rem;
+    gap: 16px;
+    padding: 20px;
   }
 
-
-  /* Ensure actions align properly on mobile */
-  ::ng-deep app-event-actions {
+  .header-actions {
     width: 100%;
-    display: flex;
     justify-content: flex-end;
+    margin-top: 8px;
   }
-}
 
-.header-stats-row {
-  margin-top: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  .header-avatar {
+    width: auto;
+  }
 }

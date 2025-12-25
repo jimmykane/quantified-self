@@ -1,22 +1,26 @@
 <!-- Event details -->
-<div class="custom-card-header">
-  <div class="header-avatar">
-    <app-privacy-icon [privacy]="event.privacy" (click)="toggleEventPrivacy()"></app-privacy-icon>
-  </div>
-  <div class="header-title">
-    <span class="date-display">
-      <b>{{ event.startDate | date:"d MMM yyyy" }}</b>
-      <span class="time-separator">at</span>
-      {{ event.startDate | date:"shortTime" }}
-    </span>
+<div class="custom-card-header app-header-card">
+  <div class="header-content">
+    <div class="header-avatar">
+      <app-privacy-icon [privacy]="event.privacy" (click)="toggleEventPrivacy()"></app-privacy-icon>
+    </div>
+    <div class="header-info">
+      <span class="date-display">
+        <b>{{ event.startDate | date:"d MMM yyyy" }}</b>
+        <span class="time-separator">at</span>
+        {{ event.startDate | date:"shortTime" }}
+      </span>
+    </div>
   </div>
 
-  @if (isOwner) {
-  <button mat-icon-button (click)="openEditDetails()">
-    <mat-icon>edit</mat-icon>
-  </button>
-  }
-  @if (isOwner) {
-  <app-event-actions [user]="user" [event]="event" [showDownloadOriginal]="true" align="end"></app-event-actions>
-  }
+  <div class="header-actions">
+    @if (isOwner) {
+    <button mat-icon-button (click)="openEditDetails()">
+      <mat-icon>edit</mat-icon>
+    </button>
+    }
+    @if (isOwner) {
+    <app-event-actions [user]="user" [event]="event" [showDownloadOriginal]="true" align="end"></app-event-actions>
+    }
+  </div>
 </div>

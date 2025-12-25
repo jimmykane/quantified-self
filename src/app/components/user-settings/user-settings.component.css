@@ -9,61 +9,14 @@
   --section-spacing: 24px;
 }
 
-/* User Profile Header Card */
-.user-profile-header .header-content {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-}
-
-.user-profile-header .avatar-container {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background-size: cover;
-  background-position: center;
-  flex-shrink: 0;
-  border: 2px solid var(--primary-color, #3f51b5);
-}
-
-.user-profile-header .user-info {
-  flex: 1;
-}
+/* User Profile Header container inherits from global .app-header-card */
+/* Removed explicit inner styles that are now global */
 
 .user-profile-header .name-row {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 4px;
-}
-
-.user-profile-header .name-row h2 {
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 500;
-  color: #333;
-}
-
-.dark-theme .user-profile-header .name-row h2 {
-  color: #fff;
-}
-
-.user-profile-header .user-id {
-  margin: 0 0 4px 0;
-  font-size: 0.8rem;
-  opacity: 0.6;
-  font-family: monospace;
-}
-
-.user-profile-header .user-bio {
-  margin: 0;
-  font-size: 0.95rem;
-  line-height: 1.4;
-  opacity: 0.8;
-}
-
-.user-profile-header .actions {
-  margin-left: auto;
 }
 
 @media (max-width: 600px) {

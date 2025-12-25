@@ -2,12 +2,12 @@
 
   <!-- Global Profile Header -->
   <div style="padding: 32px 40px 0 40px; margin: 0 auto; max-width: 900px;">
-    <mat-card class="settings-card user-profile-header">
+    <div class="user-profile-header app-header-card">
       <div class="header-content">
-        <div class="avatar-container"
+        <div class="header-avatar"
           [style.backgroundImage]="'url('+ (user.photoURL ? user.photoURL :  'https://ui-avatars.com/api/?name=' + (this.user.displayName || 'Guest') ) +')'">
         </div>
-        <div class="user-info">
+        <div class="header-info">
           <div class="name-row">
             <app-privacy-icon [privacy]="user.privacy"></app-privacy-icon>
             <h2>{{ user.displayName || 'Guest' }}</h2>
@@ -17,11 +17,11 @@
           <p class="user-bio">{{ user.description }}</p>
           }
         </div>
-        <div class="actions">
-          <app-user-actions [user]="user"></app-user-actions>
-        </div>
       </div>
-    </mat-card>
+      <div class="header-actions">
+        <app-user-actions [user]="user"></app-user-actions>
+      </div>
+    </div>
   </div>
 
   <!-- Horizontal Navigation -->
