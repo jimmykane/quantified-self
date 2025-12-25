@@ -133,7 +133,8 @@ describe('processGarminHealthAPIActivityQueueItem', () => {
         expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
             queueItem,
             expect.any(UsageLimitExceededError),
-            20 // Should abort retries
+            20, // Should abort retries
+            undefined
         );
     });
 
@@ -164,7 +165,8 @@ describe('processGarminHealthAPIActivityQueueItem', () => {
         expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
             queueItem,
             expect.any(Error),
-            20
+            20,
+            undefined
         );
     });
 });
