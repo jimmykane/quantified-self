@@ -1,9 +1,10 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
+import { ALLOWED_CORS_ORIGINS } from '../utils';
 
 export const restoreUserClaims = onCall({
     region: 'europe-west2',
-    cors: true
+    cors: ALLOWED_CORS_ORIGINS
 }, async (request) => {
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
