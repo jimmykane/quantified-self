@@ -7,7 +7,7 @@ import { User } from '@sports-alliance/sports-lib';
 import { take } from 'rxjs/operators';
 import { AppUserService } from '../../services/app.user.service';
 import * as Sentry from '@sentry/browser';
-import { Auth, signInWithCustomToken, authState } from '@angular/fire/auth';
+import { Auth, signInWithCustomToken, authState, OAuthProvider, signInWithPopup } from '@angular/fire/auth';
 import { Analytics, logEvent } from '@angular/fire/analytics';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
@@ -54,7 +54,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       let email = this.authService.localStorageService.getItem('emailForSignIn');
       if (!email) {
         // User opened the link on a different device. To prevent session fixation, ask the user to provide the associated email again.
-        email = window.prompt('Please provide your email for confirmation');
+        email = window.prompt('Please provide your email for confirmation') || '';
       }
 
       if (email) {
@@ -119,10 +119,43 @@ export class LoginComponent implements OnInit, OnDestroy {
     };
 
     // Helper to handle errors
-    const handleError = (e: any) => {
+    const handleError = async (e: any) => {
+      if (e.code === 'auth/account-exists-with-different-credential') {
+        const email = e.customData?.email;
+        const pendingCredential = OAuthProvider.credentialFromError(e);
+
+        if (email && pendingCredential) {
+          try {
+            const methods = await this.authService.fetchSignInMethods(email);
+            if (methods.length > 0) {
+              const providerId = methods[0]; // Usually the first one is what we want
+              const providerName = providerId.split('.')[0]; // simple name like 'google' or 'github'
+
+              const confirmLink = window.confirm(
+                `An account already exists with the email ${email} using ${providerName}. ` +
+                `Would you like to sign in with ${providerName} to link your accounts?`
+              );
+
+              if (confirmLink) {
+                const provider = this.authService.getProviderForId(providerId);
+                const result = await signInWithPopup(this.auth, provider as any);
+                if (result.user) {
+                  await this.authService.linkCredential(result.user, pendingCredential);
+                  this.snackBar.open('Accounts successfully linked!', 'Close', { duration: 5000 });
+                  return handleResult(result);
+                }
+              }
+            }
+          } catch (linkError: any) {
+            console.error('Account linking failed:', linkError);
+            this.snackBar.open(`Account linking failed: ${linkError.message}`, 'Close');
+          }
+        }
+      }
+
       Sentry.captureException(e);
-      this.snackBar.open(`Could not log in due to ${e} `, undefined, {
-        duration: 2000,
+      this.snackBar.open(`Could not log in due to ${e.message || e} `, undefined, {
+        duration: 5000,
       });
       this.isLoading = false;
     };
