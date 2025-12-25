@@ -244,7 +244,7 @@ export class AppEventService implements OnDestroy {
     return combineLatest(x).pipe(map(arrayOfArrays => arrayOfArrays.reduce((a, b) => a.concat(b), [])));
   }
 
-  public async writeAllEventData(user: User, event: AppEventInterface, originalFiles?: { data: any, extension: string, startDate?: Date }[] | { data: any, extension: string, startDate?: Date }) {
+  public async writeAllEventData(user: User, event: AppEventInterface, originalFiles?: { data: any, extension: string, startDate: Date }[] | { data: any, extension: string, startDate: Date }) {
     // 1. Check Pro Status
     const userService = this.injector.get(AppUserService);
     const isPro = await userService.isPro();
