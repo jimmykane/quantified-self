@@ -1,0 +1,95 @@
+.maintenance-container {
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #ffffff;
+    text-align: center;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+.maintenance-content {
+    max-width: 600px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+}
+
+.maintenance-logo {
+    width: 120px;
+    height: 120px;
+    opacity: 0.9;
+}
+
+.maintenance-title {
+    margin: 0;
+    font-family: 'QSFont', sans-serif;
+    font-size: 48px;
+    font-weight: 300;
+    color: #1a1a1a;
+    letter-spacing: -1px;
+}
+
+.maintenance-message {
+    margin: 0;
+    font-family: 'QSFont', sans-serif;
+    font-size: 18px;
+    font-weight: 400;
+    color: #666;
+    line-height: 1.6;
+    white-space: pre-line;
+}
+
+// Shine text effect
+.shine-effect {
+    background: linear-gradient(90deg,
+            #1a1a1a 0%,
+            #1a1a1a 40%,
+            #999 50%,
+            #1a1a1a 60%,
+            #1a1a1a 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shine 3s ease-in-out infinite;
+}
+
+@keyframes shine {
+    0% {
+        background-position: 100% 50%;
+    }
+
+    100% {
+        background-position: -100% 50%;
+    }
+}
+
+// Dark theme support
+:host-context(.dark-theme) {
+    .maintenance-container {
+        background-color: #121212;
+    }
+
+    .maintenance-title {
+        color: #fff;
+        background: linear-gradient(90deg,
+                #fff 0%,
+                #fff 40%,
+                #666 50%,
+                #fff 60%,
+                #fff 100%);
+        background-size: 200% 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        animation: shine 3s ease-in-out infinite;
+    }
+
+    .maintenance-message {
+        color: #aaa;
+    }
+}

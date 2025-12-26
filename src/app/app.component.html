@@ -1,78 +1,85 @@
-<ng-container *ngIf="authState !== null; else loadingApp">
-  <div *ngIf="gracePeriodUntil$ | async as gracePeriodUntil" class="grace-period-banner mat-typography">
-    <mat-icon inline>warning</mat-icon>
-    <span>
-      Your Pro plan has ended. You have until <strong>{{ gracePeriodUntil | date }}</strong> before your device sync is
-      disconnected and newest activities are deleted.
-      <a routerLink="/pricing" color="accent">Upgrade now</a> to keep your data.
-    </span>
-  </div>
+<ng-container *ngIf="!(maintenanceMode$ | async); else maintenanceTemplate">
+  <ng-container *ngIf="authState !== null; else loadingApp">
+    <div *ngIf="gracePeriodUntil$ | async as gracePeriodUntil" class="grace-period-banner mat-typography">
+      <mat-icon inline>warning</mat-icon>
+      <span>
+        Your Pro plan has ended. You have until <strong>{{ gracePeriodUntil | date }}</strong> before your device sync
+        is
+        disconnected and newest activities are deleted.
+        <a routerLink="/pricing" color="accent">Upgrade now</a> to keep your data.
+      </span>
+    </div>
 
-  @if (loading) {
-  <mat-progress-bar mode="indeterminate" color="accent"></mat-progress-bar>
-  }
-
-  <style>
-    .no-margin-top {
-      margin-top: 0 !important;
+    @if (loading) {
+    <mat-progress-bar mode="indeterminate" color="accent"></mat-progress-bar>
     }
 
-    .fill-space {
-      flex: 1 1 auto;
-    }
+    <style>
+      .no-margin-top {
+        margin-top: 0 !important;
+      }
 
-    .right {
-      margin-left: 10px;
-    }
-  </style>
+      .fill-space {
+        flex: 1 1 auto;
+      }
 
-  <!-- Only show navigation if onboarding is completed OR user is not logged in -->
-  <nav *ngIf="showNavigation" mat-tab-nav-bar [tabPanel]="tabPanel" class="mat-typography custom-nav-bar">
-    <button mat-icon-button (click)="toggleSidenav()" class="hamburger-link">
-      <mat-icon class="larger_icon">menu</mat-icon>
-    </button>
+      .right {
+        margin-left: 10px;
+      }
+    </style>
 
-    <mat-icon class="app-icon header-logo" svgIcon="logo" (click)="onLogoClick()"></mat-icon>
+    <!-- Only show navigation if onboarding is completed OR user is not logged in -->
+    <nav *ngIf="showNavigation" mat-tab-nav-bar [tabPanel]="tabPanel" class="mat-typography custom-nav-bar">
+      <button mat-icon-button (click)="toggleSidenav()" class="hamburger-link">
+        <mat-icon class="larger_icon">menu</mat-icon>
+      </button>
 
-    <span class="fill-space"></span>
+      <mat-icon class="app-icon header-logo" svgIcon="logo" (click)="onLogoClick()"></mat-icon>
 
-    @if (authState === null && title && title !== 'Dashboard' && title !== 'Login') {
-    <button mat-flat-button class="right" color="accent" disabled>
-      Loading
-    </button>
-    }
-    @if (authState === true && title && title !== 'Dashboard') {
-    <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);">
-      My dashboard
-    </button>
-    }
-    @if (authState === false && title && title !== 'Login') {
-    <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/login']);">
-      Login or Register
-    </button>
-    }
+      <span class="fill-space"></span>
 
-    @if (title && title === 'Dashboard' && authService.user$ | async; as user) {
-    <app-upload-activities class="right" [user]="user">
-    </app-upload-activities>
-    }
-  </nav>
+      @if (authState === null && title && title !== 'Dashboard' && title !== 'Login') {
+      <button mat-flat-button class="right" color="accent" disabled>
+        Loading
+      </button>
+      }
+      @if (authState === true && title && title !== 'Dashboard') {
+      <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);">
+        My dashboard
+      </button>
+      }
+      @if (authState === false && title && title !== 'Login') {
+      <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/login']);">
+        Login or Register
+      </button>
+      }
 
-  <mat-sidenav-container class="app-sidenav-container" [class.no-margin-top]="!onboardingCompleted">
-    <mat-sidenav #sidenav [mode]="'over'" *ngIf="showNavigation" [fixedInViewport]="true" [autoFocus]="false">
-      <app-sidenav></app-sidenav>
-    </mat-sidenav>
+      @if (title && title === 'Dashboard' && authService.user$ | async; as user) {
+      <app-upload-activities class="right" [user]="user">
+      </app-upload-activities>
+      }
+    </nav>
 
-    <mat-sidenav-content>
-      <mat-tab-nav-panel #tabPanel>
-        <div class="router-outlet-container" [@routeAnimations]="prepareRoute(outlet)">
-          <router-outlet #outlet="outlet"></router-outlet>
-        </div>
-      </mat-tab-nav-panel>
-    </mat-sidenav-content>
-  </mat-sidenav-container>
+    <mat-sidenav-container class="app-sidenav-container" [class.no-margin-top]="!onboardingCompleted">
+      <mat-sidenav #sidenav [mode]="'over'" *ngIf="showNavigation" [fixedInViewport]="true" [autoFocus]="false">
+        <app-sidenav></app-sidenav>
+      </mat-sidenav>
 
+      <mat-sidenav-content>
+        <mat-tab-nav-panel #tabPanel>
+          <div class="router-outlet-container" [@routeAnimations]="prepareRoute(outlet)">
+            <router-outlet #outlet="outlet"></router-outlet>
+          </div>
+        </mat-tab-nav-panel>
+      </mat-sidenav-content>
+    </mat-sidenav-container>
+
+  </ng-container>
 </ng-container>
+
+<ng-template #maintenanceTemplate>
+  <app-maintenance [message]="(maintenanceMessage$ | async) || ''"></app-maintenance>
+</ng-template>
 
 <ng-template #loadingApp>
   <div class="spinner-container">

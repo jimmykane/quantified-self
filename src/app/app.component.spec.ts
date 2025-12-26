@@ -4,6 +4,7 @@ import { AppComponent } from './app.component';
 import { AppAuthService } from './authentication/app.auth.service';
 import { AppSideNavService } from './services/side-nav/app-side-nav.service';
 import { AppUserService } from './services/app.user.service';
+import { AppRemoteConfigService } from './services/app.remote-config.service';
 import { MatIconRegistry } from '@angular/material/icon';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { Router, RouterModule, ActivatedRoute } from '@angular/router';
@@ -52,6 +53,11 @@ describe('AppComponent', () => {
         setTitle: vi.fn()
     };
 
+    const mockRemoteConfigService = {
+        getMaintenanceMode: vi.fn().mockReturnValue(of(false)),
+        getMaintenanceMessage: vi.fn().mockReturnValue(of(''))
+    };
+
     beforeEach(async () => {
         await TestBed.configureTestingModule({
             declarations: [AppComponent],
@@ -69,6 +75,7 @@ describe('AppComponent', () => {
                 { provide: MatIconRegistry, useValue: mockMatIconRegistry },
                 { provide: DomSanitizer, useValue: mockDomSanitizer },
                 { provide: Title, useValue: mockTitleService },
+                { provide: AppRemoteConfigService, useValue: mockRemoteConfigService },
                 {
                     provide: AppUserService, useValue: {
                         updateUserProperties: vi.fn().mockReturnValue(Promise.resolve()),

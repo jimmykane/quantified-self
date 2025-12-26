@@ -12,6 +12,7 @@ import { provideFirestore, getFirestore } from '@angular/fire/firestore';
 import { provideFunctions, getFunctions, httpsCallable } from '@angular/fire/functions';
 import { providePerformance, getPerformance } from '@angular/fire/performance';
 import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService } from '@angular/fire/analytics';
+import { provideRemoteConfig, getRemoteConfig } from '@angular/fire/remote-config';
 import { provideStorage, getStorage } from '@angular/fire/storage';
 import * as Sentry from '@sentry/angular';
 import { MaterialModule } from './modules/material.module';
@@ -22,6 +23,7 @@ import { UploadActivitiesComponent } from './components/upload/upload-activities
 import { AppFilesInfoSheetService } from './services/upload/app-files-info-sheet.service';
 import { AppUpdateService } from './services/app.update.service';
 import { OnboardingComponent } from './components/onboarding/onboarding.component';
+import { MaintenanceComponent } from './components/maintenance/maintenance.component';
 
 @NgModule({
   declarations: [
@@ -37,7 +39,8 @@ import { OnboardingComponent } from './components/onboarding/onboarding.componen
     ClipboardModule,
     MaterialModule,
     ServiceWorkerModule.register('ngsw-worker.js', { enabled: environment.production }),
-    OnboardingComponent
+    OnboardingComponent,
+    MaintenanceComponent
   ],
   providers: [
     ScreenTrackingService,
@@ -65,6 +68,7 @@ import { OnboardingComponent } from './components/onboarding/onboarding.componen
     provideFunctions(() => getFunctions(undefined, 'europe-west2')),
     providePerformance(() => getPerformance()),
     provideAnalytics(() => getAnalytics()),
+    provideRemoteConfig(() => getRemoteConfig()),
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } }
   ]
 })

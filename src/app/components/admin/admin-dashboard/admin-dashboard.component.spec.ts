@@ -16,7 +16,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 describe('AdminDashboardComponent', () => {
     let component: AdminDashboardComponent;
     let fixture: ComponentFixture<AdminDashboardComponent>;
-    let adminServiceSpy: { getUsers: ReturnType<typeof vi.fn> };
+    let adminServiceSpy: { getUsers: ReturnType<typeof vi.fn>; getQueueStatsDirect: ReturnType<typeof vi.fn>; getTotalUserCount: ReturnType<typeof vi.fn> };
 
     const mockUsers: AdminUser[] = [
         {
@@ -25,7 +25,8 @@ describe('AdminDashboardComponent', () => {
             displayName: 'User One',
             customClaims: { stripeRole: 'pro', admin: true },
             metadata: { lastSignInTime: '2023-01-01', creationTime: '2022-01-01' },
-            disabled: false
+            disabled: false,
+            providerIds: ['password']
         },
         {
             uid: 'user2',
@@ -33,7 +34,8 @@ describe('AdminDashboardComponent', () => {
             displayName: 'User Two',
             customClaims: { stripeRole: 'free' },
             metadata: { lastSignInTime: '2023-01-02', creationTime: '2022-01-02' },
-            disabled: true
+            disabled: true,
+            providerIds: ['google.com']
         }
     ];
 
@@ -46,7 +48,9 @@ describe('AdminDashboardComponent', () => {
 
     beforeEach(async () => {
         adminServiceSpy = {
-            getUsers: vi.fn().mockReturnValue(of(mockResponse))
+            getUsers: vi.fn().mockReturnValue(of(mockResponse)),
+            getQueueStatsDirect: vi.fn().mockReturnValue(of({ pending: 0, succeeded: 0, failed: 0, providers: [] })),
+            getTotalUserCount: vi.fn().mockReturnValue(of(100))
         };
 
         await TestBed.configureTestingModule({
@@ -79,7 +83,7 @@ describe('AdminDashboardComponent', () => {
     it('should fetch users on init with correct parameters', () => {
         expect(adminServiceSpy.getUsers).toHaveBeenCalledWith({
             page: 0,
-            pageSize: 25,
+            pageSize: 10,
             searchTerm: undefined,
             sortField: 'email',
             sortDirection: 'asc'

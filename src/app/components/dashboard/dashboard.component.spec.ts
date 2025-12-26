@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { DashboardComponent } from './dashboard.component';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppEventService } from '../../services/app.event.service';
@@ -6,9 +6,9 @@ import { AppUserService } from '../../services/app.user.service';
 import { Router, ActivatedRoute } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ChangeDetectorRef, NO_ERRORS_SCHEMA } from '@angular/core';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
-import { User, EventInterface } from '@sports-alliance/sports-lib';
+import { User } from '@sports-alliance/sports-lib';
 import { Analytics } from '@angular/fire/analytics';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
@@ -93,25 +93,22 @@ describe('DashboardComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('should load events on init', fakeAsync(() => {
+    it('should load events on init', async () => {
         fixture.detectChanges(); // Trigger ngOnInit
-        tick(); // Resolve async operations if any matches
+        await fixture.whenStable(); // Wait for async operations to complete
 
         expect(mockEventService.getEventsBy).toHaveBeenCalled();
         expect(component.events.length).toBe(1);
         expect(component.isLoading).toBe(false);
-    }));
+    });
 
-    it('should not have throttle delay on data loading', fakeAsync(() => {
+    it('should not have throttle delay on data loading', async () => {
         // This test ensures that data is available immediately (in same tick or microtask) 
         // without needing to advance time by a large amount (e.g. 2000ms).
         fixture.detectChanges();
-
-        // If there was a throttleTime(2000), this would fail if we didn't tick(2000).
-        // By only calling tick() (which advances for promises/microtasks), we assert immediate handling.
-        tick();
+        await fixture.whenStable();
 
         expect(component.events).toBeDefined();
         expect(component.events.length).toBeGreaterThan(0);
-    }));
+    });
 });

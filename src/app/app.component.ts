@@ -23,6 +23,7 @@ import {
 import { AppAuthService } from './authentication/app.auth.service';
 import { AppUserService } from './services/app.user.service';
 import { AppSideNavService } from './services/side-nav/app-side-nav.service';
+import { AppRemoteConfigService } from './services/app.remote-config.service';
 import { DomSanitizer, Title } from '@angular/platform-browser';
 import { slideInAnimation } from './animations/animations';
 
@@ -56,6 +57,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   public isOnboardingRoute = false;
   public onboardingCompleted = true; // Default to true to avoid hiding chrome of non-authenticated users prematurely
   public gracePeriodUntil$: Observable<Date | null>;
+  public maintenanceMode$!: Observable<boolean>;
+  public maintenanceMessage$!: Observable<string>;
   private currentUser: any = null;
 
   constructor(
@@ -64,6 +67,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     public router: Router,
     private changeDetectorRef: ChangeDetectorRef,
     public sideNavService: AppSideNavService,
+    private remoteConfigService: AppRemoteConfigService,
     private matIconRegistry: MatIconRegistry,
     private domSanitizer: DomSanitizer,
     private titleService: Title) {
@@ -72,6 +76,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
 
   async ngOnInit() {
+    this.maintenanceMode$ = this.remoteConfigService.getMaintenanceMode();
+    this.maintenanceMessage$ = this.remoteConfigService.getMaintenanceMessage();
     this.gracePeriodUntil$ = this.userService.getGracePeriodUntil();
     this.authService.user$.subscribe(user => {
       this.authState = !!user;
