@@ -11,6 +11,8 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { FormsModule } from '@angular/forms';
+import { MatDialog } from '@angular/material/dialog';
+import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 describe('AdminDashboardComponent', () => {
@@ -23,6 +25,7 @@ describe('AdminDashboardComponent', () => {
         getMaintenanceStatus: ReturnType<typeof vi.fn>;
         setMaintenanceMode: ReturnType<typeof vi.fn>;
     };
+    let matDialogSpy: { open: ReturnType<typeof vi.fn> };
 
     const mockUsers: AdminUser[] = [
         {
@@ -61,6 +64,12 @@ describe('AdminDashboardComponent', () => {
             setMaintenanceMode: vi.fn().mockReturnValue(of({ success: true, enabled: true, message: 'Test' }))
         };
 
+        matDialogSpy = {
+            open: vi.fn().mockReturnValue({
+                afterClosed: () => of(true) // Default to confirmed
+            })
+        };
+
         await TestBed.configureTestingModule({
             imports: [
                 AdminDashboardComponent,
@@ -75,9 +84,18 @@ describe('AdminDashboardComponent', () => {
                 FormsModule
             ],
             providers: [
-                { provide: AdminService, useValue: adminServiceSpy }
+                { provide: AdminService, useValue: adminServiceSpy },
+                provideCharts(withDefaultRegisterables())
             ]
-        }).compileComponents();
+        })
+            .overrideComponent(AdminDashboardComponent, {
+                add: {
+                    providers: [
+                        { provide: MatDialog, useValue: matDialogSpy }
+                    ]
+                }
+            })
+            .compileComponents();
 
         fixture = TestBed.createComponent(AdminDashboardComponent);
         component = fixture.componentInstance;
@@ -182,14 +200,38 @@ describe('AdminDashboardComponent', () => {
             expect(component.hasMessageChanged()).toBe(false); // Should be reset
         });
 
-        it('should include message when toggling maintenance', () => {
+        it('should include message when toggling maintenance with confirmation', () => {
             component.maintenanceMessage = 'Toggle Message';
             adminServiceSpy.setMaintenanceMode.mockReturnValue(of({ success: true, enabled: true, message: 'Toggle Message' }));
 
-            component.onMaintenanceToggle({ checked: true } as any);
+            // Mock dialog confirmation
+            matDialogSpy.open.mockReturnValue({
+                afterClosed: () => of(true)
+            });
 
+            // Pass a mock event that includes the source property
+            component.onMaintenanceToggle({ checked: true, source: { checked: true } } as any);
+
+            expect(matDialogSpy.open).toHaveBeenCalled();
             expect(adminServiceSpy.setMaintenanceMode).toHaveBeenCalledWith(true, 'Toggle Message');
             expect(component.maintenanceEnabled).toBe(true);
+        });
+
+        it('should cancel toggle if dialog is rejected', () => {
+            component.maintenanceEnabled = false; // Initial state
+            // Mock dialog rejection
+            matDialogSpy.open.mockReturnValue({
+                afterClosed: () => of(false)
+            });
+
+            const mockSource = { checked: true };
+            component.onMaintenanceToggle({ checked: true, source: mockSource } as any);
+
+            expect(matDialogSpy.open).toHaveBeenCalled();
+            expect(adminServiceSpy.setMaintenanceMode).not.toHaveBeenCalled();
+            // Should revert the checked state of the source
+            expect(mockSource.checked).toBe(false);
+            expect(component.maintenanceEnabled).toBe(false);
         });
     });
 });

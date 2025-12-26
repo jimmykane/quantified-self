@@ -227,27 +227,51 @@ describe('getQueueStats Cloud Function', () => {
                 })
             });
 
+            // Mock implementation for query chains
+            const mockQuery = {
+                where: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockReturnThis(),
+                count: mockCount,
+                get: vi.fn().mockResolvedValue({
+                    empty: false,
+                    docs: [{ data: () => ({ dateCreated: Date.now() - 10000 }) }], // Mock for oldestPending
+                    data: () => ({ count: 5 })
+                })
+            };
+
             if (collectionName === 'failed_jobs') {
                 return {
+                    count: mockCount,
+                    orderBy: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockReturnValue({
+                            get: vi.fn().mockResolvedValue({
+                                size: 2,
+                                docs: [
+                                    { data: () => ({ context: 'NO_TOKEN_FOUND', originalCollection: 'suuntoAppWorkoutQueue', error: 'Token expired' }) },
+                                    { data: () => ({ context: 'MAX_RETRY_REACHED', originalCollection: 'COROSAPIWorkoutQueue', error: 'Timeout' }) }
+                                ]
+                            })
+                        })
+                    }),
                     get: vi.fn().mockResolvedValue({
                         size: 2,
                         docs: [
-                            { data: () => ({ context: 'NO_TOKEN_FOUND', originalCollection: 'suuntoAppWorkoutQueue' }) },
-                            { data: () => ({ context: 'MAX_RETRY_REACHED', originalCollection: 'COROSAPIWorkoutQueue' }) }
+                            { data: () => ({ context: 'NO_TOKEN_FOUND', originalCollection: 'suuntoAppWorkoutQueue', error: 'Token expired' }) },
+                            { data: () => ({ context: 'MAX_RETRY_REACHED', originalCollection: 'COROSAPIWorkoutQueue', error: 'Timeout' }) }
                         ]
                     })
                 }
             }
-            return {
-                where: vi.fn().mockReturnThis(),
-                count: mockCount,
-                get: vi.fn().mockResolvedValue({
-                    data: () => ({ count: 5 })
-                })
-            };
+            return mockQuery;
         });
 
         const result = await (getQueueStats as any)(request);
+
+        // Validation of Advanced Stats
+        expect(result.advanced).toBeDefined();
+        expect(result.dlq.total).toBe(5); // Mock count return
+        expect(result.advanced.topErrors).toHaveLength(2);
 
         expect(result).toHaveProperty('pending');
         // Check totals from mocked count (5) * (3 providers * 2 queues per provider * 3 statuses) = this logic is simpler in the implementation loop
@@ -259,7 +283,7 @@ describe('getQueueStats Cloud Function', () => {
 
         // Check DLQ stats
         expect(result.dlq).toBeDefined();
-        expect(result.dlq.total).toBe(2);
+        expect(result.dlq.total).toBe(5);
         expect(result.dlq.byContext).toEqual(expect.arrayContaining([
             { context: 'NO_TOKEN_FOUND', count: 1 },
             { context: 'MAX_RETRY_REACHED', count: 1 }

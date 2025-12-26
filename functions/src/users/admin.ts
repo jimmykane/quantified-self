@@ -321,6 +321,13 @@ export const getQueueStats = onCall({
         let totalPending = 0;
         let totalSucceeded = 0;
         let totalFailed = 0;
+        // Advanced stats
+        let totalThroughput = 0;
+        let maxLagMs = 0;
+        const retryHistogram = { '0-3': 0, '4-7': 0, '8-9': 0 };
+
+        const ONE_HOUR_AGO = Date.now() - (60 * 60 * 1000);
+
         const providers: { name: string; pending: number; succeeded: number; failed: number }[] = [];
 
         // Map over providers to get individual and total stats
@@ -332,15 +339,45 @@ export const getQueueStats = onCall({
             await Promise.all(collections.map(async (collectionName) => {
                 const col = db.collection(collectionName);
 
-                const [p, s, f] = await Promise.all([
+                // Base stats + Retry Histogram + Throughput
+                const [
+                    p, s, f,
+                    retry0to3, retry4to7, retry8to9,
+                    throughput
+                ] = await Promise.all([
+                    // Standard stats
                     col.where('processed', '==', false).where('retryCount', '<', 10).count().get(),
                     col.where('processed', '==', true).count().get(),
-                    col.where('processed', '==', false).where('retryCount', '>=', 10).count().get()
+                    col.where('processed', '==', false).where('retryCount', '>=', 10).count().get(),
+
+                    // Retry Histogram
+                    col.where('processed', '==', false).where('retryCount', '<', 4).count().get(),
+                    col.where('processed', '==', false).where('retryCount', '>=', 4).where('retryCount', '<', 8).count().get(),
+                    col.where('processed', '==', false).where('retryCount', '>=', 8).where('retryCount', '<', 10).count().get(),
+
+                    // Throughput (Processed in last hour)
+                    col.where('processed', '==', true).where('processedAt', '>', ONE_HOUR_AGO).count().get()
                 ]);
+
+                // Max Lag (Oldest pending item)
+                const oldestPendingSnap = await col.where('processed', '==', false).orderBy('dateCreated', 'asc').limit(1).get();
+                if (!oldestPendingSnap.empty) {
+                    const oldestDate = oldestPendingSnap.docs[0].data().dateCreated;
+                    if (oldestDate) {
+                        const lag = Date.now() - oldestDate;
+                        if (lag > maxLagMs) maxLagMs = lag;
+                    }
+                }
 
                 providerPending += p.data().count;
                 providerSucceeded += s.data().count;
                 providerFailed += f.data().count;
+
+                retryHistogram['0-3'] += retry0to3.data().count;
+                retryHistogram['4-7'] += retry4to7.data().count;
+                retryHistogram['8-9'] += retry8to9.data().count;
+
+                totalThroughput += throughput.data().count;
             }));
 
             totalPending += providerPending;
@@ -355,34 +392,53 @@ export const getQueueStats = onCall({
             });
         }
 
-        // Dead Letter Queue stats
+        // Dead Letter Queue stats & Error Clustering
         const dlqCol = db.collection('failed_jobs');
-        const dlqSnapshot = await dlqCol.get();
+
+        // Use limited query for clustering to save reads
+        const [dlqCountSnap, dlqRecentSnap] = await Promise.all([
+            dlqCol.count().get(),
+            dlqCol.orderBy('failedAt', 'desc').limit(50).get()
+        ]);
 
         const dlqByContext: Record<string, number> = {};
         const dlqByProvider: Record<string, number> = {};
+        const errorCounts: Record<string, number> = {};
 
-        dlqSnapshot.docs.forEach(doc => {
+        dlqRecentSnap.docs.forEach(doc => {
             const data = doc.data();
             const context = data.context || 'UNKNOWN';
             const originalCollection = data.originalCollection || 'unknown';
+            const errorMsg = data.error || 'Unknown Error';
 
             dlqByContext[context] = (dlqByContext[context] || 0) + 1;
             dlqByProvider[originalCollection] = (dlqByProvider[originalCollection] || 0) + 1;
+            errorCounts[errorMsg] = (errorCounts[errorMsg] || 0) + 1;
         });
 
         const dlq = {
-            total: dlqSnapshot.size,
+            total: dlqCountSnap.data().count,
             byContext: Object.entries(dlqByContext).map(([context, count]) => ({ context, count })),
             byProvider: Object.entries(dlqByProvider).map(([provider, count]) => ({ provider, count }))
         };
+
+        const topErrors = Object.entries(errorCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([error, count]) => ({ error, count }));
 
         return {
             pending: totalPending,
             succeeded: totalSucceeded,
             failed: totalFailed,
             providers,
-            dlq
+            dlq,
+            advanced: {
+                throughput: totalThroughput, // Per hour
+                maxLagMs,
+                retryHistogram,
+                topErrors
+            }
         };
     } catch (error: unknown) {
         logger.error('Error getting queue stats:', error);

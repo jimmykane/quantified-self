@@ -65,6 +65,12 @@ export interface QueueStats {
         failed: number;
     }[];
     dlq?: DLQStats;
+    advanced?: {
+        throughput: number;
+        maxLagMs: number;
+        retryHistogram: { '0-3': number; '4-7': number; '8-9': number };
+        topErrors: { error: string; count: number }[];
+    };
 }
 
 @Injectable({

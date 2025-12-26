@@ -87,6 +87,40 @@
         </div>
     </div>
 
+    <!-- Advanced Stats -->
+    <div class="stats-grid" *ngIf="queueStats?.advanced" style="margin-bottom: 24px;">
+        <!-- Throughput -->
+        <div class="glass-card stat-card succeeded">
+            <div class="stat-header">
+                <mat-icon>speed</mat-icon>
+                <span>Throughput (1h)</span>
+            </div>
+            <div class="stat-value">{{ queueStats?.advanced?.throughput ?? 0 }}</div>
+            <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">items processed</span>
+        </div>
+
+        <!-- Max Lag -->
+        <div class="glass-card stat-card pending">
+            <div class="stat-header">
+                <mat-icon>update</mat-icon>
+                <span>Max Lag</span>
+            </div>
+            <div class="stat-value">{{ formatDuration(queueStats?.advanced?.maxLagMs || 0) }}</div>
+            <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">oldest pending</span>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="glass-card" *ngIf="queueStats?.advanced?.retryHistogram" style="padding: 16px; margin-bottom: 24px;">
+        <h3 style="margin-top: 0; color: #333; font-size: 1.1rem; font-weight: 500;">Retry Distribution (Pending Items)
+        </h3>
+        <div style="display: block; height: 250px;">
+            <canvas baseChart [data]="barChartData" [options]="barChartOptions" [plugins]="barChartPlugins"
+                [legend]="barChartLegend" [type]="'bar'">
+            </canvas>
+        </div>
+    </div>
+
     <!-- DLQ Stats -->
     <div class="stats-grid" *ngIf="queueStats?.dlq" style="margin-bottom: 24px;">
         <div class="glass-card stat-card dlq" style="background: rgba(244, 67, 54, 0.1);">
@@ -124,6 +158,23 @@
                     style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.05);">
                     <span style="font-size: 0.9rem;">{{ item.provider }}</span>
                     <span class="status-badge disabled">{{ item.count }}</span>
+                </div>
+            </div>
+
+            <!-- Top Errors -->
+            <div style="flex: 1;">
+                <h4 style="margin-bottom: 12px; font-size: 0.9rem; color: #666;">Top Errors</h4>
+                <div *ngFor="let item of queueStats?.advanced?.topErrors"
+                    style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.05);">
+                    <span
+                        style="font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; display: block;"
+                        [matTooltip]="item.error">{{ item.error }}</span>
+                    <span class="status-badge disabled" style="flex-shrink: 0; margin-left: 8px;">{{ item.count
+                        }}</span>
+                </div>
+                <div *ngIf="!queueStats?.advanced?.topErrors?.length"
+                    style="color: #999; font-size: 0.9rem; font-style: italic;">
+                    No errors recorded
                 </div>
             </div>
         </div>

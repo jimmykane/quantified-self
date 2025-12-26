@@ -20,6 +20,9 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { FormsModule } from '@angular/forms';
 import { LoggerService } from '../../../services/logger.service';
 import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
+import { BaseChartDirective } from 'ng2-charts';
+import { ChartConfiguration, ChartOptions } from 'chart.js';
+import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
 
 @Component({
     selector: 'app-admin-dashboard',
@@ -39,8 +42,10 @@ import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmat
         MatButtonModule,
         MatSlideToggleModule,
         MatExpansionModule,
-        MatDialogModule
-    ]
+        MatDialogModule,
+        BaseChartDirective
+    ],
+    providers: [provideCharts(withDefaultRegisterables())]
 })
 export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy {
     displayedColumns: string[] = [
@@ -72,6 +77,19 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     queueStats: QueueStats | null = null;
     isLoadingStats = false;
     totalUserCount: number | null = null;
+
+    // Charts
+    public barChartLegend = true;
+    public barChartPlugins = [];
+    public barChartData: ChartConfiguration<'bar'>['data'] = {
+        labels: ['0-3 Retries', '4-7 Retries', '8-9 Retries'],
+        datasets: [
+            { data: [0, 0, 0], label: 'Pending Items' }
+        ]
+    };
+    public barChartOptions: ChartConfiguration<'bar'>['options'] = {
+        responsive: true,
+    };
 
     // Maintenance mode
     maintenanceEnabled = false;
@@ -118,6 +136,27 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
             next: (stats) => {
                 this.queueStats = stats;
                 this.isLoadingStats = false;
+
+                if (stats.advanced?.retryHistogram) {
+                    this.barChartData = {
+                        labels: ['0-3 Retries', '4-7 Retries', '8-9 Retries'],
+                        datasets: [
+                            {
+                                data: [
+                                    stats.advanced.retryHistogram['0-3'],
+                                    stats.advanced.retryHistogram['4-7'],
+                                    stats.advanced.retryHistogram['8-9']
+                                ],
+                                label: 'Pending Items',
+                                backgroundColor: [
+                                    'rgba(75, 192, 192, 0.6)', // Greenish
+                                    'rgba(255, 206, 86, 0.6)', // Yellowish
+                                    'rgba(255, 99, 132, 0.6)'  // Reddish
+                                ]
+                            }
+                        ]
+                    };
+                }
             },
             error: (err) => {
                 this.logger.error('Failed to load queue stats (direct):', err);
@@ -233,6 +272,17 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         if (!timestamp) return '';
         const date = new Date(timestamp.seconds ? timestamp.seconds * 1000 : timestamp);
         return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+
+    formatDuration(ms: number): string {
+        if (!ms) return '0s';
+        const seconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+
+        if (hours > 0) return `${hours}h ${minutes % 60}m`;
+        if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+        return `${seconds}s`;
     }
 
     // Maintenance mode methods
