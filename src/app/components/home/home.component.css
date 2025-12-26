@@ -174,10 +174,28 @@
 .tag {
   background: #eee;
   color: rgba(0, 0, 0, 0.6);
-  padding: 2px 8px;
+  padding: 4px 10px;
+  /* Slight increase for icon + text */
   border-radius: 12px;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
+  /* Slight increase for readability */
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tag mat-icon {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  /* Prevent shrinking */
+  min-height: 18px;
+  font-size: 18px;
+  /* For font icons */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Footer */

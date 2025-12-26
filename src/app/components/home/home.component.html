@@ -37,9 +37,18 @@
         matters.
       </p>
       <div class="tag-list">
-        <span class="tag">Drag & Drop</span>
-        <span class="tag">Widgets</span>
-        <span class="tag">Personalized</span>
+        <span class="tag">
+          <mat-icon>touch_app</mat-icon>
+          Drag & Drop
+        </span>
+        <span class="tag">
+          <mat-icon>table_chart</mat-icon>
+          Widgets
+        </span>
+        <span class="tag">
+          <mat-icon>tune</mat-icon>
+          Personalized
+        </span>
       </div>
     </div>
 
@@ -53,9 +62,18 @@
         Visualize gradient, intensity, and speed across 12 distinct map styles and advanced charts.
       </p>
       <div class="tag-list">
-        <span class="tag">7 Chart Types</span>
-        <span class="tag">Heatmaps</span>
-        <span class="tag">Clusters</span>
+        <span class="tag">
+          <mat-icon svgIcon="chart-types"></mat-icon>
+          7 Chart Types
+        </span>
+        <span class="tag">
+          <mat-icon svgIcon="heat-map"></mat-icon>
+          Heatmaps
+        </span>
+        <span class="tag">
+          <mat-icon svgIcon="spiral"></mat-icon>
+          Clusters
+        </span>
       </div>
     </div>
 
@@ -69,9 +87,14 @@
         Deep dive into physiological output. Analyze precise Heart Rate, Power, and Speed distributions.
       </p>
       <div class="tag-list">
-        <span class="tag">HR Analysis</span>
-        <span class="tag">Power Curve</span>
-        <span class="tag">Speed Dist.</span>
+        <span class="tag">
+          <mat-icon svgIcon="bar-chart"></mat-icon>
+          HR Analysis
+        </span>
+        <span class="tag">
+          <mat-icon svgIcon="moving-time"></mat-icon>
+          Speed Dist.
+        </span>
       </div>
     </div>
 
@@ -87,13 +110,22 @@
       <div class="tag-list">
         <span class="tag"
           (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.GarminHealthAPI }});"
-          style="cursor: pointer;">Garmin</span>
+          style="cursor: pointer;">
+          <mat-icon svgIcon="garmin"></mat-icon>
+          Garmin
+        </span>
         <span class="tag"
           (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.SuuntoApp } });"
-          style="cursor: pointer;">Suunto</span>
+          style="cursor: pointer;">
+          <mat-icon svgIcon="suunto"></mat-icon>
+          Suunto
+        </span>
         <span class="tag"
           (click)="router.navigate(['/services'],{ queryParams: { serviceName: serviceNames.COROSAPI }});"
-          style="cursor: pointer;">COROS</span>
+          style="cursor: pointer;">
+          <mat-icon svgIcon="coros"></mat-icon>
+          COROS
+        </span>
       </div>
     </div>
 
@@ -109,9 +141,18 @@
           hidden paywalls or data mining.
         </p>
         <div class="tag-list">
-          <span class="tag">FIT/TCX/GPX Imports</span>
-          <span class="tag">Strict Privacy</span>
-          <span class="tag" routerLink="/policies" style="cursor: pointer;">Privacy Policy</span>
+          <span class="tag">
+            <mat-icon>cloud_upload</mat-icon>
+            FIT/TCX/GPX Imports
+          </span>
+          <span class="tag">
+            <mat-icon>security</mat-icon>
+            Strict Privacy
+          </span>
+          <span class="tag" routerLink="/policies" style="cursor: pointer;">
+            <mat-icon>policy</mat-icon>
+            Privacy Policy
+          </span>
         </div>
       </div>
     </div>
