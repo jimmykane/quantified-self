@@ -19,6 +19,7 @@ import type * as am4plugins_regression from '@amcharts/amcharts4/plugins/regress
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-component.directive';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { LoggerService } from '../../../services/logger.service';
 
 import { AppColors } from '../../../services/color/app.colors';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -35,8 +36,8 @@ import { ChartDataCategoryTypes, TimeIntervals } from '@sports-alliance/sports-l
 export class ChartsXYComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
 
 
-  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected eventColorService: AppEventColorService, protected amChartsService: AmChartsService) {
-    super(zone, changeDetector, amChartsService);
+  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected eventColorService: AppEventColorService, protected amChartsService: AmChartsService, protected logger: LoggerService) {
+    super(zone, changeDetector, amChartsService, logger);
   }
 
   protected async createChart(): Promise<am4charts.XYChart> {

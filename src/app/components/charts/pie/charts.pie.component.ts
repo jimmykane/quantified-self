@@ -23,6 +23,7 @@ import {
 import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-component.directive';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { LoggerService } from '../../../services/logger.service';
 
 
 @Component({
@@ -36,8 +37,8 @@ export class ChartsPieComponent extends DashboardChartAbstractDirective implemen
 
 
 
-  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, private eventColorService: AppEventColorService, protected amChartsService: AmChartsService) {
-    super(zone, changeDetector, amChartsService);
+  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, private eventColorService: AppEventColorService, protected amChartsService: AmChartsService, protected logger: LoggerService) {
+    super(zone, changeDetector, amChartsService, logger);
   }
 
   protected async createChart(): Promise<am4charts.PieChart> {

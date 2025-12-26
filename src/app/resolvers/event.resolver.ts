@@ -15,6 +15,7 @@ import { map, switchMap, catchError, take } from 'rxjs/operators';
 import { of, EMPTY } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../authentication/app.auth.service';
+import { LoggerService } from '../services/logger.service';
 
 export const eventResolver: ResolveFn<EventInterface> = (
     route: ActivatedRouteSnapshot,
@@ -25,6 +26,7 @@ export const eventResolver: ResolveFn<EventInterface> = (
     const authService = inject(AppAuthService);
     const router = inject(Router);
     const snackBar = inject(MatSnackBar);
+    const logger = inject(LoggerService);
 
     const eventID = route.paramMap.get('eventID');
     const targetUserID = route.paramMap.get('userID');
@@ -71,7 +73,7 @@ export const eventResolver: ResolveFn<EventInterface> = (
             }
         }),
         catchError((error) => {
-            console.error('Error resolving event:', error);
+            logger.error('Error resolving event:', error);
             snackBar.open('Error loading event', 'Close', { duration: 3000 });
             router.navigate(['/dashboard']);
             return EMPTY;

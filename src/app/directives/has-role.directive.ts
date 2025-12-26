@@ -1,6 +1,7 @@
 import { Directive, Input, TemplateRef, ViewContainerRef, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { AppUserService } from '../services/app.user.service';
 import { Subscription } from 'rxjs';
+import { LoggerService } from '../services/logger.service';
 
 @Directive({
     selector: '[appHasRole]',
@@ -13,7 +14,8 @@ export class HasRoleDirective implements OnInit {
         private templateRef: TemplateRef<any>,
         private viewContainer: ViewContainerRef,
         private userService: AppUserService,
-        private cdr: ChangeDetectorRef
+        private cdr: ChangeDetectorRef,
+        private logger: LoggerService
     ) { }
 
     async ngOnInit() {
@@ -27,7 +29,7 @@ export class HasRoleDirective implements OnInit {
             }
             this.cdr.markForCheck();
         } catch (e) {
-            console.error('Error in HasRoleDirective', e);
+            this.logger.error('Error in HasRoleDirective', e);
             this.viewContainer.clear();
         }
     }

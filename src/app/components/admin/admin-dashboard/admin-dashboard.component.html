@@ -5,46 +5,52 @@
     </div>
 
     <!-- Maintenance Mode Control -->
-    <div class="glass-card maintenance-control" style="margin-bottom: 24px; padding: 20px;">
-        <div
-            style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
-            <div style="display: flex; align-items: flex-start; gap: 12px; flex: 1;">
-                <mat-icon [style.color]="maintenanceEnabled ? '#f44336' : '#4caf50'" style="margin-top: 4px;">
+    <!-- Maintenance Mode Control -->
+    <mat-expansion-panel class="maintenance-panel glass-card" style="margin-bottom: 24px;">
+        <mat-expansion-panel-header
+            [style.border-left]="maintenanceEnabled ? '4px solid #f44336' : '4px solid #4caf50'">
+            <mat-panel-title style="align-items: center; gap: 12px;">
+                <mat-icon [style.color]="maintenanceEnabled ? '#f44336' : '#4caf50'">
                     {{ maintenanceEnabled ? 'engineering' : 'check_circle' }}
                 </mat-icon>
-                <div style="flex: 1;">
-                    <h3 style="margin: 0; font-size: 1.1rem; font-weight: 500; color: #333;">Maintenance Mode</h3>
-                    <p style="margin: 4px 0 12px 0; font-size: 0.85rem; color: #666;">
-                        {{ maintenanceEnabled ? 'App is in maintenance mode - users see maintenance page' : 'App is
-                        online - users can access normally' }}
-                    </p>
+                <span style="font-weight: 500;">Maintenance Mode</span>
+            </mat-panel-title>
+            <mat-panel-description style="align-items: center; justify-content: space-between;">
+                <span *ngIf="!maintenanceEnabled" style="color: #4caf50;">System Online</span>
+                <span *ngIf="maintenanceEnabled" style="color: #f44336;">System Offline (Maintenance)</span>
 
-                    <!-- Message Editor -->
-                    <mat-form-field appearance="outline" style="width: 100%; max-width: 500px;">
-                        <mat-label>Maintenance Message</mat-label>
-                        <textarea matInput [(ngModel)]="maintenanceMessage" rows="2"
-                            placeholder="Message shown to users during maintenance"
-                            [disabled]="isUpdatingMaintenance"></textarea>
-                        <mat-hint>This message is shown on the maintenance page</mat-hint>
-                    </mat-form-field>
+                <mat-slide-toggle [checked]="maintenanceEnabled" (change)="onMaintenanceToggle($event)"
+                    (click)="$event.stopPropagation()" [disabled]="isUpdatingMaintenance" color="warn">
+                </mat-slide-toggle>
+            </mat-panel-description>
+        </mat-expansion-panel-header>
+
+        <div style="padding-top: 16px;">
+            <p style="margin: 0 0 16px 0; font-size: 0.9rem; color: #666;">
+                Manage the maintenance mode settings. When enabled, non-admin users will be redirected to the
+                maintenance page.
+            </p>
+
+            <div style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;">
+                <mat-form-field appearance="outline" style="flex: 1; min-width: 300px;">
+                    <mat-label>Maintenance Message</mat-label>
+                    <textarea matInput [(ngModel)]="maintenanceMessage" rows="3"
+                        placeholder="Message shown to users during maintenance"
+                        [disabled]="isUpdatingMaintenance"></textarea>
+                    <mat-hint>Visible to users on the maintenance screen</mat-hint>
+                </mat-form-field>
+
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <button mat-raised-button color="primary" (click)="saveMaintenanceMessage()"
+                        [disabled]="isUpdatingMaintenance || !hasMessageChanged()" style="height: 56px;">
+                        <mat-icon>save</mat-icon>
+                        Save Message
+                    </button>
+                    <mat-spinner *ngIf="isUpdatingMaintenance" diameter="24" style="align-self: center;"></mat-spinner>
                 </div>
-            </div>
-            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 12px;">
-                <div style="display: flex; align-items: center; gap: 16px;">
-                    <mat-slide-toggle [checked]="maintenanceEnabled" (change)="onMaintenanceToggle($event)"
-                        [disabled]="isUpdatingMaintenance" color="warn">
-                        {{ maintenanceEnabled ? 'Enabled' : 'Disabled' }}
-                    </mat-slide-toggle>
-                </div>
-                <button mat-raised-button color="primary" (click)="saveMaintenanceMessage()"
-                    [disabled]="isUpdatingMaintenance || !hasMessageChanged()">
-                    <mat-icon>save</mat-icon>
-                    Save Message
-                </button>
-                <mat-spinner *ngIf="isUpdatingMaintenance" diameter="24"></mat-spinner>
             </div>
         </div>
-    </div>
+    </mat-expansion-panel>
 
 
     <!-- Queue Stats -->

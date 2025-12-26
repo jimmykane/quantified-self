@@ -24,6 +24,7 @@ import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { EventStatsBottomSheetComponent } from './stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
 import { EventDetailsBottomSheetComponent } from '../event-header/event-details-bottom-sheet/event-details-bottom-sheet.component';
+import { LoggerService } from '../../services/logger.service';
 
 
 @Component({
@@ -92,7 +93,8 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     private activitySelectionService: AppActivitySelectionService,
     private snackBar: MatSnackBar,
     private themeService: AppThemeService,
-    private bottomSheet: MatBottomSheet) {
+    private bottomSheet: MatBottomSheet,
+    private logger: LoggerService) {
   }
 
   ngOnChanges() {
@@ -107,10 +109,10 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
 
     this.subscriptions.push(this.route.data.subscribe((data: any) => {
       this.event = data.event;
-      console.log('[EventCard] Event data loaded:', this.event);
-      console.log('[EventCard] Event metadata (originalFiles):', (this.event as any).originalFiles);
-      console.log('[EventCard] Event metadata (originalFile):', (this.event as any).originalFile);
-      this.event.getActivities().forEach(a => console.log(`[EventCard] Activity ${a.getID()}:`, a));
+      this.logger.log('[EventCard] Event data loaded:', this.event);
+      this.logger.log('[EventCard] Event metadata (originalFiles):', (this.event as any).originalFiles);
+      this.logger.log('[EventCard] Event metadata (originalFile):', (this.event as any).originalFile);
+      this.event.getActivities().forEach(a => this.logger.log(`[EventCard] Activity ${a.getID()}:`, a));
 
       this.activitySelectionService.selectedActivities.clear();
       this.activitySelectionService.selectedActivities.select(...this.event.getActivities());

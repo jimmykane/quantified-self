@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EventWriter, FirestoreAdapter } from './event-writer';
+import { EventWriter, FirestoreAdapter, LogAdapter } from './event-writer';
 
 
 
@@ -155,4 +155,100 @@ describe('EventWriter', () => {
         expect(eventData).not.toHaveProperty('activities');
         expect(eventData.id).toBe('event-1');
     });
+
+    describe('LogAdapter', () => {
+        let mockLogger: LogAdapter;
+
+        beforeEach(() => {
+            mockLogger = {
+                info: vi.fn(),
+                warn: vi.fn(),
+                error: vi.fn(),
+            };
+        });
+
+        it('should use custom logger when provided', async () => {
+            const writerWithLogger = new EventWriter(adapter, storageAdapter, undefined, mockLogger);
+            await writerWithLogger.writeAllEventData('user-1', eventMock);
+
+            expect(mockLogger.info).toHaveBeenCalled();
+        });
+
+        it('should log info on successful write', async () => {
+            const writerWithLogger = new EventWriter(adapter, storageAdapter, undefined, mockLogger);
+            await writerWithLogger.writeAllEventData('user-1', eventMock);
+
+            // Should log at start
+            expect(mockLogger.info).toHaveBeenCalledWith(
+                'writeAllEventData called',
+                expect.objectContaining({ userID: 'user-1', eventID: 'event-1' })
+            );
+        });
+
+        it('should log info during file upload', async () => {
+            const writerWithLogger = new EventWriter(adapter, storageAdapter, undefined, mockLogger);
+            const originalFile = {
+                data: Buffer.from('test'),
+                extension: 'fit',
+                startDate: new Date(),
+            };
+
+            await writerWithLogger.writeAllEventData('user-1', eventMock, originalFile);
+
+            // Should log upload progress
+            expect(mockLogger.info).toHaveBeenCalledWith(
+                expect.stringContaining('Uploading file'),
+                expect.any(String)
+            );
+            // Should log upload complete
+            expect(mockLogger.info).toHaveBeenCalledWith(
+                expect.stringContaining('Upload complete')
+            );
+        });
+
+        it('should log warn when no storage adapter is provided', async () => {
+            const writerWithoutStorage = new EventWriter(adapter, undefined, undefined, mockLogger);
+            const originalFile = {
+                data: Buffer.from('test'),
+                extension: 'fit',
+            };
+
+            await writerWithoutStorage.writeAllEventData('user-1', eventMock, originalFile);
+
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                expect.stringContaining('Skipping file upload'),
+                expect.any(String),
+                expect.any(Boolean)
+            );
+        });
+
+        it('should log error when write fails', async () => {
+            const failingAdapter: FirestoreAdapter = {
+                setDoc: vi.fn().mockRejectedValue(new Error('Firestore write failed')),
+                createBlob: vi.fn((data) => data),
+                generateID: vi.fn().mockReturnValue('generated-id'),
+            };
+
+            const writerWithFailingAdapter = new EventWriter(failingAdapter, undefined, undefined, mockLogger);
+
+            await expect(writerWithFailingAdapter.writeAllEventData('user-1', eventMock))
+                .rejects.toThrow('Could not write event data');
+
+            expect(mockLogger.error).toHaveBeenCalled();
+        });
+
+        it('should use default console logger when no logger is provided', async () => {
+            // Spy on console methods
+            const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
+
+            const writerWithDefaultLogger = new EventWriter(adapter, storageAdapter);
+            await writerWithDefaultLogger.writeAllEventData('user-1', eventMock);
+
+            // Default logger should use console.log for info
+            expect(consoleSpy).toHaveBeenCalled();
+
+            consoleSpy.mockRestore();
+        });
+    });
 });
+

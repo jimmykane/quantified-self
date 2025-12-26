@@ -8,6 +8,7 @@ import { User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../services/app.user.service';
 import { Analytics } from '@angular/fire/analytics';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
+import { LoggerService } from '../services/logger.service';
 import { environment } from '../../environments/environment';
 
 @Injectable({
@@ -27,7 +28,8 @@ export class AppAuthService {
   constructor(
     private userService: AppUserService,
     private snackBar: MatSnackBar,
-    public localStorageService: LocalStorageService
+    public localStorageService: LocalStorageService,
+    private logger: LoggerService
   ) {
     // Use modular user observable to react to token refreshes too
     this.user$ = user(this.auth).pipe(
@@ -107,17 +109,17 @@ export class AppAuthService {
    * - Production: Use redirect (better mobile experience, avoids popup blockers)
    */
   private async signInWithProvider(provider: GoogleAuthProvider) {
-    console.log('[Auth] signInWithProvider - localhost:', environment.localhost);
+    this.logger.log('[Auth] signInWithProvider - localhost:', environment.localhost);
     try {
       if (environment.localhost) {
-        console.log('[Auth] Using popup...');
+        this.logger.log('[Auth] Using popup...');
         const result = await signInWithPopup(this.auth, provider);
-        console.log('[Auth] Popup succeeded:', result);
+        this.logger.log('[Auth] Popup succeeded:', result);
         return result;
       } else {
         // Redirect is deprecated/removed in this refactor favor of simple popup or different flow if needed, 
         // OR if we want to keep it for Google:
-        console.log('[Auth] Using popup (redirect removed for consistency in refactor, or restore if needed)...');
+        this.logger.log('[Auth] Using popup (redirect removed for consistency in refactor, or restore if needed)...');
         // Actually, let's keep popup for consistency as redirect caused issues before or just use popup everywhere.
         // But original code had logic. Let's stick to popup for now to be safe with removed imports unless requested.
         // Wait, I strictly removed signInWithRedirect import. So I must use popup or re-import.
@@ -126,9 +128,9 @@ export class AppAuthService {
         return await signInWithPopup(this.auth, provider);
       }
     } catch (error: any) {
-      console.error('[Auth] signInWithProvider error:', error);
-      console.error('[Auth] Error code:', error?.code);
-      console.error('[Auth] Error message:', error?.message);
+      this.logger.error('[Auth] signInWithProvider error:', error);
+      this.logger.error('[Auth] Error code:', error?.code);
+      this.logger.error('[Auth] Error message:', error?.message);
       throw error;
     }
   }
@@ -249,7 +251,7 @@ export class AppAuthService {
 
   // If error, console log and notify user
   private handleError(error: Error) {
-    console.error(error);
+    this.logger.error(error);
     this.snackBar.open(`Could not login due to error ${error.message} `, undefined, {
       duration: 2000
     });

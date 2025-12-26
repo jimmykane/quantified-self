@@ -4,6 +4,8 @@ import { map, take, tap } from 'rxjs/operators';
 import { AppAuthService } from './app.auth.service';
 import { POLICY_CONTENT } from '../shared/policies.content';
 
+import { LoggerService } from '../services/logger.service';
+
 /**
  * Guard to ensure user has completed onboarding (terms + subscription).
  * Redirects to /onboarding if any step is missing.
@@ -11,6 +13,7 @@ import { POLICY_CONTENT } from '../shared/policies.content';
 export const onboardingGuard: CanMatchFn = (route, segments) => {
     const authService = inject(AppAuthService);
     const router = inject(Router);
+    const logger = inject(LoggerService);
 
     const mapFormControlNameToUserProperty = (formControlName: string): string => {
         if (!formControlName) return '';
@@ -21,7 +24,7 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
         take(1),
         map(user => {
             if (!user) {
-                console.log('[OnboardingGuard] No user found, allowing (authGuard will handle login)');
+                logger.log('[OnboardingGuard] No user found, allowing (authGuard will handle login)');
                 return true; // Let authGuard handle unauthenticated users
             }
 
@@ -39,7 +42,7 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
             // User must have accepted terms AND (be pro OR have subscribed once)
             const onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce);
 
-            console.log('[OnboardingGuard] User Assessment:', {
+            logger.log('[OnboardingGuard] User Assessment:', {
                 uid: user.uid,
                 termsAccepted,
                 hasSubscribedOnce,
@@ -58,10 +61,10 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
             const isPricing = path.includes('pricing');
 
             if (!completed && !isOnboarding && !isPayment && !isPricing) {
-                console.log(`[OnboardingGuard] Redirecting from /${path} to /onboarding because onboarding is NOT completed.`);
+                logger.log(`[OnboardingGuard] Redirecting from /${path} to /onboarding because onboarding is NOT completed.`);
                 router.navigate(['/onboarding']);
             } else {
-                console.log(`[OnboardingGuard] Allowing access to /${path}. (Completed: ${completed}, IsOnboarding: ${isOnboarding}, IsPayment: ${isPayment}, IsPricing: ${isPricing})`);
+                logger.log(`[OnboardingGuard] Allowing access to /${path}. (Completed: ${completed}, IsOnboarding: ${isOnboarding}, IsPayment: ${isPayment}, IsPricing: ${isPricing})`);
             }
         })
     );

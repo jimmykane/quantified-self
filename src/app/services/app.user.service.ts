@@ -68,6 +68,7 @@ import { UserSummariesSettingsInterface } from '@sports-alliance/sports-lib';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AppWindowService } from './app.window.service';
+import { LoggerService } from './logger.service';
 import { UserMyTracksSettingsInterface } from '@sports-alliance/sports-lib';
 import { DataDescription } from '@sports-alliance/sports-lib';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
@@ -343,6 +344,7 @@ export class AppUserService implements OnDestroy {
     private eventService: AppEventService,
     private http: HttpClient,
     private windowService: AppWindowService,
+    private logger: LoggerService
   ) {
 
   }
@@ -540,19 +542,19 @@ export class AppUserService implements OnDestroy {
   public async getSubscriptionRole(): Promise<StripeRole | null> {
     const user = await runInInjectionContext(this.injector, () => firstValueFrom(authState(this.auth).pipe(take(1))));
     if (!user) {
-      console.warn('AppUserService: getSubscriptionRole - No current user');
+      this.logger.warn('AppUserService: getSubscriptionRole - No current user');
       return null;
     }
     try {
       // Force refresh to ensure we have latest claims
       const tokenResult = await user.getIdTokenResult(true);
-      console.log('[AppUserService] DEBUG: Full Token Result:', tokenResult);
-      console.log('[AppUserService] DEBUG: Custom Claims:', tokenResult.claims);
+      this.logger.log('[AppUserService] DEBUG: Full Token Result:', tokenResult);
+      this.logger.log('[AppUserService] DEBUG: Custom Claims:', tokenResult.claims);
       const role = (tokenResult.claims['stripeRole'] as StripeRole) || null;
-      console.log(`AppUserService: getSubscriptionRole - User: ${user.uid}, Role: ${role}`);
+      this.logger.log(`AppUserService: getSubscriptionRole - User: ${user.uid}, Role: ${role}`);
       return role;
     } catch (e) {
-      console.error('AppUserService: getSubscriptionRole - Error getting token result', e);
+      this.logger.error('AppUserService: getSubscriptionRole - Error getting token result', e);
       return null;
     }
   }
@@ -578,7 +580,7 @@ export class AppUserService implements OnDestroy {
       const tokenResult = await user.getIdTokenResult();
       return tokenResult.claims['admin'] === true;
     } catch (e) {
-      console.error('AppUserService: isAdmin - Error getting token result', e);
+      this.logger.error('AppUserService: isAdmin - Error getting token result', e);
       return false;
     }
   }

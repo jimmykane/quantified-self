@@ -24,6 +24,7 @@ import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { convertIntensityZonesStatsToChartData } from '../../../helpers/intensity-zones-chart-data-helper';
 import { AppDataColors } from '../../../services/color/app.data.colors';
+import { LoggerService } from '../../../services/logger.service';
 
 
 @Component({
@@ -49,8 +50,9 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
   constructor(protected zone: NgZone,
     changeDetector: ChangeDetectorRef,
     private eventColorService: AppEventColorService,
-    protected amChartsService: AmChartsService) {
-    super(zone, changeDetector, amChartsService);
+    protected amChartsService: AmChartsService,
+    protected logger: LoggerService) {
+    super(zone, changeDetector, amChartsService, logger);
   }
 
   async ngOnChanges(changes: SimpleChanges): Promise<void> {

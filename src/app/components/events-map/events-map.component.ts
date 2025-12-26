@@ -16,6 +16,7 @@ import { MapThemes, MapTypes } from '@sports-alliance/sports-lib';
 import { DataPositionInterface } from '@sports-alliance/sports-lib';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
 import { MapAbstractDirective } from '../map/map-abstract.directive';
+import { LoggerService } from '../../services/logger.service';
 import MarkerClusterer from '@googlemaps/markerclustererplus';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -68,8 +69,9 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     private zone: NgZone,
     private changeDetectorRef: ChangeDetectorRef,
     private eventColorService: AppEventColorService,
-    private eventService: AppEventService) {
-    super(changeDetectorRef);
+    private eventService: AppEventService,
+    protected logger: LoggerService) {
+    super(changeDetectorRef, logger);
   }
 
   ngOnInit(): void {

@@ -100,6 +100,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppEventInterface } from '../../../../../functions/src/shared/app-event.interface';
 import { AppColors } from '../../../services/color/app.colors';
 import { ActivityUtilities } from '@sports-alliance/sports-lib';
+import { LoggerService } from '../../../services/logger.service';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 8;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 1.5;
@@ -160,8 +161,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     private activityCursorService: AppActivityCursorService,
     private snackBar: MatSnackBar,
     private eventColorService: AppEventColorService,
-    protected amChartsService: AmChartsService) {
-    super(zone, changeDetector, amChartsService);
+    protected amChartsService: AmChartsService,
+    protected logger: LoggerService) {
+    super(zone, changeDetector, amChartsService, logger);
   }
 
 
@@ -771,10 +773,10 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     this.loading();
 
     const appEvent = this.event as AppEventInterface;
-    console.log('[EventCardChart] processChanges called for event:', this.event.getID());
-    console.log('[EventCardChart] Full event object:', this.event);
-    console.log('[EventCardChart] originalFile:', appEvent.originalFile);
-    console.log('[EventCardChart] originalFiles:', appEvent.originalFiles);
+    this.logger.log('[EventCardChart] processChanges called for event:', this.event.getID());
+    this.logger.log('[EventCardChart] Full event object:', this.event);
+    this.logger.log('[EventCardChart] originalFile:', appEvent.originalFile);
+    this.logger.log('[EventCardChart] originalFiles:', appEvent.originalFiles);
 
     // Listen to cursor changes
     this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(

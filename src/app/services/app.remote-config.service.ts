@@ -4,6 +4,7 @@ import { map, filter, shareReplay, switchMap, take, catchError } from 'rxjs/oper
 import { AppWindowService } from './app.window.service';
 import { AppUserService } from './app.user.service';
 import { environment } from '../../environments/environment';
+import { LoggerService } from './logger.service';
 
 /**
  * Remote Config Service - Bypasses Firebase SDK completely due to persistent bugs.
@@ -25,7 +26,8 @@ export class AppRemoteConfigService {
 
     constructor(
         private windowService: AppWindowService,
-        private userService: AppUserService
+        private userService: AppUserService,
+        private logger: LoggerService
     ) {
         // Check admin status initially
         this.checkAdminStatus();
@@ -43,13 +45,13 @@ export class AppRemoteConfigService {
 
                 // Admin? Bypass.
                 if (isAdmin) {
-                    console.log('[RemoteConfig] Admin user - bypassing maintenance mode');
+                    this.logger.log('[RemoteConfig] Admin user - bypassing maintenance mode');
                     return false;
                 }
 
                 // URL bypass?
                 if (this.isBypassEnabled()) {
-                    console.log('[RemoteConfig] URL bypass enabled');
+                    this.logger.log('[RemoteConfig] URL bypass enabled');
                     return false;
                 }
 
@@ -76,17 +78,17 @@ export class AppRemoteConfigService {
     private async checkAdminStatus(): Promise<void> {
         try {
             const isAdmin = await this.userService.isAdmin();
-            console.log('[RemoteConfig] Admin status:', isAdmin);
+            this.logger.log('[RemoteConfig] Admin status:', isAdmin);
             this.isAdmin$.next(isAdmin);
         } catch (e) {
-            console.log('[RemoteConfig] Could not check admin status:', e);
+            this.logger.log('[RemoteConfig] Could not check admin status:', e);
             this.isAdmin$.next(false);
         }
     }
 
     async initializeConfig(): Promise<boolean> {
         try {
-            console.log('[RemoteConfig] Fetching config...');
+            this.logger.log('[RemoteConfig] Fetching config...');
 
             const projectId = environment.firebase.projectId;
             const apiKey = environment.firebase.apiKey;
@@ -112,13 +114,13 @@ export class AppRemoteConfigService {
             }
 
             const data = await response.json();
-            console.log('[RemoteConfig] Response:', data.state);
+            this.logger.log('[RemoteConfig] Response:', data.state);
 
             if (data.entries) {
                 if ('maintenance_mode' in data.entries) {
                     const value = data.entries.maintenance_mode;
                     this.maintenanceModeValue = value === 'true' || value === true;
-                    console.log('[RemoteConfig] maintenance_mode:', this.maintenanceModeValue);
+                    this.logger.log('[RemoteConfig] maintenance_mode:', this.maintenanceModeValue);
                 }
                 if ('maintenance_message' in data.entries) {
                     this.maintenanceMessageValue = data.entries.maintenance_message;
@@ -128,7 +130,7 @@ export class AppRemoteConfigService {
             this.configLoaded$.next(true);
             return true;
         } catch (e) {
-            console.error('[RemoteConfig] Fetch failed:', e);
+            this.logger.error('[RemoteConfig] Fetch failed:', e);
             this.configLoaded$.next(true);
             return false;
         }

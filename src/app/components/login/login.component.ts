@@ -11,6 +11,7 @@ import { Auth, signInWithCustomToken, authState, OAuthProvider, signInWithPopup 
 import { Analytics, logEvent } from '@angular/fire/analytics';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
+import { LoggerService } from '../../services/logger.service';
 
 
 @Component({
@@ -43,6 +44,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     private router: Router,
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
+    private logger: LoggerService
   ) {
   }
 
@@ -65,7 +67,7 @@ export class LoginComponent implements OnInit, OnDestroy {
           })
           .catch((error) => {
             this.isLoading = false;
-            console.error('Error signing in with email link', error);
+            this.logger.error('Error signing in with email link', error);
             this.snackBar.open('Error signing in. The link might be invalid or expired.', 'Close');
           });
       }
@@ -83,7 +85,7 @@ export class LoginComponent implements OnInit, OnDestroy {
         setTimeout(async () => {
           const dbUser = await this.authService.getUser();
           if (!dbUser) {
-            console.warn('Login: Firebase authenticated, but no DB profile. Triggering registration flow.');
+            this.logger.warn('Login: Firebase authenticated, but no DB profile. Triggering registration flow.');
             this.redirectOrShowDataPrivacyDialog({ user: firebaseUser });
           }
         }, 500);
@@ -147,7 +149,7 @@ export class LoginComponent implements OnInit, OnDestroy {
               }
             }
           } catch (linkError: any) {
-            console.error('Account linking failed:', linkError);
+            this.logger.error('Account linking failed:', linkError);
             this.snackBar.open(`Account linking failed: ${linkError.message}`, 'Close');
           }
         }

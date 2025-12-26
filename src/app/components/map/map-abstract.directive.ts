@@ -1,8 +1,9 @@
-import { ChangeDetectorRef, Directive } from '@angular/core';
+import { ChangeDetectorRef, Directive, Inject } from '@angular/core';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 import { DataPositionInterface } from '@sports-alliance/sports-lib';
 import { MapThemes } from '@sports-alliance/sports-lib';
 // import LatLngBoundsLiteral = google.maps.LatLngBoundsLiteral;
+import { LoggerService } from '../../services/logger.service';
 
 declare function require(moduleName: string): any;
 
@@ -18,7 +19,7 @@ export interface LiteralBounds {
 @Directive()
 export abstract class MapAbstractDirective extends LoadingAbstractDirective {
 
-  constructor(changeDetector: ChangeDetectorRef) {
+  constructor(changeDetector: ChangeDetectorRef, protected logger: LoggerService) {
     super(changeDetector)
   }
 
@@ -55,7 +56,7 @@ export abstract class MapAbstractDirective extends LoadingAbstractDirective {
       north: mostNorth.latitudeDegrees,
       south: mostSouth.latitudeDegrees,
     };
-    console.log('[MapAbstractDirective] getBounds result:', bounds, 'from', validPositions.length, 'valid points');
+    this.logger.log('[MapAbstractDirective] getBounds result:', bounds, 'from', validPositions.length, 'valid points');
     return bounds;
   }
 

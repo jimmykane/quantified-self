@@ -32,6 +32,7 @@ import { EventExporterGPX } from '@sports-alliance/sports-lib';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
 import { ActivityUtilities } from '@sports-alliance/sports-lib';
 import { AppWindowService } from '../../services/app.window.service';
+import { LoggerService } from '../../services/logger.service';
 
 @Component({
   selector: 'app-event-actions',
@@ -65,7 +66,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     private deleteConfirmationBottomSheet: MatBottomSheet,
     private http: HttpClient,
     private windowService: AppWindowService,
-    private dialog: MatDialog) {
+    private dialog: MatDialog,
+    private logger: LoggerService) {
   }
 
   async ngOnInit() {
@@ -233,8 +235,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       const eventAny = this.event as any;
       const eventDate = this.fileService.toDate(this.event.startDate);
       const eventId = this.event.getID ? this.event.getID() : undefined;
-      console.log(`[EventActions] Starting download for event: ${eventId}`, this.event);
-      console.log(`[EventActions] eventAny structure:`, eventAny);
+      this.logger.log(`[EventActions] Starting download for event: ${eventId}`, this.event);
+      this.logger.log(`[EventActions] eventAny structure:`, eventAny);
 
       if (eventAny.originalFiles && eventAny.originalFiles.length > 0) {
         // Multiple files -> ZIP
@@ -271,7 +273,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         this.snackBar.open('No original files found.', undefined, { duration: 3000 });
       }
     } catch (error: any) {
-      console.error('Download failed', error);
+      this.logger.error('Download failed', error);
       this.snackBar.open('Failed to download original files.', undefined, { duration: 3000 });
       Sentry.captureException(error);
     }

@@ -5,6 +5,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Router, RouterModule } from '@angular/router';
 import { Auth } from '@angular/fire/auth';
+import { LoggerService } from '../../services/logger.service';
 
 @Component({
   selector: 'app-payment-success',
@@ -178,6 +179,7 @@ import { Auth } from '@angular/fire/auth';
 })
 export class PaymentSuccessComponent implements OnInit {
   private auth = inject(Auth);
+  private logger = inject(LoggerService);
   isRefreshing = true;
   assignedRole: string | null = null;
 
@@ -186,7 +188,7 @@ export class PaymentSuccessComponent implements OnInit {
     const user = this.auth.currentUser;
 
     if (!user) {
-      console.error('PaymentSuccess: No current user found!');
+      this.logger.error('PaymentSuccess: No current user found!');
       this.isRefreshing = false;
       return;
     }
@@ -195,36 +197,36 @@ export class PaymentSuccessComponent implements OnInit {
     let attempt = 0;
     let hasPremiumClaim = false;
 
-    console.log('PaymentSuccess: Starting claim polling...');
+    this.logger.log('PaymentSuccess: Starting claim polling...');
 
     while (!hasPremiumClaim && attempt < maxAttempts) {
       attempt++;
       try {
-        console.log(`PaymentSuccess: Polling attempt ${attempt}/${maxAttempts}...`);
+        this.logger.log(`PaymentSuccess: Polling attempt ${attempt}/${maxAttempts}...`);
         // Force refresh
         const tokenResult = await user.getIdTokenResult(true);
         const role = tokenResult.claims['stripeRole'] as string;
 
-        console.log('PaymentSuccess: Claims:', tokenResult.claims);
+        this.logger.log('PaymentSuccess: Claims:', tokenResult.claims);
 
         if (role) {
-          console.log(`PaymentSuccess: Found stripeRole '${role}' on attempt ${attempt}!`);
+          this.logger.log(`PaymentSuccess: Found stripeRole '${role}' on attempt ${attempt}!`);
           hasPremiumClaim = true;
           this.assignedRole = role;
         } else {
-          console.warn(`PaymentSuccess: stripeRole not found on attempt ${attempt}. Waiting...`);
+          this.logger.warn(`PaymentSuccess: stripeRole not found on attempt ${attempt}. Waiting...`);
           // Wait 2 seconds before next try
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
       } catch (error) {
-        console.error('PaymentSuccess: Error refreshing token:', error);
+        this.logger.error('PaymentSuccess: Error refreshing token:', error);
         // Wait even on error, so we don't spam
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
 
     if (!hasPremiumClaim) {
-      console.error('PaymentSuccess: Timeout waiting for stripeRole. User might need to re-login or wait longer.');
+      this.logger.error('PaymentSuccess: Timeout waiting for stripeRole. User might need to re-login or wait longer.');
     }
 
     this.isRefreshing = false;

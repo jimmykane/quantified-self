@@ -7,13 +7,14 @@ import { AppActivityTypeGroupColors } from './app.activity-type-group.colors';
 import type * as am4core from '@amcharts/amcharts4/core';
 import { AppColors } from './app.colors';
 import { AmChartsService } from '../am-charts.service';
+import { LoggerService } from '../logger.service';
 
 @Injectable({
   providedIn: 'root',
 })
 export class AppEventColorService {
 
-  constructor(private amChartsService: AmChartsService) { }
+  constructor(private amChartsService: AmChartsService, private logger: LoggerService) { }
 
   public getColorByNumber(number: number): string {
     // Return fixed random
@@ -33,11 +34,11 @@ export class AppEventColorService {
 
     // If still not found, return a default color based on a safe fallback
     if (activityIndex === -1) {
-      console.warn('[AppEventColorService] Activity not found in provided array, using default offset');
+      this.logger.warn('[AppEventColorService] Activity not found in provided array, using default offset');
       activityIndex = 0;
     }
 
-    console.log('[AppEventColorService] getActivityColor', {
+    this.logger.log('[AppEventColorService] getActivityColor', {
       activityID,
       activityIndex,
       creator: creatorName,
@@ -48,7 +49,7 @@ export class AppEventColorService {
 
     if (!deviceColors[creatorName]) {
       const color = this.getColorByNumber(activityIndex + 5 /* + 10 = pretty */);
-      console.log('[AppEventColorService] No device color, using fallback:', color);
+      this.logger.log('[AppEventColorService] No device color, using fallback:', color);
       return color;
     }
 
@@ -60,18 +61,18 @@ export class AppEventColorService {
       return activityID && id ? activityID === id : activity === eventActivity;
     });
 
-    console.log('[AppEventColorService] sameCreator index:', sameCreatorActivitiesActivityIndex);
+    this.logger.log('[AppEventColorService] sameCreator index:', sameCreatorActivitiesActivityIndex);
 
     // If its the first one return the color
     if (sameCreatorActivitiesActivityIndex === 0) {
       const color = deviceColors[creatorName];
-      console.log('[AppEventColorService] First for creator, using device color:', color);
+      this.logger.log('[AppEventColorService] First for creator, using device color:', color);
       return color;
     }
 
     // Else it's not the first one, then return the global activity index color
     const color = this.getColorByNumber(activityIndex);
-    console.log('[AppEventColorService] Subsequent for creator, using unique color:', color);
+    this.logger.log('[AppEventColorService] Subsequent for creator, using unique color:', color);
     return color;
   }
 
@@ -83,7 +84,7 @@ export class AppEventColorService {
     // Get the cached core module from the service (it will be loaded when charts are initialized)
     const core = this.amChartsService.getCachedCore();
     if (!core) {
-      console.warn('amCharts core not loaded yet');
+      this.logger.warn('amCharts core not loaded yet');
       return null;
     }
 

@@ -14,7 +14,7 @@ import {
 import * as crypto from 'crypto';
 import * as base58 from 'bs58';
 import { CloudTasksClient } from '@google-cloud/tasks';
-import { EventWriter, FirestoreAdapter, StorageAdapter } from './shared/event-writer';
+import { EventWriter, FirestoreAdapter, StorageAdapter, LogAdapter } from './shared/event-writer';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
 
@@ -153,7 +153,14 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
     }
   };
 
-  const writer = new EventWriter(adapter, storageAdapter);
+  // Create a logger adapter using firebase-functions/logger
+  const logAdapter: LogAdapter = {
+    info: (message: string, ...args: unknown[]) => logger.info('[EventWriter]', message, ...args),
+    warn: (message: string, ...args: unknown[]) => logger.warn('[EventWriter]', message, ...args),
+    error: (message: string | Error, ...args: unknown[]) => logger.error('[EventWriter]', message, ...args),
+  };
+
+  const writer = new EventWriter(adapter, storageAdapter, undefined, logAdapter);
   await writer.writeAllEventData(userID, event, originalFile);
 
   // Write Metadata (not handled by EventWriter)

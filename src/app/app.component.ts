@@ -33,6 +33,8 @@ import { AppWindowService } from './services/app.window.service';
 declare function require(moduleName: string): any;
 
 
+import { LoggerService } from './services/logger.service';
+
 @Component({
   selector: 'app-root',
   templateUrl: './app.component.html',
@@ -70,7 +72,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     private remoteConfigService: AppRemoteConfigService,
     private matIconRegistry: MatIconRegistry,
     private domSanitizer: DomSanitizer,
-    private titleService: Title) {
+    private titleService: Title,
+    private logger: LoggerService) {
     // this.afa.setAnalyticsCollectionEnabled(true)
     this.addIconsToRegistry();
   }
@@ -129,7 +132,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       // Mark it persistently if not already marked.
       if (hasPaidAccess && !hasSubscribedOnce) {
         // Fire and forget update to persist this fact for future (e.g. if they cancel)
-        this.userService.updateUserProperties(user, { hasSubscribedOnce: true }).catch(err => console.error('Failed to persist hasSubscribedOnce', err));
+        this.userService.updateUserProperties(user, { hasSubscribedOnce: true }).catch(err => this.logger.error('Failed to persist hasSubscribedOnce', err));
       }
     } else {
       // Not logged in - show chrome (login/landing page)

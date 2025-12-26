@@ -16,6 +16,7 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
 import { Overlay } from '@angular/cdk/overlay';
 import { USAGE_LIMITS } from '../../../../../functions/src/shared/limits';
+import { LoggerService } from '../../../services/logger.service';
 
 
 import { EventJSONSanitizer } from '../../../utils/event-json-sanitizer';
@@ -39,7 +40,8 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
     protected bottomSheet: MatBottomSheet,
     protected filesStatusService: AppFilesStatusService,
     protected overlay: Overlay,
-    private eventService: AppEventService) {
+    private eventService: AppEventService,
+    private logger: LoggerService) {
     super(snackBar, dialog, filesStatusService)
   }
 
@@ -134,7 +136,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
           return;
         }
 
-        console.log('Successfully uploaded event. ID:', newEvent.getID());
+        this.logger.log('Successfully uploaded event. ID:', newEvent.getID());
         resolve(newEvent);
       };
       // Read it depending on the extension

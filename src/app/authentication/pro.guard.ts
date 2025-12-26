@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Router, CanActivateFn } from '@angular/router';
 import { AppUserService } from '../services/app.user.service';
 import { AppAuthService } from './app.auth.service';
+import { LoggerService } from '../services/logger.service';
 import { firstValueFrom } from 'rxjs';
 import { take } from 'rxjs/operators';
 
@@ -12,16 +13,17 @@ class PermissionsService {
     constructor(
         private router: Router,
         private userService: AppUserService,
-        private authService: AppAuthService
+        private authService: AppAuthService,
+        private logger: LoggerService
     ) { }
 
     async canActivate(): Promise<boolean> {
         try {
-            console.log('[PremiumGuard] Checking access...');
+            this.logger.log('[PremiumGuard] Checking access...');
             const user = await firstValueFrom(this.authService.user$.pipe(take(1)));
 
             if (!user) {
-                console.log('[PremiumGuard] No user found, allowing (authGuard will handle)');
+                this.logger.log('[PremiumGuard] No user found, allowing (authGuard will handle)');
                 return true;
             }
 
@@ -34,11 +36,11 @@ class PermissionsService {
             const stripeRole = (user as any).stripeRole;
             const hasPaidAccess = stripeRole === 'pro' || stripeRole === 'basic' || (user as any).isPro === true;
 
-            console.log('[ProGuard] Status:', { termsAccepted, hasSubscribedOnce, stripeRole, hasPaidAccess });
+            this.logger.log('[ProGuard] Status:', { termsAccepted, hasSubscribedOnce, stripeRole, hasPaidAccess });
 
             // If they have any level of paid access, they are always allowed
             if (hasPaidAccess) {
-                console.log('[ProGuard] Access GRANTED (Pro/Basic)');
+                this.logger.log('[ProGuard] Access GRANTED (Pro/Basic)');
                 return true;
             }
 
@@ -46,18 +48,18 @@ class PermissionsService {
             // then we should NOT redirect them to /pricing yet.
             // OnboardingGuard will catch them and send them to /onboarding.
             if (!termsAccepted || !hasSubscribedOnce) {
-                console.log('[ProGuard] Access DENIED but deferring to OnboardingGuard (Not fully onboarded)');
+                this.logger.log('[ProGuard] Access DENIED but deferring to OnboardingGuard (Not fully onboarded)');
                 // We return false but do NOT navigate to /pricing, so OnboardingGuard can win.
                 return false;
             }
 
             // If we are here, it means they HAVE accepted terms and HAVE subscribed once before,
             // but they are currently NOT paid. Land them on /pricing.
-            console.log('[ProGuard] Access DENIED. User is a lapsed pro member. Redirecting to /pricing');
+            this.logger.log('[ProGuard] Access DENIED. User is a lapsed pro member. Redirecting to /pricing');
             this.router.navigate(['/pricing']);
             return false;
         } catch (error) {
-            console.error('[ProGuard] Error', error);
+            this.logger.error('[ProGuard] Error', error);
             this.router.navigate(['/pricing']);
             return false;
         }

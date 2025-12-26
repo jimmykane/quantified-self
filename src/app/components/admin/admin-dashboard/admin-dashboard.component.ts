@@ -15,7 +15,9 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSlideToggleModule, MatSlideToggleChange } from '@angular/material/slide-toggle';
+import { MatExpansionModule } from '@angular/material/expansion';
 import { FormsModule } from '@angular/forms';
+import { LoggerService } from '../../../services/logger.service';
 
 @Component({
     selector: 'app-admin-dashboard',
@@ -33,7 +35,8 @@ import { FormsModule } from '@angular/forms';
         MatIconModule,
         MatProgressSpinnerModule,
         MatButtonModule,
-        MatSlideToggleModule
+        MatSlideToggleModule,
+        MatExpansionModule
     ]
 })
 export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy {
@@ -79,7 +82,10 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     @ViewChild(MatPaginator) paginator!: MatPaginator;
     @ViewChild(MatSort) sort!: MatSort;
 
-    constructor(private adminService: AdminService) { }
+    constructor(
+        private adminService: AdminService,
+        private logger: LoggerService
+    ) { }
 
     ngOnInit(): void {
         // Setup debounced search
@@ -110,7 +116,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
                 this.isLoadingStats = false;
             },
             error: (err) => {
-                console.error('Failed to load queue stats (direct):', err);
+                this.logger.error('Failed to load queue stats (direct):', err);
                 // Fallback to function if direct fails or retry
                 this.isLoadingStats = false;
             }
@@ -154,7 +160,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
             error: (err) => {
                 this.error = 'Failed to load users. ' + (err.message || '');
                 this.isLoading = false;
-                console.error('AdminDashboard error:', err);
+                this.logger.error('AdminDashboard error:', err);
             }
         });
     }
@@ -234,7 +240,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
                 this.originalMaintenanceMessage = this.maintenanceMessage;
             },
             error: (err) => {
-                console.error('Failed to fetch maintenance status:', err);
+                this.logger.error('Failed to fetch maintenance status:', err);
                 const defaultMsg = "";
                 this.maintenanceMessage = defaultMsg;
                 this.originalMaintenanceMessage = defaultMsg;
@@ -258,7 +264,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
                 this.isUpdatingMaintenance = false;
             },
             error: (err) => {
-                console.error('Failed to save maintenance message:', err);
+                this.logger.error('Failed to save maintenance message:', err);
                 this.isUpdatingMaintenance = false;
             }
         });
@@ -275,10 +281,10 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
                 this.maintenanceMessage = result.message;
                 this.originalMaintenanceMessage = result.message;
                 this.isUpdatingMaintenance = false;
-                console.log(`Maintenance mode ${result.enabled ? 'ENABLED' : 'DISABLED'}`);
+                this.logger.log(`Maintenance mode ${result.enabled ? 'ENABLED' : 'DISABLED'}`);
             },
             error: (err) => {
-                console.error('Failed to update maintenance mode:', err);
+                this.logger.error('Failed to update maintenance mode:', err);
                 this.isUpdatingMaintenance = false;
                 // Revert the toggle
                 this.maintenanceEnabled = !event.checked;

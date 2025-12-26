@@ -11,6 +11,7 @@ import { Functions, httpsCallable, httpsCallableFromURL } from '@angular/fire/fu
 import { Auth } from '@angular/fire/auth';
 import { Observable, from, switchMap, filter, take, map, timeout } from 'rxjs';
 import { AppWindowService } from './app.window.service';
+import { LoggerService } from './logger.service';
 
 export interface StripeProduct {
     id: string;
@@ -53,7 +54,7 @@ export class AppPaymentService {
     private auth = inject(Auth);
     private dialog = inject(MatDialog);
 
-    constructor(private windowService: AppWindowService) { }
+    constructor(private windowService: AppWindowService, private logger: LoggerService) { }
 
     /**
      * Fetches all active products with their prices.
@@ -76,11 +77,11 @@ export class AppPaymentService {
             map((products: StripeProduct[]) => {
                 const virtualProducts: StripeProduct[] = [];
 
-                console.log('getProducts raw input:', products);
+                this.logger.log('getProducts raw input:', products);
 
                 // Flatten/Split logic
                 for (const product of products) {
-                    console.log(`Processing product ${product.id}`, product);
+                    this.logger.log(`Processing product ${product.id}`, product);
 
                     // Check if this product has prices with 'firebaseRole' metadata
                     const getRole = (p: StripePrice) => p.metadata?.firebaseRole?.toLowerCase();
@@ -88,7 +89,7 @@ export class AppPaymentService {
                     const basicPrices = product.prices?.filter(p => getRole(p) === 'basic');
                     const proPrices = product.prices?.filter(p => getRole(p) === 'pro');
 
-                    console.log(`Product ${product.id} prices split:`, { basicPrices, proPrices });
+                    this.logger.log(`Product ${product.id} prices split:`, { basicPrices, proPrices });
 
                     if ((basicPrices && basicPrices.length > 0) || (proPrices && proPrices.length > 0)) {
                         // Split this product into virtual products per price/role
@@ -131,7 +132,7 @@ export class AppPaymentService {
                     }
                 }
 
-                console.log('getProducts virtual output:', virtualProducts);
+                this.logger.log('getProducts virtual output:', virtualProducts);
 
                 // Sort: Basic first, then Pro
                 const roleOrder: Record<string, number> = { 'basic': 1, 'pro': 2 };
@@ -194,7 +195,7 @@ export class AppPaymentService {
                 // (rest of the block is unchanged, just omitted for brevity in diff if not touching it)
                 // actually I need to include it or carefully slice.
                 // let me just allow the logic to run for now.
-                console.warn('User already has an active subscription. Opening management dialog.');
+                this.logger.warn('User already has an active subscription. Opening management dialog.');
 
                 const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
                     data: {
@@ -221,13 +222,13 @@ export class AppPaymentService {
             if (e.message === 'User cancelled redirection to portal.') {
                 return;
             }
-            console.error('Error checking existing subscriptions:', e);
+            this.logger.error('Error checking existing subscriptions:', e);
         }
 
         const success = successUrl || `${this.windowService.currentDomain}/payment/success`;
         const cancel = cancelUrl || `${this.windowService.currentDomain}/payment/cancel`;
 
-        console.log('Creating checkout session for price:', priceId, 'mode:', mode);
+        this.logger.log('Creating checkout session for price:', priceId, 'mode:', mode);
         const checkoutSessionsRef = collection(this.firestore, `customers/${user.uid}/checkout_sessions`);
 
         try {
@@ -239,7 +240,7 @@ export class AppPaymentService {
                 mode: mode, // Explicitly set mode
             });
 
-            console.log('Checkout session created with ID:', sessionDoc.id);
+            this.logger.log('Checkout session created with ID:', sessionDoc.id);
 
             // Wait for the extension to add the URL
             const sessionRef = doc(this.firestore, `customers/${user.uid}/checkout_sessions/${sessionDoc.id}`);
@@ -251,11 +252,11 @@ export class AppPaymentService {
             ).subscribe({
                 next: async (session: any) => {
                     if (session.error) {
-                        console.error('Stripe extension returned an error:', session.error);
+                        this.logger.error('Stripe extension returned an error:', session.error);
 
                         // Self-healing: If customer not found, clear IDs and retry once
                         if (session.error.message?.includes('No such customer')) {
-                            console.log('Detected stale Stripe customer ID. Clearing and retrying...');
+                            this.logger.log('Detected stale Stripe customer ID. Clearing and retrying...');
                             const customerRef = doc(this.firestore, `customers/${user.uid}`);
                             const { updateDoc, deleteField } = await import('@angular/fire/firestore');
                             await updateDoc(customerRef, {
@@ -268,11 +269,11 @@ export class AppPaymentService {
                         alert(`Payment error: ${session.error.message}`);
                         return;
                     }
-                    console.log('Redirecting to Stripe:', session.url);
+                    this.logger.log('Redirecting to Stripe:', session.url);
                     window.location.assign(session.url);
                 },
                 error: (err) => {
-                    console.error('Error waiting for checkout session URL:', err);
+                    this.logger.error('Error waiting for checkout session URL:', err);
                     if (err.name === 'TimeoutError') {
                         alert('Payment system is slow to respond. Please check if the popup was blocked or try again.');
                     } else {
@@ -281,7 +282,7 @@ export class AppPaymentService {
                 }
             });
         } catch (e) {
-            console.error('Error creating checkout doc:', e);
+            this.logger.error('Error creating checkout doc:', e);
             throw e;
         }
     }
@@ -319,7 +320,6 @@ export class AppPaymentService {
                     // The sub doc usually contains `role` field IF the extension is configured to sync it?
                     // Let's assume the extension puts `role` on the sub doc if it updated the claims.
                     // IF NOT, we might need to fetch the product. 
-
                     // For now, let's look for `role` on the subscription document itself, 
                     // as the extension mirrors metadata if configured.
 
@@ -349,7 +349,7 @@ export class AppPaymentService {
             const result = await createPortalLink({ returnUrl });
             window.location.assign(result.data.url);
         } catch (error) {
-            console.error('Error creating portal link:', error);
+            this.logger.error('Error creating portal link:', error);
             throw error;
         }
     }
@@ -371,7 +371,7 @@ export class AppPaymentService {
                 await user.getIdToken(true);
             }
         } catch (error) {
-            console.error('Error restoring purchases:', error);
+            this.logger.error('Error restoring purchases:', error);
             throw error;
         }
     }

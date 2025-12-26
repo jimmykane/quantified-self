@@ -14,6 +14,7 @@ import type * as am4core from '@amcharts/amcharts4/core';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { ChartAbstractDirective } from '../../charts/chart-abstract.directive';
 import { AmChartsService } from '../../../services/am-charts.service';
+import { LoggerService } from '../../../services/logger.service';
 
 import { range, Subscription, timer } from 'rxjs';
 import { take } from 'rxjs/operators';
@@ -32,8 +33,8 @@ export class HomeLiveChartComponent extends ChartAbstractDirective implements On
 
   protected liveDataSubscription: Subscription;
 
-  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected eventColorService: AppEventColorService, protected amChartsService: AmChartsService) {
-    super(zone, changeDetector, amChartsService);
+  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected eventColorService: AppEventColorService, protected amChartsService: AmChartsService, protected logger: LoggerService) {
+    super(zone, changeDetector, amChartsService, logger);
   }
 
   async ngAfterViewInit(): Promise<void> {

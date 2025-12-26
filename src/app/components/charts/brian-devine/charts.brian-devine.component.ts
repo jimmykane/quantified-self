@@ -22,6 +22,7 @@ import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { isNumber } from '@sports-alliance/sports-lib';
 import { ChartDataCategoryTypes } from '@sports-alliance/sports-lib';
+import { LoggerService } from '../../../services/logger.service';
 
 @Component({
   selector: 'app-brian-devine-chart',
@@ -47,8 +48,8 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstractDirective 
   private core: typeof am4core;
   private charts: typeof am4charts;
 
-  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, private eventColorService: AppEventColorService, protected amChartsService: AmChartsService) {
-    super(zone, changeDetector, amChartsService);
+  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, private eventColorService: AppEventColorService, protected amChartsService: AmChartsService, protected logger: LoggerService) {
+    super(zone, changeDetector, amChartsService, logger);
   }
 
 
@@ -199,7 +200,7 @@ export class ChartsBrianDevineComponent extends DashboardChartAbstractDirective 
       const range = axis.axisRanges.create();
       range.date = i === 0 ? firstDay : new Date(firstDay.getFullYear(), i + firstMonth, 0, 24, 0, 0);
       range.endDate = i === totalNumberOfMonths - 1 ? lastDay : new Date(firstDay.getFullYear(), i + firstMonth + 1, 0, 23, 59, 59, 999)
-      console.log(`StartDate: ${range.date} end date: ${range.endDate}`)
+      this.logger.log(`StartDate: ${range.date} end date: ${range.endDate}`)
 
       range.axisFill.fillOpacity = 1;
       (<am4charts.AxisFillCircular>range.axisFill).radius = -28;

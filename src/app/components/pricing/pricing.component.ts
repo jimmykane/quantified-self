@@ -14,6 +14,7 @@ import { Auth } from '@angular/fire/auth';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { firstValueFrom } from 'rxjs';
+import { LoggerService } from '../../services/logger.service';
 
 @Component({
     selector: 'app-pricing',
@@ -34,7 +35,8 @@ export class PricingComponent implements OnInit {
     constructor(
         private paymentService: AppPaymentService,
         private userService: AppUserService,
-        private dialog: MatDialog
+        private dialog: MatDialog,
+        private logger: LoggerService
     ) { }
 
     isLoadingRole = true;
@@ -96,9 +98,9 @@ export class PricingComponent implements OnInit {
         } catch (error) {
             if ((error as any).message === 'User cancelled redirection to portal.') {
                 // User cancelled the dialog, just stop loading
-                console.log('User cancelled subscription management.');
+                this.logger.log('User cancelled subscription management.');
             } else {
-                console.error('Error starting checkout:', error);
+                this.logger.error('Error starting checkout:', error);
                 alert('Failed to start checkout. Please try again.');
             }
             this.isLoading = false;
@@ -127,7 +129,7 @@ export class PricingComponent implements OnInit {
         try {
             await this.paymentService.manageSubscriptions();
         } catch (error) {
-            console.error('Error managing subscription:', error);
+            this.logger.error('Error managing subscription:', error);
             alert('Failed to redirect to subscription management. Please try again.');
             this.isLoading = false;
         }
@@ -148,7 +150,7 @@ export class PricingComponent implements OnInit {
             // Reload window to reflect new state
             window.location.reload();
         } catch (error) {
-            console.error('Error restoring purchases:', error);
+            this.logger.error('Error restoring purchases:', error);
             alert('Failed to restore purchases. Please contact support.');
             this.isLoading = false;
         }

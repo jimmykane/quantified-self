@@ -1,6 +1,5 @@
 import { ChangeDetectorRef, ElementRef, Input, NgZone, OnDestroy, ViewChild, Directive } from '@angular/core';
 import * as Sentry from '@sentry/browser';
-// import * as am4charts from '@amcharts/amcharts4/charts'; // Removed static import
 import { Subscription } from 'rxjs';
 import { DataPaceMinutesPerMile, DataPace } from '@sports-alliance/sports-lib';
 import { ChartThemes } from '@sports-alliance/sports-lib';
@@ -11,7 +10,7 @@ import { AmChartsService } from '../../services/am-charts.service';
 import type * as am4charts from '@amcharts/amcharts4/charts';
 import type * as am4coretype from '@amcharts/amcharts4/core';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
-
+import { LoggerService } from '../../services/logger.service';
 
 
 // @todo should dectate to implement on screen change
@@ -31,7 +30,7 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
   // protected themes = {}; // Removed static themes map
 
 
-  protected constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected amChartsService: AmChartsService) {
+  protected constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected amChartsService: AmChartsService, protected logger: LoggerService) {
     super(changeDetector);
   }
 
@@ -63,7 +62,7 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
     am4core.unuseAllThemes();
 
     let themeModule;
-    console.log(`[Antigravity] Setting chart theme to: ${chartTheme}`);
+    this.logger.log(`[Antigravity] Setting chart theme to: ${chartTheme}`);
     try {
       switch (chartTheme) {
         case 'material': themeModule = await import('@amcharts/amcharts4/themes/material'); break;
@@ -76,19 +75,19 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
         case 'spiritedaway': themeModule = await import('@amcharts/amcharts4/themes/spiritedaway'); break;
         case 'kelly': themeModule = await import('@amcharts/amcharts4/themes/kelly'); break;
         default:
-          console.warn(`[Antigravity] Unknown theme '${chartTheme}', defaulting to material.`);
+          this.logger.warn(`[Antigravity] Unknown theme '${chartTheme}', defaulting to material.`);
           themeModule = await import('@amcharts/amcharts4/themes/material');
           break;
       }
 
       if (themeModule && themeModule.default) {
-        console.log(`[Antigravity] Applying theme module for ${chartTheme}`);
+        this.logger.log(`[Antigravity] Applying theme module for ${chartTheme}`);
         am4core.useTheme(themeModule.default);
       } else {
-        console.error(`[Antigravity] Theme module for ${chartTheme} did not load correctly.`, themeModule);
+        this.logger.error(`[Antigravity] Theme module for ${chartTheme} did not load correctly.`, themeModule);
       }
     } catch (e) {
-      console.error(`[Antigravity] Error loading theme ${chartTheme}:`, e);
+      this.logger.error(`[Antigravity] Error loading theme ${chartTheme}:`, e);
     }
 
     // Programmatically enforce dark tooltip styles for dark themes to prevent "white on white" issues

@@ -1,4 +1,4 @@
-<ng-container *ngIf="!(maintenanceMode$ | async); else maintenanceTemplate">
+<ng-container *ngIf="(maintenanceMode$ | async) !== true; else maintenanceTemplate">
   <ng-container *ngIf="authState !== null; else loadingApp">
     <div *ngIf="gracePeriodUntil$ | async as gracePeriodUntil" class="grace-period-banner mat-typography">
       <mat-icon inline>warning</mat-icon>

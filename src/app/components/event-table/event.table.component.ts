@@ -40,7 +40,7 @@ import { EventsExportFormComponent } from '../events-export-form/events-export.f
 import { MatDialog } from '@angular/material/dialog';
 import { OrderByDirection } from 'firebase/firestore';
 import { AppFileService } from '../../services/app.file.service';
-
+import { LoggerService } from '../../services/logger.service';
 
 @Component({
   selector: 'app-event-table',
@@ -85,7 +85,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     private eventColorService: AppEventColorService,
     private dialog: MatDialog,
     private fileService: AppFileService,
-    private router: Router, private datePipe: DatePipe) {
+    private router: Router, private datePipe: DatePipe,
+    private logger: LoggerService) {
     super(changeDetector);
   }
 
@@ -182,7 +183,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     try {
       events = await Promise.all(promises);
     } catch (e: any) {
-      console.error('Merge failed during event fetch', e);
+      this.logger.error('Merge failed during event fetch', e);
       this.loaded();
       this.snackBar.open(e.message || 'Error loading events for merge', 'Close', { duration: 5000, panelClass: ['error-snackbar'] });
       return;
@@ -210,7 +211,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
               const eventStartDate = this.fileService.toDate(evt.startDate);
               validOriginalFiles.push({ data: buffer, extension: ext, startDate: fileMeta.startDate || eventStartDate || new Date() });
             } catch (e) {
-              console.error('Failed to download source file for merge', fileMeta, e);
+              this.logger.error('Failed to download source file for merge', fileMeta, e);
             }
           })());
         }
@@ -225,7 +226,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
             const eventStartDate = this.fileService.toDate(evt.startDate);
             validOriginalFiles.push({ data: buffer, extension: ext, startDate: evt.originalFile.startDate || eventStartDate || new Date() });
           } catch (e) {
-            console.error('Failed to download source file for merge', evt.originalFile, e);
+            this.logger.error('Failed to download source file for merge', evt.originalFile, e);
           }
         })());
       }
@@ -236,7 +237,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         await Promise.all(fileFetchPromises);
       }
     } catch (e) {
-      console.warn('Error fetching some original files, proceeding with merge anyway', e);
+      this.logger.warn('Error fetching some original files, proceeding with merge anyway', e);
     }
 
     events.forEach((e) => {
@@ -250,8 +251,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     try {
       // Pass the collected files to the writer
       // Note: writeAllEventData signature updated to accept array
-      console.log('[EventTable] Merging event. Source events:', events);
-      console.log('[EventTable] Valid original files to write:', validOriginalFiles);
+      this.logger.log('[EventTable] Merging event. Source events:', events);
+      this.logger.log('[EventTable] Valid original files to write:', validOriginalFiles);
       await this.eventService.writeAllEventData(this.user, mergedEvent, validOriginalFiles);
 
       logEvent(this.analytics, 'merge_events');
@@ -339,8 +340,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
         const appEvent = event as any;
         const eventId = event.getID ? event.getID() : null;
-        console.log(`[EventTable] Processing event for download: ${eventId}`, event);
-        console.log(`[EventTable] originalFiles metadata:`, appEvent.originalFiles);
+        this.logger.log(`[EventTable] Processing event for download: ${eventId}`, event);
+        this.logger.log(`[EventTable] originalFiles metadata:`, appEvent.originalFiles);
 
         // Handle array of original files
         if (appEvent.originalFiles && Array.isArray(appEvent.originalFiles) && appEvent.originalFiles.length > 0) {
@@ -378,7 +379,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
           const data = await this.eventService.downloadFile(file.path);
           downloadedFiles.push({ data, fileName: file.fileName });
         } catch (e) {
-          console.error('Failed to download file:', file.path, e);
+          this.logger.error('Failed to download file:', file.path, e);
           // Continue with other files
         }
       }
@@ -398,7 +399,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       logEvent(this.analytics, 'download_originals', { count: downloadedFiles.length });
       this.snackBar.open(`Downloaded ${downloadedFiles.length} file(s)`, null, { duration: 2000 });
     } catch (e) {
-      console.error('Error downloading originals:', e);
+      this.logger.error('Error downloading originals:', e);
       Sentry.captureException(e);
       this.snackBar.open('Error downloading files', null, { duration: 3000 });
     } finally {

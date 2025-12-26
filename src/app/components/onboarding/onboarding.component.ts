@@ -16,6 +16,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatDividerModule } from '@angular/material/divider';
 import { POLICY_CONTENT, PolicyItem } from '../../shared/policies.content';
+import { LoggerService } from '../../services/logger.service';
 
 @Component({
     selector: 'app-onboarding',
@@ -49,6 +50,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
     private auth = inject(Auth);
     private router = inject(Router);
     private _formBuilder = inject(FormBuilder);
+    private logger = inject(LoggerService);
 
     ngOnInit() {
         // If user wasn't passed via Input (routing), get it from service
@@ -122,7 +124,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
                 return (this.user as any)[userProperty] === true;
             });
 
-            console.log('[OnboardingComponent] checkAndAdvance:', {
+            this.logger.log('[OnboardingComponent] checkAndAdvance:', {
                 termsAccepted,
                 isPro: this.isPro,
                 selectedIndex: this.stepper?.selectedIndex
@@ -131,10 +133,10 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
             if (termsAccepted && this.stepper && this.stepper.selectedIndex === 0) {
                 const isSubscribed = await this.userService.hasPaidAccess();
                 if (isSubscribed) {
-                    console.log('[OnboardingComponent] Terms accepted and user is subscribed, finishing onboarding.');
+                    this.logger.log('[OnboardingComponent] Terms accepted and user is subscribed, finishing onboarding.');
                     this.finishOnboarding();
                 } else {
-                    console.log('[OnboardingComponent] Terms accepted, auto-advancing to pricing step.');
+                    this.logger.log('[OnboardingComponent] Terms accepted, auto-advancing to pricing step.');
                     // Use setTimeout to avoid ExpressionChangedAfterItHasBeenCheckedError
                     setTimeout(() => {
                         this.stepper.selectedIndex = 1;
@@ -180,13 +182,13 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
 
                 const isSubscribed = await this.userService.hasPaidAccess();
                 if (isSubscribed) {
-                    console.log('[OnboardingComponent] User is subscribed, finishing onboarding directly.');
+                    this.logger.log('[OnboardingComponent] User is subscribed, finishing onboarding directly.');
                     this.finishOnboarding();
                 } else {
                     this.stepper.next();
                 }
             } catch (error) {
-                console.error('Error updating user terms:', error);
+                this.logger.error('Error updating user terms:', error);
             }
         } else {
             this.termsFormGroup.markAllAsTouched();
@@ -204,10 +206,10 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
             await this.userService.updateUserProperties(this.user, { onboardingCompleted: true });
 
             // Navigate to dashboard. The OnboardingGuard will now allow this.
-            console.log('[OnboardingComponent] Finishing onboarding, navigating to dashboard');
+            this.logger.log('[OnboardingComponent] Finishing onboarding, navigating to dashboard');
             this.router.navigate(['/dashboard']);
         } catch (error) {
-            console.error('Error completing onboarding:', error);
+            this.logger.error('Error completing onboarding:', error);
         }
     }
 }

@@ -29,6 +29,7 @@ import { MapAbstractDirective } from '../../map/map-abstract.directive';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib';
 import { environment } from '../../../../environments/environment';
+import { LoggerService } from '../../../services/logger.service';
 
 @Component({
   selector: 'app-event-card-map',
@@ -87,8 +88,9 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     private eventService: AppEventService,
     private userService: AppUserService,
     private activityCursorService: AppActivityCursorService,
-    public eventColorService: AppEventColorService) {
-    super(changeDetectorRef);
+    public eventColorService: AppEventColorService,
+    protected logger: LoggerService) {
+    super(changeDetectorRef, logger);
   }
 
   ngOnInit() {
@@ -408,23 +410,23 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
   private fitBoundsToActivities() {
     if (!this.googleMap?.googleMap || !this.activitiesMapData.length) {
-      console.log('[EventCardMapComponent] Skipping fitBounds. mapReady:', !!this.googleMap?.googleMap, 'dataLength:', this.activitiesMapData.length);
+      this.logger.log('[EventCardMapComponent] Skipping fitBounds. mapReady:', !!this.googleMap?.googleMap, 'dataLength:', this.activitiesMapData.length);
       return;
     }
 
     const allPositions = this.activitiesMapData.reduce((arr, data) => arr.concat(data.positions), []);
-    console.log('[EventCardMapComponent] fitBoundsToActivities called for', allPositions.length, 'total positions across', this.activitiesMapData.length, 'activities');
+    this.logger.log('[EventCardMapComponent] fitBoundsToActivities called for', allPositions.length, 'total positions across', this.activitiesMapData.length, 'activities');
 
     if (allPositions.length === 0) return;
 
     const bounds = this.getBounds(allPositions);
-    console.log('[EventCardMapComponent] Computed bounds:', JSON.stringify(bounds));
+    this.logger.log('[EventCardMapComponent] Computed bounds:', JSON.stringify(bounds));
 
     this.googleMap.googleMap.fitBounds(bounds);
 
     // Log final zoom after a short delay to see what Google decided
     setTimeout(() => {
-      console.log('[EventCardMapComponent] Final zoom after fitBounds:', this.googleMap.googleMap.getZoom());
+      this.logger.log('[EventCardMapComponent] Final zoom after fitBounds:', this.googleMap.googleMap.getZoom());
     }, 200);
   }
 

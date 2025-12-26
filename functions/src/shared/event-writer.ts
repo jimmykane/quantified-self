@@ -1,23 +1,50 @@
-import * as logger from 'firebase-functions/logger';
 import { AppEventInterface } from './app-event.interface';
 
+/**
+ * Logger adapter interface for cross-environment compatibility.
+ * Allows EventWriter to work in both browser (Angular) and Node.js (Firebase Functions) environments.
+ */
+export interface LogAdapter {
+    info(message: string, ...args: unknown[]): void;
+    warn(message: string, ...args: unknown[]): void;
+    error(message: string | Error, ...args: unknown[]): void;
+}
+
+/**
+ * Default console-based logger for environments where no logger is provided.
+ * Used by the frontend Angular application.
+ */
+export const consoleLogAdapter: LogAdapter = {
+    info: (message: string, ...args: unknown[]) => console.log('[EventWriter]', message, ...args),
+    warn: (message: string, ...args: unknown[]) => console.warn('[EventWriter]', message, ...args),
+    error: (message: string | Error, ...args: unknown[]) => console.error('[EventWriter]', message, ...args),
+};
 
 export interface FirestoreAdapter {
-    setDoc(path: string[], data: any): Promise<void>;
-    createBlob(data: Uint8Array): any;
+    setDoc(path: string[], data: unknown): Promise<void>;
+    createBlob(data: Uint8Array): unknown;
     generateID(): string;
 }
 
 export interface StorageAdapter {
-    uploadFile(path: string, data: any, metadata?: any): Promise<void>;
+    uploadFile(path: string, data: unknown, metadata?: unknown): Promise<void>;
     getBucketName?(): string;  // Optional: some adapters may provide bucket name
 }
 
 export class EventWriter {
-    constructor(private adapter: FirestoreAdapter, private storageAdapter?: StorageAdapter, private bucketName?: string) { }
+    private logger: LogAdapter;
 
-    public async writeAllEventData(userID: string, event: AppEventInterface, originalFiles?: { data: any, extension: string, startDate?: Date }[] | { data: any, extension: string, startDate?: Date }): Promise<void> {
-        logger.info('[EventWriter] writeAllEventData called', { userID, eventID: event.getID(), adapterPresent: !!this.storageAdapter });
+    constructor(
+        private adapter: FirestoreAdapter,
+        private storageAdapter?: StorageAdapter,
+        private bucketName?: string,
+        logger?: LogAdapter
+    ) {
+        this.logger = logger || consoleLogAdapter;
+    }
+
+    public async writeAllEventData(userID: string, event: AppEventInterface, originalFiles?: { data: unknown, extension: string, startDate?: Date }[] | { data: unknown, extension: string, startDate?: Date }): Promise<void> {
+        this.logger.info('writeAllEventData called', { userID, eventID: event.getID(), adapterPresent: !!this.storageAdapter });
         const writePromises: Promise<void>[] = [];
 
         // Ensure Event ID
@@ -33,6 +60,7 @@ export class EventWriter {
                 }
 
                 const activityJSON = activity.toJSON();
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 delete (activityJSON as any).streams;
 
                 // Write Activity
@@ -45,11 +73,12 @@ export class EventWriter {
             }
 
             // Write Event
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const eventJSON: any = event.toJSON();
-            delete (eventJSON as any).activities;
+            delete eventJSON.activities;
 
             // Normalize input to array or single
-            let filesToUpload: { data: any, extension: string, startDate?: Date }[] = [];
+            let filesToUpload: { data: unknown, extension: string, startDate?: Date }[] = [];
             if (originalFiles) {
                 if (Array.isArray(originalFiles)) {
                     filesToUpload = originalFiles;
@@ -77,7 +106,7 @@ export class EventWriter {
                         filePath = `users/${userID}/events/${event.getID()}/original_${i}.${file.extension}`;
                     }
 
-                    logger.info(`[EventWriter] Uploading file ${i + 1}/${filesToUpload.length} to`, filePath);
+                    this.logger.info(`Uploading file ${i + 1}/${filesToUpload.length} to`, filePath);
                     await this.storageAdapter.uploadFile(filePath, file.data);
 
                     uploadedFilesMetadata.push({
@@ -87,20 +116,20 @@ export class EventWriter {
                     });
                 }
 
-                logger.info('[EventWriter] Upload complete. Adding metadata to eventJSON');
+                this.logger.info('Upload complete. Adding metadata to eventJSON');
 
                 // Write 'originalFiles' array and 'originalFile' legacy
                 if (uploadedFilesMetadata.length > 0) {
-                    logger.info('[EventWriter] Assigning metadata to eventJSON:', uploadedFilesMetadata.length);
+                    this.logger.info('Assigning metadata to eventJSON:', uploadedFilesMetadata.length);
                     eventJSON.originalFiles = uploadedFilesMetadata;
                     // Always set primary legacy pointer to the first file
                     eventJSON.originalFile = uploadedFilesMetadata[0];
                 } else {
-                    logger.info('[EventWriter] No metadata to assign (uploadedFilesMetadata empty)');
+                    this.logger.info('No metadata to assign (uploadedFilesMetadata empty)');
                 }
 
             } else {
-                logger.warn('[EventWriter] Skipping file upload.', 'storageAdapter:', !!this.storageAdapter);
+                this.logger.warn('Skipping file upload.', 'storageAdapter:', !!this.storageAdapter);
             }
 
             writePromises.push(
@@ -108,9 +137,11 @@ export class EventWriter {
             );
 
             await Promise.all(writePromises);
-        } catch (e: any) {
-            logger.error(e);
-            throw new Error('Could not write event data: ' + e.message);
+        } catch (e) {
+            const error = e as Error;
+            this.logger.error(error);
+            throw new Error('Could not write event data: ' + error.message);
         }
     }
 }
+

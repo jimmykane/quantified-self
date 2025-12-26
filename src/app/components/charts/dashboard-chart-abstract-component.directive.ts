@@ -10,6 +10,7 @@ import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { DataInterface } from '@sports-alliance/sports-lib';
 
 import { AmChartsService } from '../../services/am-charts.service';
+import { LoggerService } from '../../services/logger.service';
 
 // Type-only imports
 import type * as am4core from '@amcharts/amcharts4/core';
@@ -24,8 +25,8 @@ export abstract class DashboardChartAbstractDirective extends ChartAbstractDirec
   @Input() chartDataCategoryType?: ChartDataCategoryTypes;
   @Input() chartDataTimeInterval?: TimeIntervals;
 
-  protected constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected amChartsService: AmChartsService) {
-    super(zone, changeDetector, amChartsService);
+  protected constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected amChartsService: AmChartsService, protected logger: LoggerService) {
+    super(zone, changeDetector, amChartsService, logger);
   }
 
   async ngAfterViewInit(): Promise<void> {
