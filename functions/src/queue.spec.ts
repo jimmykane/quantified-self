@@ -187,7 +187,7 @@ describe('queue', () => {
 
             await expect(
                 increaseRetryCountForQueueItem(queueItem, new Error('Test'))
-            ).rejects.toThrow('No docuemnt reference supplied');
+            ).rejects.toThrow('No document reference supplied');
         });
 
         it('should call ref.update with serialized queue item', async () => {
@@ -244,7 +244,7 @@ describe('queue', () => {
 
             await expect(
                 updateToProcessed(queueItem)
-            ).rejects.toThrow('No docuemnt reference supplied');
+            ).rejects.toThrow('No document reference supplied');
         });
     });
 });
