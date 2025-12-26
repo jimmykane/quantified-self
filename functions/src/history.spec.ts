@@ -106,7 +106,9 @@ describe('history', () => {
             await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
 
             expect(tokens.getTokenData).toHaveBeenCalled();
-            expect(requestHelper.get).toHaveBeenCalled();
+            expect(requestHelper.get).toHaveBeenCalledWith(expect.objectContaining({
+                url: expect.stringContaining('/v3/workouts')
+            }));
             expect(firestore.batch).toHaveBeenCalled();
             expect(firestore.batch().commit).toHaveBeenCalled();
         });

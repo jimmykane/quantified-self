@@ -109,7 +109,7 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
           'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
           'json': true,
         },
-        url: `https://cloudapi.suunto.com/v2/workouts?since=${startDate.getTime()}&until=${endDate.getTime()}&limit=1000000&filter-by-modification-time=false`,
+        url: `https://cloudapi.suunto.com/v3/workouts?since=${startDate.getTime()}&until=${endDate.getTime()}&limit=1000000&filter-by-modification-time=false`,
       });
       result = JSON.parse(result);
       if (result.error) {

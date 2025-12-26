@@ -90,7 +90,7 @@ describe('getSuuntoFITFile', () => {
 
         expect(mockVerifyIdToken).toHaveBeenCalledWith('Bearer token');
         expect(requestHelper.get).toHaveBeenCalledWith(expect.objectContaining({
-            url: expect.stringContaining('w1'),
+            url: expect.stringContaining('/v3/workouts/w1/fit'),
             headers: expect.objectContaining({ Authorization: 'at' })
         }));
         expect(res.status).toHaveBeenCalledWith(200);

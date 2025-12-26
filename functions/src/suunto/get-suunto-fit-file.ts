@@ -97,7 +97,7 @@ export const getSuuntoFITFile = functions.region('europe-west2').https.onRequest
       },
       encoding: null,
       // gzip: true,
-      url: `https://cloudapi.suunto.com/v2/workout/exportFit/${req.body.workoutID}`,
+      url: `https://cloudapi.suunto.com/v3/workouts/${req.body.workoutID}/fit`,
     });
     console.timeEnd('GetFIT');
     console.log(`Downloaded FIT file for ${req.body.workoutID} and token user ${serviceTokenToUse.userName}`);

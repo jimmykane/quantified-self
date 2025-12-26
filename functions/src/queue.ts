@@ -198,7 +198,7 @@ export function getWorkoutForService(
         },
         encoding: null,
         // gzip: true,
-        url: `https://cloudapi.suunto.com/v2/workout/exportFit/${(workoutQueueItem as SuuntoAppWorkoutQueueItemInterface).workoutID}`,
+        url: `https://cloudapi.suunto.com/v3/workouts/${(workoutQueueItem as SuuntoAppWorkoutQueueItemInterface).workoutID}/fit`,
       });
   }
 }
