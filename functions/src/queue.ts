@@ -259,8 +259,8 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
 
   // If there is no token for the user, give them a few chances to reconnect
   if (!tokenQuerySnapshots.size) {
-    console.warn(`No token found for queue item ${queueItem.id}. Retrying a few times in case of reconnection.`);
-    return increaseRetryCountForQueueItem(queueItem, new Error('No tokens found'), 1, bulkWriter);
+    console.warn(`No token found for queue item ${queueItem.id}. Fail fast.`);
+    return updateToProcessed(queueItem, bulkWriter, { processingError: 'NO_TOKEN_FOUND' });
   }
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {

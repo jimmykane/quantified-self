@@ -31,17 +31,17 @@ export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterfa
     }
 }
 
-export async function updateToProcessed(queueItem: QueueItemInterface, bulkWriter?: admin.firestore.BulkWriter) {
+export async function updateToProcessed(queueItem: QueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, additionalData?: any) {
     if (!queueItem.ref) {
         throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
     }
     try {
         const ref = queueItem.ref;
         queueItem.ref = undefined;
-        const updateData = {
+        const updateData = Object.assign({
             'processed': true,
             'processedAt': (new Date()).getTime(),
-        };
+        }, additionalData);
         if (bulkWriter) {
             void bulkWriter.update(ref, updateData);
         } else {
