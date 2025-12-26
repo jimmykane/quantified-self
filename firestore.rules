@@ -60,11 +60,7 @@ service cloud.firestore {
             allow read: if eventData().privacy == 'public'
             allow read: if isCoach(userID) == true;
             allow read, write: if request.auth.uid == userID;
-            match /streams/{streamID} {
-              allow read: if eventData().privacy == 'public'
-              allow read: if isCoach(userID) == true;
-              allow read, write: if request.auth.uid == userID;
-            }
+
           }
 
           match /metaData/{document=**} {
