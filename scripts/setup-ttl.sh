@@ -2,22 +2,19 @@
 
 # Array of collection group names
 COLLECTIONS=(
-    "corosAPIWorkoutQueue"
-    "corosAPIHistoryImportWorkoutQueue"
+    "COROSAPIWorkoutQueue"
+    "COROSAPIHistoryImportWorkoutQueue"
     "suuntoAppWorkoutQueue"
-    "suuntoAppHistoryImportWorkoutQueue"
+    "suuntoAppHistoryImportActivityQueue"
     "garminHealthAPIActivityQueue"
+    "failed_jobs"
 )
 
 # Field name for TTL
 FIELD_NAME="expireAt"
 
-# Get the current project ID
-PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
-
-if [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" == "(unset)" ]; then
-    PROJECT_ID="quantified-self-io"
-fi
+# Set the project ID to quantified-self-io to prevent accidental runs on other projects
+PROJECT_ID="quantified-self-io"
 
 echo "Using project ID: $PROJECT_ID"
 

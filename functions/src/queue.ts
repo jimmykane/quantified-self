@@ -2,7 +2,7 @@ import * as functions from 'firebase-functions/v1';
 import { MAX_RETRY_COUNT, QUEUE_SCHEDULE, QUEUE_ITEM_TTL_MS } from './shared/queue-config';
 import * as admin from 'firebase-admin';
 import pLimit from 'p-limit';
-import { increaseRetryCountForQueueItem, updateToProcessed } from './queue-utils';
+import { increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue } from './queue-utils';
 import { processGarminHealthAPIActivityQueueItem } from './garmin/queue';
 import {
   COROSAPIWorkoutQueueItemInterface,
@@ -260,7 +260,8 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   // If there is no token for the user, give them a few chances to reconnect
   if (!tokenQuerySnapshots.size) {
     console.warn(`No token found for queue item ${queueItem.id}. Fail fast.`);
-    return updateToProcessed(queueItem, bulkWriter, { processingError: 'NO_TOKEN_FOUND' });
+    // return updateToProcessed(queueItem, bulkWriter, { processingError: 'NO_TOKEN_FOUND' });
+    return moveToDeadLetterQueue(queueItem, new Error('No token found - Fail Fast'), bulkWriter, 'NO_TOKEN_FOUND');
   }
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {

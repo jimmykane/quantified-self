@@ -32,13 +32,21 @@ vi.mock('firebase-admin', () => {
     const mockDocRef = {
         update: vi.fn(() => Promise.resolve()),
         set: vi.fn(() => Promise.resolve()),
+        delete: vi.fn(() => Promise.resolve()),
         id: 'mock-doc-id',
+        parent: { id: 'mock-collection' }
     };
 
     const mockDocSnapshot = {
         id: 'mock-doc-id',
         ref: mockDocRef,
         data: vi.fn(() => ({})),
+    };
+
+    const mockBatch = {
+        set: vi.fn(),
+        delete: vi.fn(),
+        commit: vi.fn().mockResolvedValue(undefined)
     };
 
     const mockCollection = {
@@ -54,19 +62,27 @@ vi.mock('firebase-admin', () => {
     const mockFirestore = {
         collection: vi.fn(() => mockCollection),
         collectionGroup: vi.fn(() => mockCollection),
+        batch: vi.fn(() => mockBatch),
         bulkWriter: vi.fn(() => ({
             update: vi.fn(),
+            set: vi.fn(),
+            delete: vi.fn(),
             close: vi.fn().mockResolvedValue(undefined),
         })),
     };
 
+    const mockFirestoreFn: any = vi.fn(() => mockFirestore);
+    mockFirestoreFn.Timestamp = {
+        fromDate: vi.fn((date) => date),
+    };
+
     return {
         default: {
-            firestore: vi.fn(() => mockFirestore),
+            firestore: mockFirestoreFn,
             initializeApp: vi.fn(),
             credential: { cert: vi.fn() },
         },
-        firestore: vi.fn(() => mockFirestore),
+        firestore: mockFirestoreFn,
     };
 });
 
@@ -102,7 +118,7 @@ vi.mock('./request-helper', () => ({
 }));
 
 // Import after mocks are set up
-import { increaseRetryCountForQueueItem, updateToProcessed } from './queue-utils';
+import { increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue } from './queue-utils';
 import {
     addToQueueForSuunto,
     addToQueueForGarmin,
@@ -137,9 +153,15 @@ describe('queue', () => {
             expect(queueItem.errors![0].error).toBe('Test error');
         });
 
-        it('should increment by custom amount', async () => {
+        it('should move to DLQ if max retries reached', async () => {
+            const admin = await import('firebase-admin');
+            const firestore = admin.firestore();
+            const batch = firestore.batch();
+
             const mockRef = {
                 update: vi.fn(() => Promise.resolve()),
+                delete: vi.fn(() => Promise.resolve()),
+                parent: { id: 'original-col' }
             };
 
             const queueItem: QueueItemInterface = {
@@ -150,10 +172,16 @@ describe('queue', () => {
                 dateCreated: Date.now(),
             };
 
+            // 10 is max retry count
             await increaseRetryCountForQueueItem(queueItem, new Error('Big error'), 10);
 
-            expect(queueItem.retryCount).toBe(10);
-            expect(queueItem.totalRetryCount).toBe(10);
+            // Should NOT verify update on original ref
+            expect(mockRef.update).not.toHaveBeenCalled();
+
+            // Should verify batch delete and set (DLQ logic)
+            expect(batch.delete).toHaveBeenCalledWith(mockRef);
+            expect(batch.set).toHaveBeenCalled();
+            expect(batch.commit).toHaveBeenCalled();
         });
 
         it('should accumulate errors', async () => {
@@ -205,7 +233,7 @@ describe('queue', () => {
             await increaseRetryCountForQueueItem(queueItem, new Error('Test'));
 
             expect(mockUpdate).toHaveBeenCalled();
-            const updateArg = mockUpdate.mock.calls[0][0];
+            const updateArg = (mockUpdate.mock.calls[0] as any[])[0];
             expect(updateArg.retryCount).toBe(1);
             expect(updateArg.ref).toBeUndefined(); // ref should be stripped
         });
@@ -245,6 +273,43 @@ describe('queue', () => {
             await expect(
                 updateToProcessed(queueItem)
             ).rejects.toThrow('No document reference supplied');
+        });
+    });
+
+    describe('moveToDeadLetterQueue', () => {
+        it('should move queue item to failed_jobs collection', async () => {
+            const admin = await import('firebase-admin');
+            const firestore = admin.firestore();
+            const batch = firestore.batch();
+
+            const mockRef = {
+                parent: { id: 'original-col' },
+                update: vi.fn(),
+                delete: vi.fn(),
+                id: 'ref-id'
+            };
+
+            const queueItem: QueueItemInterface = {
+                id: 'test-item-dlq',
+                ref: mockRef as any,
+                retryCount: 9,
+                processed: false,
+                dateCreated: Date.now(),
+            };
+
+            await moveToDeadLetterQueue(queueItem, new Error('Fatal error'));
+
+            expect(batch.set).toHaveBeenCalledWith(
+                expect.any(Object), // failedDocRef
+                expect.objectContaining({
+                    id: 'test-item-dlq',
+                    error: 'Fatal error',
+                    originalCollection: 'original-col',
+                    expireAt: expect.any(Object)
+                })
+            );
+            expect(batch.delete).toHaveBeenCalledWith(mockRef);
+            expect(batch.commit).toHaveBeenCalled();
         });
     });
 });
