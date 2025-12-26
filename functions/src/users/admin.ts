@@ -269,6 +269,10 @@ export const listUsers = onCall({
 /**
  * Gets the total number of users in the system.
  */
+/**
+ * Gets the total number of users in the system, broken down by subscription status.
+ * Uses optimized Aggregation Queries.
+ */
 export const getUserCount = onCall({
     region: 'europe-west2',
     cors: ALLOWED_CORS_ORIGINS,
@@ -283,8 +287,23 @@ export const getUserCount = onCall({
 
     try {
         const db = admin.firestore();
-        const snapshot = await db.collection('users').count().get();
-        return { count: snapshot.data().count };
+
+        // Parallel efficient count queries
+        const [totalSnapshot, proSnapshot] = await Promise.all([
+            db.collection('users').count().get(),
+            db.collectionGroup('subscriptions').where('status', 'in', ['active', 'trialing']).count().get()
+        ]);
+
+        const total = totalSnapshot.data().count;
+        const pro = proSnapshot.data().count;
+        const basic = Math.max(0, total - pro); // Safety check
+
+        return {
+            count: total, // Keep for backward compatibility
+            total,
+            pro,
+            basic
+        };
     } catch (error: unknown) {
         logger.error('Error getting user count:', error);
         throw new HttpsError('internal', 'Failed to get user count');

@@ -76,7 +76,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     // Queue stats
     queueStats: QueueStats | null = null;
     isLoadingStats = false;
-    totalUserCount: number | null = null;
+    userStats: { total: number; pro: number; basic: number } | null = null;
 
     // Charts
     public barChartLegend = true;
@@ -125,8 +125,8 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         this.fetchUsers();
         this.fetchQueueStats();
         this.fetchMaintenanceStatus();
-        this.adminService.getTotalUserCount().subscribe(count => {
-            this.totalUserCount = count;
+        this.adminService.getTotalUserCount().subscribe(stats => {
+            this.userStats = stats;
         });
     }
 

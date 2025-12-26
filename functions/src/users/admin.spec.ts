@@ -16,6 +16,7 @@ const {
     const mockCollection = vi.fn();
     const mockFirestore = vi.fn(() => ({
         collection: mockCollection,
+        collectionGroup: mockCollection
     }));
 
     return {
@@ -312,24 +313,50 @@ describe('getUserCount Cloud Function', () => {
         vi.clearAllMocks();
     });
 
-    it('should return total user count', async () => {
+    it('should return total user count with subscription breakdown', async () => {
         const request = {
             auth: { uid: 'admin-uid', token: { admin: true } }
         } as unknown as CallableRequest<any>;
 
-        const mockCountGet = vi.fn().mockResolvedValue({
+        const mockTotalCount = vi.fn().mockResolvedValue({
             data: () => ({ count: 150 })
         });
+        const mockProCount = vi.fn().mockResolvedValue({
+            data: () => ({ count: 50 })
+        });
 
-        mockCollection.mockReturnValue({
+        // Mock implementation for chainable queries
+        const mockQuery = {
+            where: vi.fn().mockReturnThis(),
             count: vi.fn().mockReturnValue({
-                get: mockCountGet
+                get: mockProCount
             })
+        };
+
+        mockCollection.mockImplementation((name) => {
+            if (name === 'users') {
+                return {
+                    count: vi.fn().mockReturnValue({
+                        get: mockTotalCount
+                    })
+                };
+            }
+            if (name === 'subscriptions') {
+                // This handles collectionGroup('subscriptions')
+                return mockQuery;
+            }
+            return {};
         });
 
         const result = await (getUserCount as any)(request);
 
-        expect(result).toEqual({ count: 150 });
+        expect(result).toEqual({
+            count: 150,
+            total: 150,
+            pro: 50,
+            basic: 100
+        });
         expect(mockCollection).toHaveBeenCalledWith('users');
+        expect(mockCollection).toHaveBeenCalledWith('subscriptions'); // collectionGroup calls this name
     });
 });

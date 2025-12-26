@@ -83,13 +83,14 @@ describe('AdminService', () => {
         expect(stats).toEqual(mockStats);
     });
 
-    it('should return total user count from Cloud Function', async () => {
-        mockGetUserCount.mockReturnValue(Promise.resolve({ data: { count: 180 } }));
+    it('should return total user count with breakdown from Cloud Function', async () => {
+        const mockData = { total: 180, pro: 50, basic: 130 };
+        mockGetUserCount.mockReturnValue(Promise.resolve({ data: mockData }));
 
-        const count$ = service.getTotalUserCount();
-        const count = await firstValueFrom(count$);
+        const stats$ = service.getTotalUserCount();
+        const stats = await firstValueFrom(stats$);
 
         expect(mockGetUserCount).toHaveBeenCalled();
-        expect(count).toBe(180);
+        expect(stats).toEqual(mockData);
     });
 });

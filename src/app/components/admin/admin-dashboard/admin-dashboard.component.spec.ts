@@ -59,7 +59,7 @@ describe('AdminDashboardComponent', () => {
         adminServiceSpy = {
             getUsers: vi.fn().mockReturnValue(of(mockResponse)),
             getQueueStatsDirect: vi.fn().mockReturnValue(of({ pending: 0, succeeded: 0, failed: 0, providers: [] })),
-            getTotalUserCount: vi.fn().mockReturnValue(of(100)),
+            getTotalUserCount: vi.fn().mockReturnValue(of({ total: 100, pro: 30, basic: 70 })),
             getMaintenanceStatus: vi.fn().mockReturnValue(of({ enabled: false, message: 'Test' })),
             setMaintenanceMode: vi.fn().mockReturnValue(of({ success: true, enabled: true, message: 'Test' }))
         };
@@ -117,6 +117,11 @@ describe('AdminDashboardComponent', () => {
         expect(component.users).toEqual(mockUsers);
         expect(component.totalCount).toBe(2);
         expect(component.isLoading).toBe(false);
+    });
+
+    it('should fetch user stats on init', () => {
+        expect(adminServiceSpy.getTotalUserCount).toHaveBeenCalled();
+        expect(component.userStats).toEqual({ total: 100, pro: 30, basic: 70 });
     });
 
     it('should handle errors when fetching users', () => {

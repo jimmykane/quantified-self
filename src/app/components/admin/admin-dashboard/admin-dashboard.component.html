@@ -230,15 +230,42 @@
         </div>
     </div>
 
-    <!-- Total Users Stat -->
-    <div class="glass-card stat-card users" style="margin-bottom: 24px; max-width: 250px;">
-        <div class="stat-header">
-            <mat-icon>people</mat-icon>
-            <span>Total Users</span>
+    <!-- User Stats -->
+    <div class="stats-grid" style="margin-bottom: 24px;">
+        <!-- Total Users -->
+        <div class="glass-card stat-card users">
+            <div class="stat-header">
+                <mat-icon>people</mat-icon>
+                <span>Total Users</span>
+            </div>
+            <div class="stat-value" *ngIf="userStats">{{ userStats.total }}</div>
+            <div class="spinner-container" *ngIf="!userStats">
+                <mat-spinner diameter="24"></mat-spinner>
+            </div>
         </div>
-        <div class="stat-value" *ngIf="totalUserCount !== null">{{ totalUserCount }}</div>
-        <div class="spinner-container" *ngIf="totalUserCount === null">
-            <mat-spinner diameter="24"></mat-spinner>
+
+        <!-- Pro Users -->
+        <div class="glass-card stat-card succeeded">
+            <div class="stat-header">
+                <mat-icon>verified</mat-icon>
+                <span>Pro Users</span>
+            </div>
+            <div class="stat-value" *ngIf="userStats">{{ userStats.pro }}</div>
+            <div class="spinner-container" *ngIf="!userStats">
+                <mat-spinner diameter="24"></mat-spinner>
+            </div>
+        </div>
+
+        <!-- Basic Users -->
+        <div class="glass-card stat-card pending">
+            <div class="stat-header">
+                <mat-icon>person_outline</mat-icon>
+                <span>Basic Users</span>
+            </div>
+            <div class="stat-value" *ngIf="userStats">{{ userStats.basic }}</div>
+            <div class="spinner-container" *ngIf="!userStats">
+                <mat-spinner diameter="24"></mat-spinner>
+            </div>
         </div>
     </div>
 
