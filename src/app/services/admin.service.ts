@@ -115,4 +115,27 @@ export class AdminService {
             map(result => result.data.count)
         );
     }
+
+    // Maintenance mode
+    private setMaintenanceModeFn = httpsCallableFromURL<
+        { enabled: boolean; message?: string },
+        { success: boolean; enabled: boolean; message: string }
+    >(this.functions, environment.functions.setMaintenanceMode);
+
+    private getMaintenanceStatusFn = httpsCallableFromURL<
+        void,
+        { enabled: boolean; message: string; updatedAt?: unknown; updatedBy?: string }
+    >(this.functions, environment.functions.getMaintenanceStatus);
+
+    setMaintenanceMode(enabled: boolean, message?: string): Observable<{ success: boolean; enabled: boolean; message: string }> {
+        return from(this.setMaintenanceModeFn({ enabled, message })).pipe(
+            map(result => result.data)
+        );
+    }
+
+    getMaintenanceStatus(): Observable<{ enabled: boolean; message: string }> {
+        return from(this.getMaintenanceStatusFn()).pipe(
+            map(result => result.data)
+        );
+    }
 }

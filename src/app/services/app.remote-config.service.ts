@@ -1,97 +1,137 @@
-import { Injectable } from '@angular/core';
-import { FirebaseApp } from '@angular/fire/app';
-import {
-    RemoteConfig,
-    fetchAndActivate,
-    getBoolean,
-    getString,
-    getRemoteConfig
-} from 'firebase/remote-config';
-import { Observable, BehaviorSubject } from 'rxjs';
-import { map, filter, shareReplay, startWith } from 'rxjs/operators';
+import { Injectable, inject } from '@angular/core';
+import { Observable, BehaviorSubject, from, of } from 'rxjs';
+import { map, filter, shareReplay, switchMap, take, catchError } from 'rxjs/operators';
 import { AppWindowService } from './app.window.service';
+import { AppUserService } from './app.user.service';
 import { environment } from '../../environments/environment';
 
+/**
+ * Remote Config Service - Bypasses Firebase SDK completely due to persistent bugs.
+ * Uses Firebase Remote Config REST API directly.
+ * 
+ * Admin users automatically bypass maintenance mode.
+ */
 @Injectable({
     providedIn: 'root'
 })
 export class AppRemoteConfigService {
-    private remoteConfig: RemoteConfig;
     private configLoaded$ = new BehaviorSubject<boolean>(false);
+    private isAdmin$ = new BehaviorSubject<boolean>(false);
+    private maintenanceModeValue = false;
+    private maintenanceMessageValue = "";
 
     readonly maintenanceMode$: Observable<boolean>;
     readonly maintenanceMessage$: Observable<string>;
 
     constructor(
-        private firebaseApp: FirebaseApp,
-        private windowService: AppWindowService
+        private windowService: AppWindowService,
+        private userService: AppUserService
     ) {
-        this.remoteConfig = getRemoteConfig(this.firebaseApp);
+        // Check admin status initially
+        this.checkAdminStatus();
 
-        // Set defaults (used if fetch fails)
-        this.remoteConfig.defaultConfig = {
-            maintenance_mode: false,
-            maintenance_message: "We're currently performing maintenance. We'll be back soon."
-        };
-
-        // Fetch interval: 1 hour for production, 10 seconds for dev
-        this.remoteConfig.settings.minimumFetchIntervalMillis =
-            environment.production ? 3600000 : 10000;
-
-        // Create observables that wait for config to load
         this.maintenanceMode$ = this.configLoaded$.pipe(
             filter(loaded => loaded),
-            map(() => {
-                if (this.isBypassEnabled()) {
+            switchMap(() => this.isAdmin$),
+            map(isAdmin => {
+                // Bypass maintenance mode for admins or URL parameter
+                if (isAdmin) {
+                    console.log('[RemoteConfig] Admin user - bypassing maintenance mode');
                     return false;
                 }
-                return getBoolean(this.remoteConfig, 'maintenance_mode');
+                if (this.isBypassEnabled()) {
+                    console.log('[RemoteConfig] URL bypass enabled');
+                    return false;
+                }
+                return this.maintenanceModeValue;
             }),
             shareReplay(1)
         );
 
         this.maintenanceMessage$ = this.configLoaded$.pipe(
             filter(loaded => loaded),
-            map(() => getString(this.remoteConfig, 'maintenance_message')),
+            map(() => this.maintenanceMessageValue),
             shareReplay(1)
         );
 
-        // Initialize config on construction
         this.initializeConfig();
     }
 
     /**
-     * Initialize Remote Config - fetches and activates.
-     * Called by APP_INITIALIZER to block app startup.
+     * Check if current user is admin
      */
+    private async checkAdminStatus(): Promise<void> {
+        try {
+            const isAdmin = await this.userService.isAdmin();
+            console.log('[RemoteConfig] Admin status:', isAdmin);
+            this.isAdmin$.next(isAdmin);
+        } catch (e) {
+            console.log('[RemoteConfig] Could not check admin status:', e);
+            this.isAdmin$.next(false);
+        }
+    }
+
     async initializeConfig(): Promise<boolean> {
         try {
             console.log('[RemoteConfig] Fetching config...');
-            const fetchResult = await fetchAndActivate(this.remoteConfig);
-            console.log('[RemoteConfig] Fetch complete. New values:', fetchResult);
 
-            const maintenanceMode = getBoolean(this.remoteConfig, 'maintenance_mode');
-            const maintenanceMessage = getString(this.remoteConfig, 'maintenance_message');
-            console.log('[RemoteConfig] Config values:', { maintenanceMode, maintenanceMessage });
+            const projectId = environment.firebase.projectId;
+            const apiKey = environment.firebase.apiKey;
+            const appId = environment.firebase.appId;
+
+            // Firebase Remote Config v1 REST endpoint
+            const url = `https://firebaseremoteconfig.googleapis.com/v1/projects/${projectId}/namespaces/firebase:fetch?key=${apiKey}`;
+
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    appId: appId,
+                    appInstanceId: this.getOrCreateInstanceId(),
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+            }
+
+            const data = await response.json();
+            console.log('[RemoteConfig] Response:', data.state);
+
+            if (data.entries) {
+                if ('maintenance_mode' in data.entries) {
+                    const value = data.entries.maintenance_mode;
+                    this.maintenanceModeValue = value === 'true' || value === true;
+                    console.log('[RemoteConfig] maintenance_mode:', this.maintenanceModeValue);
+                }
+                if ('maintenance_message' in data.entries) {
+                    this.maintenanceMessageValue = data.entries.maintenance_message;
+                }
+            }
 
             this.configLoaded$.next(true);
             return true;
         } catch (e) {
-            console.error('[RemoteConfig] Fetch failed, using defaults:', e);
-            this.configLoaded$.next(true); // Use defaults on failure
+            console.error('[RemoteConfig] Fetch failed:', e);
+            this.configLoaded$.next(true);
             return false;
         }
     }
 
-    /**
-     * Check if maintenance mode bypass is enabled via URL parameter.
-     */
-    private isBypassEnabled(): boolean {
-        const bypass = this.windowService.windowRef.location.search.includes('bypass_maintenance=true');
-        if (bypass) {
-            console.log('[RemoteConfig] Bypass enabled via URL parameter');
+    private getOrCreateInstanceId(): string {
+        const key = 'rc_instance_id';
+        let id = localStorage.getItem(key);
+        if (!id) {
+            id = crypto.randomUUID();
+            localStorage.setItem(key, id);
         }
-        return bypass;
+        return id;
+    }
+
+    private isBypassEnabled(): boolean {
+        return this.windowService.windowRef.location.search.includes('bypass_maintenance=true');
     }
 
     getMaintenanceMode(): Observable<boolean> {

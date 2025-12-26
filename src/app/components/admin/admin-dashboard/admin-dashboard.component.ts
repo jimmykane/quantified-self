@@ -14,6 +14,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatButtonModule } from '@angular/material/button';
+import { MatSlideToggleModule, MatSlideToggleChange } from '@angular/material/slide-toggle';
 import { FormsModule } from '@angular/forms';
 
 @Component({
@@ -31,7 +32,8 @@ import { FormsModule } from '@angular/forms';
         MatFormFieldModule,
         MatIconModule,
         MatProgressSpinnerModule,
-        MatButtonModule
+        MatButtonModule,
+        MatSlideToggleModule
     ]
 })
 export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy {
@@ -65,6 +67,12 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     isLoadingStats = false;
     totalUserCount: number | null = null;
 
+    // Maintenance mode
+    maintenanceEnabled = false;
+    maintenanceMessage = '';
+    private originalMaintenanceMessage = '';
+    isUpdatingMaintenance = false;
+
     // Cleanup
     private destroy$ = new Subject<void>();
 
@@ -88,6 +96,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         // Initial fetch
         this.fetchUsers();
         this.fetchQueueStats();
+        this.fetchMaintenanceStatus();
         this.adminService.getTotalUserCount().subscribe(count => {
             this.totalUserCount = count;
         });
@@ -214,5 +223,66 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         if (!timestamp) return '';
         const date = new Date(timestamp.seconds ? timestamp.seconds * 1000 : timestamp);
         return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+
+    // Maintenance mode methods
+    fetchMaintenanceStatus(): void {
+        this.adminService.getMaintenanceStatus().subscribe({
+            next: (status) => {
+                this.maintenanceEnabled = status.enabled;
+                this.maintenanceMessage = status.message || "";
+                this.originalMaintenanceMessage = this.maintenanceMessage;
+            },
+            error: (err) => {
+                console.error('Failed to fetch maintenance status:', err);
+                const defaultMsg = "";
+                this.maintenanceMessage = defaultMsg;
+                this.originalMaintenanceMessage = defaultMsg;
+            }
+        });
+    }
+
+    hasMessageChanged(): boolean {
+        return this.maintenanceMessage !== this.originalMaintenanceMessage;
+    }
+
+    saveMaintenanceMessage(): void {
+        if (!this.hasMessageChanged()) return;
+
+        this.isUpdatingMaintenance = true;
+        this.adminService.setMaintenanceMode(this.maintenanceEnabled, this.maintenanceMessage).subscribe({
+            next: (result) => {
+                this.maintenanceEnabled = result.enabled;
+                this.maintenanceMessage = result.message;
+                this.originalMaintenanceMessage = result.message;
+                this.isUpdatingMaintenance = false;
+            },
+            error: (err) => {
+                console.error('Failed to save maintenance message:', err);
+                this.isUpdatingMaintenance = false;
+            }
+        });
+    }
+
+    onMaintenanceToggle(event: MatSlideToggleChange): void {
+        this.isUpdatingMaintenance = true;
+        // Use current message when toggling, or existing message if not editing
+        const messageToSave = this.maintenanceMessage || this.originalMaintenanceMessage;
+
+        this.adminService.setMaintenanceMode(event.checked, messageToSave).subscribe({
+            next: (result) => {
+                this.maintenanceEnabled = result.enabled;
+                this.maintenanceMessage = result.message;
+                this.originalMaintenanceMessage = result.message;
+                this.isUpdatingMaintenance = false;
+                console.log(`Maintenance mode ${result.enabled ? 'ENABLED' : 'DISABLED'}`);
+            },
+            error: (err) => {
+                console.error('Failed to update maintenance mode:', err);
+                this.isUpdatingMaintenance = false;
+                // Revert the toggle
+                this.maintenanceEnabled = !event.checked;
+            }
+        });
     }
 }

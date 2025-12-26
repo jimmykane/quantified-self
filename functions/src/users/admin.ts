@@ -366,3 +366,122 @@ export const getQueueStats = onCall({
         throw new HttpsError('internal', errorMessage);
     }
 });
+
+interface SetMaintenanceModeRequest {
+    enabled: boolean;
+    message?: string;
+}
+
+/**
+ * Sets the maintenance mode status using a Firestore document.
+ * This is used instead of Remote Config to allow admin-controlled updates.
+ */
+export const setMaintenanceMode = onCall({
+    region: 'europe-west2',
+    cors: ALLOWED_CORS_ORIGINS,
+    memory: '256MiB',
+}, async (request) => {
+    // 1. Check authentication
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    }
+
+    // 2. Check for admin claim
+    if (request.auth.token.admin !== true) {
+        throw new HttpsError('permission-denied', 'Only admins can call this function.');
+    }
+
+    try {
+        const data = request.data as SetMaintenanceModeRequest;
+        // Use empty string if no message provided (user requested to remove default)
+        const msg = data.message || "";
+        const db = admin.firestore();
+
+        // 1. Update Firestore (for admin dashboard source of truth)
+        const maintenanceDoc = db.collection('config').doc('maintenance');
+
+        await maintenanceDoc.set({
+            enabled: data.enabled,
+            message: msg,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            updatedBy: request.auth.uid,
+        });
+
+        // 2. Update Firebase Remote Config (for client source of truth)
+        // Note: Clients only fetch once per session, so this won't be instant for active sessions.
+        const rc = admin.remoteConfig();
+        const template = await rc.getTemplate();
+
+        // Ensure parameters exist
+        template.parameters = template.parameters || {};
+
+        template.parameters['maintenance_mode'] = {
+            defaultValue: { value: String(data.enabled) },
+            valueType: 'BOOLEAN' as any
+        };
+
+        template.parameters['maintenance_message'] = {
+            defaultValue: { value: msg },
+            valueType: 'STRING' as any
+        };
+
+        // Validate and publish
+        await rc.validateTemplate(template);
+        await rc.publishTemplate(template);
+
+        console.log(`Maintenance mode ${data.enabled ? 'ENABLED' : 'DISABLED'} by ${request.auth.uid} (Synced to Remote Config)`);
+
+        return {
+            success: true,
+            enabled: data.enabled,
+            message: msg
+        };
+    } catch (error: unknown) {
+        console.error('Error setting maintenance mode:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to set maintenance mode';
+        throw new HttpsError('internal', errorMessage);
+    }
+});
+
+/**
+ * Gets the current maintenance mode status from Firestore.
+ */
+export const getMaintenanceStatus = onCall({
+    region: 'europe-west2',
+    cors: ALLOWED_CORS_ORIGINS,
+    memory: '256MiB',
+}, async (request) => {
+    // 1. Check authentication
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    }
+
+    // 2. Check for admin claim
+    if (request.auth.token.admin !== true) {
+        throw new HttpsError('permission-denied', 'Only admins can call this function.');
+    }
+
+    try {
+        const db = admin.firestore();
+        const maintenanceDoc = await db.collection('config').doc('maintenance').get();
+
+        if (!maintenanceDoc.exists) {
+            return {
+                enabled: false,
+                message: ""
+            };
+        }
+
+        const data = maintenanceDoc.data();
+        return {
+            enabled: data?.enabled || false,
+            message: data?.message || "",
+            updatedAt: data?.updatedAt,
+            updatedBy: data?.updatedBy
+        };
+    } catch (error: unknown) {
+        console.error('Error getting maintenance status:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to get maintenance status';
+        throw new HttpsError('internal', errorMessage);
+    }
+});

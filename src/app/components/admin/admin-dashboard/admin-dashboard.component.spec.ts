@@ -16,7 +16,13 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 describe('AdminDashboardComponent', () => {
     let component: AdminDashboardComponent;
     let fixture: ComponentFixture<AdminDashboardComponent>;
-    let adminServiceSpy: { getUsers: ReturnType<typeof vi.fn>; getQueueStatsDirect: ReturnType<typeof vi.fn>; getTotalUserCount: ReturnType<typeof vi.fn> };
+    let adminServiceSpy: {
+        getUsers: ReturnType<typeof vi.fn>;
+        getQueueStatsDirect: ReturnType<typeof vi.fn>;
+        getTotalUserCount: ReturnType<typeof vi.fn>;
+        getMaintenanceStatus: ReturnType<typeof vi.fn>;
+        setMaintenanceMode: ReturnType<typeof vi.fn>;
+    };
 
     const mockUsers: AdminUser[] = [
         {
@@ -50,7 +56,9 @@ describe('AdminDashboardComponent', () => {
         adminServiceSpy = {
             getUsers: vi.fn().mockReturnValue(of(mockResponse)),
             getQueueStatsDirect: vi.fn().mockReturnValue(of({ pending: 0, succeeded: 0, failed: 0, providers: [] })),
-            getTotalUserCount: vi.fn().mockReturnValue(of(100))
+            getTotalUserCount: vi.fn().mockReturnValue(of(100)),
+            getMaintenanceStatus: vi.fn().mockReturnValue(of({ enabled: false, message: 'Test' })),
+            setMaintenanceMode: vi.fn().mockReturnValue(of({ success: true, enabled: true, message: 'Test' }))
         };
 
         await TestBed.configureTestingModule({
@@ -147,5 +155,41 @@ describe('AdminDashboardComponent', () => {
         component.clearSearch();
 
         expect(component.searchTerm).toBe('');
+    });
+
+    describe('Maintenance Mode', () => {
+        it('should fetch maintenance status on init', () => {
+            expect(component.maintenanceEnabled).toBe(false);
+            expect(component.maintenanceMessage).toBe('Test');
+        });
+
+        it('should detect message changes', () => {
+            component.maintenanceMessage = 'New Message';
+            expect(component.hasMessageChanged()).toBe(true);
+
+            component.maintenanceMessage = 'Test';
+            expect(component.hasMessageChanged()).toBe(false);
+        });
+
+        it('should save maintenance message', () => {
+            component.maintenanceMessage = 'Updated Message';
+            adminServiceSpy.setMaintenanceMode.mockReturnValue(of({ success: true, enabled: false, message: 'Updated Message' }));
+
+            component.saveMaintenanceMessage();
+
+            expect(adminServiceSpy.setMaintenanceMode).toHaveBeenCalledWith(false, 'Updated Message');
+            expect(component.maintenanceMessage).toBe('Updated Message');
+            expect(component.hasMessageChanged()).toBe(false); // Should be reset
+        });
+
+        it('should include message when toggling maintenance', () => {
+            component.maintenanceMessage = 'Toggle Message';
+            adminServiceSpy.setMaintenanceMode.mockReturnValue(of({ success: true, enabled: true, message: 'Toggle Message' }));
+
+            component.onMaintenanceToggle({ checked: true } as any);
+
+            expect(adminServiceSpy.setMaintenanceMode).toHaveBeenCalledWith(true, 'Toggle Message');
+            expect(component.maintenanceEnabled).toBe(true);
+        });
     });
 });

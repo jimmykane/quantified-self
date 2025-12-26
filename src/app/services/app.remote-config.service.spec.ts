@@ -1,35 +1,17 @@
 import { TestBed } from '@angular/core/testing';
 import { AppRemoteConfigService } from './app.remote-config.service';
-import { fetchAndActivate, getBoolean, getString, getRemoteConfig } from 'firebase/remote-config';
 import { AppWindowService } from './app.window.service';
+import { AppUserService } from './app.user.service';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { firstValueFrom } from 'rxjs';
-import { FirebaseApp } from '@angular/fire/app';
-
-vi.mock('firebase/remote-config', async (importOriginal) => {
-    const actual: any = await importOriginal();
-    return {
-        ...actual,
-        getRemoteConfig: vi.fn(),
-        fetchAndActivate: vi.fn(),
-        getBoolean: vi.fn(),
-        getString: vi.fn(),
-    };
-});
 
 describe('AppRemoteConfigService', () => {
     let service: AppRemoteConfigService;
-    let mockRemoteConfig: any;
     let mockWindowService: any;
+    let mockUserService: any;
     let mockWindow: any;
-    let mockFirebaseApp: any;
 
     beforeEach(() => {
-        mockRemoteConfig = {
-            defaultConfig: {},
-            settings: {}
-        };
-
         mockWindow = {
             location: { search: '' }
         };
@@ -38,21 +20,40 @@ describe('AppRemoteConfigService', () => {
             windowRef: mockWindow
         };
 
-        mockFirebaseApp = {
-            name: '[DEFAULT]',
-            options: {}
+        mockUserService = {
+            isAdmin: vi.fn().mockResolvedValue(false)
         };
 
-        (getRemoteConfig as any).mockReturnValue(mockRemoteConfig);
-        (fetchAndActivate as any).mockResolvedValue(true);
-        (getBoolean as any).mockReturnValue(false);
-        (getString as any).mockReturnValue('Default maintenance message');
+        // Mock fetch
+        global.fetch = vi.fn().mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve({
+                entries: {
+                    maintenance_mode: 'false',
+                    maintenance_message: 'Test message'
+                },
+                state: 'UPDATE'
+            })
+        });
+
+        // Mock localStorage
+        const localStorageMock = {
+            getItem: vi.fn().mockReturnValue('test-instance-id'),
+            setItem: vi.fn()
+        };
+        Object.defineProperty(global, 'localStorage', { value: localStorageMock, writable: true });
+
+        // Mock crypto.randomUUID
+        Object.defineProperty(global, 'crypto', {
+            value: { randomUUID: () => 'test-uuid' },
+            writable: true
+        });
 
         TestBed.configureTestingModule({
             providers: [
                 AppRemoteConfigService,
-                { provide: FirebaseApp, useValue: mockFirebaseApp },
-                { provide: AppWindowService, useValue: mockWindowService }
+                { provide: AppWindowService, useValue: mockWindowService },
+                { provide: AppUserService, useValue: mockUserService }
             ]
         });
 
@@ -67,22 +68,29 @@ describe('AppRemoteConfigService', () => {
         expect(service).toBeTruthy();
     });
 
-    it('should fetch and activate on initialization', async () => {
+    it('should fetch config via REST API', async () => {
         await firstValueFrom(service.getMaintenanceMode());
-        expect(getRemoteConfig).toHaveBeenCalledWith(mockFirebaseApp);
-        expect(fetchAndActivate).toHaveBeenCalledWith(mockRemoteConfig);
+        expect(global.fetch).toHaveBeenCalled();
     });
 
     describe('getMaintenanceMode', () => {
-        it('should return value from remote config', async () => {
-            (getBoolean as any).mockReturnValue(true);
+        it('should return true when maintenance_mode is "true" for non-admin', async () => {
+            (global.fetch as any).mockResolvedValue({
+                ok: true,
+                json: () => Promise.resolve({
+                    entries: {
+                        maintenance_mode: 'true',
+                        maintenance_message: 'Maintenance in progress'
+                    }
+                })
+            });
 
             TestBed.resetTestingModule();
             TestBed.configureTestingModule({
                 providers: [
                     AppRemoteConfigService,
-                    { provide: FirebaseApp, useValue: mockFirebaseApp },
-                    { provide: AppWindowService, useValue: mockWindowService }
+                    { provide: AppWindowService, useValue: mockWindowService },
+                    { provide: AppUserService, useValue: mockUserService }
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
@@ -91,15 +99,41 @@ describe('AppRemoteConfigService', () => {
             expect(mode).toBe(true);
         });
 
-        it('should return false on fetch error (graceful degradation)', async () => {
-            (fetchAndActivate as any).mockRejectedValue(new Error('Network error'));
+        it('should return false for admin users even when maintenance is true', async () => {
+            mockUserService.isAdmin.mockResolvedValue(true);
+            (global.fetch as any).mockResolvedValue({
+                ok: true,
+                json: () => Promise.resolve({
+                    entries: {
+                        maintenance_mode: 'true',
+                        maintenance_message: 'Maintenance in progress'
+                    }
+                })
+            });
 
             TestBed.resetTestingModule();
             TestBed.configureTestingModule({
                 providers: [
                     AppRemoteConfigService,
-                    { provide: FirebaseApp, useValue: mockFirebaseApp },
-                    { provide: AppWindowService, useValue: mockWindowService }
+                    { provide: AppWindowService, useValue: mockWindowService },
+                    { provide: AppUserService, useValue: mockUserService }
+                ]
+            });
+            service = TestBed.inject(AppRemoteConfigService);
+
+            const mode = await firstValueFrom(service.getMaintenanceMode());
+            expect(mode).toBe(false);
+        });
+
+        it('should return false on fetch error (graceful degradation)', async () => {
+            (global.fetch as any).mockRejectedValue(new Error('Network error'));
+
+            TestBed.resetTestingModule();
+            TestBed.configureTestingModule({
+                providers: [
+                    AppRemoteConfigService,
+                    { provide: AppWindowService, useValue: mockWindowService },
+                    { provide: AppUserService, useValue: mockUserService }
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
@@ -110,14 +144,21 @@ describe('AppRemoteConfigService', () => {
 
         it('should bypass maintenance mode with query parameter', async () => {
             mockWindow.location.search = '?bypass_maintenance=true';
-            (getBoolean as any).mockReturnValue(true);
+            (global.fetch as any).mockResolvedValue({
+                ok: true,
+                json: () => Promise.resolve({
+                    entries: {
+                        maintenance_mode: 'true'
+                    }
+                })
+            });
 
             TestBed.resetTestingModule();
             TestBed.configureTestingModule({
                 providers: [
                     AppRemoteConfigService,
-                    { provide: FirebaseApp, useValue: mockFirebaseApp },
-                    { provide: AppWindowService, useValue: mockWindowService }
+                    { provide: AppWindowService, useValue: mockWindowService },
+                    { provide: AppUserService, useValue: mockUserService }
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
@@ -130,14 +171,22 @@ describe('AppRemoteConfigService', () => {
     describe('getMaintenanceMessage', () => {
         it('should return message from remote config', async () => {
             const expectedMsg = 'Custom maintenance message';
-            (getString as any).mockReturnValue(expectedMsg);
+            (global.fetch as any).mockResolvedValue({
+                ok: true,
+                json: () => Promise.resolve({
+                    entries: {
+                        maintenance_mode: 'false',
+                        maintenance_message: expectedMsg
+                    }
+                })
+            });
 
             TestBed.resetTestingModule();
             TestBed.configureTestingModule({
                 providers: [
                     AppRemoteConfigService,
-                    { provide: FirebaseApp, useValue: mockFirebaseApp },
-                    { provide: AppWindowService, useValue: mockWindowService }
+                    { provide: AppWindowService, useValue: mockWindowService },
+                    { provide: AppUserService, useValue: mockUserService }
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
