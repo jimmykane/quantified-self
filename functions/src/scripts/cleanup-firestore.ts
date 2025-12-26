@@ -90,6 +90,7 @@ async function cleanupFirestore() {
     const dryRun = args.includes('--dry-run');
     const force = args.includes('--force');
     const disconnectOnly = args.includes('--disconnect-only');
+    const deauthorizeFlag = args.includes('--deauthorize');
     const collectionsArg = args.find(arg => arg.startsWith('--collections='));
 
     let targetCollections = COLLECTION_GROUPS;
@@ -106,6 +107,7 @@ async function cleanupFirestore() {
     logger.info(`Firestore Cleanup Script`);
     logger.info(`Mode: ${dryRun ? 'DRY RUN' : 'EXECUTION'}`);
     logger.info(`Disconnect Only: ${disconnectOnly}`);
+    logger.info(`Deauthorize Flag: ${deauthorizeFlag}`);
     logger.info(`Collections: ${targetCollections.join(', ')}`);
     logger.info(`=============================================`);
 
@@ -125,16 +127,30 @@ async function cleanupFirestore() {
         }
     }
 
+    // Determine if we should run deauthorization
+    let shouldDeauth = deauthorizeFlag;
+    if (!shouldDeauth && !force && !dryRun) {
+        shouldDeauth = await confirm('Do you want to deauthorize users from external services (Suunto, COROS, Garmin)?');
+    }
+
     // 1. Deauthorization phase
-    logger.info('\n--- Phase 1: Deauthorization ---');
-    for (const collection of targetCollections) {
-        if (DEAUTH_CONFIG[collection]) {
-            await deauthorize(collection, dryRun);
+    if (shouldDeauth || dryRun) {
+        logger.info('\n--- Phase 1: Deauthorization ---');
+        for (const collection of targetCollections) {
+            if (DEAUTH_CONFIG[collection]) {
+                await deauthorize(collection, dryRun);
+            }
         }
+    } else {
+        logger.info('\nSkipping Phase 1: Deauthorization (not requested)');
     }
 
     if (disconnectOnly) {
-        logger.info('\nDisconnect-only mode active. Skipping deletion phase.');
+        if (!shouldDeauth && !dryRun) {
+            logger.info('\nDisconnect-only mode active but deauthorization skipped. Nothing to do.');
+        } else {
+            logger.info('\nDisconnect-only mode active. Skipping deletion phase.');
+        }
         return;
     }
 

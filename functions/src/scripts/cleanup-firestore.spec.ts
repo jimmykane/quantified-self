@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as admin from 'firebase-admin';
 import { cleanupFirestore } from './cleanup-firestore';
+import * as readline from 'readline';
+
+vi.mock('readline', () => ({
+    createInterface: vi.fn().mockReturnValue({
+        question: vi.fn(),
+        close: vi.fn(),
+    }),
+}));
 
 // Mock dependencies
 vi.mock('firebase-admin', () => {
@@ -105,8 +113,8 @@ describe('Cleanup Firestore Script', () => {
         expect(bulkWriter.delete).not.toHaveBeenCalled();
     });
 
-    it('should call deauthorization when relevant collections are deleted', async () => {
-        process.argv = ['node', 'script.ts', '--collections=suuntoAppAccessTokens', '--force'];
+    it('should call deauthorization when --deauthorize flag is provided', async () => {
+        process.argv = ['node', 'script.ts', '--collections=suuntoAppAccessTokens', '--deauthorize', '--force'];
 
         const { deauthorizeServiceForUser } = await import('../OAuth2');
 
@@ -115,16 +123,43 @@ describe('Cleanup Firestore Script', () => {
         expect(deauthorizeServiceForUser).toHaveBeenCalled();
     });
 
+    it('should NOT call deauthorization by default if prompt is rejected', async () => {
+        process.argv = ['node', 'script.ts', '--collections=suuntoAppAccessTokens', '--force'];
+
+        const { deauthorizeServiceForUser } = await import('../OAuth2');
+
+        // Mock confirm to return false
+        const mockRl = readline.createInterface({} as any);
+        (mockRl.question as any).mockImplementation((query: string, cb: (ans: string) => void) => cb('n'));
+
+        await cleanupFirestore();
+
+        expect(deauthorizeServiceForUser).not.toHaveBeenCalled();
+    });
+
+    it('should call deauthorization if prompt is accepted', async () => {
+        process.argv = ['node', 'script.ts', '--collections=suuntoAppAccessTokens'];
+
+        const { deauthorizeServiceForUser } = await import('../OAuth2');
+
+        // Mock confirm to return true for BOTH the safety prompt and the deauth prompt
+        const mockRl = readline.createInterface({} as any);
+        (mockRl.question as any).mockImplementation((query: string, cb: (ans: string) => void) => cb('y'));
+
+        await cleanupFirestore();
+
+        expect(deauthorizeServiceForUser).toHaveBeenCalled();
+    });
+
     it('should operate in disconnect-only mode skipping deletion', async () => {
-        process.argv = ['node', 'script.ts', '--disconnect-only', '--force'];
+        process.argv = ['node', 'script.ts', '--disconnect-only', '--deauthorize', '--force'];
 
         const db = admin.firestore();
         const bulkWriter = db.bulkWriter();
 
         await cleanupFirestore();
 
-        // Should deauth (assuming all collections default)
-        // But should NOT delete
+        // Should deauth (with flag)
         expect(bulkWriter.delete).not.toHaveBeenCalled();
     });
 
