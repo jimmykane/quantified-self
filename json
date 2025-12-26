@@ -1,0 +1,16 @@
+{
+  "parameters": {
+    "maintenance_mode": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "maintenance_message": {
+      "defaultValue": {
+        "value": "We're currently upgrading the app to give you a better experience.\nWe'll be back in 2026."
+      },
+      "valueType": "STRING"
+    }
+  }
+}

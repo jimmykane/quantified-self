@@ -7,72 +7,91 @@ import {
     getString,
     getRemoteConfig
 } from 'firebase/remote-config';
-import { Observable, from, map, of } from 'rxjs';
-import { catchError, shareReplay } from 'rxjs/operators';
+import { Observable, BehaviorSubject } from 'rxjs';
+import { map, filter, shareReplay, startWith } from 'rxjs/operators';
 import { AppWindowService } from './app.window.service';
+import { environment } from '../../environments/environment';
 
 @Injectable({
     providedIn: 'root'
 })
 export class AppRemoteConfigService {
-    private maintenanceMode$: Observable<boolean>;
-    private maintenanceMessage$: Observable<string>;
     private remoteConfig: RemoteConfig;
+    private configLoaded$ = new BehaviorSubject<boolean>(false);
+
+    readonly maintenanceMode$: Observable<boolean>;
+    readonly maintenanceMessage$: Observable<string>;
 
     constructor(
         private firebaseApp: FirebaseApp,
         private windowService: AppWindowService
     ) {
-        // Get the Remote Config instance directly from the Firebase App
         this.remoteConfig = getRemoteConfig(this.firebaseApp);
 
-        // Initialize: Set defaults and fetch
-        const initialized$ = from(this.initializeRemoteConfig()).pipe(shareReplay(1));
+        // Set defaults (used if fetch fails)
+        this.remoteConfig.defaultConfig = {
+            maintenance_mode: false,
+            maintenance_message: "We're currently performing maintenance. We'll be back soon."
+        };
 
-        this.maintenanceMode$ = initialized$.pipe(
+        // Fetch interval: 1 hour for production, 10 seconds for dev
+        this.remoteConfig.settings.minimumFetchIntervalMillis =
+            environment.production ? 3600000 : 10000;
+
+        // Create observables that wait for config to load
+        this.maintenanceMode$ = this.configLoaded$.pipe(
+            filter(loaded => loaded),
             map(() => {
-                const bypass = this.windowService.windowRef.location.search.includes('bypass_maintenance=true');
-                if (bypass) {
-                    console.log('Maintenance mode bypassed via query parameter');
+                if (this.isBypassEnabled()) {
                     return false;
                 }
                 return getBoolean(this.remoteConfig, 'maintenance_mode');
             }),
-            catchError(error => {
-                console.error('Error fetching remote config for mode:', error);
-                return of(false);
-            }),
             shareReplay(1)
         );
 
-        this.maintenanceMessage$ = initialized$.pipe(
+        this.maintenanceMessage$ = this.configLoaded$.pipe(
+            filter(loaded => loaded),
             map(() => getString(this.remoteConfig, 'maintenance_message')),
-            catchError(error => {
-                console.error('Error fetching remote config for message:', error);
-                return of('We\'ll be back soon.');
-            }),
             shareReplay(1)
         );
+
+        // Initialize config on construction
+        this.initializeConfig();
     }
 
-    private async initializeRemoteConfig(): Promise<boolean> {
+    /**
+     * Initialize Remote Config - fetches and activates.
+     * Called by APP_INITIALIZER to block app startup.
+     */
+    async initializeConfig(): Promise<boolean> {
         try {
-            // Set default values
-            this.remoteConfig.defaultConfig = {
-                maintenance_mode: false,
-                maintenance_message: "We're currently upgrading the app to give you a better experience.\nWe'll be back in 2026."
-            };
+            console.log('[RemoteConfig] Fetching config...');
+            const fetchResult = await fetchAndActivate(this.remoteConfig);
+            console.log('[RemoteConfig] Fetch complete. New values:', fetchResult);
 
-            // Set fetch interval to 10 seconds for faster updates
-            // Note: Real-time updates are not supported with AngularFire's wrapped instances
-            this.remoteConfig.settings.minimumFetchIntervalMillis = 10000;
+            const maintenanceMode = getBoolean(this.remoteConfig, 'maintenance_mode');
+            const maintenanceMessage = getString(this.remoteConfig, 'maintenance_message');
+            console.log('[RemoteConfig] Config values:', { maintenanceMode, maintenanceMessage });
 
-            // Fetch and activate
-            return await fetchAndActivate(this.remoteConfig);
+            this.configLoaded$.next(true);
+            return true;
         } catch (e) {
-            console.error('Failed to init remote config', e);
+            console.error('[RemoteConfig] Fetch failed, using defaults:', e);
+            this.configLoaded$.next(true); // Use defaults on failure
             return false;
         }
+    }
+
+    /**
+     * Check if maintenance mode bypass is enabled via URL parameter.
+     */
+    private isBypassEnabled(): boolean {
+        const bypass = this.windowService.windowRef.location.search.includes('bypass_maintenance=true');
+        if (bypass) {
+            console.log('[RemoteConfig] Bypass enabled via URL parameter');
+        }
+        return bypass;
     }
 
     getMaintenanceMode(): Observable<boolean> {

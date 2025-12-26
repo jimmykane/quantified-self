@@ -1,4 +1,4 @@
-import { ErrorHandler, NgModule } from '@angular/core';
+import { APP_INITIALIZER, ErrorHandler, NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app.routing.module';
@@ -24,6 +24,13 @@ import { AppFilesInfoSheetService } from './services/upload/app-files-info-sheet
 import { AppUpdateService } from './services/app.update.service';
 import { OnboardingComponent } from './components/onboarding/onboarding.component';
 import { MaintenanceComponent } from './components/maintenance/maintenance.component';
+import { AppRemoteConfigService } from './services/app.remote-config.service';
+import { firstValueFrom } from 'rxjs';
+
+// Factory function that blocks until Remote Config is initialized
+export function initializeRemoteConfig(remoteConfigService: AppRemoteConfigService) {
+  return () => firstValueFrom(remoteConfigService.getMaintenanceMode());
+}
 
 @NgModule({
   declarations: [
@@ -50,6 +57,12 @@ import { MaintenanceComponent } from './components/maintenance/maintenance.compo
       useValue: Sentry.createErrorHandler({
         showDialog: false,
       }),
+    },
+    {
+      provide: APP_INITIALIZER,
+      useFactory: initializeRemoteConfig,
+      deps: [AppRemoteConfigService],
+      multi: true
     },
     provideHttpClient(withInterceptorsFromDi()),
     provideFirebaseApp(() => initializeApp(environment.firebase)),

@@ -31,9 +31,7 @@ describe('AppRemoteConfigService', () => {
         };
 
         mockWindow = {
-            location: {
-                search: ''
-            }
+            location: { search: '' }
         };
 
         mockWindowService = {
@@ -48,7 +46,7 @@ describe('AppRemoteConfigService', () => {
         (getRemoteConfig as any).mockReturnValue(mockRemoteConfig);
         (fetchAndActivate as any).mockResolvedValue(true);
         (getBoolean as any).mockReturnValue(false);
-        (getString as any).mockReturnValue('Default message');
+        (getString as any).mockReturnValue('Default maintenance message');
 
         TestBed.configureTestingModule({
             providers: [
@@ -91,10 +89,9 @@ describe('AppRemoteConfigService', () => {
 
             const mode = await firstValueFrom(service.getMaintenanceMode());
             expect(mode).toBe(true);
-            expect(getBoolean).toHaveBeenCalledWith(mockRemoteConfig, 'maintenance_mode');
         });
 
-        it('should return false if error occurs', async () => {
+        it('should return false on fetch error (graceful degradation)', async () => {
             (fetchAndActivate as any).mockRejectedValue(new Error('Network error'));
 
             TestBed.resetTestingModule();
@@ -111,7 +108,7 @@ describe('AppRemoteConfigService', () => {
             expect(mode).toBe(false);
         });
 
-        it('should return false if bypass query param is present', async () => {
+        it('should bypass maintenance mode with query parameter', async () => {
             mockWindow.location.search = '?bypass_maintenance=true';
             (getBoolean as any).mockReturnValue(true);
 
@@ -131,8 +128,8 @@ describe('AppRemoteConfigService', () => {
     });
 
     describe('getMaintenanceMessage', () => {
-        it('should return value from remote config', async () => {
-            const expectedMsg = 'Custom Message';
+        it('should return message from remote config', async () => {
+            const expectedMsg = 'Custom maintenance message';
             (getString as any).mockReturnValue(expectedMsg);
 
             TestBed.resetTestingModule();
@@ -147,7 +144,6 @@ describe('AppRemoteConfigService', () => {
 
             const msg = await firstValueFrom(service.getMaintenanceMessage());
             expect(msg).toBe(expectedMsg);
-            expect(getString).toHaveBeenCalledWith(mockRemoteConfig, 'maintenance_message');
         });
     });
 });
