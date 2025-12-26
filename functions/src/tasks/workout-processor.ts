@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { parseWorkoutQueueItemForServiceName } from '../queue';
 import { getServiceWorkoutQueueName } from '../shared/queue-names';
+import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
 
 /**
  * Task worker that processes a single workout queue item.
@@ -10,12 +11,7 @@ import { getServiceWorkoutQueueName } from '../shared/queue-names';
  * Force update: 2025-12-25 21:12
  */
 export const processWorkoutTask = onTaskDispatched({
-    retryConfig: {
-        maxAttempts: 8,
-        minBackoffSeconds: 30,
-        maxBackoffSeconds: 14400, // 4 hours
-        maxDoublings: 4,
-    },
+    retryConfig: CLOUD_TASK_RETRY_CONFIG,
     memory: '4GiB',
     timeoutSeconds: 540,
     region: 'europe-west2',
