@@ -16,8 +16,10 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSlideToggleModule, MatSlideToggleChange } from '@angular/material/slide-toggle';
 import { MatExpansionModule } from '@angular/material/expansion';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { FormsModule } from '@angular/forms';
 import { LoggerService } from '../../../services/logger.service';
+import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
 
 @Component({
     selector: 'app-admin-dashboard',
@@ -36,7 +38,8 @@ import { LoggerService } from '../../../services/logger.service';
         MatProgressSpinnerModule,
         MatButtonModule,
         MatSlideToggleModule,
-        MatExpansionModule
+        MatExpansionModule,
+        MatDialogModule
     ]
 })
 export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy {
@@ -84,7 +87,8 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
 
     constructor(
         private adminService: AdminService,
-        private logger: LoggerService
+        private logger: LoggerService,
+        private dialog: MatDialog
     ) { }
 
     ngOnInit(): void {
@@ -271,24 +275,49 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     }
 
     onMaintenanceToggle(event: MatSlideToggleChange): void {
-        this.isUpdatingMaintenance = true;
-        // Use current message when toggling, or existing message if not editing
-        const messageToSave = this.maintenanceMessage || this.originalMaintenanceMessage;
+        const isEnable = event.checked;
+        const confirmMessage = isEnable
+            ? 'Are you sure you want to ENABLE maintenance mode? This will prevent all non-admin users from accessing the app. Active users will be redirected to the maintenance page.'
+            : 'Are you sure you want to DISABLE maintenance mode? All users will regain access to the application immediately.';
 
-        this.adminService.setMaintenanceMode(event.checked, messageToSave).subscribe({
-            next: (result) => {
-                this.maintenanceEnabled = result.enabled;
-                this.maintenanceMessage = result.message;
-                this.originalMaintenanceMessage = result.message;
-                this.isUpdatingMaintenance = false;
-                this.logger.log(`Maintenance mode ${result.enabled ? 'ENABLED' : 'DISABLED'}`);
-            },
-            error: (err) => {
-                this.logger.error('Failed to update maintenance mode:', err);
-                this.isUpdatingMaintenance = false;
-                // Revert the toggle
-                this.maintenanceEnabled = !event.checked;
+        const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+            width: '400px',
+            data: {
+                title: isEnable ? 'Enable Maintenance Mode?' : 'Disable Maintenance Mode?',
+                message: confirmMessage,
+                confirmText: isEnable ? 'Enable' : 'Disable',
+                cancelText: 'Cancel'
             }
+        });
+
+        dialogRef.afterClosed().subscribe(result => {
+            if (!result) {
+                // Revert the toggle UI if cancelled
+                event.source.checked = !isEnable;
+                this.maintenanceEnabled = !isEnable;
+                return;
+            }
+
+            this.isUpdatingMaintenance = true;
+            // Use current message when toggling, or existing message if not editing
+            const messageToSave = this.maintenanceMessage || this.originalMaintenanceMessage;
+
+            this.adminService.setMaintenanceMode(isEnable, messageToSave).subscribe({
+                next: (result) => {
+                    this.maintenanceEnabled = result.enabled;
+                    this.maintenanceMessage = result.message;
+                    this.originalMaintenanceMessage = result.message;
+                    this.isUpdatingMaintenance = false;
+                    this.logger.log(`Maintenance mode ${result.enabled ? 'ENABLED' : 'DISABLED'}`);
+                },
+                error: (err) => {
+                    this.logger.error('Failed to update maintenance mode:', err);
+                    this.isUpdatingMaintenance = false;
+                    // Revert the toggle
+                    this.maintenanceEnabled = !isEnable;
+                    event.source.checked = !isEnable;
+                }
+            });
         });
     }
 }
