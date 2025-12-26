@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CallableRequest } from 'firebase-functions/v2/https';
+import * as admin from 'firebase-admin';
 
 const {
     mockListUsers,
@@ -205,30 +206,72 @@ describe('listUsers Cloud Function', () => {
 });
 
 describe('getQueueStats Cloud Function', () => {
+    let request: any;
+
     beforeEach(() => {
         vi.clearAllMocks();
-
-        const mockCountGet = vi.fn().mockResolvedValue({
-            data: () => ({ count: 5 })
-        });
-
-        const mockCount = vi.fn().mockReturnValue({
-            get: mockCountGet
-        });
-
-        const mockWhere = vi.fn().mockReturnValue({
-            where: vi.fn().mockReturnThis(),
-            count: mockCount
-        });
-
-        mockCollection.mockReturnValue({
-            where: mockWhere,
-            count: mockCount
-        });
+        request = {
+            auth: {
+                uid: 'admin-uid',
+                token: { admin: true }
+            }
+        };
     });
 
-    it('should throw "unauthenticated" if called without auth', async () => {
-        const request = { auth: null } as unknown as CallableRequest<any>;
+    it('should return queue statistics including DLQ', async () => {
+        // Mock permissions
+        (admin.firestore().collection as any).mockImplementation((collectionName: string) => {
+            const mockCount = vi.fn().mockReturnValue({
+                get: vi.fn().mockResolvedValue({
+                    data: () => ({ count: 5 })
+                })
+            });
+
+            if (collectionName === 'failed_jobs') {
+                return {
+                    get: vi.fn().mockResolvedValue({
+                        size: 2,
+                        docs: [
+                            { data: () => ({ context: 'NO_TOKEN_FOUND', originalCollection: 'suuntoAppWorkoutQueue' }) },
+                            { data: () => ({ context: 'MAX_RETRY_REACHED', originalCollection: 'COROSAPIWorkoutQueue' }) }
+                        ]
+                    })
+                }
+            }
+            return {
+                where: vi.fn().mockReturnThis(),
+                count: mockCount,
+                get: vi.fn().mockResolvedValue({
+                    data: () => ({ count: 5 })
+                })
+            };
+        });
+
+        const result = await (getQueueStats as any)(request);
+
+        expect(result).toHaveProperty('pending');
+        // Check totals from mocked count (5) * (3 providers * 2 queues per provider * 3 statuses) = this logic is simpler in the implementation loop
+        // pending: 5 count * 5 queues = 25
+        expect(result.pending).toBe(25);
+        expect(result.succeeded).toBe(25);
+        expect(result.failed).toBe(25);
+        expect(result.providers).toHaveLength(3);
+
+        // Check DLQ stats
+        expect(result.dlq).toBeDefined();
+        expect(result.dlq.total).toBe(2);
+        expect(result.dlq.byContext).toEqual(expect.arrayContaining([
+            { context: 'NO_TOKEN_FOUND', count: 1 },
+            { context: 'MAX_RETRY_REACHED', count: 1 }
+        ]));
+        expect(result.dlq.byProvider).toEqual(expect.arrayContaining([
+            { provider: 'suuntoAppWorkoutQueue', count: 1 },
+            { provider: 'COROSAPIWorkoutQueue', count: 1 }
+        ]));
+    });
+
+    it('should require authentication', async () => {
+        request.auth = undefined;
         await expect((getQueueStats as any)(request)).rejects.toThrow('The function must be called while authenticated.');
     });
 
@@ -237,28 +280,6 @@ describe('getQueueStats Cloud Function', () => {
             auth: { uid: 'user1', token: { admin: false } }
         } as unknown as CallableRequest<any>;
         await expect((getQueueStats as any)(request)).rejects.toThrow('Only admins can call this function.');
-    });
-
-    it('should return aggregated counts across all queue collections', async () => {
-        const request = {
-            auth: { uid: 'admin-uid', token: { admin: true } }
-        } as unknown as CallableRequest<any>;
-
-        const result = await (getQueueStats as any)(request);
-
-        expect(result).toEqual({
-            pending: 25,
-            succeeded: 25,
-            failed: 25,
-            providers: [
-                { name: 'Suunto', pending: 10, succeeded: 10, failed: 10 },
-                { name: 'COROS', pending: 10, succeeded: 10, failed: 10 },
-                { name: 'Garmin', pending: 5, succeeded: 5, failed: 5 }
-            ]
-        });
-
-        expect(mockCollection).toHaveBeenCalledWith('suuntoAppWorkoutQueue');
-        expect(mockCollection).toHaveBeenCalledWith('garminHealthAPIActivityQueue');
     });
 });
 

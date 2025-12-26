@@ -48,6 +48,12 @@ export interface ListUsersResponse {
     pageSize: number;
 }
 
+export interface DLQStats {
+    total: number;
+    byContext: { context: string; count: number }[];
+    byProvider: { provider: string; count: number }[];
+}
+
 export interface QueueStats {
     pending: number;
     succeeded: number;
@@ -58,6 +64,7 @@ export interface QueueStats {
         succeeded: number;
         failed: number;
     }[];
+    dlq?: DLQStats;
 }
 
 @Injectable({

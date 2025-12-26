@@ -355,11 +355,34 @@ export const getQueueStats = onCall({
             });
         }
 
+        // Dead Letter Queue stats
+        const dlqCol = db.collection('failed_jobs');
+        const dlqSnapshot = await dlqCol.get();
+
+        const dlqByContext: Record<string, number> = {};
+        const dlqByProvider: Record<string, number> = {};
+
+        dlqSnapshot.docs.forEach(doc => {
+            const data = doc.data();
+            const context = data.context || 'UNKNOWN';
+            const originalCollection = data.originalCollection || 'unknown';
+
+            dlqByContext[context] = (dlqByContext[context] || 0) + 1;
+            dlqByProvider[originalCollection] = (dlqByProvider[originalCollection] || 0) + 1;
+        });
+
+        const dlq = {
+            total: dlqSnapshot.size,
+            byContext: Object.entries(dlqByContext).map(([context, count]) => ({ context, count })),
+            byProvider: Object.entries(dlqByProvider).map(([provider, count]) => ({ provider, count }))
+        };
+
         return {
             pending: totalPending,
             succeeded: totalSucceeded,
             failed: totalFailed,
-            providers
+            providers,
+            dlq
         };
     } catch (error: unknown) {
         logger.error('Error getting queue stats:', error);

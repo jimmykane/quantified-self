@@ -87,6 +87,48 @@
         </div>
     </div>
 
+    <!-- DLQ Stats -->
+    <div class="stats-grid" *ngIf="queueStats?.dlq" style="margin-bottom: 24px;">
+        <div class="glass-card stat-card dlq" style="background: rgba(244, 67, 54, 0.1);">
+            <div class="stat-header">
+                <mat-icon style="color: #f44336;">error_outline</mat-icon>
+                <span style="color: #f44336;">Dead Letter Queue</span>
+            </div>
+            <div class="stat-value" *ngIf="!isLoadingStats" style="color: #f44336;">{{ queueStats?.dlq?.total ?? 0 }}
+            </div>
+            <div class="spinner-container" *ngIf="isLoadingStats">
+                <mat-spinner diameter="24"></mat-spinner>
+            </div>
+        </div>
+    </div>
+
+    <!-- DLQ Breakdown -->
+    <div class="glass-card table-container" *ngIf="queueStats?.dlq?.total" style="margin-bottom: 24px;">
+        <h3 style="margin: 16px; color: #333; font-size: 1.1rem; font-weight: 500;">Failures Breakdown</h3>
+        <div style="display: flex; gap: 24px; padding: 0 16px 16px;">
+
+            <!-- By Context -->
+            <div style="flex: 1;">
+                <h4 style="margin-bottom: 12px; font-size: 0.9rem; color: #666;">By Reason</h4>
+                <div *ngFor="let item of queueStats?.dlq?.byContext"
+                    style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.05);">
+                    <span style="font-weight: 500;">{{ item.context }}</span>
+                    <span class="status-badge disabled">{{ item.count }}</span>
+                </div>
+            </div>
+
+            <!-- By Collection -->
+            <div style="flex: 1;">
+                <h4 style="margin-bottom: 12px; font-size: 0.9rem; color: #666;">By Queue</h4>
+                <div *ngFor="let item of queueStats?.dlq?.byProvider"
+                    style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.05);">
+                    <span style="font-size: 0.9rem;">{{ item.provider }}</span>
+                    <span class="status-badge disabled">{{ item.count }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Detailed Provider Queue Stats -->
     <div class="glass-card table-container" *ngIf="queueStats?.providers?.length" style="margin-bottom: 24px;">
         <h3 style="margin: 16px; color: #333; font-size: 1.1rem; font-weight: 500;">Provider Queue Status</h3>
