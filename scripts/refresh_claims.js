@@ -3,7 +3,7 @@ const path = require('path');
 
 // Initialize Firebase Admin
 // Expects GOOGLE_APPLICATION_CREDENTIALS or PROJECT_ID
-const projectId = process.env.PROJECT_ID || process.env.GCLOUD_PROJECT;
+const projectId = 'quantified-self-io';
 if (!admin.apps.length) {
     if (projectId) {
         admin.initializeApp({ projectId });
