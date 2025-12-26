@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable, BehaviorSubject, from, of } from 'rxjs';
+import { Observable, BehaviorSubject, from, of, combineLatest } from 'rxjs';
 import { map, filter, shareReplay, switchMap, take, catchError } from 'rxjs/operators';
 import { AppWindowService } from './app.window.service';
 import { AppUserService } from './app.user.service';
@@ -16,7 +16,7 @@ import { environment } from '../../environments/environment';
 })
 export class AppRemoteConfigService {
     private configLoaded$ = new BehaviorSubject<boolean>(false);
-    private isAdmin$ = new BehaviorSubject<boolean>(false);
+    private isAdmin$ = new BehaviorSubject<boolean | null>(null);
     private maintenanceModeValue = false;
     private maintenanceMessageValue = "";
 
@@ -30,21 +30,34 @@ export class AppRemoteConfigService {
         // Check admin status initially
         this.checkAdminStatus();
 
-        this.maintenanceMode$ = this.configLoaded$.pipe(
-            filter(loaded => loaded),
-            switchMap(() => this.isAdmin$),
-            map(isAdmin => {
-                // Bypass maintenance mode for admins or URL parameter
+        this.maintenanceMode$ = combineLatest([
+            this.configLoaded$.pipe(filter(loaded => loaded)),
+            this.isAdmin$
+        ]).pipe(
+            map(([_, isAdmin]) => {
+                // Not in maintenance? Return false immediately, no need to wait for admin check.
+                if (!this.maintenanceModeValue) return false;
+
+                // In maintenance? We must wait for admin check to complete.
+                if (isAdmin === null) return null;
+
+                // Admin? Bypass.
                 if (isAdmin) {
                     console.log('[RemoteConfig] Admin user - bypassing maintenance mode');
                     return false;
                 }
+
+                // URL bypass?
                 if (this.isBypassEnabled()) {
                     console.log('[RemoteConfig] URL bypass enabled');
                     return false;
                 }
-                return this.maintenanceModeValue;
+
+                // Strictly in maintenance mode for regular user
+                return true;
             }),
+            // Filter out pending states (null)
+            filter((mode): mode is boolean => mode !== null),
             shareReplay(1)
         );
 
