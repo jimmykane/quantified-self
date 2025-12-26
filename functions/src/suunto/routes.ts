@@ -1,6 +1,7 @@
 'use strict';
 
 import * as functions from 'firebase-functions/v1';
+import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import * as requestPromise from '../request-helper';
 import { getTokenData } from '../tokens';
@@ -16,7 +17,7 @@ import { config } from '../config';
 export const importRouteToSuuntoApp = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    console.error('Not allowed');
+    logger.error('Not allowed');
     res.status(403);
     res.send('Unauthorized');
     return;
@@ -37,21 +38,21 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
   }
 
   if (!req.body) {
-    console.error('No file provided\'');
+    logger.error('No file provided\'');
     res.status(500);
     res.send();
     return;
   }
 
   const tokenQuerySnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(userID).collection('tokens').get();
-  console.log(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
+  logger.info(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     let serviceToken;
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, SERVICE_NAME, false);
     } catch (e: any) {
-      console.error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
+      logger.error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
       res.status(500);
       res.send(e.name);
       return;
@@ -71,14 +72,14 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
       result = JSON.parse(result);
       // console.log(`Deauthorized token ${doc.id} for ${decodedIdToken.uid}`)
     } catch (e: any) {
-      console.error(`Could upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
+      logger.error(`Could upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
       res.status(500);
       res.send(e.name);
       return;
     }
 
     if (result.error) {
-      console.error(`Could upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error`, result.error);
+      logger.error(`Could upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error`, result.error);
       res.status(500);
       res.send(result.error);
       return;
@@ -94,7 +95,7 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
         uploadedRoutesCount: uploadedRoutesCount + 1,
       });
     } catch (e: any) {
-      console.error('Could not update uploadedRoutes count');
+      logger.error('Could not update uploadedRoutes count');
     }
   }
   res.status(200);

@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { deauthorizeServiceForUser } from '../OAuth2';
 import { deauthorizeGarminHealthAPIForUser } from '../garmin/auth/wrapper';
@@ -54,20 +55,20 @@ async function deauthorize(collectionName: string, dryRun: boolean) {
     const config = DEAUTH_CONFIG[collectionName];
     if (!config) return;
 
-    console.log(`\nScanning collection: ${collectionName} for deauthorization...`);
+    logger.info(`\nScanning collection: ${collectionName} for deauthorization...`);
     const snapshot = await db.collection(collectionName).get();
 
     if (snapshot.empty) {
-        console.log(`  No users found in ${collectionName}.`);
+        logger.info(`  No users found in ${collectionName}.`);
         return;
     }
 
-    console.log(`  Found ${snapshot.size} users with tokens.`);
+    logger.info(`  Found ${snapshot.size} users with tokens.`);
 
     for (const doc of snapshot.docs) {
         const uid = doc.id;
         if (dryRun) {
-            console.log(`  [DRY RUN] Would deauthorize user ${uid} from ${config.service || 'Garmin'}`);
+            logger.info(`  [DRY RUN] Would deauthorize user ${uid} from ${config.service || 'Garmin'}`);
         } else {
             process.stdout.write(`  Deauthorizing user ${uid} from ${config.service || 'Garmin'}...`);
             try {
@@ -76,9 +77,9 @@ async function deauthorize(collectionName: string, dryRun: boolean) {
                 } else {
                     await config.fn(uid);
                 }
-                console.log(` ✓`);
+                logger.info(` ✓`);
             } catch (e: Error | any) {
-                console.log(` ✗ (${e.message})`);
+                logger.info(` ✗ (${e.message})`);
             }
         }
     }
@@ -97,19 +98,19 @@ async function cleanupFirestore() {
         targetCollections = COLLECTION_GROUPS.filter(c => requested.includes(c));
         const invalid = requested.filter(c => !COLLECTION_GROUPS.includes(c));
         if (invalid.length > 0) {
-            console.warn(`Warning: Invalid collections skipped: ${invalid.join(', ')}`);
+            logger.warn(`Warning: Invalid collections skipped: ${invalid.join(', ')}`);
         }
     }
 
-    console.log(`=============================================`);
-    console.log(`Firestore Cleanup Script`);
-    console.log(`Mode: ${dryRun ? 'DRY RUN' : 'EXECUTION'}`);
-    console.log(`Disconnect Only: ${disconnectOnly}`);
-    console.log(`Collections: ${targetCollections.join(', ')}`);
-    console.log(`=============================================`);
+    logger.info(`=============================================`);
+    logger.info(`Firestore Cleanup Script`);
+    logger.info(`Mode: ${dryRun ? 'DRY RUN' : 'EXECUTION'}`);
+    logger.info(`Disconnect Only: ${disconnectOnly}`);
+    logger.info(`Collections: ${targetCollections.join(', ')}`);
+    logger.info(`=============================================`);
 
     if (targetCollections.length === 0) {
-        console.error('Error: No valid collections selected for cleanup.');
+        logger.error('Error: No valid collections selected for cleanup.');
         process.exit(1);
     }
 
@@ -119,13 +120,13 @@ async function cleanupFirestore() {
             : 'DANGER: This will permanently delete data. Proceed?';
         const proceed = await confirm(message);
         if (!proceed) {
-            console.log('Operation cancelled.');
+            logger.info('Operation cancelled.');
             process.exit(0);
         }
     }
 
     // 1. Deauthorization phase
-    console.log('\n--- Phase 1: Deauthorization ---');
+    logger.info('\n--- Phase 1: Deauthorization ---');
     for (const collection of targetCollections) {
         if (DEAUTH_CONFIG[collection]) {
             await deauthorize(collection, dryRun);
@@ -133,22 +134,22 @@ async function cleanupFirestore() {
     }
 
     if (disconnectOnly) {
-        console.log('\nDisconnect-only mode active. Skipping deletion phase.');
+        logger.info('\nDisconnect-only mode active. Skipping deletion phase.');
         return;
     }
 
     // 2. Deletion phase
-    console.log('\n--- Phase 2: Deletion (BulkWriter) ---');
+    logger.info('\n--- Phase 2: Deletion (BulkWriter) ---');
     const bulkWriter = db.bulkWriter();
     bulkWriter.onWriteError((error) => {
-        console.error('BulkWriter Error:', error.message);
+        logger.error('BulkWriter Error:', error.message);
         return true; // Retry
     });
 
     let totalDeleted = 0;
 
     for (const group of targetCollections) {
-        console.log(`Processing collection group: [${group}]...`);
+        logger.info(`Processing collection group: [${group}]...`);
 
         try {
             const query = db.collectionGroup(group);
@@ -156,12 +157,12 @@ async function cleanupFirestore() {
             const count = snapshot.data().count;
 
             if (count === 0) {
-                console.log(` - No documents found in [${group}]`);
+                logger.info(` - No documents found in [${group}]`);
                 continue;
             }
 
             if (dryRun) {
-                console.log(` - [DRY RUN] Would delete ${count} documents from [${group}]`);
+                logger.info(` - [DRY RUN] Would delete ${count} documents from [${group}]`);
                 totalDeleted += count;
             } else {
                 const stream = db.collectionGroup(group).stream();
@@ -174,22 +175,22 @@ async function cleanupFirestore() {
                         process.stdout.write(`\rDeleted ${totalDeleted} documents...`);
                     }
                 }
-                console.log(`\n - Queued ${groupDeleted} documents from [${group}]`);
+                logger.info(`\n - Queued ${groupDeleted} documents from [${group}]`);
             }
         } catch (error: any) {
-            console.error(`Error processing [${group}]:`, error.message);
+            logger.error(`Error processing [${group}]:`, error.message);
         }
     }
 
     if (!dryRun) {
-        console.log(`\nFlushing BulkWriter...`);
+        logger.info(`\nFlushing BulkWriter...`);
         await bulkWriter.close();
     }
 
-    console.log(`\n=============================================`);
-    console.log(`Cleanup Complete.`);
-    console.log(`Total documents ${dryRun ? 'identified' : 'deleted'}: ${totalDeleted}`);
-    console.log(`=============================================`);
+    logger.info(`\n=============================================`);
+    logger.info(`Cleanup Complete.`);
+    logger.info(`Total documents ${dryRun ? 'identified' : 'deleted'}: ${totalDeleted}`);
+    logger.info(`=============================================`);
 }
 
 // Only run if called directly
@@ -197,7 +198,7 @@ if (require.main === module) {
     cleanupFirestore()
         .then(() => process.exit(0))
         .catch(err => {
-            console.error('Fatal error:', err);
+            logger.error('Fatal error:', err);
             process.exit(1);
         });
 }

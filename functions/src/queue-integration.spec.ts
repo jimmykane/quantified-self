@@ -16,25 +16,69 @@ vi.mock('firebase-functions', () => ({
 
 // Setup Firestore Mocks
 const mockUpdate = vi.fn(() => Promise.resolve());
-const mockRef = { update: mockUpdate };
+const mockRef = { update: mockUpdate, parent: { id: 'some-collection' } };
+
+vi.mock('firebase-functions/logger', () => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+}));
 
 vi.mock('firebase-admin', () => {
     const mockFirestore = {
         collectionGroup: vi.fn(),
-        collection: vi.fn()
+        collection: vi.fn(() => ({
+            doc: vi.fn(() => ({
+                get: vi.fn(),
+                set: vi.fn(),
+                delete: vi.fn(),
+                update: vi.fn(),
+            })),
+            where: vi.fn().mockReturnThis(),
+            get: vi.fn(),
+        })),
+        batch: vi.fn(() => ({
+            set: vi.fn(),
+            delete: vi.fn(),
+            commit: vi.fn().mockResolvedValue(undefined),
+        })),
     };
+    const mockTimestamp = {
+        fromDate: vi.fn((date) => ({ toDate: () => date })),
+        now: vi.fn(() => ({ toDate: () => new Date() })),
+    };
+    const firestoreFunc = vi.fn(() => mockFirestore);
+    (firestoreFunc as any).collectionGroup = mockFirestore.collectionGroup;
+    (firestoreFunc as any).collection = mockFirestore.collection;
+    (firestoreFunc as any).batch = mockFirestore.batch;
+    (firestoreFunc as any).Timestamp = mockTimestamp;
+
     return {
-        firestore: Object.assign(vi.fn(() => mockFirestore), {
-            collectionGroup: mockFirestore.collectionGroup,
-            collection: mockFirestore.collection
-        })
+        firestore: firestoreFunc
     };
 });
 
 // Mock dependencies
-vi.mock('./tokens', () => ({
-    getTokenData: vi.fn()
+// Mock dependencies
+const {
+    mockMoveToDeadLetterQueue,
+    mockGetTokenData,
+} = vi.hoisted(() => ({
+    mockMoveToDeadLetterQueue: vi.fn(),
+    mockGetTokenData: vi.fn(),
 }));
+
+vi.mock('./tokens', () => ({
+    getTokenData: mockGetTokenData,
+}));
+
+vi.mock('./queue-utils', async (importOriginal) => {
+    const actual = await importOriginal<any>();
+    return {
+        ...actual,
+        moveToDeadLetterQueue: mockMoveToDeadLetterQueue,
+    };
+});
 
 vi.mock('./request-helper', () => ({
     get: vi.fn()
@@ -67,7 +111,9 @@ describe('Queue Integration Logic', () => {
         vi.clearAllMocks();
     });
 
-    it('should increment retryCount by 1 (grace period) if no tokens are found', async () => {
+    it('should move to Dead Letter Queue (fail fast) if no tokens are found', async () => {
+        const { moveToDeadLetterQueue } = await import('./queue-utils');
+
         (admin.firestore().collectionGroup as any).mockReturnValue({
             where: vi.fn().mockReturnThis(),
             get: vi.fn().mockResolvedValue({ size: 0, docs: [] })
@@ -81,12 +127,12 @@ describe('Queue Integration Logic', () => {
 
         await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, queueItem as any);
 
-        expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
-            retryCount: 1,
-            errors: expect.arrayContaining([
-                expect.objectContaining({ error: 'No tokens found' })
-            ])
-        }));
+        expect(moveToDeadLetterQueue).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'item-123' }),
+            expect.any(Error),
+            undefined, // bulkWriter is not passed
+            'NO_TOKEN_FOUND'
+        );
     });
 
     it('should exit early and mark as processed on the first successful import', async () => {

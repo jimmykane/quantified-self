@@ -1,5 +1,6 @@
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 import { reconcileClaims } from './claims';
 import { checkAndSendSubscriptionEmails } from './email-triggers';
 import { GRACE_PERIOD_DAYS } from '../shared/limits';
@@ -14,7 +15,7 @@ export const onSubscriptionUpdated = onDocumentWritten({
 }, async (event) => {
     const uid = event.params.uid;
 
-    console.log(`[onSubscriptionUpdated] Change detected for user ${uid}. Reconciling claims...`);
+    logger.info(`[onSubscriptionUpdated] Change detected for user ${uid}. Reconciling claims...`);
 
     try {
         await reconcileClaims(uid);
@@ -34,7 +35,7 @@ export const onSubscriptionUpdated = onDocumentWritten({
             .get();
 
         if (activeSnapshot.empty) {
-            console.log(`[onSubscriptionUpdated] No active subscriptions for ${uid}. Checking for previous paid state...`);
+            logger.info(`[onSubscriptionUpdated] No active subscriptions for ${uid}. Checking for previous paid state...`);
 
             // Check if user already has a grace period set to avoid overwriting or extending it unfairly
             const userDoc = await admin.firestore().doc(`users/${uid}`).get();
@@ -45,7 +46,7 @@ export const onSubscriptionUpdated = onDocumentWritten({
                 const gracePeriodUntil = admin.firestore.Timestamp.fromDate(
                     new Date(Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000)
                 );
-                console.log(`[onSubscriptionUpdated] Setting gracePeriodUntil: ${gracePeriodUntil.toDate().toISOString()} for user ${uid}`);
+                logger.info(`[onSubscriptionUpdated] Setting gracePeriodUntil: ${gracePeriodUntil.toDate().toISOString()} for user ${uid}`);
                 await admin.firestore().doc(`users/${uid}`).set({
                     gracePeriodUntil,
                     lastDowngradedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -53,7 +54,7 @@ export const onSubscriptionUpdated = onDocumentWritten({
             }
         } else {
             // User has an active sub. Clear grace period if it exists.
-            console.log(`[onSubscriptionUpdated] Active subscription found. Clearing grace period for ${uid}.`);
+            logger.info(`[onSubscriptionUpdated] Active subscription found. Clearing grace period for ${uid}.`);
             await admin.firestore().doc(`users/${uid}`).update({
                 gracePeriodUntil: admin.firestore.FieldValue.delete(),
                 lastDowngradedAt: admin.firestore.FieldValue.delete()
@@ -94,6 +95,6 @@ export const onSubscriptionUpdated = onDocumentWritten({
             });
             return;
         }
-        console.error(`[onSubscriptionUpdated] Error for user ${uid}:`, e);
+        logger.error(`[onSubscriptionUpdated] Error for user ${uid}:`, e);
     }
 });

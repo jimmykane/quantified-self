@@ -1,6 +1,7 @@
 import * as functions from 'firebase-functions/v1';
 import { MAX_RETRY_COUNT, QUEUE_SCHEDULE, QUEUE_ITEM_TTL_MS } from './shared/queue-config';
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 import pLimit from 'p-limit';
 import { increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue } from './queue-utils';
 import { processGarminHealthAPIActivityQueueItem } from './garmin/queue';
@@ -33,9 +34,9 @@ export async function parseQueueItems(serviceName: ServiceNames, fromHistoryQueu
     .where('processed', '==', false)
     .where('retryCount', '<', RETRY_COUNT)
     .limit(LIMIT).get(); // Max 10 retries
-  console.log(`Found ${querySnapshot.size} queue items to process`);
+  logger.info(`Found ${querySnapshot.size} queue items to process`);
   let count = 0;
-  console.time('ParseQueueItems');
+  logger.info('Starting timer: ParseQueueItems');
 
   const bulkWriter = admin.firestore().bulkWriter();
   const limit = pLimit(20);
@@ -69,11 +70,11 @@ export async function parseQueueItems(serviceName: ServiceNames, fromHistoryQueu
             break;
         }
         count++;
-        console.log(`Parsed queue item ${count}/${querySnapshot.size} and id ${queueItem.id}`);
+        logger.info(`Parsed queue item ${count}/${querySnapshot.size} and id ${queueItem.id}`);
         // console.timeLog('ParseQueueItems'); // timeLog might be noisy in parallel
       } catch (e: unknown) {
         const error = e as Error;
-        console.error(new Error(`Error parsing queue item ${queueItem.id}: ${error.message}`));
+        logger.error(new Error(`Error parsing queue item ${queueItem.id}: ${error.message}`));
       }
     });
   });
@@ -81,8 +82,8 @@ export async function parseQueueItems(serviceName: ServiceNames, fromHistoryQueu
   await Promise.all(promises);
   await bulkWriter.close();
 
-  console.timeEnd('ParseQueueItems');
-  console.log(`Parsed ${count} queue items out of ${querySnapshot.size}`);
+  logger.info('Ending timer: ParseQueueItems');
+  logger.info(`Parsed ${count} queue items out of ${querySnapshot.size}`);
 }
 
 const TIMEOUT_DEFAULT = 300;
@@ -137,7 +138,7 @@ export const parseSuuntoAppHistoryImportActivityQueue = functions.region('europe
  * @param queueItem
  */
 export async function addToQueueForSuunto(queueItem: { userName: string, workoutID: string }): Promise<admin.firestore.DocumentReference> {
-  console.log(`Inserting to queue ${queueItem.userName} ${queueItem.workoutID}`);
+  logger.info(`Inserting to queue ${queueItem.userName} ${queueItem.workoutID}`);
   return addToWorkoutQueue({
     id: generateIDFromParts([queueItem.userName, queueItem.workoutID]),
     dateCreated: new Date().getTime(),
@@ -153,7 +154,7 @@ export async function addToQueueForSuunto(queueItem: { userName: string, workout
  * @param queueItem
  */
 export async function addToQueueForGarmin(queueItem: { userID: string, startTimeInSeconds: number, manual: boolean, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX', token: string }): Promise<admin.firestore.DocumentReference> {
-  console.log(`Inserting to queue ${generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()])} for ${queueItem.userID} fileID ${queueItem.activityFileID}`);
+  logger.info(`Inserting to queue ${generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()])} for ${queueItem.userID} fileID ${queueItem.activityFileID}`);
   return addToWorkoutQueue({
     id: generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()]),
     dateCreated: new Date().getTime(),
@@ -173,7 +174,7 @@ export async function addToQueueForGarmin(queueItem: { userID: string, startTime
  * @param queueItem
  */
 export async function addToQueueForCOROS(queueItem: COROSAPIWorkoutQueueItemInterface): Promise<admin.firestore.DocumentReference> {
-  console.log(`Inserting to queue ${queueItem.openId} ${queueItem.workoutID}`);
+  logger.info(`Inserting to queue ${queueItem.openId} ${queueItem.workoutID}`);
   return addToWorkoutQueue(queueItem, ServiceNames.COROSAPI);
 }
 
@@ -209,7 +210,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     return processGarminHealthAPIActivityQueueItem(queueItem as GarminHealthAPIActivityQueueItemInterface, bulkWriter, tokenCache, usageCache, pendingWrites);
   }
 
-  console.log(`Processing queue item ${queueItem.id} at retry count ${queueItem.retryCount}`);
+  logger.info(`Processing queue item ${queueItem.id} at retry count ${queueItem.retryCount}`);
   // queueItem is never undefined for query queueItem snapshots
   let tokenQuerySnapshots: admin.firestore.QuerySnapshot | undefined;
   const userKey = `${serviceName}:${(queueItem as COROSAPIWorkoutQueueItemInterface).openId || (queueItem as SuuntoAppWorkoutQueueItemInterface).userName}`;
@@ -233,7 +234,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       tokenQuerySnapshots = await tokenPromise;
     } catch (e: unknown) {
       const error = e as Error;
-      console.error(error);
+      logger.error(error);
       // If the promise fails, we might want to remove it from cache so next ones can retry,
       // but for this batch execution it might be better to just fail.
       return increaseRetryCountForQueueItem(queueItem, error, 1, bulkWriter);
@@ -252,14 +253,14 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       }
     } catch (e: unknown) {
       const error = e as Error;
-      console.error(error);
+      logger.error(error);
       return increaseRetryCountForQueueItem(queueItem, error, 1, bulkWriter);
     }
   }
 
   // If there is no token for the user, give them a few chances to reconnect
   if (!tokenQuerySnapshots.size) {
-    console.warn(`No token found for queue item ${queueItem.id}. Fail fast.`);
+    logger.warn(`No token found for queue item ${queueItem.id}. Fail fast.`);
     // return updateToProcessed(queueItem, bulkWriter, { processingError: 'NO_TOKEN_FOUND' });
     return moveToDeadLetterQueue(queueItem, new Error('No token found - Fail Fast'), bulkWriter, 'NO_TOKEN_FOUND');
   }
@@ -273,8 +274,8 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName);
     } catch (e: any) {
-      console.error(e);
-      console.error(new Error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`));
+      logger.error(e);
+      logger.error(new Error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`));
       continue;
     }
 
@@ -284,48 +285,48 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     }
     const parentID = parent1.parent!.id;
 
-    console.log(`Found user id ${parentID} for queue item ${queueItem.id}`);
+    logger.info(`Found user id ${parentID} for queue item ${queueItem.id}`);
 
     let result;
     try {
-      console.time('DownloadFit');
+      logger.info('Starting timer: DownloadFit');
       result = await getWorkoutForService(serviceName, queueItem, serviceToken);
-      console.log(`Downloaded FIT file for ${queueItem.id}`);
+      logger.info(`Downloaded FIT file for ${queueItem.id}`);
     } catch (e: any) {
-      console.timeEnd('DownloadFit');
+      logger.info('Ending timer: DownloadFit');
       if (e.statusCode === 401) {
-        console.warn(`Unauthorized to download workout for ${queueItem.id}, attempting to force refresh token and retry...`);
+        logger.warn(`Unauthorized to download workout for ${queueItem.id}, attempting to force refresh token and retry...`);
         try {
           // Force refresh token and save
           serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, true);
           result = await getWorkoutForService(serviceName, queueItem, serviceToken);
         } catch (retryError: any) {
-          console.error(new Error(`Could not get workout for ${queueItem.id} even after force refresh: ${retryError.message}`));
+          logger.error(new Error(`Could not get workout for ${queueItem.id} even after force refresh: ${retryError.message}`));
           await increaseRetryCountForQueueItem(queueItem, retryError, 1, bulkWriter);
           continue;
         }
       } else if (e.statusCode === 403) {
-        console.error(new Error(`Could not get workout for ${queueItem.id} due to 403, increasing retry by 20`));
+        logger.error(new Error(`Could not get workout for ${queueItem.id} due to 403, increasing retry by 20`));
         await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
         continue;
       } else if (e.statusCode === 500) {
-        console.error(new Error(`Could not get workout for ${queueItem.id} due to 500 increasing retry by 20`));
+        logger.error(new Error(`Could not get workout for ${queueItem.id} due to 500 increasing retry by 20`));
         await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
         continue;
       } else {
-        console.error(new Error(`Could not get workout for ${queueItem.id}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}`));
+        logger.error(new Error(`Could not get workout for ${queueItem.id}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}`));
         await increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
         continue;
       }
     }
-    console.timeEnd('DownloadFit');
+    logger.info('Ending timer: DownloadFit');
     try {
-      console.time('CreateEvent');
+      logger.info('Starting timer: CreateEvent');
       const event = await EventImporterFIT.getFromArrayBuffer(result);
-      console.timeEnd('CreateEvent');
+      logger.info('Ending timer: CreateEvent');
       event.name = event.startDate.toJSON(); // @todo improve
-      console.log(`Created Event from FIT file of ${queueItem.id}`);
-      console.time('InsertEvent');
+      logger.info(`Created Event from FIT file of ${queueItem.id}`);
+      logger.info('Starting timer: InsertEvent');
       switch (serviceName) {
         default:
           throw new Error('Not Implemented');
@@ -341,18 +342,18 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           await setEvent(parentID, generateIDFromParts([suuntoWorkoutQueueItem.userName, suuntoWorkoutQueueItem.workoutID]), event, suuntoMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
         }
       }
-      console.timeEnd('InsertEvent');
-      console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${parentID} and token user ${serviceToken.openId || serviceToken.userName}`);
-      console.log(`Parsed item successfully for ${queueItem.id}`);
+      logger.info('Ending timer: InsertEvent');
+      logger.info(`Created Event ${event.getID()} for ${queueItem.id} user id ${parentID} and token user ${serviceToken.openId || serviceToken.userName}`);
+      logger.info(`Parsed item successfully for ${queueItem.id}`);
     } catch (e: any) {
       // @todo should delete event  or separate catch
-      console.error(e);
+      logger.error(e);
       if (e instanceof UsageLimitExceededError) {
-        console.error(new Error(`Usage limit exceeded for ${queueItem.id}. Aborting retries. ${e.message}`));
+        logger.error(new Error(`Usage limit exceeded for ${queueItem.id}. Aborting retries. ${e.message}`));
         await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter); // Stop retries
         continue;
       }
-      console.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.openId || serviceToken.userName} to ${queueItem.retryCount + 1} due to ${e.message}`));
+      logger.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.openId || serviceToken.userName} to ${queueItem.retryCount + 1} due to ${e.message}`));
       await increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
       continue;
     }
@@ -362,7 +363,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   }
 
   // If we finished the loop without returning, it means every token attempt failed.
-  console.error(new Error(`Could not process ANY tokens for ${queueItem.id} after checking all ${tokenQuerySnapshots.size} tokens. Increasing retry count.`));
+  logger.error(new Error(`Could not process ANY tokens for ${queueItem.id} after checking all ${tokenQuerySnapshots.size} tokens. Increasing retry count.`));
   return increaseRetryCountForQueueItem(queueItem, new Error('All token processing attempts failed'), 1, bulkWriter);
 }
 

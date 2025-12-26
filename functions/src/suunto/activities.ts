@@ -1,6 +1,7 @@
 'use strict';
 
 import * as functions from 'firebase-functions/v1';
+import * as logger from 'firebase-functions/logger';
 import { config } from '../config';
 import * as admin from 'firebase-admin';
 import * as requestPromise from '../request-helper';
@@ -13,10 +14,10 @@ import { SERVICE_NAME } from './constants';
  * Uploads an activity to Suunto app
  */
 export const importActivityToSuuntoApp = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  console.log('START importActivityToSuuntoApp v_POLLING_FIX_1765906212');
+  logger.info('START importActivityToSuuntoApp v_POLLING_FIX_1765906212');
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    console.error(`Not allowed. Origin: ${req.get('origin')}, Method: ${req.method}`);
+    logger.error(`Not allowed. Origin: ${req.get('origin')}, Method: ${req.method}`);
     res.status(403);
     res.send('Unauthorized');
     return;
@@ -37,7 +38,7 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
   }
 
   if (!req.body) {
-    console.error('No file provided\'');
+    logger.error('No file provided\'');
     res.status(500);
     res.send();
     return;
@@ -46,23 +47,23 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
   // Debugging file content
   const isBuffer = Buffer.isBuffer(req.rawBody);
   const size = isBuffer ? req.rawBody.length : 0;
-  console.log(`Received upload request. rawBody isBuffer=${isBuffer}, size=${size} bytes`);
+  logger.info(`Received upload request. rawBody isBuffer=${isBuffer}, size=${size} bytes`);
 
   if (!isBuffer || size === 0) {
-    console.error('File content is empty or not a buffer');
+    logger.error('File content is empty or not a buffer');
     res.status(400).send('File content missing or invalid');
     return;
   }
 
   const tokenQuerySnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(userID).collection('tokens').get();
-  console.log(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
+  logger.info(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     let serviceToken;
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, SERVICE_NAME, false);
     } catch (e: any) {
-      console.error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
+      logger.error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
       res.status(500);
       res.send(e.name);
       return;
@@ -87,7 +88,7 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
       });
       result = JSON.parse(result);
     } catch (e: any) {
-      console.error(`Could not init activity upload for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
+      logger.error(`Could not init activity upload for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
       res.status(500);
       res.send(e.name);
       return;
@@ -95,7 +96,7 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
 
     const url = result.url;
     const uploadId = result.id;
-    console.log(`Init response for user ${userID}: url=${url}, id=${uploadId}, headers=${JSON.stringify(result.headers)}`);
+    logger.info(`Init response for user ${userID}: url=${url}, id=${uploadId}, headers=${JSON.stringify(result.headers)}`);
 
     try {
       // Perform the binary upload to the Azure Blob Storage URL provided by Suunto
@@ -106,9 +107,9 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
         url,
         body: req.rawBody,
       });
-      console.log(`PUT response for user ${userID}: ${JSON.stringify(result)}`);
+      logger.info(`PUT response for user ${userID}: ${JSON.stringify(result)}`);
     } catch (e: any) {
-      console.error(`Could not upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
+      logger.error(`Could not upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
       res.status(500);
       res.send(e.message);
       return;
@@ -136,22 +137,22 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
 
         const statusJson = JSON.parse(statusResponse);
         status = statusJson.status;
-        console.log(`Upload status (attempt ${attempts}/${maxAttempts}) for user ${userID}, id ${uploadId}: ${status}`, statusJson);
+        logger.info(`Upload status (attempt ${attempts}/${maxAttempts}) for user ${userID}, id ${uploadId}: ${status}`, statusJson);
 
         if (status === 'PROCESSED') {
-          console.log(`Successfully processed activity for user ${userID}. WorkoutKey: ${statusJson.workoutKey}`);
+          logger.info(`Successfully processed activity for user ${userID}. WorkoutKey: ${statusJson.workoutKey}`);
           break;
         } else if (status === 'ERROR') {
-          console.error(`Suunto processing failed for user ${userID}: ${statusJson.message}`);
+          logger.error(`Suunto processing failed for user ${userID}: ${statusJson.message}`);
           // We might want to throw here or just log and exit
         }
       } catch (e: any) {
-        console.error(`Could not check upload status for ${uploadId} for user ${userID} (attempt ${attempts})`, e);
+        logger.error(`Could not check upload status for ${uploadId} for user ${userID} (attempt ${attempts})`, e);
       }
     }
 
     if (result && result.error) {
-      console.error(`Could not upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error`, result.error);
+      logger.error(`Could not upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error`, result.error);
       res.status(500);
       res.send(result.error);
       return;

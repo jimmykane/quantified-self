@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 import { QueueItemInterface } from './queue/queue-item.interface';
 
 import { MAX_RETRY_COUNT, QUEUE_ITEM_TTL_MS } from './shared/queue-config';
@@ -11,7 +12,7 @@ export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error
     const failedItem = Object.assign({}, queueItem, {
         error: error.message,
         failedAt: (new Date()).getTime(),
-        originalCollection: queueItem.ref.parent.id,
+        originalCollection: queueItem.ref.parent ? queueItem.ref.parent.id : 'unknown',
         context: context || 'MAX_RETRY_REACHED',
         expireAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + QUEUE_ITEM_TTL_MS)),
         // Remove ref from payload
@@ -30,9 +31,9 @@ export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error
             batch.delete(queueItem.ref);
             await batch.commit();
         }
-        console.info(`Moved item ${queueItem.id} to Dead Letter Queue (failed_jobs)`);
+        logger.info(`Moved item ${queueItem.id} to Dead Letter Queue (failed_jobs)`);
     } catch (e) {
-        console.error(new Error(`Failed to move item ${queueItem.id} to DLQ: ${e}`));
+        logger.error(new Error(`Failed to move item ${queueItem.id} to DLQ: ${e}`));
     }
 }
 
@@ -43,7 +44,7 @@ export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterfa
 
     // Check if we overlap the max retry count
     if ((queueItem.retryCount || 0) + incrementBy >= MAX_RETRY_COUNT) {
-        console.warn(`Item ${queueItem.id} exceeded max retries (${MAX_RETRY_COUNT}). Moving to DLQ.`);
+        logger.warn(`Item ${queueItem.id} exceeded max retries (${MAX_RETRY_COUNT}). Moving to DLQ.`);
         return moveToDeadLetterQueue(queueItem, error, bulkWriter);
     }
 
@@ -67,9 +68,9 @@ export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterfa
             await ref.update(updateData);
         }
         queueItem.ref = ref;
-        console.info(`Updated retry count for ${queueItem.id} to ${queueItem.retryCount}`);
+        logger.info(`Updated retry count for ${queueItem.id} to ${queueItem.retryCount}`);
     } catch {
-        console.error(new Error(`Could not update retry count on ${queueItem.id}`));
+        logger.error(new Error(`Could not update retry count on ${queueItem.id}`));
     }
 }
 
@@ -89,8 +90,8 @@ export async function updateToProcessed(queueItem: QueueItemInterface, bulkWrite
         } else {
             await ref.update(updateData);
         }
-        console.log(`Updated to processed  ${queueItem.id}`);
+        logger.info(`Updated to processed  ${queueItem.id}`);
     } catch {
-        console.error(new Error(`Could not update processed state for ${queueItem.id}`));
+        logger.error(new Error(`Could not update processed state for ${queueItem.id}`));
     }
 }

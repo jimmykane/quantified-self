@@ -5,10 +5,12 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 // Hoist mocks
 const { authBuilderMock, deauthorizeServiceMock, deauthorizeGarminMock, firestoreMock, getServiceConfigMock, batchMock, whereMock } = vi.hoisted(() => {
     const onDeleteMock = vi.fn((handler) => handler);
-    const userMock = vi.fn(() => ({ onDelete: onDeleteMock }));
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const userMock = vi.fn((_id?: string) => ({ onDelete: onDeleteMock }));
 
     const deleteMock = vi.fn().mockResolvedValue({});
-    const docMock = vi.fn(() => ({ delete: deleteMock }));
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const docMock = vi.fn((_id?: string) => ({ delete: deleteMock }));
 
     // Define mocks first
     const querySnapshotMock = {
@@ -149,7 +151,6 @@ describe('cleanupUserAccounts', () => {
         // Make Suunto doc deletion fail (via the doc().delete mock)
         const collectionObj = firestoreMock().collection('mockCollection');
         const docObj = collectionObj.doc('testUser123');
-        // @ts-ignore
         docObj.delete.mockRejectedValueOnce(new Error('Firestore delete failed'));
 
         await wrapped(user, { eventId: 'eventId' } as any);

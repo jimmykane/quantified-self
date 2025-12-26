@@ -1,6 +1,7 @@
 'use strict';
 
 import * as functions from 'firebase-functions/v1';
+import * as logger from 'firebase-functions/logger';
 import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, assertProServiceAccess } from '../../utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
@@ -15,7 +16,7 @@ const SERVICE_NAME = ServiceNames.SuuntoApp;
 export const getSuuntoAPIAuthRequestTokenRedirectURI = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    console.error('Not allowed');
+    logger.error('Not allowed');
     res.status(403);
     res.send('Unauthorized');
     return;
@@ -39,13 +40,13 @@ export const getSuuntoAPIAuthRequestTokenRedirectURI = functions.region('europe-
   try {
     await assertProServiceAccess(userID);
   } catch (e: any) {
-    console.warn(`Blocking Suunto Auth for non-pro user ${userID}: ${e.message}`);
+    logger.warn(`Blocking Suunto Auth for non-pro user ${userID}: ${e.message}`);
     res.status(403).send(e.message);
     return;
   }
 
   if (!req.body.redirectUri) {
-    console.error('Missing redirectUri');
+    logger.error('Missing redirectUri');
     res.status(500).send('Bad Request');
     return;
   }
@@ -59,7 +60,7 @@ export const getSuuntoAPIAuthRequestTokenRedirectURI = functions.region('europe-
 export const requestAndSetSuuntoAPIAccessToken = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    console.error('Not allowed');
+    logger.error('Not allowed');
     res.status(403);
     res.send('Unauthorized');
     return;
@@ -83,7 +84,7 @@ export const requestAndSetSuuntoAPIAccessToken = functions.region('europe-west2'
   try {
     await assertProServiceAccess(userID);
   } catch (e: any) {
-    console.warn(`Blocking Suunto Token Set for non-pro user ${userID}: ${e.message}`);
+    logger.warn(`Blocking Suunto Token Set for non-pro user ${userID}: ${e.message}`);
     res.status(403).send(e.message);
     return;
   }
@@ -93,7 +94,7 @@ export const requestAndSetSuuntoAPIAccessToken = functions.region('europe-west2'
   const redirectUri = req.body.redirectUri;
 
   if (!state || !code || !redirectUri) {
-    console.error('Missing state or code or redirectUri');
+    logger.error('Missing state or code or redirectUri');
     res.status(500).send('Bad Request');
     return;
   }
@@ -105,7 +106,7 @@ export const requestAndSetSuuntoAPIAccessToken = functions.region('europe-west2'
   try {
     await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code);
   } catch (e: any) {
-    console.error(e);
+    logger.error(e);
     res.status(500).send('Authorization code flow error');
   }
   res.status(200).send();
@@ -118,7 +119,7 @@ export const requestAndSetSuuntoAPIAccessToken = functions.region('europe-west2'
 export const deauthorizeSuuntoApp = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    console.error('Not allowed');
+    logger.error('Not allowed');
     res.status(403);
     res.send('Unauthorized');
     return;
@@ -141,7 +142,7 @@ export const deauthorizeSuuntoApp = functions.region('europe-west2').https.onReq
   try {
     await deauthorizeServiceForUser(userID, SERVICE_NAME);
   } catch (e: any) {
-    console.error(e);
+    logger.error(e);
     res.status(500).send('Deauthorization Error');
   }
   res.status(200).send({ result: 'Deauthorized' });

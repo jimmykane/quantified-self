@@ -1,4 +1,5 @@
 import * as functions from 'firebase-functions/v1';
+import * as logger from 'firebase-functions/logger';
 import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse } from '../utils';
 import { GarminHealthAPIAuth } from './auth/auth';
 import * as requestPromise from '../request-helper';
@@ -16,7 +17,7 @@ export const backfillHealthAPIActivities = functions.region('europe-west2').runW
 }).https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    console.error('Not allowed');
+    logger.error('Not allowed');
     res.status(403);
     res.send('Unauthorized');
     return;
@@ -56,7 +57,7 @@ export const backfillHealthAPIActivities = functions.region('europe-west2').runW
       res.status(403).send(e.message);
       return;
     }
-    console.error(e);
+    logger.error(e);
     res.status(500).send(e.message);
     return;
   }
@@ -73,7 +74,7 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
     if (data.didLastHistoryImport) {
       const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + (3 * 24 * 60 * 60 * 1000)); // 3 days
       if ((nextHistoryImportAvailableDate > new Date())) {
-        console.error(`User ${userID} tried todo history import for ${ServiceNames.GarminHealthAPI} while not allowed`);
+        logger.error(`User ${userID} tried todo history import for ${ServiceNames.GarminHealthAPI} while not allowed`);
         throw new Error(`History import cannot happen before ${nextHistoryImportAvailableDate}`);
       }
     }
@@ -81,7 +82,7 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
 
   const tokensDocumentSnapshotData = (await admin.firestore().collection('garminHealthAPITokens').doc(userID).get()).data();
   if (!tokensDocumentSnapshotData || !tokensDocumentSnapshotData.accessToken || !tokensDocumentSnapshotData.accessTokenSecret) {
-    console.error('No token found');
+    logger.error('No token found');
     throw new Error('Bad request: No token found');
   }
 
@@ -111,7 +112,7 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
     } catch (e: any) {
       // Only if there is an api error in terms
       if (e.statusCode === 500) {
-        console.error(e);
+        logger.error(e);
         throw new Error(`Could not import history for dates ${batchStartDate} to ${batchEndDate}`);
       }
     }
@@ -125,7 +126,7 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
         didLastHistoryImport: (new Date()).getTime(),
       });
   } catch (e: any) {
-    console.error(e);
+    logger.error(e);
     // noop all is sent to garmin
   }
 }

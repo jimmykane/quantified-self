@@ -1,3 +1,4 @@
+import * as logger from 'firebase-functions/logger';
 import { AppEventInterface } from './app-event.interface';
 
 
@@ -16,7 +17,7 @@ export class EventWriter {
     constructor(private adapter: FirestoreAdapter, private storageAdapter?: StorageAdapter, private bucketName?: string) { }
 
     public async writeAllEventData(userID: string, event: AppEventInterface, originalFiles?: { data: any, extension: string, startDate?: Date }[] | { data: any, extension: string, startDate?: Date }): Promise<void> {
-        console.log('[EventWriter] writeAllEventData called', { userID, eventID: event.getID(), adapterPresent: !!this.storageAdapter });
+        logger.info('[EventWriter] writeAllEventData called', { userID, eventID: event.getID(), adapterPresent: !!this.storageAdapter });
         const writePromises: Promise<void>[] = [];
 
         // Ensure Event ID
@@ -76,7 +77,7 @@ export class EventWriter {
                         filePath = `users/${userID}/events/${event.getID()}/original_${i}.${file.extension}`;
                     }
 
-                    console.log(`[EventWriter] Uploading file ${i + 1}/${filesToUpload.length} to`, filePath);
+                    logger.info(`[EventWriter] Uploading file ${i + 1}/${filesToUpload.length} to`, filePath);
                     await this.storageAdapter.uploadFile(filePath, file.data);
 
                     uploadedFilesMetadata.push({
@@ -86,20 +87,20 @@ export class EventWriter {
                     });
                 }
 
-                console.log('[EventWriter] Upload complete. Adding metadata to eventJSON');
+                logger.info('[EventWriter] Upload complete. Adding metadata to eventJSON');
 
                 // Write 'originalFiles' array and 'originalFile' legacy
                 if (uploadedFilesMetadata.length > 0) {
-                    console.log('[EventWriter] Assigning metadata to eventJSON:', uploadedFilesMetadata.length);
+                    logger.info('[EventWriter] Assigning metadata to eventJSON:', uploadedFilesMetadata.length);
                     eventJSON.originalFiles = uploadedFilesMetadata;
                     // Always set primary legacy pointer to the first file
                     eventJSON.originalFile = uploadedFilesMetadata[0];
                 } else {
-                    console.log('[EventWriter] No metadata to assign (uploadedFilesMetadata empty)');
+                    logger.info('[EventWriter] No metadata to assign (uploadedFilesMetadata empty)');
                 }
 
             } else {
-                console.warn('[EventWriter] Skipping file upload.', 'storageAdapter:', !!this.storageAdapter);
+                logger.warn('[EventWriter] Skipping file upload.', 'storageAdapter:', !!this.storageAdapter);
             }
 
             writePromises.push(
@@ -108,7 +109,7 @@ export class EventWriter {
 
             await Promise.all(writePromises);
         } catch (e: any) {
-            console.error(e);
+            logger.error(e);
             throw new Error('Could not write event data: ' + e.message);
         }
     }

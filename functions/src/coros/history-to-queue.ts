@@ -1,6 +1,7 @@
 'use strict';
 
 import * as functions from 'firebase-functions/v1';
+import * as logger from 'firebase-functions/logger';
 import {
   getUserIDFromFirebaseToken,
   isCorsAllowed,
@@ -16,7 +17,7 @@ import { addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
 export const addCOROSAPIHistoryToQueue = functions.region('europe-west2').https.onRequest(async (req, res) => {
   // Directly set the CORS header
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    console.error('Not allowed');
+    logger.error('Not allowed');
     res.status(403);
     res.send();
     return;
@@ -48,7 +49,7 @@ export const addCOROSAPIHistoryToQueue = functions.region('europe-west2').https.
   // First check last history import
   // First check last history import
   if (!(await isAllowedToDoHistoryImport(userID, SERVICE_NAME))) {
-    console.error(`User ${userID} tried todo history import while not allowed`);
+    logger.error(`User ${userID} tried todo history import while not allowed`);
     res.status(403);
     res.send('History import is not allowed');
     return;
@@ -67,7 +68,7 @@ export const addCOROSAPIHistoryToQueue = functions.region('europe-west2').https.
     try {
       await addHistoryToQueue(userID, SERVICE_NAME, batchStartDate, batchEndDate);
     } catch (e: any) {
-      console.error(e);
+      logger.error(e);
       res.status(500).send(e.message);
       return;
     }

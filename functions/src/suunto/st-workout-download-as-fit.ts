@@ -1,6 +1,7 @@
 'use strict';
 
 import * as functions from 'firebase-functions/v1';
+import * as logger from 'firebase-functions/logger';
 import cors from 'cors';
 
 const corsRequest = cors({ origin: true });
@@ -9,8 +10,8 @@ import fetch from 'node-fetch';
 
 export const stWorkoutDownloadAsFit = functions.region('europe-west2').https.onRequest((req, res) => {
   corsRequest(req, res, () => {
-    console.log('Query:', req.query);
-    console.log('Body:', req.body);
+    logger.info('Query:', req.query);
+    logger.info('Body:', req.body);
 
     let activityID = req.query.activityID;
 
@@ -18,7 +19,7 @@ export const stWorkoutDownloadAsFit = functions.region('europe-west2').https.onR
       activityID = req.body.activityID;
     }
 
-    console.log(activityID);
+    logger.info(activityID);
 
     if (!activityID) {
       res.status(403).send('No activity ID provided.');
@@ -34,8 +35,8 @@ export const stWorkoutDownloadAsFit = functions.region('europe-west2').https.onR
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.131 Safari/537.36',
       },
     };
-    console.log('Request:', url);
-    console.log('opts:', opts);
+    logger.info('Request:', url);
+    logger.info('opts:', opts);
 
 
     fetch(url, opts as any)

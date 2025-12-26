@@ -1,11 +1,12 @@
-
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 import * as dotenv from 'dotenv';
 import { resolve } from 'path';
 
 // Load environment variables
 dotenv.config({ path: resolve(__dirname, '../../.env') });
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const serviceAccount = require('../../service-account.json');
 
 admin.initializeApp({
@@ -49,12 +50,12 @@ const EMAIL_TESTS: EmailTestConfig[] = [
 
 async function sendTestEmails(targetEmail: string) {
     if (!targetEmail) {
-        console.error('Please provide an email address as an argument.');
-        console.error('Usage: npm run test-emails -- target@example.com');
+        logger.error('Please provide an email address as an argument.');
+        logger.error('Usage: npm run test-emails -- target@example.com');
         process.exit(1);
     }
 
-    console.log(`Queueing 6 test emails for: ${targetEmail}...`);
+    logger.info(`Queueing 6 test emails for: ${targetEmail}...`);
 
     const db = admin.firestore();
     const batch = db.batch();
@@ -70,15 +71,15 @@ async function sendTestEmails(targetEmail: string) {
             },
             sent: false // Flag for extension to pick up (though usually it watches for creation)
         });
-        console.log(`Queued: ${test.templateName}`);
+        logger.info(`Queued: ${test.templateName}`);
     }
 
     await batch.commit();
-    console.log('✅ All test emails have been queued in the "mail" collection.');
+    logger.info('✅ All test emails have been queued in the "mail" collection.');
 }
 
 // Get email from command line args
 const args = process.argv.slice(2);
 const email = args[0];
 
-sendTestEmails(email).catch(console.error);
+sendTestEmails(email).catch(logger.error);

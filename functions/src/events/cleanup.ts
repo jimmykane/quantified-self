@@ -1,6 +1,6 @@
-
 import { onDocumentDeleted } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 
 export const cleanupEventFile = onDocumentDeleted({
     document: 'users/{userId}/events/{eventId}',
@@ -11,34 +11,34 @@ export const cleanupEventFile = onDocumentDeleted({
     const userId = event.params.userId;
 
     if (!snap) {
-        console.log(`[Cleanup] No data associated with event ${eventId} for user ${userId}.`);
+        logger.info(`[Cleanup] No data associated with event ${eventId} for user ${userId}.`);
         return;
     }
 
     const deletedData = snap.data();
 
-    console.log(`[Cleanup] Event ${eventId} for user ${userId} deleted. Checking for original file.`);
+    logger.info(`[Cleanup] Event ${eventId} for user ${userId} deleted. Checking for original file.`);
 
     // Delete subcollections (activities, streams, etc.)
     try {
         const path = `users/${userId}/events/${eventId}/activities`;
-        console.log(`[Cleanup] Recursively deleting activities at ${path}`);
+        logger.info(`[Cleanup] Recursively deleting activities at ${path}`);
         await admin.firestore().recursiveDelete(admin.firestore().collection(path));
-        console.log(`[Cleanup] Successfully deleted activities for event ${eventId}`);
+        logger.info(`[Cleanup] Successfully deleted activities for event ${eventId}`);
     } catch (error) {
-        console.error(`[Cleanup] Failed to delete activities for event ${eventId}`, error);
+        logger.error(`[Cleanup] Failed to delete activities for event ${eventId}`, error);
     }
 
     if (deletedData && deletedData.originalFile && deletedData.originalFile.path) {
         const filePath = deletedData.originalFile.path;
-        console.log(`[Cleanup] Found original file at ${filePath}. Deleting...`);
+        logger.info(`[Cleanup] Found original file at ${filePath}. Deleting...`);
         try {
             await admin.storage().bucket().file(filePath).delete();
-            console.log(`[Cleanup] Successfully deleted ${filePath}`);
+            logger.info(`[Cleanup] Successfully deleted ${filePath}`);
         } catch (error) {
-            console.error(`[Cleanup] Failed to delete file ${filePath}`, error);
+            logger.error(`[Cleanup] Failed to delete file ${filePath}`, error);
         }
     } else {
-        console.log(`[Cleanup] No originalFile record found for ${eventId}.`);
+        logger.info(`[Cleanup] No originalFile record found for ${eventId}.`);
     }
 });

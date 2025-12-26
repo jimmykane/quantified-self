@@ -1,5 +1,5 @@
-
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 
 // Initialize admin if not already initialized
 if (admin.apps.length === 0) {
@@ -9,7 +9,7 @@ if (admin.apps.length === 0) {
 const uid = process.argv[2];
 
 if (!uid) {
-    console.error('Usage: npx ts-node src/scripts/set-admin-claim.ts <uid>');
+    logger.error('Usage: npx ts-node src/scripts/set-admin-claim.ts <uid>');
     process.exit(1);
 }
 
@@ -23,13 +23,13 @@ async function setAdminClaim() {
             ...existingClaims,
             admin: true
         });
-        console.log(`Successfully set admin claim for user: ${uid}`);
+        logger.info(`Successfully set admin claim for user: ${uid}`);
 
         // Verify
         const updatedUser = await admin.auth().getUser(uid);
-        console.log(`Current custom claims for ${uid}:`, updatedUser.customClaims);
+        logger.info(`Current custom claims for ${uid}:`, updatedUser.customClaims);
     } catch (error) {
-        console.error(`Error setting admin claim for ${uid}:`, error);
+        logger.error(`Error setting admin claim for ${uid}:`, error);
     }
 }
 

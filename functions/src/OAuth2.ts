@@ -2,6 +2,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { COROSAPIAuth } from './coros/auth/auth';
 import * as crypto from 'crypto';
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 import { SuuntoAPIAuth } from './suunto/auth/auth';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from './coros/constants';
@@ -128,13 +129,13 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
     .doc(userID).collection('tokens')
     .doc((results.token as any).user || (results.token as any).openId)// @todo make this dynamic and not silly like this
     .set(convertAccessTokenResponseToServiceToken(results, serviceName));
-  console.log(`User ${userID} successfully connected to ${serviceName}`);
+  logger.info(`User ${userID} successfully connected to ${serviceName}`);
 }
 
 export async function deauthorizeServiceForUser(userID: string, serviceName: ServiceNames) {
   const serviceConfig = getServiceConfig(serviceName);
   const tokenQuerySnapshots = await admin.firestore().collection(serviceConfig.tokenCollectionName).doc(userID).collection('tokens').get();
-  console.log(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
+  logger.info(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
 
   // Deauthorize all tokens for that user
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
@@ -142,7 +143,7 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, false);
     } catch (e: any) {
-      console.error(`Refreshing token failed skipping deletion for this token with id ${tokenQueryDocumentSnapshot.id}`);
+      logger.error(`Refreshing token failed skipping deletion for this token with id ${tokenQueryDocumentSnapshot.id}`);
       continue; // Go to next
     }
 
@@ -156,13 +157,13 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
           },
           url: `https://cloudapi-oauth.suunto.com/oauth/deauthorize?client_id=${config.suuntoapp.client_id}`,
         });
-        console.log(`Deauthorized token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
+        logger.info(`Deauthorized token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
         break;
     }
 
     await tokenQueryDocumentSnapshot.ref.delete();
 
-    console.log(`Deleted token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
+    logger.info(`Deleted token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
 
 
     // // If a user has used 2 accounts to connect to the same

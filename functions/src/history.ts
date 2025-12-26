@@ -1,4 +1,5 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { getTokenData } from './tokens';
@@ -25,7 +26,7 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
   const serviceConfig = getServiceConfig(serviceName);
   const tokenQuerySnapshots = await admin.firestore().collection(serviceConfig.tokenCollectionName).doc(userID).collection('tokens').get();
 
-  console.log(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
+  logger.info(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
 
   // Get the history for those tokens
   let totalProcessedWorkoutsCount = 0;
@@ -37,17 +38,17 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
     try {
       workoutQueueItems = await getWorkoutQueueItems(serviceName, serviceToken, startDate, endDate);
     } catch (e: any) {
-      console.log(`Could not get history for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error: ${e}`);
+      logger.info(`Could not get history for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error: ${e}`);
       throw e;
     }
 
     // Filter on dates
     if (workoutQueueItems.length === 0) {
-      console.log(`No workouts to add to history for token ${tokenQueryDocumentSnapshot.id} for user ${userID} and for the dates of ${startDate} to ${endDate}`);
+      logger.info(`No workouts to add to history for token ${tokenQueryDocumentSnapshot.id} for user ${userID} and for the dates of ${startDate} to ${endDate}`);
       continue;
     }
 
-    console.log(`Found ${workoutQueueItems.length} workouts for the dates of ${startDate} to ${endDate} for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`);
+    logger.info(`Found ${workoutQueueItems.length} workouts for the dates of ${startDate} to ${endDate} for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`);
 
     const batchCount = Math.ceil(workoutQueueItems.length / BATCH_SIZE);
     const batchesToProcess: any[] = [];
@@ -57,7 +58,7 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
       batchesToProcess.push(workoutQueueItems.slice(start, end));
     });
 
-    console.log(`Created ${batchCount} batches for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`);
+    logger.info(`Created ${batchCount} batches for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`);
     for (const batchToProcess of batchesToProcess) {
       const batch = admin.firestore().batch();
       let processedWorkoutsCount = 0;
@@ -81,18 +82,18 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
           }, { merge: true });
 
         await batch.commit();
-        console.log(`Batch #${processedBatchesCount} with ${processedWorkoutsCount} activities saved for token ${tokenQueryDocumentSnapshot.id} and user ${userID} `);
+        logger.info(`Batch #${processedBatchesCount} with ${processedWorkoutsCount} activities saved for token ${tokenQueryDocumentSnapshot.id} and user ${userID} `);
       } catch (e: any) {
-        console.error(`Could not save batch ${processedBatchesCount} for token ${tokenQueryDocumentSnapshot.id} and user ${userID} due to service error aborting`, e);
+        logger.error(`Could not save batch ${processedBatchesCount} for token ${tokenQueryDocumentSnapshot.id} and user ${userID} due to service error aborting`, e);
         processedBatchesCount--;
         totalProcessedWorkoutsCount -= processedWorkoutsCount;
         continue; // Unnecessary but clear to the dev that it will continue
       }
     }
-    console.log(`${processedBatchesCount} out of ${batchesToProcess.length} processed and saved for token ${tokenQueryDocumentSnapshot.id} and user ${userID} `);
+    logger.info(`${processedBatchesCount} out of ${batchesToProcess.length} processed and saved for token ${tokenQueryDocumentSnapshot.id} and user ${userID} `);
   }
 
-  console.log(`Total: ${totalProcessedWorkoutsCount} workouts via ${processedBatchesCount} batches added to queue for user ${userID}`);
+  logger.info(`Total: ${totalProcessedWorkoutsCount} workouts via ${processedBatchesCount} batches added to queue for user ${userID}`);
 }
 
 // getServiceWorkoutQueueName moved to shared/queue-names.ts

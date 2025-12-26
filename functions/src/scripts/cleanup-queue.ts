@@ -1,5 +1,5 @@
-
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 
 // Initialize admin if not already initialized
 if (admin.apps.length === 0) {
@@ -20,9 +20,9 @@ async function cleanupQueue() {
     today.setHours(0, 0, 0, 0);
     const todayTimestamp = today.getTime();
 
-    console.log(`--- Cleanup Starting (High Performance Mode) ---`);
-    console.log(`Target: Items created before ${today.toISOString()} (${todayTimestamp})`);
-    console.log(`------------------------`);
+    logger.info(`--- Cleanup Starting (High Performance Mode) ---`);
+    logger.info(`Target: Items created before ${today.toISOString()} (${todayTimestamp})`);
+    logger.info(`------------------------`);
 
     const bulkWriter = admin.firestore().bulkWriter();
     // Verify connection/writer availability?
@@ -34,7 +34,7 @@ async function cleanupQueue() {
     let totalDeleted = 0;
 
     for (const collectionName of COLLECTIONS) {
-        console.log(`\nQueueing deletions for: ${collectionName}`);
+        logger.info(`\nQueueing deletions for: ${collectionName}`);
 
         try {
             // Use stream() for memory efficiency and continuous feeding
@@ -52,26 +52,26 @@ async function cleanupQueue() {
                     process.stdout.write(`\rQueued ${totalDeleted} deletions...`);
                 }
             }
-            console.log(` - Queued ${collectionCount} items for modification`);
+            logger.info(` - Queued ${collectionCount} items for modification`);
 
         } catch (error) {
-            console.error(`\nError queuing ${collectionName}:`, error);
+            logger.error(`\nError queuing ${collectionName}:`, error);
         }
     }
 
-    console.log(`\n\nFlushing bulk writer...`);
+    logger.info(`\n\nFlushing bulk writer...`);
     await bulkWriter.close();
 
-    console.log(`--- Cleanup Complete ---`);
-    console.log(`Total items deleted: ${totalDeleted}`);
+    logger.info(`--- Cleanup Complete ---`);
+    logger.info(`Total items deleted: ${totalDeleted}`);
 }
 
 cleanupQueue()
     .then(() => {
-        console.log('Script execution finished.');
+        logger.info('Script execution finished.');
         process.exit(0);
     })
     .catch((err) => {
-        console.error('Fatal error during execution:', err);
+        logger.error('Fatal error during execution:', err);
         process.exit(1);
     });

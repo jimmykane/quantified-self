@@ -1,5 +1,5 @@
-
 import * as functions from 'firebase-functions/v1';
+import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 
 
@@ -26,16 +26,16 @@ export const deleteSelf = functions
         }
 
         const uid = context.auth.uid;
-        console.log(`Requesting deletion for user: ${uid} `);
+        logger.info(`Requesting deletion for user: ${uid} `);
 
         try {
             // Delete Auth User
             await admin.auth().deleteUser(uid);
-            console.log(`Successfully deleted user auth: ${uid} `);
+            logger.info(`Successfully deleted user auth: ${uid} `);
 
             return { success: true };
         } catch (error) {
-            console.error('Error deleting user:', error);
+            logger.error('Error deleting user:', error);
             throw new functions.https.HttpsError('internal', 'Unable to delete user', error);
         }
     });

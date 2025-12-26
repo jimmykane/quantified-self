@@ -9,15 +9,55 @@ const {
     mockGetWorkoutForService,
     mockGet,
     mockWhere,
-    mockCollectionGroup
+    mockCollectionGroup,
+    mockCollection,
+    mockBatch,
+    mockTimestamp,
+    mockFirestore,
+    mockIncreaseRetryCountForQueueItem
 } = vi.hoisted(() => {
+    const mockIncreaseRetryCountForQueueItem = vi.fn(async (queueItem: any, error: any, incrementBy = 1) => {
+        queueItem.retryCount = (queueItem.retryCount || 0) + incrementBy;
+        if (queueItem.ref && queueItem.ref.update) {
+            await queueItem.ref.update({ retryCount: queueItem.retryCount });
+        }
+    });
+    const mockCollectionGroup = vi.fn();
+    const mockCollection = vi.fn(() => ({
+        doc: vi.fn(() => ({
+            get: vi.fn(),
+            set: vi.fn(),
+            delete: vi.fn(),
+            update: vi.fn(),
+        })),
+        where: vi.fn().mockReturnThis(),
+        get: vi.fn(),
+    }));
+    const mockBatch = vi.fn(() => ({
+        set: vi.fn(),
+        delete: vi.fn(),
+        commit: vi.fn().mockResolvedValue(undefined),
+    }));
+    const mockFirestore = {
+        collectionGroup: mockCollectionGroup,
+        collection: mockCollection,
+        batch: mockBatch,
+    };
     return {
         mockSetEvent: vi.fn(),
         mockGetTokenData: vi.fn(),
         mockGetWorkoutForService: vi.fn(),
         mockGet: vi.fn(),
         mockWhere: vi.fn(),
-        mockCollectionGroup: vi.fn()
+        mockCollectionGroup,
+        mockTimestamp: {
+            fromDate: vi.fn((date) => ({ toDate: () => date })),
+            now: vi.fn(() => ({ toDate: () => new Date() })),
+        },
+        mockFirestore,
+        mockCollection,
+        mockBatch,
+        mockIncreaseRetryCountForQueueItem,
     };
 });
 
@@ -49,12 +89,6 @@ vi.mock('./queue', async (importOriginal) => {
     const actual: any = await importOriginal();
     return {
         ...actual,
-        // We DON'T mock increaseRetryCountForQueueItem here because it's used internally
-        // and we want to verify its side effects (updating the ref).
-        // If we mocked it, the internal call would still use the real implementation 
-        // (because it's in the same file), but our spy wouldn't catch it unless we spy on the module exports...
-        // which is tricky with circular dependencies / same-file calls.
-        // Instead, we just let it run and check the side effects on the queueItem object.
         getWorkoutForService: mockGetWorkoutForService,
     };
 });
@@ -71,19 +105,32 @@ vi.mock('./tokens', () => ({
     getTokenData: mockGetTokenData,
 }));
 
-// Mock firebase-admin
-mockWhere.mockReturnValue({ get: mockGet });
-mockCollectionGroup.mockReturnValue({ where: mockWhere });
-const mockFirestore = {
-    collectionGroup: mockCollectionGroup,
-};
-
-vi.mock('firebase-admin', () => ({
-    default: {
-        firestore: () => mockFirestore,
-    },
-    firestore: () => mockFirestore,
+vi.mock('./queue-utils', () => ({
+    increaseRetryCountForQueueItem: mockIncreaseRetryCountForQueueItem,
+    updateToProcessed: vi.fn(),
+    moveToDeadLetterQueue: vi.fn(),
 }));
+
+vi.mock('firebase-functions/logger', () => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+}));
+
+vi.mock('firebase-admin', () => {
+    const firestoreFunc = vi.fn(() => mockFirestore);
+    (firestoreFunc as any).collectionGroup = mockCollectionGroup;
+    (firestoreFunc as any).collection = mockCollection;
+    (firestoreFunc as any).Timestamp = mockTimestamp;
+
+    return {
+        default: {
+            firestore: firestoreFunc
+        },
+        firestore: firestoreFunc
+    };
+});
+
 
 describe('parseWorkoutQueueItemForServiceName', () => {
     beforeEach(() => {
@@ -104,7 +151,8 @@ describe('parseWorkoutQueueItemForServiceName', () => {
             retryCount: 0,
             totalRetryCount: 0,
             ref: {
-                update: updateMock
+                update: updateMock,
+                parent: { id: 'suuntoAppWorkoutQueue' }
             }
         };
 
@@ -149,8 +197,10 @@ describe('parseWorkoutQueueItemForServiceName', () => {
         expect(updateCallArgs.retryCount).toBeGreaterThanOrEqual(20);
     });
 
-    it('should log a warning if no token is found', async () => {
-        const consoleSpy = vi.spyOn(console, 'warn');
+    it('should move to Dead Letter Queue (fail fast) if no token is found', async () => {
+        const loggerFunctions = await import('firebase-functions/logger');
+        const loggerSpy = vi.spyOn(loggerFunctions, 'warn');
+        const { moveToDeadLetterQueue } = await import('./queue-utils');
         const updateMock = vi.fn().mockResolvedValue(undefined);
 
         const queueItem = {
@@ -158,10 +208,10 @@ describe('parseWorkoutQueueItemForServiceName', () => {
             userName: 'test-user',
             workoutID: 'test-workout',
             retryCount: 0,
-            totalRetryCount: 0, // Explicitly init with 0 to avoid undefined + 20 = NaN if code relies on +=
-            // queue.ts: queueItem.totalRetryCount = queueItem.totalRetryCount || 0;
+            totalRetryCount: 0,
             ref: {
-                update: updateMock
+                update: updateMock,
+                parent: { id: 'suuntoAppWorkoutQueue' }
             }
         };
 
@@ -175,10 +225,17 @@ describe('parseWorkoutQueueItemForServiceName', () => {
         await parseWorkoutQueueItemForServiceName(ServiceNames.SuuntoApp, queueItem as any);
 
         // Verify
-        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('No token found'));
+        expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('No token found'));
 
-        // Verify retry count increase (grace period)
-        expect(queueItem.retryCount).toBe(1);
-        expect(updateMock).toHaveBeenCalled();
+        // Verify move to DLQ was called
+        expect(moveToDeadLetterQueue).toHaveBeenCalledWith(
+            expect.objectContaining({ id: 'test-item-missing' }),
+            expect.any(Error),
+            undefined,
+            'NO_TOKEN_FOUND'
+        );
+
+        // Verify retry count NOT increased
+        expect(queueItem.retryCount).toBe(0);
     });
 });

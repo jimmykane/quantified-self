@@ -1,4 +1,5 @@
 import * as functions from 'firebase-functions/v1';
+import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { addToQueueForGarmin } from '../queue';
 import { increaseRetryCountForQueueItem, updateToProcessed } from '../queue-utils';
@@ -48,12 +49,12 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
         });
       queueItemRefs.push(queueItemDocumentReference);
     } catch (e: unknown) {
-      console.error(e);
+      logger.error(e);
       res.status(500).send();
       return;
     }
   }
-  console.log(`Inserted to queue ${queueItemRefs.length}`);
+  logger.info(`Inserted to queue ${queueItemRefs.length}`);
   res.status(200).send();
 });
 
@@ -61,7 +62,7 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
 
 
 export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminHealthAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>) {
-  console.log(`Processing queue item ${queueItem.id} and userID ${queueItem.userID} at retry count ${queueItem.retryCount}`);
+  logger.info(`Processing queue item ${queueItem.id} and userID ${queueItem.userID} at retry count ${queueItem.retryCount}`);
   // queueItem is never undefined for query queueItem snapshots
   let tokenQuerySnapshots: admin.firestore.QuerySnapshot | undefined;
   const userKey = `GarminHealthAPI:${queueItem['userID']}`;
@@ -75,7 +76,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
     try {
       tokenQuerySnapshots = await tokenPromise;
     } catch (e: any) {
-      console.error(e);
+      logger.error(e);
       return increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
     }
   } else {
@@ -83,7 +84,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
   }
 
   if (!tokenQuerySnapshots.size) {
-    console.warn(`No token found for queue item ${queueItem.id} and userID ${queueItem.userID} increasing count just in case`);
+    logger.warn(`No token found for queue item ${queueItem.id} and userID ${queueItem.userID} increasing count just in case`);
     return increaseRetryCountForQueueItem(queueItem, new Error('No tokens found'), 20, bulkWriter);
   }
 
@@ -94,7 +95,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
   let result;
   const url = `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}&token=${queueItem.token}`;
   try {
-    console.time('DownloadFile');
+    logger.info('Starting timer: DownloadFile');
     result = await requestPromise.get({
       headers: oAuth.toHeader(oAuth.authorize({
         url: url,
@@ -108,21 +109,21 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
       // gzip: true,
       url: url,
     });
-    console.timeEnd('DownloadFile');
-    console.log(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${serviceToken.userID}`);
+    logger.info('Ending timer: DownloadFile');
+    logger.info(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${serviceToken.userID}`);
   } catch (error: unknown) {
     const e = error as RequestError;
     if (e.statusCode === 400) {
-      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 403, increasing retry by 20 URL: ${url}`));
+      logger.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 403, increasing retry by 20 URL: ${url}`));
       await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
     } else if (e.statusCode === 500) {
-      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 500 increasing retry by 20 URL: ${url}`));
+      logger.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 500 increasing retry by 20 URL: ${url}`));
       await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
     } else {
-      console.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}  URL: ${url}`));
+      logger.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}  URL: ${url}`));
       await increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
     }
-    console.timeEnd('DownloadFile');
+    logger.info('Ending timer: DownloadFile');
     return;
   }
 
@@ -136,13 +137,13 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
         try {
           event = await EventImporterGPX.getFromString(result, xmldom.DOMParser);
         } catch {
-          console.error('Could not decode as GPX trying as FIT');
+          logger.error('Could not decode as GPX trying as FIT');
         }
         if (!event) {
           // Let it fail in any case
           // @todo extract or encode somehow
           // I hate this
-          console.time('DownloadFile');
+          logger.info('Starting timer: DownloadFile');
           result = await requestPromise.get({
             headers: oAuth.toHeader(oAuth.authorize({
               url: url,
@@ -156,8 +157,8 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
             // gzip: true,
             url: url,
           });
-          console.timeEnd('DownloadFile');
-          console.log(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${serviceToken.userID}`);
+          logger.info('Ending timer: DownloadFile');
+          logger.info(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${serviceToken.userID}`);
           event = await EventImporterFIT.getFromArrayBuffer(result); // Let it fail here
         }
         break;
@@ -166,7 +167,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
         break;
     }
     event.name = event.startDate.toJSON(); // @todo improve
-    console.log(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userID}`);
+    logger.info(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userID}`);
     const metaData = new GarminHealthAPIEventMetaData(
       queueItem.userID,
       queueItem.activityFileID,
@@ -175,19 +176,19 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
       queueItem.startTimeInSeconds || 0, // 0 is ok here I suppose
       new Date());
     await setEvent(tokenQuerySnapshots.docs[0].id, generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()]), event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase(), startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
-    console.log(`Created Event ${event.getID()} for ${queueItem.id} user id ${tokenQuerySnapshots.docs[0].id} and token user ${serviceToken.userID}`);
+    logger.info(`Created Event ${event.getID()} for ${queueItem.id} user id ${tokenQuerySnapshots.docs[0].id} and token user ${serviceToken.userID}`);
     // For each ended so we can set it to processed
     return updateToProcessed(queueItem, bulkWriter);
   } catch (e: unknown) {
     // @todo should delete meta etc
-    console.error(e);
+    logger.error(e);
     if (e instanceof UsageLimitExceededError) {
-      console.error(new Error(`Usage limit exceeded for ${queueItem.id}. Aborting retries. ${e.message}`));
+      logger.error(new Error(`Usage limit exceeded for ${queueItem.id}. Aborting retries. ${e.message}`));
       await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
       return;
     }
     const err = e instanceof Error ? e : new Error(String(e));
-    console.log(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.userID} to ${queueItem.retryCount + 1} due to ${err.message}`));
+    logger.info(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.userID} to ${queueItem.retryCount + 1} due to ${err.message}`));
     await increaseRetryCountForQueueItem(queueItem, err, 1, bulkWriter);
   }
 }

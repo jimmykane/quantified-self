@@ -1,5 +1,6 @@
 //
 import * as functions from 'firebase-functions/v1';
+import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { refreshTokens } from '../tokens';
 import { SERVICE_NAME } from './constants';
@@ -13,7 +14,7 @@ export const refreshSuuntoAppRefreshTokens = functions.region('europe-west2').ru
     .where('dateRefreshed', '<=', ninetyDaysAgo)
     .limit(50).get();
 
-  console.log(`Found ${querySnapshot.size} tokens with dateRefreshed <= 90 days ago`);
+  logger.info(`Found ${querySnapshot.size} tokens with dateRefreshed <= 90 days ago`);
   await refreshTokens(querySnapshot, SERVICE_NAME);
 
   // Query 2: Tokens that don't have dateRefreshed (older tokens or newly created ones without it)
@@ -24,7 +25,7 @@ export const refreshSuuntoAppRefreshTokens = functions.region('europe-west2').ru
     .limit(50).get();
 
   if (querySnapshotNoDate.size > 0) {
-    console.log(`Found ${querySnapshotNoDate.size} tokens with dateRefreshed == null`);
+    logger.info(`Found ${querySnapshotNoDate.size} tokens with dateRefreshed == null`);
     await refreshTokens(querySnapshotNoDate, SERVICE_NAME);
   }
 });

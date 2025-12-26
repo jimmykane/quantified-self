@@ -1,5 +1,5 @@
-
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -23,11 +23,11 @@ const TEMPLATE_SUBJECTS: { [key: string]: string } = {
 };
 
 async function seedTemplates() {
-    console.log(`Seeding templates from ${TEMPLATES_DIR} to collection '${TEMPLATES_COLLECTION}'...`);
+    logger.info(`Seeding templates from ${TEMPLATES_DIR} to collection '${TEMPLATES_COLLECTION}'...`);
 
     // Check if directory exists
     if (!fs.existsSync(TEMPLATES_DIR)) {
-        console.error(`Templates directory not found: ${TEMPLATES_DIR}`);
+        logger.error(`Templates directory not found: ${TEMPLATES_DIR}`);
         process.exit(1);
     }
 
@@ -40,21 +40,21 @@ async function seedTemplates() {
 
             const htmlContent = fs.readFileSync(path.join(TEMPLATES_DIR, file), 'utf8');
 
-            console.log(`Uploading template: ${templateName}`);
+            logger.info(`Uploading template: ${templateName}`);
 
             try {
                 await admin.firestore().collection(TEMPLATES_COLLECTION).doc(templateName).set({
                     subject: subject,
                     html: htmlContent
                 });
-                console.log(`✅ Successfully uploaded ${templateName}`);
+                logger.info(`✅ Successfully uploaded ${templateName}`);
             } catch (error) {
-                console.error(`❌ Failed to upload ${templateName}:`, error);
+                logger.error(`❌ Failed to upload ${templateName}:`, error);
             }
         }
     }
 
-    console.log('Seeding complete.');
+    logger.info('Seeding complete.');
 }
 
-seedTemplates().catch(console.error);
+seedTemplates().catch(logger.error);

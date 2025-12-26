@@ -1,5 +1,5 @@
-
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 
 // Reusing the same ROLE_DISPLAY_NAMES map or importing simple map if needed
@@ -13,7 +13,7 @@ export const checkSubscriptionNotifications = onSchedule('every 24 hours', async
     const db = admin.firestore();
     const now = new Date();
 
-    console.log('Starting subscription notification check...');
+    logger.info('Starting subscription notification check...');
 
     // -------------------------------------------------------------------------
     // 1. Subscription Expiring Soon (3 days out)
@@ -29,7 +29,7 @@ export const checkSubscriptionNotifications = onSchedule('every 24 hours', async
         .where('current_period_end', '<', admin.firestore.Timestamp.fromDate(fourDaysFromNow))
         .get();
 
-    console.log(`Found ${snapshot.size} subscriptions expiring between ${threeDaysFromNow.toISOString()} and ${fourDaysFromNow.toISOString()}`);
+    logger.info(`Found ${snapshot.size} subscriptions expiring between ${threeDaysFromNow.toISOString()} and ${fourDaysFromNow.toISOString()}`);
 
 
 
@@ -38,7 +38,7 @@ export const checkSubscriptionNotifications = onSchedule('every 24 hours', async
         const uid = doc.ref.parent.parent?.id;
 
         if (!uid) {
-            console.error(`Could not determine UID for subscription ${doc.id}`);
+            logger.error(`Could not determine UID for subscription ${doc.id}`);
             continue;
         }
 
@@ -61,7 +61,7 @@ export const checkSubscriptionNotifications = onSchedule('every 24 hours', async
         // Let's check existence to be clean.
         const mailDoc = await mailRef.get();
         if (mailDoc.exists) {
-            console.log(`Skipping existing expiring email for ${doc.id}`);
+            logger.info(`Skipping existing expiring email for ${doc.id}`);
             continue;
         }
 
@@ -76,7 +76,7 @@ export const checkSubscriptionNotifications = onSchedule('every 24 hours', async
                 }
             }
         });
-        console.log(`Queued expiring email for user ${uid}`);
+        logger.info(`Queued expiring email for user ${uid}`);
     }
 
     // -------------------------------------------------------------------------
@@ -94,7 +94,7 @@ export const checkSubscriptionNotifications = onSchedule('every 24 hours', async
     // Wait, in `subscriptions.ts`, gracePeriodUntil is set as `new Date().toISOString()`.
     // So string comparison works.
 
-    console.log(`Found ${usersSnapshot.size} users with grace period ending between ${fiveDaysFromNow.toISOString()} and ${sixDaysFromNow.toISOString()}`);
+    logger.info(`Found ${usersSnapshot.size} users with grace period ending between ${fiveDaysFromNow.toISOString()} and ${sixDaysFromNow.toISOString()}`);
 
     for (const doc of usersSnapshot.docs) {
         const user = doc.data();
@@ -128,8 +128,8 @@ export const checkSubscriptionNotifications = onSchedule('every 24 hours', async
                 }
             }
         });
-        console.log(`Queued grace period warning for user ${uid}`);
+        logger.info(`Queued grace period warning for user ${uid}`);
     }
 
-    console.log('Subscription notification check complete.');
+    logger.info('Subscription notification check complete.');
 });

@@ -1,4 +1,5 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { ALLOWED_CORS_ORIGINS } from '../utils';
 
@@ -86,7 +87,7 @@ async function enrichUsers(
                     connectedServices.push({ provider: 'COROS', connectedAt: docData?.dateCreated || doc.createTime });
                 }
             } catch (e) {
-                console.warn(`Failed to fetch details for ${user.uid}`, e);
+                logger.warn(`Failed to fetch details for ${user.uid}`, e);
             }
 
             return {
@@ -162,7 +163,7 @@ export const listUsers = onCall({
             nextPageToken = listResult.pageToken;
         } while (nextPageToken);
 
-        console.log(`Fetched ${allAuthUsers.length} total users from Firebase Auth (0 Firestore reads)`);
+        logger.info(`Fetched ${allAuthUsers.length} total users from Firebase Auth (0 Firestore reads)`);
 
         // ============================================
         // STEP 2: Apply search filter (FREE - in-memory)
@@ -175,7 +176,7 @@ export const listUsers = onCall({
                 const uidMatch = user.uid.toLowerCase().includes(searchTerm);
                 return emailMatch || nameMatch || uidMatch;
             });
-            console.log(`Search "${searchTerm}" matched ${filteredUsers.length} users`);
+            logger.info(`Search "${searchTerm}" matched ${filteredUsers.length} users`);
         }
 
         // ============================================
@@ -259,7 +260,7 @@ export const listUsers = onCall({
             pageSize: pageSize
         };
     } catch (error: unknown) {
-        console.error('Error listing users:', error);
+        logger.error('Error listing users:', error);
         const errorMessage = error instanceof Error ? error.message : 'Failed to list users';
         throw new HttpsError('internal', errorMessage);
     }
@@ -285,7 +286,7 @@ export const getUserCount = onCall({
         const snapshot = await db.collection('users').count().get();
         return { count: snapshot.data().count };
     } catch (error: unknown) {
-        console.error('Error getting user count:', error);
+        logger.error('Error getting user count:', error);
         throw new HttpsError('internal', 'Failed to get user count');
     }
 });
@@ -361,7 +362,7 @@ export const getQueueStats = onCall({
             providers
         };
     } catch (error: unknown) {
-        console.error('Error getting queue stats:', error);
+        logger.error('Error getting queue stats:', error);
         const errorMessage = error instanceof Error ? error.message : 'Failed to get queue statistics';
         throw new HttpsError('internal', errorMessage);
     }
@@ -429,7 +430,7 @@ export const setMaintenanceMode = onCall({
         await rc.validateTemplate(template);
         await rc.publishTemplate(template);
 
-        console.log(`Maintenance mode ${data.enabled ? 'ENABLED' : 'DISABLED'} by ${request.auth.uid} (Synced to Remote Config)`);
+        logger.info(`Maintenance mode ${data.enabled ? 'ENABLED' : 'DISABLED'} by ${request.auth.uid} (Synced to Remote Config)`);
 
         return {
             success: true,
@@ -437,7 +438,7 @@ export const setMaintenanceMode = onCall({
             message: msg
         };
     } catch (error: unknown) {
-        console.error('Error setting maintenance mode:', error);
+        logger.error('Error setting maintenance mode:', error);
         const errorMessage = error instanceof Error ? error.message : 'Failed to set maintenance mode';
         throw new HttpsError('internal', errorMessage);
     }
@@ -480,7 +481,7 @@ export const getMaintenanceStatus = onCall({
             updatedBy: data?.updatedBy
         };
     } catch (error: unknown) {
-        console.error('Error getting maintenance status:', error);
+        logger.error('Error getting maintenance status:', error);
         const errorMessage = error instanceof Error ? error.message : 'Failed to get maintenance status';
         throw new HttpsError('internal', errorMessage);
     }

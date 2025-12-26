@@ -2,6 +2,7 @@ import * as functions from 'firebase-functions/v1';
 type Request = functions.https.Request;
 type Response = functions.Response;
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import {
@@ -26,11 +27,11 @@ export function generateIDFromParts(parts: string[], algorithm = 'sha256'): stri
 }
 
 export async function getUserIDFromFirebaseToken(req: Request): Promise<string | null> {
-  console.log('Check if request is authorized with Firebase ID token');
+  logger.info('Check if request is authorized with Firebase ID token');
 
   if ((!req.headers.authorization || !req.headers.authorization.startsWith('Bearer ')) &&
     !(req.cookies && req.cookies.__session)) {
-    console.error('No Firebase ID token was passed as a Bearer token in the Authorization header.',
+    logger.error('No Firebase ID token was passed as a Bearer token in the Authorization header.',
       'Make sure you authorize your request by providing the following HTTP header:',
       'Authorization: Bearer <Firebase ID Token>',
       'or by passing a "__session" cookie.');
@@ -39,11 +40,11 @@ export async function getUserIDFromFirebaseToken(req: Request): Promise<string |
 
   let idToken;
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
-    console.log('Found "Authorization" header');
+    logger.info('Found "Authorization" header');
     // Read the ID Token from the Authorization header.
     idToken = req.headers.authorization.split('Bearer ')[1];
   } else if (req.cookies) {
-    console.log('Found "__session" cookie');
+    logger.info('Found "__session" cookie');
     // Read the ID Token from cookie.
     idToken = req.cookies.__session;
   } else {
@@ -53,11 +54,11 @@ export async function getUserIDFromFirebaseToken(req: Request): Promise<string |
 
   try {
     const decodedIdToken = await admin.auth().verifyIdToken(idToken);
-    console.log('ID Token correctly decoded');
+    logger.info('ID Token correctly decoded');
 
     return decodedIdToken.uid;
   } catch (error) {
-    console.error('Error while verifying Firebase ID token:', error);
+    logger.error('Error while verifying Firebase ID token:', error);
     return null;
   }
 }
@@ -201,7 +202,7 @@ export async function createFirebaseAccount(serviceUserID: string) {
   }
   // Create a Firebase custom auth token.
   const token = await admin.auth().createCustomToken(uid);
-  console.log('Created Custom token for UID "', uid, '" Token:', token);
+  logger.info('Created Custom token for UID "', uid, '" Token:', token);
   return token;
 }
 
@@ -212,7 +213,7 @@ export async function getUserRole(userID: string): Promise<string> {
     // Default to 'free' if no role or role is null
     return role || 'free';
   } catch (e) {
-    console.error(`Error fetching user role for ${userID}:`, e);
+    logger.error(`Error fetching user role for ${userID}:`, e);
     return 'free'; // Safe default
   }
 }
@@ -260,7 +261,7 @@ export async function checkEventUsageLimit(userID: string, usageCache?: Map<stri
   const currentPending = (pendingWrites?.get(userID) || 0);
   const totalCount = currentCount + currentPending;
 
-  console.log(`[UsageCheck] User: ${userID}, Role: ${role}, Count: ${currentCount}, Pending: ${currentPending}, Limit: ${limit}`);
+  logger.info(`[UsageCheck] User: ${userID}, Role: ${role}, Count: ${currentCount}, Pending: ${currentPending}, Limit: ${limit}`);
 
   if (totalCount >= limit) {
     throw new UsageLimitExceededError(`Upload limit reached for ${role} tier. You have ${currentCount} events (+${currentPending} pending). Limit is ${limit}. Please upgrade to upload more.`);
@@ -316,11 +317,11 @@ export async function enqueueWorkoutTask(serviceName: ServiceNames, queueItemId:
   };
 
   try {
-    console.log(`[Dispatcher] Attempting to enqueue task for ${serviceName}:${queueItemId} to ${url} in project ${projectId}`);
+    logger.info(`[Dispatcher] Attempting to enqueue task for ${serviceName}:${queueItemId} to ${url} in project ${projectId}`);
     const [response] = await client.createTask({ parent, task });
-    console.log(`[Dispatcher] Successfully enqueued task: ${response.name}`);
+    logger.info(`[Dispatcher] Successfully enqueued task: ${response.name}`);
   } catch (error) {
-    console.error(`[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`, error);
+    logger.error(`[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`, error);
   }
 }
 

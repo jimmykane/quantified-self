@@ -1,5 +1,6 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 import { deauthorizeServiceForUser } from '../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { deauthorizeGarminHealthAPIForUser } from '../garmin/auth/wrapper';
@@ -31,7 +32,7 @@ export const enforceSubscriptionLimits = onSchedule({
     const corosSnapshot = await admin.firestore().collection(COROSAPI_ACCESS_TOKENS_COLLECTION_NAME).get();
     corosSnapshot.forEach(doc => userIDs.add(doc.id));
 
-    console.log(`Found ${userIDs.size} users with connected services.`);
+    logger.info(`Found ${userIDs.size} users with connected services.`);
 
     for (const uid of userIDs) {
         // 1. Fetch User Data for Grace Period
@@ -53,7 +54,7 @@ export const enforceSubscriptionLimits = onSchedule({
             if (gracePeriodUntil) {
                 const now = admin.firestore.Timestamp.now();
                 if (gracePeriodUntil.toMillis() > now.toMillis()) {
-                    console.log(`User ${uid} in grace period until ${gracePeriodUntil.toDate().toISOString()}. Skipping cleanup.`);
+                    logger.info(`User ${uid} in grace period until ${gracePeriodUntil.toDate().toISOString()}. Skipping cleanup.`);
                     continue;
                 }
             } else {
@@ -61,7 +62,7 @@ export const enforceSubscriptionLimits = onSchedule({
                 const newGracePeriodUntil = admin.firestore.Timestamp.fromDate(
                     new Date(Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000)
                 );
-                console.log(`FAIL-SAFE: No grace period found for non-pro user ${uid}. Initializing to ${newGracePeriodUntil.toDate().toISOString()}.`);
+                logger.info(`FAIL-SAFE: No grace period found for non-pro user ${uid}. Initializing to ${newGracePeriodUntil.toDate().toISOString()}.`);
                 await admin.firestore().doc(`users/${uid}`).set({
                     gracePeriodUntil: newGracePeriodUntil,
                     lastDowngradedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -72,15 +73,15 @@ export const enforceSubscriptionLimits = onSchedule({
 
         // 4. Disconnect Services & Clear Claims (Strict enforcement)
         if (!isPro) {
-            console.log(`Disconnecting services and clearing claims for user ${uid} (No active pro status and grace period expired).`);
+            logger.info(`Disconnecting services and clearing claims for user ${uid} (No active pro status and grace period expired).`);
 
             // Clear Auth claims
-            try { await admin.auth().setCustomUserClaims(uid, { stripeRole: 'free' }); } catch (e) { console.error(`Error clearing claims for ${uid}`, e); }
+            try { await admin.auth().setCustomUserClaims(uid, { stripeRole: 'free' }); } catch (e) { logger.error(`Error clearing claims for ${uid}`, e); }
 
             // Disconnect sync
-            try { await deauthorizeServiceForUser(uid, ServiceNames.SuuntoApp); } catch (e) { console.error(`Error deauthorizing Suunto for ${uid}`, e); }
-            try { await deauthorizeServiceForUser(uid, ServiceNames.COROSAPI); } catch (e) { console.error(`Error deauthorizing COROS for ${uid}`, e); }
-            try { await deauthorizeGarminHealthAPIForUser(uid); } catch (e) { console.error(`Error deauthorizing Garmin for ${uid}`, e); }
+            try { await deauthorizeServiceForUser(uid, ServiceNames.SuuntoApp); } catch (e) { logger.error(`Error deauthorizing Suunto for ${uid}`, e); }
+            try { await deauthorizeServiceForUser(uid, ServiceNames.COROSAPI); } catch (e) { logger.error(`Error deauthorizing COROS for ${uid}`, e); }
+            try { await deauthorizeGarminHealthAPIForUser(uid); } catch (e) { logger.error(`Error deauthorizing Garmin for ${uid}`, e); }
         }
 
         // 5. Activity Pruning (Destructive - Delete Newest)
@@ -101,7 +102,7 @@ export const enforceSubscriptionLimits = onSchedule({
 
             if (actualCount > limit) {
                 const excess = actualCount - limit;
-                console.log(`User ${uid} has ${actualCount} events (limit: ${limit}). Deleting ${excess} newest events.`);
+                logger.info(`User ${uid} has ${actualCount} events (limit: ${limit}). Deleting ${excess} newest events.`);
 
                 // Get the newest 'excess' events
                 const excessSnapshot = await eventsRef
@@ -110,7 +111,7 @@ export const enforceSubscriptionLimits = onSchedule({
                     .get();
 
                 for (const eventDoc of excessSnapshot.docs) {
-                    console.log(`Deleting excess event ${eventDoc.id}`);
+                    logger.info(`Deleting excess event ${eventDoc.id}`);
                     await admin.firestore().recursiveDelete(eventDoc.ref);
                 }
             }

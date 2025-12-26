@@ -1,4 +1,5 @@
 import * as functions from 'firebase-functions/v1';
+import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { setEvent } from './utils';
@@ -38,7 +39,7 @@ export const testEventUpload = functions.region('europe-west2').https.onRequest(
             userID, 'test-file-id', 'FIT', false, 123456, new Date()
         );
 
-        console.log(`Starting test upload for User: ${userID}, Event: ${eventID}`);
+        logger.info(`Starting test upload for User: ${userID}, Event: ${eventID}`);
         await setEvent(userID, eventID, event, metaData, originalFile);
 
         res.status(200).send({
@@ -47,7 +48,7 @@ export const testEventUpload = functions.region('europe-west2').https.onRequest(
             bucket: admin.storage().bucket().name
         });
     } catch (error: any) {
-        console.error('Test upload failed:', error);
+        logger.error('Test upload failed:', error);
         res.status(500).send({ error: error.message });
     }
 });

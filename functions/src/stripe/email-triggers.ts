@@ -1,4 +1,5 @@
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 import { ROLE_HIERARCHY } from '../shared/pricing';
 import { DocumentData } from 'firebase-admin/firestore';
 
@@ -44,7 +45,7 @@ export async function checkAndSendSubscriptionEmails(
         if (!mailDoc.exists) {
             const userRecord = await admin.auth().getUser(uid);
             if (userRecord.email) {
-                console.log(`[checkAndSendSubscriptionEmails] Queuing welcome email for user ${uid}, subscription ${subscriptionId}`);
+                logger.info(`[checkAndSendSubscriptionEmails] Queuing welcome email for user ${uid}, subscription ${subscriptionId}`);
                 await mailRef.set({
                     to: userRecord.email,
                     from: 'Quantified Self <hello@quantified-self.io>',
@@ -79,7 +80,7 @@ export async function checkAndSendSubscriptionEmails(
             const mailRef = admin.firestore().collection('mail').doc(mailId);
             const exists = (await mailRef.get()).exists;
             if (!exists) {
-                console.log(`[checkAndSendSubscriptionEmails] Queuing UPGRADE email for user ${uid}`);
+                logger.info(`[checkAndSendSubscriptionEmails] Queuing UPGRADE email for user ${uid}`);
                 await mailRef.set({
                     to: userRecord.email,
                     from: 'Quantified Self <hello@quantified-self.io>',
@@ -98,7 +99,7 @@ export async function checkAndSendSubscriptionEmails(
             const mailRef = admin.firestore().collection('mail').doc(mailId);
             const exists = (await mailRef.get()).exists;
             if (!exists) {
-                console.log(`[checkAndSendSubscriptionEmails] Queuing DOWNGRADE email for user ${uid}`);
+                logger.info(`[checkAndSendSubscriptionEmails] Queuing DOWNGRADE email for user ${uid}`);
                 await mailRef.set({
                     to: userRecord.email,
                     from: 'Quantified Self <hello@quantified-self.io>',
@@ -131,7 +132,7 @@ export async function checkAndSendSubscriptionEmails(
             if (!exists) {
                 const userRecord = await admin.auth().getUser(uid);
                 if (userRecord.email) {
-                    console.log(`[checkAndSendSubscriptionEmails] Queuing CANCELLATION email for user ${uid}`);
+                    logger.info(`[checkAndSendSubscriptionEmails] Queuing CANCELLATION email for user ${uid}`);
                     await mailRef.set({
                         to: userRecord.email,
                         from: 'Quantified Self <hello@quantified-self.io>',

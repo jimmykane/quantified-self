@@ -78,6 +78,12 @@ vi.mock('../queue', () => ({
     parseQueueItems: vi.fn(),
 }));
 
+vi.mock('firebase-functions/logger', () => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+}));
+
 // Mock firebase-admin
 mockWhere.mockReturnValue({ get: mockGet });
 mockCollection.mockReturnValue({ where: mockWhere });
@@ -141,7 +147,8 @@ describe('processGarminHealthAPIActivityQueueItem', () => {
     });
 
     it('should log a warning if no token is found', async () => {
-        const consoleSpy = vi.spyOn(console, 'warn');
+        const logger = await import('firebase-functions/logger');
+        const loggerSpy = vi.spyOn(logger, 'warn');
         const queueItem = {
             id: 'test-item-no-token',
             userID: 'test-user-missing',
@@ -163,7 +170,7 @@ describe('processGarminHealthAPIActivityQueueItem', () => {
         await processGarminHealthAPIActivityQueueItem(queueItem as any);
 
         // Verify
-        expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('No token found'));
+        expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('No token found'));
         expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
             queueItem,
             expect.any(Error),

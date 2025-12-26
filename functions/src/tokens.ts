@@ -1,6 +1,5 @@
-'use strict';
-
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 import {
   Auth2ServiceTokenInterface,
   COROSAPIAuth2ServiceTokenInterface,
@@ -13,7 +12,7 @@ import QuerySnapshot = admin.firestore.QuerySnapshot;
 
 //
 export async function refreshTokens(querySnapshot: QuerySnapshot, serviceName: ServiceNames) {
-  console.log(`Found ${querySnapshot.size} auth tokens to process`);
+  logger.info(`Found ${querySnapshot.size} auth tokens to process`);
   let count = 0;
   for (const authToken of querySnapshot.docs) {
     // If we are targeting Suunto App some tokens wont have a service name and those belong to Suunto app
@@ -27,10 +26,10 @@ export async function refreshTokens(querySnapshot: QuerySnapshot, serviceName: S
       await getTokenData(authToken, serviceName, true);
       count++;
     } catch (e) {
-      console.error(`Error parsing token #${count} of ${querySnapshot.size} and id ${authToken.id}`, e);
+      logger.error(`Error parsing token #${count} of ${querySnapshot.size} and id ${authToken.id}`, e);
     }
   }
-  console.log(`Parsed ${count} auth tokens out of ${querySnapshot.size}`);
+  logger.info(`Parsed ${count} auth tokens out of ${querySnapshot.size}`);
 }
 
 export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: ServiceNames, forceRefreshAndSave = false, useStaging = false): Promise<SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface> {
@@ -44,7 +43,7 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
   });
 
   if (!token.expired() && !forceRefreshAndSave) {
-    console.log(`Token is not expired won't refresh ${doc.id}`);
+    logger.info(`Token is not expired won't refresh ${doc.id}`);
     switch (serviceName) {
       default:
         throw new Error('Not Implemented');
@@ -76,7 +75,7 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
   }
 
   if (token.expired()) {
-    console.log(`Token ${doc.id} has expired`);
+    logger.info(`Token ${doc.id} has expired`);
   }
 
   let responseToken;
@@ -87,20 +86,20 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
     if (responseToken.token.message && responseToken.token.message !== 'OK') {
       throw new Error('Something went wrong');
     }
-    console.log(`Successfully refreshed token ${doc.id}`);
+    logger.info(`Successfully refreshed token ${doc.id}`);
   } catch (e: any) {
-    console.error(`Could not refresh token for user ${doc.id}`, e);
+    logger.error(`Could not refresh token for user ${doc.id}`, e);
     // If it's a 401 (Unauthorized) or 400 (Bad Request with invalid_grant), delete the token as it's no longer valid.
     const statusCode = e.statusCode || (e.output && e.output.statusCode);
     const errorDescription = e.message || (e.error && (e.error.error_description || e.error.error));
 
     if (statusCode === 401 || (statusCode === 400 && String(errorDescription).toLowerCase().includes('invalid_grant'))) {
-      console.log(`Error with code ${statusCode} ('${errorDescription}') deleting token ${doc.id}`);
+      logger.info(`Error with code ${statusCode} ('${errorDescription}') deleting token ${doc.id}`);
       try {
         await doc.ref.delete();
-        console.log(`Deleted token ${doc.id} because it's no longer valid.`);
+        logger.info(`Deleted token ${doc.id} because it's no longer valid.`);
       } catch (deleteError: any) {
-        console.error(`Could not delete token ${doc.id}`, deleteError);
+        logger.error(`Could not delete token ${doc.id}`, deleteError);
       }
     }
     throw e;
@@ -131,6 +130,6 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
   }
 
   await doc.ref.update(newToken as any);
-  console.log(`Successfully saved refreshed token ${doc.id}`);
+  logger.info(`Successfully saved refreshed token ${doc.id}`);
   return newToken;
 }

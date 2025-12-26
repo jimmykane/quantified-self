@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 import { ALLOWED_CORS_ORIGINS } from '../utils';
 
 export const restoreUserClaims = onCall({
@@ -58,14 +59,14 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
     // 1. `role` (Populated by Stripe Extension)
     const role = subData.role;
 
-    console.log(`[reconcileClaims] Metadata check - role: ${subData.role}`);
+    logger.info(`[reconcileClaims] Metadata check - role: ${subData.role}`);
 
     if (!role) {
         throw new HttpsError('failed-precondition', 'Subscription found but no role defined in document.');
     }
 
     // Set custom user claims on this specific user
-    console.log(`[reconcileClaims] Final decision - Setting claims for user ${uid} to role: ${role}`);
+    logger.info(`[reconcileClaims] Final decision - Setting claims for user ${uid} to role: ${role}`);
 
     // Fetch existing claims to avoid overwriting other claims like 'admin'
     const user = await admin.auth().getUser(uid);

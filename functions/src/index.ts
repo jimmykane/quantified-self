@@ -2,6 +2,7 @@
 
 // Firebase Setup
 import * as admin from 'firebase-admin';
+import * as logger from 'firebase-functions/logger';
 
 let storageBucket = 'quantified-self-io';
 if (process.env.FIREBASE_CONFIG) {
@@ -11,7 +12,7 @@ if (process.env.FIREBASE_CONFIG) {
       storageBucket = firebaseConfig.storageBucket;
     }
   } catch (e) {
-    console.warn('Could not parse FIREBASE_CONFIG, using default bucket');
+    logger.warn('Could not parse FIREBASE_CONFIG, using default bucket');
   }
 }
 
@@ -25,7 +26,7 @@ if (admin.apps.length === 0) {
       storageBucket: storageBucket,
     });
   } catch (e) {
-    console.warn('Service account not found, initializing with default credentials');
+    logger.warn('Service account not found, initializing with default credentials');
     admin.initializeApp({
       databaseURL: `https://${process.env.GCLOUD_PROJECT}.firebaseio.com`,
       storageBucket: 'quantified-self-io',
@@ -36,7 +37,7 @@ if (admin.apps.length === 0) {
 try {
   admin.firestore().settings({ ignoreUndefinedProperties: true });
 } catch (e) {
-  console.warn('Firestore settings already set or could not be set:', e);
+  logger.warn('Firestore settings already set or could not be set:', e);
 }
 
 // Coros Auth
