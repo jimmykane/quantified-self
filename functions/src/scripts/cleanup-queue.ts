@@ -15,13 +15,12 @@ const COLLECTIONS = [
 ];
 
 async function cleanupQueue() {
-    // Yesterday (start of today)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayTimestamp = today.getTime();
+    // 2 hours ago
+    const twoHoursAgo = new Date(Date.now() - (2 * 60 * 60 * 1000));
+    const cutoffTimestamp = twoHoursAgo.getTime();
 
     logger.info(`--- Cleanup Starting (High Performance Mode) ---`);
-    logger.info(`Target: Items created before ${today.toISOString()} (${todayTimestamp})`);
+    logger.info(`Target: Items created before ${twoHoursAgo.toISOString()} (${cutoffTimestamp})`);
     logger.info(`------------------------`);
 
     const bulkWriter = admin.firestore().bulkWriter();
@@ -40,7 +39,7 @@ async function cleanupQueue() {
             // Use stream() for memory efficiency and continuous feeding
             const queryStream = admin.firestore()
                 .collection(collectionName)
-                .where('dateCreated', '<', todayTimestamp)
+                .where('dateCreated', '<', cutoffTimestamp)
                 .stream();
 
             let collectionCount = 0;
