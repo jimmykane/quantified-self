@@ -97,6 +97,7 @@ export class AppRemoteConfigService {
 
             const response = await fetch(url, {
                 method: 'POST',
+                cache: 'no-store', // Prevent browser caching
                 headers: {
                     'Content-Type': 'application/json',
                 },
