@@ -86,7 +86,8 @@ mat-icon.header-logo {
 
 /* Buttons inside nav */
 nav button[mat-flat-button],
-nav button[mat-stroked-button] {
+nav button[mat-stroked-button],
+nav button[mat-icon-button] {
   border-radius: 20px;
   /* Rounded pill shape */
   padding: 0 24px;
@@ -95,6 +96,35 @@ nav button[mat-stroked-button] {
   font-weight: 500;
   box-shadow: none !important;
   /* Cleaner look */
+  align-self: center;
+  /* Ensure vertical centering */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Admin button specific styling */
+nav button.admin-button {
+  border-radius: 50%;
+  padding: 0;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: white;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+  &:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4) !important;
+  }
+
+  mat-icon {
+    color: white;
+    font-size: 22px;
+    width: 22px;
+    height: 22px;
+  }
 }
 
 /* Specific styling for the Upload Activities component if it appears in nav */
