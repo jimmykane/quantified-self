@@ -15,12 +15,35 @@ const COLLECTIONS = [
 ];
 
 async function cleanupQueue() {
-    // 2 hours ago
-    const twoHoursAgo = new Date(Date.now() - (2 * 60 * 60 * 1000));
-    const cutoffTimestamp = twoHoursAgo.getTime();
+    const args = process.argv.slice(2);
+    const hoursArg = args.find(arg => arg.startsWith('--hours='));
+    const daysArg = args.find(arg => arg.startsWith('--days='));
+
+    if (!hoursArg && !daysArg) {
+        logger.error('Error: You must specify a cleanup window using --hours=X or --days=X');
+        logger.info('Usage: npm run cleanup-queue -- --hours=2');
+        logger.info('   or: npm run cleanup-queue -- --days=1');
+        process.exit(1);
+    }
+
+    let msOffset = 0;
+    let windowLabel = '';
+
+    if (hoursArg) {
+        const hours = parseInt(hoursArg.split('=')[1]);
+        msOffset = hours * 60 * 60 * 1000;
+        windowLabel = `${hours} hours`;
+    } else if (daysArg) {
+        const days = parseInt(daysArg.split('=')[1]);
+        msOffset = days * 24 * 60 * 60 * 1000;
+        windowLabel = `${days} days`;
+    }
+
+    const cutoffTimestamp = Date.now() - msOffset;
+    const cutoffDate = new Date(cutoffTimestamp);
 
     logger.info(`--- Cleanup Starting (High Performance Mode) ---`);
-    logger.info(`Target: Items created before ${twoHoursAgo.toISOString()} (${cutoffTimestamp})`);
+    logger.info(`Target: Items older than ${windowLabel} (created before ${cutoffDate.toISOString()})`);
     logger.info(`------------------------`);
 
     const bulkWriter = admin.firestore().bulkWriter();
