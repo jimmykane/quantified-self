@@ -57,10 +57,33 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
   async ngOnInit() {
 
-    this.shouldSearch = true;
+    const resolvedData = this.route.snapshot.data['dashboardData'];
+    if (resolvedData) {
+      this.events = resolvedData.events || [];
+      this.user = resolvedData.user;
+      this.targetUser = resolvedData.targetUser;
+      this.isLoading = false;
+      this.isInitialized = true;
+      this.showPromoForUserOrDoNothing(this.user);
+
+      if (this.user) {
+        if (this.user.settings.dashboardSettings.dateRange === DateRanges.custom && this.user.settings.dashboardSettings.startDate && this.user.settings.dashboardSettings.endDate) {
+          this.searchStartDate = new Date(this.user.settings.dashboardSettings.startDate);
+          this.searchEndDate = new Date(this.user.settings.dashboardSettings.endDate);
+        } else if (this.user.settings.unitSettings?.startOfTheWeek !== undefined) {
+          const range = getDatesForDateRange(this.user.settings.dashboardSettings.dateRange, this.user.settings.unitSettings.startOfTheWeek);
+          this.searchStartDate = range.startDate;
+          this.searchEndDate = range.endDate;
+        }
+        this.startOfTheWeek = this.user.settings.unitSettings?.startOfTheWeek;
+      }
+    }
+
+    this.shouldSearch = false;
+
     // @todo make this an obsrvbl
     const userID = this.route.snapshot.paramMap.get('userID');
-    if (userID) {
+    if (userID && !this.targetUser) { // Only fetch if not resolved
       try {
         this.targetUser = await this.userService.getUserByID(userID).pipe(take(1)).toPromise();
       } catch (e) {
@@ -71,7 +94,10 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     }
     this.dataSubscription = this.authService.user$.pipe(switchMap((user: User | null) => {
 
-      this.isLoading = true;
+      if (this.shouldSearch || !this.isInitialized) {
+        this.isLoading = true;
+      }
+
       // Get the user
       if (!user) {
         this.router.navigate(['login']).then(() => {
@@ -134,7 +160,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       const returnObservable = this.shouldSearch ?
         this.eventService
           .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit)
-        : this.events.length ? of(this.events) : this.eventService
+        : (this.isInitialized) ? of(this.events) : this.eventService
           .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit);
       return returnObservable
         .pipe(map((eventsArray) => {

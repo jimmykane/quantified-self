@@ -6,11 +6,13 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppEventService } from '../services/app.event.service';
 import { AppUserService } from '../services/app.user.service';
 import { AppAuthService } from '../authentication/app.auth.service';
-import { eventResolver } from './event.resolver';
+// Moved import to top of file
+import { eventResolver, EventResolverData } from './event.resolver';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 describe('eventResolver', () => {
-    const executeResolver: ResolveFn<EventInterface> = (...resolverParameters) =>
+    // Update ResolveFn generic type to include EventResolverData
+    const executeResolver: ResolveFn<EventResolverData> = (...resolverParameters) =>
         TestBed.runInInjectionContext(() => eventResolver(...resolverParameters));
 
     let eventServiceSpy: any;
@@ -62,8 +64,9 @@ describe('eventResolver', () => {
 
         const state = {} as RouterStateSnapshot;
 
-        (executeResolver(route, state) as any).subscribe((result) => {
-            expect(result).toEqual(mockEvent);
+        (executeResolver(route, state) as any).subscribe((result: any) => {
+            expect(result.event).toEqual(mockEvent);
+            expect(result.user).toEqual(mockUser);
             expect(eventServiceSpy.getEventActivitiesAndSomeStreams).toHaveBeenCalled();
             done();
         });
