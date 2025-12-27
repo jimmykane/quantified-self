@@ -2,7 +2,7 @@ import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { addToQueueForGarmin } from '../queue';
-import { increaseRetryCountForQueueItem, updateToProcessed } from '../queue-utils';
+import { increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue } from '../queue-utils';
 
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { generateIDFromParts, setEvent, UsageLimitExceededError } from '../utils';
@@ -85,7 +85,8 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
 
   if (!tokenQuerySnapshots.size) {
     logger.warn(`No token found for queue item ${queueItem.id} and userID ${queueItem.userID} increasing count just in case`);
-    return increaseRetryCountForQueueItem(queueItem, new Error('No tokens found'), 20, bulkWriter);
+    // return increaseRetryCountForQueueItem(queueItem, new Error('No tokens found'), 20, bulkWriter);
+    return moveToDeadLetterQueue(queueItem, new Error('No token found - Fail Fast'), bulkWriter, 'NO_TOKEN_FOUND');
   }
 
   const serviceToken = tokenQuerySnapshots.docs[0].data();
