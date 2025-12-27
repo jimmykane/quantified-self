@@ -1,6 +1,4 @@
-.bottom-sheet-container {
-    padding: 1rem;
-}
+.bottom-sheet-container {}
 
 .bottom-sheet-header {
     display: flex;
@@ -17,4 +15,10 @@
 .bottom-sheet-content {
     max-height: 80vh;
     overflow-y: auto;
+}
+
+@media (min-width: 1200px) {
+    .bottom-sheet-content {
+        max-height: 90vh;
+    }
 }
