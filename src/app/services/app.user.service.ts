@@ -350,24 +350,28 @@ export class AppUserService implements OnDestroy {
   }
 
   public getUserByID(userID: string): Observable<User | null> {
-    const userDoc = doc(this.firestore, 'users', userID);
-    return docData(userDoc).pipe(map((user: DocumentData | undefined) => {
-      if (!user) {
-        return null;
-      }
-      const u = user as User;
-      u.settings = this.fillMissingAppSettings(u);
-      return u;
-    }));
+    return runInInjectionContext(this.injector, () => {
+      const userDoc = doc(this.firestore, 'users', userID);
+      return docData(userDoc).pipe(map((user: DocumentData | undefined) => {
+        if (!user) {
+          return null;
+        }
+        const u = user as User;
+        u.settings = this.fillMissingAppSettings(u);
+        return u;
+      }));
+    });
   }
 
   public async createOrUpdateUser(user: User) {
     if (!user.acceptedPrivacyPolicy || !user.acceptedDataPolicy) {
       throw new Error('User has not accepted privacy or data policy');
     }
-    const userRef = doc(this.firestore, `users/${user.uid}`);
-    await setDoc(userRef, user.toJSON());
-    return Promise.resolve(user);
+    return runInInjectionContext(this.injector, async () => {
+      const userRef = doc(this.firestore, `users/${user.uid}`);
+      await setDoc(userRef, user.toJSON());
+      return user;
+    });
   }
 
   public getServiceToken(user: User, serviceName: ServiceNames) {
@@ -383,10 +387,12 @@ export class AppUserService implements OnDestroy {
   }
 
   public getUserMetaForService(user: User, serviceName: string): Observable<UserServiceMetaInterface> {
-    const metaDoc = doc(this.firestore, 'users', user.uid, 'meta', serviceName);
-    return docData(metaDoc).pipe(map((d) => {
-      return <UserServiceMetaInterface>d;
-    }));
+    return runInInjectionContext(this.injector, () => {
+      const metaDoc = doc(this.firestore, 'users', user.uid, 'meta', serviceName);
+      return docData(metaDoc).pipe(map((d) => {
+        return <UserServiceMetaInterface>d;
+      }));
+    });
   }
 
   public shouldShowPromo(user: User) {
@@ -508,7 +514,7 @@ export class AppUserService implements OnDestroy {
   }
 
   public async updateUserProperties(user: User, propertiesToUpdate: any) {
-    return updateDoc(doc(this.firestore, 'users', user.uid), propertiesToUpdate);
+    return runInInjectionContext(this.injector, () => updateDoc(doc(this.firestore, 'users', user.uid), propertiesToUpdate));
   }
 
   public async updateUser(user: User) {
@@ -519,7 +525,7 @@ export class AppUserService implements OnDestroy {
     // }
     // Use setDoc with merge: true to handle both update and create (upsert) scenarios
     // This is critical for the "synthetic user" flow in onboarding where the doc might not exist yet.
-    return setDoc(doc(this.firestore, 'users', user.uid), data, { merge: true });
+    return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, 'users', user.uid), data, { merge: true }));
   }
 
   public async setUserPrivacy(user: User, privacy: Privacy) {
@@ -527,8 +533,8 @@ export class AppUserService implements OnDestroy {
   }
 
   public async isBranded(user: User): Promise<boolean> {
-    const privDoc = doc(this.firestore, 'userAccountPrivileges', user.uid);
-    return firstValueFrom(from(getDoc(privDoc)).pipe(map((doc) => {
+    const privDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'userAccountPrivileges', user.uid));
+    return firstValueFrom(from(runInInjectionContext(this.injector, () => getDoc(privDoc))).pipe(map((doc) => {
       if (!doc.exists()) {
         return false;
       }
@@ -599,17 +605,19 @@ export class AppUserService implements OnDestroy {
     const user = this.auth.currentUser;
     if (!user) return from([null]);
 
-    const userDoc = doc(this.firestore, 'users', user.uid);
-    return docData(userDoc).pipe(
-      map((userData: any) => {
-        if (userData?.gracePeriodUntil) {
-          // Firebase Timestamp to Date
-          return (userData.gracePeriodUntil as any).toDate();
-        }
-        return null;
-      }),
-      catchError(() => from([null]))
-    );
+    return runInInjectionContext(this.injector, () => {
+      const userDoc = doc(this.firestore, 'users', user.uid);
+      return docData(userDoc).pipe(
+        map((userData: any) => {
+          if (userData?.gracePeriodUntil) {
+            // Firebase Timestamp to Date
+            return (userData.gracePeriodUntil as any).toDate();
+          }
+          return null;
+        }),
+        catchError(() => from([null]))
+      );
+    });
   }
 
   public async deleteAllUserData(user: User) {
@@ -645,22 +653,26 @@ export class AppUserService implements OnDestroy {
     const collectionName = serviceNamesToCollectionName[serviceName];
     if (!collectionName) return from([]);
 
-    const collectionRef = collection(this.firestore, collectionName, user.uid, 'tokens');
-    return collectionData(collectionRef).pipe(
-      catchError(error => {
-        return [];
-      })
-    );
+    return runInInjectionContext(this.injector, () => {
+      const collectionRef = collection(this.firestore, collectionName, user.uid, 'tokens');
+      return collectionData(collectionRef).pipe(
+        catchError(error => {
+          return [];
+        })
+      );
+    });
   }
 
   private getGarminHealthAPITokens(user: User): Observable<any[]> {
-    const docRef = doc(this.firestore, 'garminHealthAPITokens', user.uid);
-    return docData(docRef).pipe(
-      map(d => [d]),
-      catchError(error => {
-        return [];
-      })
-    );
+    return runInInjectionContext(this.injector, () => {
+      const docRef = doc(this.firestore, 'garminHealthAPITokens', user.uid);
+      return docData(docRef).pipe(
+        map(d => [d]),
+        catchError(error => {
+          return [];
+        })
+      );
+    });
   }
 
   public fillMissingAppSettings(user: User): UserSettingsInterface {
