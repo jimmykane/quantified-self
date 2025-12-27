@@ -3,6 +3,17 @@ import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { ALLOWED_CORS_ORIGINS } from '../utils';
 
+/**
+ * Normalizes error messages by replacing dynamic values (numbers, IDs) with placeholders.
+ * This allows similar errors with different dynamic data to be clustered together.
+ */
+function normalizeError(error: string): string {
+    return error
+        .replace(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g, '#') // Replace UUIDs first
+        .replace(/[0-9a-fA-F]{24,}/g, '#') // Replace long hex IDs
+        .replace(/\d+/g, '#'); // Replace remaining numbers
+}
+
 interface ListUsersRequest {
     pageSize?: number;
     page?: number;
@@ -428,7 +439,7 @@ export const getQueueStats = onCall({
             const data = doc.data();
             const context = data.context || 'UNKNOWN';
             const originalCollection = data.originalCollection || 'unknown';
-            const errorMsg = data.error || 'Unknown Error';
+            const errorMsg = normalizeError(data.error || 'Unknown Error');
 
             dlqByContext[context] = (dlqByContext[context] || 0) + 1;
             dlqByProvider[originalCollection] = (dlqByProvider[originalCollection] || 0) + 1;
