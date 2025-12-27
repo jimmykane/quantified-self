@@ -33,10 +33,8 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
         take(1),
         switchMap(async (user: User | null) => {
             if (!user) {
-                // Not authenticated or user not ready - let the component or guard handle redirect, 
-                // but for resolver we need to return something or navigate.
-                // Usually AuthGuard handles the "not logged in" case. 
-                // If we get here, likely user is null briefly or we are in a weird state.
+                // If user is not authenticated, redirect to login and return empty data
+                router.navigate(['login']);
                 return { events: [], user: null, targetUser: null };
             }
 
