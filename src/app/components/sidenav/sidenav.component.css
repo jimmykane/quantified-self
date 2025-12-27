@@ -1,24 +1,33 @@
-mat-icon{
+mat-icon {
   vertical-align: middle;
   margin-right: 24px;
   margin-left: 8px;
 }
-.active{
+
+.active {
   font-weight: bold;
-  background: rgba(222, 222, 222, 0.2);
+  background: rgba(0, 0, 0, 0.08);
+  /* Standard light theme selection */
 }
-mat-toolbar-row{
+
+:host-context(.dark-theme) .active {
+  background: rgba(255, 255, 255, 0.12);
+  /* Standard dark theme selection */
+}
+
+mat-toolbar-row {
   /*margin-bottom: 1em;*/
   outline: none;
   /*font-size: 0.95em;*/
   font-weight: 400;
   height: 60px;
 }
-.mat-toolbar{
+
+.mat-toolbar {
   background: inherit;
 }
 
-mat-slide-toggle{
+mat-slide-toggle {
   vertical-align: middle;
   margin-left: 8px;
   margin-right: 24px;
@@ -28,11 +37,11 @@ mat-slide-toggle{
   flex: 1 1 auto;
 }
 
-mat-card-title{
+mat-card-title {
   margin: 0;
 }
 
-mat-icon.app-icon{
+mat-icon.app-icon {
   font-size: 32px;
   height: 40px;
   width: 40px;
@@ -40,6 +49,6 @@ mat-icon.app-icon{
   margin-left: 0;
 }
 
-mat-slide-toggle{
+mat-slide-toggle {
   margin-left: 4px;
 }

@@ -65,8 +65,14 @@ table {
 
 tr.mat-row:hover td:not(.mat-table-sticky) {
   background: rgba(0, 0, 0, 0.04);
+  /* Fallback */
+  background: var(--mat-sys-state-hover, rgba(0, 0, 0, 0.04));
   /* Standard hover effect */
   cursor: pointer;
+}
+
+:host-context(.dark-theme) tr.mat-row:hover td:not(.mat-table-sticky) {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 tr.mat-row:focus {

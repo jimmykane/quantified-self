@@ -1,0 +1,222 @@
+mat-card.service-card {
+    min-height: calc(100vh - 28px);
+}
+
+mat-form-field {
+    margin-bottom: 2em;
+    width: 100%;
+}
+
+button {
+    margin-right: 1em;
+}
+
+button:last-child {
+    margin-right: 0;
+}
+
+button.margin-left {
+    margin-left: 0;
+}
+
+button.big {
+    width: 100%;
+    margin-top: 1em;
+    margin-right: 0;
+}
+
+mat-icon {
+    vertical-align: middle;
+    font-size: 1.6em;
+}
+
+.smaller {
+    font-size: 0.75em;
+}
+
+.button-block {
+    display: block;
+    margin-bottom: 2em;
+}
+
+.description-text {
+    font-size: 14px;
+    line-height: 1.6;
+    margin-bottom: 16px;
+    max-width: 800px;
+}
+
+.tab-subtitle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.tab-subtitle mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+    // color: rgba(0, 0, 0, 0.54);
+    opacity: 0.54;
+}
+
+/* Services Layout Grid Extensions */
+.service-container {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding: 16px;
+}
+
+.connectivity-card {
+    width: 100%;
+    position: relative;
+}
+
+.section-title {
+    margin: 16px 0 8px;
+    font-size: 1.25rem;
+    font-weight: 500;
+    // color: rgba(0, 0, 0, 0.87);
+    opacity: 0.87;
+}
+
+.features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.feature-card {
+    position: relative;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.2s, box-shadow 0.2s;
+    cursor: default;
+    overflow: hidden;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    // background: var(--mat-sys-surface, #fff); /* Ensure base */
+}
+
+:host-context(.dark-theme) .feature-card {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.feature-card-content {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+    flex: 1;
+}
+
+.feature-icon {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    // color: #5f6368;
+    opacity: 0.6;
+    margin-bottom: 8px;
+}
+
+.feature-title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 500;
+    // color: hsla(0, 0%, 0%, .87);
+    opacity: 0.87;
+}
+
+.feature-description {
+    margin: 0;
+    font-size: 0.9rem;
+    // color: rgba(0, 0, 0, 0.6);
+    opacity: 0.6;
+    line-height: 1.4;
+}
+
+/* Locked State */
+.feature-card.locked,
+.connectivity-card.locked {
+    // background-color: #fafafa;
+    background-color: rgba(0, 0, 0, 0.02);
+    /* Slight tint instead of fixed color */
+    cursor: pointer;
+}
+
+:host-context(.dark-theme) .feature-card.locked {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+.feature-card.locked:hover,
+.connectivity-card.locked:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    // background-color: #f5f5f5;
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+:host-context(.dark-theme) .feature-card.locked:hover {
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.feature-card.locked .feature-card-content,
+.connectivity-card.locked .feature-card-content {
+    opacity: 0.3;
+    filter: blur(1.5px);
+    pointer-events: none;
+}
+
+.lock-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    // color: #424242;
+    color: var(--mat-sys-on-surface, inherit);
+    opacity: 0.8;
+}
+
+.lock-icon-large {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+    margin-bottom: 8px;
+}
+
+.pro-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background-color: #212121;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    z-index: 3;
+}
+
+:host-context(.dark-theme) .pro-badge {
+    background-color: #e0e0e0;
+    color: #121212;
+}
+
+/* Unlocked/Active State */
+.feature-card.unlocked .feature-icon {
+    // color: #1976d2;
+    color: var(--mat-sys-primary, #3f51b5);
+    opacity: 1;
+}

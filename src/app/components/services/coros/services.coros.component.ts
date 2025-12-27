@@ -4,10 +4,10 @@ import { ServicesAbstractComponentDirective } from '../services-abstract-compone
 
 
 @Component({
-    selector: 'app-services-coros',
-    templateUrl: './services.coros.component.html',
-    styleUrls: ['../services-abstract-component.directive.css', './services.coros.component.css'],
-    standalone: false
+  selector: 'app-services-coros',
+  templateUrl: './services.coros.component.html',
+  styleUrls: ['../services-abstract-component.directive.scss', './services.coros.component.css'],
+  standalone: false
 })
 export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
@@ -25,7 +25,7 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     return !!this.serviceTokens && !!this.serviceTokens.length
   }
 
-  buildRedirectURIFromServiceToken(token: {redirect_uri: string}): string {
+  buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
     return token.redirect_uri
   }
 }

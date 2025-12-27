@@ -11,7 +11,7 @@ import { ServicesAbstractComponentDirective } from '../services-abstract-compone
 @Component({
   selector: 'app-services-suunto',
   templateUrl: './services.suunto.component.html',
-  styleUrls: ['../services-abstract-component.directive.css', './services.suunto.component.css'],
+  styleUrls: ['../services-abstract-component.directive.scss', './services.suunto.component.css'],
   standalone: false
 })
 export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective implements OnInit {

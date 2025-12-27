@@ -4,10 +4,10 @@ import { ServicesAbstractComponentDirective } from '../services-abstract-compone
 
 
 @Component({
-    selector: 'app-services-garmin',
-    templateUrl: './services.garmin.component.html',
-    styleUrls: ['../services-abstract-component.directive.css', './services.garmin.component.css'],
-    standalone: false
+  selector: 'app-services-garmin',
+  templateUrl: './services.garmin.component.html',
+  styleUrls: ['../services-abstract-component.directive.scss', './services.garmin.component.css'],
+  standalone: false
 })
 export class ServicesGarminComponent extends ServicesAbstractComponentDirective {
 
@@ -26,7 +26,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     return !!this.serviceTokens && !!this.serviceTokens.length && !!this.serviceTokens[0] && !!this.serviceTokens[0].accessToken
   }
 
-  buildRedirectURIFromServiceToken(token: {redirect_uri: string, state: string, oauthToken: string}): string {
-    return  `${token.redirect_uri}?oauth_token=${token.oauthToken}&oauth_callback=${encodeURIComponent(`${this.windowService.currentDomain}/services?state=${token.state}&serviceName=${this.serviceName}&connect=1`)}`
+  buildRedirectURIFromServiceToken(token: { redirect_uri: string, state: string, oauthToken: string }): string {
+    return `${token.redirect_uri}?oauth_token=${token.oauthToken}&oauth_callback=${encodeURIComponent(`${this.windowService.currentDomain}/services?state=${token.state}&serviceName=${this.serviceName}&connect=1`)}`
   }
 }
