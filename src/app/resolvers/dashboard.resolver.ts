@@ -4,7 +4,7 @@ import { AppEventService } from '../services/app.event.service';
 import { AppUserService } from '../services/app.user.service';
 import { EventInterface, User, ActivityTypes, DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { map, switchMap, take } from 'rxjs/operators';
-import { of, EMPTY, Observable } from 'rxjs';
+import { of, EMPTY, Observable, firstValueFrom } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { WhereFilterOp } from 'firebase/firestore';
@@ -100,8 +100,7 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
             const userContext = targetUser ? targetUser : user;
             const limit = 0;
 
-            const eventsObservable = eventService.getEventsBy(userContext, where, 'startDate', false, limit);
-            const events = await eventsObservable.pipe(take(1)).toPromise();
+            const events = await firstValueFrom(eventService.getEventsOnceBy(userContext, where, 'startDate', false, limit));
 
             // Filter by Activity Types
             if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
