@@ -3,25 +3,25 @@ import { EventInterface, User, ActivityInterface, UserUnitSettingsInterface, Pri
 import { AppEventService } from '../../services/app.event.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { EventDetailsBottomSheetComponent } from './event-details-bottom-sheet/event-details-bottom-sheet.component';
+import { EventDetailsSummaryBottomSheetComponent } from './event-details-summary-bottom-sheet/event-details-summary-bottom-sheet.component';
 import { EventStatsBottomSheetComponent } from '../event/stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
 
 @Component({
-  selector: 'app-event-header',
-  templateUrl: './event-header.component.html',
-  styleUrls: ['./event-header.component.css'],
+  selector: 'app-event-summary',
+  templateUrl: './event-summary.component.html',
+  styleUrls: ['./event-summary.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })
 
-export class EventHeaderComponent implements OnChanges {
-  @Input() event!: EventInterface;
-  @Input() user!: User;
+export class EventSummaryComponent implements OnChanges {
+  @Input() event: EventInterface;
+  @Input() user: User;
   @Input() showType = true;
   @Input() showIcon = false;
   @Input() isOwner = false;
   @Input() selectedActivities: ActivityInterface[] = [];
-  @Input() unitSettings!: UserUnitSettingsInterface;
+  @Input() unitSettings: UserUnitSettingsInterface;
   @Input() statsToShow: string[] = [];
 
   constructor(
@@ -44,11 +44,11 @@ export class EventHeaderComponent implements OnChanges {
     this.cd.markForCheck(); // Trigger detection immediately
 
     // Then call service
-    await this.eventService.setEventPrivacy(this.user, this.event.getID()!, this.event.privacy);
+    await this.eventService.setEventPrivacy(this.user, this.event.getID(), this.event.privacy);
   }
 
   openEditDetails() {
-    this.bottomSheet.open(EventDetailsBottomSheetComponent, {
+    this.bottomSheet.open(EventDetailsSummaryBottomSheetComponent, {
       data: { event: this.event, user: this.user }
     });
   }

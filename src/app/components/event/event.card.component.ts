@@ -23,7 +23,7 @@ import { AppActivitySelectionService } from '../../services/activity-selection-s
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { EventStatsBottomSheetComponent } from './stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
-import { EventDetailsBottomSheetComponent } from '../event-header/event-details-bottom-sheet/event-details-bottom-sheet.component';
+import { EventDetailsSummaryBottomSheetComponent } from '../event-summary/event-details-summary-bottom-sheet/event-details-summary-bottom-sheet.component';
 import { LoggerService } from '../../services/logger.service';
 
 

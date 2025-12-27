@@ -1,12 +1,11 @@
-<!-- Event details -->
-<div class="app-header-card event-header-merged">
-  <!-- Top Row: Avatar, Date/Info, and Actions -->
-  <div class="header-top-row">
-    <div class="header-content">
-      <div class="header-avatar">
+<div class="glass-card event-summary-card">
+  <!-- Primary Info Section -->
+  <div class="summary-primary-info">
+    <div class="summary-avatar-container">
+      <div class="summary-avatar">
         <app-privacy-icon [privacy]="event.privacy" (click)="toggleEventPrivacy()"></app-privacy-icon>
       </div>
-      <div class="header-info">
+      <div class="summary-date-info">
         <span class="date-display">
           <b>{{ event.startDate | date:"d MMM yyyy" }}</b>
           <span class="time-separator">at</span>
@@ -15,7 +14,7 @@
       </div>
     </div>
 
-    <div class="header-actions">
+    <div class="summary-actions">
       @if (isOwner) {
       <button mat-icon-button (click)="openEditDetails()" matTooltip="Edit details">
         <mat-icon>edit</mat-icon>
@@ -27,19 +26,32 @@
     </div>
   </div>
 
-  <!-- Bottom Row: Stats and Global Action -->
-  <div class="header-bottom-row">
+  <!-- Activities Toggles Section -->
+  @if (event.getActivities().length > 1) {
+  <div class="summary-activities-toggles">
+    <app-activities-toggles [event]="event" [user]="user" [isOwner]="isOwner">
+    </app-activities-toggles>
+  </div>
+  }
+
+  <!-- Stats Grid Section -->
+  <div class="summary-stats-area">
     <div class="stats-container">
       <app-event-card-stats-grid [event]="event" [selectedActivities]="selectedActivities"
         [unitSettings]="unitSettings">
       </app-event-card-stats-grid>
     </div>
 
-    <div class="global-actions">
+    <div class="analysis-trigger">
       <button mat-stroked-button color="primary" (click)="openDetailedStats()">
         <mat-icon>open_in_full</mat-icon>
         <span>Open Analysis</span>
       </button>
     </div>
+  </div>
+
+  <!-- Projected Content (Tabs, etc.) -->
+  <div class="summary-projected-tabs">
+    <ng-content select="[summary-bottom]"></ng-content>
   </div>
 </div>

@@ -6,12 +6,12 @@ import { DataFeeling, DataRPE, EventInterface, Feelings, isNumber, RPEBorgCR10SC
 import { EnumeratorHelpers } from '../../../helpers/enumerator-helpers';
 
 @Component({
-    selector: 'app-event-details-bottom-sheet',
-    templateUrl: './event-details-bottom-sheet.component.html',
-    styleUrls: ['./event-details-bottom-sheet.component.css'],
+    selector: 'app-event-details-summary-bottom-sheet',
+    templateUrl: './event-details-summary-bottom-sheet.component.html',
+    styleUrls: ['./event-details-summary-bottom-sheet.component.css'],
     standalone: false
 })
-export class EventDetailsBottomSheetComponent implements OnInit {
+export class EventDetailsSummaryBottomSheetComponent implements OnInit {
     event: EventInterface;
     user: User;
 
@@ -22,7 +22,7 @@ export class EventDetailsBottomSheetComponent implements OnInit {
 
     constructor(
         @Inject(MAT_BOTTOM_SHEET_DATA) public data: { event: EventInterface, user: User },
-        private _bottomSheetRef: MatBottomSheetRef<EventDetailsBottomSheetComponent>,
+        private _bottomSheetRef: MatBottomSheetRef<EventDetailsSummaryBottomSheetComponent>,
         private eventService: AppEventService,
         private snackBar: MatSnackBar
     ) {
@@ -49,14 +49,14 @@ export class EventDetailsBottomSheetComponent implements OnInit {
 
     async saveEventName() {
         // Optimistic update already happened via ngModel
-        await this.eventService.updateEventProperties(this.user, this.event.getID(), {
+        await this.eventService.updateEventProperties(this.user, this.event.getID()!, {
             name: this.event.name,
         });
         this.snackBar.open('Event name saved', undefined, { duration: 2000 });
     }
 
     async saveEventDescription() {
-        await this.eventService.updateEventProperties(this.user, this.event.getID(), {
+        await this.eventService.updateEventProperties(this.user, this.event.getID()!, {
             description: this.event.description,
         });
         this.snackBar.open('Description saved', undefined, { duration: 2000 });

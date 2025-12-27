@@ -11,7 +11,7 @@ import { ActivityActionsComponent } from '../components/activity-actions/activit
 import { MapActionsComponent } from '../components/event/map/map-actions/map.actions.component';
 import { EventCardChartActionsComponent } from '../components/event/chart/actions/event.card.chart.actions.component';
 import { EventCardDevicesComponent } from '../components/event/devices/event.card.devices.component';
-import { EventHeaderComponent } from '../components/event-header/event-header.component';
+import { EventSummaryComponent } from '../components/event-summary/event-summary.component';
 import { HeaderStatsComponent } from '../components/header-stats/header-stats.component';
 import { ActivitiesTogglesComponent } from '../components/event/activities-toggles/activities-toggles.component';
 import { EventCardStatsTableComponent } from '../components/event/stats-table/event.card.stats-table.component';
@@ -21,7 +21,7 @@ import { ActivityToggleComponent } from '../components/event/activity-toggle/act
 import { EventIntensityZonesComponent } from '../components/event/intensity-zones/event.intensity-zones.component';
 import { LapTypeIconComponent } from '../components/lap-type-icon/lap-type-icon.component';
 import { GoogleMapsModule } from '@angular/google-maps';
-import { EventDetailsBottomSheetComponent } from '../components/event-header/event-details-bottom-sheet/event-details-bottom-sheet.component';
+import { EventDetailsSummaryBottomSheetComponent } from '../components/event-summary/event-details-summary-bottom-sheet/event-details-summary-bottom-sheet.component';
 import { EventStatsBottomSheetComponent } from '../components/event/stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
 
 
@@ -34,7 +34,7 @@ import { EventStatsBottomSheetComponent } from '../components/event/stats-table/
         GoogleMapsModule,
     ],
     exports: [
-        EventHeaderComponent
+        EventSummaryComponent
     ],
     declarations: [
         EventCardComponent,
@@ -46,8 +46,8 @@ import { EventStatsBottomSheetComponent } from '../components/event/stats-table/
         EventCardChartComponent,
         EventCardChartActionsComponent,
         EventCardDevicesComponent,
-        EventHeaderComponent,
-        EventDetailsBottomSheetComponent,
+        EventSummaryComponent,
+        EventDetailsSummaryBottomSheetComponent,
         EventStatsBottomSheetComponent,
         HeaderStatsComponent,
         ActivitiesTogglesComponent,
