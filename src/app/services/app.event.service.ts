@@ -124,6 +124,35 @@ export class AppEventService implements OnDestroy {
     return this._getEvents(user, where, orderBy, asc, limit);
   }
 
+  public getEventsOnceBy(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10): Observable<EventInterface[]> {
+    const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount);
+    return from(getDocs(q)).pipe(map((querySnapshot) => {
+      return querySnapshot.docs.map((queryDocumentSnapshot) => {
+        const eventSnapshot = queryDocumentSnapshot.data();
+        const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
+        if (unknownTypes.length > 0) {
+          const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
+          if (newUnknownTypes.length > 0) {
+            newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
+            Sentry.captureMessage('Unknown Data Types in getEventsOnceBy', { extra: { types: newUnknownTypes, eventID: queryDocumentSnapshot.id } });
+          }
+        }
+        const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(queryDocumentSnapshot.id) as AppEventInterface;
+
+        // Hydrate with original file(s) info if present
+        const rawData = eventSnapshot as any;
+        if (rawData.originalFiles) {
+          event.originalFiles = rawData.originalFiles;
+        }
+        if (rawData.originalFile) {
+          event.originalFile = rawData.originalFile;
+        }
+
+        return event;
+      });
+    }));
+  }
+
   /**
    * @Deprecated
    * @param user
