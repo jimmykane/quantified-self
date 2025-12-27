@@ -1,5 +1,4 @@
 import { Component, Input, ViewChild, inject, OnInit, AfterViewInit, OnChanges, SimpleChanges } from '@angular/core';
-import { Auth } from '@angular/fire/auth';
 import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { MatStepperModule, MatStepper } from '@angular/material/stepper';
@@ -47,7 +46,6 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
 
     private authService = inject(AppAuthService);
     private userService = inject(AppUserService);
-    private auth = inject(Auth);
     private router = inject(Router);
     private _formBuilder = inject(FormBuilder);
     private logger = inject(LoggerService);
@@ -196,7 +194,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
     }
 
     async logout() {
-        await this.auth.signOut();
+        await this.authService.signOut();
         this.router.navigate(['/login']);
     }
 
