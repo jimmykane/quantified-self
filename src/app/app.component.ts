@@ -83,10 +83,20 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     this.maintenanceMode$ = this.remoteConfigService.getMaintenanceMode();
     this.maintenanceMessage$ = this.remoteConfigService.getMaintenanceMessage();
     this.gracePeriodUntil$ = this.userService.getGracePeriodUntil();
-    this.authService.user$.subscribe(user => {
+    this.authService.user$.subscribe(async user => {
       this.authState = !!user;
       this.currentUser = user;
       this.updateOnboardingState();
+      // Check admin status when user is authenticated
+      if (user) {
+        try {
+          this.isAdminUser = await this.userService.isAdmin();
+        } catch {
+          this.isAdminUser = false;
+        }
+      } else {
+        this.isAdminUser = false;
+      }
     });
     this.routerEventSubscription = this.router.events.subscribe((event) => {
       if (event instanceof NavigationEnd) {
