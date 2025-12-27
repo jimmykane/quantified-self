@@ -70,25 +70,8 @@ mat-card-header mat-icon {
 }
 
 /* Ensure identical padding and sizing for alignment */
-.secondary-details-container,
-.dashboard-card.header-section {
+.secondary-details-container {
   padding: 16px !important;
   box-sizing: border-box;
   width: 100%;
-}
-
-.header-actions {
-  display: flex;
-  justify-content: center;
-  margin-top: 1rem;
-}
-
-.header-actions button {
-  width: 100%;
-}
-
-@media (min-width: 600px) {
-  .header-actions button {
-    width: auto;
-  }
 }
