@@ -62,6 +62,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   public maintenanceMode$!: Observable<boolean>;
   public maintenanceMessage$!: Observable<string>;
   private currentUser: any = null;
+  public isAdminUser = false;
 
   constructor(
     public authService: AppAuthService,
