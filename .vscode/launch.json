@@ -4,7 +4,7 @@
         {
             "name": "ng serve",
             "type": "chrome",
-            "request": "launch",
+            "request": "attach",
             "preLaunchTask": "npm: start",
             "url": "http://localhost:4201",
             "webRoot": "${workspaceFolder}",
@@ -19,7 +19,7 @@
         {
             "name": "ng serve + Auth Emulator",
             "type": "chrome",
-            "request": "launch",
+            "request": "attach",
             "preLaunchTask": "start:with-emulator",
             "url": "https://localhost:4201",
             "webRoot": "${workspaceFolder}",
