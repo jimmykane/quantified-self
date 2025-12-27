@@ -3,7 +3,7 @@
 
   @if (event) {
   <app-event-header [event]="event" [user]='currentUser' [isOwner]="isOwner()" [selectedActivities]="selectedActivities"
-    [unitSettings]="userUnitSettings" [statsToShow]="basicStatsTypes" (openEditDetails)="openEditDetails()">
+    [unitSettings]="userUnitSettings" [statsToShow]="basicStatsTypes">
   </app-event-header>
 
   @if (event.getActivities().length > 1) {
@@ -12,19 +12,12 @@
     </app-activities-toggles>
   </mat-card>
   }
-
-  <mat-card class="header-section glass-card dashboard-card">
-    <app-event-card-stats-grid [event]="event" [selectedActivities]="selectedActivities"
-      [unitSettings]="userUnitSettings">
-    </app-event-card-stats-grid>
-
-    <div class="header-actions">
-      <button mat-flat-button color="primary" (click)="openDetailedStats()">
-        <mat-icon>open_in_full</mat-icon> Open Analysis in Fullscreen
-      </button>
-    </div>
-
+  @if (event.getActivities().length > 1) {
+  <mat-card class="dashboard-card glass-card">
+    <app-activities-toggles [event]="event" [user]="currentUser" [isOwner]="isOwner()">
+    </app-activities-toggles>
   </mat-card>
+  }
 
   <!-- 2. TABS SECTION -->
   <div class="secondary-details-container glass-card dashboard-card">

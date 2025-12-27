@@ -247,18 +247,32 @@ section.component-container {
 /* CSS Variables for Theming */
 :root {
   --mat-sys-surface: rgba(255, 255, 255, 0.90);
-  --mat-sys-on-surface: inherit;
-  /* Add other variables as needed */
+  --mat-sys-on-surface: rgba(0, 0, 0, 0.87);
+  --mat-sys-on-surface-variant: rgba(0, 0, 0, 0.60);
+  --mat-app-surface: var(--mat-sys-surface);
+  --mat-app-on-surface: var(--mat-sys-on-surface);
+  --mat-app-on-surface-variant: var(--mat-sys-on-surface-variant);
+  --mat-app-surface-container-low: rgba(0, 0, 0, 0.03);
+  --mat-app-surface-container-high: rgba(0, 0, 0, 0.08);
+  --mat-app-outline-variant: rgba(0, 0, 0, 0.1);
+  --mat-app-primary: #3f51b5;
 }
 
 .dark-theme {
   --mat-sys-surface: rgba(30, 30, 30, 0.80);
-  /* --mat-sys-on-surface handles text via standard color property inheritance mostly */
+  --mat-sys-on-surface: rgba(255, 255, 255, 0.87);
+  --mat-sys-on-surface-variant: rgba(255, 255, 255, 0.60);
+  --mat-app-surface: var(--mat-sys-surface);
+  --mat-app-on-surface: var(--mat-sys-on-surface);
+  --mat-app-on-surface-variant: var(--mat-sys-on-surface-variant);
+  --mat-app-surface-container-low: rgba(255, 255, 255, 0.05);
+  --mat-app-surface-container-high: rgba(255, 255, 255, 0.12);
+  --mat-app-outline-variant: rgba(255, 255, 255, 0.1);
+  --mat-app-primary: #90caf9;
 }
 
 /* Global Glassmorphism Card Style */
-.glass-card,
-mat-card {
+.glass-card {
   background: var(--mat-sys-surface) !important;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -282,8 +296,7 @@ mat-paginator,
 /* Dark Theme Overrides */
 .dark-theme {
 
-  .glass-card,
-  mat-card {
+  .glass-card {
     /* Background handled by variable */
     border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2) !important;
@@ -305,7 +318,7 @@ mat-paginator,
   align-items: center;
   justify-content: space-between;
   padding: 24px 40px;
-  background: var(--mat-app-surface) !important;
+  background: var(--mat-sys-surface) !important;
   border-radius: 12px !important;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05) !important;
   border: 1px solid var(--mat-app-outline-variant);

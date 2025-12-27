@@ -4,6 +4,7 @@ import { AppEventService } from '../../services/app.event.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { EventDetailsBottomSheetComponent } from './event-details-bottom-sheet/event-details-bottom-sheet.component';
+import { EventStatsBottomSheetComponent } from '../event/stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
 
 @Component({
   selector: 'app-event-header',
@@ -49,6 +50,17 @@ export class EventHeaderComponent implements OnChanges {
   openEditDetails() {
     this.bottomSheet.open(EventDetailsBottomSheetComponent, {
       data: { event: this.event, user: this.user }
+    });
+  }
+
+  openDetailedStats() {
+    this.bottomSheet.open(EventStatsBottomSheetComponent, {
+      data: {
+        event: this.event,
+        selectedActivities: this.selectedActivities,
+        userUnitSettings: this.unitSettings
+      },
+      panelClass: 'qs-full-width-bottom-sheet'
     });
   }
 }

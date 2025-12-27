@@ -1,29 +1,68 @@
-mat-card-subtitle {
-  margin-bottom: 0;
-}
-
 :host {
   display: block;
   margin-bottom: 24px;
 }
 
-/* Use the global .app-header-card class instead of local styles */
-.custom-card-header {
-  /* Inherits from global .app-header-card */
+.event-header-merged {
+  display: flex !important;
+  flex-direction: column;
+  padding: 0 !important;
+  /* Reset padding to manage rows individually */
+  overflow: visible !important;
+  align-items: stretch !important;
 }
 
-/* Avatar/Icon area */
+.header-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 40px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.header-bottom-row {
+  display: flex;
+  flex-direction: column;
+  padding: 0 40px 24px 40px;
+  gap: 16px;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+:host-context(.dark-theme) .header-bottom-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.stats-container {
+  width: 100%;
+}
+
+.global-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.global-actions button {
+  border-radius: 20px;
+  padding: 0 24px;
+}
+
+/* Avatar area */
 .header-avatar {
   flex-shrink: 0;
-  width: 80px;
-  /* Match settings avatar container if we want sizing parity, or keep auto */
+  width: 48px;
+  /* Slightly smaller for merged view */
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 /* Title area */
-.header-title {
+.header-info {
   flex-grow: 1;
   display: flex;
   flex-direction: column;
@@ -31,8 +70,7 @@ mat-card-subtitle {
 }
 
 .date-display {
-  font-size: 1.5rem;
-  /* Match settings h2 size */
+  font-size: 1.4rem;
   font-weight: 500;
   color: var(--mat-app-on-surface);
   letter-spacing: -0.01em;
@@ -46,10 +84,9 @@ mat-card-subtitle {
 }
 
 .time-separator {
-  font-size: 1rem;
+  font-size: 0.95rem;
   color: var(--mat-app-on-surface-variant);
   font-weight: 400;
-  margin: 0 4px;
 }
 
 /* Actions Container */
@@ -61,20 +98,24 @@ mat-card-subtitle {
 
 /* Mobile Responsiveness */
 @media (max-width: 600px) {
-  .custom-card-header {
+  .header-top-row {
     flex-direction: column;
     align-items: flex-start;
-    gap: 16px;
     padding: 20px;
+    gap: 12px;
+  }
+
+  .header-bottom-row {
+    padding: 0 20px 20px 20px;
   }
 
   .header-actions {
     width: 100%;
     justify-content: flex-end;
-    margin-top: 8px;
   }
 
-  .header-avatar {
-    width: auto;
+  .date-display {
+    font-size: 1.2rem;
+    flex-wrap: wrap;
   }
 }

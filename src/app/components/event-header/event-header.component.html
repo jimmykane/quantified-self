@@ -1,26 +1,45 @@
 <!-- Event details -->
-<div class="custom-card-header app-header-card">
-  <div class="header-content">
-    <div class="header-avatar">
-      <app-privacy-icon [privacy]="event.privacy" (click)="toggleEventPrivacy()"></app-privacy-icon>
+<div class="app-header-card event-header-merged">
+  <!-- Top Row: Avatar, Date/Info, and Actions -->
+  <div class="header-top-row">
+    <div class="header-content">
+      <div class="header-avatar">
+        <app-privacy-icon [privacy]="event.privacy" (click)="toggleEventPrivacy()"></app-privacy-icon>
+      </div>
+      <div class="header-info">
+        <span class="date-display">
+          <b>{{ event.startDate | date:"d MMM yyyy" }}</b>
+          <span class="time-separator">at</span>
+          {{ event.startDate | date:"shortTime" }}
+        </span>
+      </div>
     </div>
-    <div class="header-info">
-      <span class="date-display">
-        <b>{{ event.startDate | date:"d MMM yyyy" }}</b>
-        <span class="time-separator">at</span>
-        {{ event.startDate | date:"shortTime" }}
-      </span>
+
+    <div class="header-actions">
+      @if (isOwner) {
+      <button mat-icon-button (click)="openEditDetails()" matTooltip="Edit details">
+        <mat-icon>edit</mat-icon>
+      </button>
+      }
+      @if (isOwner) {
+      <app-event-actions [user]="user" [event]="event" [showDownloadOriginal]="true" align="end"></app-event-actions>
+      }
     </div>
   </div>
 
-  <div class="header-actions">
-    @if (isOwner) {
-    <button mat-icon-button (click)="openEditDetails()">
-      <mat-icon>edit</mat-icon>
-    </button>
-    }
-    @if (isOwner) {
-    <app-event-actions [user]="user" [event]="event" [showDownloadOriginal]="true" align="end"></app-event-actions>
-    }
+  <!-- Bottom Row: Stats and Global Action -->
+  <div class="header-bottom-row">
+    <div class="stats-container">
+      <app-event-card-stats-grid [event]="event" [selectedActivities]="selectedActivities"
+        [unitSettings]="unitSettings">
+      </app-event-card-stats-grid>
+    </div>
+
+    <div class="global-actions">
+      <button mat-stroked-button color="primary" (click)="openDetailedStats()">
+        <mat-icon>open_in_full</mat-icon>
+        <span>Open Analysis</span>
+      </button>
+    </div>
   </div>
 </div>

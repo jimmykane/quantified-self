@@ -218,20 +218,4 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
   hasPositions(event: EventInterface): boolean {
     return !!this.event.getActivities().filter(a => a.hasPositionData()).length
   }
-
-  openDetailedStats() {
-    this.bottomSheet.open(EventStatsBottomSheetComponent, {
-      data: {
-        event: this.event,
-        selectedActivities: this.selectedActivities,
-        userUnitSettings: this.userUnitSettings
-      }
-    });
-  }
-
-  openEditDetails() {
-    this.bottomSheet.open(EventDetailsBottomSheetComponent, {
-      data: { event: this.event, user: this.currentUser }
-    });
-  }
 }
