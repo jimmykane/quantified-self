@@ -186,7 +186,7 @@ describe('LoginComponent', () => {
 
     // --- Extensive Testing Additions ---
 
-    it('should show error toast if fetchSignInMethods fails during collision', async () => {
+    it('should show error dialog if fetchSignInMethods fails during collision', async () => {
         const collisionError = {
             code: 'auth/account-exists-with-different-credential',
             customData: { email: 'test@example.com' }
@@ -197,7 +197,12 @@ describe('LoginComponent', () => {
         component.signInWithProvider(SignInProviders.GitHub);
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        expect(mockSnackBar.open).toHaveBeenCalledWith(expect.stringContaining('Account linking failed'), 'Close');
+        expect((mockDialog as any).open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            data: expect.objectContaining({
+                title: 'Account Linking Failed',
+                message: expect.stringContaining('Network error')
+            })
+        }));
     });
 
     it('should do nothing if linking dialog is cancelled', async () => {
@@ -207,6 +212,7 @@ describe('LoginComponent', () => {
         };
         (mockAuthService.githubLogin as any).mockRejectedValueOnce(collisionError);
         (mockAuthService as any).fetchSignInMethods = vi.fn().mockResolvedValue(['google.com']);
+        (mockAuthService as any).getProviderForId = vi.fn().mockReturnValue({});
 
         // Mock dialog cancelled (returns null/undefined)
         const mockDialogRef = {
@@ -217,18 +223,18 @@ describe('LoginComponent', () => {
         component.signInWithProvider(SignInProviders.GitHub);
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        // Should NOT hold loading state ideally, but check mainly that we didn't proceed
         expect(signInWithPopup).not.toHaveBeenCalled();
         expect(mockAuthService.linkCredential).not.toHaveBeenCalled();
     });
 
-    it('should show error if secondary provider login fails during linking', async () => {
+    it('should show error dialog if secondary provider login fails during linking', async () => {
         const collisionError = {
             code: 'auth/account-exists-with-different-credential',
             customData: { email: 'test@example.com' }
         };
         (mockAuthService.githubLogin as any).mockRejectedValueOnce(collisionError);
         (mockAuthService as any).fetchSignInMethods = vi.fn().mockResolvedValue(['google.com']);
+        (mockAuthService as any).getProviderForId = vi.fn().mockReturnValue({});
 
         // Select Google
         const mockDialogRef = {
@@ -237,21 +243,27 @@ describe('LoginComponent', () => {
         (mockDialog as any).open = vi.fn().mockReturnValue(mockDialogRef);
 
         // Secondary login fails (e.g. user closed popup)
-        (signInWithPopup as any).mockRejectedValue(new Error('Popup closed'));
+        const popupError = { code: 'auth/popup-closed-by-user' };
+        (signInWithPopup as any).mockRejectedValue(popupError);
 
         component.signInWithProvider(SignInProviders.GitHub);
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        expect(mockSnackBar.open).toHaveBeenCalledWith(expect.stringContaining('Account linking failed'), 'Close');
+        expect((mockDialog as any).open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            data: expect.objectContaining({
+                message: 'The sign-in popup was closed before completing the process. Please try again.'
+            })
+        }));
     });
 
-    it('should show error if linkCredential fails', async () => {
+    it('should show error dialog if linkCredential fails', async () => {
         const collisionError = {
             code: 'auth/account-exists-with-different-credential',
             customData: { email: 'test@example.com' }
         };
         (mockAuthService.githubLogin as any).mockRejectedValueOnce(collisionError);
         (mockAuthService as any).fetchSignInMethods = vi.fn().mockResolvedValue(['google.com']);
+        (mockAuthService as any).getProviderForId = vi.fn().mockReturnValue({});
 
         const mockDialogRef = { afterClosed: () => of('google.com') };
         (mockDialog as any).open = vi.fn().mockReturnValue(mockDialogRef);
@@ -259,12 +271,17 @@ describe('LoginComponent', () => {
         (signInWithPopup as any).mockResolvedValue({ user: { uid: '123' } });
 
         // Link fails
-        (mockAuthService as any).linkCredential = vi.fn().mockRejectedValue(new Error('Linking failed'));
+        (mockAuthService as any).linkCredential = vi.fn().mockRejectedValue({ code: 'auth/credential-already-in-use' });
 
         component.signInWithProvider(SignInProviders.GitHub);
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        expect(mockSnackBar.open).toHaveBeenCalledWith(expect.stringContaining('Account linking failed'), 'Close');
+        expect((mockDialog as any).open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            data: expect.objectContaining({
+                title: 'Account Linking Failed',
+                message: 'This account is already linked to another user. Please sign in with the original account.'
+            })
+        }));
     });
 
     it('should handle pending link failure (reverse flow)', async () => {
@@ -287,6 +304,11 @@ describe('LoginComponent', () => {
         await component.ngOnInit();
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        expect(mockSnackBar.open).toHaveBeenCalledWith(expect.stringContaining('Failed to link accounts'), 'Close');
+        expect((mockDialog as any).open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            data: expect.objectContaining({
+                title: 'Account Linking Failed',
+                message: expect.stringContaining('Link error')
+            })
+        }));
     });
 });

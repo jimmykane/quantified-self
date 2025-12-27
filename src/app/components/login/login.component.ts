@@ -13,6 +13,7 @@ import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { LoggerService } from '../../services/logger.service';
 import { AccountLinkingDialogComponent } from './account-linking-dialog/account-linking-dialog.component';
+import { ErrorDialogComponent } from './error-dialog/error-dialog.component';
 
 
 
@@ -159,9 +160,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       }
 
       Sentry.captureException(e);
-      this.snackBar.open(`Could not log in due to ${e.message || e} `, undefined, {
-        duration: 5000,
-      });
+      this.showErrorDialog('Login Failed', e);
       this.isLoading = false;
     };
 
@@ -249,10 +248,34 @@ export class LoginComponent implements OnInit, OnDestroy {
         }
       } catch (linkError: any) {
         this.logger.error('Account linking failed:', linkError);
-        this.snackBar.open(`Account linking failed: ${linkError.message}`, 'Close');
+        this.showErrorDialog('Account Linking Failed', linkError);
       }
     }
     this.isLoading = false;
+  }
+
+  private showErrorDialog(title: string, error: any) {
+    const message = this.mapErrorMessage(error);
+    this.dialog.open(ErrorDialogComponent, {
+      data: { title, message },
+      width: '400px'
+    });
+  }
+
+  private mapErrorMessage(error: any): string {
+    const code = error.code || error.message;
+    switch (code) {
+      case 'auth/credential-already-in-use':
+        return 'This account is already linked to another user. Please sign in with the original account.';
+      case 'auth/invalid-credential':
+        return 'The credential causing the conflict is invalid or expired. Please try signing in again.';
+      case 'auth/network-request-failed':
+        return 'Network connection failed. Please check your internet connection and try again.';
+      case 'auth/popup-closed-by-user':
+        return 'The sign-in popup was closed before completing the process. Please try again.';
+      default:
+        return error.message || 'We could not link your accounts. Please try again or contact support.';
+    }
   }
 
   // Helper to link a provider after secondary login (Persistence flow)
@@ -266,7 +289,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       this.router.navigate(['/dashboard']);
     } catch (e: any) {
       this.logger.error('Link pending provider failed', e);
-      this.snackBar.open(`Failed to link accounts: ${e.message}`, 'Close');
+      this.showErrorDialog('Account Linking Failed', e);
     }
   }
 
