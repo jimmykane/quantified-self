@@ -1,4 +1,4 @@
-import { inject, Injectable, Injector, OnDestroy } from '@angular/core';
+import { inject, Injectable, Injector, OnDestroy, runInInjectionContext } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, Observer, of, zip } from 'rxjs';
@@ -55,7 +55,7 @@ export class AppEventService implements OnDestroy {
     // https://stackoverflow.com/questions/42939978/avoiding-nested-subscribes-with-combine-latest-when-one-observable-depends-on-th
     const eventDoc = doc(this.firestore, 'users', user.uid, 'events', eventID);
     return combineLatest([
-      docData(eventDoc).pipe(
+      runInInjectionContext(this.injector, () => docData(eventDoc)).pipe(
         map(eventSnapshot => {
           console.log('[AppEventService] docData emitted:', !!eventSnapshot);
           if (!eventSnapshot) return null;
@@ -191,7 +191,7 @@ export class AppEventService implements OnDestroy {
 
   public getActivities(user: User, eventID: string): Observable<ActivityInterface[]> {
     const activitiesCollection = collection(this.firestore, 'users', user.uid, 'events', eventID, 'activities');
-    return (collectionData(activitiesCollection, { idField: 'id' }) as Observable<any[]>).pipe(
+    return (runInInjectionContext(this.injector, () => collectionData(activitiesCollection, { idField: 'id' })) as Observable<any[]>).pipe(
       map((activitySnapshots: any[]) => {
         return activitySnapshots.reduce((activitiesArray: ActivityInterface[], activitySnapshot: any) => {
           try {
@@ -224,7 +224,7 @@ export class AppEventService implements OnDestroy {
 
   public getEventMetaData(user: User, eventID: string, serviceName: ServiceNames): Observable<EventMetaDataInterface> {
     const metaDataDoc = doc(this.firestore, 'users', user.uid, 'events', eventID, 'metaData', serviceName);
-    return docData(metaDataDoc).pipe(
+    return runInInjectionContext(this.injector, () => docData(metaDataDoc)).pipe(
       map(metaDataSnapshot => {
         return <EventMetaDataInterface>metaDataSnapshot;
       }),
