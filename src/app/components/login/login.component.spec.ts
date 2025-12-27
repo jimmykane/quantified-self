@@ -104,8 +104,11 @@ describe('LoginComponent', () => {
         (mockAuthService as any).getProviderForId = vi.fn().mockReturnValue({});
         (mockAuthService as any).linkCredential = vi.fn().mockResolvedValue({});
 
-        // 3. Mock window.confirm
-        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        // 3. Mock dialog
+        const mockDialogRef = {
+            afterClosed: () => of(true)
+        };
+        (mockDialog as any).open = vi.fn().mockReturnValue(mockDialogRef);
 
         // 4. Mock secondary signInWithPopup success
         const mockUser = { uid: '123' };
@@ -118,7 +121,7 @@ describe('LoginComponent', () => {
         await new Promise(resolve => setTimeout(resolve, 0));
 
         expect(mockAuthService.fetchSignInMethods).toHaveBeenCalledWith('test@example.com');
-        expect(confirmSpy).toHaveBeenCalled();
+        expect((mockDialog as any).open).toHaveBeenCalled();
         expect(signInWithPopup).toHaveBeenCalled();
         expect(mockAuthService.linkCredential).toHaveBeenCalledWith(mockUser, expect.anything());
         expect(mockSnackBar.open).toHaveBeenCalledWith('Accounts successfully linked!', 'Close', expect.anything());

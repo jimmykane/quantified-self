@@ -12,6 +12,8 @@ import { Analytics, logEvent } from '@angular/fire/analytics';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { LoggerService } from '../../services/logger.service';
+import { AccountLinkingDialogComponent } from './account-linking-dialog/account-linking-dialog.component';
+
 
 
 @Component({
@@ -133,10 +135,17 @@ export class LoginComponent implements OnInit, OnDestroy {
               const providerId = methods[0]; // Usually the first one is what we want
               const providerName = providerId.split('.')[0]; // simple name like 'google' or 'github'
 
-              const confirmLink = window.confirm(
-                `An account already exists with the email ${email} using ${providerName}. ` +
-                `Would you like to sign in with ${providerName} to link your accounts?`
-              );
+              const dialogRef = this.dialog.open(AccountLinkingDialogComponent, {
+                data: {
+                  email: email,
+                  existingProvider: providerId,
+                  pendingProvider: pendingCredential.providerId
+                },
+                maxWidth: '500px',
+                autoFocus: false
+              });
+
+              const confirmLink = await dialogRef.afterClosed().toPromise();
 
               if (confirmLink) {
                 const provider = this.authService.getProviderForId(providerId);

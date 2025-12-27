@@ -1,0 +1,46 @@
+<div class="dialog-container">
+    <div class="dialog-content">
+        <h2 class="title">Account Already Exists</h2>
+
+        <div class="info-section">
+            <p class="description">
+                An account already exists with the email <strong>{{ data.email }}</strong> using <strong>{{
+                    getProviderName(data.existingProvider) }}</strong>.
+            </p>
+
+            <div class="verbose-explanation">
+                <div class="explanation-box link-box">
+                    <h3 class="box-title">Link Accounts</h3>
+                    <p>
+                        By clicking <strong>Link Accounts</strong>, you will be redirected to sign in with <strong>{{
+                            getProviderName(data.existingProvider) }}</strong>.
+                        Once authenticated, your <strong>{{ getProviderName(data.pendingProvider) }}</strong> login will
+                        be associated with your existing account.
+                    </p>
+                    <p class="benefit">
+                        <mat-icon>check_circle</mat-icon>
+                        You can use either method to sign in in the future.
+                    </p>
+                </div>
+
+                <div class="explanation-box cancel-box">
+                    <h3 class="box-title">Cancel</h3>
+                    <p>
+                        If you cancel, you will not be signed in right now.
+                        You can try signing in directly with your existing <strong>{{
+                            getProviderName(data.existingProvider) }}</strong> account instead.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button mat-button (click)="onCancel()" class="cancel-button">
+                Cancel
+            </button>
+            <button mat-raised-button color="primary" (click)="onLink()" class="link-button">
+                Link Accounts
+            </button>
+        </div>
+    </div>
+</div>

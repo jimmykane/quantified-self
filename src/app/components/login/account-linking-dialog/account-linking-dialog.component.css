@@ -1,0 +1,110 @@
+.dialog-container {
+    padding: 16px;
+    max-width: 500px;
+}
+
+.dialog-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.title {
+    margin: 0;
+    text-align: center;
+    font-family: 'QSFont', 'Roboto', sans-serif;
+    font-size: 24px;
+    font-weight: 500;
+    color: #333;
+}
+
+.info-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.description {
+    text-align: center;
+    color: rgba(0, 0, 0, 0.7);
+    font-size: 16px;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.verbose-explanation {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 8px;
+}
+
+.explanation-box {
+    padding: 16px;
+    border-radius: 12px;
+    background-color: #f9f9f9;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.link-box {
+    border-left: 4px solid #3f51b5;
+    /* Primary color indicator */
+    background-color: rgba(63, 81, 181, 0.03);
+}
+
+.cancel-box {
+    border-left: 4px solid rgba(0, 0, 0, 0.12);
+}
+
+.box-title {
+    margin: 0 0 8px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+}
+
+.explanation-box p {
+    margin: 0 0 12px 0;
+    font-size: 14px;
+    line-height: 1.4;
+    color: rgba(0, 0, 0, 0.6);
+}
+
+.explanation-box p:last-child {
+    margin-bottom: 0;
+}
+
+.benefit {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #2e7d32 !important;
+    /* Material Green 800 */
+    font-weight: 500;
+}
+
+.benefit mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+.actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.cancel-button {
+    height: 48px;
+    border-radius: 24px;
+    padding: 0 24px;
+}
+
+.link-button {
+    height: 48px;
+    border-radius: 24px;
+    padding: 0 24px;
+    font-weight: 500;
+}
