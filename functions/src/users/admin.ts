@@ -350,7 +350,7 @@ export const getQueueStats = onCall({
         const db = admin.firestore();
         let totalPending = 0;
         let totalSucceeded = 0;
-        let totalFailed = 0;
+        let totalStuck = 0;
         // Advanced stats
         let totalThroughput = 0;
         let maxLagMs = 0;
@@ -358,13 +358,13 @@ export const getQueueStats = onCall({
 
         const ONE_HOUR_AGO = Date.now() - (60 * 60 * 1000);
 
-        const providers: { name: string; pending: number; succeeded: number; failed: number }[] = [];
+        const providers: { name: string; pending: number; succeeded: number; stuck: number }[] = [];
 
         // Map over providers to get individual and total stats
         for (const [providerName, collections] of Object.entries(PROVIDER_QUEUES)) {
             let providerPending = 0;
             let providerSucceeded = 0;
-            let providerFailed = 0;
+            let providerStuck = 0;
 
             await Promise.all(collections.map(async (collectionName) => {
                 const col = db.collection(collectionName);
@@ -401,7 +401,7 @@ export const getQueueStats = onCall({
 
                 providerPending += p.data().count;
                 providerSucceeded += s.data().count;
-                providerFailed += f.data().count;
+                providerStuck += f.data().count;
 
                 retryHistogram['0-3'] += retry0to3.data().count;
                 retryHistogram['4-7'] += retry4to7.data().count;
@@ -412,13 +412,13 @@ export const getQueueStats = onCall({
 
             totalPending += providerPending;
             totalSucceeded += providerSucceeded;
-            totalFailed += providerFailed;
+            totalStuck += providerStuck;
 
             providers.push({
                 name: providerName,
                 pending: providerPending,
                 succeeded: providerSucceeded,
-                failed: providerFailed
+                stuck: providerStuck
             });
         }
 
@@ -460,7 +460,7 @@ export const getQueueStats = onCall({
         return {
             pending: totalPending,
             succeeded: totalSucceeded,
-            failed: totalFailed,
+            stuck: totalStuck,
             providers,
             dlq,
             advanced: {

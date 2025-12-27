@@ -57,12 +57,12 @@ export interface DLQStats {
 export interface QueueStats {
     pending: number;
     succeeded: number;
-    failed: number;
+    stuck: number;
     providers: {
         name: string;
         pending: number;
         succeeded: number;
-        failed: number;
+        stuck: number;
     }[];
     dlq?: DLQStats;
     advanced?: {
