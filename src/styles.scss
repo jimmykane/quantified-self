@@ -304,6 +304,15 @@ mat-paginator,
 }
 
 /* Global Card Title - Standardized Typography */
+mat-table {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.mat-header-cell {
+  font-size: unset;
+}
+
 .card-title {
   font-size: 1.3rem;
   font-weight: 700;
