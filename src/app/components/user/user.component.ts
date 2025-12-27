@@ -27,6 +27,11 @@ export class UserComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    const resolvedData = this.route.snapshot.data['userData'];
+    if (resolvedData && resolvedData.user) {
+        this.user = resolvedData.user;
+    }
+
     this.userSubscription = this.authService.user$.subscribe((user) => {
       if (!user) {
         this.router.navigate(['login']).then(() => {
@@ -34,7 +39,7 @@ export class UserComponent implements OnInit, OnDestroy {
         });
       }
       // First get our current user
-      this.user = user;
+      this.user = user!;
     })
   }
 

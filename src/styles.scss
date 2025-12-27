@@ -369,3 +369,117 @@ mat-card {
     }
   }
 }
+/* ==========================================================================
+   Global App Card Components
+   Standardized widgets for dashboard stats and metrics.
+   ========================================================================== */
+
+.app-stat-card {
+    padding: 1.25rem;
+    border-radius: 12px;
+    // Glass background handled by .glass-card if combined, or inherit transparency
+    background: transparent; 
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0.25rem;
+    transition: transform 0.2s;
+    color: var(--mat-sys-on-surface, inherit);
+    min-height: 100px; // Ensure consistent height
+}
+
+.dark-theme .app-stat-card {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+}
+
+.app-stat-card:hover {
+    transform: translateY(-4px);
+}
+
+.app-stat-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+
+    mat-icon {
+        width: 24px;
+        height: 24px;
+        font-size: 24px;
+    }
+
+    span {
+        font-size: 0.9rem;
+        opacity: 0.7;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 500;
+    }
+}
+
+.app-stat-value {
+    margin: 4px 0 0;
+    font-size: 2rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.app-spinner-mini {
+    height: 32px; // Matches 2rem font size
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+/* Status Variants (Global) */
+.app-stat-card.status-pending {
+    border-bottom: 4px solid #f59e0b;
+
+    .app-stat-value, mat-icon { color: #f59e0b; }
+}
+
+.dark-theme .app-stat-card.status-pending {
+    border-bottom: 4px solid #f59e0b;
+}
+
+.app-stat-card.status-success {
+    border-bottom: 4px solid #10b981;
+
+    .app-stat-value, mat-icon { color: #10b981; }
+}
+
+.dark-theme .app-stat-card.status-success {
+    border-bottom: 4px solid #10b981;
+}
+
+.app-stat-card.status-error {
+    border-bottom: 4px solid #ef4444;
+
+    .app-stat-value, mat-icon { color: #ef4444; }
+}
+
+.dark-theme .app-stat-card.status-error {
+    border-bottom: 4px solid #ef4444;
+}
+
+.app-stat-card.status-dlq {
+    border-bottom: 4px solid #d32f2f;
+    background: rgba(244, 67, 54, 0.05);
+    
+    .app-stat-value, mat-icon { color: #d32f2f; }
+}
+
+/* Global Text Gradient (Fancy Title) */
+.app-text-gradient {
+    font-size: 2.5rem;
+    font-weight: 800;
+    margin: 0;
+    background: linear-gradient(135deg, var(--mat-sys-primary, #3f51b5), var(--mat-sys-secondary, #ff4081));
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    display: inline-block;
+}

@@ -44,38 +44,55 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     this.isLoading = true;
-    this.userSubscription = this.authService.user$.subscribe((async (user) => {
-      if (!user) {
-        this.isLoading = false;
-        this.snackBar.open('You must login if you want to use the service features', 'OK', {
-          duration: undefined,
-        });
-        return
-      }
-      this.user = user;
-      this.isGuest = !!(user as any)?.isAnonymous;
-      if (this.isGuest) {
-        this.isLoading = false;
-        this.snackBar.open('You must login with a non-guest account if you want to use the service features', 'OK', {
-          duration: undefined,
-        });
-        return;
-      }
 
-      // Check for Pro Role via Claims (Force Refresh)
-      this.hasProAccess = await this.userService.isPro();
-
-      const serviceNameParam = this.route.snapshot.queryParamMap.get('serviceName');
-      if (serviceNameParam === ServiceNames.GarminHealthAPI) {
-        this.activeSection = 'garmin';
-      } else if (serviceNameParam === ServiceNames.COROSAPI) {
-        this.activeSection = 'coros';
-      } else {
-        this.activeSection = 'suunto';
-      }
+    // Use resolver data if available
+    const resolvedData = this.route.snapshot.data['userData'];
+    if (resolvedData) {
+      this.processUser(resolvedData.user, resolvedData.isPro);
       this.isLoading = false;
-    }))
+    }
 
+    this.userSubscription = this.authService.user$.subscribe((async (user) => {
+      // Re-check just in case, or if user changes session while on page (rare but possible)
+      // Note: isPro check is async, so we might want to skip it if we just got it from resolver?
+      // For simplicity, we can just re-run standard check if it's an update event.
+      // But efficiently:
+      if (!this.user || (user && user.uid !== this.user.uid)) {
+        const isPro = await this.userService.isPro();
+        this.processUser(user, isPro);
+      }
+    }));
+  }
+
+  processUser(user: User | null, isPro: boolean) {
+    if (!user) {
+      this.isLoading = false;
+      this.snackBar.open('You must login if you want to use the service features', 'OK', {
+        duration: undefined,
+      });
+      return
+    }
+    this.user = user;
+    this.isGuest = !!(user as any)?.isAnonymous;
+    if (this.isGuest) {
+      this.isLoading = false;
+      this.snackBar.open('You must login with a non-guest account if you want to use the service features', 'OK', {
+        duration: undefined,
+      });
+      return;
+    }
+
+    this.hasProAccess = isPro;
+
+    const serviceNameParam = this.route.snapshot.queryParamMap.get('serviceName');
+    if (serviceNameParam === ServiceNames.GarminHealthAPI) {
+      this.activeSection = 'garmin';
+    } else if (serviceNameParam === ServiceNames.COROSAPI) {
+      this.activeSection = 'coros';
+    } else {
+      this.activeSection = 'suunto';
+    }
+    this.isLoading = false;
   }
 
   ngOnDestroy(): void {

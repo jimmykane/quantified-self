@@ -11,12 +11,16 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { adminGuard } from '../authentication/admin.guard';
+import { adminResolver } from '../resolvers/admin.resolver';
 
 const routes: Routes = [
     {
         path: '',
         component: AdminDashboardComponent,
-        canActivate: [adminGuard]
+        canActivate: [adminGuard],
+        resolve: {
+            adminData: adminResolver
+        }
     }
 ];
 

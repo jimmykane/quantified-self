@@ -4,6 +4,7 @@
     margin-bottom: 2rem;
 }
 
+
 .admin-container {
     padding: 2rem;
     max-width: 1600px;
@@ -13,17 +14,6 @@
 .header-container {
     margin-bottom: 2rem;
     text-align: center;
-}
-
-.premium-title {
-    font-size: 2.5rem;
-    font-weight: 800;
-    margin: 0;
-    background: linear-gradient(135deg, var(--mat-sys-primary, #3f51b5), var(--mat-sys-secondary, #ff4081));
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    display: inline-block;
 }
 
 .premium-subtitle {
@@ -56,119 +46,6 @@
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 1.5rem;
     margin-bottom: 3rem;
-}
-
-.stat-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 8px;
-
-    mat-icon {
-        width: 24px;
-        height: 24px;
-        font-size: 24px;
-    }
-
-    span {
-        font-size: 0.9rem;
-        opacity: 0.7;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        font-weight: 500;
-    }
-}
-
-.stat-card {
-    padding: 1.25rem;
-    border-radius: 12px;
-    // background handled by .glass-card
-    background: transparent;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    gap: 0.25rem;
-    transition: transform 0.2s;
-
-    // Inherit text color
-    color: var(--mat-sys-on-surface, inherit);
-}
-
-:host-context(.dark-theme) .stat-card {
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-}
-
-.stat-card:hover {
-    transform: translateY(-4px);
-}
-
-
-/* Specific colors and accents - Placed at end to override dark theme defaults */
-.stat-card.pending {
-    border-bottom: 4px solid #f59e0b;
-
-    .stat-value {
-        color: #f59e0b;
-    }
-
-    mat-icon {
-        color: #f59e0b;
-    }
-}
-
-.stat-card.succeeded {
-    border-bottom: 4px solid #10b981;
-
-    .stat-value {
-        color: #10b981;
-    }
-
-    mat-icon {
-        color: #10b981;
-    }
-}
-
-.stat-card.failed,
-.stat-card.stuck {
-    border-bottom: 4px solid #ef4444;
-
-    .stat-value {
-        color: #ef4444;
-    }
-
-    mat-icon {
-        color: #ef4444;
-    }
-}
-
-.stat-card.dlq {
-    border-bottom: 4px solid #d32f2f;
-    background: rgba(244, 67, 54, 0.05); // Slight background tint
-
-    .stat-value {
-        color: #d32f2f;
-    }
-
-    mat-icon {
-        color: #d32f2f;
-    }
-}
-
-.stat-value {
-    margin: 4px 0 0;
-    font-size: 2rem;
-    font-weight: 800;
-    line-height: 1;
-}
-
-.spinner-container {
-    height: 32px; // Matches 2rem font size
-    margin-top: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
 }
 
 /* Data Sections */
@@ -219,6 +96,68 @@ th.mat-header-cell {
 td.mat-cell {
     font-size: 0.95rem;
     // color: #37474f; /* REMOVED */
+}
+
+/* Text & Header Styles */
+.card-title,
+.chart-header {
+    margin: 16px;
+    margin-top: 0;
+    color: #333; // Light theme default
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+
+:host-context(.dark-theme) .card-title,
+:host-context(.dark-theme) .chart-header {
+    color: rgba(255, 255, 255, 0.87);
+}
+
+.subsection-title {
+    margin-bottom: 12px;
+    font-size: 0.9rem;
+    color: #666; // Light theme default
+}
+
+:host-context(.dark-theme) .subsection-title {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.maintenance-description {
+    margin: 0 0 16px 0;
+    font-size: 0.9rem;
+    color: #666; // Light theme default
+}
+
+:host-context(.dark-theme) .maintenance-description {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.empty-state {
+    color: #999;
+    font-size: 0.9rem;
+    font-style: italic;
+}
+
+:host-context(.dark-theme) .empty-state {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.text-detail-date {
+    font-size: 11px;
+    color: #666;
+}
+
+:host-context(.dark-theme) .text-detail-date {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.text-detail-muted {
+    color: #999;
+}
+
+:host-context(.dark-theme) .text-detail-muted {
+    color: rgba(255, 255, 255, 0.3);
 }
 
 /* User Identity Cell */
@@ -338,22 +277,6 @@ td.mat-cell {
         background: rgba(255, 255, 255, 0.05);
         color: rgba(255, 255, 255, 0.5);
     }
-}
-
-/* Glass Card */
-.glass-card {
-    background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.4);
-    border-radius: 16px;
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.05);
-}
-
-:host-context(.dark-theme) .glass-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
 
 /* Queue Status Styles */
@@ -543,77 +466,6 @@ td.mat-cell {
     background-color: rgba(255, 255, 255, 0.2);
 }
 
-/* Specific colors and accents - Placed at end to override dark theme defaults */
-.stat-card.pending {
-    border-bottom: 4px solid #f59e0b;
-
-    .stat-value {
-        color: #f59e0b;
-    }
-
-    mat-icon {
-        color: #f59e0b;
-    }
-}
-
-:host-context(.dark-theme) .stat-card.pending {
-    border-bottom: 4px solid #f59e0b;
-}
-
-.stat-card.succeeded {
-    border-bottom: 4px solid #10b981;
-
-    .stat-value {
-        color: #10b981;
-    }
-
-    mat-icon {
-        color: #10b981;
-    }
-}
-
-:host-context(.dark-theme) .stat-card.succeeded {
-    border-bottom: 4px solid #10b981;
-}
-
-.stat-card.failed,
-.stat-card.stuck {
-    border-bottom: 4px solid #ef4444;
-
-    .stat-value {
-        color: #ef4444;
-    }
-
-    mat-icon {
-        color: #ef4444;
-    }
-}
-
-:host-context(.dark-theme) {
-
-    .stat-card.failed,
-    .stat-card.stuck {
-        border-bottom: 4px solid #ef4444;
-    }
-}
-
-
-.stat-card.dlq {
-    border-bottom: 4px solid #d32f2f;
-    background: rgba(244, 67, 54, 0.05); // Slight background tint
-
-    .stat-value {
-        color: #d32f2f;
-    }
-
-    mat-icon {
-        color: #d32f2f;
-    }
-}
-
-.stat-value {
-    margin: 5px 0 0;
-    font-size: 2.5rem;
-    font-weight: 800;
-    line-height: 1;
+:host-context(.dark-theme) .status-dot {
+    background-color: rgba(255, 255, 255, 0.2);
 }

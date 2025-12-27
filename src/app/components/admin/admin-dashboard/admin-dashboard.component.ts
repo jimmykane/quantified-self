@@ -1,5 +1,7 @@
 import { Component, OnInit, ViewChild, AfterViewInit, OnDestroy } from '@angular/core';
 import { AdminService, AdminUser, ListUsersParams, QueueStats } from '../../../services/admin.service';
+import { ActivatedRoute } from '@angular/router';
+import { AdminResolverData } from '../../../resolvers/admin.resolver';
 import { MatSort, Sort } from '@angular/material/sort';
 import { MatPaginator, PageEvent } from '@angular/material/paginator';
 import { Subject } from 'rxjs';
@@ -106,7 +108,8 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     constructor(
         private adminService: AdminService,
         private logger: LoggerService,
-        private dialog: MatDialog
+        private dialog: MatDialog,
+        private route: ActivatedRoute
     ) { }
 
     ngOnInit(): void {
@@ -121,13 +124,26 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
             this.fetchUsers();
         });
 
-        // Initial fetch
-        this.fetchUsers();
+        // Use resolved data
+        const resolvedData = this.route.snapshot.data['adminData'] as AdminResolverData;
+        if (resolvedData) {
+            this.users = resolvedData.usersData.users;
+            this.totalCount = resolvedData.usersData.totalCount;
+            this.userStats = resolvedData.userStats;
+            this.isLoading = false;
+        } else {
+            // Fallback if no resolver (though with guard it shouldn't happen)
+            this.fetchUsers();
+            this.adminService.getTotalUserCount().subscribe(stats => {
+                this.userStats = stats;
+            });
+        }
+
+        // Stats and Maintenance are "secondary" data, can fetch separately or via resolver if improved later.
+        // For now, let's keep them async or we could have added them to resolver.
+        // Given "Resolvers for Layout", the user list is the layout. Queue stats are a widget.
         this.fetchQueueStats();
         this.fetchMaintenanceStatus();
-        this.adminService.getTotalUserCount().subscribe(stats => {
-            this.userStats = stats;
-        });
     }
 
     fetchQueueStats(): void {
