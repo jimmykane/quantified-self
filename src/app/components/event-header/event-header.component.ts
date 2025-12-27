@@ -15,13 +15,13 @@ import { EventStatsBottomSheetComponent } from '../event/stats-table/event-stats
 })
 
 export class EventHeaderComponent implements OnChanges {
-  @Input() event: EventInterface;
-  @Input() user: User;
+  @Input() event!: EventInterface;
+  @Input() user!: User;
   @Input() showType = true;
   @Input() showIcon = false;
   @Input() isOwner = false;
   @Input() selectedActivities: ActivityInterface[] = [];
-  @Input() unitSettings: UserUnitSettingsInterface;
+  @Input() unitSettings!: UserUnitSettingsInterface;
   @Input() statsToShow: string[] = [];
 
   constructor(
@@ -44,7 +44,7 @@ export class EventHeaderComponent implements OnChanges {
     this.cd.markForCheck(); // Trigger detection immediately
 
     // Then call service
-    await this.eventService.setEventPrivacy(this.user, this.event.getID(), this.event.privacy);
+    await this.eventService.setEventPrivacy(this.user, this.event.getID()!, this.event.privacy);
   }
 
   openEditDetails() {
