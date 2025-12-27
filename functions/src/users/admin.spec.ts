@@ -279,7 +279,7 @@ describe('getQueueStats Cloud Function', () => {
         // pending: 5 count * 5 queues = 25
         expect(result.pending).toBe(25);
         expect(result.succeeded).toBe(25);
-        expect(result.failed).toBe(25);
+        expect(result.stuck).toBe(25);
         expect(result.providers).toHaveLength(3);
 
         // Check DLQ stats
@@ -354,7 +354,8 @@ describe('getUserCount Cloud Function', () => {
             count: 150,
             total: 150,
             pro: 50,
-            basic: 100
+            basic: 50,
+            free: 50
         });
         expect(mockCollection).toHaveBeenCalledWith('users');
         expect(mockCollection).toHaveBeenCalledWith('subscriptions'); // collectionGroup calls this name

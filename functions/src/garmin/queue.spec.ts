@@ -9,7 +9,8 @@ const {
     mockWhere,
     mockCollection,
     mockRequestGet,
-    mockIncreaseRetryCountForQueueItem
+    mockIncreaseRetryCountForQueueItem,
+    mockMoveToDeadLetterQueue
 } = vi.hoisted(() => {
     return {
         mockSetEvent: vi.fn(),
@@ -17,7 +18,8 @@ const {
         mockWhere: vi.fn(),
         mockCollection: vi.fn(),
         mockRequestGet: vi.fn(),
-        mockIncreaseRetryCountForQueueItem: vi.fn()
+        mockIncreaseRetryCountForQueueItem: vi.fn(),
+        mockMoveToDeadLetterQueue: vi.fn(),
     };
 });
 
@@ -70,6 +72,7 @@ vi.mock('./auth/auth', () => ({
 vi.mock('../queue-utils', () => ({
     increaseRetryCountForQueueItem: mockIncreaseRetryCountForQueueItem,
     updateToProcessed: vi.fn(),
+    moveToDeadLetterQueue: mockMoveToDeadLetterQueue,
 }));
 
 // Mock parent queue functions
@@ -171,11 +174,11 @@ describe('processGarminHealthAPIActivityQueueItem', () => {
 
         // Verify
         expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('No token found'));
-        expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
+        expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
             queueItem,
             expect.any(Error),
-            20,
-            undefined
+            undefined,
+            'NO_TOKEN_FOUND'
         );
     });
 });
