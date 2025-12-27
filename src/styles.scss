@@ -244,11 +244,22 @@ section.component-container {
   background-size: cover;
 }
 
+/* CSS Variables for Theming */
+:root {
+  --mat-sys-surface: rgba(255, 255, 255, 0.90);
+  --mat-sys-on-surface: inherit;
+  /* Add other variables as needed */
+}
+
+.dark-theme {
+  --mat-sys-surface: rgba(30, 30, 30, 0.80);
+  /* --mat-sys-on-surface handles text via standard color property inheritance mostly */
+}
+
 /* Global Glassmorphism Card Style */
 .glass-card,
 mat-card {
-  background: rgba(255, 255, 255, 0.90) !important;
-  /* Brighter/Less dim (90%) */
+  background: var(--mat-sys-surface) !important;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.5);
@@ -262,12 +273,18 @@ mat-card {
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
+/* Global Paginator Transparent Override */
+mat-paginator,
+.mat-mdc-paginator {
+  background: transparent !important;
+}
+
 /* Dark Theme Overrides */
 .dark-theme {
 
   .glass-card,
   mat-card {
-    background: rgba(30, 30, 30, 0.80) !important;
+    /* Background handled by variable */
     border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2) !important;
   }
