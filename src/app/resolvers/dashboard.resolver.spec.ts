@@ -31,7 +31,7 @@ describe('dashboardResolver', () => {
     } as any;
 
     beforeEach(() => {
-        eventServiceSpy = { getEventsBy: vi.fn() };
+        eventServiceSpy = { getEventsBy: vi.fn(), getEventsOnceBy: vi.fn() };
         userServiceSpy = { getUserByID: vi.fn() };
         authServiceSpy = { user$: of(mockUser) };
         routerSpy = { navigate: vi.fn() };
@@ -53,7 +53,7 @@ describe('dashboardResolver', () => {
     });
 
     it('should resolve with user and empty events when date range is all and no events returned', () => new Promise<void>(done => {
-        eventServiceSpy.getEventsBy.mockReturnValue(of([]));
+        eventServiceSpy.getEventsOnceBy.mockReturnValue(of([]));
 
         const route = new ActivatedRouteSnapshot();
         vi.spyOn(route.paramMap, 'get').mockReturnValue(null);
@@ -64,7 +64,7 @@ describe('dashboardResolver', () => {
             expect(result.user).toEqual(mockUser);
             expect(result.events).toEqual([]);
             expect(result.targetUser).toBeUndefined(); // or null depending on impl
-            expect(eventServiceSpy.getEventsBy).toHaveBeenCalled();
+            expect(eventServiceSpy.getEventsOnceBy).toHaveBeenCalled();
             done();
         });
     }));
@@ -72,7 +72,7 @@ describe('dashboardResolver', () => {
     it('should resolve with targetUser when userID is present', () => new Promise<void>(done => {
         const mockTargetUser = new User('targetUser');
         userServiceSpy.getUserByID.mockReturnValue(of(mockTargetUser));
-        eventServiceSpy.getEventsBy.mockReturnValue(of([]));
+        eventServiceSpy.getEventsOnceBy.mockReturnValue(of([]));
 
         const route = new ActivatedRouteSnapshot();
         vi.spyOn(route.paramMap, 'get').mockImplementation((key) => {
@@ -92,7 +92,7 @@ describe('dashboardResolver', () => {
 
     it('should handle error when fetching targetUser and navigate', () => new Promise<void>(done => {
         userServiceSpy.getUserByID.mockReturnValue(throwError(() => new Error('User not found')));
-        eventServiceSpy.getEventsBy.mockReturnValue(of([]));
+        eventServiceSpy.getEventsOnceBy.mockReturnValue(of([]));
 
         const route = new ActivatedRouteSnapshot();
         vi.spyOn(route.paramMap, 'get').mockReturnValue('targetUser');
