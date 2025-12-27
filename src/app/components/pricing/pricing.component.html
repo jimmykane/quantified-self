@@ -44,11 +44,11 @@
   } @else {
   <div class="products-grid" *ngIf="products$ | async as products; else loading">
     @for (product of products; track product.id) {
-    <mat-card class="product-card" [class.current-plan]="product.metadata.role === currentRole"
+    <mat-card class="product-card glass-card" [class.current-plan-highlight]="product.metadata.role === currentRole"
       [class.pro-card]="product.metadata.role === 'pro'" [class.basic-card]="product.metadata.role === 'basic'">
 
       @if (product.metadata.role === 'pro') {
-      <div class="popular-ribbon">Best Value</div>
+      <div class="popular-ribbon pro-ribbon">Best Value</div>
       }
 
       <mat-card-header>
@@ -61,18 +61,19 @@
         <div class="features-list">
           @if (product.metadata.role === 'basic') {
           <ul>
-            <li><mat-icon color="accent">check</mat-icon> Up to 100 Activities</li>
-            <li><mat-icon color="warn">close</mat-icon> No Device Sync</li>
-            <li><mat-icon color="primary">dns</mat-icon> Covers server & analysis costs</li>
+            <li><mat-icon color="accent">check</mat-icon> Track up to 100 activities</li>
+            <li><mat-icon color="warn">close</mat-icon> Manual uploads only</li>
+            <li><mat-icon color="primary">dns</mat-icon> Help keep the project running</li>
           </ul>
           } @else if (product.metadata.role === 'pro') {
           <ul>
-            <li><mat-icon color="primary">check_circle</mat-icon> <strong>Unlimited</strong> Activities</li>
-            <li><mat-icon color="primary">check_circle</mat-icon> Sync Garmin, Suunto, COROS</li>
-            <li><mat-icon color="warn">favorite</mat-icon> Supports project development</li>
+            <li><mat-icon color="primary">check_circle</mat-icon> <strong>No limits</strong>, ever</li>
+            <li><mat-icon color="primary">check_circle</mat-icon> Auto-sync from your watch</li>
+            <li><mat-icon color="warn">favorite</mat-icon> Power the next big update</li>
           </ul>
           }
         </div>
+
 
         <div style="flex-grow: 1;"></div>
         <!-- Since we split into virtual products, each product has exactly 1 price usually -->
@@ -84,7 +85,12 @@
 
           <!-- Current Plan Indicator -->
           @if (currentRole && product.metadata.role === currentRole) {
-          <button mat-stroked-button disabled class="current-plan-btn">Current Plan</button>
+          <div class="current-plan-chip">
+            <mat-chip-row highlighted color="primary" class="current-plan-indicator">
+              <mat-icon matChipAvatar>check_circle</mat-icon>
+              Current Plan
+            </mat-chip-row>
+          </div>
           }
 
           <!-- Manage/Downgrade for Pro Users looking at Basic -->

@@ -4,6 +4,8 @@ import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatBadgeModule } from '@angular/material/badge';
 import { AppPaymentService, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
 import { AppUserService } from '../../services/app.user.service';
 import { Observable, map } from 'rxjs';
@@ -19,7 +21,7 @@ import { LoggerService } from '../../services/logger.service';
 @Component({
     selector: 'app-pricing',
     standalone: true,
-    imports: [CommonModule, MatCardModule, MatButtonModule, MatProgressSpinnerModule, MatIconModule],
+    imports: [CommonModule, MatCardModule, MatButtonModule, MatProgressSpinnerModule, MatIconModule, MatChipsModule, MatBadgeModule],
     templateUrl: './pricing.component.html',
     styleUrls: ['./pricing.component.scss']
 })
