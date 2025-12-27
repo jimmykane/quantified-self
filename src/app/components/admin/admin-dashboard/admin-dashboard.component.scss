@@ -33,6 +33,10 @@
     margin-top: 0.5rem;
 }
 
+:host-context(.dark-theme) .premium-subtitle {
+    color: rgba(255, 255, 255, 0.7);
+}
+
 .loading-shade {
     position: fixed;
     top: 0;

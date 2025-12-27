@@ -75,7 +75,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
 
     // Queue stats
     queueStats: QueueStats | null = null;
-    isLoadingStats = false;
+    isLoadingStats = true;
     userStats: { total: number; pro: number; basic: number } | null = null;
 
     // Charts

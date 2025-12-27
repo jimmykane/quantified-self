@@ -63,7 +63,7 @@
 
 
     <!-- Queue Status & Health Section -->
-    <div class="dashboard-section" *ngIf="queueStats || isLoadingStats">
+    <div class="dashboard-section">
         <div class="section-title">
             <h2>
                 <mat-icon>dns</mat-icon>
@@ -129,12 +129,16 @@
         </div>
 
         <!-- Charts -->
-        <div class="glass-card" *ngIf="queueStats?.advanced?.retryHistogram"
-            style="padding: 16px; margin-bottom: 24px;">
+        <div class="glass-card" style="padding: 16px; margin-bottom: 24px; min-height: 350px;">
             <h3 style="margin-top: 0; color: #333; font-size: 1.1rem; font-weight: 500;">Retry Distribution (Pending
                 Items)
             </h3>
-            <div class="chart-wrapper">
+
+            <div class="spinner-container" *ngIf="isLoadingStats" style="height: 300px; justify-content: center;">
+                <mat-spinner diameter="40"></mat-spinner>
+            </div>
+
+            <div class="chart-wrapper" *ngIf="!isLoadingStats && queueStats?.advanced?.retryHistogram">
                 <canvas baseChart [data]="barChartData" [options]="barChartOptions" [plugins]="barChartPlugins"
                     [legend]="barChartLegend" [type]="'bar'">
                 </canvas>
@@ -159,7 +163,8 @@
 
         <!-- DLQ Breakdown -->
         <div class="glass-card table-container" *ngIf="queueStats?.dlq?.total" style="margin-bottom: 24px;">
-            <h3 style="margin: 16px; color: #333; font-size: 1.1rem; font-weight: 500;">Failures Breakdown</h3>
+            <h3 style="margin: 16px; color: #333; font-size: 1.1rem; font-weight: 500;">Recent Failures Analysis (Last
+                50)</h3>
             <div style="display: flex; gap: 24px; padding: 0 16px 16px;">
 
                 <!-- By Context -->
