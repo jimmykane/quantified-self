@@ -1,5 +1,6 @@
 import * as functions from 'firebase-functions/v1';
 import { MAX_RETRY_COUNT, QUEUE_SCHEDULE, QUEUE_ITEM_TTL_MS } from './shared/queue-config';
+import { QueueErrors, QueueLogs } from './shared/constants';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import pLimit from 'p-limit';
@@ -260,9 +261,9 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
 
   // If there is no token for the user, give them a few chances to reconnect
   if (!tokenQuerySnapshots.size) {
-    logger.warn(`No token found for queue item ${queueItem.id}. Fail fast.`);
+    logger.warn(QueueLogs.NO_TOKEN_FOUND.replace('${id}', queueItem.id));
     // return updateToProcessed(queueItem, bulkWriter, { processingError: 'NO_TOKEN_FOUND' });
-    return moveToDeadLetterQueue(queueItem, new Error('No token found - Fail Fast'), bulkWriter, 'NO_TOKEN_FOUND');
+    return moveToDeadLetterQueue(queueItem, new Error(QueueErrors.NO_TOKEN_FOUND), bulkWriter, 'NO_TOKEN_FOUND');
   }
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
