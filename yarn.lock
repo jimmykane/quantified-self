@@ -201,12 +201,12 @@
     symbol-observable "4.0.0"
     uuid "8.3.2"
 
-"@angular/common@12.2.7":
-  version "12.2.7"
-  resolved "https://registry.yarnpkg.com/@angular/common/-/common-12.2.7.tgz#4cc6573fb29d32b6fe5513f6150a18a00381b9af"
-  integrity sha512-Gug5a59c4NwfmSvO9Ya7DoYjl6ndK7nDuBoPSpp6IHTlNE8FY/BOd29qEp/lYJ4cAWxVk14+lonUPs6C+Szekw==
+"@angular/common@19.2.16":
+  version "19.2.16"
+  resolved "https://registry.yarnpkg.com/@angular/common/-/common-19.2.16.tgz#2ce9c21b7f2181e6d6ab85c346ad6280ef83e23b"
+  integrity sha512-sugztO7XIiLRoVjn0WJK9ooBm9zejsqlE5k4ZGvy1zFafM8LMjFHwD4KymN8JB3AOb7Ad4lJHVq1IvwWnpqeWw==
   dependencies:
-    tslib "^2.2.0"
+    tslib "^2.3.0"
 
 "@angular/compiler-cli@12.2.7":
   version "12.2.7"
@@ -1689,10 +1689,10 @@
   resolved "https://registry.yarnpkg.com/@gar/promisify/-/promisify-1.1.2.tgz#30aa825f11d438671d585bd44e7fd564535fc210"
   integrity sha512-82cpyJyKRoQoRi+14ibCeGPu0CwypgtBAdBhq1WfvagpCZNKqwXbKwXllYSMG91DhmG4jt9gN8eP6lGOtozuaw==
 
-"@googlemaps/markerclustererplus@1.1.0":
-  version "1.1.0"
-  resolved "https://registry.yarnpkg.com/@googlemaps/markerclustererplus/-/markerclustererplus-1.1.0.tgz#7f48a2fafca14b68f300b0b34d437b57cf2188f5"
-  integrity sha512-Y5jiaoMzhUQ8tCyJzvV5/+6VYF154eeczPZKqQ6kdINoL6Jui4DzVPNPitWFjXmPL9UDkBoxu0PLxOQQGvNWug==
+"@googlemaps/markerclustererplus@^1.1.0":
+  version "1.2.10"
+  resolved "https://registry.yarnpkg.com/@googlemaps/markerclustererplus/-/markerclustererplus-1.2.10.tgz#e1a97ea7ae137e00d633367be1d49f0a008fa8b3"
+  integrity sha512-HY4ev+D3kO1+9oQjtKTojxVtJIS/kSWJfry6cpKoXC97kBQc5Vguqu5x6pLnh+70N0Au+16Yl7iu4LZaIOTstw==
 
 "@grpc/grpc-js@^1.3.2":
   version "1.3.7"
@@ -9876,10 +9876,10 @@ tslib@^1.10.0, tslib@^1.13.0, tslib@^1.8.1, tslib@^1.9.0, tslib@^1.9.3:
   resolved "https://registry.yarnpkg.com/tslib/-/tslib-1.14.1.tgz#cf2d38bdc34a134bcaf1091c41f6619e2f672d00"
   integrity sha512-Xni35NKzjgMrwevysHTCArtLDpPvye8zV/0E4EyYn43P7/7qvQwPh9BGkHewbMulVntbigmcT7rdX3BNo9wRJg==
 
-tslib@^2.0.0, tslib@^2.0.1, tslib@^2.1.0, tslib@^2.2.0:
-  version "2.3.1"
-  resolved "https://registry.yarnpkg.com/tslib/-/tslib-2.3.1.tgz#e8a335add5ceae51aa261d32a490158ef042ef01"
-  integrity sha512-77EbyPPpMz+FRFRuAFlWMtmgUWGe9UOG2Z25NqCwiIjRhOf5iKGuzSe5P2w1laq+FkRy4p+PCuVkJSGkzTEKVw==
+tslib@^2.0.0, tslib@^2.0.1, tslib@^2.1.0, tslib@^2.2.0, tslib@^2.3.0:
+  version "2.8.1"
+  resolved "https://registry.yarnpkg.com/tslib/-/tslib-2.8.1.tgz#612efe4ed235d567e8aba5f2a5fab70280ade83f"
+  integrity sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==
 
 tslib@~2.1.0:
   version "2.1.0"

@@ -26,7 +26,7 @@
     "@amcharts/amcharts4": "4.10.22",
     "@angular/animations": "12.2.7",
     "@angular/cdk": "^12.2.7",
-    "@angular/common": "12.2.7",
+    "@angular/common": "19.2.16",
     "@angular/compiler": "12.2.7",
     "@angular/core": "12.2.7",
     "@angular/fire": "7.0.4",
