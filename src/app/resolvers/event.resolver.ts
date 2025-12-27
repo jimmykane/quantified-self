@@ -17,7 +17,12 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { LoggerService } from '../services/logger.service';
 
-export const eventResolver: ResolveFn<EventInterface> = (
+export interface EventResolverData {
+    event: EventInterface;
+    user: User | null;
+}
+
+export const eventResolver: ResolveFn<EventResolverData> = (
     route: ActivatedRouteSnapshot,
     state: RouterStateSnapshot
 ) => {
@@ -61,15 +66,21 @@ export const eventResolver: ResolveFn<EventInterface> = (
                 new User(targetUserID),
                 eventID,
                 dataTypes
-            ).pipe(take(1));
+            ).pipe(
+                take(1),
+                map(event => ({ event, user }))
+            );
         }),
-        map(event => {
+        map(({ event, user }) => {
             if (event) {
-                return event;
+                return { event, user };
             } else {
                 snackBar.open('Event not found', 'Close', { duration: 3000 });
                 router.navigate(['/dashboard']);
-                return null; // Or throw error to be caught
+                // We must return something that matches the signature or throw, but since we navigated, EMPTY is safe logic-wise, 
+                // but typescript might want the return type. 
+                // In a resolver, returning EMPTY keeps the navigation hanging or cancels it.
+                return null;
             }
         }),
         catchError((error) => {
@@ -77,6 +88,8 @@ export const eventResolver: ResolveFn<EventInterface> = (
             snackBar.open('Error loading event', 'Close', { duration: 3000 });
             router.navigate(['/dashboard']);
             return EMPTY;
-        })
+        }),
+        // Cast the final output to ensure it matches ResolveFn<EventResolverData>
+        map(result => result as EventResolverData)
     );
 };

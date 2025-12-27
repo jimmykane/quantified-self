@@ -1,12 +1,16 @@
 import { NgModule } from '@angular/core';
 import { Routes, RouterModule } from '@angular/router';
-import {DashboardComponent} from './components/dashboard/dashboard.component';
+import { DashboardComponent } from './components/dashboard/dashboard.component';
+import { dashboardResolver } from './resolvers/dashboard.resolver';
 
 
 const routes: Routes = [
   {
     path: '',
-    component: DashboardComponent
+    component: DashboardComponent,
+    resolve: {
+      dashboardData: dashboardResolver
+    }
   }
 ];
 

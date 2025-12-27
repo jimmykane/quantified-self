@@ -108,49 +108,39 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
     }));
 
     this.subscriptions.push(this.route.data.subscribe((data: any) => {
-      this.event = data.event;
+      const resolvedData = data.event as any; // Cast to bypass strict check if typing is loose in route def
+      // Ideally: data.event is EventResolverData.
+      // We need to check if it has .event and .user structure.
+
+      // Check if it's the new structure
+      if (resolvedData && resolvedData.event) {
+        this.event = resolvedData.event;
+        this.currentUser = resolvedData.user;
+      } else {
+        // Fallback for safety if resolver fails to update or old structure
+        this.event = resolvedData;
+      }
+
       this.logger.log('[EventCard] Event data loaded:', this.event);
-      this.logger.log('[EventCard] Event metadata (originalFiles):', (this.event as any).originalFiles);
-      this.logger.log('[EventCard] Event metadata (originalFile):', (this.event as any).originalFile);
-      this.event.getActivities().forEach(a => this.logger.log(`[EventCard] Activity ${a.getID()}:`, a));
+
+      if (this.currentUser) {
+        this.applyUserSettings(this.currentUser);
+      }
 
       this.activitySelectionService.selectedActivities.clear();
       this.activitySelectionService.selectedActivities.select(...this.event.getActivities());
-      // Fallback/Initial set
       this.selectedActivities = this.event.getActivities();
 
-      this.targetUserID = this.route.snapshot.paramMap.get('userID');
+      this.targetUserID = this.route.snapshot.paramMap.get('userID')!;
       this.changeDetectorRef.detectChanges();
     }));
 
     this.subscriptions.push(this.authService.user$.subscribe((user: User | null) => {
-      this.currentUser = user;
+      // Only update if we didn't just get it from resolver, or if it changed.
+      // Simple assignment is fine.
+      this.currentUser = user!;
       if (this.currentUser) {
-        const user = this.currentUser;
-        this.userUnitSettings = user.settings.unitSettings;
-        this.chartXAxisType = user.settings.chartSettings.xAxisType;
-        this.chartDownSamplingLevel = user.settings.chartSettings.downSamplingLevel;
-        this.chartGainAndLossThreshold = user.settings.chartSettings.gainAndLossThreshold;
-        this.chartCursorBehaviour = user.settings.chartSettings.chartCursorBehaviour;
-        this.showAllData = user.settings.chartSettings.showAllData;
-        this.useChartAnimations = user.settings.chartSettings.useAnimations;
-        this.chartDisableGrouping = user.settings.chartSettings.disableGrouping;
-        this.showMapLaps = user.settings.mapSettings.showLaps;
-        this.showMapPoints = user.settings.mapSettings.showPoints;
-        this.showChartLaps = user.settings.chartSettings.showLaps;
-        this.showChartGrid = user.settings.chartSettings.showGrid;
-        this.stackChartYAxes = user.settings.chartSettings.stackYAxes;
-        this.chartHideAllSeriesOnInit = user.settings.chartSettings.hideAllSeriesOnInit;
-        this.showMapArrows = user.settings.mapSettings.showArrows;
-        this.mapStrokeWidth = user.settings.mapSettings.strokeWidth;
-        this.mapLapTypes = user.settings.mapSettings.lapTypes;
-        this.chartLapTypes = user.settings.chartSettings.lapTypes;
-        this.chartStrokeWidth = user.settings.chartSettings.strokeWidth;
-        this.chartStrokeOpacity = user.settings.chartSettings.strokeOpacity;
-        this.chartFillOpacity = user.settings.chartSettings.fillOpacity;
-        this.chartExtraMaxForPower = user.settings.chartSettings.extraMaxForPower;
-        this.chartExtraMaxForPace = user.settings.chartSettings.extraMaxForPace;
-        this.chartDataTypesToUse = this.userService.getUserChartDataTypesToUse(user);
+        this.applyUserSettings(this.currentUser);
       }
       this.changeDetectorRef.detectChanges();
     }));
@@ -172,10 +162,34 @@ export class EventCardComponent implements OnInit, OnDestroy, OnChanges {
       this.mapTheme = mapTheme;
       this.changeDetectorRef.detectChanges();
     }));
-
-
   }
 
+  private applyUserSettings(user: User) {
+    this.userUnitSettings = user.settings.unitSettings;
+    this.chartXAxisType = user.settings.chartSettings.xAxisType;
+    this.chartDownSamplingLevel = user.settings.chartSettings.downSamplingLevel;
+    this.chartGainAndLossThreshold = user.settings.chartSettings.gainAndLossThreshold;
+    this.chartCursorBehaviour = user.settings.chartSettings.chartCursorBehaviour;
+    this.showAllData = user.settings.chartSettings.showAllData;
+    this.useChartAnimations = user.settings.chartSettings.useAnimations;
+    this.chartDisableGrouping = user.settings.chartSettings.disableGrouping;
+    this.showMapLaps = user.settings.mapSettings.showLaps;
+    this.showMapPoints = user.settings.mapSettings.showPoints;
+    this.showChartLaps = user.settings.chartSettings.showLaps;
+    this.showChartGrid = user.settings.chartSettings.showGrid;
+    this.stackChartYAxes = user.settings.chartSettings.stackYAxes;
+    this.chartHideAllSeriesOnInit = user.settings.chartSettings.hideAllSeriesOnInit;
+    this.showMapArrows = user.settings.mapSettings.showArrows;
+    this.mapStrokeWidth = user.settings.mapSettings.strokeWidth;
+    this.mapLapTypes = user.settings.mapSettings.lapTypes;
+    this.chartLapTypes = user.settings.chartSettings.lapTypes;
+    this.chartStrokeWidth = user.settings.chartSettings.strokeWidth;
+    this.chartStrokeOpacity = user.settings.chartSettings.strokeOpacity;
+    this.chartFillOpacity = user.settings.chartSettings.fillOpacity;
+    this.chartExtraMaxForPower = user.settings.chartSettings.extraMaxForPower;
+    this.chartExtraMaxForPace = user.settings.chartSettings.extraMaxForPace;
+    this.chartDataTypesToUse = this.userService.getUserChartDataTypesToUse(user);
+  }
 
   isOwner() {
     return !!(this.targetUserID && this.currentUser && (this.targetUserID === this.currentUser.uid));
