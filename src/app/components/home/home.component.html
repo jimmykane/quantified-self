@@ -161,37 +161,58 @@
 </div>
 
 <div class="footer rich-footer">
-  <div class="footer-row partners">
-    <mat-icon class="firebase" svgIcon="jetbrains_logo"
-      onclick="window.open('https://jetbrains.com/?ref=quantified-self.io')"></mat-icon>
-    <mat-icon class="firebase" svgIcon="firebase"
-      onclick="window.open('https://firebase.google.com/?ref=quantified-self.io')"></mat-icon>
-    <mat-icon class="amcharts" svgIcon="amcharts"
-      onclick="window.open('https://amcharts.com/?ref=quantified-self.io')"></mat-icon>
+
+  <!-- 1. Maker Section (Primary Focus) -->
+  <div class="footer-section maker-profile">
+    <div class="avatar-wrapper">
+      <img src="https://www.gravatar.com/avatar/50eda10b9e16333f9e9cd3b8f1e0918a?s=120" alt="Dimitrios Kanellopoulos"
+        class="avatar mat-elevation-z4">
+    </div>
+    <div class="maker-info">
+      <span>Made by</span>
+      <a href="https://dimitrioskanellopoulos.com?utm_source=quantified-self-io" target="_blank"
+        class="maker-link app-text-gradient">Dimitrios Kanellopoulos</a>
+    </div>
   </div>
 
-  <mat-divider [inset]="true" class="footer-divider"></mat-divider>
+  <!-- 2. Combined Ecosystem Row -->
+  <div class="footer-section ecosystem">
+    <!-- Integrations -->
+    <div class="logo-group">
+      <mat-icon class="partner-logo" svgIcon="garmin"
+        (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.GarminHealthAPI }})"
+        matTooltip="Garmin Integration"></mat-icon>
+      <mat-icon class="partner-logo" svgIcon="suunto"
+        (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.SuuntoApp } })"
+        matTooltip="Suunto Integration"></mat-icon>
+      <mat-icon class="partner-logo wide" svgIcon="coros"
+        (click)="router.navigate(['/services'],{ queryParams: { serviceName: serviceNames.COROSAPI }})"
+        matTooltip="COROS Integration"></mat-icon>
+    </div>
 
-  <div class="footer-row devices">
-    <mat-icon class="large-svg-icon" svgIcon="suunto"
-      (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.SuuntoApp } });"></mat-icon>
-    <mat-icon class="large-svg-icon-coros" svgIcon="coros"
-      (click)="router.navigate(['/services'],{ queryParams: { serviceName: serviceNames.COROSAPI }});"></mat-icon>
-    <mat-icon class="large-svg-icon" svgIcon="garmin"
-      (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.GarminHealthAPI }});"></mat-icon>
+    <div class="vertical-divider"></div>
+
+    <!-- Built With -->
+    <div class="logo-group">
+      <mat-icon class="partner-logo wide" svgIcon="firebase"
+        onclick="window.open('https://firebase.google.com/?ref=quantified-self.io')"
+        matTooltip="Built with Firebase"></mat-icon>
+      <mat-icon class="partner-logo" svgIcon="jetbrains_logo"
+        onclick="window.open('https://jetbrains.com/?ref=quantified-self.io')"
+        matTooltip="Coded in WebStorm"></mat-icon>
+      <img src="assets/logos/antigravity.svg" class="partner-logo wide" alt="Antigravity"
+        matTooltip="Coded with Antigravity">
+      <mat-icon class="partner-logo wide" svgIcon="amcharts"
+        onclick="window.open('https://amcharts.com/?ref=quantified-self.io')"
+        matTooltip="Charts by amCharts"></mat-icon>
+    </div>
   </div>
 
-  <mat-divider [inset]="true" class="footer-divider"></mat-divider>
-
-  <div class="footer-row made-by">
-    <img src="https://www.gravatar.com/avatar/50eda10b9e16333f9e9cd3b8f1e0918a?s=80" alt="Dimitrios Kanellopoulos"
-      class="avatar mat-elevation-z2">
-    <span>Made by <a href="https://dimitrioskanellopoulos.com?utm_source=quantified-self-io" target="_blank"
-        class="maker-link app-text-gradient">Dimitrios Kanellopoulos</a></span>
-  </div>
-
-  <div class="footer-row bottom-row">
+  <!-- 3. Legal / Bottom -->
+  <div class="footer-section bottom-legal">
     <span class="privacy-link" routerLink="/policies">Privacy & Policies</span>
+    <span class="dot-separator">&bull;</span>
     <span class="copyright">&copy; {{ currentYear }} Quantified Self</span>
   </div>
+
 </div>

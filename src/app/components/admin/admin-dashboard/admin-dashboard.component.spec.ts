@@ -14,6 +14,7 @@ import { FormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { ActivatedRoute } from '@angular/router';
 
 describe('AdminDashboardComponent', () => {
     let component: AdminDashboardComponent;
@@ -58,8 +59,8 @@ describe('AdminDashboardComponent', () => {
     beforeEach(async () => {
         adminServiceSpy = {
             getUsers: vi.fn().mockReturnValue(of(mockResponse)),
-            getQueueStatsDirect: vi.fn().mockReturnValue(of({ pending: 0, succeeded: 0, failed: 0, providers: [] })),
-            getTotalUserCount: vi.fn().mockReturnValue(of({ total: 100, pro: 30, basic: 70 })),
+            getQueueStatsDirect: vi.fn().mockReturnValue(of({ pending: 0, succeeded: 0, stuck: 0, providers: [] })),
+            getTotalUserCount: vi.fn().mockReturnValue(of({ total: 100, pro: 30, basic: 70, free: 0 })),
             getMaintenanceStatus: vi.fn().mockReturnValue(of({ enabled: false, message: 'Test' })),
             setMaintenanceMode: vi.fn().mockReturnValue(of({ success: true, enabled: true, message: 'Test' }))
         };
@@ -85,7 +86,20 @@ describe('AdminDashboardComponent', () => {
             ],
             providers: [
                 { provide: AdminService, useValue: adminServiceSpy },
-                provideCharts(withDefaultRegisterables())
+                provideCharts(withDefaultRegisterables()),
+                {
+                    provide: ActivatedRoute,
+                    useValue: {
+                        snapshot: {
+                            data: {
+                                adminData: {
+                                    usersData: mockResponse,
+                                    userStats: { total: 100, pro: 30, basic: 70, free: 0 }
+                                }
+                            }
+                        }
+                    }
+                }
             ]
         })
             .overrideComponent(AdminDashboardComponent, {
@@ -106,22 +120,16 @@ describe('AdminDashboardComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('should fetch users on init with correct parameters', () => {
-        expect(adminServiceSpy.getUsers).toHaveBeenCalledWith({
-            page: 0,
-            pageSize: 10,
-            searchTerm: undefined,
-            sortField: 'email',
-            sortDirection: 'asc'
-        });
+    it('should use resolved users on init', () => {
+        expect(adminServiceSpy.getUsers).not.toHaveBeenCalled();
         expect(component.users).toEqual(mockUsers);
         expect(component.totalCount).toBe(2);
         expect(component.isLoading).toBe(false);
     });
 
-    it('should fetch user stats on init', () => {
-        expect(adminServiceSpy.getTotalUserCount).toHaveBeenCalled();
-        expect(component.userStats).toEqual({ total: 100, pro: 30, basic: 70 });
+    it('should use resolved user stats on init', () => {
+        expect(adminServiceSpy.getTotalUserCount).not.toHaveBeenCalled();
+        expect(component.userStats).toEqual({ total: 100, pro: 30, basic: 70, free: 0 });
     });
 
     it('should handle errors when fetching users', () => {

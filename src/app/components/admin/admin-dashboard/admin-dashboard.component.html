@@ -129,7 +129,7 @@
         </div>
 
         <!-- Charts -->
-        <div class="glass-card" style="padding: 16px; margin-bottom: 24px; min-height: 350px;">
+        <div class="glass-card" style="margin-bottom: 24px; min-height: 350px;">
             <h3 class="chart-header">Retry Distribution (Pending
                 Items)
             </h3>
@@ -300,6 +300,19 @@
                     <span>Basic Users</span>
                 </div>
                 <div class="app-stat-value" *ngIf="userStats">{{ userStats.basic }}</div>
+                <div class="app-spinner-mini" *ngIf="!userStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </div>
+
+            <!-- Free Users -->
+            <div class="glass-card app-stat-card">
+                <div class="app-stat-header">
+                    <mat-icon>money_off</mat-icon>
+                    <span>Free Users</span>
+                </div>
+                <!-- Use opacity for "neutral/basic" look -->
+                <div class="app-stat-value" *ngIf="userStats" style="opacity: 0.7;">{{ userStats.free }}</div>
                 <div class="app-spinner-mini" *ngIf="!userStats">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>

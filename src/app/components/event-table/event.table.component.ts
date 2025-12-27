@@ -450,12 +450,26 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     // return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
   }
 
-  search(searchTerm) {
+  searchTerm: string = '';
+
+  search(searchTerm: string) {
+    this.searchTerm = searchTerm;
     this.data.filter = searchTerm.trim().toLowerCase();
   }
 
-  onKeyUp(event) {
-    this.searchSubject.next(event.target.value);
+  onSearchInput(event: Event) {
+    const filterValue = (event.target as HTMLInputElement).value;
+    this.searchSubject.next(filterValue);
+  }
+
+  clearSearch() {
+    this.searchTerm = '';
+    this.search('');
+  }
+
+  onKeyUp(event: KeyboardEvent) {
+    const filterValue = (event.target as HTMLInputElement).value;
+    this.searchSubject.next(filterValue);
   }
 
   async selectedColumnsChange(event: string[]) {

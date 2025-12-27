@@ -99,16 +99,41 @@ td.mat-cell {
 }
 
 /* Text & Header Styles */
-.card-title,
+// Separated to allow .card-title to inherit global typography
 .chart-header {
-    margin: 16px;
-    margin-top: 0;
+    padding: 1.5rem 1.5rem 0.5rem 1.5rem; // Standardize padding
+    margin: 0; // Remove default margins
     color: #333; // Light theme default
     font-size: 1.1rem;
     font-weight: 500;
 }
 
-:host-context(.dark-theme) .card-title,
+// Preserve layout for Admin dashboard cards, but inherit global font styles
+.card-title {
+    padding: 1.5rem 1.5rem 0.5rem 1.5rem;
+}
+
+
+.filter-container {
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    margin-bottom: 1.5rem; // Add spacing below search
+
+    .search-field {
+        width: 100%;
+        max-width: 400px; // Limit width for better aesthetics
+
+        ::ng-deep .mat-mdc-text-field-wrapper {
+            background-color: rgba(255, 255, 255, 0.5); // Subtle background
+        }
+
+        ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+            display: none; // Remove reserve space for hints if not used
+        }
+    }
+}
+
 :host-context(.dark-theme) .chart-header {
     color: rgba(255, 255, 255, 0.87);
 }
@@ -395,6 +420,8 @@ td.mat-cell {
     min-height: 300px;
     display: block;
     position: relative;
+    padding: 0 1.5rem 1.5rem;
+    box-sizing: border-box;
 
     canvas {
         width: 100% !important;

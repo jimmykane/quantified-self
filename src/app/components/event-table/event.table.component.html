@@ -1,42 +1,46 @@
-<mat-card class="mat-elevation-z0">
-  <section class="container">
-    <section>
-      <mat-form-field appearance="outline" subscriptSizing="dynamic" class="no-border">
-        <mat-label>Search</mat-label>
-        <input matInput (keyup)="onKeyUp($event)" placeholder="Date, name, type, etc..." autocomplete="off">
-      </mat-form-field>
-    </section>
-    @if (selection.selected.length) {
-    <section class="buttons">
-      @if (this.selection.selected.length > 1) {
-      <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="primary" matBadgeSize="small"
-        matTooltip="Merge {{selection.selected.length}} events"
-        (click)="$event.preventDefault(); $event.stopPropagation();mergeSelection($event)">
-        <mat-icon>compare_arrows</mat-icon>
-      </button>
-      }
-      <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="accent" matBadgeSize="small"
-        matTooltip="Download as csv {{selection.selected.length}} events"
-        (click)="$event.preventDefault(); $event.stopPropagation(); downloadAsCSV($event)">
-        <mat-icon svgIcon="file-csv"></mat-icon>
-      </button>
-      <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="primary" matBadgeSize="small"
-        matTooltip="Download original files"
-        (click)="$event.preventDefault(); $event.stopPropagation(); downloadOriginals()">
-        <mat-icon>folder_zip</mat-icon>
-      </button>
-      <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="warn" matBadgeSize="small"
-        matTooltip="Delete {{selection.selected.length}} events"
-        (click)="$event.preventDefault(); $event.stopPropagation();deleteSelection()">
-        <mat-icon>delete</mat-icon>
-      </button>
-    </section>
+<!-- Search Section -->
+<div class="glass-card filter-container">
+  <mat-form-field appearance="outline" class="search-field">
+    <mat-label>Search events</mat-label>
+    <input matInput [value]="searchTerm" (input)="onSearchInput($event)" placeholder="Date, name, type, etc..."
+      autocomplete="off">
+    <mat-icon matSuffix *ngIf="!searchTerm">search</mat-icon>
+    <button mat-icon-button matSuffix *ngIf="searchTerm" (click)="clearSearch()" aria-label="Clear">
+      <mat-icon>close</mat-icon>
+    </button>
+  </mat-form-field>
+
+  @if (selection.selected.length) {
+  <div class="buttons">
+    @if (this.selection.selected.length > 1) {
+    <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="primary" matBadgeSize="small"
+      matTooltip="Merge {{selection.selected.length}} events"
+      (click)="$event.preventDefault(); $event.stopPropagation();mergeSelection($event)">
+      <mat-icon>compare_arrows</mat-icon>
+    </button>
     }
-  </section>
+    <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="accent" matBadgeSize="small"
+      matTooltip="Download as csv {{selection.selected.length}} events"
+      (click)="$event.preventDefault(); $event.stopPropagation(); downloadAsCSV($event)">
+      <mat-icon svgIcon="file-csv"></mat-icon>
+    </button>
+    <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="primary" matBadgeSize="small"
+      matTooltip="Download original files"
+      (click)="$event.preventDefault(); $event.stopPropagation(); downloadOriginals()">
+      <mat-icon>folder_zip</mat-icon>
+    </button>
+    <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="warn" matBadgeSize="small"
+      matTooltip="Delete {{selection.selected.length}} events"
+      (click)="$event.preventDefault(); $event.stopPropagation();deleteSelection()">
+      <mat-icon>delete</mat-icon>
+    </button>
+  </div>
+  }
+</div>
 
-  <mat-divider></mat-divider>
-
-  <section class="table-container">
+<!-- Table Section -->
+<div class="glass-card table-container">
+  <div class="table-wrapper">
     <table mat-table [dataSource]="data" matSort [matSortActive]="user.settings.dashboardSettings.tableSettings.active"
       [matSortDirection]="user.settings.dashboardSettings.tableSettings.direction" matSortDisableClear>
       @for (column of getColumnsToDisplay(); track column; let isFirst = $first; let isLast = $last; let i = $index) {
@@ -96,9 +100,16 @@
         [routerLink]="['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
         [class.merged]="row['Merged Event']" class="normal-row">
       </tr>
-    </table>
 
-  </section>
+      <!-- Row shown when there is no matching data. -->
+      <tr class="mat-row" *matNoDataRow>
+        <td class="mat-cell" [attr.colspan]="getColumnsToDisplay().length">
+          <span *ngIf="searchTerm">No events found matching "{{searchTerm}}"</span>
+          <span *ngIf="!searchTerm && !isLoading">No events found</span>
+        </td>
+      </tr>
+    </table>
+  </div>
 
   <mat-paginator (page)="pageChanges($event)" [length]="data ? data.data.length : 0"
     [pageSize]="user.settings.dashboardSettings.tableSettings.eventsPerPage" [showFirstLastButtons]="true"
@@ -106,4 +117,4 @@
 
   <app-shade [isActive]="isLoading" [hasError]="this.events && this.events.length === 0"
     [errorMessage]="'Nothing to show'"></app-shade>
-</mat-card>
+</div>

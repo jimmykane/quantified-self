@@ -300,20 +300,29 @@ export const getUserCount = onCall({
         const db = admin.firestore();
 
         // Parallel efficient count queries
-        const [totalSnapshot, proSnapshot] = await Promise.all([
+        const [totalSnapshot, proSnapshot, basicSnapshot] = await Promise.all([
             db.collection('users').count().get(),
-            db.collectionGroup('subscriptions').where('status', 'in', ['active', 'trialing']).count().get()
+            db.collectionGroup('subscriptions')
+                .where('status', 'in', ['active', 'trialing'])
+                .where('role', '==', 'pro')
+                .count().get(),
+            db.collectionGroup('subscriptions')
+                .where('status', 'in', ['active', 'trialing'])
+                .where('role', '==', 'basic')
+                .count().get()
         ]);
 
         const total = totalSnapshot.data().count;
         const pro = proSnapshot.data().count;
-        const basic = Math.max(0, total - pro); // Safety check
+        const basic = basicSnapshot.data().count;
+        const free = Math.max(0, total - pro - basic); // Users with no active subscription
 
         return {
             count: total, // Keep for backward compatibility
             total,
             pro,
-            basic
+            basic,
+            free
         };
     } catch (error: unknown) {
         logger.error('Error getting user count:', error);

@@ -13,6 +13,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
+  /* Push buttons to the right */
 }
 
 /* Allow columns to size naturally or use flex */
@@ -33,34 +35,53 @@
   white-space: nowrap;
 }
 
-/* Remove forced paddings and justifications that break theme */
-/* Standard material table styles should apply */
-
-/* mat-row rule removed */
 
 mat-icon {
   vertical-align: middle;
 }
 
-mat-card {
-  margin: 0;
-  padding: 0;
-}
+/* Removed mat-card specific margins/padding since we use glass-card now */
 
 .merged {
   opacity: 0.7;
 }
 
-/* Removed ::ng-deep overrides for paginator and checkbox */
-
+/* Table Container and Glass Card Styles (matching Admin Dashboard) */
 .table-container {
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  margin-bottom: 3rem;
+  width: 100%;
+  max-width: 100%;
+}
+
+.table-wrapper {
   overflow: auto;
   width: 100%;
-  max-width: 100%
 }
+
 
 table {
   width: 100%;
+  background: transparent !important;
+}
+
+th.mat-header-cell {
+  background: rgba(0, 0, 0, 0.02);
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.8;
+}
+
+:host-context(.dark-theme) th.mat-header-cell {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+td.mat-cell {
+  font-size: 0.95rem;
 }
 
 tr.mat-row:hover td:not(.mat-table-sticky) {
@@ -79,10 +100,30 @@ tr.mat-row:focus {
   outline: none;
 }
 
-::ng-deep .no-border .mdc-notched-outline__leading,
-::ng-deep .no-border .mdc-notched-outline__notch,
-::ng-deep .no-border .mdc-notched-outline__trailing {
-  border-color: transparent !important;
+/* Search Field & Filter Container (matching Admin Dashboard) */
+.filter-container {
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  border-radius: 12px;
+}
+
+.search-field {
+  width: 100%;
+  max-width: 400px;
+
+  ::ng-deep .mat-mdc-text-field-wrapper {
+    background-color: rgba(255, 255, 255, 0.5);
+  }
+
+  ::ng-deep .mat-mdc-form-field-subscript-wrapper {
+    display: none;
+  }
+}
+
+:host-context(.dark-theme) .search-field ::ng-deep .mat-mdc-text-field-wrapper {
+  background-color: rgba(0, 0, 0, 0.2);
 }
 
 /* Force smaller badges for table actions */

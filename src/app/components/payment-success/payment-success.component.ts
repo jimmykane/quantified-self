@@ -161,7 +161,7 @@ import { LoggerService } from '../../services/logger.service';
     }
 
     .description {
-      color: rgba(0, 0, 0, 0.6);
+      color: var(--mat-sys-on-surface-variant);
       line-height: 1.5;
       margin-bottom: 24px;
     }

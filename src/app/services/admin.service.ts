@@ -92,7 +92,7 @@ export class AdminService {
 
     private injector = inject(EnvironmentInjector);
 
-    private getUserCountFn = httpsCallableFromURL<void, { count: number; total: number; pro: number; basic: number }>(
+    private getUserCountFn = httpsCallableFromURL<void, { count: number; total: number; pro: number; basic: number; free: number }>(
         this.functions,
         environment.functions.getUserCount
     );
@@ -124,12 +124,13 @@ export class AdminService {
     }
 
 
-    getTotalUserCount(): Observable<{ total: number; pro: number; basic: number }> {
+    getTotalUserCount(): Observable<{ total: number; pro: number; basic: number; free: number }> {
         return from(this.getUserCountFn()).pipe(
             map(result => ({
                 total: result.data.total ?? result.data.count, // Fallback for safety
                 pro: result.data.pro ?? 0,
-                basic: result.data.basic ?? 0
+                basic: result.data.basic ?? 0,
+                free: result.data.free ?? 0
             }))
         );
     }

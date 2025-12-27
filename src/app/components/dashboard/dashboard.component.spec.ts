@@ -59,6 +59,11 @@ describe('DashboardComponent', () => {
             snapshot: {
                 paramMap: {
                     get: (key: string) => null
+                },
+                data: {
+                    dashboardData: {
+                        events: [{ id: 'event1' }]
+                    }
                 }
             }
         };
@@ -93,11 +98,11 @@ describe('DashboardComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('should load events on init', async () => {
+    it('should use resolved events on init', async () => {
         fixture.detectChanges(); // Trigger ngOnInit
         await fixture.whenStable(); // Wait for async operations to complete
 
-        expect(mockEventService.getEventsBy).toHaveBeenCalled();
+        expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
         expect(component.events.length).toBe(1);
         expect(component.isLoading).toBe(false);
     });

@@ -2,15 +2,12 @@
     display: flex;
     flex-direction: column;
     min-height: 100vh;
-    /* overflow-y: auto; Removed - let main body scroll */
-    // color: var(--text-primary, rgba(0, 0, 0, 0.87)); /* REMOVED: Managed by global theme */
 }
 
 /* Split Layout Container */
 .split-container {
     display: flex;
     flex: 1;
-    /* overflow: hidden; Removed to allow page scroll */
     max-width: 1400px;
     margin: 0 auto;
     width: 100%;
@@ -19,7 +16,6 @@
 /* Left Side: Hero content */
 .hero-section {
     flex: 0 0 35%;
-    /* Fixed 35% width */
     padding: 2rem 3rem;
     display: flex;
     flex-direction: column;
@@ -48,13 +44,11 @@
     font-size: 2.5rem;
     font-weight: 300;
     margin: 0 0 1rem;
-    // handled by app-text-gradient
     line-height: 1.1;
 }
 
 .hero-section .subtitle {
     font-size: 1rem;
-    // color: rgba(0, 0, 0, 0.6); /* REMOVED */
     opacity: 0.7;
     margin-bottom: 2rem;
     font-weight: 400;
@@ -88,26 +82,19 @@
     grid-template-rows: repeat(3, auto);
     gap: 1rem;
     align-content: center;
-    /* overflow-y: auto; Removed for page scroll */
-    /* Fallback scroll if content is too tall */
 }
 
 .feature-card {
     // Glass styles handled by .glass-card
     padding: 1rem 1.2rem;
-    border-left: 4px solid transparent; // Keep hover effect
+    border-left: 4px solid transparent;
     transition: all 0.2s ease;
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
-
-    // Inherit text color
-    color: var(--mat-sys-on-surface, inherit);
 }
 
-:host-context(.dark-theme) .feature-card {
-    // Shadow handles by glass-card
-}
+
 
 /* Last card spans full width */
 .feature-card.full-width {
@@ -128,8 +115,6 @@
 }
 
 .feature-card:hover {
-    border-left-color: #ff4081;
-    /* Fallback accent */
     border-left-color: var(--mat-sys-secondary, #ff4081);
     transform: scale(1.01);
 }
@@ -142,30 +127,17 @@
 }
 
 .card-icon {
-    // color: #3f51b5; /* REMOVED */
     color: var(--mat-sys-primary, #3f51b5);
-    /* width/height handled by mat-icon */
 }
 
-.card-title {
-    font-size: 1rem;
-    font-weight: 500;
-    margin: 0;
-    line-height: 1.2;
-    color: var(--mat-sys-on-surface, inherit);
-}
+
 
 .card-text {
     opacity: 0.7;
-    font-size: 0.85rem;
+    font-size: 1rem; // Increased from 0.85rem
     margin-bottom: 0.5rem;
-    line-height: 1.3;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    color: var(--mat-sys-on-surface, inherit);
+    line-height: 1.5; // Increased for readability
+    // Removed line-clamp to show full text
 }
 
 .tag-list {
@@ -176,14 +148,11 @@
 }
 
 .tag {
-    background: rgba(0, 0, 0, 0.06); // Generic gray
-    // color: rgba(0, 0, 0, 0.6);
+    background: rgba(0, 0, 0, 0.06);
     opacity: 0.7;
     padding: 4px 10px;
-    /* Slight increase for icon + text */
     border-radius: 12px;
     font-size: 0.75rem;
-    /* Slight increase for readability */
     font-weight: 500;
     display: inline-flex;
     align-items: center;
@@ -198,103 +167,147 @@
     width: 18px;
     height: 18px;
     min-width: 18px;
-    /* Prevent shrinking */
     min-height: 18px;
     font-size: 18px;
-    /* For font icons */
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-/* Footer */
+/* Footer - Option 3: Maker Brand */
 .footer {
-    /* Auto height for content */
-    height: auto;
-    background: var(--mat-sys-surface, #ffffff);
-    border-top: 1px solid rgba(0, 0, 0, 0.12);
+    position: relative;
+    width: 100%;
+    background: transparent;
+    border-top: 1px solid var(--mat-sys-outline-variant, rgba(0, 0, 0, 0.12));
     display: flex;
     flex-direction: column;
-    /* Stack rows vertically */
     align-items: center;
     justify-content: center;
-    gap: 10px;
-    padding: 1rem 0;
-    /* Add some padding */
-    font-size: 0.75rem;
-    // color: rgba(0, 0, 0, 0.6);
-    opacity: 0.6;
-    flex-shrink: 0;
+    padding: 2rem 1rem 1.5rem;
+    gap: 1.5rem;
+    margin-top: auto;
+    overflow: hidden;
 }
 
-:host-context(.dark-theme) .footer {
-    background: var(--mat-sys-surface, #121212);
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.footer-row {
+/* 1. Maker Section */
+.maker-profile {
     display: flex;
-    flex-direction: row;
-    justify-content: center;
+    flex-direction: column;
     align-items: center;
-    gap: 20px;
-    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
 }
 
-.footer-divider {
-    width: 60%;
-    margin: 5px 0;
+.avatar-wrapper {
+    position: relative;
+    padding: 2px;
+    border-radius: 50%;
+    background: var(--mat-sys-primary);
 }
 
-/* Icon specific overrides from original design */
-.footer mat-icon {
-    cursor: pointer;
-    vertical-align: middle;
-}
-
-mat-icon.amcharts {
-    width: 80px;
-    height: 34px;
-    /* Reduced size slightly for compactness */
-}
-
-mat-icon.firebase {
-    width: 100px;
-    height: 46px;
-    /* Reduced size slightly for compactness */
-}
-
-.large-svg-icon {
+.avatar {
     width: 48px;
     height: 48px;
+    border-radius: 50%;
+    display: block;
+    border: 2px solid transparent;
+    object-fit: cover;
 }
 
-.large-svg-icon-coros {
-    width: 80px;
-    height: 48px;
+.maker-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-size: 0.75rem;
+    color: var(--mat-sys-on-surface-variant);
 }
 
-/* Bottom Row Styling */
-.bottom-row {
-    margin-top: 5px;
-    gap: 24px;
-    // color: rgba(0, 0, 0, 0.54);
-    opacity: 0.54;
-    font-size: 0.8rem;
+.maker-link {
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 600;
+    text-decoration: none;
+    letter-spacing: -0.2px;
+    background-size: 200% auto;
+    transition: background-position 0.5s;
+
+    &:hover {
+        background-position: right center;
+    }
+}
+
+
+/* 2. Ecosystem Row */
+.ecosystem {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 2rem;
+    padding: 0.8rem 1.5rem;
+    border-radius: 24px;
+
+    // Neutral transparent gray works on both Light (greyish) and Dark (lighter greyish)
+    background: rgba(127, 127, 127, 0.08);
+    border: 1px solid var(--mat-sys-outline-variant, rgba(127, 127, 127, 0.2));
+}
+
+.logo-group {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.vertical-divider {
+    width: 2px; // Slightly thicker for visibility
+    height: 36px; // Taller for larger logos
+    background: var(--mat-sys-outline-variant, rgba(127, 127, 127, 0.3));
+}
+
+// Unified Icon Styling
+.partner-logo {
+    cursor: pointer;
+    vertical-align: middle;
+
+    // Increased size by 50% (24px -> 36px)
+    width: 36px;
+    height: 36px;
+    font-size: 36px;
+
+    // Wide icons
+    &.wide {
+        width: 90px; // 60px -> 90px
+        height: 36px;
+    }
+
+    &:hover {
+        transform: translateY(-2px);
+    }
+}
+
+/* 3. Bottom Legal */
+.bottom-legal {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    color: var(--mat-sys-on-surface-variant); // Adapts to theme (dark/light)
 }
 
 .privacy-link {
     cursor: pointer;
     transition: color 0.2s;
+
+    &:hover {
+        color: var(--mat-sys-primary, #3f51b5);
+        text-decoration: underline;
+    }
 }
 
-.privacy-link:hover {
-    text-decoration: underline;
-    color: var(--mat-sys-primary, #3f51b5);
-}
-
-.copyright {
-    opacity: 0.8;
+.dot-separator {
+    opacity: 0.5;
 }
 
 /* Responsive */
@@ -329,6 +342,17 @@ mat-icon.firebase {
 
     .feature-card.full-width .card-header {
         margin-bottom: 0.5rem;
+    }
+
+    // Footer adjustments
+    .ecosystem {
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .vertical-divider {
+        width: 40px;
+        height: 1px; // Turn into horizontal divider
     }
 }
 
