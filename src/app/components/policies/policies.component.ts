@@ -6,7 +6,7 @@ import { POLICY_CONTENT, PolicyItem } from '../../shared/policies.content';
 @Component({
   selector: 'app-policies',
   templateUrl: './policies.component.html',
-  styleUrls: ['./policies.component.css'],
+  styleUrls: ['./policies.component.scss'],
   standalone: false
 })
 export class PoliciesComponent {

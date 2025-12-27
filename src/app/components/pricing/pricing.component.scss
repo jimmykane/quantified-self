@@ -5,7 +5,7 @@
   flex-direction: column;
   align-items: center;
   /* subtle background gradient if desired, or keep it clean */
-  background: radial-gradient(circle at center, rgba(var(--primary-rgb), 0.05) 0%, transparent 70%);
+  background: radial-gradient(circle at center, rgba(var(--mat-sys-primary-rgb, 63, 81, 181), 0.05) 0%, transparent 70%);
 
   h1 {
     margin-bottom: 50px;
@@ -31,7 +31,8 @@
     p {
       margin: 0;
       font-size: 1.1rem;
-      color: rgba(0, 0, 0, 0.6);
+      // color: rgba(0, 0, 0, 0.6); /* REMOVED */
+      opacity: 0.6;
       font-weight: 500;
       letter-spacing: 0.2px;
     }
@@ -43,8 +44,10 @@
     margin-bottom: 30px;
 
     .restore-alert {
-      background: rgba(var(--accent-rgb), 0.1);
-      border: 1px solid rgba(var(--accent-rgb), 0.3);
+      // background: rgba(var(--accent-rgb), 0.1);
+      background: rgba(var(--mat-sys-secondary-rgb, 255, 64, 129), 0.1);
+      // border: 1px solid rgba(var(--accent-rgb), 0.3);
+      border: 1px solid rgba(var(--mat-sys-secondary-rgb, 255, 64, 129), 0.3);
       border-radius: 8px;
       padding: 16px;
       display: flex;
@@ -87,8 +90,10 @@
     overflow: hidden;
     position: relative;
     border: 1px solid rgba(0, 0, 0, 0.08);
-    background: #fff;
-    /* Ensure strict background */
+    /* Consider theme var */
+    // background: #fff; /* REMOVED: Managed by global theme if mat-card usage, or set transparent */
+    background: var(--mat-sys-surface, inherit);
+    /* Ensure it's not transparent if we need card bg */
 
     /* Hover effect */
     &:hover {
@@ -106,6 +111,7 @@
     /* Pro Card - Primary Highlight */
     &.pro-card {
       border-top: 6px solid #3f51b5;
+      /* Primary */
       /* Primary color usually */
       box-shadow: 0 8px 24px rgba(63, 81, 181, 0.15);
 
@@ -179,7 +185,7 @@
           align-items: center;
           margin-bottom: 12px;
           font-size: 0.95rem;
-          color: rgba(0, 0, 0, 0.87);
+          // color: rgba(0, 0, 0, 0.87); /* REMOVED */
           line-height: 1.4;
 
           mat-icon {
@@ -207,7 +213,7 @@
         font-size: 2.8rem;
         font-weight: 800;
         margin: 0 0 20px;
-        color: rgba(0, 0, 0, 0.87);
+        // color: rgba(0, 0, 0, 0.87); /* REMOVED */
         letter-spacing: -1px;
         display: flex;
         justify-content: center;
@@ -242,10 +248,19 @@
     }
   }
 
+  :host-context(.dark-theme) .product-card {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    // Ensure mat-card global text colors apply or use currentColor
+  }
+
+  :host-context(.dark-theme) .price-section {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
   /* Current plan styling override */
   .current-plan {
     /* Ensure no weird background leaks */
-    background-color: #ffffff !important;
+    // background-color: #ffffff !important; /* REMOVED */
     border: 1px solid rgba(0, 0, 0, 0.12) !important;
     position: relative;
 

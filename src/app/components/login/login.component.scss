@@ -1,0 +1,121 @@
+.login-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: calc(100vh - 64px);
+    /* Adjust based on navbar height if any */
+    padding: 20px;
+    // background-color: #f5f5f5; /* REMOVED: Managed by global theme */
+}
+
+.login-card {
+    width: 100%;
+    max-width: 480px;
+    padding: 0;
+    /* Remove default padding to control internally */
+    border-radius: 12px;
+    // box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); /* REMOVED: Managed by mat-card global styles */
+    overflow: hidden;
+}
+
+.login-content {
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.email-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.title {
+    margin: 0;
+    text-align: center;
+    font-family: 'QSFont', 'Roboto', sans-serif;
+    font-size: 28px;
+    font-weight: 500;
+    // color: #333; /* REMOVED: Managed by global theme */
+}
+
+.subtitle {
+    text-align: center;
+    // color: rgba(0, 0, 0, 0.6); /* REMOVED: Managed by global theme (usually via opacity or material colors) */
+    margin-bottom: 8px;
+    font-size: 14px;
+    opacity: 0.7;
+    /* Use opacity for secondary text feel */
+}
+
+.full-width {
+    width: 100%;
+}
+
+.action-button {
+    height: 48px;
+    font-size: 16px;
+    width: 100%;
+    border-radius: 24px;
+}
+
+.divider-container {
+    display: flex;
+    align-items: center;
+    margin: 8px 0;
+}
+
+.divider-line {
+    flex: 1;
+    height: 1px;
+    background-color: currentColor;
+    /* Use currentColor to adapt to text color */
+    opacity: 0.12;
+}
+
+.divider-text {
+    padding: 0 16px;
+    // color: rgba(0, 0, 0, 0.54); /* REMOVED: Managed by global theme */
+    opacity: 0.54;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.social-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.social-button {
+    height: 48px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 500;
+    border-radius: 24px;
+    border: 1px solid currentColor;
+    /* Use currentColor */
+    opacity: 0.8;
+    /* Slight fade for border */
+}
+
+// Reset opacity for children so they don't fade double
+.social-button>* {
+    opacity: 1;
+}
+
+.social-button mat-icon {
+    margin-right: 12px;
+}
+
+/* Specific styling for Google icon if needed to ensure original colors */
+.google-icon {
+    /* Ensure icon size matches */
+    width: 24px;
+    height: 24px;
+}

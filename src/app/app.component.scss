@@ -19,7 +19,8 @@ nav[mat-tab-nav-bar] {
   height: 64px;
   /* Standard toolbar height */
   padding: 0 16px;
-  background-color: #ffffff;
+  // background-color: #ffffff;
+  background-color: var(--mat-sys-surface, #ffffff);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
   /* Subtle shadow for depth */
   z-index: 10;

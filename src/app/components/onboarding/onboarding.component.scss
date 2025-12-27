@@ -3,7 +3,7 @@
     justify-content: center;
     align-items: center;
     min-height: 100vh;
-    background-color: #f5f5f5; // Or use a theme color
+    // background-color: #f5f5f5; /* REMOVED: Managed by global theme */
     padding: 20px;
 }
 
@@ -43,17 +43,18 @@
         margin: 0;
         font-size: 1.1rem;
         font-weight: 500;
-        color: rgba(0,0,0,0.87);
+        // color: rgba(0,0,0,0.87); /* REMOVED */
     }
 
     .policy-text {
         margin: 0;
         font-size: 0.95rem;
         line-height: 1.5;
-        color: rgba(0,0,0,0.6);
+        // color: rgba(0,0,0,0.6); /* REMOVED */
+        opacity: 0.7; // Use opacity instead
         max-width: 850px; // Ensure readable line length
     }
-    
+
     mat-checkbox {
         margin-top: 5px;
     }
@@ -67,6 +68,8 @@
 
         .pricing-container {
             padding: 0; // Reset padding if needed
+            min-height: auto; // Let it fit availability
+            background: none; // Remove gradient overlap if any
         }
     }
 }

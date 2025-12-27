@@ -27,7 +27,7 @@ import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
 @Component({
     selector: 'app-admin-dashboard',
     templateUrl: './admin-dashboard.component.html',
-    styleUrls: ['./admin-dashboard.component.css'],
+    styleUrls: ['./admin-dashboard.component.scss'],
     standalone: true,
     imports: [
         CommonModule,

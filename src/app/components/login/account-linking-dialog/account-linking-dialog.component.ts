@@ -10,7 +10,7 @@ export interface AccountLinkingData {
 @Component({
     selector: 'app-account-linking-dialog',
     templateUrl: './account-linking-dialog.component.html',
-    styleUrls: ['./account-linking-dialog.component.css'],
+    styleUrls: ['./account-linking-dialog.component.scss'],
     standalone: false
 })
 export class AccountLinkingDialogComponent {

@@ -38,7 +38,7 @@ import {
 @Component({
   selector: 'app-user-settings',
   templateUrl: './user-settings.component.html',
-  styleUrls: ['./user-settings.component.css'],
+  styleUrls: ['./user-settings.component.scss'],
   standalone: false
 })
 export class UserSettingsComponent implements OnChanges {

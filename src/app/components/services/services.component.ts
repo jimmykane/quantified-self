@@ -17,7 +17,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 @Component({
   selector: 'app-services',
   templateUrl: './services.component.html',
-  styleUrls: ['./services.component.css'],
+  styleUrls: ['./services.component.scss'],
   standalone: false
 })
 export class ServicesComponent implements OnInit, OnDestroy {
