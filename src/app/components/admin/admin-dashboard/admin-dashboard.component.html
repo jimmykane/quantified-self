@@ -78,9 +78,9 @@
         <div class="glass-card stat-card failed">
             <div class="stat-header">
                 <mat-icon>error</mat-icon>
-                <span>Failed</span>
+                <span>Stuck</span>
             </div>
-            <div class="stat-value" *ngIf="!isLoadingStats">{{ queueStats?.failed ?? 0 }}</div>
+            <div class="stat-value" *ngIf="!isLoadingStats">{{ queueStats?.stuck ?? 0 }}</div>
             <div class="spinner-container" *ngIf="isLoadingStats">
                 <mat-spinner diameter="24"></mat-spinner>
             </div>
@@ -213,19 +213,19 @@
                     <td mat-cell *matCellDef="let stat" style="color: #4caf50;"> {{ stat.succeeded }} </td>
                 </ng-container>
 
-                <!-- Failed Column -->
-                <ng-container matColumnDef="failed">
-                    <th mat-header-cell *matHeaderCellDef> Failed </th>
+                <!-- Stuck Column -->
+                <ng-container matColumnDef="stuck">
+                    <th mat-header-cell *matHeaderCellDef matTooltip="Items stuck in queue (retries >= 10)"> Stuck </th>
                     <td mat-cell *matCellDef="let stat">
-                        <span [style.color]="stat.failed > 0 ? '#f44336' : 'inherit'"
-                            [style.fontWeight]="stat.failed > 0 ? '500' : 'normal'">
-                            {{ stat.failed }}
+                        <span [style.color]="stat.stuck > 0 ? '#f44336' : 'inherit'"
+                            [style.fontWeight]="stat.stuck > 0 ? '500' : 'normal'">
+                            {{ stat.stuck }}
                         </span>
                     </td>
                 </ng-container>
 
-                <tr mat-header-row *matHeaderRowDef="['provider', 'pending', 'succeeded', 'failed']"></tr>
-                <tr mat-row *matRowDef="let row; columns: ['provider', 'pending', 'succeeded', 'failed'];"></tr>
+                <tr mat-header-row *matHeaderRowDef="['provider', 'pending', 'succeeded', 'stuck']"></tr>
+                <tr mat-row *matRowDef="let row; columns: ['provider', 'pending', 'succeeded', 'stuck'];"></tr>
             </table>
         </div>
     </div>

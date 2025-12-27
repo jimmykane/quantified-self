@@ -4,31 +4,48 @@
 
         <div class="info-section">
             <p class="description">
-                An account already exists with the email <strong>{{ data.email }}</strong> using <strong>{{
-                    getProviderName(data.existingProvider) }}</strong>.
+                We found existing account(s) for <strong>{{ data.email }}</strong>.
+            </p>
+            <p class="description">
+                Please sign in with one of your existing methods to link your new <strong>{{
+                    getProviderName(data.pendingProvider) }}</strong> login.
             </p>
 
             <div class="verbose-explanation">
-                <div class="explanation-box link-box">
-                    <h3 class="box-title">Link Accounts</h3>
-                    <p>
-                        By clicking <strong>Link Accounts</strong>, you will be redirected to sign in with <strong>{{
-                            getProviderName(data.existingProvider) }}</strong>.
-                        Once authenticated, your <strong>{{ getProviderName(data.pendingProvider) }}</strong> login will
-                        be associated with your existing account.
-                    </p>
-                    <p class="benefit">
-                        <mat-icon>check_circle</mat-icon>
-                        You can use either method to sign in in the future.
-                    </p>
+                <div class="options-list">
+                    <!-- Iterate over all existing providers -->
+                    <ng-container *ngFor="let provider of data.existingProviders">
+
+                        <!-- Google -->
+                        <button mat-stroked-button class="provider-button google" *ngIf="provider.includes('google')"
+                            (click)="onSelectProvider(provider)">
+                            <mat-icon svgIcon="google_logo_light" class="provider-icon"></mat-icon>
+                            Sign in with Google
+                        </button>
+
+                        <!-- GitHub -->
+                        <button mat-stroked-button class="provider-button github" *ngIf="provider.includes('github')"
+                            (click)="onSelectProvider(provider)">
+                            <mat-icon svgIcon="github_logo" class="provider-icon"></mat-icon>
+                            Sign in with GitHub
+                        </button>
+
+                        <!-- Password / Email Link Option -->
+                        <!-- If provider is password, we can offer magic link as a "better" option or standard password -->
+                        <!-- For this request, we specifically want to support "Email Link" -->
+                        <button mat-stroked-button class="provider-button email" *ngIf="provider === 'password'"
+                            (click)="onSelectProvider('emailLink')">
+                            <mat-icon class="provider-icon">mail_outline</mat-icon>
+                            Send Magic Link
+                        </button>
+
+                    </ng-container>
                 </div>
 
-                <div class="explanation-box cancel-box">
-                    <h3 class="box-title">Cancel</h3>
-                    <p>
-                        If you cancel, you will not be signed in right now.
-                        You can try signing in directly with your existing <strong>{{
-                            getProviderName(data.existingProvider) }}</strong> account instead.
+                <div class="explanation-box link-box">
+                    <p class="benefit">
+                        <mat-icon>check_circle</mat-icon>
+                        Once linked, you can use any of these methods to sign in.
                     </p>
                 </div>
             </div>
@@ -37,9 +54,6 @@
         <div class="actions">
             <button mat-button (click)="onCancel()" class="cancel-button">
                 Cancel
-            </button>
-            <button mat-raised-button color="primary" (click)="onLink()" class="link-button">
-                Link Accounts
             </button>
         </div>
     </div>

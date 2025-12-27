@@ -64,11 +64,38 @@ export class LoginComponent implements OnInit, OnDestroy {
       if (email) {
         this.isLoading = true;
         this.authService.signInWithEmailLink(email, window.location.href)
-          .then((result) => {
+          .then(async (result) => {
+            // Check for pending link intent (Scenario: User clicked "Send Magic Link" to link this email to an existing GitHub/Google account)
+            // Wait, logic is reverse: User was on "Login" page, tried to sign in with GitHub, failed (collision), chose "Send Magic Link".
+            // So now they are signed in with Email. We need to link GitHub.
+            const pendingLinkProvider = this.authService.localStorageService.getItem('pendingLinkProvider');
+            if (pendingLinkProvider) {
+              this.isLoading = false;
+              const confirmLink = window.confirm(
+                `You are now signed in with your email. Please sign in with ${pendingLinkProvider} to finish linking your accounts.`
+              );
+
+              if (confirmLink) {
+                this.authService.localStorageService.removeItem('pendingLinkProvider');
+                await this.linkPendingProvider(pendingLinkProvider, result.user);
+                return; // linkPendingProvider handles redirect/dialog
+              }
+            }
             this.redirectOrShowDataPrivacyDialog(result);
           })
           .catch((error) => {
             this.isLoading = false;
+            // Handle collision (Scenario: User tries to sign in with Email Link, but account exists with GitHub)
+            if (error.code === 'auth/credential-already-in-use' || error.code === 'auth/account-exists-with-different-credential' || error.code === 'auth/email-already-in-use') {
+              // For email link, the email is known.
+              // We need to trigger the collision flow.
+              // However, error object might not provide everything cleanly for email link flow.
+              // But we have the 'email' variable.
+              // We can manually trigger the resolution.
+              this.handleAccountCollision(error, email);
+              return;
+            }
+
             this.logger.error('Error signing in with email link', error);
             this.snackBar.open('Error signing in. The link might be invalid or expired.', 'Close');
           });
@@ -97,6 +124,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.isLoading = false;
   }
 
+  // .. existing sendEmailLink ...
 
   async sendEmailLink(email: string) {
     if (!email) {
@@ -111,6 +139,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     }
   }
 
+
   signInWithProvider(provider: SignInProviders) {
     this.isLoading = true;
 
@@ -124,44 +153,9 @@ export class LoginComponent implements OnInit, OnDestroy {
 
     // Helper to handle errors
     const handleError = async (e: any) => {
-      if (e.code === 'auth/account-exists-with-different-credential') {
-        const email = e.customData?.email;
-        const pendingCredential = OAuthProvider.credentialFromError(e);
-
-        if (email && pendingCredential) {
-          try {
-            const methods = await this.authService.fetchSignInMethods(email);
-            if (methods.length > 0) {
-              const providerId = methods[0]; // Usually the first one is what we want
-              const providerName = providerId.split('.')[0]; // simple name like 'google' or 'github'
-
-              const dialogRef = this.dialog.open(AccountLinkingDialogComponent, {
-                data: {
-                  email: email,
-                  existingProvider: providerId,
-                  pendingProvider: pendingCredential.providerId
-                },
-                maxWidth: '500px',
-                autoFocus: false
-              });
-
-              const confirmLink = await dialogRef.afterClosed().toPromise();
-
-              if (confirmLink) {
-                const provider = this.authService.getProviderForId(providerId);
-                const result = await signInWithPopup(this.auth, provider as any);
-                if (result.user) {
-                  await this.authService.linkCredential(result.user, pendingCredential);
-                  this.snackBar.open('Accounts successfully linked!', 'Close', { duration: 5000 });
-                  return handleResult(result);
-                }
-              }
-            }
-          } catch (linkError: any) {
-            this.logger.error('Account linking failed:', linkError);
-            this.snackBar.open(`Account linking failed: ${linkError.message}`, 'Close');
-          }
-        }
+      if (e.code === 'auth/account-exists-with-different-credential' || e.code === 'auth/credential-already-in-use') {
+        await this.handleAccountCollision(e);
+        return;
       }
 
       Sentry.captureException(e);
@@ -183,6 +177,96 @@ export class LoginComponent implements OnInit, OnDestroy {
           .then(handleResult)
           .catch(handleError);
         break;
+    }
+  }
+
+  // Refactored collision handling
+  private async handleAccountCollision(error: any, emailHint?: string) {
+    const email = error.customData?.email || emailHint;
+    const pendingCredential = OAuthProvider.credentialFromError(error); // Might be null if it was email link login that failed
+
+    if (email) {
+      try {
+        const methods = await this.authService.fetchSignInMethods(email);
+        if (methods.length > 0) {
+          // "pendingProvider" is needed for the dialog text: "to link your new [pendingProvider] login".
+          // If we have pendingCredential, use its providerId.
+          // If not (e.g. failed Email Link login), we know the user was *trying* Email Link.
+          const pendingProviderId = pendingCredential ? pendingCredential.providerId : 'emailLink';
+
+          const dialogRef = this.dialog.open(AccountLinkingDialogComponent, {
+            data: {
+              email: email,
+              existingProviders: methods, // Pass ALL existing methods
+              pendingProvider: pendingProviderId
+            },
+            maxWidth: '500px',
+            autoFocus: false
+          });
+
+          const selectedProvider = await dialogRef.afterClosed().toPromise();
+
+          if (selectedProvider) {
+            if (selectedProvider === 'emailLink') {
+              // User wants to link using Email Link (Send Magic Link)
+              // This means we need to "park" the pending credential (if any) or just the intent.
+              // 1. Send Link
+              await this.sendEmailLink(email);
+              // 2. Save intent. We want to link the *original* pending credential (e.g. GitHub) 
+              // to the account that will be signed in via email.
+              if (pendingCredential) {
+                // We can't save the full credential object :(
+                // But we can save the provider ID and ask user to re-login with it to link.
+                this.authService.localStorageService.setItem('pendingLinkProvider', pendingCredential.providerId);
+              }
+              // If there was NO pending credential (e.g. reverse case: Email Link failed, user chose to sign in with GitHub?),
+              // Wait, if selectedProvider is 'emailLink', it implies the user wants to use Email Link to VERIFY ownership.
+              // This path is usually: User tried GitHub -> Collided -> Chose "Send Magic Link".
+            } else {
+              // User chose an existing OAuth provider (e.g. Google) to sign in and link.
+              const provider = this.authService.getProviderForId(selectedProvider);
+              if (!provider) return;
+
+              const result = await signInWithPopup(this.auth, provider as any);
+              if (result.user) {
+                // If we have a pending credential (e.g. GitHub), link it now.
+                if (pendingCredential) {
+                  await this.authService.linkCredential(result.user, pendingCredential);
+                  this.snackBar.open('Accounts successfully linked!', 'Close', { duration: 5000 });
+                }
+                // If we didn't have a pending credential (e.g. reverse case), we just logged them in.
+                // But usually we want to link the *failed* method.
+                // If 'signinWithEmailLink' failed, we don't have a 'credential' object to link easily 
+                // unless we ask them to click the link *again*? 
+                // Actually, for "Reverse": User triggers Email Link -> Fails -> User logs in with Google.
+                // User is now logged in. The Email Link is "lost" unless they click it again? 
+                // Or do we say "You are logged in. To add email link sign-in, go to settings"?
+                // For now, simple login is good enough for the 'base' account retrieval.
+                return this.redirectOrShowDataPrivacyDialog(result);
+              }
+            }
+          }
+        }
+      } catch (linkError: any) {
+        this.logger.error('Account linking failed:', linkError);
+        this.snackBar.open(`Account linking failed: ${linkError.message}`, 'Close');
+      }
+    }
+    this.isLoading = false;
+  }
+
+  // Helper to link a provider after secondary login (Persistence flow)
+  private async linkPendingProvider(providerId: string, user: any) {
+    try {
+      const provider = this.authService.getProviderForId(providerId);
+      // We need to re-authenticate/link. 
+      // `linkWithPopup` will open the provider popup and link it to the 'user'.
+      await this.authService.linkWithPopup(user, provider as any);
+      this.snackBar.open('Accounts successfully linked!', 'Close', { duration: 5000 });
+      this.router.navigate(['/dashboard']);
+    } catch (e: any) {
+      this.logger.error('Link pending provider failed', e);
+      this.snackBar.open(`Failed to link accounts: ${e.message}`, 'Close');
     }
   }
 

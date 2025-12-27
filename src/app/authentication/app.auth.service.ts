@@ -2,7 +2,7 @@ import { inject, Injectable, EnvironmentInjector, runInInjectionContext, NgZone 
 import { Observable, of } from 'rxjs';
 import { map, shareReplay, switchMap, take } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Auth, user, signInWithPopup, getRedirectResult, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, sendPasswordResetEmail, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, OAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, fetchSignInMethodsForEmail, linkWithCredential, AuthCredential } from '@angular/fire/auth';
+import { Auth, user, signInWithPopup, getRedirectResult, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, sendPasswordResetEmail, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, OAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, fetchSignInMethodsForEmail, linkWithCredential, AuthCredential, linkWithPopup, AuthProvider } from '@angular/fire/auth';
 import { Firestore, doc, onSnapshot, terminate, clearIndexedDbPersistence } from '@angular/fire/firestore';
 import { User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../services/app.user.service';
@@ -232,6 +232,10 @@ export class AppAuthService {
 
   async linkCredential(user: any, credential: AuthCredential) {
     return linkWithCredential(user, credential);
+  }
+
+  async linkWithPopup(user: any, provider: AuthProvider) {
+    return linkWithPopup(user, provider);
   }
 
   getProviderForId(providerId: string) {

@@ -17,13 +17,14 @@ vi.mock('@angular/fire/auth', async () => {
     return {
         ...actual as any,
         signInWithPopup: vi.fn(),
+        authState: () => of(null), // Mock authState to return null by default
         OAuthProvider: {
             credentialFromError: vi.fn().mockReturnValue({ providerId: 'github.com' })
         }
     };
 });
 
-import { signInWithPopup, OAuthProvider } from '@angular/fire/auth';
+import { signInWithPopup, OAuthProvider, authState } from '@angular/fire/auth';
 
 describe('LoginComponent', () => {
     let component: LoginComponent;
@@ -36,7 +37,13 @@ describe('LoginComponent', () => {
         fetchSignInMethods: vi.fn().mockResolvedValue([]),
         getProviderForId: vi.fn().mockReturnValue({}),
         linkCredential: vi.fn().mockResolvedValue({}),
-        localStorageService: { getItem: () => null }
+        sendEmailLink: vi.fn().mockResolvedValue(true),
+        linkWithPopup: vi.fn().mockResolvedValue({}),
+        localStorageService: {
+            getItem: vi.fn().mockReturnValue(null),
+            setItem: vi.fn(),
+            removeItem: vi.fn()
+        }
     };
 
     const mockUserService = {
@@ -58,6 +65,7 @@ describe('LoginComponent', () => {
     const mockDialog = {};
 
     beforeEach(() => {
+        vi.clearAllMocks(); // Clear spies to prevent accumulation
         TestBed.configureTestingModule({
             providers: [
                 LoginComponent, // Provide the component itself
@@ -104,9 +112,9 @@ describe('LoginComponent', () => {
         (mockAuthService as any).getProviderForId = vi.fn().mockReturnValue({});
         (mockAuthService as any).linkCredential = vi.fn().mockResolvedValue({});
 
-        // 3. Mock dialog
+        // 3. Mock dialog to return 'google.com'
         const mockDialogRef = {
-            afterClosed: () => of(true)
+            afterClosed: () => of('google.com')
         };
         (mockDialog as any).open = vi.fn().mockReturnValue(mockDialogRef);
 
@@ -125,5 +133,160 @@ describe('LoginComponent', () => {
         expect(signInWithPopup).toHaveBeenCalled();
         expect(mockAuthService.linkCredential).toHaveBeenCalledWith(mockUser, expect.anything());
         expect(mockSnackBar.open).toHaveBeenCalledWith('Accounts successfully linked!', 'Close', expect.anything());
+    });
+
+    it('should handle account collision and select Email Link', async () => {
+        const collisionError = {
+            code: 'auth/account-exists-with-different-credential',
+            customData: { email: 'test@example.com' }
+        };
+
+        (mockAuthService.githubLogin as any).mockRejectedValueOnce(collisionError);
+        (mockAuthService as any).fetchSignInMethods = vi.fn().mockResolvedValue(['password']); // Password provider implies we can offer Email Link
+        (mockAuthService as any).sendEmailLink = vi.fn().mockResolvedValue(true);
+        (mockAuthService.localStorageService.setItem as any) = vi.fn();
+
+        // Mock dialog to return 'emailLink'
+        const mockDialogRef = {
+            afterClosed: () => of('emailLink')
+        };
+        (mockDialog as any).open = vi.fn().mockReturnValue(mockDialogRef);
+
+        component.signInWithProvider(SignInProviders.GitHub);
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect((mockDialog as any).open).toHaveBeenCalled();
+        expect(mockAuthService.sendEmailLink).toHaveBeenCalledWith('test@example.com');
+        // Check if persist was called. The mock collision error creates a credential.
+        expect(mockAuthService.localStorageService.setItem).toHaveBeenCalledWith('pendingLinkProvider', 'github.com');
+    });
+
+    it('should handle pending link persistence in ngOnInit', async () => {
+        // Mock email link sign in
+        (mockAuthService as any).isSignInWithEmailLink = vi.fn().mockReturnValue(true);
+        (mockAuthService.localStorageService.getItem as any) = vi.fn().mockImplementation((key) => {
+            if (key === 'emailForSignIn') return 'test@example.com';
+            if (key === 'pendingLinkProvider') return 'github.com';
+            return null;
+        });
+
+        const mockUser = { uid: '456' };
+        (mockAuthService as any).signInWithEmailLink = vi.fn().mockResolvedValue({ user: mockUser });
+        (mockAuthService as any).linkWithPopup = vi.fn().mockResolvedValue({});
+
+        // Mock window.confirm
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        await component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(confirmSpy).toHaveBeenCalled();
+        expect(mockAuthService.linkWithPopup).toHaveBeenCalledWith(mockUser, expect.anything());
+    });
+
+    // --- Extensive Testing Additions ---
+
+    it('should show error toast if fetchSignInMethods fails during collision', async () => {
+        const collisionError = {
+            code: 'auth/account-exists-with-different-credential',
+            customData: { email: 'test@example.com' }
+        };
+        (mockAuthService.githubLogin as any).mockRejectedValueOnce(collisionError);
+        (mockAuthService as any).fetchSignInMethods = vi.fn().mockRejectedValue(new Error('Network error'));
+
+        component.signInWithProvider(SignInProviders.GitHub);
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockSnackBar.open).toHaveBeenCalledWith(expect.stringContaining('Account linking failed'), 'Close');
+    });
+
+    it('should do nothing if linking dialog is cancelled', async () => {
+        const collisionError = {
+            code: 'auth/account-exists-with-different-credential',
+            customData: { email: 'test@example.com' }
+        };
+        (mockAuthService.githubLogin as any).mockRejectedValueOnce(collisionError);
+        (mockAuthService as any).fetchSignInMethods = vi.fn().mockResolvedValue(['google.com']);
+
+        // Mock dialog cancelled (returns null/undefined)
+        const mockDialogRef = {
+            afterClosed: () => of(null)
+        };
+        (mockDialog as any).open = vi.fn().mockReturnValue(mockDialogRef);
+
+        component.signInWithProvider(SignInProviders.GitHub);
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        // Should NOT hold loading state ideally, but check mainly that we didn't proceed
+        expect(signInWithPopup).not.toHaveBeenCalled();
+        expect(mockAuthService.linkCredential).not.toHaveBeenCalled();
+    });
+
+    it('should show error if secondary provider login fails during linking', async () => {
+        const collisionError = {
+            code: 'auth/account-exists-with-different-credential',
+            customData: { email: 'test@example.com' }
+        };
+        (mockAuthService.githubLogin as any).mockRejectedValueOnce(collisionError);
+        (mockAuthService as any).fetchSignInMethods = vi.fn().mockResolvedValue(['google.com']);
+
+        // Select Google
+        const mockDialogRef = {
+            afterClosed: () => of('google.com')
+        };
+        (mockDialog as any).open = vi.fn().mockReturnValue(mockDialogRef);
+
+        // Secondary login fails (e.g. user closed popup)
+        (signInWithPopup as any).mockRejectedValue(new Error('Popup closed'));
+
+        component.signInWithProvider(SignInProviders.GitHub);
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockSnackBar.open).toHaveBeenCalledWith(expect.stringContaining('Account linking failed'), 'Close');
+    });
+
+    it('should show error if linkCredential fails', async () => {
+        const collisionError = {
+            code: 'auth/account-exists-with-different-credential',
+            customData: { email: 'test@example.com' }
+        };
+        (mockAuthService.githubLogin as any).mockRejectedValueOnce(collisionError);
+        (mockAuthService as any).fetchSignInMethods = vi.fn().mockResolvedValue(['google.com']);
+
+        const mockDialogRef = { afterClosed: () => of('google.com') };
+        (mockDialog as any).open = vi.fn().mockReturnValue(mockDialogRef);
+
+        (signInWithPopup as any).mockResolvedValue({ user: { uid: '123' } });
+
+        // Link fails
+        (mockAuthService as any).linkCredential = vi.fn().mockRejectedValue(new Error('Linking failed'));
+
+        component.signInWithProvider(SignInProviders.GitHub);
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockSnackBar.open).toHaveBeenCalledWith(expect.stringContaining('Account linking failed'), 'Close');
+    });
+
+    it('should handle pending link failure (reverse flow)', async () => {
+        (mockAuthService as any).isSignInWithEmailLink = vi.fn().mockReturnValue(true);
+        (mockAuthService.localStorageService.getItem as any) = vi.fn().mockImplementation((key) => {
+            if (key === 'emailForSignIn') return 'test@example.com';
+            if (key === 'pendingLinkProvider') return 'github.com';
+            return null;
+        });
+
+        const mockUser = { uid: '456' };
+        (mockAuthService as any).signInWithEmailLink = vi.fn().mockResolvedValue({ user: mockUser });
+
+        // User says OK to link
+        vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+        // Link fails
+        (mockAuthService as any).linkWithPopup = vi.fn().mockRejectedValue(new Error('Link error'));
+
+        await component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockSnackBar.open).toHaveBeenCalledWith(expect.stringContaining('Failed to link accounts'), 'Close');
     });
 });

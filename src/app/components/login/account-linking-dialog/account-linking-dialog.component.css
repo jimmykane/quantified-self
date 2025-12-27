@@ -21,7 +21,7 @@
 .info-section {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
 }
 
 .description {
@@ -36,63 +36,72 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
-    margin-top: 8px;
+    margin-top: 12px;
+}
+
+.options-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.provider-button {
+    height: 52px;
+    border-radius: 26px;
+    font-size: 16px;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    justify-content: flex-start;
+    padding-left: 24px;
+}
+
+.provider-icon {
+    margin-right: 16px;
+}
+
+.google {
+    color: #333;
+}
+
+.github {
+    color: #24292e;
+}
+
+.email {
+    color: #3f51b5;
 }
 
 .explanation-box {
-    padding: 16px;
+    padding: 12px 16px;
     border-radius: 12px;
     background-color: #f9f9f9;
     border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .link-box {
-    border-left: 4px solid #3f51b5;
-    /* Primary color indicator */
-    background-color: rgba(63, 81, 181, 0.03);
-}
-
-.cancel-box {
-    border-left: 4px solid rgba(0, 0, 0, 0.12);
-}
-
-.box-title {
-    margin: 0 0 8px 0;
-    font-size: 16px;
-    font-weight: 600;
-    color: #333;
-}
-
-.explanation-box p {
-    margin: 0 0 12px 0;
-    font-size: 14px;
-    line-height: 1.4;
-    color: rgba(0, 0, 0, 0.6);
-}
-
-.explanation-box p:last-child {
-    margin-bottom: 0;
+    background-color: rgba(46, 125, 50, 0.04);
+    /* Light green tint */
 }
 
 .benefit {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     color: #2e7d32 !important;
     /* Material Green 800 */
     font-weight: 500;
+    font-size: 14px;
+    margin: 0;
 }
 
 .benefit mat-icon {
-    font-size: 18px;
-    width: 18px;
-    height: 18px;
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
 }
 
 .actions {
     display: flex;
-    justify-content: flex-end;
-    gap: 12px;
+    justify-content: center;
     margin-top: 8px;
 }
 
@@ -100,11 +109,5 @@
     height: 48px;
     border-radius: 24px;
     padding: 0 24px;
-}
-
-.link-button {
-    height: 48px;
-    border-radius: 24px;
-    padding: 0 24px;
-    font-weight: 500;
+    color: rgba(0, 0, 0, 0.6);
 }
