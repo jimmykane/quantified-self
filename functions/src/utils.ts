@@ -97,11 +97,13 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
   event.setID(eventID);
 
   // Pre-assign Activity IDs to match legacy behavior (deterministic IDs)
-  event.getActivities().forEach((activity: ActivityInterface, index: number) => {
+  const activities = event.getActivities();
+  for (let i = 0; i < activities.length; i++) {
+    const activity = activities[i];
     if (!activity.getID()) {
-      activity.setID(generateIDFromParts([<string>event.getID(), index.toString()]));
+      activity.setID(await generateIDFromParts([<string>event.getID(), i.toString()]));
     }
-  });
+  }
 
 
   const adapter: FirestoreAdapter = {
@@ -187,8 +189,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
  */
 export async function createFirebaseAccount(serviceUserID: string) {
   // The UID we'll assign to the user.
-  const uid = generateIDFromParts(['suuntoApp', serviceUserID]);
-
+  const uid = await generateIDFromParts(['suuntoApp', serviceUserID]);
   // Save the access token to the Firestore
   // const databaseTask  = admin.firestore().collection('suuntoAppAccessTokens').doc(`${uid}`).set({accessToken: accessToken});
 

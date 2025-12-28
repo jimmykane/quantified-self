@@ -177,7 +177,8 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
       queueItem.manual || false,
       queueItem.startTimeInSeconds || 0, // 0 is ok here I suppose
       new Date());
-    await setEvent(tokenQuerySnapshots.docs[0].id, generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()]), event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase(), startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+    const eventID = await generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()]);
+    await setEvent(tokenQuerySnapshots.docs[0].id, eventID, event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase(), startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
     logger.info(`Created Event ${event.getID()} for ${queueItem.id} user id ${tokenQuerySnapshots.docs[0].id} and token user ${serviceToken.userID}`);
     // For each ended so we can set it to processed
     return updateToProcessed(queueItem, bulkWriter);

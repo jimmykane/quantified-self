@@ -42,7 +42,7 @@ export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2')
     return;
   }
 
-  for (const workout of convertCOROSWorkoutsToQueueItems(body.sportDataList)) {
+  for (const workout of await convertCOROSWorkoutsToQueueItems(body.sportDataList)) {
     try {
       await addToQueueForCOROS(workout);
     } catch (e: any) {
@@ -58,20 +58,19 @@ export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2')
 
 
 
-export function convertCOROSWorkoutsToQueueItems(workouts: any[], openId?: string): COROSAPIWorkoutQueueItemInterface[] {
+export async function convertCOROSWorkoutsToQueueItems(workouts: any[], openId?: string): Promise<COROSAPIWorkoutQueueItemInterface[]> {
   // find the triathlon
-  const triathlon = workouts
-    .filter(((workoutData: any) => workoutData.triathlonItemList))
-    .reduce((accu: COROSAPIWorkoutQueueItemInterface[], triathlonWorkout: any) => {
-      triathlonWorkout.triathlonItemList.forEach((triathlonWorkoutItem: any) => {
-        accu.push(getCOROSQueueItemFromWorkout(openId || triathlonWorkout.openId, triathlonWorkout.labelId, triathlonWorkoutItem.fitUrl));
-      });
-      return accu;
-    }, []);
+  const triathlonItems: COROSAPIWorkoutQueueItemInterface[] = [];
+  for (const triathlonWorkout of workouts.filter(((workoutData: any) => workoutData.triathlonItemList))) {
+    for (const triathlonWorkoutItem of triathlonWorkout.triathlonItemList) {
+      triathlonItems.push(await getCOROSQueueItemFromWorkout(openId || triathlonWorkout.openId, triathlonWorkout.labelId, triathlonWorkoutItem.fitUrl));
+    }
+  }
 
-  const nonTriathlon = workouts
-    .filter(((workoutData: any) => !workoutData.triathlonItemList)).map((workout: any) => getCOROSQueueItemFromWorkout(openId || workout.openId, workout.labelId, workout.fitUrl));
-  return [...triathlon, ...nonTriathlon].filter((workout) => {
+  const nonTriathlon = await Promise.all(workouts
+    .filter(((workoutData: any) => !workoutData.triathlonItemList)).map((workout: any) => getCOROSQueueItemFromWorkout(openId || workout.openId, workout.labelId, workout.fitUrl)));
+
+  return [...triathlonItems, ...nonTriathlon].filter((workout) => {
     if (!workout.FITFileURI) {
       logger.error(`No fit url skipping workout for user ${workout.openId}, id ${workout.workoutID}`);
       return false;
@@ -80,9 +79,9 @@ export function convertCOROSWorkoutsToQueueItems(workouts: any[], openId?: strin
   });
 }
 
-export function getCOROSQueueItemFromWorkout(openId: string, labelId: string, fitUrl: string): COROSAPIWorkoutQueueItemInterface {
+export async function getCOROSQueueItemFromWorkout(openId: string, labelId: string, fitUrl: string): Promise<COROSAPIWorkoutQueueItemInterface> {
   return {
-    id: generateIDFromParts([openId, labelId, fitUrl]),
+    id: await generateIDFromParts([openId, labelId, fitUrl]),
     dateCreated: new Date().getTime(),
     openId: openId,
     workoutID: labelId,

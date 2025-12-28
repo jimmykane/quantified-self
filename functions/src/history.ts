@@ -116,19 +116,19 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
       if (result.error) {
         throw new Error(result.error);
       }
-      return result.payload
+      return await Promise.all(result.payload
         // .filter((item: any) => (new Date(item.startTime)) >= startDate && (new Date(item.startTime)) <= endDate)
         .filter((item: any) => !!item.workoutKey)
-        .map((item: any) => {
+        .map(async (item: any) => {
           return {
-            id: generateIDFromParts([serviceToken.userName, item.workoutKey]),
+            id: await generateIDFromParts([serviceToken.userName, item.workoutKey]),
             dateCreated: new Date().getTime(),
             userName: serviceToken.userName,
             workoutID: item.workoutKey,
             retryCount: 0, // So it can be re-processed
             processed: false, // So it can be re-processed
           };
-        });
+        }));
     case ServiceNames.COROSAPI:
       result = await requestPromise.get({
         headers: {
@@ -140,7 +140,7 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
       if (result.message && result.message !== 'OK') {
         throw new Error(`COROS API Error with code ${result.result}`);
       }
-      return convertCOROSWorkoutsToQueueItems(result.data, (serviceToken as COROSAPIAuth2ServiceTokenInterface).openId);
+      return await convertCOROSWorkoutsToQueueItems(result.data, (serviceToken as COROSAPIAuth2ServiceTokenInterface).openId);
   }
 }
 
