@@ -228,7 +228,7 @@ export class EventCardComponent implements OnInit {
           this.event.set(resolvedData);
         }
 
-        this.logger.log('[EventCard] Event data loaded:', this.event());
+
 
         this.activitySelectionService.selectedActivities.clear();
         const activities = this.event()?.getActivities() ?? [];
