@@ -1,7 +1,7 @@
 /* Main App Layout */
+/* Note: margin-top is set dynamically via [style.margin-top.px] binding */
 mat-sidenav-container {
-  min-height: 100vh;
-  /* background-color: #fafafa;  Optional: Light background for the whole app */
+  min-height: calc(100vh - 64px);
 }
 
 mat-sidenav {
@@ -23,8 +23,12 @@ nav[mat-tab-nav-bar] {
   background-color: var(--mat-sys-surface, #ffffff);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
   /* Subtle shadow for depth */
-  z-index: 10;
-  /* Ensure it sits above content */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1001;
+  /* Above sidenav backdrop (z-index: 1000) */
   overflow: visible !important;
 
   ::ng-deep .mat-mdc-tab-header,
@@ -190,8 +194,12 @@ mat-progress-bar {
   align-items: center;
   gap: 12px;
   border-bottom: 1px solid #ffeeba;
-  z-index: 10002;
-  position: relative;
+  z-index: 1002;
+  /* Above nav bar (z-index: 1001) */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
   font-size: 14px;
   line-height: 1.4;
 

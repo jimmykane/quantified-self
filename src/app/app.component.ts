@@ -3,6 +3,7 @@ import {
   AfterViewInit,
   ChangeDetectorRef,
   Component,
+  ElementRef,
   OnDestroy,
   OnInit,
   ViewChild,
@@ -51,6 +52,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       this.sideNavService.setSidenav(sidenav);
     }
   }
+  @ViewChild('graceBanner') graceBanner: ElementRef<HTMLDivElement> | undefined;
+  public bannerHeight = 0;
   public title;
   private actionButtonsSubscription: Subscription;
   private routerEventSubscription: Subscription;
@@ -346,9 +349,19 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
   /**
    * See https://github.com/angular/angular/issues/14748
+   * Also updates banner height for dynamic layout
    */
   ngAfterViewChecked() {
-    // this.changeDetectorRef.detectChanges();
+    if (this.graceBanner) {
+      const newHeight = this.graceBanner.nativeElement.offsetHeight;
+      if (newHeight !== this.bannerHeight) {
+        this.bannerHeight = newHeight;
+        this.changeDetectorRef.detectChanges();
+      }
+    } else if (this.bannerHeight !== 0) {
+      this.bannerHeight = 0;
+      this.changeDetectorRef.detectChanges();
+    }
   }
 
   ngOnDestroy(): void {
