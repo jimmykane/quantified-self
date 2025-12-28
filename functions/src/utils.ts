@@ -4,7 +4,6 @@ type Response = functions.Response;
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { EventInterface } from '@sports-alliance/sports-lib';
-import { ActivityInterface } from '@sports-alliance/sports-lib';
 import {
   COROSAPIEventMetaData,
   GarminHealthAPIEventMetaData,
