@@ -20,6 +20,7 @@ import {
 import { EventExporterGPX } from '@sports-alliance/sports-lib';
 
 import { EventWriter, FirestoreAdapter, StorageAdapter, OriginalFile } from '../../../functions/src/shared/event-writer';
+import { generateActivityID, generateEventID } from '../../../functions/src/shared/id-generator';
 import { Bytes } from 'firebase/firestore';
 import { Storage, ref, uploadBytes, getBytes } from '@angular/fire/storage';
 import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
@@ -274,6 +275,18 @@ export class AppEventService implements OnDestroy {
   }
 
   public async writeAllEventData(user: User, event: AppEventInterface, originalFiles?: OriginalFile[] | OriginalFile) {
+    // 0. Ensure deterministic IDs to prevent duplicates
+    if (!event.getID()) {
+      event.setID(await generateEventID(user.uid, event.startDate));
+    }
+    const eventID = event.getID();
+    const activities = event.getActivities();
+    for (let i = 0; i < activities.length; i++) {
+      if (!activities[i].getID()) {
+        activities[i].setID(await generateActivityID(eventID, i));
+      }
+    }
+
     // 1. Check Pro Status
     const userService = this.injector.get(AppUserService);
     const isPro = await userService.isPro();
@@ -503,11 +516,9 @@ export class AppEventService implements OnDestroy {
   private async fetchAndParseOneFile(fileMeta: { path: string, bucket?: string }): Promise<EventInterface> {
     try {
       const fileRef = ref(this.storage, fileMeta.path);
-      const fileRef = ref(this.storage, fileMeta.path);
       const arrayBuffer = await getBytes(fileRef);
 
       const parts = fileMeta.path.split('.');
-      const extension = parts[parts.length - 1].toLowerCase();
       const extension = parts[parts.length - 1].toLowerCase();
 
       let newEvent: EventInterface;
