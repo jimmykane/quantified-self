@@ -19,8 +19,8 @@
 
     <!-- Suunto Section -->
     @if (activeSection === 'suunto') {
-    <div class="settings-card app-header-card">
-      <div class="header-content">
+    <mat-card class="settings-card glass-card">
+      <div class="header-content" style="padding: 24px; padding-bottom: 0;">
         <div class="header-avatar">
           <mat-icon class="layer-icon" svgIcon="suunto" style="width: 40px; height: 40px;"></mat-icon>
         </div>
@@ -29,8 +29,6 @@
           <p>Manage your connection with Suunto App.</p>
         </div>
       </div>
-    </div>
-    <mat-card class="settings-card glass-card">
       <div class="card-content">
         <app-services-suunto [user]="user" [isGuest]="isGuest" [hasProAccess]="hasProAccess"></app-services-suunto>
       </div>
@@ -39,8 +37,8 @@
 
     <!-- Garmin Section -->
     @if (activeSection === 'garmin') {
-    <div class="settings-card app-header-card">
-      <div class="header-content">
+    <mat-card class="settings-card glass-card">
+      <div class="header-content" style="padding: 24px; padding-bottom: 0;">
         <div class="header-avatar">
           <mat-icon class="layer-icon" svgIcon="garmin" style="width: 40px; height: 40px;"></mat-icon>
         </div>
@@ -49,8 +47,6 @@
           <p>Manage your connection with Garmin Connect.</p>
         </div>
       </div>
-    </div>
-    <mat-card class="settings-card glass-card">
       <div class="card-content">
         <app-services-garmin [user]="user" [isGuest]="isGuest" [hasProAccess]="hasProAccess"></app-services-garmin>
       </div>
@@ -59,8 +55,8 @@
 
     <!-- COROS Section -->
     @if (activeSection === 'coros') {
-    <div class="settings-card app-header-card">
-      <div class="header-content">
+    <mat-card class="settings-card glass-card">
+      <div class="header-content" style="padding: 24px; padding-bottom: 0;">
         <div class="header-avatar">
           <mat-icon class="layer-icon" svgIcon="coros" style="width: 40px; height: 40px;"></mat-icon>
         </div>
@@ -69,8 +65,6 @@
           <p>Manage your connection with COROS.</p>
         </div>
       </div>
-    </div>
-    <mat-card class="settings-card glass-card">
       <div class="card-content">
         <app-services-coros [user]="user" [isGuest]="isGuest" [hasProAccess]="hasProAccess"></app-services-coros>
       </div>
