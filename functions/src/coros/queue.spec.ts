@@ -30,20 +30,20 @@ vi.mock('firebase-functions', () => ({
 vi.mock('simple-oauth2', () => ({
     AuthorizationCode: class {
         authorizeURL() {
- return 'https://mock-auth-url.com';
-}
+            return 'https://mock-auth-url.com';
+        }
         getToken() {
- return Promise.resolve({ token: {} });
-}
+            return Promise.resolve({ token: {} });
+        }
         createToken(token: any) {
- return { expired: () => false, refresh: () => Promise.resolve({ token: {} }), token };
-}
+            return { expired: () => false, refresh: () => Promise.resolve({ token: {} }), token };
+        }
     },
 }));
 
 // Mock the utils module for generateIDFromParts
 vi.mock('../utils', () => ({
-    generateIDFromParts: vi.fn((parts: string[]) => parts.join('-')),
+    generateIDFromParts: vi.fn((parts: string[]) => Promise.resolve(parts.join('-'))),
 }));
 
 // Import AFTER mocks are set up - Vitest hoists vi.mock calls
@@ -54,8 +54,8 @@ import {
 
 describe('coros/queue', () => {
     describe('getCOROSQueueItemFromWorkout', () => {
-        it('should create a queue item with correct structure', () => {
-            const result = getCOROSQueueItemFromWorkout(
+        it('should create a queue item with correct structure', async () => {
+            const result = await getCOROSQueueItemFromWorkout(
                 'open-id-123',
                 'label-456',
                 'https://coros.com/fit/file.fit'
@@ -70,8 +70,8 @@ describe('coros/queue', () => {
             });
         });
 
-        it('should generate an ID from openId, labelId, and fitUrl', () => {
-            const result = getCOROSQueueItemFromWorkout(
+        it('should generate an ID from openId, labelId, and fitUrl', async () => {
+            const result = await getCOROSQueueItemFromWorkout(
                 'open-id-123',
                 'label-456',
                 'https://coros.com/fit/file.fit'
@@ -81,9 +81,9 @@ describe('coros/queue', () => {
             expect(result.id).toBe('open-id-123-label-456-https://coros.com/fit/file.fit');
         });
 
-        it('should set dateCreated to current timestamp', () => {
+        it('should set dateCreated to current timestamp', async () => {
             const before = Date.now();
-            const result = getCOROSQueueItemFromWorkout('a', 'b', 'c');
+            const result = await getCOROSQueueItemFromWorkout('a', 'b', 'c');
             const after = Date.now();
 
             expect(result.dateCreated).toBeGreaterThanOrEqual(before);
@@ -92,7 +92,7 @@ describe('coros/queue', () => {
     });
 
     describe('convertCOROSWorkoutsToQueueItems', () => {
-        it('should convert regular workouts to queue items', () => {
+        it('should convert regular workouts to queue items', async () => {
             const workouts = [
                 {
                     openId: 'user1',
@@ -106,14 +106,14 @@ describe('coros/queue', () => {
                 },
             ];
 
-            const result = convertCOROSWorkoutsToQueueItems(workouts);
+            const result = await convertCOROSWorkoutsToQueueItems(workouts);
 
             expect(result).toHaveLength(2);
             expect(result[0].workoutID).toBe('workout1');
             expect(result[1].workoutID).toBe('workout2');
         });
 
-        it('should use provided openId when available', () => {
+        it('should use provided openId when available', async () => {
             const workouts = [
                 {
                     openId: 'originalUser',
@@ -122,12 +122,12 @@ describe('coros/queue', () => {
                 },
             ];
 
-            const result = convertCOROSWorkoutsToQueueItems(workouts, 'overrideUser');
+            const result = await convertCOROSWorkoutsToQueueItems(workouts, 'overrideUser');
 
             expect(result[0].openId).toBe('overrideUser');
         });
 
-        it('should expand triathlon workouts into individual items', () => {
+        it('should expand triathlon workouts into individual items', async () => {
             const workouts = [
                 {
                     openId: 'user1',
@@ -140,7 +140,7 @@ describe('coros/queue', () => {
                 },
             ];
 
-            const result = convertCOROSWorkoutsToQueueItems(workouts);
+            const result = await convertCOROSWorkoutsToQueueItems(workouts);
 
             expect(result).toHaveLength(3);
             expect(result[0].FITFileURI).toBe('https://coros.com/fit/swim.fit');
@@ -148,7 +148,7 @@ describe('coros/queue', () => {
             expect(result[2].FITFileURI).toBe('https://coros.com/fit/run.fit');
         });
 
-        it('should filter out workouts without FIT URL', () => {
+        it('should filter out workouts without FIT URL', async () => {
             const workouts = [
                 {
                     openId: 'user1',
@@ -167,13 +167,13 @@ describe('coros/queue', () => {
                 },
             ];
 
-            const result = convertCOROSWorkoutsToQueueItems(workouts);
+            const result = await convertCOROSWorkoutsToQueueItems(workouts);
 
             expect(result).toHaveLength(1);
             expect(result[0].workoutID).toBe('workout1');
         });
 
-        it('should handle mixed regular and triathlon workouts', () => {
+        it('should handle mixed regular and triathlon workouts', async () => {
             const workouts = [
                 {
                     openId: 'user1',
@@ -190,13 +190,13 @@ describe('coros/queue', () => {
                 },
             ];
 
-            const result = convertCOROSWorkoutsToQueueItems(workouts);
+            const result = await convertCOROSWorkoutsToQueueItems(workouts);
 
             expect(result).toHaveLength(3);
         });
 
-        it('should handle empty workouts array', () => {
-            const result = convertCOROSWorkoutsToQueueItems([]);
+        it('should handle empty workouts array', async () => {
+            const result = await convertCOROSWorkoutsToQueueItems([]);
             expect(result).toHaveLength(0);
         });
     });

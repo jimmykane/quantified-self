@@ -8,37 +8,37 @@ import {
 
 describe('utils', () => {
     describe('generateIDFromParts', () => {
-        it('should generate a consistent hash for the same inputs', () => {
-            const result1 = generateIDFromParts(['user123', 'workout456']);
-            const result2 = generateIDFromParts(['user123', 'workout456']);
+        it('should generate a consistent hash for the same inputs', async () => {
+            const result1 = await generateIDFromParts(['user123', 'workout456']);
+            const result2 = await generateIDFromParts(['user123', 'workout456']);
             expect(result1).toBe(result2);
         });
 
-        it('should generate different hashes for different inputs', () => {
-            const result1 = generateIDFromParts(['user123', 'workout456']);
-            const result2 = generateIDFromParts(['user123', 'workout789']);
+        it('should generate different hashes for different inputs', async () => {
+            const result1 = await generateIDFromParts(['user123', 'workout456']);
+            const result2 = await generateIDFromParts(['user123', 'workout789']);
             expect(result1).not.toBe(result2);
         });
 
-        it('should generate a hex string', () => {
-            const result = generateIDFromParts(['test', 'value']);
+        it('should generate a hex string', async () => {
+            const result = await generateIDFromParts(['test', 'value']);
             expect(result).toMatch(/^[a-f0-9]+$/);
         });
 
-        it('should handle empty parts array', () => {
-            const result = generateIDFromParts([]);
+        it('should handle empty parts array', async () => {
+            const result = await generateIDFromParts([]);
             expect(result).toBeTruthy();
             expect(typeof result).toBe('string');
         });
 
-        it('should handle single part', () => {
-            const result = generateIDFromParts(['singlepart']);
+        it('should handle single part', async () => {
+            const result = await generateIDFromParts(['singlepart']);
             expect(result).toBeTruthy();
         });
 
-        it('should produce different results for different order', () => {
-            const result1 = generateIDFromParts(['a', 'b']);
-            const result2 = generateIDFromParts(['b', 'a']);
+        it('should produce different results for different order', async () => {
+            const result1 = await generateIDFromParts(['a', 'b']);
+            const result2 = await generateIDFromParts(['b', 'a']);
             expect(result1).not.toBe(result2);
         });
     });
