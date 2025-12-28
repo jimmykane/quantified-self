@@ -1,4 +1,25 @@
 /* Compact History Import Form Styles */
+
+.status-section {
+  padding: 0.5rem 0;
+}
+
+.status-section h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.9rem;
+  opacity: 0.7;
+}
+
+.status-section p {
+  margin: 0.25rem 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.status-section strong {
+  opacity: 0.8;
+}
+
 .history-import-form {
   display: flex;
   flex-direction: column;

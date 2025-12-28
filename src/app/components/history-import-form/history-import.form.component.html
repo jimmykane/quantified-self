@@ -1,25 +1,12 @@
 @if (userMetaForService && userMetaForService.didLastHistoryImport && !isAllowedToDoHistoryImport) {
-<mat-list>
-  <div mat-subheader>Status</div>
-  <mat-list-item style="text-align: left">
-    <mat-icon mat-list-icon>date_range</mat-icon>
-    <div mat-line>Your last history import was at</div>
-    <div mat-line>{{ userMetaForService.didLastHistoryImport | date: 'medium'}}</div>
-  </mat-list-item>
+<div class="status-section">
+  <h4>Status</h4>
+  <p><strong>Last import:</strong> {{ userMetaForService.didLastHistoryImport | date: 'short' }}</p>
   @if (serviceName === serviceNames.SuuntoApp) {
-  <mat-list-item style="text-align: left">
-    <mat-icon mat-list-icon>confirmation_number</mat-icon>
-    <div mat-line>Activities Queued</div>
-    <div mat-line>{{ userMetaForService.processedActivitiesFromLastHistoryImportCount }} activities</div>
-  </mat-list-item>
+  <p><strong>Queued:</strong> {{ userMetaForService.processedActivitiesFromLastHistoryImportCount }} activities</p>
   }
-  <mat-list-item style="text-align: left">
-    <mat-icon mat-list-icon>replay</mat-icon>
-    <div mat-line>You can run the next history import at</div>
-    <div mat-line>{{ nextImportAvailableDate | date: 'medium'}}</div>
-  </mat-list-item>
-
-</mat-list>
+  <p><strong>Next available:</strong> {{ nextImportAvailableDate | date: 'short' }}</p>
+</div>
 }
 
 @if (formGroup && isAllowedToDoHistoryImport) {
