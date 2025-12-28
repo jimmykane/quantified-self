@@ -11,7 +11,7 @@
   <div class="features-grid">
 
     <!-- Connectivity Card (Now inside Pro Grid) -->
-    <mat-card class="feature-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
+    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
       (click)="!hasProAccess && triggerUpsell()">
       @if (!hasProAccess) {
       <div class="lock-overlay">
@@ -42,8 +42,8 @@
 
         <div style="margin-top: auto; padding-top: 16px;">
           @if (!isConnectedToService()) {
-          <button mat-flat-button color="primary" style="width: 100%"
-            [disabled]="!user || this.isGuest || isLoading" (click)="connectWithService($event)">
+          <button mat-flat-button color="primary" style="width: 100%" [disabled]="!user || this.isGuest || isLoading"
+            (click)="connectWithService($event)">
             <mat-icon>link</mat-icon> Connect
           </button>
           }
@@ -59,7 +59,7 @@
     </mat-card>
 
     <!-- History Import Card -->
-    <mat-card class="feature-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
+    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
       (click)="!hasProAccess && triggerUpsell()">
       @if (!hasProAccess) {
       <div class="lock-overlay">

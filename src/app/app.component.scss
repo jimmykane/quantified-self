@@ -25,7 +25,18 @@ nav[mat-tab-nav-bar] {
   /* Subtle shadow for depth */
   z-index: 10;
   /* Ensure it sits above content */
-  overflow: hidden;
+  overflow: visible !important;
+
+  ::ng-deep .mat-mdc-tab-header,
+  ::ng-deep .mat-mdc-tab-header-pagination,
+  ::ng-deep .mat-mdc-tab-link-container,
+  ::ng-deep .mat-mdc-tab-list,
+  ::ng-deep .mat-tab-header,
+  ::ng-deep .mat-tab-header-pagination,
+  ::ng-deep .mat-tab-link-container,
+  ::ng-deep .mat-tab-list {
+    overflow: visible !important;
+  }
 }
 
 /* Navigation Items */
@@ -145,7 +156,7 @@ mat-progress-bar {
   top: 0;
   left: 0;
   width: 100%;
-  z-index: 10001;
+  z-index: 10003;
   /* Highest priority */
 }
 

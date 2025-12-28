@@ -10,7 +10,7 @@
   <div class="features-grid">
 
     <!-- Connectivity Card (Now inside Pro Grid) -->
-    <mat-card class="feature-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
+    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
       (click)="!hasProAccess && triggerUpsell()">
       @if (!hasProAccess) {
       <div class="lock-overlay">
@@ -58,7 +58,7 @@
     </mat-card>
 
     <!-- History Import Card -->
-    <mat-card class="feature-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
+    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
       (click)="!hasProAccess && triggerUpsell()">
       @if (!hasProAccess) {
       <div class="lock-overlay">
