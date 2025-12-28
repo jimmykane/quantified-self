@@ -35,6 +35,7 @@ import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
 import { AppUserService } from './app.user.service';
 import { USAGE_LIMITS } from '../../../functions/src/shared/limits';
 import { AppEventInterface } from '../../../functions/src/shared/app-event.interface'; // Import Shared Interface
+import { AppEventUtilities } from '../utils/app.event.utilities';
 
 @Injectable({
   providedIn: 'root',
@@ -502,13 +503,12 @@ export class AppEventService implements OnDestroy {
   private async fetchAndParseOneFile(fileMeta: { path: string, bucket?: string }): Promise<EventInterface> {
     try {
       const fileRef = ref(this.storage, fileMeta.path);
-      console.log('Fetching file bytes from', fileMeta.path);
+      const fileRef = ref(this.storage, fileMeta.path);
       const arrayBuffer = await getBytes(fileRef);
-      console.log('File bytes fetched, size:', arrayBuffer.byteLength);
 
       const parts = fileMeta.path.split('.');
       const extension = parts[parts.length - 1].toLowerCase();
-      console.log('Parsing file with extension:', extension);
+      const extension = parts[parts.length - 1].toLowerCase();
 
       let newEvent: EventInterface;
 
@@ -530,6 +530,13 @@ export class AppEventService implements OnDestroy {
         newEvent = await EventImporterSuuntoSML.getFromXML(text);
       } else {
         throw new Error(`Unsupported original file extension: ${extension}`);
+      }
+
+      // Polyfill Time stream if missing
+      if (newEvent) {
+        newEvent.getActivities().forEach(activity => {
+          AppEventUtilities.enrich(activity, ['Time', 'Duration']);
+        });
       }
       return newEvent;
     } catch (e) {
