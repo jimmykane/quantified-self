@@ -2,7 +2,7 @@
 
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
-import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, assertProServiceAccess } from '../../utils';
+import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, isProUser, PRO_REQUIRED_MESSAGE } from '../../utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   deauthorizeServiceForUser,
@@ -37,11 +37,9 @@ export const getSuuntoAPIAuthRequestTokenRedirectURI = functions.region('europe-
   }
 
   // Enforce Pro Access
-  try {
-    await assertProServiceAccess(userID);
-  } catch (e: any) {
-    logger.warn(`Blocking Suunto Auth for non-pro user ${userID}: ${e.message}`);
-    res.status(403).send(e.message);
+  if (!(await isProUser(userID))) {
+    logger.warn(`Blocking Suunto Auth for non-pro user ${userID}`);
+    res.status(403).send(PRO_REQUIRED_MESSAGE);
     return;
   }
 
@@ -81,11 +79,9 @@ export const requestAndSetSuuntoAPIAccessToken = functions.region('europe-west2'
   }
 
   // Enforce Pro Access
-  try {
-    await assertProServiceAccess(userID);
-  } catch (e: any) {
-    logger.warn(`Blocking Suunto Token Set for non-pro user ${userID}: ${e.message}`);
-    res.status(403).send(e.message);
+  if (!(await isProUser(userID))) {
+    logger.warn(`Blocking Suunto Token Set for non-pro user ${userID}`);
+    res.status(403).send(PRO_REQUIRED_MESSAGE);
     return;
   }
 

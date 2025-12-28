@@ -16,7 +16,8 @@ vi.mock('../../utils', () => ({
     isCorsAllowed: vi.fn().mockReturnValue(true),
     setAccessControlHeadersOnResponse: vi.fn(),
     getUserIDFromFirebaseToken: vi.fn().mockResolvedValue('testUserID'),
-    assertProServiceAccess: vi.fn().mockResolvedValue(true)
+    isProUser: vi.fn().mockResolvedValue(true),
+    PRO_REQUIRED_MESSAGE: 'Service sync is a Pro feature.'
 }));
 
 vi.mock('../../OAuth2', () => ({
@@ -39,7 +40,7 @@ describe('Suunto Auth Wrapper', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        (utils.assertProServiceAccess as any).mockResolvedValue(true);
+        (utils.isProUser as any).mockResolvedValue(true);
         (utils.getUserIDFromFirebaseToken as any).mockResolvedValue('testUserID');
 
         req = {
@@ -58,7 +59,7 @@ describe('Suunto Auth Wrapper', () => {
         it('should return redirect URI for pro user', async () => {
             await getSuuntoAPIAuthRequestTokenRedirectURI(req, res);
 
-            expect(utils.assertProServiceAccess).toHaveBeenCalledWith('testUserID');
+            expect(utils.isProUser).toHaveBeenCalledWith('testUserID');
             expect(oauth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith(
                 'testUserID',
                 ServiceNames.SuuntoApp,
@@ -68,12 +69,12 @@ describe('Suunto Auth Wrapper', () => {
         });
 
         it('should return 403 for non-pro user', async () => {
-            (utils.assertProServiceAccess as any).mockRejectedValue(new Error('Pro required'));
+            (utils.isProUser as any).mockResolvedValue(false);
 
             await getSuuntoAPIAuthRequestTokenRedirectURI(req, res);
 
             expect(res.status).toHaveBeenCalledWith(403);
-            expect(res.send).toHaveBeenCalledWith('Pro required');
+            expect(res.send).toHaveBeenCalledWith('Service sync is a Pro feature.');
         });
     });
 

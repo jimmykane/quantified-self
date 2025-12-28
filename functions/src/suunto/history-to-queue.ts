@@ -6,7 +6,8 @@ import {
   getUserIDFromFirebaseToken,
   isCorsAllowed,
   setAccessControlHeadersOnResponse,
-  assertProServiceAccess,
+  isProUser,
+  PRO_REQUIRED_MESSAGE,
 } from '../utils';
 import { SERVICE_NAME } from './constants';
 import { addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
@@ -37,7 +38,11 @@ export const addSuuntoAppHistoryToQueue = functions.region('europe-west2').https
     return;
   }
 
-  await assertProServiceAccess(userID);
+  if (!(await isProUser(userID))) {
+    logger.warn(`Blocking history import for non-pro user ${userID}`);
+    res.status(403).send(PRO_REQUIRED_MESSAGE);
+    return;
+  }
 
 
   const startDate = new Date(req.body.startDate);
