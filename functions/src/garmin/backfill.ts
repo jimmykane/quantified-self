@@ -1,6 +1,6 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
-import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse } from '../utils';
+import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, assertProServiceAccess } from '../utils';
 import { GarminHealthAPIAuth } from './auth/auth';
 import * as requestPromise from '../request-helper';
 import * as admin from 'firebase-admin';
@@ -36,6 +36,8 @@ export const backfillHealthAPIActivities = functions.region('europe-west2').runW
     res.status(403).send('Unauthorized');
     return;
   }
+
+  await assertProServiceAccess(userID);
 
   const startDate = new Date(req.body.startDate);
   const endDate = new Date(req.body.endDate);

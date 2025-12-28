@@ -15,7 +15,8 @@ vi.mock('firebase-functions/v1', () => ({
 vi.mock('../utils', () => ({
     isCorsAllowed: vi.fn().mockReturnValue(true),
     setAccessControlHeadersOnResponse: vi.fn(),
-    getUserIDFromFirebaseToken: vi.fn().mockResolvedValue('testUserID')
+    getUserIDFromFirebaseToken: vi.fn().mockResolvedValue('testUserID'),
+    assertProServiceAccess: vi.fn().mockResolvedValue(undefined)
 }));
 
 vi.mock('../history', () => ({

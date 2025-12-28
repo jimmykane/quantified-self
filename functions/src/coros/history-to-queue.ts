@@ -6,6 +6,7 @@ import {
   getUserIDFromFirebaseToken,
   isCorsAllowed,
   setAccessControlHeadersOnResponse,
+  assertProServiceAccess,
 } from '../utils';
 import { SERVICE_NAME } from './constants';
 import { addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
@@ -36,6 +37,8 @@ export const addCOROSAPIHistoryToQueue = functions.region('europe-west2').https.
     res.status(403).send('Unauthorized');
     return;
   }
+
+  await assertProServiceAccess(userID);
 
 
   const startDate = new Date(req.body.startDate);
