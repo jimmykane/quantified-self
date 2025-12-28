@@ -99,3 +99,33 @@ section.condensed {
     /* More breathing room on desktop */
   }
 }
+
+/* Mobile Styles */
+@media only screen and (max-width: 600px) {
+  section.grid {
+    grid-template-columns: repeat(2, 1fr);
+    /* Force 2 columns on mobile */
+    gap: 8px;
+  }
+
+  .stat-item {
+    padding: 8px 10px;
+    gap: 8px;
+    border-radius: 8px;
+    touch-action: pan-y;
+    /* Allow vertical scrolling through items */
+  }
+
+  .stat-avatar {
+    width: 16px;
+    height: 16px;
+  }
+
+  .stat-label {
+    font-size: 0.55rem;
+  }
+
+  .stat-value-grid {
+    font-size: 0.8rem;
+  }
+}
