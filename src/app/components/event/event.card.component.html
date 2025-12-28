@@ -9,6 +9,17 @@
     [selectedActivities]="selectedActivitiesInstant()" [unitSettings]="userUnitSettings()"
     [statsToShow]="basicStatsTypes">
 
+    <!-- Projecting Intensity Zones after Stats Grid -->
+    <!-- Projecting Intensity Zones after Stats Grid -->
+    @if (hasIntensityZonesFlag()) {
+    <div after-stats class="intensity-zones-summary-wrapper">
+      <mat-divider></mat-divider>
+      <app-event-intensity-zones [activities]="selectedActivitiesInstant()" [useAnimations]="useChartAnimations()"
+        [chartTheme]="chartTheme()">
+      </app-event-intensity-zones>
+    </div>
+    }
+
     <!-- Projecting Secondary Details into Summary Card -->
     <div summary-bottom class="secondary-details-container">
       <mat-tab-group mat-stretch-tabs="false" animationDuration="0ms">
@@ -75,27 +86,6 @@
               <app-event-card-laps [selectedActivities]="selectedActivitiesInstant()"
                 [unitSettings]="userUnitSettings()" [event]="event()!">
               </app-event-card-laps>
-            </div>
-          </ng-template>
-        </mat-tab>
-        }
-
-        <!-- TAB 4: DETAILS -->
-        @if (hasIntensityZonesFlag() || hasDevicesFlag()) {
-        <mat-tab label="Details">
-          <ng-template matTabContent>
-            <div class="tab-content-wrapper">
-              @if (hasIntensityZonesFlag()) {
-              <app-event-intensity-zones [activities]="selectedActivitiesInstant()"
-                [useAnimations]="useChartAnimations()" [chartTheme]="chartTheme()">
-              </app-event-intensity-zones>
-              }
-
-              @if (hasDevicesFlag()) {
-              @if (hasIntensityZonesFlag()) { <mat-divider></mat-divider> }
-              <app-event-card-devices [selectedActivities]="selectedActivitiesInstant()" [event]="event()!">
-              </app-event-card-devices>
-              }
             </div>
           </ng-template>
         </mat-tab>

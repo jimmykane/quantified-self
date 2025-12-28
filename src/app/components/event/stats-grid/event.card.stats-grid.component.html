@@ -1,2 +1,8 @@
 <app-header-stats [statsToShow]="displayedStatsToShow" [layout]="layout" [stats]="stats" [unitSettings]="unitSettings">
+    <div grid-suffix>
+        <ng-content select="[stats-suffix]"></ng-content>
+    </div>
+    <div chip-suffix>
+        <ng-content select="[stats-suffix]"></ng-content>
+    </div>
 </app-header-stats>

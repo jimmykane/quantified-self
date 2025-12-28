@@ -40,15 +40,97 @@
   width: 100%;
 }
 
-.analysis-trigger {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 8px;
+.show-more-item {
+  cursor: pointer;
+  border: 1px dashed var(--mat-app-primary) !important;
+  opacity: 0.9;
+  /* Inherits grid sizing from parent */
+  background-color: var(--mat-app-surface-variant) !important;
+  align-items: center !important;
+  padding: 10px 12px !important;
+  gap: 12px !important;
+  border-radius: 12px !important;
 }
 
-.analysis-trigger button {
-  border-radius: 20px;
-  padding: 0 24px;
+.show-more-item:hover {
+  opacity: 1;
+  background-color: var(--mat-app-primary-container) !important;
+  border-style: solid !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.show-more-item .stat-avatar {
+  margin-bottom: 0;
+}
+
+.show-more-item .stat-content {
+  align-items: flex-start !important;
+  text-align: left;
+}
+
+.show-more-item .stat-label {
+  color: var(--mat-app-primary);
+  font-weight: 700;
+  font-size: 0.65rem;
+}
+
+.show-more-item .stat-value-grid {
+  color: var(--mat-app-on-surface);
+  font-size: 0.95rem;
+}
+
+/* Base Stat Item Style for projected content */
+.stat-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 10px 12px;
+  min-width: 0;
+  border: 1px solid var(--mat-app-outline-variant);
+  border-radius: 8px;
+  background-color: var(--mat-app-surface-container-low);
+  transition: all 0.2s ease-in-out;
+  text-align: left;
+  gap: 10px;
+}
+
+.stat-avatar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stat-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 0;
+}
+
+.stat-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--mat-app-on-surface-variant);
+  opacity: 0.8;
+  line-height: 1.1;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stat-value-grid {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--mat-app-on-surface);
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 /* Avatar area */

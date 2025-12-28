@@ -23,6 +23,7 @@ import { LapTypeIconComponent } from '../components/lap-type-icon/lap-type-icon.
 import { GoogleMapsModule } from '@angular/google-maps';
 import { EventDetailsSummaryBottomSheetComponent } from '../components/event-summary/event-details-summary-bottom-sheet/event-details-summary-bottom-sheet.component';
 import { EventStatsBottomSheetComponent } from '../components/event/stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
+import { EventDevicesBottomSheetComponent } from '../components/event/devices/event-devices-bottom-sheet/event-devices-bottom-sheet.component';
 
 
 @NgModule({
@@ -49,6 +50,7 @@ import { EventStatsBottomSheetComponent } from '../components/event/stats-table/
         EventSummaryComponent,
         EventDetailsSummaryBottomSheetComponent,
         EventStatsBottomSheetComponent,
+        EventDevicesBottomSheetComponent,
         HeaderStatsComponent,
         ActivitiesTogglesComponent,
         ActivityActionsComponent,

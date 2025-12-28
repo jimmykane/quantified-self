@@ -1,7 +1,17 @@
-.mat-column-Manufacturer{
+.mat-column-Manufacturer {
   text-transform: capitalize;
 }
 
-mat-table{
+mat-table {
   padding-bottom: 1em;
+  background: transparent;
+}
+
+.activity-devices-section {
+  padding-bottom: 16px;
+}
+
+.table-container {
+  overflow-x: auto;
+  width: 100%;
 }

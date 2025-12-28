@@ -1,0 +1,24 @@
+.bottom-sheet-container {
+    display: flex;
+    flex-direction: column;
+    max-height: 80vh;
+}
+
+.bottom-sheet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--mat-app-outline-variant);
+}
+
+.bottom-sheet-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 500;
+}
+
+.bottom-sheet-content {
+    padding: 16px;
+    overflow-y: auto;
+}

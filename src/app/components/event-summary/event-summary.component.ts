@@ -5,6 +5,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { EventDetailsSummaryBottomSheetComponent } from './event-details-summary-bottom-sheet/event-details-summary-bottom-sheet.component';
 import { EventStatsBottomSheetComponent } from '../event/stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
+import { EventDevicesBottomSheetComponent } from '../event/devices/event-devices-bottom-sheet/event-devices-bottom-sheet.component';
 
 @Component({
   selector: 'app-event-summary',
@@ -59,6 +60,20 @@ export class EventSummaryComponent implements OnChanges {
         event: this.event,
         selectedActivities: this.selectedActivities,
         userUnitSettings: this.unitSettings
+      },
+      panelClass: 'qs-full-width-bottom-sheet'
+    });
+  }
+
+  get hasDevices(): boolean {
+    return this.selectedActivities?.some(a => a.creator?.devices?.length > 0);
+  }
+
+  openDevices() {
+    this.bottomSheet.open(EventDevicesBottomSheetComponent, {
+      data: {
+        event: this.event,
+        selectedActivities: this.selectedActivities,
       },
       panelClass: 'qs-full-width-bottom-sheet'
     });
