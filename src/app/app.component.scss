@@ -67,11 +67,7 @@ mat-icon.header-logo {
   /* Ensure resizing works */
 }
 
-.hamburger-link {
-  margin-right: 8px;
-  /* Ensure it's not squashed */
-  flex-shrink: 0;
-}
+
 
 /* Utilities */
 .fill-space {
@@ -132,6 +128,16 @@ nav app-upload-activities {
   display: flex;
   align-items: center;
   margin-left: 12px;
+}
+
+/* Hamburger button specific styling */
+nav button.hamburger-link {
+  border-radius: 50%;
+  padding: 0;
+  width: 40px;
+  min-width: 40px;
+  margin-right: 8px;
+  flex-shrink: 0;
 }
 
 mat-progress-bar {
