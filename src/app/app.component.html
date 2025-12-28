@@ -48,21 +48,23 @@
         Dashboard
       </button>
       }
+
+      @if (title && title === 'Dashboard' && authService.user$ | async; as user) {
+      <app-upload-activities class="right" [user]="user">
+      </app-upload-activities>
+      }
+
       @if (isAdminUser && title !== 'Admin') {
       <button mat-icon-button class="right admin-button" matTooltip="Admin Dashboard"
         (click)="router.navigate(['/admin']);">
         <mat-icon>admin_panel_settings</mat-icon>
       </button>
       }
+
       @if (authState === false && title && title !== 'Login') {
       <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/login']);">
         Login or Register
       </button>
-      }
-
-      @if (title && title === 'Dashboard' && authService.user$ | async; as user) {
-      <app-upload-activities class="right" [user]="user">
-      </app-upload-activities>
       }
     </nav>
 

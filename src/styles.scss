@@ -290,7 +290,10 @@ section.component-container {
 
 /* Global Paginator Transparent Override */
 mat-paginator,
-.mat-mdc-paginator {
+.mat-mdc-paginator,
+mat-stepper,
+.mat-stepper-horizontal,
+.mat-stepper-vertical {
   background: transparent !important;
 }
 
