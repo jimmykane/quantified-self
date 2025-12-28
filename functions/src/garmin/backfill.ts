@@ -1,6 +1,6 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
-import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, assertProServiceAccess } from '../utils';
+import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
 import { GarminHealthAPIAuth } from './auth/auth';
 import * as requestPromise from '../request-helper';
 import * as admin from 'firebase-admin';
@@ -37,7 +37,11 @@ export const backfillHealthAPIActivities = functions.region('europe-west2').runW
     return;
   }
 
-  await assertProServiceAccess(userID);
+  if (!(await isProUser(userID))) {
+    logger.warn(`Blocking history import for non-pro user ${userID}`);
+    res.status(403).send(PRO_REQUIRED_MESSAGE);
+    return;
+  }
 
   const startDate = new Date(req.body.startDate);
   const endDate = new Date(req.body.endDate);

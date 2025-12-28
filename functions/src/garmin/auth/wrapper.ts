@@ -3,7 +3,7 @@ import * as logger from 'firebase-functions/logger';
 import { GarminHealthAPIAuth } from './auth';
 import * as requestPromise from '../../request-helper';
 import { isCorsAllowed, setAccessControlHeadersOnResponse } from '../../utils';
-import { getUserIDFromFirebaseToken, assertProServiceAccess } from '../../utils';
+import { getUserIDFromFirebaseToken, isProUser, PRO_REQUIRED_MESSAGE } from '../../utils';
 import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
 
@@ -44,11 +44,9 @@ export const getGarminHealthAPIAuthRequestTokenRedirectURI = functions.region('e
   }
 
   // Enforce Pro Access
-  try {
-    await assertProServiceAccess(userID);
-  } catch (e: any) {
-    logger.warn(`Blocking Garmin Auth for non-pro user ${userID}: ${e.message}`);
-    res.status(403).send(e.message);
+  if (!(await isProUser(userID))) {
+    logger.warn(`Blocking Garmin Auth for non-pro user ${userID}`);
+    res.status(403).send(PRO_REQUIRED_MESSAGE);
     return;
   }
 
@@ -126,11 +124,9 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
   }
 
   // Enforce Pro Access
-  try {
-    await assertProServiceAccess(userID);
-  } catch (e: any) {
-    logger.warn(`Blocking Garmin Token Set for non-pro user ${userID}: ${e.message}`);
-    res.status(403).send(e.message);
+  if (!(await isProUser(userID))) {
+    logger.warn(`Blocking Garmin Token Set for non-pro user ${userID}`);
+    res.status(403).send(PRO_REQUIRED_MESSAGE);
     return;
   }
 

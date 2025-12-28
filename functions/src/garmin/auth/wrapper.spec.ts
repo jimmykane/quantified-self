@@ -58,7 +58,8 @@ vi.mock('../../utils', () => ({
     isCorsAllowed: vi.fn().mockReturnValue(true),
     setAccessControlHeadersOnResponse: vi.fn(),
     getUserIDFromFirebaseToken: vi.fn().mockResolvedValue('testUserID'),
-    assertProServiceAccess: vi.fn().mockResolvedValue(true)
+    isProUser: vi.fn().mockResolvedValue(true),
+    PRO_REQUIRED_MESSAGE: 'Service sync is a Pro feature.'
 }));
 
 // Import AFTER mocks
@@ -74,7 +75,7 @@ describe('Garmin Auth Wrapper', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        (utils.assertProServiceAccess as any).mockResolvedValue(true);
+        (utils.isProUser as any).mockResolvedValue(true);
         (utils.getUserIDFromFirebaseToken as any).mockResolvedValue('testUserID');
         (utils.isCorsAllowed as any).mockReturnValue(true);
 
@@ -95,7 +96,7 @@ describe('Garmin Auth Wrapper', () => {
 
             await getGarminHealthAPIAuthRequestTokenRedirectURI(req, res);
 
-            expect(utils.assertProServiceAccess).toHaveBeenCalledWith('testUserID');
+            expect(utils.isProUser).toHaveBeenCalledWith('testUserID');
             expect(res.send).toHaveBeenCalledWith(expect.objectContaining({
                 redirect_uri: expect.any(String),
                 oauthToken: 'token',
@@ -106,12 +107,12 @@ describe('Garmin Auth Wrapper', () => {
         });
 
         it('should return 403 for non-pro user', async () => {
-            (utils.assertProServiceAccess as any).mockRejectedValue(new Error('Non-pro'));
+            (utils.isProUser as any).mockResolvedValue(false);
 
             await getGarminHealthAPIAuthRequestTokenRedirectURI(req, res);
 
             expect(res.status).toHaveBeenCalledWith(403);
-            expect(res.send).toHaveBeenCalledWith('Non-pro');
+            expect(res.send).toHaveBeenCalledWith('Service sync is a Pro feature.');
         });
     });
 

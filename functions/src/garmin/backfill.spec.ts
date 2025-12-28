@@ -37,7 +37,8 @@ vi.mock('../utils', () => ({
     isCorsAllowed: vi.fn().mockReturnValue(true),
     setAccessControlHeadersOnResponse: vi.fn(),
     getUserIDFromFirebaseToken: vi.fn().mockResolvedValue('testUserID'),
-    assertProServiceAccess: vi.fn().mockResolvedValue(undefined)
+    isProUser: vi.fn().mockResolvedValue(true),
+    PRO_REQUIRED_MESSAGE: 'Service sync is a Pro feature.'
 }));
 
 vi.mock('../request-helper', () => ({
@@ -61,6 +62,7 @@ describe('Garmin Backfill', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         (utils.getUserIDFromFirebaseToken as any).mockResolvedValue('testUserID');
+        (utils.isProUser as any).mockResolvedValue(true);
 
         req = {
             method: 'POST',
