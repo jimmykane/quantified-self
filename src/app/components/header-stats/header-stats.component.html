@@ -2,7 +2,7 @@
   <!-- Grid Layout -->
   @if (layout === 'grid') {
   <section class="grid">
-    @for (stat of stats; track stat) {
+    @for (stat of displayedStats; track stat) {
     <div class="stat-item" [matTooltip]="stat.getDisplayType()">
       <div class="stat-avatar">
         <app-data-type-icon [size]="'20px'" [vAlign]="'middle'" [dataType]="stat.getType()"></app-data-type-icon>
@@ -24,7 +24,7 @@
   @if (layout === 'condensed') {
   <section class="condensed">
     <mat-chip-set role="list">
-      @for (stat of stats; track stat) {
+      @for (stat of displayedStats; track stat) {
       <mat-chip role="listitem" [matTooltip]="stat.getDisplayType()" class="stat-chip" [highlighted]="false"
         [disableRipple]="true">
         <app-data-type-icon matChipAvatar [size]="'18px'" [vAlign]="'middle'"

@@ -235,8 +235,6 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       const eventAny = this.event as any;
       const eventDate = this.fileService.toDate(this.event.startDate);
       const eventId = this.event.getID ? this.event.getID() : undefined;
-      this.logger.log(`[EventActions] Starting download for event: ${eventId}`, this.event);
-      this.logger.log(`[EventActions] eventAny structure:`, eventAny);
 
       if (eventAny.originalFiles && eventAny.originalFiles.length > 0) {
         // Multiple files -> ZIP

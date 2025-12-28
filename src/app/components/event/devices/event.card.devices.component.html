@@ -13,8 +13,8 @@
     @if (selectedActivities.length > 1) {
     <mat-divider [inset]="true"></mat-divider>
     }
-    @if (getData(activity).data.length) {
-    <mat-table [dataSource]="getData(activity)">
+    @if (getDataSource(activity)) {
+    <mat-table [dataSource]="getDataSource(activity)">
       @for (column of getColumns(activity); track column) {
       <ng-container [matColumnDef]="column">
         <mat-header-cell *matHeaderCellDef><app-data-type-icon

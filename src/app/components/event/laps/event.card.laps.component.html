@@ -12,7 +12,7 @@
     </ng-template>
     <ng-template matTabContent>
       @for (activity of selectedActivities; track activity; let i = $index) {
-      @if (getData(activity, availableLapType).data.length) {
+      @if (getDataSource(activity, availableLapType)) {
       <section>
         @if (selectedActivities.length > 1 || event.getActivities().length > 1) {
         <app-activity-toggle [event]="event" [showToggle]="false" [showDate]="false" [showStats]="false"
@@ -23,8 +23,8 @@
         <mat-divider [inset]="true"></mat-divider>
         }
         <section class="table-container">
-          <table mat-table [dataSource]="getData(activity, availableLapType)">
-            @for (column of getColumnsToDisplayByActivityLapTypes(activity, availableLapType); track column) {
+          <table mat-table [dataSource]="getDataSource(activity, availableLapType)">
+            @for (column of getColumns(activity, availableLapType); track column) {
             <ng-container [matColumnDef]="column" [sticky]="isSticky(column)">
               <mat-header-cell *matHeaderCellDef>
                 <app-data-type-icon [dataType]="column"></app-data-type-icon>
@@ -32,10 +32,8 @@
               <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
             </ng-container>
             }
-            <mat-header-row
-              *matHeaderRowDef="getColumnsToDisplayByActivityLapTypes(activity, availableLapType)"></mat-header-row>
-            <mat-row
-              *matRowDef="let row; columns: getColumnsToDisplayByActivityLapTypes(activity, availableLapType);"></mat-row>
+            <mat-header-row *matHeaderRowDef="getColumns(activity, availableLapType)"></mat-header-row>
+            <mat-row *matRowDef="let row; columns: getColumns(activity, availableLapType);"></mat-row>
           </table>
         </section>
       </section>

@@ -15,14 +15,29 @@ export class HeaderStatsComponent implements OnChanges {
   @Input() stats: DataInterface[] = [];
   @Input() unitSettings?: UserUnitSettingsInterface;
   @Input() layout: 'grid' | 'condensed' = 'grid';
+  public displayedStats: DataInterface[] = [];
 
   ngOnChanges(changes: SimpleChanges): void {
-    this.stats = this.statsToShow.reduce((accu, statType) => {
-      return this.stats.find(stat => stat.getType() === statType) ? [...accu, this.stats.find(stat => stat.getType() === statType)] : accu;
-    }, []);
-    this.stats = this.stats
-      .filter(stat => this.statsToShow.indexOf(stat.getType()) !== -1)
-      .reduce((accu, stat) => [...accu, ...DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, this.unitSettings)], []);
+    if (!this.statsToShow || !this.stats) {
+      this.displayedStats = [];
+      return;
+    }
+
+    // Create a map for O(1) lookups
+    const statsMap = new Map<string, DataInterface>();
+    this.stats.forEach(stat => statsMap.set(stat.getType(), stat));
+
+    const enrichedStats: DataInterface[] = [];
+    this.statsToShow.forEach(statType => {
+      const stat = statsMap.get(statType);
+      if (stat) {
+        // This expands the stat into unit-based versions (e.g. Speed -> Speed and Pace)
+        const unitBasedStats = DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, this.unitSettings);
+        enrichedStats.push(...unitBasedStats);
+      }
+    });
+
+    this.displayedStats = enrichedStats;
   }
 
 

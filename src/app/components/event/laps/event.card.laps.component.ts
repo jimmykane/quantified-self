@@ -10,12 +10,12 @@ import { DataHeartRateMax } from '@sports-alliance/sports-lib';
 import { isNumber } from '@sports-alliance/sports-lib';
 
 @Component({
-    selector: 'app-event-card-laps',
-    templateUrl: './event.card.laps.component.html',
-    styleUrls: ['./event.card.laps.component.css'],
-    providers: [],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    standalone: false
+  selector: 'app-event-card-laps',
+  templateUrl: './event.card.laps.component.html',
+  styleUrls: ['./event.card.laps.component.css'],
+  providers: [],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 
 export class EventCardLapsComponent extends DataTableAbstractDirective implements OnChanges {
@@ -25,16 +25,55 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
 
   public availableLapTypes: LapTypes[] = []
 
+  public dataSourcesMap = new Map<string, MatTableDataSource<any>>();
+  public columnsMap = new Map<string, string[]>();
+
   constructor(public eventColorService: AppEventColorService, protected changeDetectorRef: ChangeDetectorRef) {
     super(changeDetectorRef);
   }
 
   ngOnChanges() {
-    this.selectedActivities.forEach(activity => this.availableLapTypes = [...new Set(this.availableLapTypes.concat(activity.getLaps().map(lap => lap.type)))])
+    this.updateAvailableLapTypes();
+    this.updateData();
   }
 
-  getData(activity: ActivityInterface, lapType: LapTypes) {
-    return new MatTableDataSource(activity.getLaps().filter(lap => lap.type === lapType).reduce((lapDataArray, lap, index) => {
+  private updateAvailableLapTypes() {
+    this.availableLapTypes = [];
+    if (this.selectedActivities) {
+      this.selectedActivities.forEach(activity => {
+        this.availableLapTypes = [...new Set(this.availableLapTypes.concat(activity.getLaps().map(lap => lap.type)))];
+      });
+    }
+  }
+
+  private updateData() {
+    this.dataSourcesMap.clear();
+    this.columnsMap.clear();
+
+    if (!this.selectedActivities) {
+      return;
+    }
+
+    this.selectedActivities.forEach(activity => {
+      this.availableLapTypes.forEach(lapType => {
+        const data = this.generateLapData(activity, lapType);
+        const key = this.getKey(activity, lapType);
+
+        if (data.length > 0) {
+          const dataSource = new MatTableDataSource(data);
+          this.dataSourcesMap.set(key, dataSource);
+          this.columnsMap.set(key, this.calculateColumns(dataSource));
+        }
+      });
+    });
+  }
+
+  private getKey(activity: ActivityInterface, lapType: LapTypes): string {
+    return `${activity.getID()}-${lapType}`;
+  }
+
+  private generateLapData(activity: ActivityInterface, lapType: LapTypes) {
+    return activity.getLaps().filter(lap => lap.type === lapType).reduce((lapDataArray, lap, index) => {
       const statRowElement = this.getStatsRowElement(lap.getStatsAsArray(), [activity.type], this.unitSettings);
       statRowElement['#'] = index + 1;
       statRowElement['Type'] = lap.type;
@@ -44,7 +83,23 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       statRowElement['Maximum Heart Rate'] = maxHR ? `${maxHR.getDisplayValue()} ${maxHR.getDisplayUnit()}` : '';
       lapDataArray.push(statRowElement);
       return lapDataArray;
-    }, []));
+    }, []);
+  }
+
+  private calculateColumns(dataSource: MatTableDataSource<any>): string[] {
+    return this.getColumnsToDisplay().filter(column => {
+      return dataSource.data.find(row => {
+        return isNumber(row[column]) || row[column]; // isNumber allow 0's to be accepted
+      });
+    });
+  }
+
+  getDataSource(activity: ActivityInterface, lapType: LapTypes): MatTableDataSource<any> | undefined {
+    return this.dataSourcesMap.get(this.getKey(activity, lapType));
+  }
+
+  getColumns(activity: ActivityInterface, lapType: LapTypes): string[] {
+    return this.columnsMap.get(this.getKey(activity, lapType)) || [];
   }
 
   getColumnsToDisplay() {
@@ -60,14 +115,6 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
       'Average Speed',
       'Average Power',
     ]
-  }
-
-  getColumnsToDisplayByActivityLapTypes(activity: ActivityInterface, availableLapType: LapTypes) {
-    return this.getColumnsToDisplay().filter(column => {
-      return this.getData(activity, availableLapType).data.find(row => {
-        return isNumber(row[column]) || row[column]; // isNumber allow 0's to be accepted
-      });
-    });
   }
 
   isSticky(column: string) {
