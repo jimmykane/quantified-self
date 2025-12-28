@@ -66,6 +66,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   public maintenanceMessage$!: Observable<string>;
   private currentUser: any = null;
   public isAdminUser = false;
+  public gracePeriodDismissed = false;
 
   constructor(
     public authService: AppAuthService,
@@ -341,6 +342,13 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
   ngAfterViewInit() {
 
+  }
+
+  dismissGracePeriodBanner() {
+    this.gracePeriodDismissed = true;
+    // Reset banner height since it's now hidden
+    this.bannerHeight = 0;
+    this.changeDetectorRef.detectChanges();
   }
 
   prepareRoute(outlet: RouterOutlet) {
