@@ -223,23 +223,23 @@ describe('utils', () => {
             });
         });
 
-        describe('assertProServiceAccess', () => {
-            it('should allow pro users', async () => {
+        describe('isProUser', () => {
+            it('should return true for pro users', async () => {
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
-                const { assertProServiceAccess } = await getUtils();
-                await expect(assertProServiceAccess('user1')).resolves.not.toThrow();
+                const { isProUser } = await getUtils();
+                await expect(isProUser('user1')).resolves.toBe(true);
             });
 
-            it('should verify reject free users', async () => {
+            it('should return false for free users', async () => {
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
-                const { assertProServiceAccess } = await getUtils();
-                await expect(assertProServiceAccess('user1')).rejects.toThrow('Service sync is a Pro feature');
+                const { isProUser } = await getUtils();
+                await expect(isProUser('user1')).resolves.toBe(false);
             });
 
-            it('should reject basic users', async () => {
+            it('should return false for basic users', async () => {
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'basic' } });
-                const { assertProServiceAccess } = await getUtils();
-                await expect(assertProServiceAccess('user1')).rejects.toThrow('Service sync is a Pro feature');
+                const { isProUser } = await getUtils();
+                await expect(isProUser('user1')).resolves.toBe(false);
             });
         });
     });

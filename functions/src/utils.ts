@@ -281,11 +281,14 @@ export async function checkEventUsageLimit(userID: string, usageCache?: Map<stri
 }
 
 
-export async function assertProServiceAccess(userID: string): Promise<void> {
+export const PRO_REQUIRED_MESSAGE = 'Service sync is a Pro feature. Please upgrade to Pro.';
+
+/**
+ * Checks if the user has Pro access.
+ */
+export async function isProUser(userID: string): Promise<boolean> {
   const role = await getUserRole(userID);
-  if (role !== 'pro') {
-    throw new Error(`Service sync is a Pro feature. Your current role is: ${role}. Please upgrade to Pro.`);
-  }
+  return role === 'pro';
 }
 
 /**
