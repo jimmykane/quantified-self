@@ -34,6 +34,11 @@ if (admin.apps.length === 0) {
   }
 }
 
+// Configure Firestore to ignore undefined properties when writing documents.
+// This handles activity/event data that may have undefined fields
+// (e.g., TCX files may have undefined creator.manufacturer).
+// Undefined fields are silently skipped, not stored.
+// Note: The frontend (Angular app) also has this setting enabled in app.module.ts.
 try {
   admin.firestore().settings({ ignoreUndefinedProperties: true });
 } catch (e) {
