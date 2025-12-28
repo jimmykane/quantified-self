@@ -2,7 +2,7 @@
 
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
-import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, assertProServiceAccess } from '../../utils';
+import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, isProUser, PRO_REQUIRED_MESSAGE } from '../../utils';
 import {
   deauthorizeServiceForUser,
   getAndSetServiceOAuth2AccessTokenForUser,
@@ -36,11 +36,9 @@ export const getCOROSAPIAuthRequestTokenRedirectURI = functions.region('europe-w
   }
 
   // Enforce Pro Access
-  try {
-    await assertProServiceAccess(userID);
-  } catch (e: any) {
-    logger.warn(`Blocking COROS Auth for non-pro user ${userID}: ${e.message}`);
-    res.status(403).send(e.message);
+  if (!(await isProUser(userID))) {
+    logger.warn(`Blocking COROS Auth for non-pro user ${userID}`);
+    res.status(403).send(PRO_REQUIRED_MESSAGE);
     return;
   }
 
@@ -79,11 +77,9 @@ export const requestAndSetCOROSAPIAccessToken = functions.region('europe-west2')
   }
 
   // Enforce Pro Access
-  try {
-    await assertProServiceAccess(userID);
-  } catch (e: any) {
-    logger.warn(`Blocking COROS Token Set for non-pro user ${userID}: ${e.message}`);
-    res.status(403).send(e.message);
+  if (!(await isProUser(userID))) {
+    logger.warn(`Blocking COROS Token Set for non-pro user ${userID}`);
+    res.status(403).send(PRO_REQUIRED_MESSAGE);
     return;
   }
 

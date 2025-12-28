@@ -16,7 +16,8 @@ vi.mock('../utils', () => ({
     isCorsAllowed: vi.fn().mockReturnValue(true),
     setAccessControlHeadersOnResponse: vi.fn(),
     getUserIDFromFirebaseToken: vi.fn().mockResolvedValue('testUserID'),
-    assertProServiceAccess: vi.fn().mockResolvedValue(undefined)
+    isProUser: vi.fn().mockResolvedValue(true),
+    PRO_REQUIRED_MESSAGE: 'Service sync is a Pro feature.'
 }));
 
 vi.mock('../history', () => ({
@@ -34,6 +35,7 @@ describe('COROS History to Queue', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         (utils.getUserIDFromFirebaseToken as any).mockResolvedValue('testUserID');
+        (utils.isProUser as any).mockResolvedValue(true);
         (history.isAllowedToDoHistoryImport as any).mockResolvedValue(true);
 
         req = {
