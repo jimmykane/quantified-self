@@ -1,53 +1,45 @@
-/* Global .qs-form styles handle width and spacing now. */
-.radio-container {
-  margin-bottom: 1em;
+/* Compact History Import Form Styles */
+.history-import-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
-.mat-radio-button {
-  margin-top: 1em;
-  margin-right: 1em;
+.date-fields {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
-
-.generic-form-error {
-  margin-top: 1.5em;
+.date-fields mat-form-field {
+  flex: 1;
+  min-width: 120px;
 }
 
-/* Removed ::ng-deep .mat-checkbox-layout override */
-
-mat-error {
-  margin-top: 0.5em;
+.confirmation-section {
+  margin: 0.5rem 0;
 }
 
-section {
+.checkbox-label {
+  font-size: 0.85rem;
+  opacity: 0.9;
+  white-space: normal;
+  line-height: 1.4;
+}
+
+.pro-required {
   text-align: center;
+  padding: 1rem;
 }
 
-mat-icon {
-  vertical-align: middle;
-  font-size: 1.6em;
+.pro-required p {
+  margin-bottom: 1rem;
+  opacity: 0.8;
 }
 
-.smaller {
-  font-size: 0.90em;
-  line-height: 0.90em;
+.qs-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
 }
-
-
-.no-margin {
-  margin: 0;
-}
-
-form {
-  height: 100%;
-}
-
-p {
-  font-size: 0.9em;
-}
-
-mat-hint {
-  font-size: 0.9em;
-}
-
-/* Removed ::ng-deep .mat-horizontal-content-container override */

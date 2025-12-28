@@ -35,6 +35,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public nextImportAvailableDate: Date;
   public isLoading: boolean;
   public serviceNames = ServiceNames
+  public isPro = false;
   private analytics = inject(Analytics);
 
   constructor(
@@ -45,25 +46,20 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
   async ngOnInit() {
     this.formGroup = new UntypedFormGroup({
-      formArray: new UntypedFormArray([
-        new UntypedFormGroup({
-          startDate: new UntypedFormControl(new Date(new Date().setHours(0, 0, 0, 0)), [
-            Validators.required,
-          ]),
-          endDate: new UntypedFormControl(new Date(new Date().setHours(24, 0, 0, 0)), [
-            Validators.required,
-          ])
-        }),
-        new UntypedFormGroup({
-          accepted: new UntypedFormControl(false, [
-            Validators.requiredTrue,
-            // Validators.minLength(4),
-          ]),
-        })
-      ])
+      startDate: new UntypedFormControl(new Date(new Date().setHours(0, 0, 0, 0)), [
+        Validators.required,
+      ]),
+      endDate: new UntypedFormControl(new Date(new Date().setHours(24, 0, 0, 0)), [
+        Validators.required,
+      ]),
+      accepted: new UntypedFormControl(false, [
+        Validators.requiredTrue,
+      ]),
     });
 
     this.formGroup.disable();
+
+    this.isPro = await this.userService.isPro();
 
     this.processChanges();
   }
@@ -115,19 +111,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.isLoading = false;
   }
 
-  /** Returns a FormArray with the name 'formArray'. */
-  get formArray(): AbstractControl | null {
-    return this.formGroup.get('formArray');
-  }
-
-  hasError(formGroupIndex?: number, field?: string) {
-    if (!field) {
-      return !this.formGroup.valid;
-    }
-    const formArray = <UntypedFormArray>this.formGroup.get('formArray');
-    return !(formArray.controls[formGroupIndex].get(field).valid && formArray.controls[formGroupIndex].get(field).touched);
-  }
-
   async onSubmit(event) {
     event.preventDefault();
     if (!this.formGroup.valid) {
@@ -142,7 +125,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.isLoading = true;
 
     try {
-      await this.userService.importServiceHistoryForCurrentUser(this.serviceName, this.formGroup.get('formArray')['controls'][0].get('startDate').value, this.formGroup.get('formArray')['controls'][0].get('endDate').value)
+      await this.userService.importServiceHistoryForCurrentUser(
+        this.serviceName,
+        this.formGroup.get('startDate')?.value,
+        this.formGroup.get('endDate')?.value
+      );
       this.snackBar.open('History import has been queued', null, {
         duration: 2000,
       });
