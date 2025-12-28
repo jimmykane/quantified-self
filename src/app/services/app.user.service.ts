@@ -603,19 +603,33 @@ export class AppUserService implements OnDestroy {
 
   public getGracePeriodUntil(): Observable<Date | null> {
     const user = this.auth.currentUser;
+    this.logger.log('[AppUserService] getGracePeriodUntil - Current auth user:', user?.uid || 'null');
     if (!user) return from([null]);
 
     return runInInjectionContext(this.injector, () => {
       const userDoc = doc(this.firestore, 'users', user.uid);
       return docData(userDoc).pipe(
         map((userData: any) => {
+          this.logger.log('[AppUserService] getGracePeriodUntil - User document data:', {
+            uid: user.uid,
+            gracePeriodUntil: userData?.gracePeriodUntil,
+            stripeRole: userData?.stripeRole,
+            isPro: userData?.isPro,
+            hasSubscribedOnce: userData?.hasSubscribedOnce
+          });
           if (userData?.gracePeriodUntil) {
             // Firebase Timestamp to Date
-            return (userData.gracePeriodUntil as any).toDate();
+            const date = (userData.gracePeriodUntil as any).toDate();
+            this.logger.log('[AppUserService] getGracePeriodUntil - Returning grace period date:', date);
+            return date;
           }
+          this.logger.log('[AppUserService] getGracePeriodUntil - No grace period set');
           return null;
         }),
-        catchError(() => from([null]))
+        catchError((error) => {
+          this.logger.error('[AppUserService] getGracePeriodUntil - Error fetching user document:', error);
+          return from([null]);
+        })
       );
     });
   }

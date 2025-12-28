@@ -9,6 +9,7 @@ import {
   OnDestroy,
   SimpleChanges,
 } from '@angular/core';
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { AmChartsService } from '../../../services/am-charts.service';
 import type * as am4core from '@amcharts/amcharts4/core';
 import type * as am4charts from '@amcharts/amcharts4/charts';
@@ -25,6 +26,8 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { convertIntensityZonesStatsToChartData } from '../../../helpers/intensity-zones-chart-data-helper';
 import { AppDataColors } from '../../../services/color/app.data.colors';
 import { LoggerService } from '../../../services/logger.service';
+import { AppBreakpoints } from '../../../constants/breakpoints';
+import { Subscription } from 'rxjs';
 
 
 @Component({
@@ -40,10 +43,12 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
   protected declare chart: am4charts.XYChart;
   private core: typeof am4core;
   private charts: typeof am4charts;
+  private isMobile = false;
+  private breakpointSubscription: Subscription;
 
 
-  private static getData(activities: ActivityInterface[]): any[] {
-    return convertIntensityZonesStatsToChartData(activities)
+  private getData(): any[] {
+    return convertIntensityZonesStatsToChartData(this.activities, this.isMobile);
   }
 
 
@@ -51,8 +56,21 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
     changeDetector: ChangeDetectorRef,
     private eventColorService: AppEventColorService,
     protected amChartsService: AmChartsService,
-    protected logger: LoggerService) {
+    protected logger: LoggerService,
+    private breakpointObserver: BreakpointObserver) {
     super(zone, changeDetector, amChartsService, logger);
+
+    // Subscribe to mobile breakpoint
+    this.breakpointSubscription = this.breakpointObserver
+      .observe([AppBreakpoints.XSmall])
+      .subscribe(result => {
+        const wasMobile = this.isMobile;
+        this.isMobile = result.matches;
+        // Refresh chart data if breakpoint changed and chart exists
+        if (this.chart && wasMobile !== this.isMobile) {
+          this.updateChart(this.getData());
+        }
+      });
   }
 
   async ngOnChanges(changes: SimpleChanges): Promise<void> {
@@ -61,14 +79,21 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
         this.destroyChart();
         this.chart = await this.createChart();
       }
-      this.updateChart(EventIntensityZonesComponent.getData(this.activities));
+      this.updateChart(this.getData());
+    }
+  }
+
+  override ngOnDestroy(): void {
+    super.ngOnDestroy();
+    if (this.breakpointSubscription) {
+      this.breakpointSubscription.unsubscribe();
     }
   }
 
 
   async ngAfterViewInit(): Promise<void> {
     this.chart = await this.createChart();
-    this.updateChart(EventIntensityZonesComponent.getData(this.activities));
+    this.updateChart(this.getData());
   }
 
 
@@ -129,6 +154,8 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
     categoryAxis.renderer.axisFills.template.adapter.add('fill', (fill, target) => {
       return target.dataItem && target.dataItem.dataContext ? this.eventColorService.getColorForZone(target.dataItem.dataContext['zone']) : null;
     });
+
+
 
     return chart;
   }

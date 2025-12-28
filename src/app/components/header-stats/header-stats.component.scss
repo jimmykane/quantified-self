@@ -1,3 +1,5 @@
+@use '../../../styles/breakpoints' as bp;
+
 :host {
   display: block;
   width: 100%;
@@ -92,16 +94,16 @@ section.condensed {
   font-size: 0.95rem;
 }
 
-/* Desktop Styles */
-@media only screen and (min-width: 768px) {
+/* Desktop Styles (Medium and up) */
+@include bp.medium-and-up {
   section.grid {
     column-gap: 2rem;
     /* More breathing room on desktop */
   }
 }
 
-/* Mobile Styles */
-@media only screen and (max-width: 600px) {
+/* Mobile Styles (XSmall) */
+@include bp.xsmall {
   section.grid {
     grid-template-columns: repeat(2, 1fr);
     /* Force 2 columns on mobile */

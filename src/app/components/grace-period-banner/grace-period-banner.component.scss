@@ -58,6 +58,33 @@
     }
 }
 
+/* Mobile responsive adjustments - matches AppBreakpoints.XSmall (max-width: 599.98px) */
+@media (max-width: 599.98px) {
+    .grace-period-banner {
+        padding: 10px 12px;
+        gap: 8px;
+        font-size: 13px;
+
+        .banner-warning-icon {
+            font-size: 18px;
+            height: 18px;
+            width: 18px;
+        }
+
+        .banner-close-btn {
+            width: 28px;
+            height: 28px;
+            line-height: 28px;
+
+            mat-icon {
+                font-size: 16px;
+                width: 16px;
+                height: 16px;
+            }
+        }
+    }
+}
+
 :host-context(.dark-theme) .grace-period-banner {
     background-color: #332b00;
     color: #ffda6a;

@@ -6,7 +6,7 @@ import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 @Component({
   selector: 'app-header-stats',
   templateUrl: './header-stats.component.html',
-  styleUrls: ['./header-stats.component.css'],
+  styleUrls: ['./header-stats.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })

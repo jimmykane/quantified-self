@@ -1,13 +1,13 @@
-<mat-card class="mat-elevation-z0">
-  <mat-card-header>
-    <div mat-card-avatar>
+<div class="map-component-wrapper">
+  <div class="map-header">
+    <div class="map-header-avatar">
       <mat-icon>map</mat-icon>
     </div>
-    <mat-card-subtitle>
+    <div class="map-header-actions">
       <app-map-actions [(showLaps)]="showLaps" [(showArrows)]="showArrows" [user]="user">
       </app-map-actions>
-    </mat-card-subtitle>
-  </mat-card-header>
+    </div>
+  </div>
   <section class="container">
     @if (googleMap && event.getActivities().length > 1) {
     <mat-card class="map-legend mat-elevation-z0">
@@ -73,4 +73,4 @@
     </google-map>
     }
   </section>
-</mat-card>
+</div>

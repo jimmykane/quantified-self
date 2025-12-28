@@ -40,7 +40,7 @@ Use these Angular Material-aligned breakpoint values ONLY:
    ```
 
 4. **Reference**:
-   - TypeScript constants: `src/app/shared/constants/breakpoints.ts`
+   - TypeScript constants: `src/app/constants/breakpoints.ts`
    - CSS documentation: `:root` block in `src/styles.css`
 
 ## Checklist

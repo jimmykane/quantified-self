@@ -37,3 +37,15 @@ mat-button-toggle-group {
   align-items: baseline;
   gap: 1em;
 }
+
+/* Mobile: Ensure filters stay on one row */
+@media (max-width: 599.98px) {
+  .filters-row {
+    flex-wrap: nowrap;
+    gap: 0.5em;
+  }
+
+  .big {
+    min-width: 0;
+  }
+}
