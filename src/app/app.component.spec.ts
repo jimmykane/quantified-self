@@ -130,28 +130,9 @@ describe('AppComponent', () => {
         expect(component.showNavigation).toBe(true);
     });
 
-    it('should show grace period banner when date is present', () => {
-        const mockDate = new Date();
-        const userService = TestBed.inject(AppUserService);
-        vi.spyOn(userService, 'getGracePeriodUntil').mockReturnValue(of(mockDate));
-
-        // Re-init component to trigger ngOnInit
-        component.ngOnInit();
+    it('should include grace period banner component', () => {
         fixture.detectChanges();
-
-        const banner = fixture.nativeElement.querySelector('.grace-period-banner');
-        expect(banner).toBeTruthy();
-        expect(banner.textContent).toContain('Your Pro plan has ended');
-    });
-
-    it('should hide grace period banner when date is null', () => {
-        const userService = TestBed.inject(AppUserService);
-        vi.spyOn(userService, 'getGracePeriodUntil').mockReturnValue(of(null));
-
-        component.ngOnInit();
-        fixture.detectChanges();
-
-        const banner = fixture.nativeElement.querySelector('.grace-period-banner');
-        expect(banner).toBeFalsy();
+        const bannerComponent = fixture.nativeElement.querySelector('app-grace-period-banner');
+        expect(bannerComponent).toBeTruthy();
     });
 });

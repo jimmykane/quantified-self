@@ -3,7 +3,6 @@ import {
   AfterViewInit,
   ChangeDetectorRef,
   Component,
-  ElementRef,
   OnDestroy,
   OnInit,
   ViewChild,
@@ -52,8 +51,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       this.sideNavService.setSidenav(sidenav);
     }
   }
-  @ViewChild('graceBanner') graceBanner: ElementRef<HTMLDivElement> | undefined;
   public bannerHeight = 0;
+  public hasBanner = false;
   public title;
   private actionButtonsSubscription: Subscription;
   private routerEventSubscription: Subscription;
@@ -61,12 +60,10 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   public authState: boolean | null = null;
   public isOnboardingRoute = false;
   public onboardingCompleted = true; // Default to true to avoid hiding chrome of non-authenticated users prematurely
-  public gracePeriodUntil$: Observable<Date | null>;
   public maintenanceMode$!: Observable<boolean>;
   public maintenanceMessage$!: Observable<string>;
   private currentUser: any = null;
   public isAdminUser = false;
-  public gracePeriodDismissed = false;
 
   constructor(
     public authService: AppAuthService,
@@ -86,7 +83,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   async ngOnInit() {
     this.maintenanceMode$ = this.remoteConfigService.getMaintenanceMode();
     this.maintenanceMessage$ = this.remoteConfigService.getMaintenanceMessage();
-    this.gracePeriodUntil$ = this.userService.getGracePeriodUntil();
     this.authService.user$.subscribe(async user => {
       this.authState = !!user;
       this.currentUser = user;
@@ -345,9 +341,13 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
 
   dismissGracePeriodBanner() {
-    this.gracePeriodDismissed = true;
-    // Reset banner height since it's now hidden
     this.bannerHeight = 0;
+    this.hasBanner = false;
+  }
+
+  onBannerHeightChanged(height: number) {
+    this.bannerHeight = height;
+    this.hasBanner = height > 0;
     this.changeDetectorRef.detectChanges();
   }
 
@@ -355,21 +355,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     return outlet && outlet.activatedRouteData && outlet.activatedRouteData['animation'];
   }
 
-  /**
-   * See https://github.com/angular/angular/issues/14748
-   * Also updates banner height for dynamic layout
-   */
   ngAfterViewChecked() {
-    if (this.graceBanner) {
-      const newHeight = this.graceBanner.nativeElement.offsetHeight;
-      if (newHeight !== this.bannerHeight) {
-        this.bannerHeight = newHeight;
-        this.changeDetectorRef.detectChanges();
-      }
-    } else if (this.bannerHeight !== 0) {
-      this.bannerHeight = 0;
-      this.changeDetectorRef.detectChanges();
-    }
+    // Reserved for future use
   }
 
   ngOnDestroy(): void {

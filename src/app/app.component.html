@@ -1,19 +1,7 @@
 <ng-container *ngIf="(maintenanceMode$ | async) !== true; else maintenanceTemplate">
   <ng-container *ngIf="authState !== null; else loadingApp">
-    <div [class.has-banner]="gracePeriodUntil$ | async" class="app-layout-wrapper">
-      <div #graceBanner *ngIf="(gracePeriodUntil$ | async) as gracePeriodUntil" [hidden]="gracePeriodDismissed"
-        class="grace-period-banner mat-typography">
-        <mat-icon class="banner-warning-icon">warning</mat-icon>
-        <span class="banner-text">
-          Your Pro plan has ended. You have until <strong>{{ gracePeriodUntil | date }}</strong> before your device sync
-          is disconnected and your activities are reduced to 10. Newest activities will be deleted first.
-          <a routerLink="/pricing" color="accent">Upgrade now</a> to keep your data.
-        </span>
-        <button mat-icon-button class="banner-close-btn" aria-label="Dismiss notification"
-          (click)="dismissGracePeriodBanner()">
-          <mat-icon>close</mat-icon>
-        </button>
-      </div>
+    <div [class.has-banner]="hasBanner" class="app-layout-wrapper">
+      <app-grace-period-banner (heightChanged)="onBannerHeightChanged($event)"></app-grace-period-banner>
 
       @if (loading) {
       <mat-progress-bar mode="indeterminate" color="accent"></mat-progress-bar>

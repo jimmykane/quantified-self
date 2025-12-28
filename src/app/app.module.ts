@@ -25,6 +25,7 @@ import { AppFilesInfoSheetService } from './services/upload/app-files-info-sheet
 import { AppUpdateService } from './services/app.update.service';
 import { OnboardingComponent } from './components/onboarding/onboarding.component';
 import { MaintenanceComponent } from './components/maintenance/maintenance.component';
+import { GracePeriodBannerComponent } from './components/grace-period-banner/grace-period-banner.component';
 import { AppRemoteConfigService } from './services/app.remote-config.service';
 import { firstValueFrom } from 'rxjs';
 
@@ -38,6 +39,7 @@ export function initializeRemoteConfig(remoteConfigService: AppRemoteConfigServi
     AppComponent,
     SideNavComponent,
     UploadActivitiesComponent,
+    GracePeriodBannerComponent,
   ],
   bootstrap: [AppComponent],
   imports: [
