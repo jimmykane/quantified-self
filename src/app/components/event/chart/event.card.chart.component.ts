@@ -373,18 +373,20 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
                 }
 
                 if (index !== -1) {
-                  const timeStream = activity.getStream(XAxisTypes.Time) || activity.getStream('Duration');
-                  if (timeStream) {
-                    const timeData = timeStream.getData();
-                    if (timeData && timeData[index] !== undefined && timeData[index] !== null) {
-                      const timeOffset = timeData[index];
-                      // Assuming timeOffset is in seconds (standard for Duration/Time streams in this app)
-                      this.activityCursorService.setCursor({
-                        activityID: activity.getID(),
-                        time: activity.startDate.getTime() + (timeOffset * 1000),
-                        byChart: true,
-                      });
-                    }
+                  let timeStream;
+                  // check for Time stream first
+                  // Time stream is guaranteed by AppEventService enrichment
+                  timeStream = activity.getStream(XAxisTypes.Time);
+
+                  const timeData = timeStream.getData();
+                  if (timeData && timeData[index] !== undefined && timeData[index] !== null) {
+                    const timeOffset = timeData[index];
+                    // Assuming timeOffset is in seconds (standard for Duration/Time streams in this app)
+                    this.activityCursorService.setCursor({
+                      activityID: activity.getID(),
+                      time: activity.startDate.getTime() + (timeOffset * 1000),
+                      byChart: true,
+                    });
                   }
                 }
               }
@@ -656,13 +658,13 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   protected attachSeriesEventListeners(series: am4charts.XYSeries) {
     // Shown
     // series.events.on('visibilitychanged', () => {
-    //   console.log(`visibilitychanged ${series.id} ${series.visible} ${series.hidden}`)
+
     // });
     series.events.on('shown', () => {
 
       series.hidden = false;
       this.showSeriesYAxis(series);
-      // console.log(series.name + ' shown stat: ' + series.hidden )
+
       if (this.getSeriesRangeLabelContainer(series)) {
         this.getSeriesRangeLabelContainer(series).disabled = false;
         this.getSeriesRangeLabelContainer(series).deepInvalidate();
@@ -683,7 +685,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       if (!this.getVisibleSeriesWithSameYAxis(series).length) {
         this.hideSeriesYAxis(series)
       }
-      // console.log(series.name + ' hidden state: ' + series.visible)
+
       if (this.getSeriesRangeLabelContainer(series)) {
         this.getSeriesRangeLabelContainer(series).disabled = true;
       }
@@ -1134,7 +1136,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           avg: ''
         };
         (<AxisRendererY>target.parent).axis.series.each((axisSeries, index) => {
-          // console.log(axisSeries.dummyData.stream.type)
+
           if (axisSeries.hidden) {
             return;
           }
@@ -1545,8 +1547,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   private getSeriesColor(series: am4charts.XYSeries) {
-    // console.log(target.name)
-    // console.log(this.getSameNameSeries(target).indexOf(target));
+
     if (this.getSameNameSeries(series).length < 2 || this.selectedActivities.length === 1) {
       return AppDataColors[series.name] || this.getFillColor(series.chart, series.chart.series.indexOf(series));
     }

@@ -381,7 +381,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     this.loading();
     this.noMapData = false;
     this.activitiesMapData = [];
-    this.unSubscribeFromAll();
+    this.activitiesMapData = [];
 
     if (!this.selectedActivities?.length) {
       this.noMapData = true;
