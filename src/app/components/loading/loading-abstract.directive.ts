@@ -8,7 +8,7 @@ export abstract class LoadingAbstractDirective {
 
   public isLoading: boolean;
 
-  constructor(private  changeDetector: ChangeDetectorRef) {
+  constructor(protected changeDetector: ChangeDetectorRef) {
   }
 
   public loading() {

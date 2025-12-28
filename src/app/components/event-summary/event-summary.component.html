@@ -29,7 +29,7 @@
   <!-- Activities Toggles Section -->
   @if (event.getActivities().length > 1) {
   <div class="summary-activities-toggles">
-    <app-activities-toggles [event]="event" [user]="user" [isOwner]="isOwner">
+    <app-activities-toggles [event]="event" [user]="user" [isOwner]="isOwner" [selectedActivities]="selectedActivities">
     </app-activities-toggles>
   </div>
   }

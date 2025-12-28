@@ -9,7 +9,8 @@ import {
   OnDestroy,
   OnInit,
   ViewChild,
-  NgZone
+  NgZone,
+  SimpleChanges
 } from '@angular/core';
 import { GoogleMap, MapPolyline, MapMarker } from '@angular/google-maps';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
@@ -81,6 +82,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   private lineMouseMoveSubscription: Subscription;
 
   public apiLoaded = false;
+  private processSequence = 0;
 
   constructor(
     private zone: NgZone,
@@ -179,20 +181,25 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     });
   }
 
-  ngOnChanges(simpleChanges) {
-    if ((simpleChanges.event
-      || simpleChanges.selectedActivities
-      || simpleChanges.lapTypes
-      || simpleChanges.showLaps)) {
-      this.bindToNewData();
-    }
+  ngOnChanges(simpleChanges: SimpleChanges) {
     if (simpleChanges.theme) {
       this.mapOptions = { ...this.mapOptions, styles: this.getStyles(this.theme) };
     }
+
+    if (
+      (simpleChanges.selectedActivities && !simpleChanges.selectedActivities.firstChange) ||
+      (simpleChanges.showLaps && !simpleChanges.showLaps.firstChange) ||
+      (simpleChanges.lapTypes && !simpleChanges.lapTypes.firstChange) ||
+      (simpleChanges.showArrows && !simpleChanges.showArrows.firstChange) ||
+      (simpleChanges.strokeWidth && !simpleChanges.strokeWidth.firstChange) ||
+      (simpleChanges.showPoints && !simpleChanges.showPoints.firstChange)
+    ) {
+      this.mapActivities(++this.processSequence);
+    }
   }
 
-  onMapReady(map: google.maps.Map) {
-    setTimeout(() => this.fitBoundsToActivities(), 500);
+  async onMapReady(map: google.maps.Map) {
+    this.mapActivities(++this.processSequence);
   }
 
   openLapMarkerInfoWindow(lap) {
@@ -205,11 +212,11 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     this.openedLapMarkerInfoWindow = void 0;
   }
 
-  getMarkerOptions(activity: ActivityInterface): google.maps.MarkerOptions {
+  getMarkerOptions(activity: ActivityInterface, color: string): google.maps.MarkerOptions {
     return {
       icon: {
         path: 'M22-48h-44v43h16l6 5 6-5h16z',
-        fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+        fillColor: color,
         fillOpacity: 1,
         strokeColor: '#FFF',
         strokeWeight: 0.5,
@@ -219,11 +226,11 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     };
   }
 
-  getHomeMarkerOptions(activity: ActivityInterface): google.maps.MarkerOptions {
+  getHomeMarkerOptions(activity: ActivityInterface, color: string): google.maps.MarkerOptions {
     return {
       icon: {
         path: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
-        fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+        fillColor: color,
         fillOpacity: 1,
         strokeColor: '#FFF',
         strokeWeight: 0.8,
@@ -233,11 +240,11 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     };
   }
 
-  getFlagMarkerOptions(activity: ActivityInterface): google.maps.MarkerOptions {
+  getFlagMarkerOptions(activity: ActivityInterface, color: string): google.maps.MarkerOptions {
     return {
       icon: {
         path: 'M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z',
-        fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+        fillColor: color,
         fillOpacity: 1,
         strokeColor: '#FFF',
         strokeWeight: 0.8,
@@ -247,11 +254,11 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     };
   }
 
-  getCursorMarkerOptions(activity: ActivityInterface): google.maps.MarkerOptions {
+  getCursorMarkerOptions(activity: ActivityInterface, color: string): google.maps.MarkerOptions {
     return {
       icon: {
         path: 'M5 15H3v4c0 1.1.9 2 2 2h4v-2H5v-4zM5 5h4V3H5c-1.1 0-2 .9-2 2v4h2V5zm14-2h-4v2h4v4h2V5c0-1.1-.9-2-2-2zm0 16h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zM12 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
-        fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+        fillColor: color,
         fillOpacity: 1,
         strokeColor: '#FFF',
         strokeWeight: 1,
@@ -261,11 +268,11 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     };
   }
 
-  getLapMarkerOptions(activity: ActivityInterface, lapIndex: number): google.maps.MarkerOptions {
+  getLapMarkerOptions(activity: ActivityInterface, color: string, lapIndex: number): google.maps.MarkerOptions {
     return {
       icon: {
         path: 'M22-48h-44v43h16l6 5 6-5h16z',
-        fillColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+        fillColor: color,
         fillOpacity: 1,
         strokeColor: '#FFF',
         strokeWeight: 0.5,
@@ -282,12 +289,29 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   getPolylineOptions(activityMapData: MapData): google.maps.PolylineOptions {
-    return {
+    const options: google.maps.PolylineOptions = {
       strokeColor: activityMapData.strokeColor,
       strokeWeight: this.strokeWidth || 3,
       strokeOpacity: 1,
       clickable: true
     };
+
+    if (this.showArrows) {
+      options.icons = [{
+        icon: {
+          path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+          scale: 2,
+          strokeColor: '#FFF',
+          strokeWeight: 1,
+          fillColor: activityMapData.strokeColor,
+          fillOpacity: 1
+        },
+        offset: '50%',
+        repeat: '100px'
+      }];
+    }
+
+    return options;
   }
 
   getPolylinePath(activityMapData: MapData): google.maps.LatLngLiteral[] {
@@ -348,7 +372,12 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     this.unSubscribeFromAll();
   }
 
-  private bindToNewData() {
+  private mapActivities(seq: number) {
+    if (seq !== this.processSequence) {
+      this.logger.warn(`[EventCardMap] mapActivities aborted BEFORE starting (seq mismatch: ${seq} !== ${this.processSequence})`);
+      return;
+    }
+    this.logger.log(`[EventCardMap] mapActivities started for ${this.selectedActivities.length} activities (seq: ${seq})`);
     this.loading();
     this.noMapData = false;
     this.activitiesMapData = [];
@@ -357,6 +386,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     if (!this.selectedActivities?.length) {
       this.noMapData = true;
       this.loaded();
+      this.logger.log(`[EventCardMap] mapActivities stopped: no activities selected (seq: ${seq})`);
       return;
     }
 
@@ -395,6 +425,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     });
 
     this.loaded();
+    this.logger.log(`[EventCardMap] mapActivities completed (seq: ${seq})`);
 
     // Set initial center if we have data
     if (this.activitiesMapData.length > 0 && this.activitiesMapData[0].positions.length > 0) {

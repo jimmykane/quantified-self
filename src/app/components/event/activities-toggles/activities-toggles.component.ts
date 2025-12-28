@@ -1,8 +1,17 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  inject,
+  input,
+  OnInit
+} from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { debounceTime } from 'rxjs/operators';
 import { EventInterface, ActivityInterface, User } from '@sports-alliance/sports-lib';
 import { AppActivitySelectionService } from '../../../services/activity-selection-service/app-activity-selection.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-activities-toggles',
@@ -11,63 +20,47 @@ import { Subscription } from 'rxjs';
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })
+export class ActivitiesTogglesComponent implements OnInit {
+  // Signal inputs
+  event = input.required<EventInterface>();
+  selectedActivities = input.required<ActivityInterface[]>();
+  isOwner = input<boolean>();
+  user = input<User>();
 
-export class ActivitiesTogglesComponent implements OnInit, OnDestroy {
-  @Input() isOwner?: boolean;
-  @Input() event!: EventInterface;
-  @Input() user?: User;
+  // Injected services
+  private destroyRef = inject(DestroyRef);
+  public activitySelectionService = inject(AppActivitySelectionService);
+  public eventColorService = inject(AppEventColorService);
 
-  private selectedActivitiesSubscription?: Subscription;
+  // Computed: cache activities array - won't recompute unless event changes
+  activities = computed(() => this.event()?.getActivities() ?? []);
 
-  constructor(
-    public activitySelectionService: AppActivitySelectionService,
-    public eventColorService: AppEventColorService,
-    private changeDetectorRef: ChangeDetectorRef
-  ) { }
+  // Computed: pre-calculate colors for all activities
+  activityColors = computed(() => {
+    const acts = this.activities();
+    const colorMap = new Map<string, string>();
+    acts.forEach(activity => {
+      colorMap.set(activity.getID(), this.eventColorService.getActivityColor(acts, activity));
+    });
+    return colorMap;
+  });
+
+  // Computed: check if device names should show
+  shouldShowDeviceNames = computed(() => {
+    const acts = this.activities();
+    if (acts.length <= 1) return false;
+    const ids = acts.map(a => `${a.creator?.name || ''}-${a.creator?.serialNumber || ''}`);
+    return new Set(ids).size > 1;
+  });
 
   ngOnInit() {
-    this.selectedActivitiesSubscription = this.activitySelectionService.selectedActivities.changed
-      .asObservable()
-      .subscribe(() => {
-        this.changeDetectorRef.detectChanges();
-      });
-  }
-
-  ngOnDestroy() {
-    if (this.selectedActivitiesSubscription) {
-      this.selectedActivitiesSubscription.unsubscribe();
-    }
-  }
-
-  /**
-   * Determines if device names should be shown.
-   * Returns true only if activities come from different devices.
-   */
-  get shouldShowDeviceNames(): boolean {
-    const activities = this.event.getActivities();
-    if (activities.length <= 1) {
-      return false;
-    }
-    const deviceIdentifiers = activities.map(a =>
-      `${a.creator?.name || ''}-${a.creator?.serialNumber || ''}`
-    );
-    return new Set(deviceIdentifiers).size > 1;
-  }
-
-  /**
-   * Gets the device display name for an activity.
-   */
-  getDeviceName(activity: ActivityInterface): string {
-    const name = activity.creator?.name || '';
-    const swInfo = activity.creator?.swInfo || '';
-    return swInfo ? `${name} ${swInfo}` : name;
   }
 
   /**
    * Check if an activity is selected.
    */
   isSelected(activity: ActivityInterface): boolean {
-    return this.activitySelectionService.selectedActivities.isSelected(activity);
+    return this.selectedActivities().some(a => a.getID() === activity.getID());
   }
 
   /**
@@ -82,9 +75,25 @@ export class ActivitiesTogglesComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Get the color for an activity.
+   * Get the device display name for an activity.
+   */
+  getDeviceName(activity: ActivityInterface): string {
+    const name = activity.creator?.name || '';
+    const swInfo = activity.creator?.swInfo || '';
+    return swInfo ? `${name} ${swInfo}` : name;
+  }
+
+  /**
+   * Get the color for an activity from the pre-calculated map.
    */
   getActivityColor(activity: ActivityInterface): string {
-    return this.eventColorService.getActivityColor(this.event.getActivities(), activity);
+    return this.activityColors().get(activity.getID()) || '#000';
+  }
+
+  /**
+   * Track activities by ID for better rendering performance.
+   */
+  trackByActivityId(index: number, activity: ActivityInterface): string {
+    return activity.getID();
   }
 }

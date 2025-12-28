@@ -100,31 +100,7 @@ tr.mat-row:focus {
   outline: none;
 }
 
-/* Search Field & Filter Container (matching Admin Dashboard) */
-.filter-container {
-  padding: 1rem 1.5rem;
-  display: flex;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  border-radius: 12px;
-}
 
-.search-field {
-  width: 100%;
-  max-width: 400px;
-
-  ::ng-deep .mat-mdc-text-field-wrapper {
-    background-color: rgba(255, 255, 255, 0.5);
-  }
-
-  ::ng-deep .mat-mdc-form-field-subscript-wrapper {
-    display: none;
-  }
-}
-
-:host-context(.dark-theme) .search-field ::ng-deep .mat-mdc-text-field-wrapper {
-  background-color: rgba(0, 0, 0, 0.2);
-}
 
 /* Force smaller badges for table actions */
 .buttons ::ng-deep .mat-badge-content {

@@ -114,25 +114,7 @@ td.mat-cell {
 }
 
 
-.filter-container {
-    padding: 1rem 1.5rem;
-    display: flex;
-    align-items: center;
-    margin-bottom: 1.5rem; // Add spacing below search
 
-    .search-field {
-        width: 100%;
-        max-width: 400px; // Limit width for better aesthetics
-
-        ::ng-deep .mat-mdc-text-field-wrapper {
-            background-color: rgba(255, 255, 255, 0.5); // Subtle background
-        }
-
-        ::ng-deep .mat-mdc-form-field-subscript-wrapper {
-            display: none; // Remove reserve space for hints if not used
-        }
-    }
-}
 
 :host-context(.dark-theme) .chart-header {
     color: rgba(255, 255, 255, 0.87);

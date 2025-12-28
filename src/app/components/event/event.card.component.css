@@ -3,12 +3,22 @@
 .event-dashboard-container {
   display: flex;
   flex-direction: column;
+  position: relative;
   gap: 0.5rem;
   /* Tight gap between sections */
   padding: 16px;
   max-width: 1600px;
-  /* Prevent it from getting too wide on huge screens */
+  /* Cap width for ultra-wide screens */
   margin: 0 auto;
+}
+
+.global-download-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  height: 3px;
 }
 
 /* Specific section tweaks if needed */

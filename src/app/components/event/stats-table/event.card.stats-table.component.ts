@@ -44,7 +44,7 @@ export class EventCardStatsTableComponent implements OnChanges {
     // Create the columns
     this.columns = ['Name'].concat(this.selectedActivities
       .map((activity, index) => {
-        return `${activity.creator.name} ${this.eventColorService.getActivityColor(this.event.getActivities(), activity)}`
+        return `${activity.creator.name} ${this.eventColorService.getActivityColor(this.selectedActivities, activity)}`
       }));
 
     // Collect all the stat types from all the activities
@@ -105,7 +105,7 @@ export class EventCardStatsTableComponent implements OnChanges {
           if (!activityStat) {
             return rowObj;
           }
-          rowObj[`${activity.creator.name} ${this.eventColorService.getActivityColor(this.event.getActivities(), activity)}`] =
+          rowObj[`${activity.creator.name} ${this.eventColorService.getActivityColor(this.selectedActivities, activity)}`] =
             (activityStat ? activityStat.getDisplayValue() : '') +
             ' ' +
             (activityStat ? activityStat.getDisplayUnit() : '');

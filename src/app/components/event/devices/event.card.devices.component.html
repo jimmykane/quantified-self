@@ -8,7 +8,7 @@
     </mat-expansion-panel-header>
     @for (activity of selectedActivities; track activity) {
     <app-activity-toggle [event]="event" [showToggle]="false" [showDate]="false" [showStats]="false"
-      [activity]="activity">
+      [activity]="activity" [selectedActivities]="selectedActivities">
     </app-activity-toggle>
     @if (selectedActivities.length > 1) {
     <mat-divider [inset]="true"></mat-divider>

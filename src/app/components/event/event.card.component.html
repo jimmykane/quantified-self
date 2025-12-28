@@ -1,9 +1,13 @@
 <div class="event-dashboard-container">
+  @if (isDownloading()) {
+  <mat-progress-bar mode="indeterminate" class="global-download-progress"></mat-progress-bar>
+  }
 
 
-  @if (event) {
-  <app-event-summary [event]="event" [user]='currentUser' [isOwner]="isOwner()"
-    [selectedActivities]="selectedActivities" [unitSettings]="userUnitSettings" [statsToShow]="basicStatsTypes">
+  @if (event()) {
+  <app-event-summary [event]="event()!" [user]='currentUser()' [isOwner]="isOwner()"
+    [selectedActivities]="selectedActivitiesInstant()" [unitSettings]="userUnitSettings()"
+    [statsToShow]="basicStatsTypes">
 
     <!-- Projecting Secondary Details into Summary Card -->
     <div summary-bottom class="secondary-details-container">
@@ -15,31 +19,47 @@
             <div class="tab-content-wrapper responsive-grid">
 
               <!-- Map Section -->
-              @if (event && targetUserID && hasPositions(event)) {
+              @if (event() && targetUserID() && hasPositionsFlag()) {
               <mat-card class="dashboard-card map-section glass-card no-shadow">
-                <app-event-card-map [selectedActivities]="selectedActivities" [targetUserID]="targetUserID"
-                  [user]="currentUser" [event]="event" [showLaps]="showMapLaps" [showPoints]="showMapPoints"
-                  [lapTypes]="mapLapTypes" [showArrows]="showMapArrows" [strokeWidth]="mapStrokeWidth"
-                  [theme]="mapTheme">
+                @if (selectedActivitiesDebounced().length > 0) {
+                <app-event-card-map [selectedActivities]="selectedActivitiesDebounced()" [targetUserID]="targetUserID()"
+                  [user]="currentUser()!" [event]="event()!" [showLaps]="showMapLaps()" [showPoints]="showMapPoints()"
+                  [lapTypes]="mapLapTypes()" [showArrows]="showMapArrows()" [strokeWidth]="mapStrokeWidth()"
+                  [theme]="mapTheme()">
                 </app-event-card-map>
+                } @else {
+                <div class="empty-selection-message">
+                  <mat-icon ripple>map</mat-icon>
+                  <span>Please select at least one activity to view the map.</span>
+                </div>
+                }
               </mat-card>
               }
 
               <!-- Chart Section -->
-              @if (event && targetUserID && currentUser) {
+              @if (event() && targetUserID() && currentUser()) {
               <mat-card class="dashboard-card chart-section glass-card no-shadow">
-                <app-event-card-chart [showAllData]="showAllData" [showLaps]="showChartLaps"
-                  [useAnimations]="useChartAnimations" [disableGrouping]="chartDisableGrouping"
-                  [hideAllSeriesOnInit]="chartHideAllSeriesOnInit" [gainAndLossThreshold]="chartGainAndLossThreshold"
-                  [stackYAxes]="stackChartYAxes" [showGrid]="showChartGrid" [lapTypes]="chartLapTypes"
-                  [xAxisType]="chartXAxisType" [strokeWidth]="chartStrokeWidth" [strokeOpacity]="chartStrokeOpacity"
-                  [extraMaxForPower]="chartExtraMaxForPower" [extraMaxForPace]="chartExtraMaxForPace"
-                  [fillOpacity]="chartFillOpacity" [selectedActivities]="selectedActivities"
-                  [targetUserID]="targetUserID" [dataTypesToUse]="chartDataTypesToUse"
-                  [userUnitSettings]="userUnitSettings" [user]="currentUser"
-                  [downSamplingLevel]="chartDownSamplingLevel" [chartCursorBehaviour]="chartCursorBehaviour"
-                  [chartTheme]="chartTheme" [waterMark]="currentUser ? currentUser.brandText : null" [event]="event">
+                @if (selectedActivitiesDebounced().length > 0) {
+                <app-event-card-chart [showAllData]="showAllData()" [showLaps]="showChartLaps()"
+                  [useAnimations]="useChartAnimations()" [disableGrouping]="chartDisableGrouping()"
+                  [hideAllSeriesOnInit]="chartHideAllSeriesOnInit()"
+                  [gainAndLossThreshold]="chartGainAndLossThreshold()" [stackYAxes]="stackChartYAxes()"
+                  [showGrid]="showChartGrid()" [lapTypes]="chartLapTypes()" [xAxisType]="chartXAxisType()"
+                  [strokeWidth]="chartStrokeWidth()" [strokeOpacity]="chartStrokeOpacity()"
+                  [extraMaxForPower]="chartExtraMaxForPower()" [extraMaxForPace]="chartExtraMaxForPace()"
+                  [fillOpacity]="chartFillOpacity()" [selectedActivities]="selectedActivitiesDebounced()"
+                  [targetUserID]="targetUserID()" [dataTypesToUse]="chartDataTypesToUse()"
+                  [userUnitSettings]="userUnitSettings()" [user]="currentUser()!"
+                  [downSamplingLevel]="chartDownSamplingLevel()" [chartCursorBehaviour]="chartCursorBehaviour()"
+                  [chartTheme]="chartTheme()" [waterMark]="currentUser() ? currentUser()!.brandText : null"
+                  [event]="event()!" (loadingStatus)="isDownloading.set($event)">
                 </app-event-card-chart>
+                } @else {
+                <div class="empty-selection-message">
+                  <mat-icon ripple>show_chart</mat-icon>
+                  <span>Please select at least one activity to view the chart.</span>
+                </div>
+                }
               </mat-card>
               }
 
@@ -48,12 +68,12 @@
         </mat-tab>
 
         <!-- TAB 2: LAPS -->
-        @if (hasLaps(event)) {
+        @if (hasLapsFlag()) {
         <mat-tab label="Laps">
           <ng-template matTabContent>
             <div class="tab-content-wrapper">
-              <app-event-card-laps [selectedActivities]="selectedActivities" [unitSettings]="userUnitSettings"
-                [event]="event">
+              <app-event-card-laps [selectedActivities]="selectedActivitiesInstant()"
+                [unitSettings]="userUnitSettings()" [event]="event()!">
               </app-event-card-laps>
             </div>
           </ng-template>
@@ -61,19 +81,19 @@
         }
 
         <!-- TAB 4: DETAILS -->
-        @if (hasIntensityZones(event) || hasDevices(event)) {
+        @if (hasIntensityZonesFlag() || hasDevicesFlag()) {
         <mat-tab label="Details">
           <ng-template matTabContent>
             <div class="tab-content-wrapper">
-              @if (hasIntensityZones(event)) {
-              <app-event-intensity-zones [activities]="selectedActivities" [useAnimations]="useChartAnimations"
-                [chartTheme]="chartTheme">
+              @if (hasIntensityZonesFlag()) {
+              <app-event-intensity-zones [activities]="selectedActivitiesInstant()"
+                [useAnimations]="useChartAnimations()" [chartTheme]="chartTheme()">
               </app-event-intensity-zones>
               }
 
-              @if (hasDevices(event)) {
-              @if (hasIntensityZones(event)) { <mat-divider></mat-divider> }
-              <app-event-card-devices [selectedActivities]="selectedActivities" [event]="event">
+              @if (hasDevicesFlag()) {
+              @if (hasIntensityZonesFlag()) { <mat-divider></mat-divider> }
+              <app-event-card-devices [selectedActivities]="selectedActivitiesInstant()" [event]="event()!">
               </app-event-card-devices>
               }
             </div>

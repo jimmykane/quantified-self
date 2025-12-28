@@ -1,7 +1,6 @@
 import { Injectable } from '@angular/core';
 import { AppDeviceColors } from './app.device.colors';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
-import { EventInterface } from '@sports-alliance/sports-lib';
 import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import { AppActivityTypeGroupColors } from './app.activity-type-group.colors';
 import type * as am4core from '@amcharts/amcharts4/core';
@@ -14,16 +13,33 @@ import { LoggerService } from '../logger.service';
 })
 export class AppEventColorService {
 
+  private colorCache = new Map<string, string>();
+
   constructor(private amChartsService: AmChartsService, private logger: LoggerService) { }
+
+  /**
+   * Clears the color cache. Should be called when activities change context (e.g. new event load)
+   */
+  public clearCache() {
+    this.colorCache.clear();
+  }
 
   public getColorByNumber(number: number): string {
     // Return fixed random
     return '#' + Math.floor((Math.abs(Math.sin(number) * 16777215)) % 16777215).toString(16);
   }
 
+  /**
+   * Get the color for an activity from the pre-calculated map.
+   */
   public getActivityColor(activities: ActivityInterface[], activity: ActivityInterface): string {
     const activityID = activity.getID();
     const creatorName = activity.creator.name || 'Unknown';
+
+    const cacheKey = `${activities.length}-${activityID}`;
+    if (this.colorCache.has(cacheKey)) {
+      return this.colorCache.get(cacheKey)!;
+    }
 
     // Get the index of the requested activity among all activities
     // If ID is missing, fallback to reference matching or index-in-array if possible
@@ -38,18 +54,12 @@ export class AppEventColorService {
       activityIndex = 0;
     }
 
-    this.logger.log('[AppEventColorService] getActivityColor', {
-      activityID,
-      activityIndex,
-      creator: creatorName,
-      totalActivities: activities.length
-    });
-
     const deviceColors = AppDeviceColors as any;
 
     if (!deviceColors[creatorName]) {
       const color = this.getColorByNumber(activityIndex + 5 /* + 10 = pretty */);
-      this.logger.log('[AppEventColorService] No device color, using fallback:', color);
+
+      this.colorCache.set(cacheKey, color); // Cache the color
       return color;
     }
 
@@ -61,18 +71,20 @@ export class AppEventColorService {
       return activityID && id ? activityID === id : activity === eventActivity;
     });
 
-    this.logger.log('[AppEventColorService] sameCreator index:', sameCreatorActivitiesActivityIndex);
+
 
     // If its the first one return the color
     if (sameCreatorActivitiesActivityIndex === 0) {
       const color = deviceColors[creatorName];
-      this.logger.log('[AppEventColorService] First for creator, using device color:', color);
+
+      this.colorCache.set(cacheKey, color);
       return color;
     }
 
     // Else it's not the first one, then return the global activity index color
     const color = this.getColorByNumber(activityIndex);
-    this.logger.log('[AppEventColorService] Subsequent for creator, using unique color:', color);
+
+    this.colorCache.set(cacheKey, color);
     return color;
   }
 

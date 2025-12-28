@@ -16,7 +16,7 @@
       <section>
         @if (selectedActivities.length > 1 || event.getActivities().length > 1) {
         <app-activity-toggle [event]="event" [showToggle]="false" [showDate]="false" [showStats]="false"
-          [activity]="activity">
+          [activity]="activity" [selectedActivities]="selectedActivities">
         </app-activity-toggle>
         }
         @if (selectedActivities.length > 1) {

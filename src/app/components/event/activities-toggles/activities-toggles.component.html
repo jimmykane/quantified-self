@@ -1,15 +1,16 @@
 <mat-chip-listbox class="activity-chips" [multiple]="true" [hideSingleSelectionIndicator]="true"
   aria-label="Activity selection">
-  @for (activity of event.getActivities(); track activity) {
-  <mat-chip-option [selected]="isSelected(activity)" [style.--chip-accent-color]="getActivityColor(activity)"
-    (click)="toggleActivity(activity)" class="activity-chip">
+  @for (activity of activities(); track trackByActivityId($index, activity)) {
+  <mat-chip-option [selected]="isSelected(activity)"
+    [style.--chip-accent-color]="activityColors().get(activity.getID())" (click)="toggleActivity(activity)"
+    class="activity-chip">
     <div class="chip-content">
       <span class="chip-type">{{ activity.type }}</span>
       <span class="chip-stats">
         {{ activity.getDuration().getDisplayValue() }} • {{ activity.getDistance().getDisplayValue() }}{{
         activity.getDistance().getDisplayUnit() }}
       </span>
-      @if (shouldShowDeviceNames) {
+      @if (shouldShowDeviceNames()) {
       <span class="chip-device">{{ getDeviceName(activity) }}</span>
       }
     </div>
