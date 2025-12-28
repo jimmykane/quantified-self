@@ -14,7 +14,7 @@ import {
 import * as crypto from 'crypto';
 import * as base58 from 'bs58';
 import { CloudTasksClient } from '@google-cloud/tasks';
-import { EventWriter, FirestoreAdapter, StorageAdapter, LogAdapter } from './shared/event-writer';
+import { EventWriter, FirestoreAdapter, StorageAdapter, LogAdapter, OriginalFile } from './shared/event-writer';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
 
@@ -90,7 +90,7 @@ export function isCorsAllowed(req: Request) {
   });
 }
 
-export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminHealthAPIEventMetaData | COROSAPIEventMetaData, originalFile?: { data: any, extension: string, startDate: Date }, bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>) {
+export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminHealthAPIEventMetaData | COROSAPIEventMetaData, originalFile?: OriginalFile, bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>) {
   // Enforce Usage Limit
   await checkEventUsageLimit(userID, usageCache, pendingWrites);
 

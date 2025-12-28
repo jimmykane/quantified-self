@@ -19,7 +19,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { EventExporterGPX } from '@sports-alliance/sports-lib';
 
-import { EventWriter, FirestoreAdapter, StorageAdapter } from '../../../functions/src/shared/event-writer';
+import { EventWriter, FirestoreAdapter, StorageAdapter, OriginalFile } from '../../../functions/src/shared/event-writer';
 import { Bytes } from 'firebase/firestore';
 import { Storage, ref, uploadBytes, getBytes } from '@angular/fire/storage';
 import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
@@ -272,7 +272,7 @@ export class AppEventService implements OnDestroy {
     return combineLatest(x).pipe(map(arrayOfArrays => arrayOfArrays.reduce((a, b) => a.concat(b), [])));
   }
 
-  public async writeAllEventData(user: User, event: AppEventInterface, originalFiles?: { data: any, extension: string, startDate: Date }[] | { data: any, extension: string, startDate: Date }) {
+  public async writeAllEventData(user: User, event: AppEventInterface, originalFiles?: OriginalFile[] | OriginalFile) {
     // 1. Check Pro Status
     const userService = this.injector.get(AppUserService);
     const isPro = await userService.isPro();

@@ -31,6 +31,13 @@ export interface StorageAdapter {
     getBucketName?(): string;  // Optional: some adapters may provide bucket name
 }
 
+export interface OriginalFile {
+    data: unknown;
+    extension: string;
+    startDate: Date;
+    originalFilename?: string;
+}
+
 export class EventWriter {
     private logger: LogAdapter;
 
@@ -43,7 +50,7 @@ export class EventWriter {
         this.logger = logger || consoleLogAdapter;
     }
 
-    public async writeAllEventData(userID: string, event: AppEventInterface, originalFiles?: { data: unknown, extension: string, startDate?: Date }[] | { data: unknown, extension: string, startDate?: Date }): Promise<void> {
+    public async writeAllEventData(userID: string, event: AppEventInterface, originalFiles?: OriginalFile[] | OriginalFile): Promise<void> {
         this.logger.info('writeAllEventData called', { userID, eventID: event.getID(), adapterPresent: !!this.storageAdapter });
         const writePromises: Promise<void>[] = [];
 
@@ -78,7 +85,7 @@ export class EventWriter {
             delete eventJSON.activities;
 
             // Normalize input to array or single
-            let filesToUpload: { data: unknown, extension: string, startDate?: Date }[] = [];
+            let filesToUpload: { data: unknown, extension: string, startDate: Date, originalFilename?: string }[] = [];
             if (originalFiles) {
                 if (Array.isArray(originalFiles)) {
                     filesToUpload = originalFiles;
@@ -88,7 +95,7 @@ export class EventWriter {
             }
 
             if (filesToUpload.length > 0 && this.storageAdapter) {
-                const uploadedFilesMetadata: { path: string, bucket?: string, startDate?: Date }[] = [];
+                const uploadedFilesMetadata: { path: string, bucket?: string, startDate: Date, originalFilename?: string }[] = [];
 
                 for (let i = 0; i < filesToUpload.length; i++) {
                     const file = filesToUpload[i];
@@ -113,6 +120,7 @@ export class EventWriter {
                         path: filePath,
                         bucket: this.storageAdapter.getBucketName?.() || this.bucketName,
                         startDate: file.startDate,
+                        originalFilename: file.originalFilename // Save if present
                     });
                 }
 

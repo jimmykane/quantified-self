@@ -76,6 +76,7 @@ describe('EventWriter', () => {
             data: Buffer.from('test'),
             extension: 'fit',
             startDate: new Date(),
+            originalFilename: 'test.fit',
         };
         await writer.writeAllEventData('user-1', eventMock, originalFile);
 
@@ -92,12 +93,14 @@ describe('EventWriter', () => {
                     path: 'users/user-1/events/event-1/original.fit',
                     bucket: 'quantified-self-io',
                     startDate: originalFile.startDate,
+                    originalFilename: 'test.fit',
                 }),
                 originalFiles: expect.arrayContaining([
                     expect.objectContaining({
                         path: 'users/user-1/events/event-1/original.fit',
                         bucket: 'quantified-self-io',
                         startDate: originalFile.startDate,
+                        originalFilename: 'test.fit',
                     })
                 ])
             })
@@ -211,6 +214,7 @@ describe('EventWriter', () => {
             const originalFile = {
                 data: Buffer.from('test'),
                 extension: 'fit',
+                startDate: new Date(),
             };
 
             await writerWithoutStorage.writeAllEventData('user-1', eventMock, originalFile);
