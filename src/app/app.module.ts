@@ -8,7 +8,8 @@ import { environment } from '../environments/environment';
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
 import { provideAuth, getAuth, connectAuthEmulator } from '@angular/fire/auth';
-import { provideFirestore, getFirestore } from '@angular/fire/firestore';
+import { provideFirestore, initializeFirestore } from '@angular/fire/firestore';
+import { getApp } from '@angular/fire/app';
 import { provideFunctions, getFunctions, httpsCallable } from '@angular/fire/functions';
 import { providePerformance, getPerformance } from '@angular/fire/performance';
 import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService } from '@angular/fire/analytics';
@@ -73,9 +74,13 @@ export function initializeRemoteConfig(remoteConfigService: AppRemoteConfigServi
       }
       return auth;
     }),
+    // Use initializeFirestore with ignoreUndefinedProperties to handle undefined values
+    // in activity/event data (e.g., TCX files may have undefined creator.manufacturer).
+    // This is the official Firebase approach - undefined fields are silently skipped, not stored.
     provideFirestore(() => {
-      const firestore = getFirestore();
-      return firestore;
+      return initializeFirestore(getApp(), {
+        ignoreUndefinedProperties: true
+      });
     }),
     provideStorage(() => getStorage()),
     provideFunctions(() => getFunctions(undefined, 'europe-west2')),
