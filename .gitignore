@@ -69,3 +69,5 @@ licenses.json
 # SSL certificates (generate locally with mkcert)
 /certs
 functions/.env
+
+PR_DESCRIPTION.md
