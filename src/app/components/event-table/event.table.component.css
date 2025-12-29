@@ -62,43 +62,7 @@ mat-icon {
 }
 
 
-table {
-  width: 100%;
-  background: transparent !important;
-}
 
-th.mat-header-cell {
-  background: rgba(0, 0, 0, 0.02);
-  font-weight: 600;
-  font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  opacity: 0.8;
-}
-
-:host-context(.dark-theme) th.mat-header-cell {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-td.mat-cell {
-  font-size: 0.95rem;
-}
-
-tr.mat-row:hover td:not(.mat-table-sticky) {
-  background: rgba(0, 0, 0, 0.04);
-  /* Fallback */
-  background: var(--mat-sys-state-hover, rgba(0, 0, 0, 0.04));
-  /* Standard hover effect */
-  cursor: pointer;
-}
-
-:host-context(.dark-theme) tr.mat-row:hover td:not(.mat-table-sticky) {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-tr.mat-row:focus {
-  outline: none;
-}
 
 
 
