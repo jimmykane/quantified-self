@@ -355,7 +355,8 @@ describe('getUserCount Cloud Function', () => {
             total: 150,
             pro: 50,
             basic: 50,
-            free: 50
+            free: 50,
+            providers: {}
         });
         expect(mockCollection).toHaveBeenCalledWith('users');
         expect(mockCollection).toHaveBeenCalledWith('subscriptions'); // collectionGroup calls this name

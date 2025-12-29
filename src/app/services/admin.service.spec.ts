@@ -84,7 +84,7 @@ describe('AdminService', () => {
     });
 
     it('should return total user count with breakdown from Cloud Function', async () => {
-        const mockData = { total: 180, pro: 50, basic: 130, free: 0 };
+        const mockData = { total: 180, pro: 50, basic: 130, free: 0, providers: {} };
         mockGetUserCount.mockReturnValue(Promise.resolve({ data: mockData }));
 
         const stats$ = service.getTotalUserCount();
