@@ -147,7 +147,7 @@
 
       <div class="feature-card-content">
         <p class="feature-description" *ngIf="!hasProAccess">Upload standard FIT files to Suunto.</p>
-        <app-upload-activity-to-service [user]="user"></app-upload-activity-to-service>
+        <app-upload-activity-to-service [user]="user" [hasProAccess]="hasProAccess"></app-upload-activity-to-service>
       </div>
     </mat-card>
 
@@ -175,7 +175,7 @@
 
       <div class="feature-card-content">
         <p class="feature-description" *ngIf="!hasProAccess">Upload GPX routes to Suunto.</p>
-        <app-upload-route-to-service [user]="user"></app-upload-route-to-service>
+        <app-upload-route-to-service [user]="user" [hasProAccess]="hasProAccess"></app-upload-route-to-service>
       </div>
     </mat-card>
 
