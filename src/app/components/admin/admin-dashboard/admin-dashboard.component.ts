@@ -78,7 +78,39 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     // Queue stats
     queueStats: QueueStats | null = null;
     isLoadingStats = true;
-    userStats: { total: number; pro: number; basic: number; free: number } | null = null;
+    userStats: { total: number; pro: number; basic: number; free: number; providers: Record<string, number> } | null = null;
+
+    // Auth Chart
+    public authPieChartData: ChartConfiguration<'pie'>['data'] = {
+        labels: [],
+        datasets: [{
+            data: [],
+            backgroundColor: [
+                'rgba(255, 99, 132, 0.6)',
+                'rgba(54, 162, 235, 0.6)',
+                'rgba(255, 206, 86, 0.6)',
+                'rgba(75, 192, 192, 0.6)',
+                'rgba(153, 102, 255, 0.6)',
+                'rgba(255, 159, 64, 0.6)'
+            ],
+            borderColor: 'transparent'
+        }]
+    };
+    public authPieChartOptions: ChartConfiguration<'pie'>['options'] = {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'right',
+                labels: {
+                    color: 'rgba(255, 255, 255, 0.8)',
+                    font: {
+                        size: 12
+                    }
+                }
+            }
+        },
+        maintainAspectRatio: false
+    };
 
     // Charts
     public barChartLegend = true;
@@ -91,6 +123,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     };
     public barChartOptions: ChartConfiguration<'bar'>['options'] = {
         responsive: true,
+        maintainAspectRatio: false
     };
 
     // Maintenance mode
@@ -131,11 +164,15 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
             this.totalCount = resolvedData.usersData.totalCount;
             this.userStats = resolvedData.userStats;
             this.isLoading = false;
+            if (this.userStats) {
+                this.updateAuthChart(this.userStats.providers);
+            }
         } else {
             // Fallback if no resolver (though with guard it shouldn't happen)
             this.fetchUsers();
             this.adminService.getTotalUserCount().subscribe(stats => {
                 this.userStats = stats;
+                this.updateAuthChart(stats.providers);
             });
         }
 
@@ -144,6 +181,29 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         // Given "Resolvers for Layout", the user list is the layout. Queue stats are a widget.
         this.fetchQueueStats();
         this.fetchMaintenanceStatus();
+    }
+
+    updateAuthChart(providers: Record<string, number>): void {
+        if (!providers) return;
+
+        const labels = Object.keys(providers).map(label => {
+            // Prettify label
+            if (label === 'google.com') return 'Google';
+            if (label === 'password') return 'Email';
+            if (label === 'apple.com') return 'Apple';
+            if (label === 'facebook.com') return 'Facebook';
+            if (label === 'github.com') return 'GitHub';
+            return label;
+        });
+        const data = Object.values(providers);
+
+        this.authPieChartData = {
+            labels,
+            datasets: [{
+                ...this.authPieChartData.datasets[0],
+                data
+            }]
+        };
     }
 
     fetchQueueStats(): void {
