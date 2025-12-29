@@ -21,9 +21,12 @@ describe('stWorkoutDownloadAsFit', () => {
             query: {},
             body: {},
             headers: {
-                'origin': 'http://localhost:4200'
+                'origin': 'http://localhost:4200' // Allowed origin
             },
-            get: vi.fn().mockReturnValue('application/json')
+            get: vi.fn().mockImplementation((header) => {
+                if (header === 'origin') return 'http://localhost:4200';
+                return 'application/json';
+            })
         };
         res = {
             status: vi.fn().mockReturnThis(),
@@ -31,6 +34,25 @@ describe('stWorkoutDownloadAsFit', () => {
             setHeader: vi.fn().mockReturnThis(),
             getHeader: vi.fn().mockReturnValue(undefined)
         };
+    });
+
+    it('should NOT allow requests from disallowed origins', async () => {
+        req.headers.origin = 'http://evil.com';
+        req.get.mockImplementation((header: string) => {
+            if (header === 'origin') return 'http://evil.com';
+            return 'application/json';
+        });
+
+        // The cors middleware will not call the next() callback if origin is not allowed?
+        // Actually, the 'cors' package usually proceeds but doesn't set the Access-Control-Allow-Origin header if the origin is not allowed.
+        // Or if options.origin is a function/array, it might block?
+        // Let's see how 'cors' behaves. If it's just setting headers, the function body will still run, but the browser would block the response.
+        // However, standard `cors` middleware implementation often just sets headers.
+
+        await stWorkoutDownloadAsFit(req, res);
+
+        // If the origin is not allowed, the CORS middleware should NOT set the Access-Control-Allow-Origin header
+        expect(res.setHeader).not.toHaveBeenCalledWith('Access-Control-Allow-Origin', 'http://evil.com');
     });
 
     it('should return 403 if activityID is missing', async () => {
