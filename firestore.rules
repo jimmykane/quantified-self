@@ -60,6 +60,10 @@ service cloud.firestore {
 
            // New Flat Activities Collection
            // @note: This is the new way to access activities
+          }
+          
+          match /activities/{activityID} {
+            // New Flat Activities Collection
             allow read: if isCoach(userID) == true; // @todo restrict to coach/privacy?
             allow read, write: if request.auth.uid == userID;
           }
