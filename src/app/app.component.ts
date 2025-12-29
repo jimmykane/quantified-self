@@ -56,7 +56,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   public title;
   private actionButtonsSubscription: Subscription;
   private routerEventSubscription: Subscription;
-  public loading: boolean;
   public authState: boolean | null = null;
   public isOnboardingRoute = false;
   public onboardingCompleted = true; // Default to true to avoid hiding chrome of non-authenticated users prematurely
@@ -106,14 +105,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
         case event instanceof RoutesRecognized:
           this.title = (<RoutesRecognized>event).state.root.firstChild.data['title'];
           this.titleService.setTitle(`${this.title} - Quantified Self`);
-          break;
-        case event instanceof NavigationStart:
-          this.loading = true;
-          break;
-        case event instanceof NavigationEnd:
-        case event instanceof NavigationCancel:
-        case event instanceof NavigationError:
-          this.loading = false;
           break;
         default: {
           break;
