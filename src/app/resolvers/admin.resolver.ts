@@ -6,7 +6,7 @@ import { map, catchError } from 'rxjs/operators';
 
 export interface AdminResolverData {
     usersData: { users: AdminUser[], totalCount: number };
-    userStats: { total: number, pro: number, basic: number, free: number } | null;
+    userStats: { total: number, pro: number, basic: number, free: number, providers: Record<string, number> } | null;
 }
 
 export const adminResolver: ResolveFn<AdminResolverData> = (route, state) => {
