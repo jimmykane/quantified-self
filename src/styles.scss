@@ -584,16 +584,16 @@ mat-table {
 }
 
 /* Bottom Sheet Overrides */
+/* Bottom Sheet Overrides */
 .qs-full-width-bottom-sheet {
   padding: 0 !important;
   overflow: hidden !important;
   max-width: none !important;
   max-height: 80vh !important;
-  /* Force container to fit screen */
   height: 80vh !important;
-  /* Explicitly set height */
-  border: 5px solid red !important;
-  /* DEBUG: VERIFYING CLASS APPLICATION */
+
+  display: flex !important;
+  flex-direction: column !important;
 }
 
 /* Specific Material targets */
@@ -604,8 +604,9 @@ mat-table {
   max-width: none !important;
   max-height: 80vh !important;
   height: 80vh !important;
-  border: 5px solid red !important;
-  /* DEBUG: VERIFYING CLASS APPLICATION */
+
+  display: flex !important;
+  flex-direction: column !important;
 }
 
 /* ==========================================================================
