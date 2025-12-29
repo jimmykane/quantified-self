@@ -52,7 +52,7 @@ async function confirm(message: string): Promise<boolean> {
     });
 }
 
-async function deauthorize(collectionName: string, dryRun: boolean) {
+async function deauthorize(collectionName: string, dryRun: boolean, verbose: boolean = false) {
     const config = DEAUTH_CONFIG[collectionName];
     if (!config) return;
 
@@ -64,32 +64,42 @@ async function deauthorize(collectionName: string, dryRun: boolean) {
         return;
     }
 
-    logger.info(`  Found ${snapshot.size} users with tokens.`);
+    logger.info(`  Found ${snapshot.size} users with active tokens.`);
 
+    if (dryRun && !verbose) {
+        logger.info(`  [DRY RUN] Would deauthorize all ${snapshot.size} users from ${config.service || 'Garmin'}. (Use --verbose to see IDs)`);
+        return;
+    }
+
+    let count = 0;
     for (const doc of snapshot.docs) {
         const uid = doc.id;
         if (dryRun) {
             logger.info(`  [DRY RUN] Would deauthorize user ${uid} from ${config.service || 'Garmin'}`);
         } else {
-            process.stdout.write(`  Deauthorizing user ${uid} from ${config.service || 'Garmin'}...`);
+            if (count === 0) process.stdout.write(`  Processing deauthorizations: `);
             try {
                 if (config.service) {
                     await config.fn(uid, config.service);
                 } else {
                     await config.fn(uid);
                 }
-                logger.info(` ✓`);
+                process.stdout.write(`.`);
             } catch (e: Error | any) {
-                logger.info(` ✗ (${e.message})`);
+                process.stdout.write(`x`);
             }
+            count++;
+            if (count % 50 === 0) process.stdout.write(` (${count})\n  `);
         }
     }
+    if (!dryRun) logger.info(`\n  Completed ${count} deauthorizations.`);
 }
 
 async function cleanupFirestore() {
     const args = process.argv.slice(2);
     const dryRun = args.includes('--dry-run');
     const force = args.includes('--force');
+    const verbose = args.includes('--verbose');
     const disconnectOnly = args.includes('--disconnect-only');
     const deauthorizeFlag = args.includes('--deauthorize');
     const collectionsArg = args.find(arg => arg.startsWith('--collections='));
