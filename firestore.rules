@@ -56,12 +56,7 @@ service cloud.firestore {
             return get(/databases/$(database)/documents/users/$(userID)/events/$(eventID)).data
           }
 
-          match /activities/{activityID} {
-            allow read: if eventData().privacy == 'public'
-            allow read: if isCoach(userID) == true;
-            allow read, write: if request.auth.uid == userID;
 
-          }
 
            // New Flat Activities Collection
            // @note: This is the new way to access activities

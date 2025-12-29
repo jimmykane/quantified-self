@@ -169,4 +169,27 @@ describe('Firestore Security Rules', () => {
 
     });
 
+    // End of main describe block removed here to include appended tests
+
+    describe('Legacy Activities Collection (Nested)', () => {
+        const userId = 'legacy_user';
+        const eventId = 'legacy_event';
+        const activityId = 'legacy_activity';
+
+        it('should DENY user from reading their own nested activity (Removed matching rule)', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/events/${eventId}/activities`).doc(activityId).set({ foo: 'bar' });
+                await context.firestore().collection(`users/${userId}/events`).doc(eventId).set({ privacy: 'private' });
+            });
+            await assertFails(db.collection(`users/${userId}/events/${eventId}/activities`).doc(activityId).get());
+        });
+
+        it('should DENY user from writing to nested activity', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+            await assertFails(db.collection(`users/${userId}/events/${eventId}/activities`).doc(activityId).set({
+                type: 'Running'
+            }));
+        });
+    });
 });
