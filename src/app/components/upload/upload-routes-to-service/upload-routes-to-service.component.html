@@ -2,8 +2,9 @@
   ondragenter="event.stopPropagation(); event.preventDefault();"
   ondragover="event.stopPropagation(); event.preventDefault();this.classList.add('drag');"
   ondragleave="event.stopPropagation(); event.preventDefault();this.classList.remove('drag');">
-  <button mat-flat-button color="primary" (click)="inputFile.click()">
+  <button mat-flat-button color="primary" (click)="inputFile.click()" [disabled]="!hasProAccess">
     Open or drag and drop file
   </button>
-  <input #inputFile type="file" accept=".gpx" multiple style="display: none;" (change)="getFiles($event)" />
+  <input #inputFile type="file" accept=".gpx" multiple style="display: none;" (change)="getFiles($event)"
+    [disabled]="!hasProAccess" />
 </section>

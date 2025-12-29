@@ -39,7 +39,18 @@ export abstract class UploadAbstractDirective implements OnInit {
    */
   async getFiles(event) {
     event.stopPropagation();
+    event.stopPropagation();
     event.preventDefault();
+
+    if (this.requiresPro && !this.hasProAccess) {
+      const snackBarRef = this.snackBar.open('This feature is available for Pro users.', 'UPGRADE', {
+        duration: 5000,
+      });
+      snackBarRef.onAction().subscribe(() => {
+        this.router.navigate(['/settings']);
+      });
+      return;
+    }
 
     // Add as local to show totals
     const files = [];
