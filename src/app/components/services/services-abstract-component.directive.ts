@@ -117,6 +117,10 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   async connectWithService(event) {
+    if (!this.hasProAccess) {
+      this.triggerUpsell();
+      return;
+    }
     this.isLoading = true;
     try {
       const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(this.serviceName);
@@ -133,6 +137,10 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   async deauthorizeService(event) {
+    if (!this.hasProAccess) {
+      this.triggerUpsell();
+      return;
+    }
     this.isLoading = true;
     try {
       await this.userService.deauthorizeService(this.serviceName);
