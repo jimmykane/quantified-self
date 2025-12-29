@@ -3,6 +3,11 @@
     --section-spacing: 24px;
 }
 
+// Override global form limit for settings page
+::ng-deep .qs-form {
+    max-width: 100% !important;
+}
+
 /* User Profile Header container inherits from global .app-header-card */
 
 .user-profile-header .name-row {
@@ -66,7 +71,7 @@
     padding: 12px 40px;
     /* Aligns with content padding */
     margin: 0 auto;
-    max-width: 900px;
+    margin: 0 auto;
     overflow-x: auto;
     scrollbar-width: none;
     /* Firefox */
@@ -151,7 +156,7 @@
 .settings-content {
     flex: 1;
     padding: 24px 40px;
-    max-width: 900px;
+    max-width: 100%;
     margin: 0 auto;
 }
 
