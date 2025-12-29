@@ -17,7 +17,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { Clipboard } from '@angular/cdk/clipboard';
-import { ActivityCropFormComponent } from '../activity-crop-form/activity.crop.form.component';
+
 import { DataDistance } from '@sports-alliance/sports-lib';
 import { environment } from '../../../environments/environment';
 import * as Sentry from '@sentry/browser';
@@ -115,17 +115,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     });
   }
 
-  cropEventActivity() {
-    const dialogRef = this.dialog.open(ActivityCropFormComponent, {
-      width: '75vw',
-      disableClose: false,
-      data: {
-        event: this.event,
-        activity: this.event.getFirstActivity(),
-        user: this.user
-      },
-    });
-  }
+
 
   hasDistance() {
     return this.event.getFirstActivity().hasStreamData(DataDistance.type);

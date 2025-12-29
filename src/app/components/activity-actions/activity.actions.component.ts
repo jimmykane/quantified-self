@@ -11,24 +11,23 @@ import { EventUtilities } from '@sports-alliance/sports-lib';
 import { take } from 'rxjs/operators';
 import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { ActivityCropFormComponent } from '../activity-crop-form/activity.crop.form.component';
 import { DataDistance } from '@sports-alliance/sports-lib';
 import { ActivityUtilities } from '@sports-alliance/sports-lib';
 
 @Component({
-    selector: 'app-activity-actions',
-    templateUrl: './activity.actions.component.html',
-    styleUrls: ['./activity.actions.component.css'],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    providers: [],
-    standalone: false
+  selector: 'app-activity-actions',
+  templateUrl: './activity.actions.component.html',
+  styleUrls: ['./activity.actions.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  providers: [],
+  standalone: false
 })
 export class ActivityActionsComponent implements OnInit, OnDestroy {
   @Input() event: EventInterface;
   @Input() user: User;
   @Input() activity: ActivityInterface;
 
-  private deleteConfirmationSubscription;
+  private deleteConfirmationSubscription: any;
 
   constructor(
     private eventService: AppEventService,
@@ -60,16 +59,7 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
     return this.activity.hasStreamData(DataDistance.type);
   }
 
-  cropActivity() {
-    const dialogRef = this.dialog.open(ActivityCropFormComponent, {
-      width: '75vw',
-      data: {
-        event: this.event,
-        activity: this.activity,
-        user: this.user
-      },
-    });
-  }
+
 
   async reGenerateStatistics() {
     this.snackBar.open('Re-calculating activity statistics', null, {

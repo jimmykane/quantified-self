@@ -12,7 +12,6 @@ import { DataTypeIconComponent } from '../components/data-type-icon/data-type-ic
 import { UploadErrorComponent } from '../components/upload/upload-error/upload-error.component';
 import { UploadInfoComponent } from '../components/upload/upload-info/upload-info.component';
 import { FilesStatusListComponent } from '../components/files-status-list/files-status-list.component';
-import { ActivityCropFormComponent } from '../components/activity-crop-form/activity.crop.form.component';
 import { PromoDialogComponent } from '../components/promo-dialog/promo-dialog.component';
 import { EventSearchComponent } from '../components/event-search/event-search.component';
 import { ActivityTypesMultiSelectComponent } from '../components/activity-types-multi-select/activity-types-multi-select.component';
@@ -36,7 +35,7 @@ import { MAT_MOMENT_DATE_FORMATS, MomentDateAdapter } from '@angular/material-mo
         EventFormComponent,
         PromoDialogComponent,
         ActivityFormComponent,
-        ActivityCropFormComponent,
+        ActivityFormComponent,
         DeleteConfirmationComponent,
         DataTypeIconComponent,
         UploadInfoComponent,
@@ -59,7 +58,7 @@ import { MAT_MOMENT_DATE_FORMATS, MomentDateAdapter } from '@angular/material-mo
         EventActionsComponent,
         EventFormComponent,
         ActivityFormComponent,
-        ActivityCropFormComponent,
+        ActivityFormComponent,
         DeleteConfirmationComponent,
         DataTypeIconComponent,
         ReactiveFormsModule,
