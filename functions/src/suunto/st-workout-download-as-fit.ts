@@ -4,7 +4,9 @@ import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import cors from 'cors';
 
-const corsRequest = cors({ origin: true });
+import { ALLOWED_CORS_ORIGINS } from '../utils';
+
+const corsRequest = cors({ origin: ALLOWED_CORS_ORIGINS });
 
 import fetch from 'node-fetch';
 
