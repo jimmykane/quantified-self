@@ -44,8 +44,8 @@ jobs:
       - name: Create SA key
         run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "${{ runner.temp }}/firebase_service_account.json"
 
-      # - name: Deploy to Firebase
-      #   run: |
-      #     npm install -g firebase-tools
-      #     export GOOGLE_APPLICATION_CREDENTIALS="${{ runner.temp }}/firebase_service_account.json"
-      #     firebase deploy --only hosting:beta
+      - name: Deploy to Firebase
+        run: |
+          npm install -g firebase-tools
+          export GOOGLE_APPLICATION_CREDENTIALS="${{ runner.temp }}/firebase_service_account.json"
+          firebase deploy --only hosting:beta
