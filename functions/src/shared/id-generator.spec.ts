@@ -15,6 +15,39 @@ describe('ID Generator', () => {
         expect(id1.length).toBeGreaterThan(0);
     });
 
+    it('should generate the same ID for events within the tolerance window (20s)', async () => {
+        // Within the same 20s bucket (depending on where baseTime falls relative to the bucket boundary)
+        // Let's pick a baseTime that is clearly in the middle of a bucket to test offsets
+        // 20000 ms buckets start at 0.
+        // 10000 is in the middle of 0-20000.
+        const safeBaseDate = new Date(10000);
+        const id1 = await generateEventID(userID, safeBaseDate);
+        const id2 = await generateEventID(userID, new Date(safeBaseDate.getTime() + 5000)); // +5s
+
+        expect(id1).toBe(id2);
+    });
+
+    it('should generate different IDs for events outside the tolerance window', async () => {
+        const baseTime = 10000; // Middle of 0-20000 bucket
+        const id1 = await generateEventID(userID, new Date(baseTime));
+        const id2 = await generateEventID(userID, new Date(baseTime + 21000)); // +21s, definitely in next bucket
+
+        expect(id1).not.toBe(id2);
+    });
+
+    it('should handle bucket boundaries correctly', async () => {
+        // Bucket 1: 0 - 19999
+        // Bucket 2: 20000 - 39999
+
+        const endOfBucket1 = new Date(19999);
+        const startOfBucket2 = new Date(20000);
+
+        const id1 = await generateEventID(userID, endOfBucket1);
+        const id2 = await generateEventID(userID, startOfBucket2);
+
+        expect(id1).not.toBe(id2);
+    });
+
     it('should generate different IDs for different users', async () => {
         const id1 = await generateEventID('user1', startDate);
         const id2 = await generateEventID('user2', startDate);
