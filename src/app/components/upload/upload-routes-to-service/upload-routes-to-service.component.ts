@@ -1,4 +1,5 @@
 import { Component, inject } from '@angular/core';
+import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import * as Sentry from '@sentry/browser';
@@ -28,8 +29,9 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
     protected snackBar: MatSnackBar,
     protected dialog: MatDialog,
     protected filesStatusService: AppFilesStatusService,
-    private http: HttpClient) {
-    super(snackBar, dialog, filesStatusService);
+    private http: HttpClient,
+    protected router: Router) {
+    super(snackBar, dialog, filesStatusService, router);
   }
 
   /**

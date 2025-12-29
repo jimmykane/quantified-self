@@ -1,4 +1,5 @@
 import { Directive, Input, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 import { User } from '@sports-alliance/sports-lib';
 import { FileInterface } from './file.interface';
 import { UPLOAD_STATUS } from './upload-status/upload.status';
@@ -12,11 +13,14 @@ import { AppFilesStatusService } from '../../services/upload/app-files-status.se
 export abstract class UploadAbstractDirective implements OnInit {
 
   @Input() user: User;
+  @Input() hasProAccess: boolean = false;
+  @Input() requiresPro: boolean = false;
 
   constructor(
     protected snackBar: MatSnackBar,
     protected dialog: MatDialog,
-    protected filesStatusService: AppFilesStatusService) {
+    protected filesStatusService: AppFilesStatusService,
+    protected router: Router) {
 
   }
 

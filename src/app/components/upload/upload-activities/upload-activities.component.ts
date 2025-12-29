@@ -1,4 +1,5 @@
 import { Component, inject } from '@angular/core';
+import { Router } from '@angular/router';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { MatDialog } from '@angular/material/dialog';
@@ -41,8 +42,9 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
     protected filesStatusService: AppFilesStatusService,
     protected overlay: Overlay,
     private eventService: AppEventService,
-    private logger: LoggerService) {
-    super(snackBar, dialog, filesStatusService)
+    private logger: LoggerService,
+    protected router: Router) {
+    super(snackBar, dialog, filesStatusService, router);
   }
 
   async ngOnInit() {
