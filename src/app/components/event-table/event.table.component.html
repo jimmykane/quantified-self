@@ -40,7 +40,7 @@
 
 <!-- Table Section -->
 <div class="glass-card table-container">
-  <div class="table-wrapper">
+  <div class="table-wrapper qs-scrollbar">
     <table mat-table [dataSource]="data" matSort [matSortActive]="user.settings.dashboardSettings.tableSettings.active"
       [matSortDirection]="user.settings.dashboardSettings.tableSettings.direction" matSortDisableClear>
       @for (column of getColumnsToDisplay(); track column; let isFirst = $first; let isLast = $last; let i = $index) {
