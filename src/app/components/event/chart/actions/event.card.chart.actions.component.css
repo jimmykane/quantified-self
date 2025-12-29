@@ -1,10 +1,14 @@
-/* Toggle Actions Container - Pill/Chip Style */
+/* Toggle Actions Container */
 section.container {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 12px;
   align-items: center;
-  padding: 8px 0;
+  padding: 4px 0;
+}
+
+.spacer {
+  flex: 1;
 }
 
 section.item {
@@ -12,27 +16,34 @@ section.item {
   align-items: center;
 }
 
-/* Compact Toggle Styling */
-mat-slide-toggle {
-  --mdc-switch-track-height: 20px;
-  --mdc-switch-track-width: 36px;
+mat-chip-option {
   font-size: 0.85rem;
 }
 
-mat-slide-toggle span {
+/* Button Toggle Group Styling */
+mat-button-toggle-group {
+  border: 1px solid var(--mat-app-outline-variant);
+  border-radius: 20px;
+  overflow: hidden;
+  height: 32px;
+  align-items: center;
+}
+
+mat-button-toggle {
+  font-size: 0.8rem;
+  background-color: transparent;
+  color: var(--mat-app-on-surface-variant);
+  border-left: 1px solid var(--mat-app-outline-variant);
+}
+
+mat-button-toggle:first-child {
+  border-left: none;
+}
+
+mat-button-toggle-checked {
+  background-color: var(--mat-app-secondary-container);
+  color: var(--mat-app-on-secondary-container);
   font-weight: 500;
-  color: var(--mat-app-on-surface);
-  opacity: 0.9;
-}
-
-/* Form Field Compact */
-mat-form-field {
-  width: 100%;
-  max-width: 180px;
-}
-
-mat-icon {
-  vertical-align: baseline;
 }
 
 /* Responsive: Stack on mobile */
@@ -40,14 +51,15 @@ mat-icon {
   section.container {
     flex-direction: column;
     align-items: flex-start;
-    gap: 12px;
+    gap: 16px;
+  }
+
+  .spacer {
+    display: none;
   }
 
   section.item {
     width: 100%;
-  }
-
-  mat-form-field {
     max-width: 100%;
   }
 }

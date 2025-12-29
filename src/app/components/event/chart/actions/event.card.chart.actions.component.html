@@ -1,42 +1,39 @@
 <section class="container">
-  <section class="item">
-    <mat-slide-toggle [disabled]="!user" [color]="'accent'" (change)="somethingChanged($event)"
-      (click)="$event.stopPropagation();" [(ngModel)]="stackYAxes">
-      <span [matTooltip]="user ? 'Show charts on top of each other' : 'Sign in to use this'">
-        Stack Y Axes
-      </span>
-    </mat-slide-toggle>
-  </section>
+  <mat-chip-listbox multiple>
+    <!-- Stack Y Axes -->
+    <mat-chip-option [selected]="stackYAxes" (selectionChange)="stackYAxes = $event.selected; somethingChanged($event)"
+      [color]="'accent'" [disabled]="!user"
+      [matTooltip]="user ? 'Show charts on top of each other' : 'Sign in to use this'">
+      <mat-icon matChipAvatar>layers</mat-icon>
+      Stack Y Axes
+    </mat-chip-option>
+
+    <!-- Show Laps -->
+    <mat-chip-option [selected]="showLaps" (selectionChange)="showLaps = $event.selected; somethingChanged($event)"
+      [color]="'accent'" [disabled]="!user" [matTooltip]="user ? 'Show lap markers on chart' : 'Sign in to use this'">
+      <mat-icon matChipAvatar>flag</mat-icon>
+      Show Laps
+    </mat-chip-option>
+
+    <!-- Show All Data -->
+    <mat-chip-option [selected]="showAllData"
+      (selectionChange)="showAllData = $event.selected; somethingChanged($event)" [color]="'accent'" [disabled]="!user"
+      [matTooltip]="user ? 'Show all available data from file' : 'Sign in to use this'">
+      <mat-icon matChipAvatar>data_usage</mat-icon>
+      Show All Data
+    </mat-chip-option>
+  </mat-chip-listbox>
+
+  <span class="spacer"></span>
 
   <section class="item">
-    <mat-slide-toggle [disabled]="!user" [color]="'accent'" (change)="somethingChanged($event)"
-      (click)="$event.stopPropagation();" [(ngModel)]="showLaps">
-      <span [matTooltip]="user ? 'Show lap markers on chart' : 'Sign in to use this'">
-        Show Laps
-      </span>
-    </mat-slide-toggle>
-  </section>
-
-  <section class="item">
-    <mat-slide-toggle [disabled]="!user" [color]="'accent'" (change)="somethingChanged($event)"
-      (click)="$event.stopPropagation();" [(ngModel)]="showAllData">
-      <span [matTooltip]="user ? 'Show all available data from file' : 'Sign in to use this'">
-        Show All Data
-      </span>
-    </mat-slide-toggle>
-  </section>
-
-  <section class="item">
-    <mat-form-field>
-      <mat-label>X Axis</mat-label>
-      <mat-select [disabled]="!user || event.isMultiSport()" [(value)]="xAxisType"
-        (selectionChange)="somethingChanged($event)">
-        @for (xAxisType of xAxisTypes | keyvalue; track xAxisType) {
-        <mat-option [value]="xAxisType.value">
-          {{xAxisType.key}}
-        </mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
+    <mat-button-toggle-group [disabled]="!user || event.isMultiSport()" [value]="xAxisType"
+      (change)="xAxisType = $event.value; somethingChanged($event)" appearance="standard">
+      @for (xAxisType of xAxisTypes | keyvalue; track xAxisType) {
+      <mat-button-toggle [value]="xAxisType.value">
+        {{xAxisType.key}}
+      </mat-button-toggle>
+      }
+    </mat-button-toggle-group>
   </section>
 </section>

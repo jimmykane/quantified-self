@@ -34,6 +34,10 @@ export class EventCardChartActionsComponent implements OnChanges {
   }
 
   async somethingChanged(event) {
+    this.xAxisTypeChange.emit(this.xAxisType);
+    this.showAllDataChange.emit(this.showAllData);
+    this.showLapsChange.emit(this.showLaps);
+    this.stackYAxesChange.emit(this.stackYAxes);
     if (this.user) {
       this.user.settings.chartSettings.xAxisType = this.xAxisType;
       this.user.settings.chartSettings.showAllData = this.showAllData;
@@ -41,10 +45,6 @@ export class EventCardChartActionsComponent implements OnChanges {
       this.user.settings.chartSettings.stackYAxes = this.stackYAxes;
       await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
     }
-    this.xAxisTypeChange.emit(this.xAxisType);
-    this.showAllDataChange.emit(this.showAllData);
-    this.showLapsChange.emit(this.showLaps);
-    this.stackYAxesChange.emit(this.stackYAxes);
     return logEvent(this.analytics, 'event_chart_settings_change');
   }
 
