@@ -34,7 +34,8 @@
     "seed-emails": "ts-node src/scripts/seed-email-templates.ts",
     "test-emails": "ts-node src/scripts/test-all-emails.ts",
     "cleanup-queue": "ts-node src/scripts/cleanup-queue.ts",
-    "export-users": "ts-node src/scripts/export-users.ts"
+    "export-users": "ts-node src/scripts/export-users.ts",
+    "cleanup-firestore": "ts-node -r dotenv/config src/scripts/cleanup-firestore.ts"
   },
   "engines": {
     "node": "20"
