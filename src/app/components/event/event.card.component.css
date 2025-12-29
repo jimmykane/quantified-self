@@ -80,7 +80,7 @@ mat-card-header mat-icon {
 
 /* Ensure identical padding and sizing for alignment */
 .secondary-details-container {
-  padding: 16px !important;
+  padding: 16px;
   box-sizing: border-box;
   width: 100%;
 }

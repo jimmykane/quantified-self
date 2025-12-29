@@ -250,15 +250,15 @@
 
   /* Current plan highlight styling - theme aware */
   .current-plan-highlight {
-    border: 2px solid var(--mat-app-primary, #3f51b5) !important;
+    border: 2px solid var(--mat-app-primary, #3f51b5);
     position: relative;
 
     &.basic-card {
-      border-top: 6px solid #607d8b !important;
+      border-top: 6px solid #607d8b;
     }
 
     &.pro-card {
-      border-top: 6px solid var(--mat-app-primary, #3f51b5) !important;
+      border-top: 6px solid var(--mat-app-primary, #3f51b5);
     }
   }
 
