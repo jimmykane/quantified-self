@@ -46,9 +46,11 @@ import { MAT_MOMENT_DATE_FORMATS, MomentDateAdapter } from '@angular/material-mo
     ],
     providers: [
         // @todo get it from settings as a service perhaps
-        { provide: MAT_DATE_LOCALE, useValue: window.navigator.languages
+        {
+            provide: MAT_DATE_LOCALE, useValue: window.navigator.languages
                 ? window.navigator.languages[0]
-                : window.navigator['userLanguage'] || window.navigator.language },
+                : window.navigator['userLanguage'] || window.navigator.language
+        },
         { provide: DateAdapter, useClass: MomentDateAdapter, deps: [MAT_DATE_LOCALE] },
         { provide: MAT_DATE_FORMATS, useValue: MAT_MOMENT_DATE_FORMATS },
     ],
