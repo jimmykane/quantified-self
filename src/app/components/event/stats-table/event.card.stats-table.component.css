@@ -18,10 +18,15 @@ mat-form-field {
 
 
 mat-table {
-  width: 100%;
-  overflow-x: auto;
+  padding-bottom: 1em;
+  background: transparent;
 }
 
 .mat-header-cell {
   font-size: unset;
+}
+
+.table-container {
+  overflow-x: auto;
+  width: 100%;
 }
