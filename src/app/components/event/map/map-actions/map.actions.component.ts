@@ -33,14 +33,15 @@ export class MapActionsComponent implements OnChanges {
   }
 
   async checkBoxChanged(event) {
+    this.showLapsChange.emit(this.showLaps);
+    this.showArrowsChange.emit(this.showArrows);
+
     // debugger;
     if (this.user) {
       this.user.settings.mapSettings.showLaps = this.showLaps;
       this.user.settings.mapSettings.showArrows = this.showArrows;
       await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
     }
-    this.showLapsChange.emit(this.showLaps);
-    this.showArrowsChange.emit(this.showArrows);
     return logEvent(this.analytics, 'event_map_settings_change');
   }
 
