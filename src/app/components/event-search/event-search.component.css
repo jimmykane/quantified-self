@@ -41,11 +41,11 @@ mat-button-toggle-group {
 /* Mobile: Ensure filters stay on one row */
 @media (max-width: 599.98px) {
   .filters-row {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 0.5em;
   }
 
   .big {
-    min-width: 0;
+    min-width: 100%;
   }
 }
