@@ -15,6 +15,7 @@ export class GracePeriodBannerComponent implements OnInit, AfterViewInit, OnDest
     gracePeriodUntil$!: Observable<Date | null>;
     isDismissed = false;
     private subscription: Subscription | null = null;
+    private resizeObserver: ResizeObserver | null = null;
 
     constructor(private userService: AppUserService) { }
 
@@ -26,17 +27,33 @@ export class GracePeriodBannerComponent implements OnInit, AfterViewInit, OnDest
         // Subscribe to grace period changes to update height when banner appears
         this.subscription = this.gracePeriodUntil$.subscribe(() => {
             // Use setTimeout to ensure the DOM is updated before measuring
-            setTimeout(() => this.updateHeight(), 0);
+            setTimeout(() => {
+                this.updateHeight();
+                this.setupResizeObserver();
+            }, 0);
         });
     }
 
     ngOnDestroy(): void {
         this.subscription?.unsubscribe();
+        this.resizeObserver?.disconnect();
     }
 
     dismiss(): void {
         this.isDismissed = true;
         this.heightChanged.emit(0);
+        this.resizeObserver?.disconnect();
+    }
+
+    private setupResizeObserver(): void {
+        this.resizeObserver?.disconnect(); // Disconnect existing if any
+
+        if (this.bannerElement?.nativeElement) {
+            this.resizeObserver = new ResizeObserver(() => {
+                this.updateHeight();
+            });
+            this.resizeObserver.observe(this.bannerElement.nativeElement);
+        }
     }
 
     private updateHeight(): void {
