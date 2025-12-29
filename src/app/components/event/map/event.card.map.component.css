@@ -27,7 +27,6 @@ google-map {
   min-height: 60vh;
   height: 60vh;
   display: block;
-  border-radius: 0 0 20px 20px;
   overflow: hidden;
 }
 
