@@ -299,6 +299,7 @@ export const getUserCount = onCall({
     try {
         const db = admin.firestore();
 
+        // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
         const [totalSnapshot, proSnapshot, basicSnapshot] = await Promise.all([
             db.collection('users').count().get(),
@@ -317,12 +318,40 @@ export const getUserCount = onCall({
         const basic = basicSnapshot.data().count;
         const free = Math.max(0, total - pro - basic); // Users with no active subscription
 
+        // 2. Get provider breakdown from Firebase Auth
+        // This is done by listing ALL users. 
+        // Note: For very large user bases (>100k), this should be cached or aggregated differently.
+        const providerCounts: Record<string, number> = {};
+        let nextPageToken: string | undefined;
+
+        do {
+            const listResult = await admin.auth().listUsers(1000, nextPageToken);
+            listResult.users.forEach(userRecord => {
+                // providerData contains the providers. Use first one as primary or count all?
+                // Usually providerData[0].providerId is the one used for login.
+                // We'll count all unique providers per user or just the primary?
+                // Let's count all providers linked to accounts to see the footprint.
+                const providers = userRecord.providerData.map(p => p.providerId);
+                // If no providers (anonymous or just email/pass without provider data?), check providerId
+                if (providers.length === 0) {
+                    // Check if it's password auth
+                    providerCounts['password'] = (providerCounts['password'] || 0) + 1;
+                } else {
+                    providers.forEach(p => {
+                        providerCounts[p] = (providerCounts[p] || 0) + 1;
+                    });
+                }
+            });
+            nextPageToken = listResult.pageToken;
+        } while (nextPageToken);
+
         return {
             count: total, // Keep for backward compatibility
             total,
             pro,
             basic,
-            free
+            free,
+            providers: providerCounts
         };
     } catch (error: unknown) {
         logger.error('Error getting user count:', error);
