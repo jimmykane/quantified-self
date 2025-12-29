@@ -4,11 +4,22 @@
  */
 
 /**
+ * The threshold in milliseconds for detecting duplicate events based on start date.
+ * Events starting within this window will generate the same ID.
+ * 20 seconds = 20000 ms
+ */
+export const EVENT_DUPLICATE_THRESHOLD_MS = 20000;
+
+/**
  * Generates a deterministic ID for an event based on the user ID and start date.
  */
 export async function generateEventID(userID: string, startDate: Date): Promise<string> {
-    // Note: startDate.getTime() is used for consistency.
-    const parts = [userID, startDate.getTime().toString()];
+    // Bucket the timestamp to allow for slight differences in start time (e.g. from different devices)
+    const time = startDate.getTime();
+    const bucketedTime = Math.floor(time / EVENT_DUPLICATE_THRESHOLD_MS) * EVENT_DUPLICATE_THRESHOLD_MS;
+
+    // Note: bucketedTime is used for duplicate detection
+    const parts = [userID, bucketedTime.toString()];
     return generateIDFromParts(parts);
 }
 
