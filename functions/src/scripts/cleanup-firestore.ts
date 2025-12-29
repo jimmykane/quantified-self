@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin';
-import * as logger from 'firebase-functions/logger';
+const logger = console;
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { deauthorizeServiceForUser } from '../OAuth2';
 import { deauthorizeGarminHealthAPIForUser } from '../garmin/auth/wrapper';
