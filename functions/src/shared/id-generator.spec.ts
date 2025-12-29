@@ -55,7 +55,7 @@ describe('ID Generator', () => {
         expect(id1).not.toBe(id2);
     });
 
-    it('should generate different IDs for different dates', async () => {
+    it('should generate different IDs for significantly different dates', async () => {
         const id1 = await generateEventID(userID, new Date('2025-12-28T12:00:00Z'));
         const id2 = await generateEventID(userID, new Date('2025-12-28T13:00:00Z'));
 
