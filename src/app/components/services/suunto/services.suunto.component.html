@@ -30,7 +30,7 @@
 
         @if (isConnectedToService()) {
         <mat-list style="width: 100%; padding: 0;">
-          @for (serviceToken of serviceTokens; track serviceToken; let i = $index) {
+          @for (serviceToken of serviceTokens; track $index; let i = $index) {
           <mat-list-item style="height: auto; padding: 8px 0;">
             <mat-icon matListItemIcon (click)="clicks = clicks+1" style="margin-right: 8px;">account_circle</mat-icon>
             <div matListItemTitle style="font-size: 0.9rem;">{{ serviceToken.userName }} </div>
