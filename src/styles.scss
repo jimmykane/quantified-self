@@ -548,3 +548,34 @@ mat-table {
   -webkit-text-fill-color: transparent;
   display: inline-block;
 }
+/* Reusable Custom Scrollbar */
+.qs-scrollbar {
+  &::-webkit-scrollbar {
+    height: 8px; /* Horizontal scrollbar height */
+    width: 8px;  /* Vertical scrollbar width */
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* Dark theme support for global scrollbar */
+.dark-theme .qs-scrollbar {
+  &::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+  }
+}
