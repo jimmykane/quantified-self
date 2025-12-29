@@ -109,17 +109,17 @@
           class="qs-form">
           <mat-form-field appearance="outline">
             <mat-label>App Link</mat-label>
-            <input matInput placeholder="https://..." formControlName="input">
+            <input matInput placeholder="https://..." formControlName="input" [readonly]="!hasProAccess">
             @if (hasError('input')) {
             <mat-error>Link Required</mat-error>
             }
           </mat-form-field>
           <div class="qs-form-actions" style="display: flex; gap: 8px;">
-            <button mat-flat-button color="primary" [disabled]="isLoading" (click)="onSubmit()">
+            <button mat-flat-button color="primary" [disabled]="isLoading || !hasProAccess" (click)="onSubmit()">
               Download
             </button>
             @if (user) {
-            <button mat-flat-button color="accent" [disabled]="isLoading" (click)="onImportAndOpen()">
+            <button mat-flat-button color="accent" [disabled]="isLoading || !hasProAccess" (click)="onImportAndOpen()">
               Import
             </button>
             }
@@ -147,7 +147,8 @@
 
       <div class="feature-card-content">
         <p class="feature-description" *ngIf="!hasProAccess">Upload standard FIT files to Suunto.</p>
-        <app-upload-activity-to-service [user]="user"></app-upload-activity-to-service>
+        <app-upload-activity-to-service [user]="user" [hasProAccess]="hasProAccess"
+          [requiresPro]="true"></app-upload-activity-to-service>
       </div>
     </mat-card>
 
@@ -175,7 +176,8 @@
 
       <div class="feature-card-content">
         <p class="feature-description" *ngIf="!hasProAccess">Upload GPX routes to Suunto.</p>
-        <app-upload-route-to-service [user]="user"></app-upload-route-to-service>
+        <app-upload-route-to-service [user]="user" [hasProAccess]="hasProAccess"
+          [requiresPro]="true"></app-upload-route-to-service>
       </div>
     </mat-card>
 

@@ -59,6 +59,11 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
       return;
     }
 
+    if (!this.hasProAccess) {
+      this.triggerUpsell();
+      return;
+    }
+
     if (this.isLoading) {
       return false;
     }
