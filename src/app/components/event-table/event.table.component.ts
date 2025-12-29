@@ -483,11 +483,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   isSticky(column: string) {
-    return column === 'Checkbox'
+    return false
   }
 
   isStickyEnd(column: string) {
-    return column === 'Actions'
+    return false
   }
 
   private processChanges() {
