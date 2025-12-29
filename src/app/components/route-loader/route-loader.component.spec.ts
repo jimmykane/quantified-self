@@ -14,7 +14,8 @@ describe('RouteLoaderComponent', () => {
 
         // Mock Router with an events Observable we can control
         const routerMock = {
-            events: routerEvents$.asObservable()
+            events: routerEvents$.asObservable(),
+            getCurrentNavigation: () => null
         };
 
         await TestBed.configureTestingModule({
@@ -61,5 +62,16 @@ describe('RouteLoaderComponent', () => {
         component.isLoading = true;
         routerEvents$.next(new NavigationError(1, '/test', 'error'));
         expect(component.isLoading).toBe(false);
+    });
+
+    it('should initialize isLoading to true if getCurrentNavigation returns a value', () => {
+        // Test constructor logic directly to avoid TestBed set up complexity for this specific case
+        const mockRouter = {
+            events: new Subject(),
+            getCurrentNavigation: () => ({ id: 1, initialUrl: '/loading' })
+        } as any;
+
+        const comp = new RouteLoaderComponent(mockRouter);
+        expect(comp.isLoading).toBe(true);
     });
 });

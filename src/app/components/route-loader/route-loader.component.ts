@@ -13,6 +13,11 @@ export class RouteLoaderComponent implements OnDestroy {
     private routerSubscription: Subscription;
 
     constructor(private router: Router) {
+        // Check if there's an active navigation already (e.g. on initial page load)
+        if (this.router.getCurrentNavigation()) {
+            this.isLoading = true;
+        }
+
         this.routerSubscription = this.router.events.subscribe((event) => {
             switch (true) {
                 case event instanceof NavigationStart: {
