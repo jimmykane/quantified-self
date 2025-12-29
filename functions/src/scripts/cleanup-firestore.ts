@@ -127,40 +127,38 @@ async function cleanupFirestore() {
         process.exit(1);
     }
 
-    if (!dryRun && !force) {
-        const message = disconnectOnly
-            ? 'This will deauthorize users from selected services. Proceed?'
-            : 'DANGER: This will permanently delete data. Proceed?';
-        const proceed = await confirm(message);
-        if (!proceed) {
-            logger.info('Operation cancelled.');
-            process.exit(0);
-        }
+    // Phase 1 Confirmation: External Service Disconnection
+    let shouldDeauth = deauthorizeFlag;
+    if (!dryRun && !force && !shouldDeauth) {
+        shouldDeauth = await confirm('PHASE 1: Do you want to DISCONNECT users from external services (Suunto, COROS, Garmin)?\n(This revokes their API tokens so we don\'t keep getting their data)');
     }
 
-    // Determine if we should run deauthorization
-    let shouldDeauth = deauthorizeFlag;
-    if (!shouldDeauth && !force && !dryRun) {
-        shouldDeauth = await confirm('Do you want to deauthorize users from external services (Suunto, COROS, Garmin)?');
+    // Phase 2 Confirmation: Data Deletion
+    let shouldDelete = !disconnectOnly;
+    if (!dryRun && !force && shouldDelete) {
+        shouldDelete = await confirm('PHASE 2: DANGER - Do you want to PERMANENTLY DELETE all documents in the selected collections?');
+    }
+
+    if (!shouldDeauth && !shouldDelete && !dryRun) {
+        logger.info('Nothing selected. Exiting.');
+        process.exit(0);
     }
 
     // 1. Deauthorization phase
-    if (shouldDeauth || dryRun) {
+    if (shouldDeauth || (dryRun && deauthorizeFlag)) {
         logger.info('\n--- Phase 1: Deauthorization ---');
         for (const collection of targetCollections) {
             if (DEAUTH_CONFIG[collection]) {
-                await deauthorize(collection, dryRun);
+                await deauthorize(collection, dryRun, verbose);
             }
         }
     } else {
-        logger.info('\nSkipping Phase 1: Deauthorization (not requested)');
+        logger.info('\nSkipping Phase 1: Deauthorization');
     }
 
-    if (disconnectOnly) {
-        if (!shouldDeauth && !dryRun) {
-            logger.info('\nDisconnect-only mode active but deauthorization skipped. Nothing to do.');
-        } else {
-            logger.info('\nDisconnect-only mode active. Skipping deletion phase.');
+    if (disconnectOnly || !shouldDelete) {
+        if (shouldDeauth || dryRun) {
+            logger.info('\nDeauthorization phase complete. Skipping deletion phase.');
         }
         return;
     }
