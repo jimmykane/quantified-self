@@ -6,7 +6,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { beforeEach, describe, it, beforeAll, afterAll } from 'vitest';
+import { beforeEach, describe, it, beforeAll, afterAll, expect } from 'vitest';
 
 let testEnv: RulesTestEnvironment;
 
@@ -133,6 +133,98 @@ describe('Firestore Security Rules', () => {
         it('should identify a Free user (no role)', async () => {
             const db = testEnv.authenticatedContext(userId).firestore();
             expect(db).toBeDefined();
+        });
+    });
+
+
+    describe('User Split Model', () => {
+        const userId = 'split_user';
+        const otherId = 'other_user';
+
+        describe('Legal Agreements (users/{uid}/legal/agreements)', () => {
+            it('should allow user to read their own agreements', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertSucceeds(db.collection('users').doc(userId).collection('legal').doc('agreements').get());
+            });
+
+            it('should deny user reading other agreements', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection('users').doc(otherId).collection('legal').doc('agreements').get());
+            });
+
+            it('should allow user to create agreements setting policies to TRUE', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertSucceeds(db.collection('users').doc(userId).collection('legal').doc('agreements').set({
+                    acceptedPrivacyPolicy: true,
+                    acceptedTos: true
+                }));
+            });
+
+            it('should deny user setting policies to FALSE', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection('users').doc(userId).collection('legal').doc('agreements').set({
+                    acceptedPrivacyPolicy: false
+                }));
+            });
+
+            it('should deny user un-accepting a policy (update true -> false)', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                // Setup: User accepted policy
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/legal/agreements`).set({
+                        acceptedPrivacyPolicy: true
+                    });
+                });
+
+                // Attempt to un-accept
+                await assertFails(db.collection('users').doc(userId).collection('legal').doc('agreements').update({
+                    acceptedPrivacyPolicy: false
+                }));
+            });
+
+            it('should allow user to accept a new policy (update undefined -> true)', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                // Setup: User has one policy
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/legal/agreements`).set({
+                        acceptedPrivacyPolicy: true
+                    });
+                });
+
+                // Accept new policy
+                await assertSucceeds(db.collection('users').doc(userId).collection('legal').doc('agreements').update({
+                    acceptedTos: true
+                }));
+            });
+
+            it('should deny updates to unknown fields', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection('users').doc(userId).collection('legal').doc('agreements').set({
+                    acceptedPrivacyPolicy: true,
+                    someRandomField: true
+                }));
+            });
+        });
+
+        describe('System Status (users/{uid}/system/status)', () => {
+            it('should allow user to read their own status', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertSucceeds(db.collection('users').doc(userId).collection('system').doc('status').get());
+            });
+
+            it('should deny user writing to status', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection('users').doc(userId).collection('system').doc('status').set({
+                    gracePeriodUntil: new Date()
+                }));
+            });
+
+            it('should deny user updating status', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection('users').doc(userId).collection('system').doc('status').update({
+                    isPro: true
+                }));
+            });
         });
     });
     // End of main describe block removed here to include appended tests

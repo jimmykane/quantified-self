@@ -85,31 +85,36 @@ export const checkSubscriptionNotifications = onSchedule('every 24 hours', async
     const fiveDaysFromNow = new Date(now.getTime() + (5 * 24 * 60 * 60 * 1000));
     const sixDaysFromNow = new Date(now.getTime() + (6 * 24 * 60 * 60 * 1000));
 
-    // We need to query USERS directly for gracePeriodUntil
-    const usersSnapshot = await db.collection('users')
-        .where('gracePeriodUntil', '>=', fiveDaysFromNow.toISOString()) // stored as ISO string in logic
-        .where('gracePeriodUntil', '<', sixDaysFromNow.toISOString())
+    // Refactored to query 'system' subcollection group
+    const systemSnapshot = await db.collectionGroup('system')
+        .where('gracePeriodUntil', '>=', admin.firestore.Timestamp.fromDate(fiveDaysFromNow))
+        .where('gracePeriodUntil', '<', admin.firestore.Timestamp.fromDate(sixDaysFromNow))
         .get();
 
-    // Wait, in `subscriptions.ts`, gracePeriodUntil is set as `new Date().toISOString()`.
-    // So string comparison works.
+    // Note: subscriptions.ts stores gracePeriodUntil as Timestamp now (fixed in refactor), 
+    // but originally logic had ISO strings? 
+    // Wait, in subscriptions.ts I see `gracePeriodUntil = admin.firestore.Timestamp.fromDate(...)`.
+    // So the query above uses Timestamps which is correct.
 
-    logger.info(`Found ${usersSnapshot.size} users with grace period ending between ${fiveDaysFromNow.toISOString()} and ${sixDaysFromNow.toISOString()}`);
+    logger.info(`Found ${systemSnapshot.size} users with grace period ending between ${fiveDaysFromNow.toISOString()} and ${sixDaysFromNow.toISOString()}`);
 
-    for (const doc of usersSnapshot.docs) {
-        const user = doc.data();
-        const uid = doc.id;
+    for (const doc of systemSnapshot.docs) {
+        const systemData = doc.data();
+        const uid = doc.ref.parent.parent?.id;
 
-        // Double check they don't have an active subscription now?
-        // If they resubscribed, `gracePeriodUntil` should have been cleared (handled in onSubscriptionUpdated).
-        // But just in case, we can rely on the fact it exists.
+        if (!uid) {
+            logger.warn(`Found orphan system doc ${doc.id} without parent user`);
+            continue;
+        }
 
-        const expirationDate = new Date(user.gracePeriodUntil).toLocaleDateString('en-US', {
+        // Grace period until is a Timestamp
+        const gracePeriodDate = (systemData.gracePeriodUntil as admin.firestore.Timestamp).toDate();
+        const expirationDate = gracePeriodDate.toLocaleDateString('en-US', {
             year: 'numeric', month: 'long', day: 'numeric'
         });
 
         // Use a safe ID safe for filenames
-        const dateKey = user.gracePeriodUntil.replace(/[:.]/g, '-');
+        const dateKey = gracePeriodDate.toISOString().replace(/[:.]/g, '-');
         const idempotencyKey = `grace_ending_${uid}_${dateKey}`;
         const mailRef = db.collection('mail').doc(idempotencyKey);
 

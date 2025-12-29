@@ -130,8 +130,9 @@ describe('enforceSubscriptionLimits', () => {
             return mockQuery([]);
         });
 
+        // Mock system doc fetch for grace period
         mockFirestoreInstance.doc.mockImplementation((path: string) => {
-            if (path === 'users/user1') return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(futureDate) });
+            if (path === 'users/user1/system/status') return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(futureDate) });
             return mockDoc({});
         });
 
@@ -148,16 +149,23 @@ describe('enforceSubscriptionLimits', () => {
             return mockQuery([]);
         });
 
-        const userDocMock = mockDoc({}); // No data
+        const systemDocSetSpy = vi.fn().mockResolvedValue({});
+        const systemDocMock = {
+            get: vi.fn().mockResolvedValue({ exists: false, data: () => ({}) }),
+            set: systemDocSetSpy,
+            ref: { id: 'status' }
+        };
+
         mockFirestoreInstance.doc.mockImplementation((path: string) => {
-            if (path === 'users/user1') return userDocMock;
+            if (path === 'users/user1/system/status') return systemDocMock;
             return mockDoc({});
         });
 
         const wrapped = enforceSubscriptionLimits as any;
         await wrapped({});
 
-        expect(userDocMock.set).toHaveBeenCalledWith(expect.objectContaining({
+        expect(mockFirestoreInstance.doc).toHaveBeenCalledWith('users/user1/system/status');
+        expect(systemDocSetSpy).toHaveBeenCalledWith(expect.objectContaining({
             gracePeriodUntil: expect.anything(),
             lastDowngradedAt: 'SERVER_TIMESTAMP'
         }), { merge: true });
@@ -182,8 +190,9 @@ describe('enforceSubscriptionLimits', () => {
             return mockQuery([]);
         });
 
+        // Mock system doc fetch for grace period
         mockFirestoreInstance.doc.mockImplementation((path: string) => {
-            if (path === 'users/user1') return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
+            if (path === 'users/user1/system/status') return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
             return mockDoc({});
         });
 
@@ -211,8 +220,9 @@ describe('enforceSubscriptionLimits', () => {
             return mockQuery([]);
         });
 
+        // Mock system doc fetch for grace period
         mockFirestoreInstance.doc.mockImplementation((path: string) => {
-            if (path === 'users/user1') return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
+            if (path === 'users/user1/system/status') return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(pastDate) });
             return mockDoc({});
         });
 

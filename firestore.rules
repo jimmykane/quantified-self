@@ -44,6 +44,49 @@ service cloud.firestore {
       match /payments/{id} {
         allow read: if request.auth.uid == userID;
       }
+      
+      // Legal Agreements (Write-Once / Monotonic)
+      match /legal/agreements {
+        allow read: if request.auth.uid == userID;
+        
+        function isValidLegalAgreement() {
+           return request.resource.data.keys().hasOnly([
+             'acceptedPrivacyPolicy', 
+             'acceptedDataPolicy', 
+             'acceptedTrackingPolicy', 
+             'acceptedDiagnosticsPolicy', 
+             'acceptedTos'
+           ]) &&
+           (request.resource.data.get('acceptedPrivacyPolicy', true) == true) &&
+           (request.resource.data.get('acceptedDataPolicy', true) == true) &&
+           (request.resource.data.get('acceptedTrackingPolicy', true) == true) &&
+           (request.resource.data.get('acceptedDiagnosticsPolicy', true) == true) &&
+           (request.resource.data.get('acceptedTos', true) == true);
+        }
+
+        allow create: if request.auth.uid == userID && isValidLegalAgreement();
+        
+        allow update: if request.auth.uid == userID 
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+             'acceptedPrivacyPolicy', 
+             'acceptedDataPolicy', 
+             'acceptedTrackingPolicy', 
+             'acceptedDiagnosticsPolicy', 
+             'acceptedTos'
+           ])
+          && (request.resource.data.get('acceptedPrivacyPolicy', true) == true)
+          && (request.resource.data.get('acceptedDataPolicy', true) == true)
+          && (request.resource.data.get('acceptedTrackingPolicy', true) == true)
+          && (request.resource.data.get('acceptedDiagnosticsPolicy', true) == true)
+          && (request.resource.data.get('acceptedTos', true) == true);
+           
+      }
+
+      // System Status (Admin Only)
+      match /system/status {
+         allow read: if request.auth.uid == userID;
+         allow write: if false; // Only Cloud Functions (Admin SDK)
+      }
 
         match /events/{eventID} {
           allow read: if resource.data.privacy == 'public';

@@ -32,12 +32,13 @@ describe('GracePeriodBannerComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('should show banner when grace period date is present', () => {
+    it('should show banner when grace period date is present', async () => {
         const mockDate = new Date();
         mockUserService.getGracePeriodUntil.mockReturnValue(of(mockDate));
 
         component.ngOnInit();
         fixture.detectChanges();
+        await fixture.whenStable();
 
         const banner = fixture.nativeElement.querySelector('.grace-period-banner');
         expect(banner).toBeTruthy();
@@ -54,12 +55,13 @@ describe('GracePeriodBannerComponent', () => {
         expect(banner).toBeFalsy();
     });
 
-    it('should hide banner when dismissed', () => {
+    it('should hide banner when dismissed', async () => {
         const mockDate = new Date();
         mockUserService.getGracePeriodUntil.mockReturnValue(of(mockDate));
 
         component.ngOnInit();
         fixture.detectChanges();
+        await fixture.whenStable();
 
         // Verify banner is visible
         let banner = fixture.nativeElement.querySelector('.grace-period-banner');

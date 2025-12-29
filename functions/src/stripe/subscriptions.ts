@@ -38,16 +38,16 @@ export const onSubscriptionUpdated = onDocumentWritten({
             logger.info(`[onSubscriptionUpdated] No active subscriptions for ${uid}. Checking for previous paid state...`);
 
             // Check if user already has a grace period set to avoid overwriting or extending it unfairly
-            const userDoc = await admin.firestore().doc(`users/${uid}`).get();
-            const userData = userDoc.data();
+            const systemDoc = await admin.firestore().doc(`users/${uid}/system/status`).get();
+            const systemData = systemDoc.data();
 
             // If they don't have a grace period yet, set it to 30 days from now
-            if (!userData?.gracePeriodUntil) {
+            if (!systemData?.gracePeriodUntil) {
                 const gracePeriodUntil = admin.firestore.Timestamp.fromDate(
                     new Date(Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000)
                 );
                 logger.info(`[onSubscriptionUpdated] Setting gracePeriodUntil: ${gracePeriodUntil.toDate().toISOString()} for user ${uid}`);
-                await admin.firestore().doc(`users/${uid}`).set({
+                await admin.firestore().doc(`users/${uid}/system/status`).set({
                     gracePeriodUntil,
                     lastDowngradedAt: admin.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });
@@ -55,7 +55,7 @@ export const onSubscriptionUpdated = onDocumentWritten({
         } else {
             // User has an active sub. Clear grace period if it exists.
             logger.info(`[onSubscriptionUpdated] Active subscription found. Clearing grace period for ${uid}.`);
-            await admin.firestore().doc(`users/${uid}`).update({
+            await admin.firestore().doc(`users/${uid}/system/status`).update({
                 gracePeriodUntil: admin.firestore.FieldValue.delete(),
                 lastDowngradedAt: admin.firestore.FieldValue.delete()
             }).catch(() => { }); // Ignore error if field doesn't exist
@@ -80,12 +80,12 @@ export const onSubscriptionUpdated = onDocumentWritten({
         if (e.code === 'not-found' || e.message?.includes('No active subscription found')) {
             // Expected if user has no active subs. Set grace period as above.
             // Duplicate logic partially but for safety...
-            const userDoc = await admin.firestore().doc(`users/${uid}`).get();
-            if (!userDoc.data()?.gracePeriodUntil) {
+            const systemDoc = await admin.firestore().doc(`users/${uid}/system/status`).get();
+            if (!systemDoc.data()?.gracePeriodUntil) {
                 const gracePeriodUntil = admin.firestore.Timestamp.fromDate(
                     new Date(Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000)
                 );
-                await admin.firestore().doc(`users/${uid}`).set({ gracePeriodUntil }, { merge: true });
+                await admin.firestore().doc(`users/${uid}/system/status`).set({ gracePeriodUntil }, { merge: true });
             }
             const user = await admin.auth().getUser(uid);
             const existingClaims = user.customClaims || {};
