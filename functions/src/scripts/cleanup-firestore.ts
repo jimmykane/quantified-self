@@ -18,17 +18,18 @@ const COLLECTION_GROUPS = [
     "tokens",
     "events",
     "meta",
+    "metaData",
     "athletes",
     "users",
     "coaches",
     "garminHealthAPITokens",
     "suuntoAppAccessTokens",
     "COROSAPIAccessTokens",
-    "stravaTokens",
-    "polarAccessTokens",
-    "fitbitAccessTokens",
     "garminHealthAPIActivityQueue",
-    "suuntoAppWorkoutQueue"
+    "suuntoAppWorkoutQueue",
+    "COROSAPIWorkoutQueue",
+    "COROSAPIHistoryImportWorkoutQueue",
+    "suuntoAppHistoryImportActivityQueue"
 ];
 
 const DEAUTH_CONFIG: Record<string, { service: ServiceNames | null, fn: (uid: string, service?: any) => Promise<void> }> = {
