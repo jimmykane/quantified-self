@@ -1,0 +1,22 @@
+.route-loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.7);
+    z-index: 9999; // Ensure it sits above mostly everything
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(2px); // Nice effect to blur background content
+}
+
+/* Dark Theme Support */
+:host-context(.dark-theme) {
+    .route-loading-overlay {
+        background-color: rgba(30, 30, 30, 0.7);
+    }
+}
