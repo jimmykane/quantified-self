@@ -177,28 +177,13 @@
   gap: 8px;
 }
 
-.summary-projected-tabs {
-  width: 100%;
-  border-top: 1px solid var(--mat-app-outline-variant);
-}
+/* Removed summary-projected-tabs styles */
 
 .summary-activities-toggles {
   width: 100%;
   padding: 16px 40px;
   box-sizing: border-box;
   border-top: 1px solid var(--mat-app-outline-variant);
-}
-
-::ng-deep .summary-projected-tabs .secondary-details-container {
-  margin-top: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  border: none !important;
-  padding: 0 !important;
-}
-
-::ng-deep .summary-projected-tabs mat-tab-group {
-  width: 100%;
 }
 
 @media (max-width: 600px) {
