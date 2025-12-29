@@ -43,14 +43,14 @@
 
         <div style="margin-top: auto; padding-top: 16px;">
           @if (!isConnectedToService() || clicks > 10) {
-          <button mat-flat-button color="primary" style="width: 100%" [disabled]="!user || this.isGuest || isLoading"
-            (click)="connectWithService($event)">
+          <button mat-flat-button color="primary" style="width: 100%"
+            [disabled]="!user || this.isGuest || isLoading || !hasProAccess" (click)="connectWithService($event)">
             <mat-icon>link</mat-icon> Connect
           </button>
           }
 
           @if (isConnectedToService()) {
-          <button mat-stroked-button color="warn" style="width: 100%" [disabled]="isLoading"
+          <button mat-stroked-button color="warn" style="width: 100%" [disabled]="isLoading || !hasProAccess"
             (click)="deauthorizeService($event)">
             <mat-icon>link_off</mat-icon> Disconnect
           </button>
