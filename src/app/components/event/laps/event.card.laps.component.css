@@ -6,9 +6,19 @@
 
 table {
   width: 100%;
+  background: transparent;
 }
 
-mat-cell, .mat-header-cell {
+mat-row,
+mat-header-row,
+mat-footer-row,
+th.mat-header-cell,
+td.mat-cell {
+  background: transparent;
+}
+
+mat-cell,
+.mat-header-cell {
   overflow: visible;
   min-width: 68px;
 }
