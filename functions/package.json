@@ -33,7 +33,8 @@
     "test:coverage": "vitest run --coverage -c ./vitest.config.ts",
     "seed-emails": "ts-node src/scripts/seed-email-templates.ts",
     "test-emails": "ts-node src/scripts/test-all-emails.ts",
-    "cleanup-queue": "ts-node src/scripts/cleanup-queue.ts"
+    "cleanup-queue": "ts-node src/scripts/cleanup-queue.ts",
+    "export-users": "ts-node src/scripts/export-users.ts"
   },
   "engines": {
     "node": "20"

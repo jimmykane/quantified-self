@@ -13,3 +13,6 @@ service-account.json
 # Environment files with secrets
 .env
 .env.local
+
+# Exported files
+users_export.csv
