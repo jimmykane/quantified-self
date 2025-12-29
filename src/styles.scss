@@ -548,11 +548,14 @@ mat-table {
   -webkit-text-fill-color: transparent;
   display: inline-block;
 }
+
 /* Reusable Custom Scrollbar */
 .qs-scrollbar {
   &::-webkit-scrollbar {
-    height: 8px; /* Horizontal scrollbar height */
-    width: 8px;  /* Vertical scrollbar width */
+    height: 8px;
+    /* Horizontal scrollbar height */
+    width: 8px;
+    /* Vertical scrollbar width */
   }
 
   &::-webkit-scrollbar-track {
@@ -578,4 +581,75 @@ mat-table {
   &::-webkit-scrollbar-thumb:hover {
     background-color: rgba(255, 255, 255, 0.3);
   }
+}
+
+/* Bottom Sheet Overrides */
+.qs-full-width-bottom-sheet {
+  padding: 0 !important;
+  overflow: hidden !important;
+  max-width: none !important;
+  max-height: 80vh !important;
+  /* Force container to fit screen */
+  height: 80vh !important;
+  /* Explicitly set height */
+  border: 5px solid red !important;
+  /* DEBUG: VERIFYING CLASS APPLICATION */
+}
+
+/* Specific Material targets */
+.mat-mdc-bottom-sheet-container.qs-full-width-bottom-sheet,
+.mat-bottom-sheet-container.qs-full-width-bottom-sheet {
+  padding: 0 !important;
+  overflow: hidden !important;
+  max-width: none !important;
+  max-height: 80vh !important;
+  height: 80vh !important;
+  border: 5px solid red !important;
+  /* DEBUG: VERIFYING CLASS APPLICATION */
+}
+
+/* ==========================================================================
+   Global Table Styles
+   Standardized Material table overrides for glassmorphism.
+   ========================================================================== */
+table.mat-mdc-table,
+mat-table {
+  width: 100%;
+  background: transparent !important;
+}
+
+/* Header Cells */
+.mat-mdc-header-cell,
+th.mat-header-cell {
+  font-weight: 600 !important;
+  font-size: 0.85rem !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.8;
+}
+
+
+
+/* Body Cells */
+.mat-mdc-cell,
+td.mat-cell {
+  font-size: 0.95rem;
+}
+
+/* Row Hover Effects */
+.mat-mdc-row:hover .mat-mdc-cell:not(.mat-column-sticky),
+tr.mat-row:hover td:not(.mat-table-sticky) {
+  background: rgba(0, 0, 0, 0.04);
+  background: var(--mat-sys-state-hover, rgba(0, 0, 0, 0.04));
+  cursor: pointer;
+}
+
+.dark-theme .mat-mdc-row:hover .mat-mdc-cell:not(.mat-column-sticky),
+.dark-theme tr.mat-row:hover td:not(.mat-table-sticky) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+tr.mat-row:focus,
+.mat-mdc-row:focus {
+  outline: none;
 }
