@@ -502,7 +502,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         return EventRowElementsArray;
       }
 
-      const statRowElement = this.getStatsRowElement(event.getStatsAsArray(), (<DataActivityTypes>event.getStat(DataActivityTypes.type)) ? (<DataActivityTypes>event.getStat(DataActivityTypes.type)).getValue() : [ActivityTypes.unknown], this.user.settings.unitSettings);
+      const statRowElement = this.getStatsRowElement(event.getStatsAsArray(), (<DataActivityTypes>event.getStat(DataActivityTypes.type)) ? (<DataActivityTypes>event.getStat(DataActivityTypes.type)).getValue() : [ActivityTypes.unknown], this.user.settings.unitSettings, event.isMerge);
 
       statRowElement['Privacy'] = event.privacy;
       statRowElement['Name'] = event.name;

@@ -52,7 +52,7 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
     ].indexOf(columnName) !== -1;
   }
 
-  getStatsRowElement(stats: DataInterface[], activityTypes: string[], unitSettings?: UserUnitSettingsInterface): StatRowElement {
+  getStatsRowElement(stats: DataInterface[], activityTypes: string[], unitSettings?: UserUnitSettingsInterface, isMerge: boolean = false): StatRowElement {
     const statRowElement: StatRowElement = <StatRowElement>{};
 
     const distance = stats.find(stat => stat.getType() === DataDistance.type);
@@ -85,17 +85,24 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
     statRowElement[DataHeartRateAvg.type] = heartRateAverage ? `${heartRateAverage.getDisplayValue()} ${heartRateAverage.getDisplayUnit()}` : '';
     statRowElement[DataRPE.type] = rpe ? <RPEBorgCR10SCale>rpe.getValue() : undefined;
     statRowElement[DataFeeling.type] = feeling ? <Feelings>feeling.getValue() : undefined;
-    statRowElement[DataSpeedAvg.type] = activityTypes.reduce((accu, activityType) => {
-      return [...accu, ...ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(ActivityTypes[activityType])]
-    }, []).reduce((accu, dataType) => {
-      const stat = stats.find(iStat => iStat.getType() === dataType);
-      return stat ?
-        [...accu, ...DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, unitSettings)]
-        : accu
-    }, []).reduce((avs, data) => {
-      avs.push(`${data.getDisplayValue()}${data.getDisplayUnit()}`);
-      return avs;
-    }, []).join(', ');
+
+    if (isMerge && avgSpeed) {
+      statRowElement[DataSpeedAvg.type] = DynamicDataLoader.getUnitBasedDataFromDataInstance(avgSpeed, unitSettings)
+        .map(data => `${data.getDisplayValue()}${data.getDisplayUnit()}`)
+        .join(', ');
+    } else {
+      statRowElement[DataSpeedAvg.type] = activityTypes.reduce((accu, activityType) => {
+        return [...accu, ...ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(ActivityTypes[activityType])]
+      }, []).reduce((accu, dataType) => {
+        const stat = stats.find(iStat => iStat.getType() === dataType);
+        return stat ?
+          [...accu, ...DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, unitSettings)]
+          : accu
+      }, []).reduce((avs, data) => {
+        avs.push(`${data.getDisplayValue()}${data.getDisplayUnit()}`);
+        return avs;
+      }, []).join(', ');
+    }
 
     // Add the sorts
     statRowElement[`sort.${DataDistance.type}`] = distance ? <number>distance.getValue() : 0;
