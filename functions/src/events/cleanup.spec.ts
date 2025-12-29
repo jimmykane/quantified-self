@@ -4,15 +4,30 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 
 // Use vi.hoisted to ensure mocks are initialized before vi.mock
-const { firestoreBuilderMock, adminFirestoreMock, adminStorageMock } = vi.hoisted(() => {
+const { firestoreBuilderMock, adminFirestoreMock, adminStorageMock, batchDeleteMock, batchCommitMock } = vi.hoisted(() => {
     const onDeleteMock = vi.fn((handler) => handler);
     const documentMock = vi.fn(() => ({ onDelete: onDeleteMock }));
 
-    const recursiveDeleteMock = vi.fn().mockResolvedValue(undefined);
-    const collectionMock = vi.fn().mockReturnValue({ path: 'mock/path' });
+    const recursiveDeleteMock = vi.fn().mockResolvedValue(undefined); // Keep for potential other use or safety
+    // Mock return of collection() needs to permit chaining: .where().get()
+    const whereMock = vi.fn();
+    const collectionMock = vi.fn().mockReturnValue({
+        path: 'mock/path',
+        where: whereMock
+    });
+
+    // Batch Mocks
+    const batchDeleteMock = vi.fn();
+    const batchCommitMock = vi.fn().mockResolvedValue(undefined);
+    const batchMock = vi.fn().mockReturnValue({
+        delete: batchDeleteMock,
+        commit: batchCommitMock
+    });
+
     const firestoreMock = {
         collection: collectionMock,
         recursiveDelete: recursiveDeleteMock,
+        batch: batchMock
     } as any;
 
     const deleteFileMock = vi.fn().mockResolvedValue(undefined);
@@ -28,6 +43,8 @@ const { firestoreBuilderMock, adminFirestoreMock, adminStorageMock } = vi.hoiste
         firestoreBuilderMock: { document: documentMock },
         adminFirestoreMock: firestoreMock,
         adminStorageMock: storageMock,
+        batchDeleteMock,
+        batchCommitMock
     };
 });
 
@@ -59,7 +76,9 @@ describe('cleanupEventFile', () => {
         firestore: adminFirestoreMock,
         storage: adminStorageMock,
         recursiveDelete: adminFirestoreMock.recursiveDelete,
-        deleteFile: adminStorageMock.bucket().file().delete // this is slightly tricky as bucket() creates new obj if not careful, but we mocked return value above
+        deleteFile: adminStorageMock.bucket().file().delete,
+        batchDelete: batchDeleteMock,
+        batchCommit: batchCommitMock
     };
 
     beforeEach(() => {
@@ -88,17 +107,38 @@ describe('cleanupEventFile', () => {
             },
         };
 
+        // Mock snapshot for flat activities
+        const mockDocs = [{ ref: 'docRef1' }, { ref: 'docRef2' }];
+        (mocks.firestore.collection('users/testUser/activities').where as any).mockReturnValue({
+            get: vi.fn().mockResolvedValue({
+                empty: false,
+                size: 2,
+                docs: mockDocs.map(doc => ({ ref: doc.ref })) // Ensure docs have a ref property
+            })
+        });
+
         await wrapped(event);
 
-        // Check recursive delete
-        expect(mocks.firestore.collection).toHaveBeenCalledWith('users/testUser/events/testEvent/activities');
-        expect(mocks.recursiveDelete).toHaveBeenCalled();
+        // Check flat activity delete
+        expect(mocks.firestore.collection).toHaveBeenCalledWith('users/testUser/activities');
+        // Simple check for now, can be more specific if needed
+        expect(mocks.batchDelete).toHaveBeenCalledTimes(2);
+        expect(mocks.batchCommit).toHaveBeenCalled();
 
         // Check file delete
         expect(mocks.deleteFile).toHaveBeenCalled();
     });
 
     it('should delete activities even if no original file exists', async () => {
+        // Mock snapshot for flat activities (EMPTY)
+        (mocks.firestore.collection('users/testUser/activities').where as any).mockReturnValue({
+            get: vi.fn().mockResolvedValue({
+                empty: true,
+                size: 0,
+                docs: []
+            })
+        });
+
         const wrapped = cleanupEventFile as any;
 
         const snap = testEnv.firestore.makeDocumentSnapshot({}, 'users/testUser/events/testEvent');
@@ -113,8 +153,8 @@ describe('cleanupEventFile', () => {
 
         await wrapped(event);
 
-        // Check recursive delete called
-        expect(mocks.recursiveDelete).toHaveBeenCalled();
+        // Check flat activity delete query called
+        expect(mocks.firestore.collection).toHaveBeenCalledWith('users/testUser/activities');
 
         // Check file delete NOT called
         expect(mocks.deleteFile).not.toHaveBeenCalled();

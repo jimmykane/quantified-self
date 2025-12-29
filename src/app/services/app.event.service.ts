@@ -192,8 +192,9 @@ export class AppEventService implements OnDestroy {
   }
 
   public getActivities(user: User, eventID: string): Observable<ActivityInterface[]> {
-    const activitiesCollection = collection(this.firestore, 'users', user.uid, 'events', eventID, 'activities');
-    return (runInInjectionContext(this.injector, () => collectionData(activitiesCollection, { idField: 'id' })) as Observable<any[]>).pipe(
+    const activitiesCollection = collection(this.firestore, 'users', user.uid, 'activities');
+    const q = query(activitiesCollection, where('eventID', '==', eventID));
+    return (runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })) as Observable<any[]>).pipe(
       map((activitySnapshots: any[]) => {
         return activitySnapshots.reduce((activitiesArray: ActivityInterface[], activitySnapshot: any) => {
           try {
@@ -343,7 +344,13 @@ export class AppEventService implements OnDestroy {
   }
 
   public async setActivity(user: User, event: EventInterface, activity: ActivityInterface) {
-    return setDoc(doc(this.firestore, 'users', user.uid, 'events', event.getID(), 'activities', activity.getID()), activity.toJSON());
+    const data = activity.toJSON() as any;
+    data.eventID = event.getID();
+    data.userID = user.uid;
+    if (event.startDate) {
+      data.eventStartDate = event.startDate;
+    }
+    return setDoc(doc(this.firestore, 'users', user.uid, 'activities', activity.getID()), data);
   }
 
   public async updateEventProperties(user: User, eventID: string, propertiesToUpdate: any) {
@@ -359,17 +366,17 @@ export class AppEventService implements OnDestroy {
   public async deleteAllActivityData(user: User, eventID: string, activityID: string): Promise<boolean> {
     // @todo add try catch etc
     await this.deleteAllStreams(user, eventID, activityID);
-    await deleteDoc(doc(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID));
+    await deleteDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID));
 
     return true;
   }
 
   public deleteStream(user: User, eventID, activityID, streamType: string) {
-    return deleteDoc(doc(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID, 'streams', streamType));
+    return deleteDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID, 'streams', streamType));
   }
 
   public async deleteAllStreams(user: User, eventID: string, activityID: string): Promise<number> {
-    const streamsCollection = collection(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID, 'streams');
+    const streamsCollection = collection(this.firestore, 'users', user.uid, 'activities', activityID, 'streams');
     const numberOfStreamsDeleted = await this.deleteAllDocsFromCollections([streamsCollection]);
 
     return numberOfStreamsDeleted

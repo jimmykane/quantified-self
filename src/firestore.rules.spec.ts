@@ -135,4 +135,38 @@ describe('Firestore Security Rules', () => {
             expect(db).toBeDefined();
         });
     });
+    // End of main describe block removed here to include appended tests
+
+    describe('Flat Activities Collection', () => {
+        const userId = 'user_activities_1';
+        const otherId = 'user_activities_2';
+        const activityId = 'activity_1';
+
+        it('should allow user to read their own activity', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+            await assertSucceeds(db.collection(`users/${userId}/activities`).doc(activityId).get());
+        });
+
+        it('should allow user to write their own activity', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+            await assertSucceeds(db.collection(`users/${userId}/activities`).doc(activityId).set({
+                type: 'Running',
+                distance: 5000
+            }));
+        });
+
+        it('should deny user from reading another users activity', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+            await assertFails(db.collection(`users/${otherId}/activities`).doc('some_activity').get());
+        });
+
+        it('should deny user from writing to another users activity', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+            await assertFails(db.collection(`users/${otherId}/activities`).doc('some_activity').set({
+                type: 'Hacking'
+            }));
+        });
+
+    });
+
 });

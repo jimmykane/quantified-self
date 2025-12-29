@@ -53,8 +53,12 @@ describe('EventWriter', () => {
 
         // 1. Activity write
         expect(setDocFn).toHaveBeenCalledWith(
-            ['users', 'user-1', 'events', 'event-1', 'activities', 'activity-1'],
-            expect.objectContaining({ id: 'activity-1' })
+            ['users', 'user-1', 'activities', 'activity-1'],
+            expect.objectContaining({
+                id: 'activity-1',
+                userID: 'user-1',
+                eventID: 'event-1'
+            })
         );
 
         // 2. Stream write

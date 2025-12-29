@@ -71,9 +71,19 @@ export class EventWriter {
                 delete (activityJSON as any).streams;
 
                 // Write Activity
+                // Add flat structure metadata
+                (activityJSON as any).userID = userID;
+                (activityJSON as any).eventID = event.getID();
+                // Ensure eventStartDate is present for sorting
+                if (event.startDate) {
+                    (activityJSON as any).eventStartDate = event.startDate;
+                }
+
+
                 writePromises.push(
                     this.adapter.setDoc(
-                        ['users', userID, 'events', <string>event.getID(), 'activities', <string>activity.getID()],
+                        // New path: users/{userID}/activities/{activityID}
+                        ['users', userID, 'activities', <string>activity.getID()],
                         activityJSON
                     )
                 );
