@@ -1,3 +1,5 @@
+@use '../../../../styles/breakpoints' as bp;
+
 :host {
     display: block;
     min-height: 100vh;
@@ -9,6 +11,10 @@
     padding: 2rem;
     max-width: 1600px;
     margin: 0 auto;
+
+    @include bp.xsmall {
+        padding: 1rem;
+    }
 }
 
 .header-container {
@@ -46,6 +52,14 @@
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 1.5rem;
     margin-bottom: 3rem;
+
+    @include bp.xsmall {
+        gap: 1rem;
+        margin-bottom: 2rem;
+        // Force single column on very small screens if needed, but auto-fit handles 280px well.
+        // If screen < 320px (tiny), 280px minmax might cause overflow if not handled.
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Data Sections */
@@ -62,6 +76,10 @@
         display: flex;
         align-items: center;
         gap: 12px;
+
+        @include bp.xsmall {
+            font-size: 1.25rem;
+        }
     }
 }
 
@@ -72,6 +90,17 @@
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     overflow: hidden;
     margin-bottom: 3rem;
+
+    @include bp.xsmall {
+        margin-bottom: 2rem;
+        border-radius: 8px; // Slightly smaller radius for mobile
+    }
+}
+
+.table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
 }
 
 table {
@@ -542,6 +571,11 @@ td.mat-cell {
     position: relative;
     padding: 0 1.5rem 1.5rem;
     box-sizing: border-box;
+
+    @include bp.xsmall {
+        padding: 0 1rem 1rem;
+        min-height: 250px;
+    }
 
     canvas {
         width: 100% !important;
