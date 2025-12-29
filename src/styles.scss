@@ -84,8 +84,8 @@ body {
   $dark-bg: map.get($app-dark-theme, background);
   $dark-fg: map.get($app-dark-theme, foreground);
 
-  background-color: mat.m2-get-color-from-palette($dark-bg, background) !important;
-  color: mat.m2-get-color-from-palette($dark-fg, text) !important;
+  background-color: mat.m2-get-color-from-palette($dark-bg, background);
+  color: mat.m2-get-color-from-palette($dark-fg, text);
 
   // Force SVG text to be light in dark mode for amCharts
   text,
@@ -327,13 +327,13 @@ mat-table {
 
 /* Global App Header Card Standard */
 .app-header-card {
-  display: flex !important;
+  display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 24px 40px;
-  background: var(--mat-sys-surface) !important;
-  border-radius: 12px !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05) !important;
+  background: var(--mat-sys-surface);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
   border: 1px solid var(--mat-app-outline-variant);
   gap: 24px;
   margin-bottom: 24px;
