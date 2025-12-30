@@ -82,6 +82,11 @@ service cloud.firestore {
            
       }
 
+      // Config Settings (Private / Owner Read-Write)
+      match /config/settings {
+         allow read, write: if request.auth.uid == userID;
+      }
+
       // System Status (Admin Only)
       match /system/status {
          allow read: if request.auth.uid == userID;
