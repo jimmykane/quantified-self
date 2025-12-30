@@ -61,18 +61,18 @@ export class AppEventService implements OnDestroy {
     return combineLatest([
       runInInjectionContext(this.injector, () => docData(eventDoc)).pipe(
         map(eventSnapshot => {
-          console.log('[AppEventService] docData emitted:', !!eventSnapshot);
+          this.logger.log('[AppEventService] docData emitted:', !!eventSnapshot);
           if (!eventSnapshot) return null;
           const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
-          console.log('[AppEventService] sanitizedJson:', !!sanitizedJson);
+          this.logger.log('[AppEventService] sanitizedJson:', !!sanitizedJson);
           const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventID) as AppEventInterface;
 
           // Hydrate with original file(s) info if present
           const rawData = eventSnapshot as any;
-          console.log('[AppEventService] raw snapshot keys for SINGLE event:', Object.keys(rawData));
+          this.logger.log('[AppEventService] raw snapshot keys for SINGLE event:', Object.keys(rawData));
 
           if (rawData.originalFiles) {
-            console.log('[AppEventService] Hydrating originalFiles (Single):', rawData.originalFiles.length);
+            this.logger.log('[AppEventService] Hydrating originalFiles (Single):', rawData.originalFiles.length);
             event.originalFiles = rawData.originalFiles.map((file: any) => {
               if (file.startDate) {
                 // Convert Firestore Timestamp to Date
@@ -90,7 +90,7 @@ export class AppEventService implements OnDestroy {
             });
           }
           if (rawData.originalFile) {
-            console.log('[AppEventService] Hydrating originalFile (Single):', rawData.originalFile.path);
+            this.logger.log('[AppEventService] Hydrating originalFile (Single):', rawData.originalFile.path);
             event.originalFile = rawData.originalFile;
           }
 
@@ -101,7 +101,7 @@ export class AppEventService implements OnDestroy {
       if (error && error.code && error.code === 'permission-denied') {
         return of([null, null] as [AppEventInterface | null, ActivityInterface[] | null]);
       }
-      console.error('Error fetching event or activities:', error);
+      this.logger.error('Error fetching event or activities:', error);
       Sentry.captureException(error);
 
       return of([null, null] as [AppEventInterface | null, ActivityInterface[] | null]); // @todo fix this
@@ -114,7 +114,7 @@ export class AppEventService implements OnDestroy {
       return event;
     })).pipe(catchError((error) => {
       // debugger;
-      console.error('Error adding activities to event:', error);
+      this.logger.error('Error adding activities to event:', error);
       Sentry.captureException(error);
 
       return of(null); // @todo is this the best we can do?
@@ -219,7 +219,7 @@ export class AppEventService implements OnDestroy {
             }
             activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>sanitizedJson).setID(activitySnapshot.id));
           } catch (e) {
-            console.error('Failed to parse activity:', activitySnapshot.id, 'Error:', e);
+            this.logger.error('Failed to parse activity:', activitySnapshot.id, 'Error:', e);
           }
           return activitiesArray;
         }, []);
@@ -417,11 +417,11 @@ export class AppEventService implements OnDestroy {
    */
   public attachStreamsToEventWithActivities(user: User, event: AppEventInterface, streamTypes?: string[]): Observable<EventInterface> {
     // Check if we have an original file to parse instead of fetching from Firestore
-    console.log(`[AppEventService] attachStreams for ${event.getID()}. Has originalFile?`, !!event.originalFile);
-    console.log(`[AppEventService] attachStreams for ${event.getID()}. Has originalFiles?`, !!event.originalFiles);
+    this.logger.log(`[AppEventService] attachStreams for ${event.getID()}. Has originalFile?`, !!event.originalFile);
+    this.logger.log(`[AppEventService] attachStreams for ${event.getID()}. Has originalFiles?`, !!event.originalFiles);
 
     if (event.originalFiles && event.originalFiles.length > 0) {
-      console.log('[AppEventService] Using client-side parsing for (Multiple)', event.getID());
+      this.logger.log('[AppEventService] Using client-side parsing for (Multiple)', event.getID());
       return from(this.calculateStreamsFromWithOrchestration(event)).pipe(
         map((fullEvent) => {
           if (!fullEvent) return event;
@@ -431,14 +431,14 @@ export class AppEventService implements OnDestroy {
           return event;
         }),
         catchError((e) => {
-          console.error('Failed to parse original files, falling back to legacy streams', e);
+          this.logger.error('Failed to parse original files, falling back to legacy streams', e);
           return this.attachStreamsLegacy(user, event, streamTypes);
         })
       );
     }
 
     if (event.originalFile && event.originalFile.path) {
-      console.log('[AppEventService] Using client-side parsing for (Single)', event.getID());
+      this.logger.log('[AppEventService] Using client-side parsing for (Single)', event.getID());
       return from(this.calculateStreamsFromWithOrchestration(event)).pipe(
         map((fullEvent) => {
           if (!fullEvent) return event;
@@ -451,13 +451,13 @@ export class AppEventService implements OnDestroy {
           return event;
         }),
         catchError((e) => {
-          console.error('Failed to parse original file, falling back to legacy streams', e);
+          this.logger.error('Failed to parse original file, falling back to legacy streams', e);
           return this.attachStreamsLegacy(user, event, streamTypes);
         })
       );
     }
 
-    console.log('[AppEventService] Fallback to legacy streams for', event.getID());
+    this.logger.log('[AppEventService] Fallback to legacy streams for', event.getID());
     return this.attachStreamsLegacy(user, event, streamTypes);
   }
 
@@ -481,11 +481,11 @@ export class AppEventService implements OnDestroy {
   }
 
   private async calculateStreamsFromWithOrchestration(event: AppEventInterface): Promise<EventInterface> {
-    console.log('Calculating streams orchestration for event', event.getID());
+    this.logger.log('Calculating streams orchestration for event', event.getID());
 
     // 1. Array Strategy
     if (event.originalFiles && event.originalFiles.length > 0) {
-      console.log(`Orchestrating fetch and merge for ${event.originalFiles.length} files`);
+      this.logger.log(`Orchestrating fetch and merge for ${event.originalFiles.length} files`);
       const promises = event.originalFiles.map(fileMeta => this.fetchAndParseOneFile(fileMeta));
       const parsedEvents = await Promise.all(promises);
 
@@ -511,7 +511,7 @@ export class AppEventService implements OnDestroy {
     // 2. Legacy Single Strategy
     const originalFile = event.originalFile;
     if (!originalFile || !originalFile.path) {
-      console.warn('Original file path missing', originalFile);
+      this.logger.warn('Original file path missing', originalFile);
       return null;
     }
     return this.fetchAndParseOneFile(originalFile);
@@ -560,7 +560,7 @@ export class AppEventService implements OnDestroy {
       }
       return newEvent;
     } catch (e) {
-      console.error('Error in fetchAndParseOneFile', e);
+      this.logger.error('Error in fetchAndParseOneFile', e);
       // throw e; // Don't throw to allow partial success in array? 
       // Actually if one fails in array, what do we do? 
       // For now, let's return null and filter it out, logging error
@@ -622,22 +622,22 @@ export class AppEventService implements OnDestroy {
           }
         }
         const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id) as AppEventInterface;
-        console.log('[AppEventService] importer created event instance');
+        this.logger.log('[AppEventService] importer created event instance');
 
         // Hydrate with original file(s) info if present
         const rawData = eventSnapshot as any;
-        console.log('[AppEventService] raw snapshot keys:', Object.keys(rawData));
+        this.logger.log('[AppEventService] raw snapshot keys:', Object.keys(rawData));
 
         if (rawData.originalFiles) {
-          console.log('[AppEventService] Found originalFiles in snapshot:', rawData.originalFiles.length);
+          this.logger.log('[AppEventService] Found originalFiles in snapshot:', rawData.originalFiles.length);
           event.originalFiles = rawData.originalFiles;
         }
         if (rawData.originalFile) {
-          console.log('[AppEventService] Found originalFile in snapshot:', rawData.originalFile.path);
+          this.logger.log('[AppEventService] Found originalFile in snapshot:', rawData.originalFile.path);
           event.originalFile = rawData.originalFile;
         }
 
-        console.log('[AppEventService] Hydration complete for', eventSnapshot.id, {
+        this.logger.log('[AppEventService] Hydration complete for', eventSnapshot.id, {
           hasFiles: !!event.originalFiles,
           hasFile: !!event.originalFile
         });
@@ -661,22 +661,22 @@ export class AppEventService implements OnDestroy {
           }
         }
         const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id) as AppEventInterface;
-        console.log('[AppEventService] importer created event instance');
+        this.logger.log('[AppEventService] importer created event instance');
 
         // Hydrate with original file(s) info if present
         const rawData = eventSnapshot as any;
-        console.log('[AppEventService] raw snapshot keys:', Object.keys(rawData));
+        this.logger.log('[AppEventService] raw snapshot keys:', Object.keys(rawData));
 
         if (rawData.originalFiles) {
-          console.log('[AppEventService] Hydrating originalFiles:', rawData.originalFiles.length);
+          this.logger.log('[AppEventService] Hydrating originalFiles:', rawData.originalFiles.length);
           event.originalFiles = rawData.originalFiles;
         }
         if (rawData.originalFile) {
-          console.log('[AppEventService] Hydrating originalFile:', rawData.originalFile.path);
+          this.logger.log('[AppEventService] Hydrating originalFile:', rawData.originalFile.path);
           event.originalFile = rawData.originalFile;
         }
 
-        console.log('[AppEventService] Hydration complete for', eventSnapshot.id, {
+        this.logger.log('[AppEventService] Hydration complete for', eventSnapshot.id, {
           hasFiles: !!event.originalFiles,
           hasFile: !!event.originalFile
         });
