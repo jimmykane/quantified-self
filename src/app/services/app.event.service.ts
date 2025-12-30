@@ -59,7 +59,7 @@ export class AppEventService implements OnDestroy {
     // https://stackoverflow.com/questions/42939978/avoiding-nested-subscribes-with-combine-latest-when-one-observable-depends-on-th
     const eventDoc = doc(this.firestore, 'users', user.uid, 'events', eventID);
     return combineLatest([
-      runInInjectionContext(this.injector, () => docData(eventDoc)).pipe(
+      docData(eventDoc).pipe(
         map(eventSnapshot => {
           this.logger.log('[AppEventService] docData emitted:', !!eventSnapshot);
           if (!eventSnapshot) return null;
@@ -519,13 +519,13 @@ export class AppEventService implements OnDestroy {
 
   public async downloadFile(path: string): Promise<ArrayBuffer> {
     const fileRef = ref(this.storage, path);
-    return runInInjectionContext(this.injector, () => getBytes(fileRef));
+    return getBytes(fileRef);
   }
 
   private async fetchAndParseOneFile(fileMeta: { path: string, bucket?: string }): Promise<EventInterface> {
     try {
       const fileRef = ref(this.storage, fileMeta.path);
-      const arrayBuffer = await runInInjectionContext(this.injector, () => getBytes(fileRef));
+      const arrayBuffer = await getBytes(fileRef);
 
       const parts = fileMeta.path.split('.');
       const extension = parts[parts.length - 1].toLowerCase();
@@ -611,7 +611,7 @@ export class AppEventService implements OnDestroy {
   private _getEvents(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any): Observable<EventInterface[]> {
     const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount, startAfterDoc, endBeforeDoc);
 
-    return runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })).pipe(map((eventSnapshots: any[]) => {
+    return collectionData(q, { idField: 'id' }).pipe(map((eventSnapshots: any[]) => {
       return eventSnapshots.map((eventSnapshot) => {
         const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
         if (unknownTypes.length > 0) {
@@ -650,7 +650,7 @@ export class AppEventService implements OnDestroy {
   private _getEventsAndActivities(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any): Observable<EventInterface[]> {
     const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount, startAfterDoc, endBeforeDoc);
 
-    return runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })).pipe(map((eventSnapshots: any[]) => {
+    return collectionData(q, { idField: 'id' }).pipe(map((eventSnapshots: any[]) => {
       return eventSnapshots.reduce((events: EventInterface[], eventSnapshot) => {
         const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
         if (unknownTypes.length > 0) {
