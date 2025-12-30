@@ -2,16 +2,10 @@
 import * as admin from 'firebase-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 
-// Initialize Firebase Admin (assumes GOOGLE_APPLICATION_CREDENTIALS or emulator)
-if (!admin.apps.length) {
-    admin.initializeApp();
-}
-
-const db = getFirestore();
-
-async function migrateUser(userDoc: admin.firestore.QueryDocumentSnapshot) {
+// Exported for testing, but requires DB injection
+export async function migrateUser(userDoc: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot, database: admin.firestore.Firestore) {
     const uid = userDoc.id;
-    const data = userDoc.data();
+    const data = userDoc.data() || {};
 
     // 1. Identify System Fields
     const systemFields = ['gracePeriodUntil', 'lastDowngradedAt', 'stripeRole', 'isPro'];
