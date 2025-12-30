@@ -4,14 +4,12 @@
     <mat-chip-option [selected]="stackYAxes" (selectionChange)="stackYAxes = $event.selected; somethingChanged($event)"
       [color]="'accent'" [disabled]="!user"
       [matTooltip]="user ? 'Show charts on top of each other' : 'Sign in to use this'">
-      <mat-icon matChipAvatar>layers</mat-icon>
       Stack Y Axes
     </mat-chip-option>
 
     <!-- Show Laps -->
     <mat-chip-option [selected]="showLaps" (selectionChange)="showLaps = $event.selected; somethingChanged($event)"
       [color]="'accent'" [disabled]="!user" [matTooltip]="user ? 'Show lap markers on chart' : 'Sign in to use this'">
-      <mat-icon matChipAvatar>flag</mat-icon>
       Show Laps
     </mat-chip-option>
 
@@ -19,7 +17,6 @@
     <mat-chip-option [selected]="showAllData"
       (selectionChange)="showAllData = $event.selected; somethingChanged($event)" [color]="'accent'" [disabled]="!user"
       [matTooltip]="user ? 'Show all available data from file' : 'Sign in to use this'">
-      <mat-icon matChipAvatar>data_usage</mat-icon>
       Show All Data
     </mat-chip-option>
   </mat-chip-listbox>
