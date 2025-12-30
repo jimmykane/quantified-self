@@ -37,6 +37,7 @@ import { AppUserService } from './app.user.service';
 import { USAGE_LIMITS } from '../../../functions/src/shared/limits';
 import { AppEventInterface } from '../../../functions/src/shared/app-event.interface'; // Import Shared Interface
 import { AppEventUtilities } from '../utils/app.event.utilities';
+import { LoggerService } from './logger.service';
 
 @Injectable({
   providedIn: 'root',
@@ -49,7 +50,8 @@ export class AppEventService implements OnDestroy {
   private static reportedUnknownTypes = new Set<string>();
 
   constructor(
-    private windowService: AppWindowService) {
+    private windowService: AppWindowService,
+    private logger: LoggerService) {
   }
 
   public getEventAndActivities(user: User, eventID: string): Observable<AppEventInterface> {
