@@ -637,8 +637,9 @@ export class AppUserService implements OnDestroy {
       return null;
     }
     try {
-      // Force refresh to ensure we have latest claims
-      const tokenResult = await user.getIdTokenResult(true);
+      // Use cached token result unless explicitly told otherwise to avoid infinite loops
+      // by triggering auth state changes during an auth subscription.
+      const tokenResult = await user.getIdTokenResult();
       this.logger.log('[AppUserService] DEBUG: Full Token Result:', tokenResult);
       this.logger.log('[AppUserService] DEBUG: Custom Claims:', tokenResult.claims);
       const role = (tokenResult.claims['stripeRole'] as StripeRole) || null;
