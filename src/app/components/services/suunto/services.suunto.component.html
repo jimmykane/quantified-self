@@ -10,9 +10,10 @@
   <div class="features-grid">
 
     <!-- Connectivity Card (Now inside Pro Grid) -->
-    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
-      (click)="!hasProAccess && triggerUpsell()">
-      @if (!hasProAccess) {
+    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess && !isConnectedToService()"
+      [class.unlocked]="hasProAccess || isConnectedToService()"
+      (click)="!hasProAccess && !isConnectedToService() && triggerUpsell()">
+      @if (!hasProAccess && !isConnectedToService()) {
       <div class="lock-overlay">
         <mat-icon class="lock-icon-large">lock</mat-icon>
         <span class="pro-badge">PRO</span>
@@ -50,7 +51,7 @@
           }
 
           @if (isConnectedToService()) {
-          <button mat-stroked-button color="warn" style="width: 100%" [disabled]="isLoading || !hasProAccess"
+          <button mat-stroked-button color="warn" style="width: 100%" [disabled]="isLoading"
             (click)="deauthorizeService($event)">
             <mat-icon>link_off</mat-icon> Disconnect
           </button>
