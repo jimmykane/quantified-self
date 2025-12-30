@@ -12,8 +12,8 @@ mat-icon.tooltip {
 /*}*/
 
 mat-form-field {
-  padding: 0 1em;
-  width: 100%
+  width: 100%;
+  /* Removed padding: 0 1em; to prevents horizontal overflow */
 }
 
 
