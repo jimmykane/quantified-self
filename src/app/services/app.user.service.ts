@@ -367,17 +367,26 @@ export class AppUserService implements OnDestroy {
       const userDoc = doc(this.firestore, 'users', userID);
       const legalDoc = doc(this.firestore, `users/${userID}/legal/agreements`);
       const systemDoc = doc(this.firestore, `users/${userID}/system/status`);
+      const settingsDoc = doc(this.firestore, `users/${userID}/config/settings`);
 
       return forkJoin({
         user: docData(userDoc),
         legal: docData(legalDoc).pipe(catchError(() => of({}))), // Handle missing docs gracefully
-        system: docData(systemDoc).pipe(catchError(() => of({})))
-      }).pipe(map(({ user, legal, system }) => {
+        system: docData(systemDoc).pipe(catchError(() => of({}))),
+        settings: docData(settingsDoc).pipe(catchError(() => of({})))
+      }).pipe(map(({ user, legal, system, settings }) => {
         if (!user) {
           return null;
         }
+        // Merge all sources
+        // Note: 'settings' from subcolumn overrides 'settings' on main doc if both exist (during migration)
         const u = { ...user, ...legal, ...system } as User;
+        if (settings && Object.keys(settings).length > 0) {
+          u.settings = settings as any;
+        }
+
         u.settings = this.fillMissingAppSettings(u);
+
         return u;
       }));
     });
@@ -568,6 +577,7 @@ export class AppUserService implements OnDestroy {
     // Filter out restricted fields that should live in sub-collections or system locations
     // This prevents accidental writes to the main doc and satisfying Security Rules
     const forbiddenFields = [
+      'settings', // Now in config/settings
       'gracePeriodUntil',
       'lastDowngradedAt',
       'stripeRole',
@@ -583,7 +593,19 @@ export class AppUserService implements OnDestroy {
 
     // Use setDoc with merge: true to handle both update and create (upsert) scenarios
     // This is critical for the "synthetic user" flow in onboarding where the doc might not exist yet.
-    return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, 'users', user.uid), data, { merge: true }));
+    return runInInjectionContext(this.injector, async () => {
+      const promises = [];
+
+      // 1. Write Main User Doc
+      promises.push(setDoc(doc(this.firestore, 'users', user.uid), data, { merge: true }));
+
+      // 2. Write Settings to Subcollection
+      if (user.settings) {
+        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), user.settings, { merge: true }));
+      }
+
+      await Promise.all(promises);
+    });
   }
 
   public async setUserPrivacy(user: User, privacy: Privacy) {
