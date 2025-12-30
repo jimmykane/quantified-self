@@ -133,3 +133,16 @@ vi.mock('./request-helper', () => ({
     get: () => Promise.resolve({}),
     post: () => Promise.resolve({}),
 }));
+
+// Mock sports-lib to avoid resolution errors
+vi.mock('@sports-alliance/sports-lib', () => ({
+    ServiceNames: {
+        GarminHealthAPI: 'garminHealthAPI',
+        SuuntoApp: 'suuntoApp',
+        COROSAPI: 'corosAPI',
+    },
+    GarminHealthAPIAuth: () => ({
+        toHeader: () => ({}),
+        authorize: () => ({}),
+    }),
+}));

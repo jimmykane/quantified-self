@@ -14,6 +14,7 @@ import {
 import { getTokenData } from './tokens';
 import * as requestPromise from './request-helper';
 import { config } from './config';
+import { TokenNotFoundError } from './utils';
 
 /**
  *
@@ -135,6 +136,11 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
 export async function deauthorizeServiceForUser(userID: string, serviceName: ServiceNames) {
   const serviceConfig = getServiceConfig(serviceName);
   const tokenQuerySnapshots = await admin.firestore().collection(serviceConfig.tokenCollectionName).doc(userID).collection('tokens').get();
+
+  if (tokenQuerySnapshots.empty) {
+    throw new TokenNotFoundError('No tokens found');
+  }
+
   logger.info(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
 
   // Deauthorize all tokens for that user
@@ -143,22 +149,34 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, false);
     } catch (e: any) {
-      logger.error(`Refreshing token failed skipping deletion for this token with id ${tokenQueryDocumentSnapshot.id}`);
-      continue; // Go to next
+      if (e.message?.includes('400') || e.message?.includes('invalid_grant') || e?.output?.statusCode === 400) {
+        logger.warn(`Token for ${tokenQueryDocumentSnapshot.id} is invalid or revoked (400). Proceeding to delete local record.`);
+        // Don't continue, fall through to deletion. serviceToken will be undefined.
+      } else {
+        logger.error(`Refreshing token failed skipping deletion for this token with id ${tokenQueryDocumentSnapshot.id}: ${e}`);
+        continue; // Go to next for other errors
+      }
     }
 
-    switch (serviceName) {
-      default:
-        break;
-      case ServiceNames.SuuntoApp:
-        await requestPromise.get({
-          headers: {
-            'Authorization': `Bearer ${serviceToken.accessToken}`,
-          },
-          url: `https://cloudapi-oauth.suunto.com/oauth/deauthorize?client_id=${config.suuntoapp.client_id}`,
-        });
-        logger.info(`Deauthorized token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
-        break;
+    if (serviceToken) {
+      switch (serviceName) {
+        default:
+          break;
+        case ServiceNames.SuuntoApp:
+          try {
+            await requestPromise.get({
+              headers: {
+                'Authorization': `Bearer ${serviceToken.accessToken}`,
+              },
+              url: `https://cloudapi-oauth.suunto.com/oauth/deauthorize?client_id=${config.suuntoapp.client_id}`,
+            });
+            logger.info(`Deauthorized token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
+          } catch (apiError: any) {
+            logger.warn(`Failed to deauthorize on Suunto API for ${userID}: ${apiError.message}`);
+            // Proceed to delete local token anyway
+          }
+          break;
+      }
     }
 
     await tokenQueryDocumentSnapshot.ref.delete();

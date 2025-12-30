@@ -88,13 +88,19 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
     }
     logger.info(`Successfully refreshed token ${doc.id}`);
   } catch (e: any) {
-    logger.error(`Could not refresh token for user ${doc.id}`, e);
-    // If it's a 401 (Unauthorized) or 400 (Bad Request with invalid_grant), delete the token as it's no longer valid.
     const statusCode = e.statusCode || (e.output && e.output.statusCode);
     const errorDescription = e.message || (e.error && (e.error.error_description || e.error.error));
 
+    // Suppress logging for 400/401 (Invalid Grant/Unauthorized) as these are expected during cleanup
+    if (statusCode === 401 || (statusCode === 400)) {
+      // Do not log the full stack trace for these known "token dead" errors
+      logger.warn(`Token for user ${doc.id} is invalid (${statusCode}): ${errorDescription}`);
+    } else {
+      logger.error(`Could not refresh token for user ${doc.id}`, e);
+    }
+
+    // If it's a 401 (Unauthorized) or 400 (Bad Request with invalid_grant), delete the token as it's no longer valid.
     if (statusCode === 401 || (statusCode === 400 && String(errorDescription).toLowerCase().includes('invalid_grant'))) {
-      logger.info(`Error with code ${statusCode} ('${errorDescription}') deleting token ${doc.id}`);
       try {
         await doc.ref.delete();
         logger.info(`Deleted token ${doc.id} because it's no longer valid.`);

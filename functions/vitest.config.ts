@@ -8,8 +8,7 @@ export default defineConfig({
         environment: 'node',
         include: ['src/**/*.spec.ts'],
         alias: {
-            // Force resolution to ESM entry point for sports-lib
-            '@sports-alliance/sports-lib': resolve('./node_modules/@sports-alliance/sports-lib/lib/esm/index.js'),
+            '@sports-alliance/sports-lib': resolve(__dirname, 'node_modules/@sports-alliance/sports-lib/lib/esm/index.js'),
         },
         coverage: {
             provider: 'v8',
@@ -17,7 +16,6 @@ export default defineConfig({
             include: ['src/**/*.ts'],
             exclude: ['src/**/*.spec.ts', 'src/index.ts'],
         },
-        // Mock firebase-admin and firebase-functions by default
         // Mock firebase-admin and firebase-functions by default
         setupFiles: [resolve(__dirname, 'src/test-setup.ts')],
 
