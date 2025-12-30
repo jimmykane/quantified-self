@@ -43,39 +43,59 @@ export async function migrateUser(userDoc: admin.firestore.QueryDocumentSnapshot
         return;
     }
 
-    const batch = database.batch();
+    // 3. Write Phase
+    const writeBatch = database.batch();
+    let writesQueued = false;
 
-    // 3. Write System Data
     if (hasSystemData) {
+        console.log(`[${uid}] Found System Data:`, Object.keys(systemData));
         const systemRef = database.doc(`users/${uid}/system/status`);
-        batch.set(systemRef, systemData, { merge: true });
+        writeBatch.set(systemRef, systemData, { merge: true });
+        writesQueued = true;
     }
 
-    // 4. Write Legal Data
     if (hasLegalData) {
+        console.log(`[${uid}] Found Legal Data:`, Object.keys(legalData));
         const legalRef = database.doc(`users/${uid}/legal/agreements`);
-        batch.set(legalRef, legalData, { merge: true });
+        writeBatch.set(legalRef, legalData, { merge: true });
+        writesQueued = true;
     }
 
-    // 5. Write Settings Data
     if (data.settings) {
+        console.log(`[${uid}] Found Settings Data`);
         const settingsRef = database.doc(`users/${uid}/config/settings`);
-        batch.set(settingsRef, data.settings, { merge: true });
+        writeBatch.set(settingsRef, data.settings, { merge: true });
+        writesQueued = true;
     }
 
-    // 5. Cleanup Main Doc
+    if (writesQueued) {
+        await writeBatch.commit();
+        console.log(`[${uid}] writes committed successfully.`);
+    } else {
+        console.log(`[${uid}] No data to migrate.`);
+    }
+
+    // 4. Verification & Delete Phase
+    // In a real script, 'await writeBatch.commit()' throwing guarantees writes failed.
+    // If we are here, writes succeeded.
+
+    const deleteBatch = database.batch();
     const cleanupData: any = {};
+    let deletesQueued = false;
+
     [...systemFields, ...legalFields, 'settings'].forEach(field => {
         if (data[field] !== undefined) {
             cleanupData[field] = admin.firestore.FieldValue.delete();
+            deletesQueued = true;
         }
     });
 
-    const userRef = userDoc.ref;
-    batch.update(userRef, cleanupData);
-
-    await batch.commit();
-    console.log(`Migrated user ${uid}`);
+    if (deletesQueued) {
+        const userRef = userDoc.ref;
+        deleteBatch.update(userRef, cleanupData);
+        await deleteBatch.commit();
+        console.log(`[${uid}] cleanup (deletion) committed successfully.`);
+    }
 }
 
 async function run(db: admin.firestore.Firestore) {
