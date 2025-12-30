@@ -609,6 +609,11 @@ mat-table {
   flex-direction: column !important;
 }
 
+/* Ensure Overlays (Bottom Sheets, Dialogs) are always on top of App Bars and Banners */
+.cdk-overlay-container {
+  z-index: 2000 !important;
+}
+
 /* ==========================================================================
    Global Table Styles
    Standardized Material table overrides for glassmorphism.
