@@ -88,13 +88,13 @@ export class UserAgreementFormComponent implements OnInit {
       this.user.acceptedPrivacyPolicy = true;
       this.user.acceptedTrackingPolicy = true;
       this.user.acceptedDiagnosticsPolicy = true;
-      const dbUser = await this.userService.createOrUpdateUser(this.user);
+      await this.userService.createOrUpdateUser(this.user);
       this.snackBar.open('User updated', null, {
         duration: 2000,
       });
       logEvent(this.analytics, 'sign_up', { method: this.signInMethod });
       await this.router.navigate(['dashboard']);
-      this.snackBar.open(`Thanks for signing in ${dbUser.displayName || 'guest'}!`, null, {
+      this.snackBar.open(`Thanks for signing in ${this.user.displayName || 'guest'}!`, null, {
         duration: 2000,
       });
     } catch (e) {
