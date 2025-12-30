@@ -14,21 +14,30 @@ vi.mock('firebase-admin', () => {
 });
 
 describe('Migration Script (Split Model)', () => {
-    let mockBatch: any;
+    let mockWriteBatch: any;
+    let mockDeleteBatch: any;
     let mockDb: any;
     let mockUserDoc: any;
 
     beforeEach(() => {
-        // Mock Batch
-        mockBatch = {
+        // Mock Writes Batch
+        mockWriteBatch = {
             set: vi.fn(),
+            commit: vi.fn().mockResolvedValue(undefined),
+        };
+
+        // Mock Delete Batch
+        mockDeleteBatch = {
             update: vi.fn(),
             commit: vi.fn().mockResolvedValue(undefined),
         };
 
         // Mock DB
         mockDb = {
-            batch: vi.fn().mockReturnValue(mockBatch),
+            // Return write batch first, then delete batch
+            batch: vi.fn()
+                .mockReturnValueOnce(mockWriteBatch)
+                .mockReturnValueOnce(mockDeleteBatch),
             doc: vi.fn().mockImplementation((path) => ({ path })), // Pseudo-ref
         };
 
@@ -65,9 +74,9 @@ describe('Migration Script (Split Model)', () => {
         // 2. Execute Migration
         await migrateUser(mockUserDoc, mockDb);
 
-        // 3. Verify System Data Write
+        // 3. Verify System Data Write (Write Batch)
         expect(mockDb.doc).toHaveBeenCalledWith('users/test-uid/system/status');
-        expect(mockBatch.set).toHaveBeenCalledWith(
+        expect(mockWriteBatch.set).toHaveBeenCalledWith(
             { path: 'users/test-uid/system/status' },
             {
                 gracePeriodUntil: '2025-01-01',
@@ -78,9 +87,9 @@ describe('Migration Script (Split Model)', () => {
             { merge: true }
         );
 
-        // 4. Verify Legal Data Write
+        // 4. Verify Legal Data Write (Write Batch)
         expect(mockDb.doc).toHaveBeenCalledWith('users/test-uid/legal/agreements');
-        expect(mockBatch.set).toHaveBeenCalledWith(
+        expect(mockWriteBatch.set).toHaveBeenCalledWith(
             { path: 'users/test-uid/legal/agreements' },
             {
                 acceptedPrivacyPolicy: true,
@@ -89,9 +98,9 @@ describe('Migration Script (Split Model)', () => {
             { merge: true }
         );
 
-        // 5. Verify Settings Data Write
+        // 5. Verify Settings Data Write (Write Batch)
         expect(mockDb.doc).toHaveBeenCalledWith('users/test-uid/config/settings');
-        expect(mockBatch.set).toHaveBeenCalledWith(
+        expect(mockWriteBatch.set).toHaveBeenCalledWith(
             { path: 'users/test-uid/config/settings' },
             {
                 theme: 'dark',
@@ -100,10 +109,11 @@ describe('Migration Script (Split Model)', () => {
             { merge: true }
         );
 
-        // 6. Verify Cleanup
-        // We can't easily check for FieldValue.delete() since it's an object/symbol
-        // But we can check that update was called on the user ref
-        expect(mockBatch.update).toHaveBeenCalledWith(
+        // Verify Write Batch Committed
+        expect(mockWriteBatch.commit).toHaveBeenCalled();
+
+        // 6. Verify Cleanup (Delete Batch)
+        expect(mockDeleteBatch.update).toHaveBeenCalledWith(
             mockUserDoc.ref,
             expect.objectContaining({
                 gracePeriodUntil: 'DELETE_SENTINEL',
@@ -114,7 +124,8 @@ describe('Migration Script (Split Model)', () => {
             })
         );
 
-        expect(mockBatch.commit).toHaveBeenCalled();
+        // Verify Delete Batch Committed
+        expect(mockDeleteBatch.commit).toHaveBeenCalled();
     });
 
     it('should ignore users with no relevant fields', async () => {
@@ -126,7 +137,9 @@ describe('Migration Script (Split Model)', () => {
 
         await migrateUser(mockUserDoc, mockDb);
 
-        // Expect no batch operations
-        expect(mockDb.batch).not.toHaveBeenCalled();
+        // Expect no batch operations (neither write nor delete)
+        // Note: batch() might be called to create the write batch, but verify no set/commit
+        expect(mockWriteBatch.commit).not.toHaveBeenCalled();
+        expect(mockDeleteBatch.commit).not.toHaveBeenCalled();
     });
 });
