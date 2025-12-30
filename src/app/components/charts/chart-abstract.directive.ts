@@ -1,5 +1,4 @@
 import { ChangeDetectorRef, ElementRef, Input, NgZone, OnDestroy, ViewChild, Directive } from '@angular/core';
-import * as Sentry from '@sentry/browser';
 import { Subscription } from 'rxjs';
 import { DataPaceMinutesPerMile, DataPace } from '@sports-alliance/sports-lib';
 import { ChartThemes } from '@sports-alliance/sports-lib';
@@ -128,8 +127,7 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
       });
     } catch (e) {
 
-      // Log to Sentry
-      Sentry.captureException(e);
+      this.logger.error(e);
     }
   }
 

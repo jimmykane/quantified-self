@@ -1,7 +1,15 @@
 import { Component, OnInit } from '@angular/core';
 import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
-import * as Sentry from '@sentry/browser';
-import { logEvent } from '@angular/fire/analytics';
+import { HttpClient } from '@angular/common/http';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { Router, ActivatedRoute } from '@angular/router';
+import { Analytics, logEvent } from '@angular/fire/analytics';
+import { LoggerService } from '../../../services/logger.service';
+import { AppFileService } from '../../../services/app.file.service';
+import { AppEventService } from '../../../services/app.event.service';
+import { AppAuthService } from '../../../authentication/app.auth.service';
+import { AppUserService } from '../../../services/app.user.service';
+import { AppWindowService } from '../../../services/app.window.service';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { environment } from '../../../../environments/environment';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -19,6 +27,20 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
 
   public serviceName = ServiceNames.SuuntoApp;
   clicks = 0;
+
+  constructor(protected http: HttpClient,
+    protected fileService: AppFileService,
+    protected analytics: Analytics,
+    protected eventService: AppEventService,
+    protected authService: AppAuthService,
+    protected userService: AppUserService,
+    protected router: Router,
+    protected route: ActivatedRoute,
+    protected windowService: AppWindowService,
+    protected snackBar: MatSnackBar,
+    protected logger: LoggerService) {
+    super(http, fileService, analytics, eventService, authService, userService, router, route, windowService, snackBar, logger);
+  }
 
   isConnectedToService(): boolean {
     return !!this.serviceTokens && !!this.serviceTokens.length
@@ -99,7 +121,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
       this.snackBar.open('Could not open activity. Make sure that the activity is public by opening the link in a new browser tab', null, {
         duration: 5000,
       });
-      Sentry.captureException(e);
+      this.logger.error(e);
     } finally {
       this.isLoading = false;
     }

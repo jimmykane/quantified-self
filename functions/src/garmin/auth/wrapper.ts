@@ -2,7 +2,7 @@ import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import { GarminHealthAPIAuth } from './auth';
 import * as requestPromise from '../../request-helper';
-import { isCorsAllowed, setAccessControlHeadersOnResponse } from '../../utils';
+import { isCorsAllowed, setAccessControlHeadersOnResponse, TokenNotFoundError } from '../../utils';
 import { getUserIDFromFirebaseToken, isProUser, PRO_REQUIRED_MESSAGE } from '../../utils';
 import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
@@ -210,7 +210,11 @@ export const deauthorizeGarminHealthAPI = functions.region('europe-west2').https
 
   try {
     await deauthorizeGarminHealthAPIForUser(userID);
-  } catch (e) {
+  } catch (e: any) {
+    if (e.name === 'TokenNotFoundError') {
+      res.status(404).send('Token not found');
+      return;
+    }
     res.status(500).send('Bad request or internal error');
     return;
   }
@@ -221,8 +225,8 @@ export const deauthorizeGarminHealthAPI = functions.region('europe-west2').https
 export async function deauthorizeGarminHealthAPIForUser(userID: string) {
   const tokensDocumentSnapshotData = (await admin.firestore().collection(GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME).doc(userID).get()).data();
   if (!tokensDocumentSnapshotData || !tokensDocumentSnapshotData.accessToken || !tokensDocumentSnapshotData.accessTokenSecret) {
-    logger.error('No token found');
-    throw new Error('No token found');
+    logger.warn('No token found');
+    throw new TokenNotFoundError('No token found');
   }
 
   const oAuth = GarminHealthAPIAuth();

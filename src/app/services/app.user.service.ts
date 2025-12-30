@@ -1,5 +1,5 @@
 import { inject, Injectable, OnDestroy, EnvironmentInjector, runInInjectionContext } from '@angular/core';
-import { Observable, from, firstValueFrom, forkJoin, of } from 'rxjs';
+import { Observable, from, firstValueFrom, forkJoin, of, combineLatest, distinctUntilChanged } from 'rxjs';
 import { StripeRole } from '../models/stripe-role.model';
 import { User } from '@sports-alliance/sports-lib';
 import { Privacy } from '@sports-alliance/sports-lib';
@@ -33,7 +33,6 @@ import {
 import { Auth, deleteUser, authState } from '@angular/fire/auth';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { environment } from '../../environments/environment';
-import * as Sentry from '@sentry/browser';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import {
   DateRanges,
@@ -348,16 +347,16 @@ export class AppUserService implements OnDestroy {
   ) {
     authState(this.auth).subscribe((user) => {
       if (user) {
-        Sentry.setUser({ id: user.uid, email: user.email || undefined });
+        this.logger.setUser({ id: user.uid, email: user.email || undefined });
         user.getIdTokenResult().then((token) => {
           const role = token.claims['stripeRole'] as string;
           if (role) {
-            Sentry.setTag("subscription_role", role);
+            this.logger.setTag("subscription_role", role);
           }
         });
       } else {
-        Sentry.setUser(null);
-        Sentry.setTag("subscription_role", "anonymous");
+        this.logger.setUser(null);
+        this.logger.setTag("subscription_role", "anonymous");
       }
     });
   }
@@ -369,26 +368,31 @@ export class AppUserService implements OnDestroy {
       const systemDoc = doc(this.firestore, `users/${userID}/system/status`);
       const settingsDoc = doc(this.firestore, `users/${userID}/config/settings`);
 
-      return forkJoin({
+      return combineLatest({
         user: docData(userDoc),
-        legal: docData(legalDoc).pipe(catchError(() => of({}))), // Handle missing docs gracefully
-        system: docData(systemDoc).pipe(catchError(() => of({}))),
-        settings: docData(settingsDoc).pipe(catchError(() => of({})))
-      }).pipe(map(({ user, legal, system, settings }) => {
-        if (!user) {
-          return null;
-        }
-        // Merge all sources
-        // Note: 'settings' from subcolumn overrides 'settings' on main doc if both exist (during migration)
-        const u = { ...user, ...legal, ...system } as User;
-        if (settings && Object.keys(settings).length > 0) {
-          u.settings = settings as any;
-        }
+        legal: docData(legalDoc).pipe(catchError((err) => { this.logger.error('Error fetching legal:', err); return of({}); })),
+        system: docData(systemDoc).pipe(catchError((err) => { this.logger.error('Error fetching system:', err); return of({}); })),
+        settings: docData(settingsDoc).pipe(catchError((err) => { this.logger.error('Error fetching settings:', err); return of({}); }))
+      }).pipe(
+        distinctUntilChanged((prev, curr) => JSON.stringify(prev) === JSON.stringify(curr)),
+        map(({ user, legal, system, settings }) => {
+          if (!user) {
+            return null;
+          }
 
-        u.settings = this.fillMissingAppSettings(u);
+          // Merge all sources
+          // Merge order: Main Doc -> Legal -> System (System overrides if overlap)
+          const u = { ...user, ...(legal || {}), ...(system || {}) } as User;
 
-        return u;
-      }));
+          // Settings is a special case (nested object)
+          if (settings && Object.keys(settings).length > 0) {
+            u.settings = settings as any;
+          }
+
+          u.settings = this.fillMissingAppSettings(u);
+
+          return u;
+        }));
     });
   }
 
@@ -632,8 +636,9 @@ export class AppUserService implements OnDestroy {
       return null;
     }
     try {
-      // Force refresh to ensure we have latest claims
-      const tokenResult = await user.getIdTokenResult(true);
+      // Use cached token result unless explicitly told otherwise to avoid infinite loops
+      // by triggering auth state changes during an auth subscription.
+      const tokenResult = await user.getIdTokenResult();
       this.logger.log('[AppUserService] DEBUG: Full Token Result:', tokenResult);
       this.logger.log('[AppUserService] DEBUG: Custom Claims:', tokenResult.claims);
       const role = (tokenResult.claims['stripeRole'] as StripeRole) || null;
@@ -715,7 +720,7 @@ export class AppUserService implements OnDestroy {
       await deleteSelf();
       await this.auth.signOut();
     } catch (e) {
-      Sentry.captureException(e);
+      this.logger.error(e);
       throw e;
     }
   }

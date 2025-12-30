@@ -6,7 +6,6 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { User } from '@sports-alliance/sports-lib';
 import { take } from 'rxjs/operators';
 import { AppUserService } from '../../services/app.user.service';
-import * as Sentry from '@sentry/browser';
 import { Auth, signInWithCustomToken, authState, OAuthProvider, signInWithPopup } from '@angular/fire/auth';
 import { Analytics, logEvent } from '@angular/fire/analytics';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
@@ -159,7 +158,7 @@ export class LoginComponent implements OnInit, OnDestroy {
         return;
       }
 
-      Sentry.captureException(e);
+      this.logger.error(e);
       this.showErrorDialog('Login Failed', e);
       this.isLoading = false;
     };
@@ -303,7 +302,7 @@ export class LoginComponent implements OnInit, OnDestroy {
         duration: 5000,
       });
     } catch (e) {
-      Sentry.captureException(e);
+      this.logger.error(e);
       this.isLoading = false;
     }
   }

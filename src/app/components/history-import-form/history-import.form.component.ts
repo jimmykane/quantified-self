@@ -7,7 +7,7 @@ import {
   Validators,
 } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import * as Sentry from '@sentry/browser';
+import { LoggerService } from '../../services/logger.service';
 import { User } from '@sports-alliance/sports-lib';
 
 import { AppUserService } from '../../services/app.user.service';
@@ -41,6 +41,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   constructor(
     private userService: AppUserService,
     private snackBar: MatSnackBar,
+    private logger: LoggerService,
   ) {
   }
 
@@ -101,7 +102,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + (3 * 24 * 60 * 60 * 1000));
         break;
       default:
-        Sentry.captureException(new Error(`Service name is not available ${this.serviceName} for history import`));
+        this.logger.error(new Error(`Service name is not available ${this.serviceName} for history import`));
         // this.formGroup.disable();
         // this.isAllowedToDoHistoryImport = false;
         break;
@@ -136,7 +137,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       logEvent(this.analytics, 'imported_history', { method: this.serviceName });
     } catch (e) {
       // debugger;
-      Sentry.captureException(e);
+      this.logger.error(e);
 
       this.snackBar.open(`Could not import history for ${this.serviceName} due to ${e.message}`, null, {
         duration: 2000,

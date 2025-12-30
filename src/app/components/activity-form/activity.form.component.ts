@@ -1,6 +1,6 @@
-import {Component, Inject, Input, OnInit} from '@angular/core';
-import {EventInterface} from '@sports-alliance/sports-lib';
-import {AppEventService} from '../../services/app.event.service';
+import { Component, Inject, Input, OnInit } from '@angular/core';
+import { EventInterface } from '@sports-alliance/sports-lib';
+import { AppEventService } from '../../services/app.event.service';
 import {
   UntypedFormBuilder,
   UntypedFormControl,
@@ -9,27 +9,27 @@ import {
   ValidatorFn,
   Validators,
 } from '@angular/forms';
-import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import * as Sentry from '@sentry/browser';
-import {ActivityInterface} from '@sports-alliance/sports-lib';
-import {User} from '@sports-alliance/sports-lib';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { LoggerService } from '../../services/logger.service';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { User } from '@sports-alliance/sports-lib';
 
-import {DataDistance} from '@sports-alliance/sports-lib';
-import {DataDeviceNames} from '@sports-alliance/sports-lib';
-import {DataAscent} from '@sports-alliance/sports-lib';
-import {DataDescent} from '@sports-alliance/sports-lib';
-import {ActivityTypes, ActivityTypesHelper} from '@sports-alliance/sports-lib';
-import {DataActivityTypes} from '@sports-alliance/sports-lib';
+import { DataDistance } from '@sports-alliance/sports-lib';
+import { DataDeviceNames } from '@sports-alliance/sports-lib';
+import { DataAscent } from '@sports-alliance/sports-lib';
+import { DataDescent } from '@sports-alliance/sports-lib';
+import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { DataEnergy } from '@sports-alliance/sports-lib';
 
 
 @Component({
-    selector: 'app-activity-form',
-    templateUrl: './activity.form.component.html',
-    styleUrls: ['./activity.form.component.css'],
-    providers: [],
-    standalone: false
+  selector: 'app-activity-form',
+  templateUrl: './activity.form.component.html',
+  styleUrls: ['./activity.form.component.css'],
+  providers: [],
+  standalone: false
 })
 
 
@@ -51,6 +51,7 @@ export class ActivityFormComponent implements OnInit {
     private eventService: AppEventService,
     private snackBar: MatSnackBar,
     private formBuilder: UntypedFormBuilder,
+    private logger: LoggerService,
   ) {
     this.activity = data.activity;
     this.event = data.event;
@@ -63,29 +64,29 @@ export class ActivityFormComponent implements OnInit {
     }
     // Now build the controls
     this.activityFormGroup = new UntypedFormGroup({
-        activity: new UntypedFormControl(this.activity),
-        creatorName: new UntypedFormControl(this.activity.creator.name, [
-          Validators.required,
-        ]),
-        startDate: new UntypedFormControl(this.activity.startDate, [
-          Validators.required,
-        ]),
-        endDate: new UntypedFormControl({value: this.activity.endDate, disabled: true}, [
-          Validators.required,
-        ]),
-        startTime: new UntypedFormControl(this.getTimeFromDateAsString(this.activity.startDate), [
-          Validators.required,
-        ]),
-        endTime: new UntypedFormControl({
-          value: this.getTimeFromDateAsString(this.activity.endDate),
-          disabled: true
-        }, [
-          Validators.required,
-        ]),
-        type: new UntypedFormControl(this.activity.type, [
-          Validators.required,
-        ]),
-      }
+      activity: new UntypedFormControl(this.activity),
+      creatorName: new UntypedFormControl(this.activity.creator.name, [
+        Validators.required,
+      ]),
+      startDate: new UntypedFormControl(this.activity.startDate, [
+        Validators.required,
+      ]),
+      endDate: new UntypedFormControl({ value: this.activity.endDate, disabled: true }, [
+        Validators.required,
+      ]),
+      startTime: new UntypedFormControl(this.getTimeFromDateAsString(this.activity.startDate), [
+        Validators.required,
+      ]),
+      endTime: new UntypedFormControl({
+        value: this.getTimeFromDateAsString(this.activity.endDate),
+        disabled: true
+      }, [
+        Validators.required,
+      ]),
+      type: new UntypedFormControl(this.activity.type, [
+        Validators.required,
+      ]),
+    }
     );
 
     const ascent = this.activity.getStat(DataAscent.type);
@@ -219,12 +220,7 @@ export class ActivityFormComponent implements OnInit {
       });
     } catch (e) {
       // debugger;
-      Sentry.captureException(e);
-
-      this.snackBar.open('Could not save activity', null, {
-        duration: 2000,
-      });
-      Sentry.captureException(e);
+      this.logger.error(e);
     } finally {
       this.isLoading = false;
       this.dialogRef.close();
@@ -235,7 +231,7 @@ export class ActivityFormComponent implements OnInit {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
       if (control instanceof UntypedFormControl) {
-        control.markAsTouched({onlySelf: true});
+        control.markAsTouched({ onlySelf: true });
       } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }
@@ -258,7 +254,7 @@ export class ActivityFormComponent implements OnInit {
 export const autocompleteSelectionValidator: ValidatorFn = (control: UntypedFormControl): ValidationErrors | null => {
   const selection: any = control.value;
   if (typeof selection === 'string') {
-    return {requireMatch: true};
+    return { requireMatch: true };
   }
   return null;
 }

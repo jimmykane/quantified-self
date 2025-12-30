@@ -33,54 +33,41 @@ export class AppAuthService {
   ) {
     // Use modular user observable to react to token refreshes too
     this.user$ = user(this.auth).pipe(
-      switchMap(user => {
-        if (user) {
-          return new Observable<User | null>(observer => {
-            return runInInjectionContext(this.injector, () => {
-              const userDoc = doc(this.firestore, `users/${user.uid}`);
-              const unsubscribe = onSnapshot(userDoc, async (snap) => {
-                // Get current claims
-                const tokenResult = await user.getIdTokenResult();
-                const stripeRole = tokenResult.claims['stripeRole'] as string || null;
+      switchMap(firebaseUser => {
+        if (firebaseUser) {
+          return this.userService.getUserByID(firebaseUser.uid).pipe(
+            switchMap(async (dbUser) => {
+              // Get current claims
+              const tokenResult = await firebaseUser.getIdTokenResult();
+              const stripeRole = tokenResult.claims['stripeRole'] as string || null;
 
-                const dbUser = snap.data() as User;
-                let emittedUser: User | null = null;
-                if (dbUser) {
-                  // Attach the uid to the object
-                  dbUser.uid = user.uid;
-                  // Merge the stripe role from the token claims
-                  (dbUser as any).stripeRole = stripeRole;
-                  emittedUser = dbUser;
-                } else {
-                  // If the user doesn't exist in Firestore yet, create a synthetic object
-                  // to avoid breaking the rest of the app that expects a User object.
-                  // This is common for new users who haven't had their Firestore doc created yet by triggers.
-                  emittedUser = {
-                    uid: user.uid,
-                    email: user.email,
-                    displayName: user.displayName,
-                    photoURL: user.photoURL,
-                    emailVerified: user.emailVerified,
-                    settings: this.userService.fillMissingAppSettings({} as any),
-                    // Explicitly set policy flags to false for safety
-                    acceptedPrivacyPolicy: false,
-                    acceptedDataPolicy: false,
-                    acceptedTrackingPolicy: false,
-                    acceptedDiagnosticsPolicy: false,
-                    isAnonymous: user.isAnonymous,
-                    stripeRole: stripeRole,
-                    creationDate: new Date(user.metadata.creationTime!), // types fixed
-                    lastSignInDate: new Date(user.metadata.lastSignInTime!) // types fixed
-                  } as unknown as User;
-                }
-                this.zone.run(() => {
-                  observer.next(emittedUser);
-                });
-              }, error => observer.error(error));
-
-              return () => unsubscribe();
-            });
-          });
+              if (dbUser) {
+                // Attach the uid to the object
+                dbUser.uid = firebaseUser.uid;
+                // Merge the stripe role from the token claims
+                (dbUser as any).stripeRole = stripeRole;
+                return dbUser;
+              } else {
+                // Synthetic user for new accounts
+                return {
+                  uid: firebaseUser.uid,
+                  email: firebaseUser.email,
+                  displayName: firebaseUser.displayName,
+                  photoURL: firebaseUser.photoURL,
+                  emailVerified: firebaseUser.emailVerified,
+                  settings: this.userService.fillMissingAppSettings({} as any),
+                  acceptedPrivacyPolicy: false,
+                  acceptedDataPolicy: false,
+                  acceptedTrackingPolicy: false,
+                  acceptedDiagnosticsPolicy: false,
+                  isAnonymous: firebaseUser.isAnonymous,
+                  stripeRole: stripeRole,
+                  creationDate: new Date(firebaseUser.metadata.creationTime!),
+                  lastSignInDate: new Date(firebaseUser.metadata.lastSignInTime!)
+                } as unknown as User;
+              }
+            })
+          );
         } else {
           return of(null);
         }

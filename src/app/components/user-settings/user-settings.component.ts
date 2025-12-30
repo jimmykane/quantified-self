@@ -8,7 +8,7 @@ import { AppUserService } from '../../services/app.user.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
-import * as Sentry from '@sentry/browser';
+import { LoggerService } from '../../services/logger.service';
 import { Privacy, UserSettingsInterface } from '@sports-alliance/sports-lib';
 import {
   ChartCursorBehaviours,
@@ -93,7 +93,8 @@ export class UserSettingsComponent implements OnChanges {
     private router: Router,
     private snackBar: MatSnackBar,
     private windowService: AppWindowService,
-    private dialog: MatDialog) {
+    private dialog: MatDialog,
+    private logger: LoggerService) {
   }
 
 
@@ -388,7 +389,7 @@ export class UserSettingsComponent implements OnChanges {
       this.snackBar.open('Could not update user', null, {
         duration: 2000,
       });
-      Sentry.captureException(e);
+      this.logger.error(e);
       // @todo add logging
     } finally {
       this.isSaving = false;
@@ -420,7 +421,7 @@ export class UserSettingsComponent implements OnChanges {
       localStorage.clear();
       this.windowService.windowRef.location.reload();
     } catch (e) {
-      Sentry.captureException(e);
+      this.logger.error(e);
       this.errorDeleting = e;
       this.isDeleting = false;
     }

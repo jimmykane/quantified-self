@@ -233,6 +233,13 @@ export class UsageLimitExceededError extends Error {
   }
 }
 
+export class TokenNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TokenNotFoundError';
+  }
+}
+
 import { USAGE_LIMITS } from './shared/limits';
 
 export async function checkEventUsageLimit(userID: string, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<void> {

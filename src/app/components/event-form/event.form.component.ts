@@ -1,22 +1,22 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
-import {EventInterface} from '@sports-alliance/sports-lib';
-import {AppEventService} from '../../services/app.event.service';
-import {FormBuilder, UntypedFormControl, UntypedFormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
-import {ErrorStateMatcher} from '@angular/material/core';
-import {MAT_DIALOG_DATA, MatDialogRef} from '@angular/material/dialog';
-import {MatSnackBar} from '@angular/material/snack-bar';
-import * as Sentry from '@sentry/browser';
-import {Privacy} from '@sports-alliance/sports-lib';
-import {User} from '@sports-alliance/sports-lib';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit } from '@angular/core';
+import { EventInterface } from '@sports-alliance/sports-lib';
+import { AppEventService } from '../../services/app.event.service';
+import { FormBuilder, UntypedFormControl, UntypedFormGroup, FormGroupDirective, NgForm, Validators } from '@angular/forms';
+import { ErrorStateMatcher } from '@angular/material/core';
+import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { LoggerService } from '../../services/logger.service';
+import { Privacy } from '@sports-alliance/sports-lib';
+import { User } from '@sports-alliance/sports-lib';
 
 
 @Component({
-    selector: 'app-event-form',
-    templateUrl: './event.form.component.html',
-    styleUrls: ['./event.form.component.css'],
-    providers: [],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    standalone: false
+  selector: 'app-event-form',
+  templateUrl: './event.form.component.html',
+  styleUrls: ['./event.form.component.css'],
+  providers: [],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 
 
@@ -36,13 +36,14 @@ export class EventFormComponent implements OnInit {
     @Inject(MAT_DIALOG_DATA) public data: any,
     private eventService: AppEventService,
     private snackBar: MatSnackBar,
+    private logger: LoggerService,
   ) {
     this.event = data.event;
     this.user = data.user; // Perhaps move to service?
     if (!this.user || !this.event) {
       throw new Error('Component needs event and user')
     }
-    this.originalValues = {name: this.event.name};
+    this.originalValues = { name: this.event.name };
   }
 
   ngOnInit(): void {
@@ -90,7 +91,7 @@ export class EventFormComponent implements OnInit {
       this.snackBar.open('Could not save event', null, {
         duration: 2000,
       });
-      Sentry.captureException(e);
+      this.logger.error(e);
     } finally {
       this.dialogRef.close()
     }
@@ -100,7 +101,7 @@ export class EventFormComponent implements OnInit {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
       if (control instanceof UntypedFormControl) {
-        control.markAsTouched({onlySelf: true});
+        control.markAsTouched({ onlySelf: true });
       } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }

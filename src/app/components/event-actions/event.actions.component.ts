@@ -20,7 +20,6 @@ import { Clipboard } from '@angular/cdk/clipboard';
 
 import { DataDistance } from '@sports-alliance/sports-lib';
 import { environment } from '../../../environments/environment';
-import * as Sentry from '@sentry/browser';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Auth, getIdToken } from '@angular/fire/auth';
 import {
@@ -215,7 +214,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.snackBar.open(`Could not download original fit file due to ${e.message}`, undefined, {
         duration: 5000,
       });
-      Sentry.captureException(e);
+      this.logger.error(e);
     }
   }
 
@@ -263,7 +262,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     } catch (error: any) {
       this.logger.error('Download failed', error);
       this.snackBar.open('Failed to download original files.', undefined, { duration: 3000 });
-      Sentry.captureException(error);
+      this.logger.error(error);
     }
   }
 
