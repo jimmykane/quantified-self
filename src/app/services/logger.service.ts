@@ -11,13 +11,13 @@ export class LoggerService {
     constructor() { }
 
     log(message: any, ...optionalParams: any[]) {
-        if (!environment.production) {
+        if (!environment.production || environment.beta) {
             console.log(message, ...optionalParams);
         }
     }
 
     info(message: any, ...optionalParams: any[]) {
-        if (!environment.production) {
+        if (!environment.production || environment.beta) {
             console.info(message, ...optionalParams);
         }
     }
