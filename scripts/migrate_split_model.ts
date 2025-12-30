@@ -6,6 +6,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 export async function migrateUser(userDoc: admin.firestore.QueryDocumentSnapshot | admin.firestore.DocumentSnapshot, database: admin.firestore.Firestore) {
     const uid = userDoc.id;
     const data = userDoc.data() || {};
+    console.log(`[${uid}] DEBUG: Document Keys:`, Object.keys(data));
 
     // 1. Identify System Fields
     const systemFields = ['gracePeriodUntil', 'lastDowngradedAt', 'stripeRole', 'isPro'];
