@@ -90,7 +90,8 @@ async function deauthorize(collectionName: string, dryRun: boolean, verbose: boo
             } catch (e: Error | any) {
                 // Ignore 404s/TokenNotFound as success
                 if (!(e.name === 'TokenNotFoundError' || e.statusCode === 404 || e.message === 'No token found')) {
-                    logger.error(`\n  Failed to deauthorize ${uid}: ${e.message}`);
+                    process.stdout.write('\n');
+                    logger.error(`  Failed to deauthorize ${uid}: ${e.message}`);
                 }
             }
 

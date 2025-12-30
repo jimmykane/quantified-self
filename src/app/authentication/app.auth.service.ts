@@ -36,7 +36,7 @@ export class AppAuthService {
       switchMap(firebaseUser => {
         if (firebaseUser) {
           return this.userService.getUserByID(firebaseUser.uid).pipe(
-            switchMap(async (dbUser) => {
+            switchMap((dbUser) => runInInjectionContext(this.injector, async () => {
               // Get current claims
               const tokenResult = await firebaseUser.getIdTokenResult();
               const stripeRole = tokenResult.claims['stripeRole'] as string || null;
@@ -66,7 +66,7 @@ export class AppAuthService {
                   lastSignInDate: new Date(firebaseUser.metadata.lastSignInTime!)
                 } as unknown as User;
               }
-            })
+            }))
           );
         } else {
           return of(null);

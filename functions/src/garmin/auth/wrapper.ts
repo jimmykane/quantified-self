@@ -223,9 +223,11 @@ export const deauthorizeGarminHealthAPI = functions.region('europe-west2').https
 });
 
 export async function deauthorizeGarminHealthAPIForUser(userID: string) {
-  const tokensDocumentSnapshotData = (await admin.firestore().collection(GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME).doc(userID).get()).data();
+  const docRef = admin.firestore().collection(GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME).doc(userID);
+  const tokensDocumentSnapshotData = (await docRef.get()).data();
   if (!tokensDocumentSnapshotData || !tokensDocumentSnapshotData.accessToken || !tokensDocumentSnapshotData.accessTokenSecret) {
-    logger.warn('No token found');
+    logger.warn(`No token found for user ${userID}. Deleting hollow document.`);
+    await docRef.delete();
     throw new TokenNotFoundError('No token found');
   }
 

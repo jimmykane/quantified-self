@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, Injector, runInInjectionContext } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { environment } from '../../environments/environment';
@@ -53,6 +53,7 @@ export class AppPaymentService {
     private functions = inject(Functions);
     private auth = inject(Auth);
     private dialog = inject(MatDialog);
+    private injector = inject(Injector);
 
     constructor(private windowService: AppWindowService, private logger: LoggerService) { }
 
@@ -64,7 +65,7 @@ export class AppPaymentService {
         const productsRef = collection(this.firestore, 'products');
         const activeProductsQuery = query(productsRef, where('active', '==', true));
 
-        return collectionData(activeProductsQuery, { idField: 'id' }).pipe(
+        return runInInjectionContext(this.injector, () => collectionData(activeProductsQuery, { idField: 'id' })).pipe(
             map(docs => docs as StripeProduct[]),
             switchMap((products: StripeProduct[]) => {
                 // Fetch prices for each product
@@ -150,7 +151,7 @@ export class AppPaymentService {
         const activePricesQuery = query(pricesRef, where('active', '==', true));
 
         return new Promise((resolve) => {
-            collectionData(activePricesQuery, { idField: 'id' }).pipe(take(1)).subscribe((prices) => {
+            runInInjectionContext(this.injector, () => collectionData(activePricesQuery, { idField: 'id' })).pipe(take(1)).subscribe((prices) => {
                 resolve({ ...product, prices: prices as StripePrice[] });
             });
         });
@@ -178,7 +179,7 @@ export class AppPaymentService {
         const activeQuery = query(subscriptionsRef, where('status', 'in', ['active', 'trialing']));
 
         try {
-            const snapshot = from(collectionData(activeQuery).pipe(take(1)));
+            const snapshot = from(runInInjectionContext(this.injector, () => collectionData(activeQuery).pipe(take(1))));
             const activeSubs = await snapshot.toPromise();
 
             // Only block/prompt if we are trying to start a NEW subscription while one exists
@@ -218,7 +219,7 @@ export class AppPaymentService {
                     throw new Error('User cancelled redirection to portal.');
                 }
             }
-        } catch (e) {
+        } catch (e: any) {
             if (e.message === 'User cancelled redirection to portal.') {
                 return;
             }
@@ -232,20 +233,20 @@ export class AppPaymentService {
         const checkoutSessionsRef = collection(this.firestore, `customers/${user.uid}/checkout_sessions`);
 
         try {
-            const sessionDoc = await addDoc(checkoutSessionsRef, {
+            const sessionDoc = await runInInjectionContext(this.injector, () => addDoc(checkoutSessionsRef, {
                 price: priceId,
                 success_url: success,
                 cancel_url: cancel,
                 allow_promotion_codes: true,
                 mode: mode, // Explicitly set mode
-            });
+            }));
 
             this.logger.log('Checkout session created with ID:', sessionDoc.id);
 
             // Wait for the extension to add the URL
             const sessionRef = doc(this.firestore, `customers/${user.uid}/checkout_sessions/${sessionDoc.id}`);
 
-            docData(sessionRef).pipe(
+            runInInjectionContext(this.injector, () => docData(sessionRef)).pipe(
                 filter((session: any) => session?.url || session?.error),
                 take(1),
                 timeout(15000) // Timeout after 15 seconds
@@ -259,10 +260,10 @@ export class AppPaymentService {
                             this.logger.log('Detected stale Stripe customer ID. Clearing and retrying...');
                             const customerRef = doc(this.firestore, `customers/${user.uid}`);
                             const { updateDoc, deleteField } = await import('@angular/fire/firestore');
-                            await updateDoc(customerRef, {
+                            await runInInjectionContext(this.injector, () => updateDoc(customerRef, {
                                 stripeId: deleteField(),
                                 stripeLink: deleteField()
-                            });
+                            }));
                             // Retry the specific checkout session creation
                             return this.appendCheckoutSession(priceId, success, cancel);
                         }
@@ -299,7 +300,7 @@ export class AppPaymentService {
         const subscriptionsRef = collection(this.firestore, `customers/${user.uid}/subscriptions`);
         const activeQuery = query(subscriptionsRef, where('status', 'in', ['active', 'trialing']));
 
-        return collectionData(activeQuery, { idField: 'id' }).pipe(
+        return runInInjectionContext(this.injector, () => collectionData(activeQuery, { idField: 'id' })).pipe(
             map(docs => docs as StripeSubscription[]),
             switchMap((subscriptions: StripeSubscription[]) => {
                 if (subscriptions.length === 0) return from([[]]);

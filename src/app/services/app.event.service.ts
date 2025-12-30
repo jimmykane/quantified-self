@@ -58,7 +58,7 @@ export class AppEventService implements OnDestroy {
     // https://stackoverflow.com/questions/42939978/avoiding-nested-subscribes-with-combine-latest-when-one-observable-depends-on-th
     const eventDoc = doc(this.firestore, 'users', user.uid, 'events', eventID);
     return combineLatest([
-      docData(eventDoc).pipe(
+      runInInjectionContext(this.injector, () => docData(eventDoc)).pipe(
         map(eventSnapshot => {
           this.logger.log('[AppEventService] docData emitted:', !!eventSnapshot);
           if (!eventSnapshot) return null;
@@ -127,7 +127,7 @@ export class AppEventService implements OnDestroy {
 
   public getEventsOnceBy(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10): Observable<EventInterface[]> {
     const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount);
-    return from(getDocs(q)).pipe(map((querySnapshot) => {
+    return from(runInInjectionContext(this.injector, () => getDocs(q))).pipe(map((querySnapshot) => {
       return querySnapshot.docs.map((queryDocumentSnapshot) => {
         const eventSnapshot = queryDocumentSnapshot.data();
         const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
@@ -225,7 +225,7 @@ export class AppEventService implements OnDestroy {
   }
 
   public getEventMetaData(user: User, eventID: string, serviceName: ServiceNames): Observable<EventMetaDataInterface> {
-    const metaDataDoc = doc(this.firestore, 'users', user.uid, 'events', eventID, 'metaData', serviceName);
+    const metaDataDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID, 'metaData', serviceName));
     return runInInjectionContext(this.injector, () => docData(metaDataDoc)).pipe(
       map(metaDataSnapshot => {
         return <EventMetaDataInterface>metaDataSnapshot;
@@ -235,7 +235,7 @@ export class AppEventService implements OnDestroy {
 
   public getAllStreams(user: User, eventID: string, activityID: string): Observable<StreamInterface[]> {
     const streamsCollection = collection(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID, 'streams');
-    return from(getDocs(streamsCollection)) // @todo replace with snapshot changes I suppose when @https://github.com/angular/angularfire2/issues/1552 is fixed
+    return from(runInInjectionContext(this.injector, () => getDocs(streamsCollection))) // @todo replace with snapshot changes I suppose when @https://github.com/angular/angularfire2/issues/1552 is fixed
       .pipe(map((querySnapshot) => {
         return querySnapshot.docs.map(queryDocumentSnapshot => this.processStreamQueryDocumentSnapshot(queryDocumentSnapshot))
       }))
@@ -243,7 +243,7 @@ export class AppEventService implements OnDestroy {
 
   public getStream(user: User, eventID: string, activityID: string, streamType: string): Observable<StreamInterface> {
     const streamDoc = doc(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID, 'streams', streamType);
-    return from(getDoc(streamDoc)) // @todo replace with snapshot changes I suppose when @https://github.com/angular/angularfire2/issues/1552 is fixed
+    return from(runInInjectionContext(this.injector, () => getDoc(streamDoc))) // @todo replace with snapshot changes I suppose when @https://github.com/angular/angularfire2/issues/1552 is fixed
       .pipe(map((queryDocumentSnapshot) => {
         // getDoc returns DocumentSnapshot, ensure data exists
         if (!queryDocumentSnapshot.exists()) return null; // Handle missing stream
@@ -262,7 +262,7 @@ export class AppEventService implements OnDestroy {
     }, []).map((typesBatch) => {
       const streamsCollection = collection(this.firestore, 'users', userID, 'events', eventID, 'activities', activityID, 'streams');
       const q = query(streamsCollection, where('type', 'in', typesBatch));
-      return from(getDocs(q))
+      return from(runInInjectionContext(this.injector, () => getDocs(q)))
         .pipe(map((documentSnapshots) => {
           return documentSnapshots.docs.reduce((streamArray: StreamInterface[], documentSnapshot) => {
             streamArray.push(this.processStreamDocumentSnapshot(documentSnapshot));
@@ -308,13 +308,13 @@ export class AppEventService implements OnDestroy {
         // path example: ['users', userID, 'events', eventID]
         // collection(firestore, path[0], path[1], ...) seems wrong if it mixes coll/doc
         // doc() takes (firestore, path...)
-        return setDoc(doc(this.firestore, ...path as [string, ...string[]]), data);
+        return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, ...path as [string, ...string[]]), data));
       },
       createBlob: (data: Uint8Array) => {
         return Bytes.fromUint8Array(data);
       },
       generateID: () => {
-        return doc(collection(this.firestore, 'users')).id;
+        return runInInjectionContext(this.injector, () => doc(collection(this.firestore, 'users'))).id;
       }
     };
 
@@ -339,7 +339,7 @@ export class AppEventService implements OnDestroy {
   }
 
   public async setEvent(user: User, event: EventInterface) {
-    return setDoc(doc(this.firestore, 'users', user.uid, 'events', event.getID()), event.toJSON());
+    return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, 'users', user.uid, 'events', event.getID()), event.toJSON()));
   }
 
   public async setActivity(user: User, event: EventInterface, activity: ActivityInterface) {
@@ -349,29 +349,29 @@ export class AppEventService implements OnDestroy {
     if (event.startDate) {
       data.eventStartDate = event.startDate;
     }
-    return setDoc(doc(this.firestore, 'users', user.uid, 'activities', activity.getID()), data);
+    return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, 'users', user.uid, 'activities', activity.getID()), data));
   }
 
   public async updateEventProperties(user: User, eventID: string, propertiesToUpdate: any) {
     // @todo check if properties are allowed on object via it's JSON export interface keys
-    return updateDoc(doc(this.firestore, 'users', user.uid, 'events', eventID), propertiesToUpdate);
+    return runInInjectionContext(this.injector, () => updateDoc(doc(this.firestore, 'users', user.uid, 'events', eventID), propertiesToUpdate));
   }
 
   public async deleteAllEventData(user: User, eventID: string): Promise<boolean> {
-    await deleteDoc(doc(this.firestore, 'users', user.uid, 'events', eventID));
+    await runInInjectionContext(this.injector, () => deleteDoc(doc(this.firestore, 'users', user.uid, 'events', eventID)));
     return true;
   }
 
   public async deleteAllActivityData(user: User, eventID: string, activityID: string): Promise<boolean> {
     // @todo add try catch etc
     await this.deleteAllStreams(user, eventID, activityID);
-    await deleteDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID));
+    await runInInjectionContext(this.injector, () => deleteDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID)));
 
     return true;
   }
 
   public deleteStream(user: User, eventID, activityID, streamType: string) {
-    return deleteDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID, 'streams', streamType));
+    return runInInjectionContext(this.injector, () => deleteDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID, 'streams', streamType)));
   }
 
   public async deleteAllStreams(user: User, eventID: string, activityID: string): Promise<number> {
@@ -579,12 +579,12 @@ export class AppEventService implements OnDestroy {
     const observables: Observable<DocumentSnapshot>[] = [];
     if (startAfterDoc) {
       observables.push(
-        from(getDoc(doc(this.firestore, 'users', user.uid, 'events', startAfterDoc.getID())))
+        from(runInInjectionContext(this.injector, () => getDoc(doc(this.firestore, 'users', user.uid, 'events', startAfterDoc.getID()))))
       )
     }
     if (endBeforeDoc) {
       observables.push(
-        from(getDoc(doc(this.firestore, 'users', user.uid, 'events', endBeforeDoc.getID())))
+        from(runInInjectionContext(this.injector, () => getDoc(doc(this.firestore, 'users', user.uid, 'events', endBeforeDoc.getID()))))
       )
     }
     return zip(...observables).pipe(switchMap(([resultA, resultB]) => {
@@ -608,7 +608,7 @@ export class AppEventService implements OnDestroy {
   private _getEvents(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any): Observable<EventInterface[]> {
     const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount, startAfterDoc, endBeforeDoc);
 
-    return collectionData(q, { idField: 'id' }).pipe(map((eventSnapshots: any[]) => {
+    return runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })).pipe(map((eventSnapshots: any[]) => {
       return eventSnapshots.map((eventSnapshot) => {
         const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
         if (unknownTypes.length > 0) {
@@ -647,7 +647,7 @@ export class AppEventService implements OnDestroy {
   private _getEventsAndActivities(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any): Observable<EventInterface[]> {
     const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount, startAfterDoc, endBeforeDoc);
 
-    return collectionData(q, { idField: 'id' }).pipe(map((eventSnapshots: any[]) => {
+    return runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })).pipe(map((eventSnapshots: any[]) => {
       return eventSnapshots.reduce((events: EventInterface[], eventSnapshot) => {
         const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
         if (unknownTypes.length > 0) {
@@ -752,11 +752,11 @@ export class AppEventService implements OnDestroy {
     const batchSize = 500;
     // Iterate collections
     for (const coll of collections) {
-      const snaps = await getDocs(coll); // Read all
+      const snaps = await runInInjectionContext(this.injector, () => getDocs(coll)); // Read all
       // Batch delete
       const chunks = this.chunkArray(snaps.docs, batchSize);
       for (const chunk of chunks) {
-        const batch = writeBatch(this.firestore);
+        const batch = runInInjectionContext(this.injector, () => writeBatch(this.firestore));
         chunk.forEach(doc => batch.delete(doc.ref));
         await batch.commit();
         totalDeleteCount += chunk.length;
@@ -774,7 +774,7 @@ export class AppEventService implements OnDestroy {
   }
   public async getEventCount(user: User): Promise<number> {
     const eventsRef = collection(this.firestore, `users/${user.uid}/events`);
-    const snapshot = await getCountFromServer(query(eventsRef));
+    const snapshot = await runInInjectionContext(this.injector, () => getCountFromServer(query(eventsRef)));
     return snapshot.data().count;
   }
 }

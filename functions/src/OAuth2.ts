@@ -135,9 +135,12 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
 
 export async function deauthorizeServiceForUser(userID: string, serviceName: ServiceNames) {
   const serviceConfig = getServiceConfig(serviceName);
-  const tokenQuerySnapshots = await admin.firestore().collection(serviceConfig.tokenCollectionName).doc(userID).collection('tokens').get();
+  const userDocRef = admin.firestore().collection(serviceConfig.tokenCollectionName).doc(userID);
+  const tokenQuerySnapshots = await userDocRef.collection('tokens').get();
 
   if (tokenQuerySnapshots.empty) {
+    logger.warn(`No tokens found for user ${userID} in ${serviceConfig.tokenCollectionName}. Deleting parent document.`);
+    await userDocRef.delete();
     throw new TokenNotFoundError('No tokens found');
   }
 
@@ -202,6 +205,8 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
     // }
     // console.log(`Deleted successfully token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
   }
+  await userDocRef.delete();
+  logger.info(`Deleted parent document ${userID} from ${serviceConfig.tokenCollectionName}`);
 }
 
 export interface ServiceConfig {
