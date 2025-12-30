@@ -371,9 +371,9 @@ export class AppUserService implements OnDestroy {
 
       return combineLatest({
         user: docData(userDoc),
-        legal: docData(legalDoc).pipe(catchError((err) => { console.error('Error fetching legal:', err); return of({}); })),
-        system: docData(systemDoc).pipe(catchError((err) => { console.error('Error fetching system:', err); return of({}); })),
-        settings: docData(settingsDoc).pipe(catchError((err) => { console.error('Error fetching settings:', err); return of({}); }))
+        legal: docData(legalDoc).pipe(catchError((err) => { this.logger.error('Error fetching legal:', err); return of({}); })),
+        system: docData(systemDoc).pipe(catchError((err) => { this.logger.error('Error fetching system:', err); return of({}); })),
+        settings: docData(settingsDoc).pipe(catchError((err) => { this.logger.error('Error fetching settings:', err); return of({}); }))
       }).pipe(
         distinctUntilChanged((prev, curr) => JSON.stringify(prev) === JSON.stringify(curr)),
         map(({ user, legal, system, settings }) => {
