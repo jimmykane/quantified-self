@@ -346,7 +346,20 @@ export class AppUserService implements OnDestroy {
     private windowService: AppWindowService,
     private logger: LoggerService
   ) {
-
+    authState(this.auth).subscribe((user) => {
+      if (user) {
+        Sentry.setUser({ id: user.uid, email: user.email || undefined });
+        user.getIdTokenResult().then((token) => {
+          const role = token.claims['stripeRole'] as string;
+          if (role) {
+            Sentry.setTag("subscription_role", role);
+          }
+        });
+      } else {
+        Sentry.setUser(null);
+        Sentry.setTag("subscription_role", "anonymous");
+      }
+    });
   }
 
   public getUserByID(userID: string): Observable<User | null> {

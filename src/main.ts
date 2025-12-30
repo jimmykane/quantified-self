@@ -18,10 +18,16 @@ if (!environment.localhost) {
     integrations: [
       Sentry.browserTracingIntegration(),
     ],
+    // ResizeObserver loop limit exceeded is a benign warning in browsers
+    ignoreErrors: [
+      'ResizeObserver loop limit exceeded',
+      'Network Error',
+      'Non-Error promise rejection captured'
+    ],
 
     // We recommend adjusting this value in production, or using tracesSampler
     // for finer control
-    tracesSampleRate: 1.0,
+    tracesSampleRate: 0.2,
   });
 }
 
