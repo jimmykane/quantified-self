@@ -24,6 +24,13 @@ describe('GracePeriodBannerComponent', () => {
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
         }).compileComponents();
 
+        // Mock ResizeObserver
+        global.ResizeObserver = vi.fn().mockImplementation(() => ({
+            observe: vi.fn(),
+            unobserve: vi.fn(),
+            disconnect: vi.fn(),
+        }));
+
         fixture = TestBed.createComponent(GracePeriodBannerComponent);
         component = fixture.componentInstance;
     });
