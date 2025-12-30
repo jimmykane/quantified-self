@@ -72,27 +72,35 @@ async function deauthorize(collectionName: string, dryRun: boolean, verbose: boo
     }
 
     let count = 0;
+    const total = snapshot.size;
+
     for (const doc of snapshot.docs) {
         const uid = doc.id;
         if (dryRun) {
-            logger.info(`  [DRY RUN] Would deauthorize user ${uid} from ${config.service || 'Garmin'}`);
+            if (verbose) {
+                logger.info(`  [DRY RUN] Would deauthorize user ${uid} from ${config.service || 'Garmin'}`);
+            }
         } else {
-            if (count === 0) process.stdout.write(`  Processing deauthorizations: `);
             try {
                 if (config.service) {
                     await config.fn(uid, config.service);
                 } else {
                     await config.fn(uid);
                 }
-                process.stdout.write(`.`);
             } catch (e: Error | any) {
-                process.stdout.write(`x`);
+                // Ignore 404s/TokenNotFound as success
+                if (!(e.name === 'TokenNotFoundError' || e.statusCode === 404 || e.message === 'No token found')) {
+                    logger.error(`\n  Failed to deauthorize ${uid}: ${e.message}`);
+                }
             }
+
             count++;
-            if (count % 50 === 0) process.stdout.write(` (${count})\n  `);
+            // Update progress line
+            process.stdout.write(`\r  Progress: ${count} / ${total} users processed...`);
         }
     }
-    if (!dryRun) logger.info(`\n  Completed ${count} deauthorizations.`);
+    process.stdout.write('\n'); // New line after loop
+    if (!dryRun) logger.info(`  Completed ${count} deauthorizations.`);
 }
 
 async function cleanupFirestore() {
@@ -116,10 +124,15 @@ async function cleanupFirestore() {
 
     logger.info(`=============================================`);
     logger.info(`Firestore Cleanup Script`);
-    logger.info(`Mode: ${dryRun ? 'DRY RUN' : 'EXECUTION'}`);
+    logger.info(`Mode:            ${dryRun ? 'DRY RUN' : 'EXECUTION'}`);
     logger.info(`Disconnect Only: ${disconnectOnly}`);
-    logger.info(`Deauthorize Flag: ${deauthorizeFlag}`);
-    logger.info(`Collections: ${targetCollections.join(', ')}`);
+    logger.info(`Deauthorize:     ${deauthorizeFlag}`);
+
+    if (targetCollections.length === COLLECTION_GROUPS.length) {
+        logger.info(`Collections:     ALL (${targetCollections.length})`);
+    } else {
+        logger.info(`Collections:     ${targetCollections.join(', ')}`);
+    }
     logger.info(`=============================================`);
 
     if (targetCollections.length === 0) {
