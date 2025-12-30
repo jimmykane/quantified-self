@@ -107,6 +107,7 @@ describe('Migration Script (Split Model)', () => {
             mockUserDoc.ref,
             expect.objectContaining({
                 gracePeriodUntil: 'DELETE_SENTINEL',
+                lastDowngradedAt: 'DELETE_SENTINEL',
                 isPro: 'DELETE_SENTINEL',
                 acceptedTos: 'DELETE_SENTINEL',
                 settings: 'DELETE_SENTINEL',
