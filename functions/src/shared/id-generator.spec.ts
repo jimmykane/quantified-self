@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateEventID, generateActivityID, generateIDFromParts } from './id-generator';
+import { generateEventID, generateActivityID, generateIDFromParts, EVENT_DUPLICATE_THRESHOLD_MS } from './id-generator';
 
 describe('ID Generator', () => {
     const userID = 'user123';
@@ -15,32 +15,32 @@ describe('ID Generator', () => {
         expect(id1.length).toBeGreaterThan(0);
     });
 
-    it('should generate the same ID for events within the tolerance window (20s)', async () => {
-        // Within the same 20s bucket (depending on where baseTime falls relative to the bucket boundary)
-        // Let's pick a baseTime that is clearly in the middle of a bucket to test offsets
-        // 20000 ms buckets start at 0.
-        // 10000 is in the middle of 0-20000.
-        const safeBaseDate = new Date(10000);
+    it(`should generate the same ID for events within the tolerance window (${EVENT_DUPLICATE_THRESHOLD_MS}ms)`, async () => {
+        // Within the same bucket
+        // Buckets start at 0.
+        // baseTime is in the middle of 0-EVENT_DUPLICATE_THRESHOLD_MS.
+        const baseTime = EVENT_DUPLICATE_THRESHOLD_MS / 2;
+        const safeBaseDate = new Date(baseTime);
         const id1 = await generateEventID(userID, safeBaseDate);
-        const id2 = await generateEventID(userID, new Date(safeBaseDate.getTime() + 5000)); // +5s
+        const id2 = await generateEventID(userID, new Date(safeBaseDate.getTime() + (EVENT_DUPLICATE_THRESHOLD_MS * 0.2))); // +20% of threshold
 
         expect(id1).toBe(id2);
     });
 
     it('should generate different IDs for events outside the tolerance window', async () => {
-        const baseTime = 10000; // Middle of 0-20000 bucket
+        const baseTime = EVENT_DUPLICATE_THRESHOLD_MS / 2; // Middle of bucket
         const id1 = await generateEventID(userID, new Date(baseTime));
-        const id2 = await generateEventID(userID, new Date(baseTime + 21000)); // +21s, definitely in next bucket
+        const id2 = await generateEventID(userID, new Date(baseTime + EVENT_DUPLICATE_THRESHOLD_MS + 10)); // +Threshold + 10ms, definitely in next bucket
 
         expect(id1).not.toBe(id2);
     });
 
     it('should handle bucket boundaries correctly', async () => {
-        // Bucket 1: 0 - 19999
-        // Bucket 2: 20000 - 39999
+        // Bucket 1: 0 - (THRESHOLD - 1)
+        // Bucket 2: THRESHOLD - (2*THRESHOLD - 1)
 
-        const endOfBucket1 = new Date(19999);
-        const startOfBucket2 = new Date(20000);
+        const endOfBucket1 = new Date(EVENT_DUPLICATE_THRESHOLD_MS - 1);
+        const startOfBucket2 = new Date(EVENT_DUPLICATE_THRESHOLD_MS);
 
         const id1 = await generateEventID(userID, endOfBucket1);
         const id2 = await generateEventID(userID, startOfBucket2);

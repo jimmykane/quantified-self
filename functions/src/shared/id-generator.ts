@@ -6,9 +6,9 @@
 /**
  * The threshold in milliseconds for detecting duplicate events based on start date.
  * Events starting within this window will generate the same ID.
- * 20 seconds = 20000 ms
+ * 100 ms
  */
-export const EVENT_DUPLICATE_THRESHOLD_MS = 20000;
+export const EVENT_DUPLICATE_THRESHOLD_MS = 100;
 
 /**
  * Generates a deterministic ID for an event based on the user ID and start date.
