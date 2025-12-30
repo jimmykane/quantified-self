@@ -226,6 +226,33 @@ describe('Firestore Security Rules', () => {
                 }));
             });
         });
+
+        describe('Config Settings (users/{uid}/config/settings)', () => {
+            it('should allow user to read their own settings', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertSucceeds(db.collection('users').doc(userId).collection('config').doc('settings').get());
+            });
+
+            it('should allow user to write their own settings', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertSucceeds(db.collection('users').doc(userId).collection('config').doc('settings').set({
+                    theme: 'dark',
+                    units: 'metric'
+                }));
+            });
+
+            it('should deny user reading other user settings', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection('users').doc(otherId).collection('config').doc('settings').get());
+            });
+
+            it('should deny user writing to other user settings', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection('users').doc(otherId).collection('config').doc('settings').set({
+                    theme: 'hacked'
+                }));
+            });
+        });
     });
     // End of main describe block removed here to include appended tests
 
