@@ -36,9 +36,9 @@ export const enforceSubscriptionLimits = onSchedule({
 
     for (const uid of userIDs) {
         // 1. Fetch User Data for Grace Period
-        const userDoc = await admin.firestore().doc(`users/${uid}`).get();
-        const userData = userDoc.data();
-        const gracePeriodUntil = userData?.gracePeriodUntil;
+        const systemDoc = await admin.firestore().doc(`users/${uid}/system/status`).get();
+        const systemData = systemDoc.data();
+        const gracePeriodUntil = systemData?.gracePeriodUntil;
 
         // 2. Check for ACTIVE Pro status
         const activeSubSnapshot = await admin.firestore().collection(`customers/${uid}/subscriptions`)
@@ -63,7 +63,7 @@ export const enforceSubscriptionLimits = onSchedule({
                     new Date(Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000)
                 );
                 logger.info(`FAIL-SAFE: No grace period found for non-pro user ${uid}. Initializing to ${newGracePeriodUntil.toDate().toISOString()}.`);
-                await admin.firestore().doc(`users/${uid}`).set({
+                await admin.firestore().doc(`users/${uid}/system/status`).set({
                     gracePeriodUntil: newGracePeriodUntil,
                     lastDowngradedAt: admin.firestore.FieldValue.serverTimestamp()
                 }, { merge: true });

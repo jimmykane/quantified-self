@@ -6,7 +6,6 @@ import { Functions } from '@angular/fire/functions';
 import { HttpClient } from '@angular/common/http';
 import { AppEventService } from './app.event.service';
 import { AppWindowService } from './app.window.service';
-import { AppWindowService } from './app.window.service';
 import { of, firstValueFrom } from 'rxjs';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
@@ -34,7 +33,7 @@ describe('AppUserService', () => {
     beforeEach(() => {
         mockAuth = {
             currentUser: {
-                getIdTokenResult: vi.fn()
+                getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} })
             }
         };
 
@@ -110,7 +109,10 @@ describe('AppUserService', () => {
         });
 
         it('should return null if no grace period is set', async () => {
-            mockAuth.currentUser = { uid: 'u1' };
+            mockAuth.currentUser = {
+                uid: 'u1',
+                getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} })
+            };
             (docData as any).mockReturnValue(of({}));
             const res = await firstValueFrom(service.getGracePeriodUntil());
             expect(res).toBeNull();
@@ -118,7 +120,10 @@ describe('AppUserService', () => {
 
         it('should return Date if grace period is set', async () => {
             const mockDate = new Date();
-            mockAuth.currentUser = { uid: 'u1' };
+            mockAuth.currentUser = {
+                uid: 'u1',
+                getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} })
+            };
             (docData as any).mockReturnValue(of({
                 gracePeriodUntil: { toDate: () => mockDate }
             }));

@@ -1,5 +1,5 @@
 import { inject, Injectable, OnDestroy, EnvironmentInjector, runInInjectionContext } from '@angular/core';
-import { Observable, from, firstValueFrom } from 'rxjs';
+import { Observable, from, firstValueFrom, forkJoin, of } from 'rxjs';
 import { StripeRole } from '../models/stripe-role.model';
 import { User } from '@sports-alliance/sports-lib';
 import { Privacy } from '@sports-alliance/sports-lib';
@@ -365,12 +365,28 @@ export class AppUserService implements OnDestroy {
   public getUserByID(userID: string): Observable<User | null> {
     return runInInjectionContext(this.injector, () => {
       const userDoc = doc(this.firestore, 'users', userID);
-      return docData(userDoc).pipe(map((user: DocumentData | undefined) => {
+      const legalDoc = doc(this.firestore, `users/${userID}/legal/agreements`);
+      const systemDoc = doc(this.firestore, `users/${userID}/system/status`);
+      const settingsDoc = doc(this.firestore, `users/${userID}/config/settings`);
+
+      return forkJoin({
+        user: docData(userDoc),
+        legal: docData(legalDoc).pipe(catchError(() => of({}))), // Handle missing docs gracefully
+        system: docData(systemDoc).pipe(catchError(() => of({}))),
+        settings: docData(settingsDoc).pipe(catchError(() => of({})))
+      }).pipe(map(({ user, legal, system, settings }) => {
         if (!user) {
           return null;
         }
-        const u = user as User;
+        // Merge all sources
+        // Note: 'settings' from subcolumn overrides 'settings' on main doc if both exist (during migration)
+        const u = { ...user, ...legal, ...system } as User;
+        if (settings && Object.keys(settings).length > 0) {
+          u.settings = settings as any;
+        }
+
         u.settings = this.fillMissingAppSettings(u);
+
         return u;
       }));
     });
@@ -380,11 +396,36 @@ export class AppUserService implements OnDestroy {
     if (!user.acceptedPrivacyPolicy || !user.acceptedDataPolicy) {
       throw new Error('User has not accepted privacy or data policy');
     }
-    return runInInjectionContext(this.injector, async () => {
-      const userRef = doc(this.firestore, `users/${user.uid}`);
-      await setDoc(userRef, user.toJSON());
-      return user;
+    // We must split writes for creation: 
+    // 1. Write legal first (critical)
+    await this.acceptPolicies(user);
+    // 2. Write rest of user
+    return this.updateUser(user);
+  }
+
+  public async acceptPolicies(policies: Partial<User>) {
+    const legalFields = [
+      'acceptedPrivacyPolicy',
+      'acceptedDataPolicy',
+      'acceptedTrackingPolicy',
+      'acceptedDiagnosticsPolicy',
+      'acceptedTos'
+    ];
+    const dataToWrite: any = {};
+    let hasChanges = false;
+    legalFields.forEach(field => {
+      if ((policies as any)[field] === true) {
+        dataToWrite[field] = true;
+        hasChanges = true;
+      }
     });
+
+    if (hasChanges) {
+      return runInInjectionContext(this.injector, async () => {
+        // Use set with merge true to allow "upsert" of the agreements doc
+        await setDoc(doc(this.firestore, `users/${policies.uid}/legal/agreements`), dataToWrite, { merge: true });
+      });
+    }
   }
 
   public getServiceToken(user: User, serviceName: ServiceNames) {
@@ -532,13 +573,39 @@ export class AppUserService implements OnDestroy {
 
   public async updateUser(user: User) {
     const data = typeof user.toJSON === 'function' ? user.toJSON() : { ...user };
-    // Start of the week is a special case, we need to convert it to a number
-    // if (data.settings && data.settings.unitSettings && data.settings.unitSettings.startOfTheWeek) {
-    //   data.settings.unitSettings.startOfTheWeek = parseInt(data.settings.unitSettings.startOfTheWeek.toString(), 10);
-    // }
+
+    // Filter out restricted fields that should live in sub-collections or system locations
+    // This prevents accidental writes to the main doc and satisfying Security Rules
+    const forbiddenFields = [
+      'settings', // Now in config/settings
+      'gracePeriodUntil',
+      'lastDowngradedAt',
+      'stripeRole',
+      'isPro',
+      'acceptedPrivacyPolicy',
+      'acceptedDataPolicy',
+      'acceptedTrackingPolicy',
+      'acceptedDiagnosticsPolicy',
+      'acceptedTos',
+    ];
+
+    forbiddenFields.forEach(field => delete (data as any)[field]);
+
     // Use setDoc with merge: true to handle both update and create (upsert) scenarios
     // This is critical for the "synthetic user" flow in onboarding where the doc might not exist yet.
-    return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, 'users', user.uid), data, { merge: true }));
+    return runInInjectionContext(this.injector, async () => {
+      const promises = [];
+
+      // 1. Write Main User Doc
+      promises.push(setDoc(doc(this.firestore, 'users', user.uid), data, { merge: true }));
+
+      // 2. Write Settings to Subcollection
+      if (user.settings) {
+        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), user.settings, { merge: true }));
+      }
+
+      await Promise.all(promises);
+    });
   }
 
   public async setUserPrivacy(user: User, privacy: Privacy) {
@@ -620,27 +687,22 @@ export class AppUserService implements OnDestroy {
     if (!user) return from([null]);
 
     return runInInjectionContext(this.injector, () => {
-      const userDoc = doc(this.firestore, 'users', user.uid);
-      return docData(userDoc).pipe(
-        map((userData: any) => {
-          this.logger.log('[AppUserService] getGracePeriodUntil - User document data:', {
-            uid: user.uid,
-            gracePeriodUntil: userData?.gracePeriodUntil,
-            stripeRole: userData?.stripeRole,
-            isPro: userData?.isPro,
-            hasSubscribedOnce: userData?.hasSubscribedOnce
-          });
-          if (userData?.gracePeriodUntil) {
+      // Logic refactored: gracePeriodUntil is now in system/status and merged onto user
+      // so this can technically just call getUserByID, but that's heavy.
+      // Let's read directly from system/status for efficiency
+      const systemDoc = doc(this.firestore, `users/${user.uid}/system/status`);
+      return docData(systemDoc).pipe(
+        map((systemData: any) => {
+          if (systemData?.gracePeriodUntil) {
             // Firebase Timestamp to Date
-            const date = (userData.gracePeriodUntil as any).toDate();
-            this.logger.log('[AppUserService] getGracePeriodUntil - Returning grace period date:', date);
+            const date = (systemData.gracePeriodUntil as any).toDate();
+            // this.logger.log('[AppUserService] getGracePeriodUntil - Returning grace period date:', date);
             return date;
           }
-          this.logger.log('[AppUserService] getGracePeriodUntil - No grace period set');
           return null;
         }),
         catchError((error) => {
-          this.logger.error('[AppUserService] getGracePeriodUntil - Error fetching user document:', error);
+          this.logger.error('[AppUserService] getGracePeriodUntil - Error fetching system document:', error);
           return from([null]);
         })
       );

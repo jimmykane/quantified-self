@@ -8,9 +8,25 @@ import { AppUserService } from '../../services/app.user.service';
     styleUrls: ['./grace-period-banner.component.scss'],
     standalone: false
 })
-export class GracePeriodBannerComponent implements OnInit, AfterViewInit, OnDestroy {
+export class GracePeriodBannerComponent implements OnInit {
     @Output() heightChanged = new EventEmitter<number>();
-    @ViewChild('bannerElement') bannerElement: ElementRef<HTMLDivElement> | undefined;
+
+    private _bannerElement: ElementRef<HTMLDivElement> | undefined;
+
+    @ViewChild('bannerElement')
+    set bannerElement(element: ElementRef<HTMLDivElement> | undefined) {
+        this._bannerElement = element;
+        if (element) {
+            console.log('[GracePeriodBanner] ViewChild setter called - Element present');
+            this.updateHeight();
+        } else {
+            console.log('[GracePeriodBanner] ViewChild setter called - Element undefined');
+        }
+    }
+
+    get bannerElement(): ElementRef<HTMLDivElement> | undefined {
+        return this._bannerElement;
+    }
 
     gracePeriodUntil$!: Observable<Date | null>;
     isDismissed = false;
@@ -20,6 +36,7 @@ export class GracePeriodBannerComponent implements OnInit, AfterViewInit, OnDest
     constructor(private userService: AppUserService) { }
 
     ngOnInit(): void {
+        console.log('[GracePeriodBanner] ngOnInit - Getting grace period observable');
         this.gracePeriodUntil$ = this.userService.getGracePeriodUntil();
     }
 
@@ -57,9 +74,12 @@ export class GracePeriodBannerComponent implements OnInit, AfterViewInit, OnDest
     }
 
     private updateHeight(): void {
-        if (this.bannerElement && !this.isDismissed) {
-            this.heightChanged.emit(this.bannerElement.nativeElement.offsetHeight);
+        if (this._bannerElement && !this.isDismissed) {
+            const height = this._bannerElement.nativeElement.offsetHeight;
+            console.log('[GracePeriodBanner] updateHeight - emitting height:', height);
+            this.heightChanged.emit(height);
         } else {
+            console.log('[GracePeriodBanner] updateHeight - emitting 0');
             this.heightChanged.emit(0);
         }
     }

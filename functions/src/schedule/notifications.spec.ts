@@ -21,7 +21,15 @@ vi.mock('firebase-admin', () => ({
     initializeApp: vi.fn(),
     firestore: Object.assign(
         vi.fn(() => mockFirestore),
-        { Timestamp: { fromDate: (date: Date) => date } }
+        {
+            Timestamp: {
+                fromDate: (date: Date) => ({
+                    toDate: () => date,
+                    toMillis: () => date.getTime(),
+                    toISOString: () => date.toISOString()
+                })
+            }
+        }
     )
 }));
 
@@ -49,12 +57,18 @@ describe('checkSubscriptionNotifications', () => {
             }
         ];
 
-        collectionGroupSpy.mockReturnValue({
-            where: vi.fn().mockReturnThis(),
-            get: vi.fn().mockResolvedValue({
-                size: 1,
-                docs: mockSubs
-            })
+        collectionGroupSpy.mockImplementation((collectionName) => {
+            if (collectionName === 'subscriptions') {
+                return {
+                    where: vi.fn().mockReturnThis(),
+                    get: vi.fn().mockResolvedValue({
+                        size: 1,
+                        docs: mockSubs
+                    })
+                };
+            }
+            // Fallback for other collection groups (like system)
+            return { where: vi.fn().mockReturnThis(), get: vi.fn().mockResolvedValue({ size: 0, docs: [] }) };
         });
 
         // Mock Mail collection check (not exists)
@@ -80,18 +94,30 @@ describe('checkSubscriptionNotifications', () => {
 
     it('should queue emails for grace period ending', async () => {
         // Mock Subscriptions results (empty)
-        collectionGroupSpy.mockReturnValue({
-            where: vi.fn().mockReturnThis(),
-            get: vi.fn().mockResolvedValue({ size: 0, docs: [] })
-        });
-
-        // Mock Users results
-        const mockUsers = [
+        // Mock System results (1 found)
+        const mockSystemDocs = [
             {
-                id: 'user2',
-                data: () => ({ gracePeriodUntil: '2025-12-30T10:00:00Z' })
+                id: 'status',
+                data: () => ({
+                    gracePeriodUntil: {
+                        toDate: () => new Date('2025-12-30T10:00:00Z'),
+                        toMillis: () => new Date('2025-12-30T10:00:00Z').getTime(),
+                        toISOString: () => '2025-12-30T10:00:00Z'
+                    }
+                }),
+                ref: { parent: { parent: { id: 'user2' } } }
             }
         ];
+
+        collectionGroupSpy.mockImplementation((collectionName) => {
+            if (collectionName === 'subscriptions') {
+                return { where: vi.fn().mockReturnThis(), get: vi.fn().mockResolvedValue({ size: 0, docs: [] }) };
+            }
+            if (collectionName === 'system') {
+                return { where: vi.fn().mockReturnThis(), get: vi.fn().mockResolvedValue({ size: 1, docs: mockSystemDocs }) };
+            }
+            return { where: vi.fn().mockReturnThis(), get: vi.fn().mockResolvedValue({ size: 0, docs: [] }) };
+        });
 
 
         const mailDocRef = {
@@ -100,12 +126,6 @@ describe('checkSubscriptionNotifications', () => {
         };
 
         collectionSpy.mockImplementation((name) => {
-            if (name === 'users') {
-                return {
-                    where: vi.fn().mockReturnThis(),
-                    get: vi.fn().mockResolvedValue({ size: 1, docs: mockUsers })
-                };
-            }
             if (name === 'mail') {
                 return {
                     doc: vi.fn(() => mailDocRef)
@@ -116,7 +136,7 @@ describe('checkSubscriptionNotifications', () => {
 
         await wrapped({});
 
-        expect(collectionSpy).toHaveBeenCalledWith('users');
+        expect(collectionGroupSpy).toHaveBeenCalledWith('system');
         expect(mailDocRef.set).toHaveBeenCalledWith(expect.objectContaining({
             toUids: ['user2'],
             template: expect.objectContaining({ name: 'grace_period_ending' })
@@ -132,9 +152,14 @@ describe('checkSubscriptionNotifications', () => {
                 ref: { parent: { parent: { id: 'user1' } } }
             }
         ];
-        collectionGroupSpy.mockReturnValue({
-            where: vi.fn().mockReturnThis(),
-            get: vi.fn().mockResolvedValue({ size: 1, docs: mockSubs })
+        collectionGroupSpy.mockImplementation((collectionName) => {
+            if (collectionName === 'subscriptions') {
+                return {
+                    where: vi.fn().mockReturnThis(),
+                    get: vi.fn().mockResolvedValue({ size: 1, docs: mockSubs })
+                };
+            }
+            return { where: vi.fn().mockReturnThis(), get: vi.fn().mockResolvedValue({ size: 0, docs: [] }) };
         });
 
         // Mock Mail exists
@@ -143,7 +168,6 @@ describe('checkSubscriptionNotifications', () => {
             set: vi.fn()
         };
         collectionSpy.mockImplementation((name) => {
-            if (name === 'users') return { where: vi.fn().mockReturnThis(), get: vi.fn().mockResolvedValue({ size: 0, docs: [] }) };
             if (name === 'mail') return { doc: vi.fn(() => mailDocRef) };
             return {};
         });
