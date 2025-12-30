@@ -3,7 +3,7 @@ import { Router } from '@angular/router';
 import { User } from '@sports-alliance/sports-lib';
 import { FileInterface } from './file.interface';
 import { UPLOAD_STATUS } from './upload-status/upload.status';
-import * as Sentry from '@sentry/browser';
+import { LoggerService } from '../../services/logger.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { AppFilesStatusService } from '../../services/upload/app-files-status.service';
@@ -20,7 +20,8 @@ export abstract class UploadAbstractDirective implements OnInit {
     protected snackBar: MatSnackBar,
     protected dialog: MatDialog,
     protected filesStatusService: AppFilesStatusService,
-    protected router: Router) {
+    protected router: Router,
+    protected logger: LoggerService) {
 
   }
 
@@ -72,7 +73,7 @@ export abstract class UploadAbstractDirective implements OnInit {
       } catch (e) {
         files[index].status = UPLOAD_STATUS.ERROR;
 
-        Sentry.captureException(e);
+        this.logger.error(e);
       } finally {
         this.filesStatusService.addOrUpdate(files[index]);
       }

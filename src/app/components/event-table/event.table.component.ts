@@ -26,7 +26,6 @@ import { EventInterface } from '@sports-alliance/sports-lib';
 import { EventUtilities, User } from '@sports-alliance/sports-lib';
 import { debounceTime, take, map } from 'rxjs/operators';
 import { firstValueFrom, Subject, Subscription } from 'rxjs';
-import * as Sentry from '@sentry/browser';
 import { rowsAnimation } from '../../animations/animations';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
@@ -261,12 +260,13 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         duration: 2000,
       });
     } catch (e) {
-      Sentry.withScope(scope => {
-        scope.setExtra('data_event', mergedEvent.toJSON());
-        mergedEvent.getActivities().forEach((activity, index) => scope.setExtra(`data_activity${index}`, activity.toJSON()));
-        Sentry.captureException(e);
-        this.loaded();
+      this.logger.captureException(e, {
+        extra: {
+          data_event: mergedEvent.toJSON(),
+          activities: mergedEvent.getActivities().map(activity => activity.toJSON()),
+        }
       });
+      this.loaded();
       this.snackBar.open('Could not merge events', null, {
         duration: 5000,
       });
@@ -400,7 +400,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.snackBar.open(`Downloaded ${downloadedFiles.length} file(s)`, null, { duration: 2000 });
     } catch (e) {
       this.logger.error('Error downloading originals:', e);
-      Sentry.captureException(e);
+      this.logger.error(e);
       this.snackBar.open('Error downloading files', null, { duration: 3000 });
     } finally {
       this.loaded();

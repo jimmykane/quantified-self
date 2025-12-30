@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { FormControl, FormGroup, Validators } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import * as Sentry from '@sentry/browser';
+import { LoggerService } from '../../services/logger.service';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { combineLatest, of, Subscription } from 'rxjs';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
@@ -55,7 +55,8 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     protected router: Router,
     protected route: ActivatedRoute,
     protected windowService: AppWindowService,
-    protected snackBar: MatSnackBar) {
+    protected snackBar: MatSnackBar,
+    protected logger: LoggerService) {
   }
 
   async ngOnChanges() {
@@ -101,7 +102,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
           duration: 10000,
         });
       } catch (e) {
-        Sentry.captureException(e);
+        this.logger.error(e);
         this.snackBar.open(`Could not connect due to ${e.message}`, null, {
           duration: 10000,
         });
@@ -127,7 +128,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       // Get the redirect url for the unsigned token created with the post
       this.windowService.windowRef.location.href = this.buildRedirectURIFromServiceToken(tokenAndURI);
     } catch (e) {
-      Sentry.captureException(e);
+      this.logger.error(e);
       this.snackBar.open(`Could not connect to ${this.serviceName} due to ${e.message}`, null, {
         duration: 5000,
       });
@@ -149,7 +150,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       });
       logEvent(this.analytics, 'disconnected_from_service', { serviceName: this.serviceName });
     } catch (e) {
-      Sentry.captureException(e);
+      this.logger.error(e);
       this.snackBar.open(`Could not disconnect due to ${e.message}`, null, {
         duration: 2000,
       });

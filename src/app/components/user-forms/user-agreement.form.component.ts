@@ -3,7 +3,7 @@ import { FormBuilder, UntypedFormControl, UntypedFormGroup, FormGroupDirective, 
 import { ErrorStateMatcher } from '@angular/material/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import * as Sentry from '@sentry/browser';
+import { LoggerService } from '../../services/logger.service';
 import { Privacy } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../services/app.user.service';
@@ -41,6 +41,7 @@ export class UserAgreementFormComponent implements OnInit {
     private authService: AppAuthService,
     private snackBar: MatSnackBar,
     private router: Router,
+    private logger: LoggerService,
   ) {
     this.user = data.user; // Perhaps move to service?
     this.signInMethod = data.signInMethod;
@@ -102,7 +103,7 @@ export class UserAgreementFormComponent implements OnInit {
       this.snackBar.open('Could not update user', null, {
         duration: 2000,
       });
-      Sentry.captureException(e);
+      this.logger.error(e);
     } finally {
       this.dialogRef.close()
     }

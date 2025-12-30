@@ -8,7 +8,6 @@ import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { StreamInterface } from '@sports-alliance/sports-lib';
-import * as Sentry from '@sentry/browser';
 import { EventExporterJSON } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { Privacy } from '@sports-alliance/sports-lib';
@@ -102,7 +101,6 @@ export class AppEventService implements OnDestroy {
         return of([null, null] as [AppEventInterface | null, ActivityInterface[] | null]);
       }
       this.logger.error('Error fetching event or activities:', error);
-      Sentry.captureException(error);
 
       return of([null, null] as [AppEventInterface | null, ActivityInterface[] | null]); // @todo fix this
     })).pipe(map(([event, activities]: [AppEventInterface, ActivityInterface[]]) => {
@@ -115,7 +113,6 @@ export class AppEventService implements OnDestroy {
     })).pipe(catchError((error) => {
       // debugger;
       this.logger.error('Error adding activities to event:', error);
-      Sentry.captureException(error);
 
       return of(null); // @todo is this the best we can do?
     }))
@@ -138,7 +135,7 @@ export class AppEventService implements OnDestroy {
           const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
           if (newUnknownTypes.length > 0) {
             newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
-            Sentry.captureMessage('Unknown Data Types in getEventsOnceBy', { extra: { types: newUnknownTypes, eventID: queryDocumentSnapshot.id } });
+            this.logger.captureMessage('Unknown Data Types in getEventsOnceBy', { extra: { types: newUnknownTypes, eventID: queryDocumentSnapshot.id } });
           }
         }
         const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(queryDocumentSnapshot.id) as AppEventInterface;
@@ -214,7 +211,7 @@ export class AppEventService implements OnDestroy {
               const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
               if (newUnknownTypes.length > 0) {
                 newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
-                Sentry.captureMessage('Unknown Data Types in getActivities', { extra: { types: newUnknownTypes, eventID, activityID: activitySnapshot.id } });
+                this.logger.captureMessage('Unknown Data Types in getActivities', { extra: { types: newUnknownTypes, eventID, activityID: activitySnapshot.id } });
               }
             }
             activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>sanitizedJson).setID(activitySnapshot.id));
@@ -618,7 +615,7 @@ export class AppEventService implements OnDestroy {
           const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
           if (newUnknownTypes.length > 0) {
             newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
-            Sentry.captureMessage('Unknown Data Types in _getEvents', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
+            this.logger.captureMessage('Unknown Data Types in _getEvents', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
           }
         }
         const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id) as AppEventInterface;
@@ -657,7 +654,7 @@ export class AppEventService implements OnDestroy {
           const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
           if (newUnknownTypes.length > 0) {
             newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
-            Sentry.captureMessage('Unknown Data Types in _getEventsAndActivities', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
+            this.logger.captureMessage('Unknown Data Types in _getEventsAndActivities', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
           }
         }
         const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id) as AppEventInterface;

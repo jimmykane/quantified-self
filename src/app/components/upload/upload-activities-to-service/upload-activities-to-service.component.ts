@@ -2,7 +2,7 @@ import { Component, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import * as Sentry from '@sentry/browser';
+import { LoggerService } from '../../../services/logger.service';
 import { Analytics, logEvent } from '@angular/fire/analytics';
 import { environment } from '../../../../environments/environment';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
@@ -30,8 +30,9 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     protected dialog: MatDialog,
     protected filesStatusService: AppFilesStatusService,
     private http: HttpClient,
-    protected router: Router) {
-    super(snackBar, dialog, filesStatusService, router);
+    protected router: Router,
+    protected logger: LoggerService) {
+    super(snackBar, dialog, filesStatusService, router, logger);
   }
 
   /**
@@ -64,7 +65,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
                 })
             }).toPromise();
         } catch (e) {
-          Sentry.captureException(e);
+          this.logger.error(e);
           this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message}`, 'OK', { duration: 10000 });
           reject(e);
           return;

@@ -20,7 +20,7 @@ import { ChartThemes } from '@sports-alliance/sports-lib';
 import { AppThemeService } from '../../services/app.theme.service';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import * as Sentry from '@sentry/browser';
+import { LoggerService } from '../../services/logger.service';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -73,6 +73,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
     changeDetector: ChangeDetectorRef,
+    private logger: LoggerService,
   ) {
     super(changeDetector);
     this.rowHeight = this.getRowHeight();
@@ -106,12 +107,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         const eventTypeDisplayStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
         // this should not happen :-)
         if (!eventTypeDisplayStat) {
-          Sentry.captureException(new Error(`No eventTypeDisplayStat found for event with id ${event.getID()} and user ${this.user.uid}`));
+          this.logger.error(new Error(`No eventTypeDisplayStat found for event with id ${event.getID()} and user ${this.user.uid}`));
           return '??'
         }
         // Log an error to notify us what is missing
         if (eventTypeDisplayStat.getValue().length === 1 && !ActivityTypes[eventTypeDisplayStat.getDisplayValue()]) {
-          Sentry.captureException(new Error(`Activity type with ${eventTypeDisplayStat.getDisplayValue()} is not known`));
+          this.logger.error(new Error(`Activity type with ${eventTypeDisplayStat.getDisplayValue()} is not known`));
           return '??';
         }
         return eventTypeDisplayStat.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplayStat.getDisplayValue()];

@@ -4,7 +4,6 @@ import { AppEventService } from '../../../services/app.event.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import * as Sentry from '@sentry/browser';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
@@ -42,9 +41,9 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
     protected filesStatusService: AppFilesStatusService,
     protected overlay: Overlay,
     private eventService: AppEventService,
-    private logger: LoggerService,
-    protected router: Router) {
-    super(snackBar, dialog, filesStatusService, router);
+    protected router: Router,
+    logger: LoggerService) {
+    super(snackBar, dialog, filesStatusService, router, logger);
   }
 
   async ngOnInit() {
@@ -83,7 +82,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
               const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(json);
 
               if (unknownTypes.length > 0) {
-                Sentry.captureMessage('Unknown Data Types in Upload', { extra: { types: unknownTypes, file: file.filename } });
+                this.logger.captureMessage('Unknown Data Types in Upload', { extra: { types: unknownTypes, file: file.filename } });
                 this.snackBar.open(`Warning: Unknown data types removed: ${unknownTypes.join(', ')}`, 'OK', { duration: 5000 });
               }
 

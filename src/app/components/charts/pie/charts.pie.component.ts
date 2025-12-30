@@ -15,7 +15,6 @@ import type * as am4charts from '@amcharts/amcharts4/charts';
 import type * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGrouper';
 
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
-import * as Sentry from '@sentry/browser';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes
@@ -89,7 +88,7 @@ export class ChartsPieComponent extends DashboardChartAbstractDirective implemen
         return `[font-size: 1.1em]${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? target.dataItem.dataContext.type.slice(0, 40) : `{category.formatDate("${this.getChartDateFormat(this.chartDataTimeInterval)}")}`}[/]\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
         // return `[bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/] [font-size: 1.1em]${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? target.dataItem.dataContext.type.slice(0, 40) : `{category.formatDate('${this.getChartDateFormat(this.chartDataDateRange)}')}` || 'other'}[/]\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
       } catch (e) {
-        Sentry.captureException(e);
+        this.logger.error(e);
       }
     });
 

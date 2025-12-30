@@ -1,4 +1,5 @@
 import { APP_INITIALIZER, ErrorHandler, NgModule } from '@angular/core';
+import { LoggerService, GlobalErrorHandler } from './services/logger.service';
 import { BrowserModule } from '@angular/platform-browser';
 import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app.routing.module';
@@ -15,7 +16,6 @@ import { providePerformance, getPerformance } from '@angular/fire/performance';
 import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService } from '@angular/fire/analytics';
 import { provideRemoteConfig, getRemoteConfig } from '@angular/fire/remote-config';
 import { provideStorage, getStorage } from '@angular/fire/storage';
-import * as Sentry from '@sentry/angular';
 import { MaterialModule } from './modules/material.module';
 import { ClipboardModule } from '@angular/cdk/clipboard';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
@@ -59,9 +59,7 @@ export function initializeRemoteConfig(remoteConfigService: AppRemoteConfigServi
     UserTrackingService,
     {
       provide: ErrorHandler,
-      useValue: Sentry.createErrorHandler({
-        showDialog: false,
-      }),
+      useClass: GlobalErrorHandler,
     },
     {
       provide: APP_INITIALIZER,

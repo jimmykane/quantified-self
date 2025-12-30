@@ -33,7 +33,6 @@ import {
 import { Auth, deleteUser, authState } from '@angular/fire/auth';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { environment } from '../../environments/environment';
-import * as Sentry from '@sentry/browser';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import {
   DateRanges,
@@ -348,16 +347,16 @@ export class AppUserService implements OnDestroy {
   ) {
     authState(this.auth).subscribe((user) => {
       if (user) {
-        Sentry.setUser({ id: user.uid, email: user.email || undefined });
+        this.logger.setUser({ id: user.uid, email: user.email || undefined });
         user.getIdTokenResult().then((token) => {
           const role = token.claims['stripeRole'] as string;
           if (role) {
-            Sentry.setTag("subscription_role", role);
+            this.logger.setTag("subscription_role", role);
           }
         });
       } else {
-        Sentry.setUser(null);
-        Sentry.setTag("subscription_role", "anonymous");
+        this.logger.setUser(null);
+        this.logger.setTag("subscription_role", "anonymous");
       }
     });
   }
@@ -721,7 +720,7 @@ export class AppUserService implements OnDestroy {
       await deleteSelf();
       await this.auth.signOut();
     } catch (e) {
-      Sentry.captureException(e);
+      this.logger.error(e);
       throw e;
     }
   }
