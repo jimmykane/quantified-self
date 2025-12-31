@@ -9,7 +9,7 @@
         <h2 class="title">Sign In</h2>
         <p class="subtitle">Enter your email to receive a secure sign-in link.</p>
 
-        <mat-form-field appearance="outline" class="full-width">
+        <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
           <mat-label>Email Address</mat-label>
           <input matInput [(ngModel)]="email" type="email" placeholder="name@example.com"
             (keyup.enter)="email ? sendEmailLink(email) : null" required>

@@ -173,10 +173,9 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
 
             try {
                 // Determine if we should save now or later. 
-                // Let's save now to be safe, so terms are recorded. 
-                // Because we updated AppComponent to check for 'onboardingCompleted', 
-                // this save will NOT cause the component to disappear.
-                await this.userService.updateUser(this.user);
+                // We MUST save terms if we want them persisted even if user drops off.
+                // We use createOrUpdateUser to ensure legal policies are saved to the correct subcollection.
+                await this.userService.createOrUpdateUser(this.user);
 
                 const isSubscribed = await this.userService.hasPaidAccess();
                 if (isSubscribed) {
