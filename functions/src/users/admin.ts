@@ -614,10 +614,24 @@ export const getMaintenanceStatus = onCall({
         const maintenanceDoc = await db.collection('config').doc('maintenance').get();
 
         if (!maintenanceDoc.exists) {
-            return {
-                enabled: false,
-                message: ""
-            };
+            // Fallback to Remote Config if Firestore source is missing
+            try {
+                const rc = admin.remoteConfig();
+                const template = await rc.getTemplate();
+                const maintenanceMode = template.parameters?.['maintenance_mode']?.defaultValue as { value: string } | undefined;
+                const maintenanceMessage = template.parameters?.['maintenance_message']?.defaultValue as { value: string } | undefined;
+
+                return {
+                    enabled: maintenanceMode?.value === 'true',
+                    message: maintenanceMessage?.value || ""
+                };
+            } catch (rcError) {
+                logger.warn('Failed to fetch Remote Config fallback:', rcError);
+                return {
+                    enabled: false,
+                    message: ""
+                };
+            }
         }
 
         const data = maintenanceDoc.data();
