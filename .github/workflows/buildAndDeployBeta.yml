@@ -30,16 +30,18 @@ jobs:
           npm run build
           cd ..
 
+      - name: Get fonts
+        run: |
+          curl "https://firebasestorage.googleapis.com/v0/b/quantified-self-io.appspot.com/o/assets%2Ffonts%2Fproxima-nova-regular.woff?alt=media&token=17c6e5ba-1a2f-4bdd-af56-b467b754f0be" --create-dirs -o src/assets/fonts/proxima-nova-regular.woff
+          curl "https://firebasestorage.googleapis.com/v0/b/quantified-self-io.appspot.com/o/assets%2Ffonts%2Fproxima-nova-regular.woff2?alt=media&token=8caf4bf3-4d07-4240-bfe7-5234f3f65408" --create-dirs -o src/assets/fonts/proxima-nova-regular.woff2
+
       - name: Install, test and build
         run: |
           npm ci
           npm run test
           npm run build-beta
 
-      - name: Get fonts
-        run: |
-          curl "https://firebasestorage.googleapis.com/v0/b/quantified-self-io.appspot.com/o/assets%2Ffonts%2Fproxima-nova-regular.woff?alt=media&token=17c6e5ba-1a2f-4bdd-af56-b467b754f0be" --create-dirs -o dist/assets/fonts/proxima-nova-regular.woff
-          curl "https://firebasestorage.googleapis.com/v0/b/quantified-self-io.appspot.com/o/assets%2Ffonts%2Fproxima-nova-regular.woff2?alt=media&token=8caf4bf3-4d07-4240-bfe7-5234f3f65408" --create-dirs -o dist/assets/fonts/proxima-nova-regular.woff2
+
 
       - name: Create SA key
         run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "${{ runner.temp }}/firebase_service_account.json"
