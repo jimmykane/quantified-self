@@ -58,9 +58,15 @@
           }
 
           @if (isConnectedToService()) {
-          <button mat-stroked-button color="warn" style="width: 100%" [disabled]="isLoading"
+          <button mat-stroked-button color="warn" style="width: 100%" [disabled]="isLoading || isDisconnecting"
             (click)="deauthorizeService($event)">
+            @if (isDisconnecting) {
+            <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
+              color="warn"></mat-spinner>
+            Disconnecting...
+            } @else {
             <mat-icon>link_off</mat-icon> Disconnect
+            }
           </button>
           }
         </div>
@@ -123,12 +129,26 @@
             }
           </mat-form-field>
           <div class="qs-form-actions" style="display: flex; gap: 8px;">
-            <button mat-flat-button color="primary" [disabled]="isLoading" (click)="onSubmit()">
+            <button mat-flat-button color="primary" [disabled]="isLoading || isDownloading || isImporting"
+              (click)="onSubmit()">
+              @if (isDownloading) {
+              <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
+                color="accent"></mat-spinner>
+              Downloading...
+              } @else {
               Download
+              }
             </button>
             @if (user) {
-            <button mat-flat-button color="accent" [disabled]="isLoading" (click)="onImportAndOpen()">
+            <button mat-flat-button color="accent" [disabled]="isLoading || isDownloading || isImporting"
+              (click)="onImportAndOpen()">
+              @if (isImporting) {
+              <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
+                color="primary"></mat-spinner>
+              Importing...
+              } @else {
               Import
+              }
             </button>
             }
           </div>

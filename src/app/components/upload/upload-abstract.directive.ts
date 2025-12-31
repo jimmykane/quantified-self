@@ -15,6 +15,7 @@ export abstract class UploadAbstractDirective implements OnInit {
   @Input() user: User;
   @Input() hasProAccess: boolean = false;
   @Input() requiresPro: boolean = false;
+  public isUploading = false;
 
   constructor(
     protected snackBar: MatSnackBar,
@@ -66,17 +67,22 @@ export abstract class UploadAbstractDirective implements OnInit {
     })
 
     // Then actually start processing them
-    for (let index = 0; index < files.length; index++) {
-      try {
-        await this.processAndUploadFile(files[index]);
-        files[index].status = UPLOAD_STATUS.PROCESSED;
-      } catch (e) {
-        files[index].status = UPLOAD_STATUS.ERROR;
+    this.isUploading = true;
+    try {
+      for (let index = 0; index < files.length; index++) {
+        try {
+          await this.processAndUploadFile(files[index]);
+          files[index].status = UPLOAD_STATUS.PROCESSED;
+        } catch (e) {
+          files[index].status = UPLOAD_STATUS.ERROR;
 
-        this.logger.error(e);
-      } finally {
-        this.filesStatusService.addOrUpdate(files[index]);
+          this.logger.error(e);
+        } finally {
+          this.filesStatusService.addOrUpdate(files[index]);
+        }
       }
+    } finally {
+      this.isUploading = false;
     }
 
     // this.isUploadActive = false;

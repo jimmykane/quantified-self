@@ -26,6 +26,8 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   public suuntoAppLinkFormGroup: UntypedFormGroup;
 
   public serviceName = ServiceNames.SuuntoApp;
+  public isDownloading = false;
+  public isImporting = false;
   clicks = 0;
 
   constructor(protected http: HttpClient,
@@ -81,11 +83,15 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
       return;
     }
 
-    if (this.isLoading) {
+    if (this.isDownloading || this.isImporting) {
       return false;
     }
 
-    this.isLoading = true;
+    if (shouldImportAndOpen) {
+      this.isImporting = true;
+    } else {
+      this.isDownloading = true;
+    }
 
     try {
 
@@ -123,7 +129,8 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
       });
       this.logger.error(e);
     } finally {
-      this.isLoading = false;
+      this.isDownloading = false;
+      this.isImporting = false;
     }
   }
 

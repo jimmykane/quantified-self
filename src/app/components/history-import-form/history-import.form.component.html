@@ -12,7 +12,6 @@
 @if (formGroup && isAllowedToDoHistoryImport) {
 @if (isPro) {
 <form [formGroup]="formGroup" class="qs-form history-import-form">
-  <app-shade [isActive]="isLoading"></app-shade>
   <div class="date-fields">
     <mat-form-field appearance="outline">
       <mat-label>Start Date</mat-label>
@@ -40,8 +39,14 @@
     </mat-checkbox>
   </div>
   <div class="qs-form-actions">
-    <button mat-flat-button color="primary" (click)="onSubmit($event)" [disabled]="!formGroup.valid">
+    <button mat-flat-button color="primary" (click)="onSubmit($event)" [disabled]="!formGroup.valid || isLoading">
+      @if (isLoading) {
+      <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
+        color="accent"></mat-spinner>
+      Importing History...
+      } @else {
       Import History
+      }
     </button>
   </div>
 </form>

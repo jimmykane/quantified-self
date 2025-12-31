@@ -42,6 +42,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   public selectedTabIndex = 0;
   public serviceNames = ServiceNames;
   public isConnecting = false;
+  public isDisconnecting = false;
 
 
   protected serviceDataSubscription: Subscription;
@@ -141,7 +142,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       this.triggerUpsell();
       return;
     }
-    this.isLoading = true;
+    this.isDisconnecting = true;
     try {
       await this.userService.deauthorizeService(this.serviceName);
       this.snackBar.open(`Disconnected successfully`, null, {
@@ -154,7 +155,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         duration: 2000,
       });
     }
-    this.isLoading = false;
+    this.isDisconnecting = false;
   }
 
   triggerUpsell() {

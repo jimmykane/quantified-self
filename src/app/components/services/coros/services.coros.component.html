@@ -57,9 +57,15 @@
           }
 
           @if (isConnectedToService()) {
-          <button mat-stroked-button color="warn" style="width: 100%" [disabled]="isLoading"
+          <button mat-stroked-button color="warn" style="width: 100%" [disabled]="isLoading || isDisconnecting"
             (click)="deauthorizeService($event)">
+            @if (isDisconnecting) {
+            <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
+              color="warn"></mat-spinner>
+            Disconnecting...
+            } @else {
             <mat-icon>link_off</mat-icon> Disconnect
+            }
           </button>
           }
         </div>
