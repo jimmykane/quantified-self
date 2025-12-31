@@ -146,22 +146,28 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
 
   logger.info(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
 
-  // Deauthorize all tokens for that user
+  let failedTokenCount = 0;
+
+  // Deauthorize tokens individually.
+  // We delete successful ones and preserve those that fail with 500.
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     let serviceToken;
+    let shouldDeleteToken = true;
+
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, false);
     } catch (e: any) {
-      if (e.message?.includes('400') || e.message?.includes('invalid_grant') || e?.output?.statusCode === 400) {
-        logger.warn(`Token for ${tokenQueryDocumentSnapshot.id} is invalid or revoked (400). Proceeding to delete local record.`);
-        // Don't continue, fall through to deletion. serviceToken will be undefined.
+      const statusCode = e.statusCode || (e.output && e.output.statusCode);
+      if (statusCode === 500) {
+        logger.error(`Refreshing token failed with 500 for ${tokenQueryDocumentSnapshot.id}. Preserving local token.`);
+        shouldDeleteToken = false;
+        failedTokenCount++;
       } else {
-        logger.error(`Refreshing token failed skipping deletion for this token with id ${tokenQueryDocumentSnapshot.id}: ${e}`);
-        continue; // Go to next for other errors
+        logger.warn(`Refreshing token failed for ${tokenQueryDocumentSnapshot.id} (${statusCode || 'unknown error'}). Proceeding with local cleanup.`);
       }
     }
 
-    if (serviceToken) {
+    if (shouldDeleteToken && serviceToken) {
       switch (serviceName) {
         default:
           break;
@@ -175,38 +181,38 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
             });
             logger.info(`Deauthorized token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
           } catch (apiError: any) {
-            logger.warn(`Failed to deauthorize on Suunto API for ${userID}: ${apiError.message}`);
-            // Proceed to delete local token anyway
+            const statusCode = apiError.statusCode || (apiError.output && apiError.output.statusCode);
+            if (statusCode === 500) {
+              logger.error(`Suunto API deauthorization failed with 500 for ${userID}. Preserving local token.`);
+              shouldDeleteToken = false;
+              failedTokenCount++;
+            } else {
+              logger.warn(`Failed to deauthorize on Suunto API for ${userID}: ${apiError.message}. Proceeding with local cleanup.`);
+            }
           }
           break;
       }
     }
 
-    await tokenQueryDocumentSnapshot.ref.delete();
-
-    logger.info(`Deleted token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
-
-
-    // // If a user has used 2 accounts to connect to the same
-    // // Now get from all users the same username token
-    // // Note this will return the current doc as well
-    // const otherUsersTokensQuerySnapshot = await admin.firestore().collectionGroup('tokens').where("userName", "==", serviceToken.userName).get();
-    //
-    // console.log(`Found ${otherUsersTokensQuerySnapshot.size} tokens for token username ${serviceToken.userName}`);
-    //
-    // try {
-    //   for (const otherUserQueryDocumentSnapshot of otherUsersTokensQuerySnapshot.docs) {
-    //     await otherUserQueryDocumentSnapshot.ref.delete();
-    //     console.log(`Deleted token ${otherUserQueryDocumentSnapshot.id}`);
-    //   }
-    // } catch (e: any) {
-    //   console.error(`Could not delete token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
-    //   throw e
-    // }
-    // console.log(`Deleted successfully token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
+    if (shouldDeleteToken) {
+      try {
+        await tokenQueryDocumentSnapshot.ref.delete();
+        logger.info(`Deleted token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
+      } catch (deleteError: any) {
+        logger.error(`Failed to delete local token ${tokenQueryDocumentSnapshot.id}: ${deleteError.message}`);
+        // If we can't delete it locally, effectively it failed to be cleaned up
+        failedTokenCount++;
+      }
+    }
   }
-  await userDocRef.delete();
-  logger.info(`Deleted parent document ${userID} from ${serviceConfig.tokenCollectionName}`);
+
+  // Only delete the parent document if ALL tokens were successfully deleted
+  if (failedTokenCount === 0) {
+    await userDocRef.delete();
+    logger.info(`Deleted parent document ${userID} from ${serviceConfig.tokenCollectionName}`);
+  } else {
+    logger.warn(`Skipping parent document deletion for ${userID} because ${failedTokenCount} tokens could not be safely deauthorized.`);
+  }
 }
 
 export interface ServiceConfig {

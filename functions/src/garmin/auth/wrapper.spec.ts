@@ -1,37 +1,35 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as admin from 'firebase-admin';
-import * as GarminAuth from './auth';
 import * as requestHelper from '../../request-helper';
 import * as utils from '../../utils';
 
+// Define stable mocks
+const mockDelete = vi.fn().mockResolvedValue({});
+const mockSet = vi.fn().mockResolvedValue({});
+const mockGet = vi.fn();
+const mockCollection = vi.fn();
+const mockDoc = vi.fn();
+
+const mockDocInstance = {
+    delete: mockDelete,
+    set: mockSet,
+    get: mockGet,
+};
+
+const mockCollectionInstance = {
+    doc: mockDoc,
+    where: vi.fn().mockReturnThis(),
+};
+
+mockDoc.mockReturnValue(mockDocInstance);
+mockCollection.mockReturnValue(mockCollectionInstance);
+
 // Mock dependencies
-vi.mock('firebase-admin', () => {
-    const deleteMock = vi.fn().mockResolvedValue({});
-    const setMock = vi.fn().mockResolvedValue({});
-    const getMock = vi.fn().mockResolvedValue({
-        data: () => ({
-            state: 'mockState',
-            oauthToken: 'mockToken',
-            oauthTokenSecret: 'mockSecret',
-            accessToken: 'mockAccessToken',
-            accessTokenSecret: 'mockAccessTokenSecret'
-        })
-    });
-    const docMock = vi.fn(() => ({
-        set: setMock,
-        get: getMock,
-        delete: deleteMock
-    }));
-    const collectionMock = vi.fn(() => ({
-        doc: docMock,
-        where: vi.fn().mockReturnThis()
-    }));
-    return {
-        firestore: () => ({
-            collection: collectionMock
-        })
-    };
-});
+vi.mock('firebase-admin', () => ({
+    firestore: vi.fn(() => ({
+        collection: mockCollection,
+    })),
+}));
 
 vi.mock('firebase-functions/v1', () => ({
     region: () => ({
@@ -55,18 +53,24 @@ vi.mock('../../request-helper', () => ({
 }));
 
 vi.mock('../../utils', () => ({
-    isCorsAllowed: vi.fn().mockReturnValue(true),
-    setAccessControlHeadersOnResponse: vi.fn(),
-    getUserIDFromFirebaseToken: vi.fn().mockResolvedValue('testUserID'),
-    isProUser: vi.fn().mockResolvedValue(true),
-    PRO_REQUIRED_MESSAGE: 'Service sync is a Pro feature.'
+    isCorsAllowed: vi.fn(),
+    setAccessControlHeadersOnResponse: vi.fn().mockImplementation((req, res) => res),
+    getUserIDFromFirebaseToken: vi.fn(),
+    isProUser: vi.fn(),
+    PRO_REQUIRED_MESSAGE: 'Service sync is a Pro feature.',
+    TokenNotFoundError: class TokenNotFoundError extends Error {
+        constructor(message: string) {
+            super(message);
+            this.name = 'TokenNotFoundError';
+        }
+    }
 }));
 
-// Import AFTER mocks
 import {
     getGarminHealthAPIAuthRequestTokenRedirectURI,
     requestAndSetGarminHealthAPIAccessToken,
-    deauthorizeGarminHealthAPI
+    deauthorizeGarminHealthAPI,
+    deauthorizeGarminHealthAPIForUser,
 } from './wrapper';
 
 describe('Garmin Auth Wrapper', () => {
@@ -75,19 +79,38 @@ describe('Garmin Auth Wrapper', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        (utils.isProUser as any).mockResolvedValue(true);
-        (utils.getUserIDFromFirebaseToken as any).mockResolvedValue('testUserID');
-        (utils.isCorsAllowed as any).mockReturnValue(true);
+
+        vi.mocked(utils.isCorsAllowed).mockReturnValue(true);
+        vi.mocked(utils.getUserIDFromFirebaseToken).mockResolvedValue('testUserID');
+        vi.mocked(utils.isProUser).mockResolvedValue(true);
 
         req = {
-            method: 'POST',
-            body: {}
+            method: 'POST', // Crucial for passing the check in wrapper.ts
+            query: { userID: 'testUserID' },
+            body: {},
+            headers: { authorization: 'Bearer mock-token' },
+            get: vi.fn().mockReturnValue('localhost')
         };
         res = {
             status: vi.fn().mockReturnThis(),
             send: vi.fn().mockReturnThis(),
+            json: vi.fn().mockReturnThis(),
+            set: vi.fn().mockReturnThis(),
             write: vi.fn().mockReturnThis()
         };
+
+        // Default: Document exists and has data
+        mockGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                accessToken: 'mock-token',
+                accessTokenSecret: 'mock-secret',
+                state: 'mockState',
+                oauthToken: 'token',
+                oauthTokenSecret: 'secret'
+            }),
+        });
+        mockDelete.mockResolvedValue({});
     });
 
     describe('getGarminHealthAPIAuthRequestTokenRedirectURI', () => {
@@ -102,12 +125,11 @@ describe('Garmin Auth Wrapper', () => {
                 oauthToken: 'token',
                 state: expect.any(String)
             }));
-            const firestore = admin.firestore();
-            expect(firestore.collection).toHaveBeenCalled();
+            expect(mockCollection).toHaveBeenCalled();
         });
 
         it('should return 403 for non-pro user', async () => {
-            (utils.isProUser as any).mockResolvedValue(false);
+            vi.mocked(utils.isProUser).mockResolvedValue(false);
 
             await getGarminHealthAPIAuthRequestTokenRedirectURI(req, res);
 
@@ -125,8 +147,7 @@ describe('Garmin Auth Wrapper', () => {
             await requestAndSetGarminHealthAPIAccessToken(req, res);
 
             expect(res.send).toHaveBeenCalled();
-            const firestore = admin.firestore();
-            expect(firestore.collection('').doc('').set).toHaveBeenCalledWith(expect.objectContaining({
+            expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({
                 accessToken: 'accessToken',
                 accessTokenSecret: 'accessSecret',
                 userID: 'garminUID'
@@ -151,6 +172,50 @@ describe('Garmin Auth Wrapper', () => {
 
             expect(res.status).toHaveBeenCalledWith(200);
             expect(res.send).toHaveBeenCalled();
+        });
+
+        it('should return 500 if deauthorization fails', async () => {
+            // Force the internal deauthorize function to throw a 500 error
+            (requestHelper.delete as any).mockRejectedValue({ statusCode: 500, message: 'Server Error' });
+
+            await deauthorizeGarminHealthAPI(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(500);
+        });
+    });
+
+    describe('deauthorizeGarminHealthAPIForUser', () => {
+        const userID = 'testUserID';
+
+        it('should deauthorize and delete records successfully', async () => {
+            (requestHelper.delete as any).mockResolvedValue({});
+
+            await deauthorizeGarminHealthAPIForUser(userID);
+
+            expect(requestHelper.delete).toHaveBeenCalled();
+            expect(mockDelete).toHaveBeenCalled();
+        });
+
+        it('should NOT delete local records if Garmin API returns 500', async () => {
+            const error500 = new Error('Server error');
+            (error500 as any).statusCode = 500;
+            (requestHelper.delete as any).mockRejectedValue(error500);
+
+            await expect(deauthorizeGarminHealthAPIForUser(userID)).rejects.toThrow('Server error');
+
+            expect(mockDelete).not.toHaveBeenCalled();
+        });
+
+        it('should delete record if no tokens are found (hollow document)', async () => {
+            mockGet.mockResolvedValue({
+                exists: false, // This triggers the deletion block in wrapper.ts
+                data: () => null
+            });
+
+            await expect(deauthorizeGarminHealthAPIForUser(userID))
+                .rejects.toThrow('No token found');
+
+            expect(mockDelete).toHaveBeenCalled();
         });
     });
 });

@@ -1,7 +1,30 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
-// Mock firebase-functions first
+// Define stable mocks first
+const mockDelete = vi.fn().mockResolvedValue({});
+const mockGet = vi.fn();
+const mockCollection = vi.fn();
+const mockDoc = vi.fn();
+
+const mockDocInstance = {
+    delete: mockDelete,
+    get: mockGet,
+    collection: mockCollection,
+};
+
+const mockCollectionInstance = {
+    doc: mockDoc,
+    get: mockGet,
+    where: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+};
+
+// Setup nesting
+mockDoc.mockReturnValue(mockDocInstance);
+mockCollection.mockReturnValue(mockCollectionInstance);
+
+// Mock firebase-functions
 vi.mock('firebase-functions', () => ({
     config: () => ({
         suuntoapp: {
@@ -13,10 +36,6 @@ vi.mock('firebase-functions', () => ({
             client_id: 'test-coros-client-id',
             client_secret: 'test-coros-client-secret',
         },
-        garminhealth: {
-            consumer_key: 'test-garmin-consumer-key',
-            consumer_secret: 'test-garmin-consumer-secret',
-        },
     }),
     region: () => ({
         https: { onRequest: () => { } },
@@ -27,77 +46,41 @@ vi.mock('firebase-functions', () => ({
     }),
 }));
 
-// Mock simple-oauth2
-vi.mock('simple-oauth2', () => ({
-    AuthorizationCode: class MockAuthorizationCode {
-        constructor(public config: any) { }
-        authorizeURL(params: any) {
-            return `https://mock-auth-url.com?redirect_uri=${params.redirect_uri}&scope=${params.scope}&state=${params.state}`;
-        }
-        getToken(params: any) {
-            return Promise.resolve({
-                token: {
-                    access_token: 'mock-access-token',
-                    refresh_token: 'mock-refresh-token',
-                    token_type: 'Bearer',
-                    expires_in: 3600,
-                    scope: 'workout',
-                    user: 'test-user',
-                    openId: 'test-open-id',
-                },
-            });
-        }
-        createToken(token: any) {
-            return {
-                expired: () => false,
-                refresh: () => Promise.resolve({ token: {} }),
-                token,
-            };
-        }
-    },
-}));
-
 // Mock firebase-admin
 vi.mock('firebase-admin', () => {
-    const mockDocRef = {
-        collection: vi.fn(() => ({
-            doc: vi.fn(() => mockDocRef),
-        })),
-        set: vi.fn(() => Promise.resolve()),
-        get: vi.fn(() => Promise.resolve({
-            data: () => ({ state: 'valid-state' }),
-            exists: true,
-        })),
-    };
-
-    const mockCollection = {
-        doc: vi.fn(() => mockDocRef),
-        get: vi.fn(() => Promise.resolve({
-            docs: [],
-            size: 0,
-        })),
-        where: vi.fn(function() {
- return this;
-}),
-        limit: vi.fn(function() {
- return this;
-}),
-    };
-
-    const mockFirestore = () => ({
-        collection: vi.fn(() => mockCollection),
-        collectionGroup: vi.fn(() => mockCollection),
+    const firestore = () => ({
+        collection: mockCollection,
+        collectionGroup: mockCollection,
     });
-
     return {
         default: {
-            firestore: mockFirestore,
+            firestore,
             initializeApp: vi.fn(),
             credential: { cert: vi.fn() },
         },
-        firestore: mockFirestore,
+        firestore,
     };
 });
+
+// Mock tokens
+vi.mock('./tokens', () => ({
+    getTokenData: vi.fn(),
+}));
+
+// Mock utils
+vi.mock('./utils', () => ({
+    TokenNotFoundError: class TokenNotFoundError extends Error {
+        constructor(message: string) {
+            super(message);
+            this.name = 'TokenNotFoundError';
+        }
+    },
+    isCorsAllowed: vi.fn().mockReturnValue(true),
+    setAccessControlHeadersOnResponse: vi.fn(),
+    getUserIDFromFirebaseToken: vi.fn().mockResolvedValue('testUserID'),
+    isProUser: vi.fn().mockResolvedValue(true),
+    PRO_REQUIRED_MESSAGE: 'Service sync is a Pro feature.'
+}));
 
 // Mock request-helper
 vi.mock('./request-helper', () => ({
@@ -105,11 +88,23 @@ vi.mock('./request-helper', () => ({
     post: vi.fn(() => Promise.resolve({})),
 }));
 
-// Import AFTER mocks
+// Mock simple-oauth2
+vi.mock('simple-oauth2', () => ({
+    AuthorizationCode: class MockAuthorizationCode {
+        constructor() { }
+        authorizeURL() { return 'https://mock-auth-url.com'; }
+        getToken() { return Promise.resolve({ token: {} }); }
+        createToken() { return { expired: () => false, token: {} }; }
+    },
+}));
+
 import {
     getServiceConfig,
     convertAccessTokenResponseToServiceToken,
+    deauthorizeServiceForUser,
 } from './OAuth2';
+import { getTokenData } from './tokens';
+import * as requestPromise from './request-helper';
 
 describe('OAuth2', () => {
     describe('getServiceConfig', () => {
@@ -247,6 +242,121 @@ describe('OAuth2', () => {
             // Should use default values
             expect(result.tokenType).toBe('bearer');
             expect(result.scope).toBe('workout');
+        });
+    });
+
+    describe('deauthorizeServiceForUser', () => {
+        const userID = 'test-user-id';
+        const serviceName = ServiceNames.SuuntoApp;
+
+        beforeEach(() => {
+            vi.clearAllMocks();
+
+            // Default: 1 token found
+            const mockTokenDoc = {
+                id: 'token-doc-id',
+                ref: {
+                    delete: mockDelete, // Use the shared mockDelete
+                },
+            };
+
+            mockGet.mockResolvedValue({
+                empty: false,
+                size: 1,
+                docs: [mockTokenDoc],
+            });
+
+            mockDelete.mockResolvedValue({});
+
+            (getTokenData as any).mockResolvedValue({ accessToken: 'mock-access' });
+            (requestPromise.get as any).mockResolvedValue({});
+        });
+
+        it('should deauthorize and delete records successfully', async () => {
+            await deauthorizeServiceForUser(userID, serviceName);
+
+            expect(getTokenData).toHaveBeenCalled();
+            expect(requestPromise.get).toHaveBeenCalled();
+            expect(mockDelete).toHaveBeenCalled(); // Once for token, once for user doc
+            expect(mockDelete).toHaveBeenCalledTimes(2);
+        });
+
+        it('should NOT delete local records if getTokenData fails with 500', async () => {
+            const error500 = new Error('Server error');
+            (error500 as any).statusCode = 500;
+            (getTokenData as any).mockRejectedValue(error500);
+
+            // Partial Success: Should NOT throw, but also NOT delete the token
+            await expect(deauthorizeServiceForUser(userID, serviceName)).resolves.not.toThrow();
+
+            expect(mockDelete).not.toHaveBeenCalled();
+        });
+
+        it('should still delete local records if Suunto API deauthorization fails', async () => {
+            (requestPromise.get as any).mockRejectedValue(new Error('API Failure'));
+
+            await deauthorizeServiceForUser(userID, serviceName);
+
+            expect(mockDelete).toHaveBeenCalledTimes(2);
+        });
+
+        /*
+        it('should delete parent document if no tokens are found', async () => {
+            mockGet.mockResolvedValue({
+                empty: true,
+                size: 0,
+                docs: [],
+            });
+
+            expect(mockDelete).toHaveBeenCalledTimes(1);
+        });
+        */
+        it('should delete successful tokens but PRESERVE failed (500) tokens and parent doc', async () => {
+            // Mock two tokens
+            const token1 = { id: 'token-1', ref: { delete: mockDelete }, data: () => ({ accessToken: 't1' }) };
+            const token2 = { id: 'token-2', ref: { delete: mockDelete }, data: () => ({ accessToken: 't2' }) };
+
+            mockGet.mockResolvedValue({
+                empty: false,
+                size: 2,
+                docs: [token1, token2],
+            });
+
+            // Mock getTokenData to succeed for token1 but fail for token2
+            (getTokenData as any)
+                .mockResolvedValueOnce({ accessToken: 't1' }) // first call success
+                .mockRejectedValueOnce({ statusCode: 500, message: 'Server Error' }); // second call failure
+
+            (requestPromise.get as any).mockResolvedValue({});
+
+            await deauthorizeServiceForUser(userID, serviceName);
+
+            // Assertions for Partial Success:
+            // 1. Token 1 (success) SHOULD be deleted.
+            // 2. Token 2 (500) SHOULD NOT be deleted.
+            // 3. Parent User Doc SHOULD NOT be deleted (because Token 2 remains).
+
+            expect(mockDelete).toHaveBeenCalledTimes(1);
+        });
+
+        it('should delete ALL local records if multiple tokens succeed', async () => {
+            // Mock two tokens
+            const token1 = { id: 'token-1', ref: { delete: mockDelete }, data: () => ({ accessToken: 't1' }) };
+            const token2 = { id: 'token-2', ref: { delete: mockDelete }, data: () => ({ accessToken: 't2' }) };
+
+            mockGet.mockResolvedValue({
+                empty: false,
+                size: 2,
+                docs: [token1, token2],
+            });
+
+            (getTokenData as any).mockResolvedValue({ accessToken: 'valid' });
+            (requestPromise.get as any).mockResolvedValue({});
+
+            await deauthorizeServiceForUser(userID, serviceName);
+
+            // Expect 3 deletions: token1, token2, and parent user doc
+            expect(mockDelete).toHaveBeenCalledTimes(3);
         });
     });
 });

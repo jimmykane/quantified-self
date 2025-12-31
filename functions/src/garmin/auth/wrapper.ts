@@ -2,8 +2,14 @@ import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import { GarminHealthAPIAuth } from './auth';
 import * as requestPromise from '../../request-helper';
-import { isCorsAllowed, setAccessControlHeadersOnResponse, TokenNotFoundError } from '../../utils';
-import { getUserIDFromFirebaseToken, isProUser, PRO_REQUIRED_MESSAGE } from '../../utils';
+import {
+  isCorsAllowed,
+  setAccessControlHeadersOnResponse,
+  TokenNotFoundError,
+  getUserIDFromFirebaseToken,
+  isProUser,
+  PRO_REQUIRED_MESSAGE
+} from '../../utils';
 import * as admin from 'firebase-admin';
 import * as crypto from 'crypto';
 
@@ -231,9 +237,8 @@ export async function deauthorizeGarminHealthAPIForUser(userID: string) {
     throw new TokenNotFoundError('No token found');
   }
 
-  const oAuth = GarminHealthAPIAuth();
-
   try {
+    const oAuth = GarminHealthAPIAuth();
     await requestPromise.delete({
       headers: oAuth.toHeader(oAuth.authorize({
         url: DEREGISTRATION_URI,
@@ -245,11 +250,11 @@ export async function deauthorizeGarminHealthAPIForUser(userID: string) {
       url: DEREGISTRATION_URI,
     });
   } catch (e: any) {
-    // Only if there is an api error in terms
     if (e.statusCode === 500) {
-      logger.error(e);
+      logger.error(`Garmin API failed with 500 for ${userID}. Aborting.`);
       throw e;
     }
+    logger.warn(`Garmin API deauthorization failed for ${userID} (will clean up locally): ${e.message}`);
   }
   await admin.firestore().collection(GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME).doc(userID).delete();
 }

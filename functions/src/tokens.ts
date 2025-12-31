@@ -91,10 +91,10 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
     const statusCode = e.statusCode || (e.output && e.output.statusCode);
     const errorDescription = e.message || (e.error && (e.error.error_description || e.error.error));
 
-    // Suppress logging for 400/401 (Invalid Grant/Unauthorized) as these are expected during cleanup
-    if (statusCode === 401 || (statusCode === 400)) {
-      // Do not log the full stack trace for these known "token dead" errors
-      logger.warn(`Token for user ${doc.id} is invalid (${statusCode}): ${errorDescription}`);
+    // Suppress logging for 400/401/500 as these are expected during cleanup or due to partner issues
+    if (statusCode === 401 || statusCode === 400 || statusCode === 500) {
+      // Do not log the full stack trace for these known errors during cleanup
+      logger.warn(`Token refresh for user ${doc.id} failed (${statusCode}): ${errorDescription}`);
     } else {
       logger.error(`Could not refresh token for user ${doc.id}`, e);
     }
