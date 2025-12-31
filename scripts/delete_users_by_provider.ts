@@ -26,7 +26,14 @@ async function run() {
     let usersToDelete: string[] = [];
     let count = 0;
 
-    const TARGET_PROVIDERS = ['phone', 'twitter.com'];
+    const providersArg = args.find(arg => arg.startsWith('--providers='));
+    const targetProviders = providersArg ? providersArg.split('=')[1].split(',') : [];
+
+    if (targetProviders.length > 0) {
+        console.log(`Filtering for providers: ${targetProviders.join(', ')}`);
+    } else {
+        console.log('Targeting ALL providers.');
+    }
 
     do {
         const listUsersResult = await auth.listUsers(1000, nextPageToken);
@@ -34,9 +41,9 @@ async function run() {
         for (const user of listUsersResult.users) {
             const providers = user.providerData.map(p => p.providerId);
 
-            // Check if user has ANY of the target providers
-            const hasTargetProvider = user.providerData.some(p =>
-                TARGET_PROVIDERS.includes(p.providerId)
+            // Check if user has ANY of the target providers (or if no target specified, match all)
+            const hasTargetProvider = targetProviders.length === 0 || user.providerData.some(p =>
+                targetProviders.includes(p.providerId)
             );
 
             if (hasTargetProvider) {
@@ -58,23 +65,32 @@ async function run() {
     if (forceDelete) {
         console.log(`Deleting ${usersToDelete.length} users...`);
 
-        // Batch delete in chunks of 1000 (Firebase limit)
-        const chunkSize = 1000;
-        for (let i = 0; i < usersToDelete.length; i += chunkSize) {
-            const chunk = usersToDelete.slice(i, i + chunkSize);
-            try {
-                const result = await auth.deleteUsers(chunk);
-                console.log(`Only deleted ${result.successCount} users. Failed to delete ${result.failureCount} users.`);
+        console.log(`Deleting ${usersToDelete.length} users one by one to ensure 'onDelete' triggers/Extensions fire...`);
 
-                if (result.failureCount > 0) {
-                    result.errors.forEach(err => {
-                        console.error(`Failed to delete user ${err.index}: ${err.error.toJSON()}`);
-                    });
+        let deletedCount = 0;
+        let failedCount = 0;
+        const CONCURRENCY_LIMIT = 5; // Delete 5 at a time to respect rate limits while being faster than serial
+
+        for (let i = 0; i < usersToDelete.length; i += CONCURRENCY_LIMIT) {
+            const chunk = usersToDelete.slice(i, i + CONCURRENCY_LIMIT);
+
+            await Promise.all(chunk.map(async (uid) => {
+                try {
+                    await auth.deleteUser(uid);
+                    deletedCount++;
+                    process.stdout.write('.'); // Minimal progress indicator
+                } catch (error) {
+                    failedCount++;
+                    console.error(`\nFailed to delete user ${uid}:`, error);
                 }
-            } catch (error) {
-                console.error('Error deleting users:', error);
-            }
+            }));
+
+            // Optional: slight pause to be gentle on the API if needed, but 5 concurrent is usually fine
         }
+
+        console.log(`\n\nDeletion complete.`);
+        console.log(`Successfully deleted: ${deletedCount}`);
+        console.log(`Failed to delete: ${failedCount}`);
         console.log('Deletion complete.');
     } else {
         console.log(`Dry run complete. Run with --force to delete these ${usersToDelete.length} users.`);
