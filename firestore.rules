@@ -215,6 +215,11 @@ service cloud.firestore {
           allow read, write: if request.auth.uid == athleteUserID && request.auth.token.firebase.sign_in_provider != 'anonymous';
        }
     }
+
+    match /failed_jobs/{document=**} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
   }
 }
 
