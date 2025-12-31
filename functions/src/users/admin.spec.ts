@@ -1,13 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CallableRequest } from 'firebase-functions/v2/https';
-import * as admin from 'firebase-admin';
-
 const {
     mockListUsers,
     mockAuth,
     mockOnCall,
     mockCollection,
-    mockFirestore
+    mockFirestore,
+    mockRemoteConfig
 } = vi.hoisted(() => {
     const mockListUsers = vi.fn();
     const mockAuth = { listUsers: mockListUsers };
@@ -19,12 +16,19 @@ const {
         collectionGroup: mockCollection
     }));
 
+    const mockRemoteConfig = vi.fn(() => ({
+        getTemplate: vi.fn(),
+        validateTemplate: vi.fn(),
+        publishTemplate: vi.fn()
+    }));
+
     return {
         mockListUsers,
         mockAuth,
         mockOnCall,
         mockCollection,
-        mockFirestore
+        mockFirestore,
+        mockRemoteConfig
     };
 });
 
@@ -34,7 +38,8 @@ vi.mock('firebase-admin', () => ({
     auth: () => mockAuth,
     initializeApp: vi.fn(),
     apps: { length: 1 },
-    firestore: mockFirestore
+    firestore: mockFirestore,
+    remoteConfig: mockRemoteConfig
 }));
 
 vi.mock('firebase-functions/v2/https', () => ({
@@ -52,7 +57,7 @@ vi.mock('../utils', () => ({
     ALLOWED_CORS_ORIGINS: ['*']
 }));
 
-import { listUsers, getQueueStats, getUserCount } from './admin';
+import { listUsers, getQueueStats, getUserCount, getMaintenanceStatus } from './admin';
 
 describe('listUsers Cloud Function', () => {
     beforeEach(() => {
@@ -68,6 +73,7 @@ describe('listUsers Cloud Function', () => {
         mockCollection.mockReturnValue({
             doc: vi.fn().mockReturnValue({
                 get: emptyDocGet,
+                set: vi.fn().mockResolvedValue({}),
                 collection: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
                         orderBy: vi.fn().mockReturnValue({
@@ -221,7 +227,7 @@ describe('getQueueStats Cloud Function', () => {
 
     it('should return queue statistics including DLQ', async () => {
         // Mock permissions
-        (admin.firestore().collection as any).mockImplementation((collectionName: string) => {
+        mockCollection.mockImplementation((collectionName: string) => {
             const mockCount = vi.fn().mockReturnValue({
                 get: vi.fn().mockResolvedValue({
                     data: () => ({ count: 5 })
@@ -360,5 +366,93 @@ describe('getUserCount Cloud Function', () => {
         });
         expect(mockCollection).toHaveBeenCalledWith('users');
         expect(mockCollection).toHaveBeenCalledWith('subscriptions'); // collectionGroup calls this name
+    });
+});
+
+describe('getMaintenanceStatus Cloud Function', () => {
+    let request: any;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        request = {
+            auth: {
+                uid: 'admin-uid',
+                token: { admin: true }
+            }
+        };
+
+        // Reset Remote Config mock
+        mockRemoteConfig.mockReturnValue({
+            getTemplate: vi.fn().mockResolvedValue({
+                parameters: {
+                    maintenance_mode: { defaultValue: { value: 'true' } },
+                    maintenance_message: { defaultValue: { value: 'RC Message' } }
+                }
+            })
+        });
+    });
+
+    it('should return enabled=true and message from Firestore when document exists', async () => {
+        // Mock Firestore doc present
+        const mockDoc = {
+            exists: true,
+            data: () => ({ enabled: true, message: 'Firestore Message', updatedAt: '2024-01-01', updatedBy: 'admin' })
+        };
+        const mockDocGet = vi.fn().mockResolvedValue(mockDoc);
+
+        mockCollection.mockReturnValue({
+            doc: vi.fn().mockReturnValue({
+                get: mockDocGet
+            })
+        });
+
+        const result: any = await (getMaintenanceStatus as any)(request);
+
+        expect(result.enabled).toBe(true);
+        expect(result.message).toBe('Firestore Message');
+        expect(result.updatedBy).toBe('admin');
+        // Remote Config should NOT be called
+        expect(mockRemoteConfig).not.toHaveBeenCalled();
+    });
+
+    it('should fallback to Remote Config if Firestore document is missing', async () => {
+        // Mock Firestore doc missing
+        const mockDoc = { exists: false };
+        const mockDocGet = vi.fn().mockResolvedValue(mockDoc);
+
+        mockCollection.mockReturnValue({
+            doc: vi.fn().mockReturnValue({
+                get: mockDocGet
+            })
+        });
+
+        // Mock Remote Config (set in beforeEach)
+        const result: any = await (getMaintenanceStatus as any)(request);
+
+        expect(result.enabled).toBe(true);
+        expect(result.message).toBe('RC Message');
+        expect(mockRemoteConfig).toHaveBeenCalled();
+    });
+
+    it('should handle Remote Config errors gracefully (default off)', async () => {
+        // Mock Firestore doc missing
+        const mockDoc = { exists: false };
+        const mockDocGet = vi.fn().mockResolvedValue(mockDoc);
+
+        mockCollection.mockReturnValue({
+            doc: vi.fn().mockReturnValue({
+                get: mockDocGet
+            })
+        });
+
+        // Mock Remote Config throws error
+        mockRemoteConfig.mockReturnValue({
+            getTemplate: vi.fn().mockRejectedValue(new Error('RC Error'))
+        });
+
+        const result: any = await (getMaintenanceStatus as any)(request);
+
+        expect(result.enabled).toBe(false);
+        expect(result.message).toBe('');
     });
 });
