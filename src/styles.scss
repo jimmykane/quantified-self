@@ -54,8 +54,8 @@ $app-dark-theme: mat.m2-define-dark-theme((color: (primary: $dark-primary,
 
 @font-face {
   font-family: 'QSFont';
-  src: url('/assets/fonts/proxima-nova-regular.woff2') format('woff2'),
-    url('/assets/fonts/proxima-nova-regular.woff') format('woff');
+  src: url('./assets/fonts/proxima-nova-regular.woff2') format('woff2'),
+    url('./assets/fonts/proxima-nova-regular.woff') format('woff');
   font-weight: normal;
   font-style: normal;
 }
@@ -78,6 +78,8 @@ body {
   background-color: mat.m2-get-color-from-palette($light-bg, background);
   color: mat.m2-get-color-from-palette($light-fg, text);
   font-family: 'QSFont', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .dark-theme {
@@ -319,7 +321,7 @@ mat-table {
 
 .card-title {
   font-size: 1.3rem;
-  font-weight: 700;
+  font-weight: 400;
   margin: 0;
   line-height: 1.2;
   color: var(--mat-sys-on-surface, inherit);
@@ -367,7 +369,7 @@ mat-table {
     h2 {
       margin: 0;
       font-size: 1.5rem;
-      font-weight: 500;
+      font-weight: 400;
       line-height: 1.2;
     }
 
@@ -468,14 +470,14 @@ mat-table {
     opacity: 0.7;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    font-weight: 500;
+    font-weight: 400;
   }
 }
 
 .app-stat-value {
   margin: 4px 0 0;
   font-size: 2rem;
-  font-weight: 800;
+  font-weight: 400;
   line-height: 1;
 }
 
@@ -540,7 +542,7 @@ mat-table {
 /* Global Text Gradient (Fancy Title) */
 .app-text-gradient {
   font-size: 2.5rem;
-  font-weight: 800;
+  font-weight: 400;
   margin: 0;
   background: linear-gradient(135deg, var(--mat-sys-primary, #3f51b5), var(--mat-sys-secondary, #ff4081));
   background-clip: text;
@@ -627,7 +629,7 @@ mat-table {
 /* Header Cells */
 .mat-mdc-header-cell,
 th.mat-header-cell {
-  font-weight: 600 !important;
+  font-weight: 400 !important;
   font-size: 0.85rem !important;
   text-transform: uppercase;
   letter-spacing: 0.5px;

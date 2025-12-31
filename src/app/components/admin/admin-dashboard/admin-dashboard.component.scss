@@ -110,7 +110,7 @@ table {
 
 th.mat-header-cell {
     background: rgba(0, 0, 0, 0.02);
-    font-weight: 600;
+    font-weight: 400;
     font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -134,7 +134,7 @@ td.mat-cell {
     margin: 0; // Remove default margins
     color: #333; // Light theme default
     font-size: 1.1rem;
-    font-weight: 500;
+    font-weight: 400;
 }
 
 // Preserve layout for Admin dashboard cards, but inherit global font styles
@@ -162,7 +162,7 @@ td.mat-cell {
 .maintenance-header-title {
     align-items: center;
     gap: 12px;
-    font-weight: 500;
+    font-weight: 400;
 }
 
 .maintenance-header-description {
@@ -293,7 +293,7 @@ td.mat-cell {
 }
 
 .user-name {
-    font-weight: 500;
+    font-weight: 400;
     // color: #263238; /* REMOVED */
 }
 
@@ -309,7 +309,7 @@ td.mat-cell {
     padding: 4px 12px;
     border-radius: 16px;
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 400;
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -392,7 +392,7 @@ td.mat-cell {
 }
 
 .analysis-label {
-    font-weight: 500;
+    font-weight: 400;
 }
 
 .analysis-label-sm {
@@ -486,7 +486,7 @@ td.mat-cell {
 }
 
 .queue-name {
-    font-weight: 600;
+    font-weight: 400;
     font-size: 1rem;
     // color: #37474f;
 }
@@ -516,7 +516,7 @@ td.mat-cell {
 
 .stat-mini .value {
     font-size: 1.2rem;
-    font-weight: 700;
+    font-weight: 400;
     display: block;
 }
 

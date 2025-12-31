@@ -71,7 +71,7 @@
 
 .show-more-item .stat-label {
   color: var(--mat-app-primary);
-  font-weight: 700;
+  font-weight: 400;
   font-size: 0.65rem;
 }
 
@@ -113,7 +113,7 @@
 
 .stat-label {
   font-size: 0.65rem;
-  font-weight: 600;
+  font-weight: 400;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--mat-app-on-surface-variant);
@@ -127,7 +127,7 @@
 
 .stat-value-grid {
   font-size: 0.95rem;
-  font-weight: 700;
+  font-weight: 400;
   color: var(--mat-app-on-surface);
   line-height: 1.2;
   white-space: nowrap;
@@ -152,7 +152,7 @@
 
 .date-display {
   font-size: 1.4rem;
-  font-weight: 500;
+  font-weight: 400;
   color: var(--mat-app-on-surface);
   letter-spacing: -0.01em;
   display: flex;
@@ -161,7 +161,7 @@
 }
 
 .date-display b {
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .time-separator {

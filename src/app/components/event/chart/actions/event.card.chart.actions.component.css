@@ -43,7 +43,7 @@ mat-button-toggle:first-child {
 mat-button-toggle-checked {
   background-color: var(--mat-app-secondary-container);
   color: var(--mat-app-on-secondary-container);
-  font-weight: 500;
+  font-weight: 400;
 }
 
 /* Responsive: Stack on mobile */

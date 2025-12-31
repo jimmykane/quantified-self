@@ -53,7 +53,7 @@ section.grid {
 
 .stat-label {
   font-size: 0.65rem;
-  font-weight: 600;
+  font-weight: 400;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--mat-app-on-surface-variant);
@@ -67,7 +67,7 @@ section.grid {
 
 .stat-value-grid {
   font-size: 0.95rem;
-  font-weight: 700;
+  font-weight: 400;
   color: var(--mat-app-on-surface);
   line-height: 1.2;
   white-space: nowrap;
@@ -86,11 +86,11 @@ section.condensed {
   --mdc-chip-elevated-container-color: transparent !important;
   --mdc-chip-label-text-color: var(--mat-app-on-surface);
   border: 1px solid var(--mat-app-outline-variant);
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .stat-value {
-  font-weight: 600;
+  font-weight: 400;
   font-size: 0.95rem;
 }
 

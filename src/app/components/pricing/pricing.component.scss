@@ -33,7 +33,7 @@
       font-size: 1.1rem;
       // color: rgba(0, 0, 0, 0.6); /* REMOVED */
       opacity: 0.6;
-      font-weight: 500;
+      font-weight: 400;
       letter-spacing: 0.2px;
     }
   }
@@ -135,7 +135,7 @@
       padding: 6px 40px;
       transform: rotate(45deg);
       font-size: 0.8rem;
-      font-weight: 700;
+      font-weight: 400;
       text-transform: uppercase;
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
       z-index: 10;
@@ -149,7 +149,7 @@
 
       mat-card-title {
         font-size: 1.7rem;
-        font-weight: 700;
+        font-weight: 400;
         margin-bottom: 8px;
         letter-spacing: -0.5px;
       }
@@ -196,7 +196,7 @@
           }
 
           strong {
-            font-weight: 600;
+            font-weight: 400;
           }
         }
       }
@@ -211,7 +211,7 @@
 
       .price {
         font-size: 2.8rem;
-        font-weight: 800;
+        font-weight: 400;
         margin: 0 0 20px;
         // color: rgba(0, 0, 0, 0.87); /* REMOVED */
         letter-spacing: -1px;
@@ -221,7 +221,7 @@
 
         .interval {
           font-size: 1rem;
-          font-weight: 500;
+          font-weight: 400;
           opacity: 0.6;
           margin-left: 4px;
         }
@@ -233,7 +233,7 @@
         /* Taller buttons */
         border-radius: 8px;
         font-size: 1.1rem;
-        font-weight: 600;
+        font-weight: 400;
         line-height: 0;
       }
     }
@@ -269,7 +269,7 @@
     margin-bottom: 8px;
 
     .current-plan-indicator {
-      font-weight: 600;
+      font-weight: 400;
     }
   }
 

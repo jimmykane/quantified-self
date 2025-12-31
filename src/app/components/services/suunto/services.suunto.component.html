@@ -46,7 +46,13 @@
           @if (!isConnectedToService() || clicks > 10) {
           <button mat-flat-button color="primary" style="width: 100%"
             [disabled]="!user || this.isGuest || isLoading || !hasProAccess" (click)="connectWithService($event)">
+            @if (isLoading) {
+            <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
+              color="accent"></mat-spinner>
+            Connecting...
+            } @else {
             <mat-icon>link</mat-icon> Connect
+            }
           </button>
           }
 
