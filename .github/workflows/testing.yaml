@@ -10,6 +10,10 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+
+      - name: Install Firebase Tools
+        run: npm install -g firebase-tools
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
