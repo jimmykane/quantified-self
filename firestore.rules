@@ -34,17 +34,6 @@ service cloud.firestore {
       allow read, write: if request.auth.uid == userID;
       allow create: if request.auth.uid != null;
       
-      // Stripe Extension Collections
-      match /checkout_sessions/{id} {
-        allow read, write: if request.auth.uid == userID;
-      }
-      match /subscriptions/{id} {
-        allow read: if request.auth.uid == userID;
-      }
-      match /payments/{id} {
-        allow read: if request.auth.uid == userID;
-      }
-      
       // Legal Agreements (Write-Once / Monotonic)
       match /legal/agreements {
         allow read: if request.auth.uid == userID;
@@ -131,10 +120,7 @@ service cloud.firestore {
 
     match /customers/{userID} {
       allow read: if request.auth.uid == userID;
-      allow update: if request.auth.uid == userID && 
-        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['stripeId', 'stripeLink']) || 
-         ((!('stripeId' in request.resource.data) || request.resource.data.stripeId == null) &&
-          (!('stripeLink' in request.resource.data) || request.resource.data.stripeLink == null)));
+      
       match /checkout_sessions/{id} {
         allow read, write: if request.auth.uid == userID;
       }
