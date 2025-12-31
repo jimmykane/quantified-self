@@ -29,7 +29,10 @@ const COLLECTION_GROUPS = [
     "suuntoAppWorkoutQueue",
     "COROSAPIWorkoutQueue",
     "COROSAPIHistoryImportWorkoutQueue",
-    "suuntoAppHistoryImportActivityQueue"
+    "suuntoAppHistoryImportActivityQueue",
+    "system",
+    "config",
+    "failed_jobs"
 ];
 
 const DEAUTH_CONFIG: Record<string, { service: ServiceNames | null, fn: (uid: string, service?: any) => Promise<void> }> = {
