@@ -122,18 +122,17 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       this.triggerUpsell();
       return;
     }
-    this.isLoading = true;
+    this.isConnecting = true;
     try {
       const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(this.serviceName);
       // Get the redirect url for the unsigned token created with the post
       this.windowService.windowRef.location.href = this.buildRedirectURIFromServiceToken(tokenAndURI);
     } catch (e) {
+      this.isConnecting = false;
       this.logger.error(e);
       this.snackBar.open(`Could not connect to ${this.serviceName} due to ${e.message}`, null, {
         duration: 5000,
       });
-    } finally {
-      this.isLoading = false;
     }
   }
 
