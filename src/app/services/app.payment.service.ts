@@ -233,13 +233,26 @@ export class AppPaymentService {
         const checkoutSessionsRef = collection(this.firestore, `customers/${user.uid}/checkout_sessions`);
 
         try {
-            const sessionDoc = await runInInjectionContext(this.injector, () => addDoc(checkoutSessionsRef, {
+            const sessionPayload: any = {
                 price: priceId,
                 success_url: success,
                 cancel_url: cancel,
                 allow_promotion_codes: true,
                 mode: mode, // Explicitly set mode
-            }));
+                metadata: {
+                    firebaseUID: user.uid
+                }
+            };
+
+            if (mode === 'subscription') {
+                sessionPayload.subscription_data = {
+                    metadata: {
+                        firebaseUID: user.uid
+                    }
+                };
+            }
+
+            const sessionDoc = await runInInjectionContext(this.injector, () => addDoc(checkoutSessionsRef, sessionPayload));
 
             this.logger.log('Checkout session created with ID:', sessionDoc.id);
 
