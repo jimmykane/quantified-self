@@ -122,6 +122,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
 
 
   if (!results || !results.token || !results.token.access_token) {
+    logger.error(`Failed to get token results for ${serviceName}`, { results });
     throw new Error(`No results when geting token for userID: ${userID}, serviceName: ${serviceName}`);
   }
 
