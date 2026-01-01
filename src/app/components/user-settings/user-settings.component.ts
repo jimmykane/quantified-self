@@ -110,7 +110,7 @@ export class UserSettingsComponent implements OnChanges {
         Validators.required,
         // Validators.minLength(4),
       ]),
-      privacy: new UntypedFormControl(this.user.privacy, [
+      privacy: new UntypedFormControl(this.user.privacy || Privacy.Private, [
         Validators.required,
         // Validators.minLength(4),
       ]),
