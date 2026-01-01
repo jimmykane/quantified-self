@@ -46,7 +46,39 @@
 .mat-mdc-header-cell,
 .mat-mdc-cell {
   white-space: nowrap !important;
-  padding: 0 12px !important;
+  padding: 0 16px !important;
+  border-bottom-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+.mat-mdc-header-cell {
+  color: rgba(255, 255, 255, 0.6) !important;
+  font-weight: 500 !important;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+.mat-mdc-row {
+  transition: background-color 0.2s;
+}
+
+.mat-mdc-row:hover {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+/* Specific column adjustments */
+.mat-column-Start-Date {
+  min-width: 120px;
+}
+
+.mat-column-Activity-Types {
+  min-width: 140px;
+}
+
+/* Icons alignment in headers */
+::ng-deep .mat-sort-header-container {
+  display: flex !important;
+  align-items: center !important;
 }
 
 /* Mobile Adjustments for Overall Table Compactness */
@@ -54,22 +86,16 @@
 
   .mat-mdc-header-cell,
   .mat-mdc-cell {
-    padding: 0 8px !important;
-    /* Balanced padding for mobile */
+    padding: 0 10px !important;
   }
 
   .mat-column-Checkbox,
   .mat-column-Privacy,
   .mat-column-Actions {
-    width: 40px !important;
-    min-width: 40px !important;
-  }
-
-  .mat-mdc-checkbox {
-    transform: scale(0.9);
+    width: 44px !important;
+    min-width: 44px !important;
   }
 }
-
 
 mat-icon {
   vertical-align: middle;
@@ -85,7 +111,10 @@ mat-icon {
 /* Table Container and Glass Card Styles (matching Admin Dashboard) */
 .table-container {
   border-radius: 12px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   overflow: hidden;
   margin-bottom: 3rem;
   width: 100%;
@@ -97,9 +126,11 @@ mat-icon {
   width: 100%;
 }
 
-
-
-
+/* Paginator styling to match glass theme */
+mat-paginator {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+}
 
 
 /* Force smaller badges for table actions */

@@ -1,61 +1,59 @@
-<button mat-icon-button [matMenuTriggerFor]="menu"
+<button mat-icon-button [matMenuTriggerFor]="chartOptions"
   (click)="$event.preventDefault(); $event.stopPropagation(); fixDisappearIOSBug();">
   <mat-icon>more_vert</mat-icon>
 </button>
-<mat-menu #menu="matMenu">
-  @if (user.settings.dashboardSettings.tiles.length <= 11) {
-    <section class="first">
-      <button mat-menu-item class="big" (click)="addNewTile($event)">
-        <mat-icon>add</mat-icon>
-        <span>Add new</span>
-        <mat-icon class="toolTip" matTooltip="This will copy the current tile and create a new one">info</mat-icon>
-      </button>
+<mat-menu #chartOptions="matMenu" class="qs-config-menu">
+  @if (user.settings.dashboardSettings.tiles.length <= 11) { <section class="first">
+    <button mat-flat-button color="primary" (click)="addNewTile($event)">
+      <mat-icon>add</mat-icon>
+      <span>Add new</span>
+      <mat-icon class="toolTip" matTooltip="This will copy the current tile and create a new one">info</mat-icon>
+    </button>
     </section>
-  }
-  <section mat-menu-item>
-    <mat-form-field>
-      <mat-label>Type</mat-label>
-      <mat-select placeholder="Type of tile" [value]="type" (selectionChange)="changeTileType($event)">
-        @for (tileType of tileTypes | keyvalue; track tileType) {
+    }
+    <section mat-menu-item>
+      <mat-form-field>
+        <mat-label>Type</mat-label>
+        <mat-select placeholder="Type of tile" [value]="type" (selectionChange)="changeTileType($event)">
+          @for (tileType of tileTypes | keyvalue; track tileType) {
           <mat-option [value]="tileType.value">
             {{tileType.value}}
           </mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-  </section>
-  <section mat-menu-item>
-    <mat-form-field>
-      <mat-label>Chart type</mat-label>
-      <mat-select placeholder="Looks" [value]="chartType" (selectionChange)="changeChartType($event)">
-        @for (chartType of chartTypes | keyvalue; track chartType) {
+          }
+        </mat-select>
+      </mat-form-field>
+    </section>
+    <section mat-menu-item>
+      <mat-form-field>
+        <mat-label>Chart type</mat-label>
+        <mat-select placeholder="Looks" [value]="chartType" (selectionChange)="changeChartType($event)">
+          @for (chartType of chartTypes | keyvalue; track chartType) {
           <mat-option [value]="chartType.value">
             {{chartType.value}}
           </mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-  </section>
-  @if (chartType !== chartTypes.IntensityZones) {
+          }
+        </mat-select>
+      </mat-form-field>
+    </section>
+    @if (chartType !== chartTypes.IntensityZones) {
     <section mat-menu-item>
       <mat-form-field>
         <mat-label>What data to look at</mat-label>
         <mat-select placeholder="Type" [value]="chartDataType" (selectionChange)="changeChartDataType($event)">
           @for (dataGroup of dataGroups; track dataGroup) {
-            <mat-optgroup [label]="dataGroup.name"
-              [disabled]="dataGroup.disabled">
-              @for (data of dataGroup.data; track data) {
-                <mat-option [value]="data">
-                  {{data}}
-                </mat-option>
-              }
-            </mat-optgroup>
+          <mat-optgroup [label]="dataGroup.name" [disabled]="dataGroup.disabled">
+            @for (data of dataGroup.data; track data) {
+            <mat-option [value]="data">
+              {{data}}
+            </mat-option>
+            }
+          </mat-optgroup>
           }
         </mat-select>
       </mat-form-field>
     </section>
-  }
-  @if (chartType !== chartTypes.Pie && chartType !== chartTypes.IntensityZones) {
+    }
+    @if (chartType !== chartTypes.Pie && chartType !== chartTypes.IntensityZones) {
     <section mat-menu-item>
       <mat-form-field>
         <mat-label>How to look at the data</mat-label>
@@ -63,17 +61,16 @@
           (selectionChange)="changeChartDataValueType($event)">
           <section>
             @for (chartValueType of chartValueTypes | keyvalue; track chartValueType) {
-              <mat-option
-                [value]="chartValueType.value">
-                {{chartValueType.value}}
-              </mat-option>
+            <mat-option [value]="chartValueType.value">
+              {{chartValueType.value}}
+            </mat-option>
             }
           </section>
         </mat-select>
       </mat-form-field>
     </section>
-  }
-  @if (chartType !== chartTypes.IntensityZones) {
+    }
+    @if (chartType !== chartTypes.IntensityZones) {
     <section mat-menu-item>
       <mat-form-field>
         <mat-label>Base data on</mat-label>
@@ -81,18 +78,17 @@
           (selectionChange)="changeChartDataCategoryType($event)">
           <section>
             @for (chartCategoryType of chartCategoryTypes | keyvalue; track chartCategoryType) {
-              <mat-option
-                [value]="chartCategoryType.value">
-                {{chartCategoryType.value}}
-              </mat-option>
+            <mat-option [value]="chartCategoryType.value">
+              {{chartCategoryType.value}}
+            </mat-option>
             }
           </section>
         </mat-select>
       </mat-form-field>
     </section>
-  }
+    }
 
-  @if (chartDataCategoryType === chartCategoryTypes.DateType && chartType !== chartTypes.IntensityZones) {
+    @if (chartDataCategoryType === chartCategoryTypes.DateType && chartType !== chartTypes.IntensityZones) {
     <section mat-menu-item>
       <mat-form-field>
         <mat-label>Time interval</mat-label>
@@ -107,56 +103,55 @@
         </mat-select>
       </mat-form-field>
     </section>
-  }
-  <section mat-menu-item>
-    <mat-form-field>
-      <mat-label>Column Size</mat-label>
-      <mat-select placeholder="Size" [value]="size.columns"
-        (selectionChange)="changeTileColumnSize($event)">
-        <section>
-          <mat-option [value]="1">
-            Single
-          </mat-option>
-          <mat-option [value]="2">
-            Double
-          </mat-option>
-          <mat-option [value]="3">
-            Triple
-          </mat-option>
-          <mat-option [value]="4">
-            Quad
-          </mat-option>
-        </section>
-      </mat-select>
-    </mat-form-field>
-  </section>
-  <section mat-menu-item>
-    <mat-form-field>
-      <mat-label>Row Size</mat-label>
-      <mat-select placeholder="Size" [value]="size.rows"
-        (selectionChange)="changeTileRowSize($event)">
-        <section>
-          <mat-option [value]="1">
-            Single
-          </mat-option>
-          <mat-option [value]="2">
-            Double
-          </mat-option>
-          <mat-option [value]="3">
-            Triple
-          </mat-option>
-          <mat-option [value]="4">
-            Quad
-          </mat-option>
-        </section>
-      </mat-select>
-    </mat-form-field>
-  </section>
-  @if (user.settings.dashboardSettings.tiles.length > 1) {
-    <section>
-      <button class="big" mat-menu-item (click)="deleteTile($event)">
+    }
+    <section mat-menu-item>
+      <mat-form-field>
+        <mat-label>Column Size</mat-label>
+        <mat-select placeholder="Size" [value]="size.columns" (selectionChange)="changeTileColumnSize($event)">
+          <section>
+            <mat-option [value]="1">
+              Single
+            </mat-option>
+            <mat-option [value]="2">
+              Double
+            </mat-option>
+            <mat-option [value]="3">
+              Triple
+            </mat-option>
+            <mat-option [value]="4">
+              Quad
+            </mat-option>
+          </section>
+        </mat-select>
+      </mat-form-field>
+    </section>
+    <section mat-menu-item>
+      <mat-form-field>
+        <mat-label>Row Size</mat-label>
+        <mat-select placeholder="Size" [value]="size.rows" (selectionChange)="changeTileRowSize($event)">
+          <section>
+            <mat-option [value]="1">
+              Single
+            </mat-option>
+            <mat-option [value]="2">
+              Double
+            </mat-option>
+            <mat-option [value]="3">
+              Triple
+            </mat-option>
+            <mat-option [value]="4">
+              Quad
+            </mat-option>
+          </section>
+        </mat-select>
+      </mat-form-field>
+    </section>
+    @if (user.settings.dashboardSettings.tiles.length > 1) {
+    <section class="delete-section">
+      <button mat-button color="warn" (click)="deleteTile($event)">
         <mat-icon>delete_outline</mat-icon>
+        <span>Delete</span>
       </button>
     </section>
-  }
+    }
 </mat-menu>
