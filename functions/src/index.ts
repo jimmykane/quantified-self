@@ -134,6 +134,6 @@ export { listUsers, getQueueStats, getUserCount, setMaintenanceMode, getMaintena
 // Tasks
 export { processWorkoutTask } from './tasks/workout-processor';
 
-// Missing / Deleted Functions (Not Exported)
-// - addCookieAndRedirect
-// - getSuuntoAPIAuthCode
+// Stripe Cleanup
+export { cleanupStripeCustomer } from './stripe/cleanup';
+
