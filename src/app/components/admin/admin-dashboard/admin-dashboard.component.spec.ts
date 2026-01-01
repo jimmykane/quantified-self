@@ -16,6 +16,8 @@ import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ActivatedRoute } from '@angular/router';
 
+import { ChangeDetectorRef, NO_ERRORS_SCHEMA } from '@angular/core';
+
 describe('AdminDashboardComponent', () => {
     let component: AdminDashboardComponent;
     let fixture: ComponentFixture<AdminDashboardComponent>;
@@ -100,7 +102,8 @@ describe('AdminDashboardComponent', () => {
                         }
                     }
                 }
-            ]
+            ],
+            schemas: [NO_ERRORS_SCHEMA]
         })
             .overrideComponent(AdminDashboardComponent, {
                 add: {

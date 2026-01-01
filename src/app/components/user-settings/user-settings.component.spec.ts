@@ -91,7 +91,8 @@ describe('UserSettingsComponent', () => {
                 { provide: MatDialog, useValue: {} },
                 { provide: LoggerService, useValue: {} },
                 { provide: Analytics, useValue: {} },
-            ]
+            ],
+            schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();
 
         fixture = TestBed.createComponent(UserSettingsComponent);

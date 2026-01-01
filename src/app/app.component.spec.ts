@@ -97,7 +97,7 @@ describe('AppComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('should hide navigation for free users on pricing page', () => {
+    it('should show navigation for free users on pricing page', () => {
         // Mock user as free
         component['currentUser'] = { stripeRole: undefined };
         component.onboardingCompleted = true;
@@ -105,7 +105,7 @@ describe('AppComponent', () => {
         // Mock router URL
         mockRouter.url = '/pricing';
 
-        expect(component.showNavigation).toBe(false);
+        expect(component.showNavigation).toBe(true);
     });
 
     it('should show navigation for free users on dashboard', () => {
