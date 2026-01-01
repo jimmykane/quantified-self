@@ -15,6 +15,7 @@ import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { Analytics, logEvent } from '@angular/fire/analytics';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../../constants/coros';
 import dayjs from 'dayjs';
 
 
@@ -38,6 +39,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public isLoading: boolean;
   public serviceNames = ServiceNames
   public isPro = false;
+  public corosHistoryLimitMonths = COROS_HISTORY_IMPORT_LIMIT_MONTHS;
   private analytics = inject(Analytics);
 
   constructor(
