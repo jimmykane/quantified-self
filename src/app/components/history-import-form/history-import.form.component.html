@@ -12,6 +12,17 @@
 @if (formGroup && isAllowedToDoHistoryImport) {
 @if (isPro) {
 <form [formGroup]="formGroup" class="qs-form history-import-form">
+  @if (minDate && serviceName === serviceNames.COROSAPI) {
+  <div class="limit-info">
+    <mat-icon>info</mat-icon>
+    <div class="limit-text">
+      <span class="limit-title">{{corosHistoryLimitMonths}}-Month Import Limit</span>
+      <p class="limit-description">
+        Dates before {{ minDate | date:'mediumDate' }} are disabled in the picker due to API restrictions.
+      </p>
+    </div>
+  </div>
+  }
   <div class="date-fields">
     <mat-form-field appearance="outline">
       <mat-label>Start Date</mat-label>
@@ -19,9 +30,6 @@
         (click)="startDate.open()">
       <mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>
       <mat-datepicker #startDate></mat-datepicker>
-      @if (minDate && serviceName === serviceNames.COROSAPI) {
-      <mat-hint>COROS API limits history to the last {{corosHistoryLimitMonths}} months.</mat-hint>
-      }
     </mat-form-field>
     <mat-form-field appearance="outline">
       <mat-label>End Date</mat-label>
