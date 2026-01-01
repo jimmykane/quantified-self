@@ -16,6 +16,9 @@ class MockAppPaymentService {
     manageSubscriptions() {
         return Promise.resolve();
     }
+    restorePurchases() {
+        return Promise.resolve();
+    }
 }
 
 class MockAppUserService {
@@ -86,5 +89,23 @@ describe('PricingComponent', () => {
                 message: expect.stringContaining('30-day grace period')
             })
         }));
+    });
+
+    it('should show error dialog with support link when restorePurchases fails', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const dialog = TestBed.inject(MatDialog);
+        const dialogSpy = vi.spyOn(dialog, 'open');
+
+        vi.spyOn(paymentService, 'restorePurchases').mockRejectedValue(new Error('Stripe error'));
+
+        await component.restorePurchases();
+
+        expect(dialogSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            data: expect.objectContaining({
+                title: 'Error',
+                message: expect.stringContaining('mailto:support@quantified-self.io')
+            })
+        }));
+        expect(component.isLoading).toBe(false);
     });
 });
