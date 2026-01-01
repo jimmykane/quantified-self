@@ -46,7 +46,7 @@ describe('Firestore Security Rules', () => {
             await assertFails(db.collection('customers').doc(otherId).get());
         });
 
-        it('should allow user to clear their own stripeId and stripeLink', async () => {
+        it('should DENY user from clearing their own stripeId and stripeLink', async () => {
             const db = testEnv.authenticatedContext(userId).firestore();
 
             // Setup initial data as admin
@@ -59,13 +59,13 @@ describe('Firestore Security Rules', () => {
             });
 
             // User clears their fields using null (simpler case)
-            await assertSucceeds(db.collection('customers').doc(userId).update({
+            await assertFails(db.collection('customers').doc(userId).update({
                 stripeId: null,
                 stripeLink: null
             }));
         });
 
-        it('should allow user to delete their stripeId using deleteField()', async () => {
+        it('should DENY user from deleting their stripeId using deleteField()', async () => {
             const db = testEnv.authenticatedContext(userId).firestore();
             const { deleteField } = await import('firebase/firestore');
 
@@ -77,7 +77,7 @@ describe('Firestore Security Rules', () => {
             });
 
             // User clears their fields specificially using deleteField()
-            await assertSucceeds(db.collection('customers').doc(userId).update({
+            await assertFails(db.collection('customers').doc(userId).update({
                 stripeId: deleteField(),
                 stripeLink: deleteField()
             }));
@@ -98,20 +98,7 @@ describe('Firestore Security Rules', () => {
             }));
         });
 
-        it('should allow user to update other fields without touching stripeId', async () => {
-            const db = testEnv.authenticatedContext(userId).firestore();
 
-            await testEnv.withSecurityRulesDisabled(async (context) => {
-                await context.firestore().collection('customers').doc(userId).set({
-                    stripeId: 'cus_stable',
-                    settings: { theme: 'dark' }
-                });
-            });
-
-            await assertSucceeds(db.collection('customers').doc(userId).update({
-                'settings.theme': 'light'
-            }));
-        });
     });
 
     describe('Role protected content', () => {

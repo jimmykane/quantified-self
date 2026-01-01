@@ -271,12 +271,14 @@ export class AppPaymentService {
                         // Self-healing: If customer not found, clear IDs and retry once
                         if (session.error.message?.includes('No such customer')) {
                             this.logger.log('Detected stale Stripe customer ID. Clearing and retrying...');
-                            const customerRef = doc(this.firestore, `customers/${user.uid}`);
-                            const { updateDoc, deleteField } = await import('@angular/fire/firestore');
-                            await runInInjectionContext(this.injector, () => updateDoc(customerRef, {
-                                stripeId: deleteField(),
-                                stripeLink: deleteField()
-                            }));
+
+                            const cleanupStripeCustomer = httpsCallableFromURL<void, { success: boolean, cleaned: boolean }>(
+                                this.functions,
+                                environment.functions.cleanupStripeCustomer
+                            );
+
+                            await cleanupStripeCustomer();
+
                             // Retry the specific checkout session creation
                             return this.appendCheckoutSession(priceId, success, cancel);
                         }
