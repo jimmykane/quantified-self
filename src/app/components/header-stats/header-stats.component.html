@@ -3,7 +3,7 @@
   @if (layout === 'grid') {
   <section class="grid">
     @for (stat of displayedStats; track stat) {
-    <div class="stat-item" [matTooltip]="stat.getDisplayType()">
+    <div class="stat-item">
       <div class="stat-avatar">
         <app-data-type-icon [size]="'20px'" [vAlign]="'middle'" [dataType]="stat.getType()"></app-data-type-icon>
       </div>
@@ -15,6 +15,7 @@
           {{stat.getDisplayValue()}} {{stat.getDisplayUnit()}}
         </div>
       </div>
+      <mat-icon class="stat-info-icon" fontIcon="info" [matTooltip]="stat.getDisplayType()"></mat-icon>
     </div>
     }
     <ng-content select="[grid-suffix]"></ng-content>

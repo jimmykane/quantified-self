@@ -25,7 +25,23 @@ section.grid {
   background-color: var(--mat-app-surface-container-low);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   text-align: left;
+  text-align: left;
   gap: 12px;
+}
+
+.stat-info-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
+  color: var(--mat-app-on-surface-variant);
+  opacity: 0.5;
+  margin-left: auto;
+  /* Push to the right */
+  cursor: pointer;
+
+  &:hover {
+    opacity: 1;
+  }
 }
 
 .stat-item:hover {
