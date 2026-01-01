@@ -45,9 +45,7 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
     }
   }
 
-  isConnectedToService(): boolean {
-    return !!this.serviceTokens && !!this.serviceTokens.length
-  }
+  isConnectedToService = () => (!!this.serviceTokens && !!this.serviceTokens.length) || this.forceConnected;
 
   buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
     return token.redirect_uri

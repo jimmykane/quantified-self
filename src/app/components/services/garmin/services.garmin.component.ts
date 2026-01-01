@@ -47,7 +47,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   isConnectedToService(): boolean {
-    return !!this.serviceTokens && !!this.serviceTokens.length && !!this.serviceTokens[0] && !!this.serviceTokens[0].accessToken
+    return (!!this.serviceTokens?.length && !!this.serviceTokens[0]?.accessToken) || this.forceConnected;
   }
 
   buildRedirectURIFromServiceToken(token: { redirect_uri: string, state: string, oauthToken: string }): string {

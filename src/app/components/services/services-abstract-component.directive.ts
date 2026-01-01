@@ -43,6 +43,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   public serviceNames = ServiceNames;
   public isConnecting = false;
   public isDisconnecting = false;
+  public forceConnected = false;
 
 
   protected serviceDataSubscription: Subscription;
@@ -99,6 +100,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       try {
         await this.requestAndSetToken(this.route.snapshot.queryParamMap)
         logEvent(this.analytics, 'connected_to_service', { serviceName: this.serviceName });
+        this.forceConnected = true;
         this.snackBar.open(`Successfully connected to ${this.serviceName}`, null, {
           duration: 10000,
         });
@@ -156,6 +158,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       });
     }
     this.isDisconnecting = false;
+    this.forceConnected = false;
   }
 
   triggerUpsell() {

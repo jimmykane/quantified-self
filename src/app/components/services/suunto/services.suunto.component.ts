@@ -45,7 +45,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   }
 
   isConnectedToService(): boolean {
-    return !!this.serviceTokens && !!this.serviceTokens.length
+    return (!!this.serviceTokens && !!this.serviceTokens.length) || this.forceConnected;
   }
 
   buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
