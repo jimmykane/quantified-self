@@ -1,0 +1,1 @@
+export const COROS_HISTORY_IMPORT_LIMIT_MONTHS = 3;
