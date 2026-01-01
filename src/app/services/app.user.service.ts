@@ -572,7 +572,19 @@ export class AppUserService implements OnDestroy {
   }
 
   public async updateUserProperties(user: User, propertiesToUpdate: any) {
-    return runInInjectionContext(this.injector, () => updateDoc(doc(this.firestore, 'users', user.uid), propertiesToUpdate));
+    return runInInjectionContext(this.injector, async () => {
+      const promises = [];
+      if (propertiesToUpdate.settings) {
+        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), propertiesToUpdate.settings, { merge: true }));
+        delete propertiesToUpdate.settings;
+      }
+
+      if (Object.keys(propertiesToUpdate).length > 0) {
+        promises.push(updateDoc(doc(this.firestore, 'users', user.uid), propertiesToUpdate));
+      }
+
+      await Promise.all(promises);
+    });
   }
 
   public async updateUser(user: User) {

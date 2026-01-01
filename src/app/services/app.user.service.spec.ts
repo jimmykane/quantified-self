@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { AppUserService } from './app.user.service';
 import { Auth, authState } from '@angular/fire/auth';
-import { Firestore, doc, docData } from '@angular/fire/firestore';
+import { Firestore, doc, docData, setDoc, updateDoc } from '@angular/fire/firestore';
 import { Functions } from '@angular/fire/functions';
 import { HttpClient } from '@angular/common/http';
 import { AppEventService } from './app.event.service';
@@ -21,8 +21,10 @@ vi.mock('@angular/fire/firestore', async (importOriginal) => {
     const actual: any = await importOriginal();
     return {
         ...actual,
-        doc: vi.fn(),
+        doc: vi.fn().mockReturnValue({}),
         docData: vi.fn(),
+        setDoc: vi.fn(),
+        updateDoc: vi.fn(),
     };
 });
 
@@ -130,6 +132,21 @@ describe('AppUserService', () => {
 
             const res = await firstValueFrom(service.getGracePeriodUntil());
             expect(res).toEqual(mockDate);
+        });
+    });
+    describe('updateUserProperties', () => {
+        it('should split settings and other properties', async () => {
+            const user = { uid: 'u1' } as any;
+            const settings = { theme: 'dark' };
+            const updates = { displayName: 'New Name', settings };
+
+            await service.updateUserProperties(user, updates);
+
+            // Expect updateDoc to be called with strictly the non-settings properties
+            expect(updateDoc).toHaveBeenCalledWith(expect.anything(), { displayName: 'New Name' });
+
+            // Expect setDoc to be called for the settings
+            expect(setDoc).toHaveBeenCalledWith(expect.anything(), settings, { merge: true });
         });
     });
 });
