@@ -169,23 +169,40 @@ export class ChartsColumnsComponent extends DashboardChartAbstractDirective impl
         categoryLabel.label.dx = 40;
       }
       categoryLabel.label.adapter.add('text', (text, target) => {
+        if (!target.dataItem || !target.dataItem.dataContext) {
+          return '';
+        }
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext[this.chartDataValueType]));
         return `[bold font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
       });
-      categoryLabel.label.background = new core.RoundedRectangle();
       categoryLabel.label.background.fillOpacity = 1;
       categoryLabel.label.background.strokeOpacity = 1;
-      // categoryLabel.label.background.fill = core.color(AppColors.LightGray);
-      categoryLabel.label.adapter.add('stroke', (stroke, target) => {
+      categoryLabel.label.padding(5, 10, 5, 10);
+      categoryLabel.label.textAlign = 'middle';
+      categoryLabel.label.verticalCenter = 'middle';
+      categoryLabel.label.horizontalCenter = 'middle';
+      categoryLabel.label.hideOversized = false;
+      categoryLabel.label.truncate = false;
+
+      // Set text color to white for high contrast
+      categoryLabel.label.fill = core.color("#ffffff");
+
+      // Set BACKGROUND fill to the series color
+      categoryLabel.label.background.adapter.add('fill', (fill, target) => {
+        if (!target.dataItem || !target.dataItem.dataContext) {
+          return fill;
+        }
         if (categoryAxis instanceof charts.CategoryAxis) {
           return core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext.type]))
         }
         return this.getFillColor(chart, target.dataItem.index)
       });
-      categoryLabel.label.padding(1, 4, 0, 4);
-      categoryLabel.label.hideOversized = false;
-      categoryLabel.label.truncate = false;
-      categoryLabel.label.adapter.add('fill', (fill, target) => {
+
+      // Set BACKGROUND stroke (border) to the series color (optional, looks cleaner)
+      categoryLabel.label.background.adapter.add('stroke', (stroke, target) => {
+        if (!target.dataItem || !target.dataItem.dataContext) {
+          return stroke;
+        }
         if (categoryAxis instanceof charts.CategoryAxis) {
           return core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext.type]))
         }
