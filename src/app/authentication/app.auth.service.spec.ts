@@ -1,13 +1,33 @@
+import { vi, describe, it, expect, beforeEach, Mock } from 'vitest';
+
+const { mockUserFunction } = vi.hoisted(() => {
+    return {
+        mockUserFunction: vi.fn(),
+    };
+});
+
+// Mock @angular/fire/auth modular functions MUST be at the top level
+vi.mock('@angular/fire/auth', async () => {
+    const actual = await vi.importActual('@angular/fire/auth');
+    return {
+        ...actual,
+        user: mockUserFunction,
+        signInWithPopup: vi.fn(),
+        signOut: vi.fn(),
+    };
+});
+
 import { TestBed } from '@angular/core/testing';
 import { AppAuthService } from './app.auth.service';
 import { AppUserService } from '../services/app.user.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
-import { Auth, GithubAuthProvider } from '@angular/fire/auth';
+import { Auth, GithubAuthProvider, user as fireAuthUser } from '@angular/fire/auth';
 import { Firestore } from '@angular/fire/firestore';
 import { Analytics } from '@angular/fire/analytics';
 import { EnvironmentInjector } from '@angular/core';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { of, BehaviorSubject } from 'rxjs';
+import { Privacy } from '@sports-alliance/sports-lib';
 
 // Mock dependencies
 const mockAuth = {
@@ -18,7 +38,9 @@ const mockFirestore = {};
 const mockAnalytics = {};
 
 const mockUserService = {
-    fillMissingAppSettings: (settings: any) => settings
+    fillMissingAppSettings: (settings: any) => settings,
+    getUserByID: vi.fn(),
+    isPro: vi.fn(),
 };
 
 const mockSnackBar = {
@@ -32,10 +54,14 @@ const mockLocalStorageService = {
     clearAllStorage: vi.fn()
 };
 
+
 describe('AppAuthService', () => {
     let service: AppAuthService;
+    let userSubject: BehaviorSubject<any>;
 
     beforeEach(() => {
+        userSubject = new BehaviorSubject<any>(null);
+        mockUserFunction.mockReturnValue(userSubject);
         TestBed.configureTestingModule({
             providers: [
                 AppAuthService,
@@ -66,5 +92,41 @@ describe('AppAuthService', () => {
         expect(signInSpy).toHaveBeenCalled();
         const args = signInSpy.mock.calls[0];
         expect(args[0]).toBeInstanceOf(GithubAuthProvider);
+    });
+
+    it('should create a synthetic user with default Private privacy when user is not in DB', async () => {
+        const mockFirebaseUser = {
+            uid: 'new-uid',
+            email: 'new@example.com',
+            displayName: 'New User',
+            photoURL: 'photo-url',
+            emailVerified: true,
+            isAnonymous: false,
+            metadata: {
+                creationTime: new Date().toISOString(),
+                lastSignInTime: new Date().toISOString(),
+            },
+            getIdTokenResult: vi.fn().mockResolvedValue({
+                claims: {},
+            }),
+        };
+
+        (mockUserService.getUserByID as Mock).mockReturnValue(of(null));
+
+        const userPromise = new Promise<any>((resolve) => {
+            const sub = service.user$.subscribe((u) => {
+                if (u && u.uid === 'new-uid') {
+                    sub.unsubscribe();
+                    resolve(u);
+                }
+            });
+        });
+
+        userSubject.next(mockFirebaseUser);
+
+        const user = await userPromise;
+
+        expect(user.privacy).toBe(Privacy.Private);
+        expect(user.acceptedPrivacyPolicy).toBe(false);
     });
 });

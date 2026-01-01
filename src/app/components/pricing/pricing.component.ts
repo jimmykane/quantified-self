@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -27,6 +27,8 @@ import { LoggerService } from '../../services/logger.service';
     styleUrls: ['./pricing.component.scss']
 })
 export class PricingComponent implements OnInit {
+    @Output() planSelected = new EventEmitter<void>();
+
     products$: Observable<StripeProduct[]> | null = null;
     currentRole: StripeRole | null = null;
     isLoading = false;
@@ -45,7 +47,23 @@ export class PricingComponent implements OnInit {
     isLoadingRole = true;
 
     async ngOnInit(): Promise<void> {
-        this.products$ = this.paymentService.getProducts();
+        // Define a synthetic "Free" product that matches the StripeProduct structure
+        const freeProduct: any = {
+            id: 'free_tier',
+            name: 'Free Forever',
+            description: 'The essentials to get started',
+            metadata: { role: 'free' },
+            prices: [{
+                id: 'free_price',
+                unit_amount: 0,
+                currency: 'USD',
+                recurring: { interval: 'forever' }
+            }]
+        };
+
+        this.products$ = this.paymentService.getProducts().pipe(
+            map(products => [freeProduct, ...products])
+        );
 
         // Initial load
         const role = await this.userService.getSubscriptionRole();
@@ -134,6 +152,44 @@ export class PricingComponent implements OnInit {
         } catch (error) {
             this.logger.error('Error managing subscription:', error);
             alert('Failed to redirect to subscription management. Please try again.');
+            this.isLoading = false;
+        }
+    }
+
+    async selectFreeTier() {
+        if (!this.auth.currentUser) {
+            this.router.navigate(['/login']);
+            return;
+        }
+
+        this.isLoading = true;
+        try {
+            // We need the full user object to pass to setFreeTier.
+            // We can get it from userService.getUserByID or via the authService observable if we had it here.
+            // But simpler: just get the uid and let the service handle it? 
+            // The method signature I added expects 'User' object.
+            // Let's fetch it quickly or assume we have it via a subscription if we inject authService properly.
+            // Actually, `AppUserService` update methods generally take the partial user object or just UID for some things, 
+            // but `updateUserProperties` takes `User`.
+
+            // Let's get the user first.
+            const uid = this.auth.currentUser.uid;
+            const user = await firstValueFrom(this.userService.getUserByID(uid));
+
+            if (user) {
+                await this.userService.setFreeTier(user);
+                this.logger.log('Free tier selected. Waiting for reactive updates to handle navigation.');
+
+                this.planSelected.emit();
+
+                // Do NOT navigate from here. 
+                // The OnboardingComponent listens to user changes and will checkAndAdvance/finishOnboarding automatically.
+                // Navigation here causes a race condition with the guard.
+
+                this.isLoading = false;
+            }
+        } catch (error) {
+            this.logger.error('Error selecting free tier:', error);
             this.isLoading = false;
         }
     }

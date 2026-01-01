@@ -3,6 +3,7 @@ import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { MatStepperModule, MatStepper } from '@angular/material/stepper';
 import { MatButtonModule } from '@angular/material/button';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ReactiveFormsModule, FormBuilder, Validators, FormGroup, FormControl } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -31,7 +32,9 @@ import { LoggerService } from '../../services/logger.service';
         PricingComponent,
         MatIconModule,
         MatCardModule,
-        MatDividerModule
+        MatCardModule,
+        MatDividerModule,
+        MatProgressSpinnerModule
     ],
     templateUrl: './onboarding.component.html',
     styleUrls: ['./onboarding.component.scss']
@@ -112,6 +115,8 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
         }
     }
 
+    canFinish = false;
+
     private async checkAndAdvance() {
         if (this.user) {
             // Re-check pro status whenever user data changes
@@ -122,18 +127,22 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
                 return (this.user as any)[userProperty] === true;
             });
 
+            const isSubscribed = await this.userService.hasPaidAccess();
+            const isFreeCompleted = (this.user as any).onboardingCompleted === true;
+            this.canFinish = isSubscribed || isFreeCompleted;
+
             this.logger.log('[OnboardingComponent] checkAndAdvance:', {
                 termsAccepted,
                 isPro: this.isPro,
-                selectedIndex: this.stepper?.selectedIndex
+                selectedIndex: this.stepper?.selectedIndex,
+                canFinish: this.canFinish
             });
 
-            if (termsAccepted && this.stepper && this.stepper.selectedIndex === 0) {
-                const isSubscribed = await this.userService.hasPaidAccess();
-                if (isSubscribed) {
-                    this.logger.log('[OnboardingComponent] Terms accepted and user is subscribed, finishing onboarding.');
+            if (termsAccepted) {
+                if (this.canFinish) {
+                    this.logger.log('[OnboardingComponent] User setup complete (paid or free), finishing onboarding.');
                     this.finishOnboarding();
-                } else {
+                } else if (this.stepper && this.stepper.selectedIndex === 0) {
                     this.logger.log('[OnboardingComponent] Terms accepted, auto-advancing to pricing step.');
                     // Use setTimeout to avoid ExpressionChangedAfterItHasBeenCheckedError
                     setTimeout(() => {
@@ -155,8 +164,11 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
         this.isPro = await this.userService.isPro();
     }
 
+    isLoading = false;
+
     async onTermsSubmit() {
         if (this.termsFormGroup.valid) {
+            this.isLoading = true;
             this.policies.forEach(policy => {
                 const userProperty = this.mapFormControlNameToUserProperty(policy.formControlName);
                 if (userProperty) {
@@ -186,6 +198,8 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
                 }
             } catch (error) {
                 this.logger.error('Error updating user terms:', error);
+            } finally {
+                this.isLoading = false;
             }
         } else {
             this.termsFormGroup.markAllAsTouched();
@@ -198,8 +212,20 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
     }
 
     async finishOnboarding() {
+        this.isLoading = true;
         try {
-            // Mark onboarding as completed in the database
+            // Implicit Free Tier Selection:
+            // If the user clicks continue but hasn't explicitly selected a plan (canFinish is false),
+            // and they don't have paid access, we assume they want the Free Tier.
+            if (!this.canFinish) {
+                const isPro = await this.userService.hasPaidAccess();
+                if (!isPro) {
+                    this.logger.log('[OnboardingComponent] Implicitly selecting Free Tier via Continue button.');
+                    await this.userService.setFreeTier(this.user);
+                }
+            }
+
+            // Mark onboarding as completed in the database (ensures consistency)
             await this.userService.updateUserProperties(this.user, { onboardingCompleted: true });
 
             // Navigate to dashboard. The OnboardingGuard will now allow this.
@@ -207,6 +233,15 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
             this.router.navigate(['/dashboard']);
         } catch (error) {
             this.logger.error('Error completing onboarding:', error);
+        } finally {
+            this.isLoading = false;
         }
+    }
+
+    onPlanSelected() {
+        this.logger.log('[OnboardingComponent] Plan selected event received from child component.');
+        this.canFinish = true;
+        // Attempt to finish immediately if on the right step
+        this.finishOnboarding();
     }
 }

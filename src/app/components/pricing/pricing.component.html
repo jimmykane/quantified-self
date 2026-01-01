@@ -44,8 +44,10 @@
   } @else {
   <div class="products-grid" *ngIf="products$ | async as products; else loading">
     @for (product of products; track product.id) {
-    <mat-card class="product-card glass-card" [class.current-plan-highlight]="product.metadata.role === currentRole"
-      [class.pro-card]="product.metadata.role === 'pro'" [class.basic-card]="product.metadata.role === 'basic'">
+    <mat-card class="product-card glass-card"
+      [class.current-plan-highlight]="(product.metadata.role === 'free' && (!currentRole || currentRole === 'free')) || product.metadata.role === currentRole"
+      [class.pro-card]="product.metadata.role === 'pro'" [class.basic-card]="product.metadata.role === 'basic'"
+      [class.free-card]="product.metadata.role === 'free'">
 
       @if (product.metadata.role === 'pro') {
       <div class="popular-ribbon pro-ribbon">Best Value</div>
@@ -59,7 +61,13 @@
       </mat-card-header>
       <mat-card-content>
         <div class="features-list">
-          @if (product.metadata.role === 'basic') {
+          @if (product.metadata.role === 'free') {
+          <ul>
+            <li><mat-icon style="color: grey">check</mat-icon> Manual uploads</li>
+            <li><mat-icon style="color: grey">check</mat-icon> Basic analysis</li>
+            <li><mat-icon color="warn">close</mat-icon> No auto-sync</li>
+          </ul>
+          } @else if (product.metadata.role === 'basic') {
           <ul>
             <li><mat-icon color="accent">check</mat-icon> Track up to 100 activities</li>
             <li><mat-icon color="warn">close</mat-icon> Manual uploads only</li>
@@ -79,14 +87,21 @@
         <!-- Since we split into virtual products, each product has exactly 1 price usually -->
         <div *ngFor="let price of product.prices" class="price-section">
           <h3 class="price">
+            @if (price.unit_amount === 0) {
+            $0
+            } @else {
             {{ (price.unit_amount || 0) / 100 | currency: price.currency.toUpperCase() : 'symbol' : '1.0-0' }}
+            }
             <span *ngIf="price.recurring" class="interval">/ {{ price.recurring.interval }}</span>
           </h3>
 
           <!-- Current Plan Indicator -->
-          @if (currentRole && product.metadata.role === currentRole) {
+          @if ((product.metadata.role === 'free' && (!currentRole || currentRole === 'free')) || (currentRole &&
+          product.metadata.role === currentRole)) {
           <div class="current-plan-chip">
-            <mat-chip-row highlighted color="primary" class="current-plan-indicator">
+            <mat-chip-row highlighted color="primary" class="current-plan-indicator"
+              [style.backgroundColor]="product.metadata.role === 'free' ? 'grey' : null"
+              [style.color]="product.metadata.role === 'free' ? 'white' : null">
               <mat-icon matChipAvatar>check_circle</mat-icon>
               Current Plan
             </mat-chip-row>
@@ -98,8 +113,19 @@
           <button mat-stroked-button (click)="manageSubscription()" [disabled]="isLoading">Downgrade</button>
           }
 
-          <!-- Upgrade/Buy Logic -->
+          <!-- Upgrade/Buy/Select Free Logic -->
           @else {
+          @if (product.metadata.role === 'free') {
+          @if (currentRole) {
+          <!-- Paid user looking at free -->
+          <button mat-stroked-button disabled>Included</button>
+          } @else {
+          <!-- New User (Role is null) choosing Free -->
+          <button mat-stroked-button (click)="selectFreeTier()" [disabled]="isLoading">
+            Choose Free Tier
+          </button>
+          }
+          } @else {
           <!-- Use 'Upgrade' if we are Basic looking at Pro -->
           @if (currentRole === 'basic' && product.metadata.role === 'pro') {
           <button mat-flat-button color="accent" (click)="subscribe(price)" [disabled]="isLoading" class="upgrade-btn">
@@ -117,9 +143,10 @@
             @if (loadingPriceId === price.id) {
             <mat-spinner diameter="20"></mat-spinner>
             } @else {
-            {{ price.recurring ? 'Start ' + product.name : 'Buy Now' }}
+            {{ price.recurring ? (product.metadata.role | titlecase) : 'Buy Now' }}
             }
           </button>
+          }
           }
           }
 

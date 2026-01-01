@@ -128,7 +128,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       const stripeRole = user.stripeRole;
       const hasPaidAccess = stripeRole === 'pro' || stripeRole === 'basic' || user.isPro === true;
 
-      this.onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce);
+      const explicitOnboardingComplete = (user as any).onboardingCompleted === true;
+      this.onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce || explicitOnboardingComplete);
 
       // If user HAS pro access now, they definitely "subscribed once".
       // Mark it persistently if not already marked.
@@ -149,13 +150,13 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     }
     // Requirement: Hide sidenav/toolbar if user has NO product (undefined role) AND is on pricing page
     // If they have 'free', 'basic', or 'pro', they are good.
-    if (this.currentUser && this.router.url.includes('pricing')) {
-      const stripeRole = (this.currentUser as any).stripeRole;
-      // If stripeRole is undefined or null, they haven't been assigned a product yet (even free).
-      if (!stripeRole) {
-        return false;
-      }
-    }
+    // Constraint removed: Free tier users (no role) should still see nav on pricing page
+    // if (this.currentUser && this.router.url.includes('pricing')) {
+    //   const stripeRole = (this.currentUser as any).stripeRole;
+    //   if (!stripeRole) {
+    //     return false;
+    //   }
+    // }
     return true;
   }
 

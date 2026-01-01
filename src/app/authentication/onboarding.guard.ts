@@ -38,9 +38,10 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
             const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
             const stripeRole = (user as any).stripeRole;
             const hasPaidAccess = stripeRole === 'pro' || stripeRole === 'basic' || (user as any).isPro === true;
+            const explicitlyCompleted = (user as any).onboardingCompleted === true;
 
-            // User must have accepted terms AND (be pro OR have subscribed once)
-            const onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce);
+            // User must have accepted terms AND (be pro OR have subscribed once OR explicitly completed free onboarding)
+            const onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce || explicitlyCompleted);
 
             logger.log('[OnboardingGuard] User Assessment:', {
                 uid: user.uid,
@@ -48,6 +49,7 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
                 hasSubscribedOnce,
                 hasPaidAccess,
                 stripeRole: (user as any).stripeRole,
+                explicitlyCompleted,
                 onboardingCompleted
             });
 

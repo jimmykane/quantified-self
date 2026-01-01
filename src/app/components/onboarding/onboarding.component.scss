@@ -19,9 +19,25 @@
     display: flex;
     flex-direction: column;
     gap: 20px;
+    width: 100%; // Ensure full width usage
 
     h2 {
         margin-top: 0;
+    }
+}
+
+// Ensure the form itself takes full width of the mat-step
+// Ensure the form itself takes full width of the mat-step
+form.qs-form {
+    width: 100%;
+    max-width: 100%; // Override global 600px limit
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+
+    // Ensure all inputs inside span full width
+    mat-form-field {
+        width: 100%;
     }
 }
 
@@ -30,6 +46,7 @@
     flex-direction: column;
     gap: 25px; // Increased gap for better separation of sections
     margin: 20px 0;
+    width: 100%; // Ensure full width
 }
 
 // New styles for the clean policy design
@@ -38,6 +55,7 @@
     flex-direction: column;
     gap: 10px;
     padding-bottom: 5px;
+    width: 100%; // Ensure full width
 
     h3 {
         margin: 0;
@@ -52,7 +70,8 @@
         line-height: 1.5;
         // color: rgba(0,0,0,0.6); /* REMOVED */
         opacity: 0.7; // Use opacity instead
-        max-width: 850px; // Ensure readable line length
+        // max-width: 850px; // REMOVED: User requested full width, so let it expand.
+        width: 100%;
     }
 
     mat-checkbox {
@@ -74,9 +93,15 @@
     }
 }
 
-.actions {
+// Consolidated actions class for consistency across key steps
+.actions,
+.qs-form-actions {
     display: flex;
-    justify-content: flex-end;
-    gap: 10px; // Spacing between Next and Logout
-    margin-top: 20px;
+    justify-content: flex-end; // Align buttons to the right
+    gap: 15px; // Consistent spacing
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(0, 0, 0, 0.05); // Subtle separator
+    width: 100%; // Ensure controls span full width
+    box-sizing: border-box; // Ensure padding fits in width
 }

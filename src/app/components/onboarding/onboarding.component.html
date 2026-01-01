@@ -11,7 +11,7 @@
                         <div class="checkbox-group">
                             <span class="mat-subheader">Please examine the following agreements carefully</span>
 
-                            <ng-container *ngFor="let policy of policies">
+                            <ng-container *ngFor="let policy of policies; let last = last">
                                 <section class="policy-item">
                                     <h3>{{policy.title}}</h3>
                                     <!-- Use innerHTML for content paragraphs/bullets -->
@@ -23,13 +23,19 @@
                                         {{policy.checkboxLabel}}
                                     </mat-checkbox>
                                 </section>
-                                <mat-divider></mat-divider>
+                                <mat-divider *ngIf="!last"></mat-divider>
                             </ng-container>
                         </div>
 
                         <div class="qs-form-actions">
-                            <button mat-flat-button color="primary" [disabled]="!termsFormGroup.valid"
-                                (click)="onTermsSubmit()">Next</button>
+                            <button mat-flat-button color="primary" [disabled]="!termsFormGroup.valid || isLoading"
+                                (click)="onTermsSubmit()">
+                                @if (isLoading) {
+                                Processing...
+                                } @else {
+                                Next
+                                }
+                            </button>
                             <button mat-stroked-button color="warn" (click)="logout()">Logout</button>
                         </div>
                     </div>
@@ -39,10 +45,11 @@
             <!-- Step 2: Pricing -->
             <mat-step label="Plan">
                 <div class="step-content pricing-step">
-                    <app-pricing></app-pricing>
+                    <app-pricing (planSelected)="onPlanSelected()"></app-pricing>
 
                     <div class="actions">
-                        <button mat-stroked-button *ngIf="isPro" (click)="finishOnboarding()">Continue to
+                        <button mat-button matStepperPrevious>Back</button>
+                        <button mat-stroked-button (click)="finishOnboarding()">Continue to
                             Dashboard</button>
                     </div>
                 </div>

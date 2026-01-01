@@ -616,6 +616,49 @@ export class AppUserService implements OnDestroy {
     return this.updateUserProperties(user, { privacy: privacy });
   }
 
+  public async setFreeTier(user: User) {
+    // We update the user properties to set the role to 'free' (though role is usually claimed from token, 
+    // for initial state we might want to store it or rely on the claim not being present/defaulting).
+    // Actually, 'stripeRole' is a claim. We can't set it directly on the user object for Auth purposes client-side.
+    // However, the guard checks `stripeRole` OR `isPro` OR `hasSubscribedOnce`.
+    // If we want to allow "Free", we should explicitly set a flag or relying on the absence of a role 
+    // being acceptable if they have "completed onboarding".
+    // But the guard checks "hasPaidAccess".
+
+    // Let's look at the guard again.
+    // const hasPaidAccess = stripeRole === 'pro' || stripeRole === 'basic' || (user as any).isPro === true;
+    // const onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce);
+
+    // We need to enable a way for 'free' users to pass.
+    // We can set a property like 'onboardingCompleted' explicitly, but the guard calculates it dynamically 
+    // based on roles.
+
+    // Wait, the guard:
+    // return onboardingCompleted;
+
+    // So if I just set 'onboardingCompleted' property on the user in Firestore, 
+    // does the guard read it?
+    // The guard code:
+    // const onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce);
+
+    // The guard DOES NOT read a 'onboardingCompleted' flag from the DB user object to determine success.
+    // It logic is hardcoded.
+
+    // So I need to change the guard first/also.
+    // But for this service method, I should probably set a flag that indicates they chose the free tier.
+    // Maybe `acceptedFreeTier: true`? Or just ensuring `onboardingCompleted: true` is set 
+    // and valid for the guard.
+
+    // Let's set 'onboardingCompleted: true' in the DB (standard practice) 
+    // AND maybe a local property if needed. 
+    // But most importantly, the guard needs to be updated to respect "Free" choice.
+
+    return this.updateUserProperties(user, {
+      onboardingCompleted: true,
+      lastSeenPromo: new Date().getTime() // Optional: treat as if they saw promo so they don't get nagged immediately
+    });
+  }
+
   public async isBranded(user: User): Promise<boolean> {
     const privDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'userAccountPrivileges', user.uid));
     return firstValueFrom(from(runInInjectionContext(this.injector, () => getDoc(privDoc))).pipe(map((doc) => {
