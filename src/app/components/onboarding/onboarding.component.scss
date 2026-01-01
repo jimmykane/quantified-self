@@ -12,6 +12,11 @@
     max-width: 900px;
     min-height: 600px;
     padding: 20px;
+
+    // Remove default padding from stepper content
+    ::ng-deep .mat-horizontal-content-container {
+        padding: 0 !important;
+    }
 }
 
 .step-content {

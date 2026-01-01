@@ -75,8 +75,8 @@
   /* Use grid for products if we want stricer columns, but flex is good for centering few items */
   .products-grid {
     display: grid;
-    /* Grid responsive: min 240px, max 320px cards (reduced by 20%) */
-    grid-template-columns: repeat(auto-fit, minmax(240px, 320px));
+    /* Grid responsive: min 251px, max 334px cards (decreased by 5%) */
+    grid-template-columns: repeat(auto-fit, minmax(251px, 334px));
     justify-content: center;
     gap: 40px;
   }
