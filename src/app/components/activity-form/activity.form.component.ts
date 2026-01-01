@@ -22,6 +22,7 @@ import { DataDescent } from '@sports-alliance/sports-lib';
 import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { DataEnergy } from '@sports-alliance/sports-lib';
+import dayjs from 'dayjs';
 
 
 @Component({
@@ -114,10 +115,11 @@ export class ActivityFormComponent implements OnInit {
   }
 
   onStartDateAndStartTimeChange(event) {
-    const starDate = this.activityFormGroup.get('startDate').value;
-    if (!starDate) {
+    let starDateVal = this.activityFormGroup.get('startDate').value;
+    if (!starDateVal) {
       return;
     }
+    const starDate = dayjs(starDateVal).toDate();
     starDate.setHours(this.activityFormGroup.get('startTime').value.split(':')[0]);
     starDate.setMinutes(this.activityFormGroup.get('startTime').value.split(':')[1]);
     starDate.setSeconds(this.activityFormGroup.get('startTime').value.split(':')[2]);
@@ -148,7 +150,7 @@ export class ActivityFormComponent implements OnInit {
         this.event.addStat(new DataDeviceNames(this.event.getActivities().map(eventActivities => eventActivities.creator.name)));
       }
       if (this.activityFormGroup.get('startDate') && (this.activityFormGroup.get('startDate').dirty || this.activityFormGroup.get('startTime').dirty)) {
-        this.activity.startDate = this.activityFormGroup.get('startDate').value;
+        this.activity.startDate = dayjs(this.activityFormGroup.get('startDate').value).toDate();
         this.activity.startDate.setHours(this.activityFormGroup.get('startTime').value.split(':')[0]);
         this.activity.startDate.setMinutes(this.activityFormGroup.get('startTime').value.split(':')[1]);
         this.activity.startDate.setSeconds(this.activityFormGroup.get('startTime').value.split(':')[2]);

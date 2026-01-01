@@ -35,6 +35,20 @@ export function initializeRemoteConfig(remoteConfigService: AppRemoteConfigServi
   return () => firstValueFrom(remoteConfigService.getMaintenanceMode());
 }
 
+import { MAT_DATE_LOCALE } from '@angular/material/core';
+import 'dayjs/locale/en-gb';
+import 'dayjs/locale/de';
+import 'dayjs/locale/fr';
+import 'dayjs/locale/es';
+import 'dayjs/locale/it';
+import 'dayjs/locale/nl';
+
+// ... (existing imports)
+
+export function getBrowserLocale() {
+  return navigator.language || 'en-US';
+}
+
 @NgModule({
   declarations: [
     AppComponent,
@@ -89,7 +103,8 @@ export function initializeRemoteConfig(remoteConfigService: AppRemoteConfigServi
     providePerformance(() => getPerformance()),
     provideAnalytics(() => getAnalytics()),
     provideRemoteConfig(() => getRemoteConfig()),
-    { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } }
+    { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
+    { provide: MAT_DATE_LOCALE, useFactory: getBrowserLocale }
   ]
 })
 export class AppModule {

@@ -15,6 +15,7 @@ import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { Analytics, logEvent } from '@angular/fire/analytics';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import dayjs from 'dayjs';
 
 
 @Component({
@@ -128,8 +129,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     try {
       await this.userService.importServiceHistoryForCurrentUser(
         this.serviceName,
-        this.formGroup.get('startDate')?.value,
-        this.formGroup.get('endDate')?.value
+        dayjs(this.formGroup.get('startDate')?.value).toDate(),
+        dayjs(this.formGroup.get('endDate')?.value).toDate()
       );
       this.snackBar.open('History import has been queued', null, {
         duration: 2000,

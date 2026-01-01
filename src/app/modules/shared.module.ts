@@ -16,11 +16,6 @@ import { PromoDialogComponent } from '../components/promo-dialog/promo-dialog.co
 import { EventSearchComponent } from '../components/event-search/event-search.component';
 import { ActivityTypesMultiSelectComponent } from '../components/activity-types-multi-select/activity-types-multi-select.component';
 import { DateAdapter, MAT_DATE_FORMATS, MAT_DATE_LOCALE } from '@angular/material/core';
-import { MAT_MOMENT_DATE_FORMATS, MomentDateAdapter } from '@angular/material-moment-adapter';
-
-/**
- * @todo perhaps to many shared components
- */
 @NgModule({
     imports: [
         CommonModule,
@@ -35,7 +30,6 @@ import { MAT_MOMENT_DATE_FORMATS, MomentDateAdapter } from '@angular/material-mo
         EventFormComponent,
         PromoDialogComponent,
         ActivityFormComponent,
-        ActivityFormComponent,
         DeleteConfirmationComponent,
         DataTypeIconComponent,
         UploadInfoComponent,
@@ -44,16 +38,7 @@ import { MAT_MOMENT_DATE_FORMATS, MomentDateAdapter } from '@angular/material-mo
         EventSearchComponent,
         ActivityTypesMultiSelectComponent,
     ],
-    providers: [
-        // @todo get it from settings as a service perhaps
-        {
-            provide: MAT_DATE_LOCALE, useValue: window.navigator.languages
-                ? window.navigator.languages[0]
-                : window.navigator['userLanguage'] || window.navigator.language
-        },
-        { provide: DateAdapter, useClass: MomentDateAdapter, deps: [MAT_DATE_LOCALE] },
-        { provide: MAT_DATE_FORMATS, useValue: MAT_MOMENT_DATE_FORMATS },
-    ],
+    providers: [],
     exports: [
         ShadeComponent,
         PrivacyIconComponent,

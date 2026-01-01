@@ -3,7 +3,8 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
-import { MatCommonModule, MatNativeDateModule, MatRippleModule } from '@angular/material/core';
+import { MatCommonModule, MatRippleModule } from '@angular/material/core';
+import { MatDayjsDateModule } from '../shared/adapters/mat-dayjs-date.module';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatSidenavModule } from '@angular/material/sidenav';
@@ -60,7 +61,7 @@ import { MatChipsModule } from '@angular/material/chips';
     MatDialogModule,
     MatSlideToggleModule,
     MatDatepickerModule,
-    MatNativeDateModule,
+    MatDayjsDateModule,
     MatRadioModule,
     MatPaginatorModule,
     MatProgressSpinnerModule,

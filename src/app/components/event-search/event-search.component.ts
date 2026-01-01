@@ -17,7 +17,7 @@ import { LoadingAbstractDirective } from '../loading/loading-abstract.directive'
 import { DateRanges } from '@sports-alliance/sports-lib';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { MatDatepickerInputEvent } from '@angular/material/datepicker';
-import * as moment from 'moment';
+import dayjs from 'dayjs';
 
 @Component({
   selector: 'app-event-search',
@@ -101,11 +101,11 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
 
     let startDate: Date = this.searchFormGroup.get('startDate').value;
     let endDate: Date = this.searchFormGroup.get('endDate').value;
-    if (moment.isMoment(this.searchFormGroup.get('startDate').value)) {
+    if (dayjs.isDayjs(this.searchFormGroup.get('startDate').value)) {
       startDate = this.searchFormGroup.get('startDate').value.toDate();
     }
 
-    if (moment.isMoment(this.searchFormGroup.get('endDate').value)) {
+    if (dayjs.isDayjs(this.searchFormGroup.get('endDate').value)) {
       endDate = this.searchFormGroup.get('endDate').value.toDate();
     }
 
