@@ -12,6 +12,8 @@ import {
   ViewChild,
   inject
 } from '@angular/core';
+import { BreakpointObserver } from '@angular/cdk/layout';
+import { AppBreakpoints } from '../../constants/breakpoints';
 import { AppEventService } from '../../services/app.event.service';
 import { Router } from '@angular/router';
 import { MatCard } from '@angular/material/card';
@@ -71,6 +73,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   private deleteConfirmationSubscription: Subscription;
   private sortSubscription: Subscription;
+  private breakpointSubscription: Subscription;
+  private isHandset = false;
 
 
   private searchSubject: Subject<string> = new Subject();
@@ -85,7 +89,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     private dialog: MatDialog,
     private fileService: AppFileService,
     private router: Router, private datePipe: DatePipe,
-    private logger: LoggerService) {
+    private logger: LoggerService,
+    private breakpointObserver: BreakpointObserver) {
     super(changeDetector);
   }
 
@@ -114,6 +119,16 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     ).subscribe(searchTextValue => {
       this.search(searchTextValue);
     });
+
+    this.breakpointSubscription = this.breakpointObserver
+      .observe([AppBreakpoints.HandsetOrTabletPortrait])
+      .subscribe(result => {
+        this.isHandset = result.matches;
+        if (this.events) {
+          this.processChanges();
+        }
+        this.changeDetector.markForCheck();
+      });
   }
 
   ngAfterViewInit() {
@@ -413,10 +428,13 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     let columns = [
       'Checkbox',
       'Start Date',
-      ...(this.selectedColumns || []).sort(function (a, b) {
-        const defaultColumns = AppUserService.getDefaultSelectedTableColumns();
-        return defaultColumns.indexOf(a) - defaultColumns.indexOf(b);
-      }),
+      ...(this.selectedColumns || [])
+        .filter(column => column !== 'Description')
+        .sort(function (a, b) {
+          const defaultColumns = AppUserService.getDefaultSelectedTableColumns();
+          return defaultColumns.indexOf(a) - defaultColumns.indexOf(b);
+        }),
+      'Description',
       'Actions'
     ]
 
@@ -480,6 +498,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   ngOnDestroy() {
     this.unsubscribeFromAll();
+    if (this.breakpointSubscription) {
+      this.breakpointSubscription.unsubscribe();
+    }
   }
 
   isSticky(column: string) {
@@ -506,7 +527,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
       statRowElement['Privacy'] = event.privacy;
       statRowElement['Name'] = event.name;
-      statRowElement['Start Date'] = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, 'EEEEEE d MMM yy HH:mm') : 'None?';
+      const dateFormat = this.isHandset ? 'd MMM yy' : 'EEEEEE d MMM yy HH:mm';
+      statRowElement['Start Date'] = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, dateFormat) : 'None?';
       statRowElement['Activity Types'] = event.getActivityTypesAsString();
       statRowElement['Merged Event'] = event.isMerge;
       statRowElement['Description'] = event.description;

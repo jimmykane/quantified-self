@@ -28,17 +28,53 @@
   width: 50px;
 }
 
-/* Increase width for the Start Date column to fit full date */
+/* Responsive width for the Start Date column */
 .mat-column-Start-Date {
-  min-width: 200px;
-  width: 220px;
+  min-width: 90px;
+  width: auto;
   white-space: nowrap;
+}
+
+@media (min-width: 960px) {
+  .mat-column-Start-Date {
+    min-width: 200px;
+    width: 220px;
+  }
+}
+
+/* Standardize cell behavior */
+.mat-mdc-header-cell,
+.mat-mdc-cell {
+  white-space: nowrap !important;
+  padding: 0 12px !important;
+}
+
+/* Mobile Adjustments for Overall Table Compactness */
+@media (max-width: 599.98px) {
+
+  .mat-mdc-header-cell,
+  .mat-mdc-cell {
+    padding: 0 8px !important;
+    /* Balanced padding for mobile */
+  }
+
+  .mat-column-Checkbox,
+  .mat-column-Privacy,
+  .mat-column-Actions {
+    width: 40px !important;
+    min-width: 40px !important;
+  }
+
+  .mat-mdc-checkbox {
+    transform: scale(0.9);
+  }
 }
 
 
 mat-icon {
   vertical-align: middle;
 }
+
 
 /* Removed mat-card specific margins/padding since we use glass-card now */
 
