@@ -23,7 +23,7 @@ export function COROSAPIAuth(refresh = false): AuthorizationCode {
       tokenPath: refresh ? REFRESH_TOKEN_PATH : ACCESS_TOKEN_PATH,
     },
     options: {
-      // authorizationMethod: 'body',
+      authorizationMethod: 'body',
     },
   });
 }
