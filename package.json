@@ -4,7 +4,7 @@
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve --port 4201",
+    "start": "ng serve --port 4200",
     "clean": "rm -rf dist",
     "build": "ng build --verbose",
     "build-beta": "ng build --verbose --configuration beta",
