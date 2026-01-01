@@ -661,3 +661,39 @@ tr.mat-row:focus,
 .mat-mdc-row:focus {
   outline: none;
 }
+
+/* ==========================================================================
+   Global Menu Form Layouts
+   Ensures configuration forms inside mat-menu look properly spaced.
+   ========================================================================== */
+
+/* Panel Overrides */
+.mat-mdc-menu-panel.qs-config-menu {
+  max-width: none !important;
+  min-width: 300px !important;
+}
+
+/* Section/Item Layout for menus used for settings */
+.qs-config-menu {
+  section[mat-menu-item] {
+    height: auto !important;
+    min-height: unset !important;
+    padding: 4px 16px !important;
+    background: transparent !important;
+    overflow: visible;
+    line-height: normal;
+
+    &:hover {
+      background: transparent !important;
+    }
+
+    .mat-mdc-menu-item-text {
+      width: 100%;
+    }
+  }
+
+  mat-form-field {
+    width: 100%;
+    display: block;
+  }
+}
