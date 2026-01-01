@@ -11,6 +11,8 @@ import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
+import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../../../constants/coros';
+import dayjs from 'dayjs';
 
 
 @Component({
@@ -22,6 +24,7 @@ import { ServicesAbstractComponentDirective } from '../services-abstract-compone
 export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
   public serviceName = ServiceNames.COROSAPI;
+  public minDate = dayjs().subtract(COROS_HISTORY_IMPORT_LIMIT_MONTHS, 'month').toDate();
 
   constructor(protected http: HttpClient,
     protected fileService: AppFileService,

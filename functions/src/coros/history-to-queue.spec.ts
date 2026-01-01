@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as utils from '../utils';
 import * as history from '../history';
-import { SERVICE_NAME } from './constants';
+import { SERVICE_NAME, COROS_HISTORY_IMPORT_LIMIT_MONTHS } from './constants';
 
 // Mock dependencies
 vi.mock('firebase-functions/v1', () => ({
@@ -38,11 +38,15 @@ describe('COROS History to Queue', () => {
         (utils.isProUser as any).mockResolvedValue(true);
         (history.isAllowedToDoHistoryImport as any).mockResolvedValue(true);
 
+        const recentDate = new Date();
+        recentDate.setDate(recentDate.getDate() - 7); // 7 days ago
+        const endDate = new Date();
+
         req = {
             method: 'POST',
             body: {
-                startDate: '2023-01-01',
-                endDate: '2023-01-10'
+                startDate: recentDate.toISOString(),
+                endDate: endDate.toISOString()
             }
         };
         res = {
@@ -67,9 +71,11 @@ describe('COROS History to Queue', () => {
         });
 
         it('should batch requests if range > 30 days', async () => {
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - 40); // 40 days ago
             req.body = {
-                startDate: '2023-01-01',
-                endDate: '2023-02-10' // 40 days
+                startDate: startDate.toISOString(),
+                endDate: new Date().toISOString() // 40 days range
             };
 
             await addCOROSAPIHistoryToQueue(req, res);
@@ -86,6 +92,43 @@ describe('COROS History to Queue', () => {
 
             expect(res.status).toHaveBeenCalledWith(500);
             expect(res.send).toHaveBeenCalledWith('Queue failure');
+        });
+
+        it('should reject if end date is older than the limit', async () => {
+            const olderThanLimit = new Date();
+            olderThanLimit.setMonth(olderThanLimit.getMonth() - (COROS_HISTORY_IMPORT_LIMIT_MONTHS + 1));
+
+            req.body = {
+                startDate: new Date(olderThanLimit.getTime() - 86400000).toISOString(),
+                endDate: olderThanLimit.toISOString()
+            };
+
+            await addCOROSAPIHistoryToQueue(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(400);
+            expect(res.send).toHaveBeenCalledWith(`COROS API limits history to the last ${COROS_HISTORY_IMPORT_LIMIT_MONTHS} months.`);
+        });
+
+        it('should clamp start date if it is older than the limit', async () => {
+            const limitDate = new Date();
+            limitDate.setMonth(limitDate.getMonth() - COROS_HISTORY_IMPORT_LIMIT_MONTHS);
+            limitDate.setHours(0, 0, 0, 0);
+
+            const olderThanLimit = new Date(limitDate.getTime() - 86400000); // 1 day older
+
+            req.body = {
+                startDate: olderThanLimit.toISOString(),
+                endDate: new Date().toISOString()
+            };
+
+            await addCOROSAPIHistoryToQueue(req, res);
+
+            expect(history.addHistoryToQueue).toHaveBeenCalled();
+            // The first call (or only call if range is small) should use the limitDate as startDate
+            const callArgs = (history.addHistoryToQueue as any).mock.calls[0];
+            // callArgs[2] is startDate
+            expect(callArgs[2].getTime()).toBeGreaterThanOrEqual(limitDate.getTime());
+            expect(res.status).toHaveBeenCalledWith(200);
         });
     });
 });

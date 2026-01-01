@@ -15,7 +15,8 @@
   <div class="date-fields">
     <mat-form-field appearance="outline">
       <mat-label>Start Date</mat-label>
-      <input matInput [matDatepicker]="startDate" formControlName="startDate" (click)="startDate.open()">
+      <input matInput [matDatepicker]="startDate" [min]="minDate" formControlName="startDate"
+        (click)="startDate.open()">
       <mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>
       <mat-datepicker #startDate></mat-datepicker>
     </mat-form-field>

@@ -29,6 +29,7 @@ import dayjs from 'dayjs';
 export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges {
   @Input() serviceName: ServiceNames;
   @Input() userMetaForService: UserServiceMetaInterface;
+  @Input() minDate: Date | null = null;
 
 
   public formGroup: UntypedFormGroup;

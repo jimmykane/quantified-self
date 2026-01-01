@@ -64,3 +64,17 @@
   gap: 0.5rem;
   margin-top: 0.5rem;
 }
+
+/* Fix for checkmark visibility using MDC variables */
+mat-checkbox {
+  --mdc-checkbox-selected-checkmark-color: white;
+  --mdc-checkbox-selected-focus-checkmark-color: white;
+  --mdc-checkbox-selected-hover-checkmark-color: white;
+  --mdc-checkbox-selected-pressed-checkmark-color: white;
+
+  /* Ensure background matches primary theme color */
+  --mdc-checkbox-selected-icon-color: var(--mat-sys-primary, #3f51b5);
+  --mdc-checkbox-selected-focus-icon-color: var(--mat-sys-primary, #3f51b5);
+  --mdc-checkbox-selected-hover-icon-color: var(--mat-sys-primary, #3f51b5);
+  --mdc-checkbox-selected-pressed-icon-color: var(--mat-sys-primary, #3f51b5);
+}

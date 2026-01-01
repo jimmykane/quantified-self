@@ -9,7 +9,7 @@ import {
   isProUser,
   PRO_REQUIRED_MESSAGE,
 } from '../utils';
-import { SERVICE_NAME } from './constants';
+import { SERVICE_NAME, COROS_HISTORY_IMPORT_LIMIT_MONTHS } from './constants';
 import { addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
 
 
@@ -52,6 +52,22 @@ export const addCOROSAPIHistoryToQueue = functions.region('europe-west2').https.
   if (!startDate || isNaN(startDate.getTime()) || !endDate || isNaN(endDate.getTime())) {
     res.status(500).send('No start and/or end date');
     return;
+  }
+
+  // COROS V2 API Restriction: No data older than 3 months
+  const threeMonthsAgo = new Date();
+  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - COROS_HISTORY_IMPORT_LIMIT_MONTHS);
+  threeMonthsAgo.setHours(0, 0, 0, 0);
+
+  if (endDate < threeMonthsAgo) {
+    logger.warn(`User ${userID} requested COROS history older than ${COROS_HISTORY_IMPORT_LIMIT_MONTHS} months (end date ${endDate}). Rejected.`);
+    res.status(400).send(`COROS API limits history to the last ${COROS_HISTORY_IMPORT_LIMIT_MONTHS} months.`);
+    return;
+  }
+
+  if (startDate < threeMonthsAgo) {
+    logger.info(`Clamping COROS history start date from ${startDate} to ${threeMonthsAgo} for user ${userID}`);
+    startDate.setTime(threeMonthsAgo.getTime());
   }
 
   // First check last history import
