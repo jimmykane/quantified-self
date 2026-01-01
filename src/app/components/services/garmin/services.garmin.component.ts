@@ -21,7 +21,7 @@ import { ServicesAbstractComponentDirective } from '../services-abstract-compone
 })
 export class ServicesGarminComponent extends ServicesAbstractComponentDirective {
 
-  public serviceName = ServiceNames.GarminHealthAPI;
+  public serviceName: ServiceNames = ServiceNames.GarminHealthAPI;
 
   constructor(protected http: HttpClient,
     protected fileService: AppFileService,
@@ -51,6 +51,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
   }
 
   buildRedirectURIFromServiceToken(token: { redirect_uri: string, state: string, oauthToken: string }): string {
-    return `${token.redirect_uri}?oauth_token=${token.oauthToken}&oauth_callback=${encodeURIComponent(`${this.windowService.currentDomain}/services?state=${token.state}&serviceName=${this.serviceName}&connect=1`)}`
+    const serviceNameStr = this.serviceName as unknown as string;
+    return `${token.redirect_uri}?oauth_token=${token.oauthToken}&oauth_callback=${encodeURIComponent(`${this.windowService.currentDomain}/services?state=${token.state}&serviceName=${serviceNameStr}&connect=1`)}`
   }
 }
