@@ -12,6 +12,7 @@ import { Observable, map } from 'rxjs';
 import { StripeRole } from '../../models/stripe-role.model';
 import { Router } from '@angular/router';
 import { Auth } from '@angular/fire/auth';
+import { environment } from '../../../environments/environment';
 
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
@@ -153,7 +154,14 @@ export class PricingComponent implements OnInit {
             window.location.reload();
         } catch (error) {
             this.logger.error('Error restoring purchases:', error);
-            alert('Failed to restore purchases. Please contact support.');
+            const message = `Failed to restore purchases. Please <a href="mailto:${environment.supportEmail}">contact support</a>.`;
+            this.dialog.open(ConfirmationDialogComponent, {
+                data: {
+                    title: 'Error',
+                    message,
+                    confirmText: 'OK'
+                }
+            });
             this.isLoading = false;
         }
     }

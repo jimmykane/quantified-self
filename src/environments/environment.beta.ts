@@ -7,6 +7,7 @@ const appVersion = require('../../package.json').version;
 
 export const environment = {
   appVersion: appVersion,
+  supportEmail: 'support@quantified-self.io',
   production: false,
   beta: true,
   localhost: false,

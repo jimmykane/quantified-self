@@ -4,7 +4,7 @@ import { map, shareReplay, switchMap, take } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Auth, user, signInWithPopup, getRedirectResult, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, sendPasswordResetEmail, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, OAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, fetchSignInMethodsForEmail, linkWithCredential, AuthCredential, linkWithPopup, AuthProvider } from '@angular/fire/auth';
 import { Firestore, doc, onSnapshot, terminate, clearIndexedDbPersistence } from '@angular/fire/firestore';
-import { User } from '@sports-alliance/sports-lib';
+import { Privacy, User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../services/app.user.service';
 import { Analytics } from '@angular/fire/analytics';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
@@ -60,6 +60,7 @@ export class AppAuthService {
                   acceptedDataPolicy: false,
                   acceptedTrackingPolicy: false,
                   acceptedDiagnosticsPolicy: false,
+                  privacy: Privacy.Private,
                   isAnonymous: firebaseUser.isAnonymous,
                   stripeRole: stripeRole,
                   creationDate: new Date(firebaseUser.metadata.creationTime!),
