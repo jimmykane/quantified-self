@@ -11,7 +11,7 @@
     <span>Edit settings</span>
   </button>
   @if (event.getActivities().length === 1) {
-  <button mat-menu-item (click)="editEventActivity()">
+  <button mat-menu-item (click)="editEventActivity()" disabled="true">
     <mat-icon>edit</mat-icon>
     <span>Edit activity</span>
   </button>
