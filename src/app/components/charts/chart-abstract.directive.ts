@@ -81,7 +81,12 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
 
       if (themeModule && themeModule.default) {
         this.logger.log(`[Antigravity] Applying theme module for ${chartTheme}`);
-        am4core.useTheme(themeModule.default);
+        try {
+          am4core.useTheme(themeModule.default);
+          this.logger.log(`[Antigravity] Successfully applied theme: ${chartTheme}`);
+        } catch (themeError) {
+          this.logger.error(`[Antigravity] Failed to apply theme ${chartTheme}:`, themeError);
+        }
       } else {
         this.logger.error(`[Antigravity] Theme module for ${chartTheme} did not load correctly.`, themeModule);
       }
