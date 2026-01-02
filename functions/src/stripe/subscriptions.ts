@@ -17,6 +17,14 @@ export const onSubscriptionUpdated = onDocumentWritten({
 
     logger.info(`[onSubscriptionUpdated] Change detected for user ${uid}. Reconciling claims...`);
 
+    // Check if the user document exists before proceeding
+    // This prevents creating orphaned subcollections when a user has been deleted
+    const userDoc = await admin.firestore().collection('users').doc(uid).get();
+    if (!userDoc.exists) {
+        logger.warn(`[onSubscriptionUpdated] User ${uid} no longer exists in Firestore. Skipping to prevent orphaned subcollections.`);
+        return;
+    }
+
     try {
         await reconcileClaims(uid);
 
