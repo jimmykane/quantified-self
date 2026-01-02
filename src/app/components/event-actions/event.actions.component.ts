@@ -25,7 +25,6 @@ import { Auth, getIdToken } from '@angular/fire/auth';
 import {
   GarminHealthAPIEventMetaDataInterface,
   ServiceNames,
-  SuuntoAppEventMetaDataInterface
 } from '@sports-alliance/sports-lib';
 import { EventExporterGPX } from '@sports-alliance/sports-lib';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
@@ -46,7 +45,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   @Input() user!: User;
   @Input() showDownloadOriginal = false;
 
-  public suuntoAppServiceMetaData: SuuntoAppEventMetaDataInterface;
+
 
   public garminHealthAPIServiceMetaData: GarminHealthAPIEventMetaDataInterface;
   private deleteConfirmationSubscription;
@@ -80,11 +79,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     if (!this.showDownloadOriginal) {
       return;
     }
-    if (this.suuntoAppServiceMetaData) {
-      return;
-    }
-    this.suuntoAppServiceMetaData = <SuuntoAppEventMetaDataInterface>(await this.eventService.getEventMetaData(this.user, this.event.getID(), ServiceNames.SuuntoApp)
-      .pipe(take(1)).toPromise());
+
 
     this.garminHealthAPIServiceMetaData = <GarminHealthAPIEventMetaDataInterface>(await this.eventService.getEventMetaData(this.user, this.event.getID(), ServiceNames.GarminHealthAPI)
       .pipe(take(1)).toPromise());
@@ -200,34 +195,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     });
   }
 
-  async downloadSuuntoFIT() {
-    try {
-      const result = await this.http.post(
-        environment.functions.getSuuntoFITFile,
-        {
-          firebaseAuthToken: await getIdToken(this.auth.currentUser, true),
-          workoutID: this.suuntoAppServiceMetaData.serviceWorkoutID,
-          userName: this.suuntoAppServiceMetaData.serviceUserName,
-        },
-        {
-          headers:
-            new HttpHeaders({
-              'Authorization': await getIdToken(this.auth.currentUser, true)
-            }),
-          responseType: 'arraybuffer',
-        }).toPromise();
-      this.fileService.downloadFile(new Blob([new Uint8Array(result)], { type: 'application/octet-stream' }), `${this.getFileName(this.event)}#${this.suuntoAppServiceMetaData.serviceWorkoutID}`, 'fit');
-      this.snackBar.open('Download started', undefined, {
-        duration: 2000,
-      });
-      logEvent(this.analytics, 'downloaded_fit_file', { method: ServiceNames.SuuntoApp });
-    } catch (e) {
-      this.snackBar.open(`Could not download original fit file due to ${e.message}`, undefined, {
-        duration: 5000,
-      });
-      this.logger.error(e);
-    }
-  }
+
 
   async downloadOriginals() {
     this.snackBar.open('Preparing download...', undefined, { duration: 2000 });
