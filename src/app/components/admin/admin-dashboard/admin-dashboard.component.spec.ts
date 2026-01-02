@@ -192,32 +192,45 @@ describe('AdminDashboardComponent', () => {
     });
 
     describe('Maintenance Mode', () => {
+        beforeEach(() => {
+            // Update mock to match the expected structure with environments
+            const mockStatus = {
+                prod: { enabled: false, message: 'Test' },
+                beta: { enabled: false, message: 'TestBeta' },
+                dev: { enabled: false, message: 'TestDev' }
+            };
+            adminServiceSpy.getMaintenanceStatus.mockReturnValue(of(mockStatus));
+
+            // Re-trigger ngOnInit since we updated the mock but the component was already created
+            component.ngOnInit();
+        });
+
         it('should fetch maintenance status on init', () => {
-            expect(component.maintenanceEnabled).toBe(false);
-            expect(component.maintenanceMessage).toBe('Test');
+            expect(component.prodMaintenance.enabled).toBe(false);
+            expect(component.prodMaintenance.message).toBe('Test');
         });
 
         it('should detect message changes', () => {
-            component.maintenanceMessage = 'New Message';
-            expect(component.hasMessageChanged()).toBe(true);
+            component.prodMaintenance.message = 'New Message';
+            expect(component.hasMessageChanged('prod')).toBe(true);
 
-            component.maintenanceMessage = 'Test';
-            expect(component.hasMessageChanged()).toBe(false);
+            component.prodMaintenance.message = 'Test';
+            expect(component.hasMessageChanged('prod')).toBe(false);
         });
 
         it('should save maintenance message', () => {
-            component.maintenanceMessage = 'Updated Message';
+            component.prodMaintenance.message = 'Updated Message';
             adminServiceSpy.setMaintenanceMode.mockReturnValue(of({ success: true, enabled: false, message: 'Updated Message' }));
 
-            component.saveMaintenanceMessage();
+            component.saveMaintenanceMessage('prod');
 
-            expect(adminServiceSpy.setMaintenanceMode).toHaveBeenCalledWith(false, 'Updated Message');
-            expect(component.maintenanceMessage).toBe('Updated Message');
-            expect(component.hasMessageChanged()).toBe(false); // Should be reset
+            expect(adminServiceSpy.setMaintenanceMode).toHaveBeenCalledWith(false, 'Updated Message', 'prod');
+            expect(component.prodMaintenance.message).toBe('Updated Message');
+            expect(component.hasMessageChanged('prod')).toBe(false); // Should be reset
         });
 
         it('should include message when toggling maintenance with confirmation', () => {
-            component.maintenanceMessage = 'Toggle Message';
+            component.prodMaintenance.message = 'Toggle Message';
             adminServiceSpy.setMaintenanceMode.mockReturnValue(of({ success: true, enabled: true, message: 'Toggle Message' }));
 
             // Mock dialog confirmation
@@ -226,28 +239,28 @@ describe('AdminDashboardComponent', () => {
             });
 
             // Pass a mock event that includes the source property
-            component.onMaintenanceToggle({ checked: true, source: { checked: true } } as any);
+            component.onMaintenanceToggle({ checked: true, source: { checked: true } } as any, 'prod');
 
             expect(matDialogSpy.open).toHaveBeenCalled();
-            expect(adminServiceSpy.setMaintenanceMode).toHaveBeenCalledWith(true, 'Toggle Message');
-            expect(component.maintenanceEnabled).toBe(true);
+            expect(adminServiceSpy.setMaintenanceMode).toHaveBeenCalledWith(true, 'Toggle Message', 'prod');
+            expect(component.prodMaintenance.enabled).toBe(true);
         });
 
         it('should cancel toggle if dialog is rejected', () => {
-            component.maintenanceEnabled = false; // Initial state
+            component.prodMaintenance.enabled = false; // Initial state
             // Mock dialog rejection
             matDialogSpy.open.mockReturnValue({
                 afterClosed: () => of(false)
             });
 
             const mockSource = { checked: true };
-            component.onMaintenanceToggle({ checked: true, source: mockSource } as any);
+            component.onMaintenanceToggle({ checked: true, source: mockSource } as any, 'prod');
 
             expect(matDialogSpy.open).toHaveBeenCalled();
             expect(adminServiceSpy.setMaintenanceMode).not.toHaveBeenCalled();
             // Should revert the checked state of the source
             expect(mockSource.checked).toBe(false);
-            expect(component.maintenanceEnabled).toBe(false);
+            expect(component.prodMaintenance.enabled).toBe(false);
         });
     });
 });
