@@ -171,6 +171,31 @@ export class AppPaymentService {
         // Default to subscription if string passed or recurring field present, otherwise payment
         const mode = typeof price === 'string' ? 'subscription' : (price.type === 'recurring' ? 'subscription' : 'payment');
 
+        // Pre-checkout check: Link existing Stripe customer if found
+        // This prevents duplicate subscriptions for recreated users
+        try {
+            const linkExistingStripeCustomer = httpsCallableFromURL<void, { linked: boolean, role?: string }>(
+                this.functions,
+                environment.functions.linkExistingStripeCustomer
+            );
+            const result = await linkExistingStripeCustomer();
+
+            if (result.data.linked) {
+                this.logger.log(`Existing subscription found and linked. Role: ${result.data.role}. Skipping checkout.`);
+                // Force token refresh to pick up new claims
+                await user.getIdToken(true);
+                // Throw a specific error to signal the calling code that we linked instead of checking out
+                throw new Error(`SUBSCRIPTION_RESTORED:${result.data.role}`);
+            }
+        } catch (error: unknown) {
+            const err = error as Error;
+            if (err.message?.startsWith('SUBSCRIPTION_RESTORED:')) {
+                throw error; // Re-throw so the caller can handle it
+            }
+            this.logger.warn('Pre-checkout link check failed, proceeding with checkout:', error);
+            // Continue with checkout if the linking check fails
+        }
+
         // Check for existing active subscriptions first (only relevant for subscriptions)
         // If it's a one-time payment mode, we might not need to block?
         // But let's keep logic simple: manage sub if active sub exists.

@@ -132,9 +132,22 @@ export class PricingComponent implements OnInit, OnDestroy {
         try {
             await this.paymentService.appendCheckoutSession(price);
         } catch (error) {
-            if ((error as any).message === 'User cancelled redirection to portal.') {
+            const errorMessage = (error as Error).message || '';
+            if (errorMessage === 'User cancelled redirection to portal.') {
                 // User cancelled the dialog, just stop loading
                 this.logger.log('User cancelled subscription management.');
+            } else if (errorMessage.startsWith('SUBSCRIPTION_RESTORED:')) {
+                // Existing subscription was linked, show success message
+                const role = errorMessage.split(':')[1];
+                this.dialog.open(ConfirmationDialogComponent, {
+                    data: {
+                        title: 'Subscription Restored!',
+                        message: `We found your existing ${role} subscription and linked it to your account. No need to subscribe again!`,
+                        confirmText: 'OK'
+                    }
+                }).afterClosed().subscribe(() => {
+                    window.location.reload();
+                });
             } else {
                 this.logger.error('Error starting checkout:', error);
                 alert('Failed to start checkout. Please try again.');
