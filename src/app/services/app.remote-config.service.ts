@@ -117,12 +117,25 @@ export class AppRemoteConfigService {
             this.logger.log('[RemoteConfig] Response:', data.state);
 
             if (data.entries) {
-                if ('maintenance_mode' in data.entries) {
+                const envSuffix = environment.production ? 'prod' : 'beta';
+                const modeKey = `maintenance_mode_${envSuffix}`;
+                const messageKey = `maintenance_message_${envSuffix}`;
+
+                // Try environment specific first
+                if (modeKey in data.entries) {
+                    const value = data.entries[modeKey];
+                    this.maintenanceModeValue = value === 'true' || value === true;
+                    this.logger.log(`[RemoteConfig] ${modeKey}:`, this.maintenanceModeValue);
+                } else if ('maintenance_mode' in data.entries) {
+                    // Fallback to legacy
                     const value = data.entries.maintenance_mode;
                     this.maintenanceModeValue = value === 'true' || value === true;
-                    this.logger.log('[RemoteConfig] maintenance_mode:', this.maintenanceModeValue);
+                    this.logger.log('[RemoteConfig] maintenance_mode (fallback):', this.maintenanceModeValue);
                 }
-                if ('maintenance_message' in data.entries) {
+
+                if (messageKey in data.entries) {
+                    this.maintenanceMessageValue = data.entries[messageKey];
+                } else if ('maintenance_message' in data.entries) {
                     this.maintenanceMessageValue = data.entries.maintenance_message;
                 }
             }

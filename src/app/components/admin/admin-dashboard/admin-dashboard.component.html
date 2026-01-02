@@ -13,52 +13,103 @@
             </h2>
         </div>
 
-        <mat-expansion-panel class="maintenance-panel glass-card">
-            <mat-expansion-panel-header
-                [style.border-left]="maintenanceEnabled ? '4px solid #f44336' : '4px solid #4caf50'">
-                <mat-panel-title class="maintenance-header-title">
-                    <mat-icon [style.color]="maintenanceEnabled ? '#f44336' : '#4caf50'">
-                        {{ maintenanceEnabled ? 'engineering' : 'check_circle' }}
-                    </mat-icon>
-                    <span>Maintenance Mode</span>
-                </mat-panel-title>
-                <mat-panel-description class="maintenance-header-description">
-                    <span *ngIf="!maintenanceEnabled" class="status-text online">System Online</span>
-                    <span *ngIf="maintenanceEnabled" class="status-text offline">System Offline (Maintenance)</span>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px;">
+            <!-- Production Maintenance -->
+            <mat-expansion-panel class="maintenance-panel glass-card">
+                <mat-expansion-panel-header
+                    [style.border-left]="prodMaintenance.enabled ? '4px solid #f44336' : '4px solid #4caf50'">
+                    <mat-panel-title class="maintenance-header-title">
+                        <mat-icon [style.color]="prodMaintenance.enabled ? '#f44336' : '#4caf50'">
+                            {{ prodMaintenance.enabled ? 'engineering' : 'check_circle' }}
+                        </mat-icon>
+                        <span>Production Maintenance</span>
+                    </mat-panel-title>
+                    <mat-panel-description class="maintenance-header-description">
+                        <span *ngIf="!prodMaintenance.enabled" class="status-text online">Online</span>
+                        <span *ngIf="prodMaintenance.enabled" class="status-text offline">Offline</span>
 
-                    <mat-slide-toggle [checked]="maintenanceEnabled" (change)="onMaintenanceToggle($event)"
-                        (click)="$event.stopPropagation()" [disabled]="isUpdatingMaintenance" color="warn">
-                    </mat-slide-toggle>
-                </mat-panel-description>
-            </mat-expansion-panel-header>
+                        <mat-slide-toggle [checked]="prodMaintenance.enabled"
+                            (change)="onMaintenanceToggle($event, 'prod')" (click)="$event.stopPropagation()"
+                            [disabled]="isUpdatingMaintenance" color="warn">
+                        </mat-slide-toggle>
+                    </mat-panel-description>
+                </mat-expansion-panel-header>
 
-            <div class="maintenance-content">
-                <p class="maintenance-description">
-                    Manage the maintenance mode settings. When enabled, non-admin users will be redirected to the
-                    maintenance page.
-                </p>
+                <div class="maintenance-content">
+                    <p class="maintenance-description">
+                        Manage Production maintenance mode. Non-admin users will be redirected.
+                    </p>
 
-                <div class="maintenance-form-container">
-                    <mat-form-field appearance="outline" class="maintenance-message-field">
-                        <mat-label>Maintenance Message</mat-label>
-                        <textarea matInput [(ngModel)]="maintenanceMessage" rows="3"
-                            placeholder="Message shown to users during maintenance"
-                            [disabled]="isUpdatingMaintenance"></textarea>
-                        <mat-hint>Visible to users on the maintenance screen</mat-hint>
-                    </mat-form-field>
+                    <div class="maintenance-form-container">
+                        <mat-form-field appearance="outline" class="maintenance-message-field">
+                            <mat-label>Maintenance Message (Prod)</mat-label>
+                            <textarea matInput [(ngModel)]="prodMaintenance.message" rows="2"
+                                placeholder="Message shown to users during maintenance"
+                                [disabled]="isUpdatingMaintenance"></textarea>
+                            <mat-hint>Visible to users on production</mat-hint>
+                        </mat-form-field>
 
-                    <div class="maintenance-actions">
-                        <button mat-raised-button color="primary" (click)="saveMaintenanceMessage()"
-                            [disabled]="isUpdatingMaintenance || !hasMessageChanged()" class="save-btn">
-                            <mat-icon>save</mat-icon>
-                            Save Message
-                        </button>
-                        <mat-spinner *ngIf="isUpdatingMaintenance" diameter="24"
-                            style="align-self: center;"></mat-spinner>
+                        <div class="maintenance-actions">
+                            <button mat-raised-button color="primary" (click)="saveMaintenanceMessage('prod')"
+                                [disabled]="isUpdatingMaintenance || !hasMessageChanged('prod')" class="save-btn">
+                                <mat-icon>save</mat-icon>
+                                Save Message
+                            </button>
+                            <mat-spinner *ngIf="isUpdatingMaintenance" diameter="24"
+                                style="align-self: center;"></mat-spinner>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </mat-expansion-panel>
+            </mat-expansion-panel>
+
+            <!-- Beta Maintenance -->
+            <mat-expansion-panel class="maintenance-panel glass-card">
+                <mat-expansion-panel-header
+                    [style.border-left]="betaMaintenance.enabled ? '4px solid #f44336' : '4px solid #4caf50'">
+                    <mat-panel-title class="maintenance-header-title">
+                        <mat-icon [style.color]="betaMaintenance.enabled ? '#f44336' : '#4caf50'">
+                            {{ betaMaintenance.enabled ? 'engineering' : 'check_circle' }}
+                        </mat-icon>
+                        <span>Beta Maintenance</span>
+                    </mat-panel-title>
+                    <mat-panel-description class="maintenance-header-description">
+                        <span *ngIf="!betaMaintenance.enabled" class="status-text online">Online</span>
+                        <span *ngIf="betaMaintenance.enabled" class="status-text offline">Offline</span>
+
+                        <mat-slide-toggle [checked]="betaMaintenance.enabled"
+                            (change)="onMaintenanceToggle($event, 'beta')" (click)="$event.stopPropagation()"
+                            [disabled]="isUpdatingMaintenance" color="warn">
+                        </mat-slide-toggle>
+                    </mat-panel-description>
+                </mat-expansion-panel-header>
+
+                <div class="maintenance-content">
+                    <p class="maintenance-description">
+                        Manage Beta maintenance mode. Non-admin users will be redirected.
+                    </p>
+
+                    <div class="maintenance-form-container">
+                        <mat-form-field appearance="outline" class="maintenance-message-field">
+                            <mat-label>Maintenance Message (Beta)</mat-label>
+                            <textarea matInput [(ngModel)]="betaMaintenance.message" rows="2"
+                                placeholder="Message shown to users during maintenance"
+                                [disabled]="isUpdatingMaintenance"></textarea>
+                            <mat-hint>Visible to users on beta</mat-hint>
+                        </mat-form-field>
+
+                        <div class="maintenance-actions">
+                            <button mat-raised-button color="primary" (click)="saveMaintenanceMessage('beta')"
+                                [disabled]="isUpdatingMaintenance || !hasMessageChanged('beta')" class="save-btn">
+                                <mat-icon>save</mat-icon>
+                                Save Message
+                            </button>
+                            <mat-spinner *ngIf="isUpdatingMaintenance" diameter="24"
+                                style="align-self: center;"></mat-spinner>
+                        </div>
+                    </div>
+                </div>
+            </mat-expansion-panel>
+        </div>
     </div>
 
 

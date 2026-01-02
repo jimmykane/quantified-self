@@ -127,9 +127,8 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     };
 
     // Maintenance mode
-    maintenanceEnabled = false;
-    maintenanceMessage = '';
-    private originalMaintenanceMessage = '';
+    prodMaintenance = { enabled: false, message: '', originalMessage: '' };
+    betaMaintenance = { enabled: false, message: '', originalMessage: '' };
     isUpdatingMaintenance = false;
 
     // Cleanup
@@ -365,51 +364,62 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     fetchMaintenanceStatus(): void {
         this.adminService.getMaintenanceStatus().subscribe({
             next: (status) => {
-                this.maintenanceEnabled = status.enabled;
-                this.maintenanceMessage = status.message || "";
-                this.originalMaintenanceMessage = this.maintenanceMessage;
+                this.prodMaintenance = {
+                    enabled: status.prod.enabled,
+                    message: status.prod.message || "",
+                    originalMessage: status.prod.message || ""
+                };
+                this.betaMaintenance = {
+                    enabled: status.beta.enabled,
+                    message: status.beta.message || "",
+                    originalMessage: status.beta.message || ""
+                };
             },
             error: (err) => {
                 this.logger.error('Failed to fetch maintenance status:', err);
-                const defaultMsg = "";
-                this.maintenanceMessage = defaultMsg;
-                this.originalMaintenanceMessage = defaultMsg;
             }
         });
     }
 
-    hasMessageChanged(): boolean {
-        return this.maintenanceMessage !== this.originalMaintenanceMessage;
+    hasMessageChanged(env: 'prod' | 'beta'): boolean {
+        const m = env === 'prod' ? this.prodMaintenance : this.betaMaintenance;
+        return m.message !== m.originalMessage;
     }
 
-    saveMaintenanceMessage(): void {
-        if (!this.hasMessageChanged()) return;
+    saveMaintenanceMessage(env: 'prod' | 'beta'): void {
+        if (!this.hasMessageChanged(env)) return;
 
+        const m = env === 'prod' ? this.prodMaintenance : this.betaMaintenance;
         this.isUpdatingMaintenance = true;
-        this.adminService.setMaintenanceMode(this.maintenanceEnabled, this.maintenanceMessage).subscribe({
+        this.adminService.setMaintenanceMode(m.enabled, m.message, env).subscribe({
             next: (result) => {
-                this.maintenanceEnabled = result.enabled;
-                this.maintenanceMessage = result.message;
-                this.originalMaintenanceMessage = result.message;
+                const updated = {
+                    enabled: result.enabled,
+                    message: result.message,
+                    originalMessage: result.message
+                };
+                if (env === 'prod') this.prodMaintenance = updated;
+                else this.betaMaintenance = updated;
                 this.isUpdatingMaintenance = false;
             },
             error: (err) => {
-                this.logger.error('Failed to save maintenance message:', err);
+                this.logger.error(`Failed to save ${env} maintenance message:`, err);
                 this.isUpdatingMaintenance = false;
             }
         });
     }
 
-    onMaintenanceToggle(event: MatSlideToggleChange): void {
+    onMaintenanceToggle(event: MatSlideToggleChange, env: 'prod' | 'beta'): void {
         const isEnable = event.checked;
+        const envLabel = env === 'prod' ? 'PRODUCTION' : 'BETA';
         const confirmMessage = isEnable
-            ? 'Are you sure you want to ENABLE maintenance mode? This will prevent all non-admin users from accessing the app. Active users will be redirected to the maintenance page.'
-            : 'Are you sure you want to DISABLE maintenance mode? All users will regain access to the application immediately.';
+            ? `Are you sure you want to ENABLE maintenance mode for ${envLabel}? This will prevent all non-admin users in that environment from accessing the app.`
+            : `Are you sure you want to DISABLE maintenance mode for ${envLabel}? All users in that environment will regain access immediately.`;
 
         const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
             width: '400px',
             data: {
-                title: isEnable ? 'Enable Maintenance Mode?' : 'Disable Maintenance Mode?',
+                title: isEnable ? `Enable ${envLabel} Maintenance?` : `Disable ${envLabel} Maintenance?`,
                 message: confirmMessage,
                 confirmText: isEnable ? 'Enable' : 'Disable',
                 cancelText: 'Cancel'
@@ -420,27 +430,32 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
             if (!result) {
                 // Revert the toggle UI if cancelled
                 event.source.checked = !isEnable;
-                this.maintenanceEnabled = !isEnable;
+                if (env === 'prod') this.prodMaintenance.enabled = !isEnable;
+                else this.betaMaintenance.enabled = !isEnable;
                 return;
             }
 
             this.isUpdatingMaintenance = true;
-            // Use current message when toggling, or existing message if not editing
-            const messageToSave = this.maintenanceMessage || this.originalMaintenanceMessage;
+            const m = env === 'prod' ? this.prodMaintenance : this.betaMaintenance;
 
-            this.adminService.setMaintenanceMode(isEnable, messageToSave).subscribe({
+            this.adminService.setMaintenanceMode(isEnable, m.message, env).subscribe({
                 next: (result) => {
-                    this.maintenanceEnabled = result.enabled;
-                    this.maintenanceMessage = result.message;
-                    this.originalMaintenanceMessage = result.message;
+                    const updated = {
+                        enabled: result.enabled,
+                        message: result.message,
+                        originalMessage: result.message
+                    };
+                    if (env === 'prod') this.prodMaintenance = updated;
+                    else this.betaMaintenance = updated;
                     this.isUpdatingMaintenance = false;
-                    this.logger.log(`Maintenance mode ${result.enabled ? 'ENABLED' : 'DISABLED'}`);
+                    this.logger.log(`Maintenance mode [${env}] ${result.enabled ? 'ENABLED' : 'DISABLED'}`);
                 },
                 error: (err) => {
-                    this.logger.error('Failed to update maintenance mode:', err);
+                    this.logger.error(`Failed to update ${env} maintenance mode:`, err);
                     this.isUpdatingMaintenance = false;
                     // Revert the toggle
-                    this.maintenanceEnabled = !isEnable;
+                    if (env === 'prod') this.prodMaintenance.enabled = !isEnable;
+                    else this.betaMaintenance.enabled = !isEnable;
                     event.source.checked = !isEnable;
                 }
             });

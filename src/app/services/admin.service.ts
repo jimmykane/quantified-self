@@ -138,22 +138,28 @@ export class AdminService {
 
     // Maintenance mode
     private setMaintenanceModeFn = httpsCallableFromURL<
-        { enabled: boolean; message?: string },
-        { success: boolean; enabled: boolean; message: string }
+        { enabled: boolean; message?: string; env?: 'prod' | 'beta' },
+        { success: boolean; enabled: boolean; message: string; env: 'prod' | 'beta' }
     >(this.functions, environment.functions.setMaintenanceMode);
 
     private getMaintenanceStatusFn = httpsCallableFromURL<
         void,
-        { enabled: boolean; message: string; updatedAt?: unknown; updatedBy?: string }
+        {
+            prod: { enabled: boolean; message: string; updatedAt?: unknown; updatedBy?: string };
+            beta: { enabled: boolean; message: string; updatedAt?: unknown; updatedBy?: string };
+        }
     >(this.functions, environment.functions.getMaintenanceStatus);
 
-    setMaintenanceMode(enabled: boolean, message?: string): Observable<{ success: boolean; enabled: boolean; message: string }> {
-        return from(this.setMaintenanceModeFn({ enabled, message })).pipe(
+    setMaintenanceMode(enabled: boolean, message: string, env: 'prod' | 'beta'): Observable<{ success: boolean; enabled: boolean; message: string; env: 'prod' | 'beta' }> {
+        return from(this.setMaintenanceModeFn({ enabled, message, env })).pipe(
             map(result => result.data)
         );
     }
 
-    getMaintenanceStatus(): Observable<{ enabled: boolean; message: string }> {
+    getMaintenanceStatus(): Observable<{
+        prod: { enabled: boolean; message: string; updatedAt?: unknown; updatedBy?: string };
+        beta: { enabled: boolean; message: string; updatedAt?: unknown; updatedBy?: string };
+    }> {
         return from(this.getMaintenanceStatusFn()).pipe(
             map(result => result.data)
         );

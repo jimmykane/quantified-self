@@ -518,6 +518,7 @@ export const getQueueStats = onCall({
 interface SetMaintenanceModeRequest {
     enabled: boolean;
     message?: string;
+    env?: 'prod' | 'beta';
 }
 
 /**
@@ -541,12 +542,13 @@ export const setMaintenanceMode = onCall({
 
     try {
         const data = request.data as SetMaintenanceModeRequest;
-        // Use empty string if no message provided (user requested to remove default)
+        const env = data.env || 'prod'; // Default to prod for safety/legacy
         const msg = data.message || "";
         const db = admin.firestore();
 
         // 1. Update Firestore (for admin dashboard source of truth)
-        const maintenanceDoc = db.collection('config').doc('maintenance');
+        const docId = `maintenance_${env}`;
+        const maintenanceDoc = db.collection('config').doc(docId);
 
         await maintenanceDoc.set({
             enabled: data.enabled,
@@ -556,33 +558,47 @@ export const setMaintenanceMode = onCall({
         });
 
         // 2. Update Firebase Remote Config (for client source of truth)
-        // Note: Clients only fetch once per session, so this won't be instant for active sessions.
         const rc = admin.remoteConfig();
         const template = await rc.getTemplate();
 
-        // Ensure parameters exist
         template.parameters = template.parameters || {};
 
-        template.parameters['maintenance_mode'] = {
+        const modeKey = `maintenance_mode_${env}`;
+        const messageKey = `maintenance_message_${env}`;
+
+        template.parameters[modeKey] = {
             defaultValue: { value: String(data.enabled) },
             valueType: 'BOOLEAN' as any
         };
 
-        template.parameters['maintenance_message'] = {
+        template.parameters[messageKey] = {
             defaultValue: { value: msg },
             valueType: 'STRING' as any
         };
+
+        // Also update legacy keys if env is prod for backward compatibility with old clients
+        if (env === 'prod') {
+            template.parameters['maintenance_mode'] = {
+                defaultValue: { value: String(data.enabled) },
+                valueType: 'BOOLEAN' as any
+            };
+            template.parameters['maintenance_message'] = {
+                defaultValue: { value: msg },
+                valueType: 'STRING' as any
+            };
+        }
 
         // Validate and publish
         await rc.validateTemplate(template);
         await rc.publishTemplate(template);
 
-        logger.info(`Maintenance mode ${data.enabled ? 'ENABLED' : 'DISABLED'} by ${request.auth.uid} (Synced to Remote Config)`);
+        logger.info(`Maintenance mode [${env}] ${data.enabled ? 'ENABLED' : 'DISABLED'} by ${request.auth.uid} (Synced to Remote Config)`);
 
         return {
             success: true,
             enabled: data.enabled,
-            message: msg
+            message: msg,
+            env
         };
     } catch (error: unknown) {
         logger.error('Error setting maintenance mode:', error);
@@ -611,36 +627,28 @@ export const getMaintenanceStatus = onCall({
 
     try {
         const db = admin.firestore();
-        const maintenanceDoc = await db.collection('config').doc('maintenance').get();
+        const [prodDoc, betaDoc, legacyDoc] = await Promise.all([
+            db.collection('config').doc('maintenance_prod').get(),
+            db.collection('config').doc('maintenance_beta').get(),
+            db.collection('config').doc('maintenance').get()
+        ]);
 
-        if (!maintenanceDoc.exists) {
-            // Fallback to Remote Config if Firestore source is missing
-            try {
-                const rc = admin.remoteConfig();
-                const template = await rc.getTemplate();
-                const maintenanceMode = template.parameters?.['maintenance_mode']?.defaultValue as { value: string } | undefined;
-                const maintenanceMessage = template.parameters?.['maintenance_message']?.defaultValue as { value: string } | undefined;
-
-                return {
-                    enabled: maintenanceMode?.value === 'true',
-                    message: maintenanceMessage?.value || ""
-                };
-            } catch (rcError) {
-                logger.warn('Failed to fetch Remote Config fallback:', rcError);
-                return {
-                    enabled: false,
-                    message: ""
-                };
-            }
-        }
-
-        const data = maintenanceDoc.data();
-        return {
-            enabled: data?.enabled || false,
-            message: data?.message || "",
-            updatedAt: data?.updatedAt,
-            updatedBy: data?.updatedBy
+        const getStatusData = (doc: admin.firestore.DocumentSnapshot) => {
+            if (!doc.exists) return null;
+            const data = doc.data();
+            return {
+                enabled: data?.enabled || false,
+                message: data?.message || "",
+                updatedAt: data?.updatedAt,
+                updatedBy: data?.updatedBy
+            };
         };
+
+        // Fallback: If prod is missing, use legacy
+        const prod = getStatusData(prodDoc) || getStatusData(legacyDoc) || { enabled: false, message: "" };
+        const beta = getStatusData(betaDoc) || { enabled: false, message: "" };
+
+        return { prod, beta };
     } catch (error: unknown) {
         logger.error('Error getting maintenance status:', error);
         const errorMessage = error instanceof Error ? error.message : 'Failed to get maintenance status';
