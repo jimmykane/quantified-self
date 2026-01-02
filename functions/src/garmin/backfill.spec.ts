@@ -132,5 +132,22 @@ describe('Garmin Backfill', () => {
             expect(res.status).toHaveBeenCalledWith(500);
             expect(res.send).toHaveBeenCalledWith('Start date if after the end date');
         });
+
+        it('should return 409 if Garmin returns Conflict', async () => {
+            const firestore = admin.firestore();
+            (firestore.collection('users').doc('uid').collection('meta').doc('id').get as any).mockResolvedValue({ exists: false });
+            (firestore.collection('garminHealthAPITokens').doc('uid').get as any).mockResolvedValue({
+                data: () => ({ accessToken: 't', accessTokenSecret: 's' })
+            });
+
+            const error: any = new Error('Conflict');
+            error.statusCode = 409;
+            (requestHelper.get as any).mockRejectedValue(error);
+
+            await backfillHealthAPIActivities(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(409);
+            expect(res.send).toHaveBeenCalledWith(expect.stringContaining('Duplicate backfill detected'));
+        });
     });
 });

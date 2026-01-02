@@ -63,8 +63,12 @@ export const backfillHealthAPIActivities = functions.region('europe-west2').runW
       res.status(403).send(e.message);
       return;
     }
+    if (e.message.includes('Duplicate backfill detected')) {
+      res.status(409).send(e.message);
+      return;
+    }
     logger.error(e);
-    res.status(500).send(e.message);
+    res.status(e.statusCode || 500).send(e.message);
     return;
   }
 

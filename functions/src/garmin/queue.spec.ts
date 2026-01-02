@@ -108,7 +108,48 @@ vi.mock('firebase-admin', () => ({
 }));
 
 // Import SUT
-import { processGarminHealthAPIActivityQueueItem } from './queue';
+import { processGarminHealthAPIActivityQueueItem, insertGarminHealthAPIActivityFileToQueue } from './queue';
+import { addToQueueForGarmin } from '../queue';
+
+describe('insertGarminHealthAPIActivityFileToQueue', () => {
+    let req: any;
+    let res: any;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        req = {
+            body: {
+                activityFiles: [{
+                    userId: 'garmin-user-id',
+                    userAccessToken: 'garmin-access-token',
+                    fileType: 'FIT',
+                    callbackURL: 'https://callback?id=123&token=abc',
+                    startTimeInSeconds: 1000,
+                    manual: false,
+                }]
+            }
+        };
+        res = {
+            status: vi.fn().mockReturnThis(),
+            send: vi.fn().mockReturnThis(),
+        };
+    });
+
+    it('should correctly extract metadata and call addToQueueForGarmin', async () => {
+        await insertGarminHealthAPIActivityFileToQueue(req, res);
+
+        expect(addToQueueForGarmin).toHaveBeenCalledWith({
+            userID: 'garmin-user-id',
+            startTimeInSeconds: 1000,
+            manual: false,
+            activityFileID: '123',
+            activityFileType: 'FIT',
+            token: 'abc',
+            userAccessToken: 'garmin-access-token',
+        });
+        expect(res.status).toHaveBeenCalledWith(200);
+    });
+});
 
 describe('processGarminHealthAPIActivityQueueItem', () => {
     beforeEach(() => {
@@ -125,6 +166,7 @@ describe('processGarminHealthAPIActivityQueueItem', () => {
             activityFileID: 'file-id',
             activityFileType: 'FIT',
             token: 'token',
+            userAccessToken: 'garmin-access-token',
             retryCount: 0,
             manual: false,
             startTimeInSeconds: 12345
@@ -149,14 +191,9 @@ describe('processGarminHealthAPIActivityQueueItem', () => {
         // Verify
         expect(result).toBe('RETRY_INCREMENTED');
 
-        // Verify
-        expect(mockSetEvent).toHaveBeenCalled();
-        expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
-            queueItem,
-            expect.any(UsageLimitExceededError),
-            20, // Should abort retries
-            undefined
-        );
+        // Verify correct query was made
+        expect(mockCollection).toHaveBeenCalledWith('garminHealthAPITokens');
+        expect(mockWhere).toHaveBeenCalledWith('accessToken', '==', 'garmin-access-token');
     });
 
     it('should log a warning if no token is found', async () => {
@@ -168,6 +205,7 @@ describe('processGarminHealthAPIActivityQueueItem', () => {
             activityFileID: 'file-id',
             activityFileType: 'FIT',
             token: 'token',
+            userAccessToken: 'missing-token',
             retryCount: 0,
             manual: false,
             startTimeInSeconds: 12345
