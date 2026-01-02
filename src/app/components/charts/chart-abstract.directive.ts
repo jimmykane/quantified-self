@@ -94,9 +94,10 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
       this.logger.error(`[Antigravity] Error loading theme ${chartTheme}:`, e);
     }
 
-    // Programmatically enforce dark tooltip styles for dark themes to prevent "white on white" issues
+    // Programmatically enforce dark styles for dark themes to prevent visibility issues
     if (chartTheme === 'dark' || chartTheme === 'amchartsdark') {
-      const customDarkTooltipTheme = (target: any) => {
+      const customDarkTheme = (target: any) => {
+        // Fix tooltip styles
         if (target instanceof am4core.Tooltip) {
           if (target.background) {
             target.background.fill = am4core.color("#303030");
@@ -107,8 +108,27 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
           }
           target.getFillFromObject = false;
         }
+        // Fix axis labels (AxisLabel extends Label)
+        if (target.className === 'AxisLabel') {
+          target.fill = am4core.color("#ffffff");
+        }
+        // Fix axis titles
+        if (target.className === 'Label' && target.parent?.className === 'AxisRendererY') {
+          target.fill = am4core.color("#ffffff");
+        }
+        if (target.className === 'Label' && target.parent?.className === 'AxisRendererX') {
+          target.fill = am4core.color("#ffffff");
+        }
+        // Fix axis range labels (lap numbers, etc.)
+        if (target.className === 'AxisLabelCircular' || (target.className === 'Label' && target.parent?.className === 'Grid')) {
+          target.fill = am4core.color("#ffffff");
+        }
+        // Fix legend labels
+        if (target.className === 'Label' && target.parent?.className === 'LegendDataItem') {
+          target.fill = am4core.color("#ffffff");
+        }
       };
-      am4core.useTheme(customDarkTooltipTheme);
+      am4core.useTheme(customDarkTheme);
     }
 
     if (useAnimations === true) {

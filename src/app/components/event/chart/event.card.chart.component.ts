@@ -1138,6 +1138,13 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         return `[font-size: 0.9em]${series.name}[/] [bold font-size: 0.8em]Min:[/] [font-size: 0.7em]${map.min}[/] [bold font-size: 0.8em]Avg:[/] [font-size: 0.7em]${map.avg}[/] [bold font-size: 0.8em]Max:[/] [font-size: 0.7em]${map.max}[/]`
       });
 
+      // Style axis tooltip for dark themes
+      if (this.chartTheme === 'dark' || this.chartTheme === 'amchartsdark') {
+        yAxis.tooltip.background.fill = this.core.color('#303030');
+        yAxis.tooltip.background.stroke = this.core.color('#303030');
+        yAxis.tooltip.label.fill = this.core.color('#ffffff');
+      }
+
     }
     return yAxis;
   }
@@ -1422,7 +1429,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
                 // range.label.interactionsEnabled = true;
 
                 range.label.background.width = 1;
-                // range.label.fill = range.grid.stroke;
+                range.label.fill = range.grid.stroke;
                 range.label.horizontalCenter = 'middle';
                 range.label.valign = 'bottom';
                 range.label.textAlign = 'middle';
@@ -1599,6 +1606,14 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     xAxis.padding = 0;
     // xAxis.renderer.labels.template.fontSize = '1.2em';
+
+    // Style axis tooltip for dark themes
+    if (this.chartTheme === 'dark' || this.chartTheme === 'amchartsdark') {
+      xAxis.tooltip.background.fill = this.core.color('#303030');
+      xAxis.tooltip.background.stroke = this.core.color('#303030');
+      xAxis.tooltip.label.fill = this.core.color('#ffffff');
+    }
+
     return xAxis;
   }
 
