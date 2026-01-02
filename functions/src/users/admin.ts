@@ -518,7 +518,7 @@ export const getQueueStats = onCall({
 interface SetMaintenanceModeRequest {
     enabled: boolean;
     message?: string;
-    env?: 'prod' | 'beta';
+    env?: 'prod' | 'beta' | 'dev';
 }
 
 /**
@@ -627,9 +627,10 @@ export const getMaintenanceStatus = onCall({
 
     try {
         const db = admin.firestore();
-        const [prodDoc, betaDoc, legacyDoc] = await Promise.all([
+        const [prodDoc, betaDoc, devDoc, legacyDoc] = await Promise.all([
             db.collection('config').doc('maintenance_prod').get(),
             db.collection('config').doc('maintenance_beta').get(),
+            db.collection('config').doc('maintenance_dev').get(),
             db.collection('config').doc('maintenance').get()
         ]);
 
@@ -647,8 +648,9 @@ export const getMaintenanceStatus = onCall({
         // Fallback: If prod is missing, use legacy
         const prod = getStatusData(prodDoc) || getStatusData(legacyDoc) || { enabled: false, message: "" };
         const beta = getStatusData(betaDoc) || { enabled: false, message: "" };
+        const dev = getStatusData(devDoc) || { enabled: false, message: "" };
 
-        return { prod, beta };
+        return { prod, beta, dev };
     } catch (error: unknown) {
         logger.error('Error getting maintenance status:', error);
         const errorMessage = error instanceof Error ? error.message : 'Failed to get maintenance status';

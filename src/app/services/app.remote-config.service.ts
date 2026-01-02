@@ -117,7 +117,11 @@ export class AppRemoteConfigService {
             this.logger.log('[RemoteConfig] Response:', data.state);
 
             if (data.entries) {
-                const envSuffix = environment.production ? 'prod' : 'beta';
+                let envSuffix: 'prod' | 'beta' | 'dev' = 'beta';
+                if (environment.production) envSuffix = 'prod';
+                else if (environment.beta) envSuffix = 'beta';
+                else if (environment.localhost) envSuffix = 'dev';
+
                 const modeKey = `maintenance_mode_${envSuffix}`;
                 const messageKey = `maintenance_message_${envSuffix}`;
 

@@ -129,6 +129,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     // Maintenance mode
     prodMaintenance = { enabled: false, message: '', originalMessage: '' };
     betaMaintenance = { enabled: false, message: '', originalMessage: '' };
+    devMaintenance = { enabled: false, message: '', originalMessage: '' };
     isUpdatingMaintenance = false;
 
     // Cleanup
@@ -374,6 +375,11 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
                     message: status.beta.message || "",
                     originalMessage: status.beta.message || ""
                 };
+                this.devMaintenance = {
+                    enabled: status.dev.enabled,
+                    message: status.dev.message || "",
+                    originalMessage: status.dev.message || ""
+                };
             },
             error: (err) => {
                 this.logger.error('Failed to fetch maintenance status:', err);
@@ -381,15 +387,15 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         });
     }
 
-    hasMessageChanged(env: 'prod' | 'beta'): boolean {
-        const m = env === 'prod' ? this.prodMaintenance : this.betaMaintenance;
+    hasMessageChanged(env: 'prod' | 'beta' | 'dev'): boolean {
+        const m = env === 'prod' ? this.prodMaintenance : (env === 'beta' ? this.betaMaintenance : this.devMaintenance);
         return m.message !== m.originalMessage;
     }
 
-    saveMaintenanceMessage(env: 'prod' | 'beta'): void {
+    saveMaintenanceMessage(env: 'prod' | 'beta' | 'dev'): void {
         if (!this.hasMessageChanged(env)) return;
 
-        const m = env === 'prod' ? this.prodMaintenance : this.betaMaintenance;
+        const m = env === 'prod' ? this.prodMaintenance : (env === 'beta' ? this.betaMaintenance : this.devMaintenance);
         this.isUpdatingMaintenance = true;
         this.adminService.setMaintenanceMode(m.enabled, m.message, env).subscribe({
             next: (result) => {
@@ -399,7 +405,8 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
                     originalMessage: result.message
                 };
                 if (env === 'prod') this.prodMaintenance = updated;
-                else this.betaMaintenance = updated;
+                else if (env === 'beta') this.betaMaintenance = updated;
+                else this.devMaintenance = updated;
                 this.isUpdatingMaintenance = false;
             },
             error: (err) => {
@@ -409,9 +416,10 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         });
     }
 
-    onMaintenanceToggle(event: MatSlideToggleChange, env: 'prod' | 'beta'): void {
+    onMaintenanceToggle(event: MatSlideToggleChange, env: 'prod' | 'beta' | 'dev'): void {
         const isEnable = event.checked;
-        const envLabel = env === 'prod' ? 'PRODUCTION' : 'BETA';
+        const envLabels = { prod: 'PRODUCTION', beta: 'BETA', dev: 'DEV' };
+        const envLabel = envLabels[env];
         const confirmMessage = isEnable
             ? `Are you sure you want to ENABLE maintenance mode for ${envLabel}? This will prevent all non-admin users in that environment from accessing the app.`
             : `Are you sure you want to DISABLE maintenance mode for ${envLabel}? All users in that environment will regain access immediately.`;
@@ -431,12 +439,13 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
                 // Revert the toggle UI if cancelled
                 event.source.checked = !isEnable;
                 if (env === 'prod') this.prodMaintenance.enabled = !isEnable;
-                else this.betaMaintenance.enabled = !isEnable;
+                else if (env === 'beta') this.betaMaintenance.enabled = !isEnable;
+                else this.devMaintenance.enabled = !isEnable;
                 return;
             }
 
             this.isUpdatingMaintenance = true;
-            const m = env === 'prod' ? this.prodMaintenance : this.betaMaintenance;
+            const m = env === 'prod' ? this.prodMaintenance : (env === 'beta' ? this.betaMaintenance : this.devMaintenance);
 
             this.adminService.setMaintenanceMode(isEnable, m.message, env).subscribe({
                 next: (result) => {
@@ -446,7 +455,8 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
                         originalMessage: result.message
                     };
                     if (env === 'prod') this.prodMaintenance = updated;
-                    else this.betaMaintenance = updated;
+                    else if (env === 'beta') this.betaMaintenance = updated;
+                    else this.devMaintenance = updated;
                     this.isUpdatingMaintenance = false;
                     this.logger.log(`Maintenance mode [${env}] ${result.enabled ? 'ENABLED' : 'DISABLED'}`);
                 },
@@ -455,7 +465,8 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
                     this.isUpdatingMaintenance = false;
                     // Revert the toggle
                     if (env === 'prod') this.prodMaintenance.enabled = !isEnable;
-                    else this.betaMaintenance.enabled = !isEnable;
+                    else if (env === 'beta') this.betaMaintenance.enabled = !isEnable;
+                    else this.devMaintenance.enabled = !isEnable;
                     event.source.checked = !isEnable;
                 }
             });
