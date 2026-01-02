@@ -108,4 +108,22 @@ describe('PricingComponent', () => {
         }));
         expect(component.isLoading).toBe(false);
     });
+
+    it('should reset loading state when document becomes visible', () => {
+        // Set component to loading state
+        component.isLoading = true;
+        component.loadingPriceId = 'price_123';
+
+        // Mock document visibility state to be visible (not hidden)
+        Object.defineProperty(document, 'hidden', {
+            configurable: true,
+            get: () => false
+        });
+
+        // Trigger visibilitychange event
+        document.dispatchEvent(new Event('visibilitychange'));
+
+        expect(component.isLoading).toBe(false);
+        expect(component.loadingPriceId).toBeNull();
+    });
 });

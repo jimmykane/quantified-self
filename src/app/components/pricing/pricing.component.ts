@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, Output, EventEmitter } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
@@ -26,7 +26,7 @@ import { LoggerService } from '../../services/logger.service';
     templateUrl: './pricing.component.html',
     styleUrls: ['./pricing.component.scss']
 })
-export class PricingComponent implements OnInit {
+export class PricingComponent implements OnInit, OnDestroy {
     @Output() planSelected = new EventEmitter<void>();
 
     products$: Observable<StripeProduct[]> | null = null;
@@ -87,7 +87,22 @@ export class PricingComponent implements OnInit {
                 return subs.filter(sub => sub.role !== 'free');
             })
         );
+
+        // Reset loading state if user returns to the tab (e.g. from Stripe Checkout via back button)
+        document.addEventListener('visibilitychange', this.handleVisibilityChange);
     }
+
+    ngOnDestroy() {
+        document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    }
+
+    private handleVisibilityChange = () => {
+        if (!document.hidden) {
+            this.logger.log('Page became visible, resetting loading state');
+            this.isLoading = false;
+            this.loadingPriceId = null;
+        }
+    };
 
     async subscribe(price: any) {
         if (!this.auth.currentUser) {
