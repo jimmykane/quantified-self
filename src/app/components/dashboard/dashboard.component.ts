@@ -13,8 +13,7 @@ import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { map, switchMap, take, throttleTime } from 'rxjs/operators';
 import { Analytics, logEvent } from '@angular/fire/analytics';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
-import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { PromoDialogComponent } from '../promo-dialog/promo-dialog.component';
+
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { WhereFilterOp } from 'firebase/firestore';
 
@@ -40,7 +39,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public isInitialized = false;
 
   private shouldSearch: boolean;
-  private promoDialogRef: MatDialogRef<PromoDialogComponent>
+
 
   private analytics = inject(Analytics);
 
@@ -50,7 +49,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     private eventService: AppEventService,
     private userService: AppUserService,
     private route: ActivatedRoute,
-    private dialog: MatDialog,
     private snackBar: MatSnackBar) {
   }
 
@@ -63,7 +61,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       this.targetUser = resolvedData.targetUser;
       this.isLoading = false;
       this.isInitialized = true;
-      this.showPromoForUserOrDoNothing(this.user);
+
 
       if (this.user) {
         if (this.user.settings.dashboardSettings.dateRange === DateRanges.custom && this.user.settings.dashboardSettings.startDate && this.user.settings.dashboardSettings.endDate) {
@@ -188,7 +186,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       this.user = eventsAndUser.user;
       this.isLoading = false;
       this.isInitialized = true;
-      this.showPromoForUserOrDoNothing(this.user);
+
     });
   }
 
@@ -210,22 +208,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
   }
 
-  async showPromoForUserOrDoNothing(user: User) {
-    if (!this.userService.shouldShowPromo(user)) {
-      return
-    }
-    // Show the modal
-    if (this.promoDialogRef) {
-      return;
-    }
-    this.promoDialogRef = this.dialog.open(PromoDialogComponent, {
-      // width: '75vw',
-      disableClose: true,
-      data: {
-        user: user
-      },
-    })
-  }
+
 
   ngOnDestroy(): void {
     if (this.dataSubscription) {

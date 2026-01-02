@@ -453,19 +453,7 @@ export class AppUserService implements OnDestroy {
     });
   }
 
-  public shouldShowPromo(user: User) {
-    // Intentionally just check if only set for now
-    if (!user || user.lastSeenPromo) {
-      return false;
-    }
-    const lastSignIn = user.lastSignInDate ? +user.lastSignInDate : 0;
-    const creation = user.creationDate ? +user.creationDate : 0;
-    return (lastSignIn - creation) > 60 * 60 * 24 * 30 * 1000; // Bigger than 1 months
-  }
 
-  public async setLastSeenPromoToNow(user: User) {
-    return this.updateUserProperties(user, { lastSeenPromo: (new Date().getTime()) })
-  }
 
   async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date) {
     const idToken = await this.auth.currentUser?.getIdToken(true);
@@ -667,7 +655,7 @@ export class AppUserService implements OnDestroy {
 
     return this.updateUserProperties(user, {
       onboardingCompleted: true,
-      lastSeenPromo: new Date().getTime() // Optional: treat as if they saw promo so they don't get nagged immediately
+
     });
   }
 

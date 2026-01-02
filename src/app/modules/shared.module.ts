@@ -12,7 +12,7 @@ import { DataTypeIconComponent } from '../components/data-type-icon/data-type-ic
 import { UploadErrorComponent } from '../components/upload/upload-error/upload-error.component';
 import { UploadInfoComponent } from '../components/upload/upload-info/upload-info.component';
 import { FilesStatusListComponent } from '../components/files-status-list/files-status-list.component';
-import { PromoDialogComponent } from '../components/promo-dialog/promo-dialog.component';
+
 import { EventSearchComponent } from '../components/event-search/event-search.component';
 import { ActivityTypesMultiSelectComponent } from '../components/activity-types-multi-select/activity-types-multi-select.component';
 import { DateAdapter, MAT_DATE_FORMATS, MAT_DATE_LOCALE } from '@angular/material/core';
@@ -28,7 +28,7 @@ import { DateAdapter, MAT_DATE_FORMATS, MAT_DATE_LOCALE } from '@angular/materia
         PrivacyIconComponent,
         EventActionsComponent,
         EventFormComponent,
-        PromoDialogComponent,
+
         ActivityFormComponent,
         DeleteConfirmationComponent,
         DataTypeIconComponent,
@@ -53,7 +53,7 @@ import { DateAdapter, MAT_DATE_FORMATS, MAT_DATE_LOCALE } from '@angular/materia
         UploadInfoComponent,
         UploadErrorComponent,
         FilesStatusListComponent,
-        PromoDialogComponent,
+
         EventSearchComponent,
         ActivityTypesMultiSelectComponent,
     ]
