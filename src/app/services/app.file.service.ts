@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Inject, Injectable, LOCALE_ID } from '@angular/core';
 import { saveAs } from 'file-saver';
 import JSZip from 'jszip';
 import { DatePipe } from '@angular/common';
@@ -8,7 +8,11 @@ import { DatePipe } from '@angular/common';
   providedIn: 'root',
 })
 export class AppFileService {
-  private datePipe = new DatePipe('en-US');
+  private datePipe: DatePipe;
+
+  constructor(@Inject(LOCALE_ID) private locale: string) {
+    this.datePipe = new DatePipe(this.locale);
+  }
 
   public downloadFile(blob: Blob, name: string, extension: string): void {
     saveAs(blob, [name, extension].join('.'));

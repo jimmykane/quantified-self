@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { LOCALE_ID } from '@angular/core';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { AppFileService } from './app.file.service';
 import * as FileSaver from 'file-saver';
@@ -28,7 +29,11 @@ describe('AppFileService', () => {
     let service: AppFileService;
 
     beforeEach(() => {
-        TestBed.configureTestingModule({});
+        TestBed.configureTestingModule({
+            providers: [
+                { provide: LOCALE_ID, useValue: 'en-US' }
+            ]
+        });
         service = TestBed.inject(AppFileService);
         vi.clearAllMocks();
     });
@@ -89,4 +94,97 @@ describe('AppFileService', () => {
             expect(FileSaver.saveAs).toHaveBeenCalledWith(mockZipBlob, zipName);
         });
     });
+
+    describe('generateDateBasedFilename', () => {
+        it('should format dates using the injected locale', () => {
+            const date = new Date('2024-12-25T14:30:00');
+            const result = service.generateDateBasedFilename(date, 'fit');
+            // Should produce ISO-like format regardless of locale
+            expect(result).toBe('2024-12-25_14-30.fit');
+        });
+
+        it('should use fallback ID when date is null', () => {
+            const result = service.generateDateBasedFilename(null, 'fit', undefined, undefined, 'event-123');
+            expect(result).toBe('event-123.fit');
+        });
+
+        it('should use "activity" when date is null and no fallback ID', () => {
+            const result = service.generateDateBasedFilename(null, 'fit');
+            expect(result).toBe('activity.fit');
+        });
+
+        it('should include index when multiple files', () => {
+            const date = new Date('2024-12-25T14:30:00');
+            const result = service.generateDateBasedFilename(date, 'fit', 2, 3);
+            expect(result).toBe('2024-12-25_14-30_2.fit');
+        });
+    });
+
+    describe('generateDateRangeZipFilename', () => {
+        it('should format date range correctly', () => {
+            const minDate = new Date('2024-12-01');
+            const maxDate = new Date('2024-12-25');
+            const result = service.generateDateRangeZipFilename(minDate, maxDate);
+            expect(result).toBe('2024-12-01_to_2024-12-25_originals.zip');
+        });
+
+        it('should use single date when min equals max', () => {
+            const date = new Date('2024-12-15');
+            const result = service.generateDateRangeZipFilename(date, date);
+            expect(result).toBe('2024-12-15_originals.zip');
+        });
+
+        it('should use "unknown" when dates are null', () => {
+            const result = service.generateDateRangeZipFilename(null, null);
+            expect(result).toBe('unknown_originals.zip');
+        });
+
+        it('should use custom suffix', () => {
+            const date = new Date('2024-12-15');
+            const result = service.generateDateRangeZipFilename(date, date, 'backup');
+            expect(result).toBe('2024-12-15_backup.zip');
+        });
+    });
 });
+
+describe('AppFileService with different locales', () => {
+    it('should be injectable with en-GB locale (EU format)', () => {
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            providers: [
+                { provide: LOCALE_ID, useValue: 'en-GB' }
+            ]
+        });
+        const service = TestBed.inject(AppFileService);
+        expect(service).toBeTruthy();
+
+        // The date format used (yyyy-MM-dd_HH-mm) is locale-independent
+        // This test ensures the service works with non-US locales
+        const date = new Date('2024-12-25T14:30:00');
+        const result = service.generateDateBasedFilename(date, 'fit');
+        expect(result).toBe('2024-12-25_14-30.fit');
+    });
+
+    it('should be injectable with de-DE locale', () => {
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            providers: [
+                { provide: LOCALE_ID, useValue: 'de-DE' }
+            ]
+        });
+        const service = TestBed.inject(AppFileService);
+        expect(service).toBeTruthy();
+    });
+
+    it('should be injectable with fr-FR locale', () => {
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            providers: [
+                { provide: LOCALE_ID, useValue: 'fr-FR' }
+            ]
+        });
+        const service = TestBed.inject(AppFileService);
+        expect(service).toBeTruthy();
+    });
+});
+

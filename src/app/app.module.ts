@@ -1,4 +1,4 @@
-import { APP_INITIALIZER, ErrorHandler, NgModule } from '@angular/core';
+import { APP_INITIALIZER, ErrorHandler, LOCALE_ID, NgModule } from '@angular/core';
 import { LoggerService, GlobalErrorHandler } from './services/logger.service';
 import { BrowserModule } from '@angular/platform-browser';
 import { AppComponent } from './app.component';
@@ -42,11 +42,23 @@ import 'dayjs/locale/fr';
 import 'dayjs/locale/es';
 import 'dayjs/locale/it';
 import 'dayjs/locale/nl';
+import 'dayjs/locale/el';
 
 // ... (existing imports)
 
-export function getBrowserLocale() {
-  return navigator.language || 'en-US';
+/**
+ * Gets the user's locale using the modern Intl API.
+ * This respects system/OS regional settings, not just browser language.
+ * Falls back to navigator.language if Intl is unavailable.
+ */
+export function getBrowserLocale(): string {
+  try {
+    // Use Intl.DateTimeFormat to get the actual system locale for dates
+    const systemLocale = Intl.DateTimeFormat().resolvedOptions().locale;
+    return systemLocale || navigator.language || 'en-US';
+  } catch {
+    return navigator.language || 'en-US';
+  }
 }
 
 @NgModule({
@@ -104,7 +116,8 @@ export function getBrowserLocale() {
     provideAnalytics(() => getAnalytics()),
     provideRemoteConfig(() => getRemoteConfig()),
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
-    { provide: MAT_DATE_LOCALE, useFactory: getBrowserLocale }
+    { provide: MAT_DATE_LOCALE, useFactory: getBrowserLocale },
+    { provide: LOCALE_ID, useFactory: getBrowserLocale }
   ]
 })
 export class AppModule {

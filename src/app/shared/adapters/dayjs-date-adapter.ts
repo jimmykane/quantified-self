@@ -18,6 +18,43 @@ export class DayjsDateAdapter extends DateAdapter<Dayjs> {
         this.setLocale(matDateLocale || dayjs.locale());
     }
 
+    /**
+     * Normalizes browser locale codes to Day.js locale codes.
+     * e.g., 'el-GR' -> 'el', 'en-US' -> 'en', 'en-GB' -> 'en-gb'
+     */
+    private normalizeLocale(locale: string): string {
+        if (!locale) return 'en';
+
+        const lowerLocale = locale.toLowerCase();
+
+        // Map common browser locales to Day.js locales
+        const localeMap: Record<string, string> = {
+            'en-us': 'en',
+            'en-gb': 'en-gb',
+            'el-gr': 'el',
+            'de-de': 'de',
+            'de-at': 'de-at',
+            'de-ch': 'de-ch',
+            'fr-fr': 'fr',
+            'fr-be': 'fr',
+            'fr-ca': 'fr-ca',
+            'fr-ch': 'fr-ch',
+            'es-es': 'es',
+            'it-it': 'it',
+            'nl-nl': 'nl',
+            'nl-be': 'nl-be',
+        };
+
+        // Check exact match in the map
+        if (localeMap[lowerLocale]) {
+            return localeMap[lowerLocale];
+        }
+
+        // Try the base language (e.g., 'el-GR' -> 'el')
+        const baseLang = lowerLocale.split('-')[0];
+        return baseLang;
+    }
+
     getYear(date: Dayjs): number {
         return date.year();
     }
@@ -143,7 +180,8 @@ export class DayjsDateAdapter extends DateAdapter<Dayjs> {
     }
 
     override setLocale(locale: string) {
-        super.setLocale(locale);
-        dayjs.locale(locale);
+        const normalizedLocale = this.normalizeLocale(locale);
+        super.setLocale(normalizedLocale);
+        dayjs.locale(normalizedLocale);
     }
 }
