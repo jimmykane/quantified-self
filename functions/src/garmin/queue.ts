@@ -39,6 +39,7 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
         res.status(500).send();
         return;
       }
+
       queueItemDocumentReference = await addToQueueForGarmin(
         {
           userID: activityFile.userId,
@@ -47,6 +48,7 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
           activityFileID: activityFileID,
           activityFileType: activityFile.fileType,
           token: activityFileToken || 'No token',
+          userAccessToken: activityFile.userAccessToken,
         });
       queueItemRefs.push(queueItemDocumentReference);
     } catch (e: unknown) {
@@ -55,7 +57,7 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
       return;
     }
   }
-  logger.info(`Inserted to queue ${queueItemRefs.length}. Item Details: ${activityFiles.map(f => `[User: ${f.userId}, Type: ${f.fileType}]`).join(', ')}`);
+  logger.info(`Inserted to queue ${queueItemRefs.length} Garmin activity files.`);
   res.status(200).send();
 });
 
@@ -63,15 +65,15 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
 
 
 export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminHealthAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<QueueResult> {
-  logger.info(`Processing queue item ${queueItem.id} and userID ${queueItem.userID} at retry count ${queueItem.retryCount}`);
+  logger.info(`Processing queue item ${queueItem.id} at retry count ${queueItem.retryCount}`);
   // queueItem is never undefined for query queueItem snapshots
   let tokenQuerySnapshots: admin.firestore.QuerySnapshot | undefined;
-  const userKey = `GarminHealthAPI:${queueItem['userID']}`;
+  const userKey = `GarminHealthAPI:${queueItem['userAccessToken']}`;
 
   if (tokenCache) {
     let tokenPromise = tokenCache.get(userKey);
     if (!tokenPromise) {
-      tokenPromise = admin.firestore().collection('garminHealthAPITokens').where('userID', '==', queueItem['userID']).get();
+      tokenPromise = admin.firestore().collection('garminHealthAPITokens').where('accessToken', '==', queueItem['userAccessToken']).get();
       tokenCache.set(userKey, tokenPromise);
     }
     try {
@@ -81,7 +83,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
       return increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
     }
   } else {
-    tokenQuerySnapshots = await admin.firestore().collection('garminHealthAPITokens').where('userID', '==', queueItem['userID']).get();
+    tokenQuerySnapshots = await admin.firestore().collection('garminHealthAPITokens').where('accessToken', '==', queueItem['userAccessToken']).get();
   }
 
   if (!tokenQuerySnapshots.size) {
