@@ -270,14 +270,12 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   }
 
   let oneSuccess = false;
-  let lastFailResult: QueueResult = QueueResult.Failed;
+  let retryIncrement = 1;
+  let lastError = new Error(QueueErrors.ALL_TOKENS_FAILED);
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     let serviceToken;
 
-    // So if 2 tokens exist for 1 queue item then it will
-    // IF refresh fails it will go and try to import the for the next token
-    // If import fails for the next token it will increase count (fail ) and try from start.
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName);
     } catch (e: any) {
@@ -309,21 +307,22 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
           result = await getWorkoutForService(serviceName, queueItem, serviceToken);
         } catch (retryError: any) {
           logger.error(new Error(`Could not get workout for ${queueItem.id} even after force refresh: ${retryError.message}`));
-          lastFailResult = await increaseRetryCountForQueueItem(queueItem, retryError, 1, bulkWriter);
+          // Continue to next token
           continue;
         }
 
       } else if (e.statusCode === 403) {
         logger.error(new Error(`Could not get workout for ${queueItem.id} due to 403, increasing retry by 20`));
-        lastFailResult = await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
+        retryIncrement = 20;
+        lastError = e;
         continue;
       } else if (e.statusCode === 500) {
         logger.error(new Error(`Could not get workout for ${queueItem.id} due to 500 increasing retry by 20`));
-        lastFailResult = await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
+        retryIncrement = 20;
+        lastError = e;
         continue;
       } else {
         logger.error(new Error(`Could not get workout for ${queueItem.id}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}`));
-        lastFailResult = await increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
         continue;
       }
 
@@ -357,17 +356,18 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
       logger.info(`Created Event ${event.getID()} for ${queueItem.id} user id ${parentID} and token user ${serviceToken.openId || serviceToken.userName}`);
       logger.info(`Parsed item successfully for ${queueItem.id}`);
       oneSuccess = true;
+      break;
     } catch (e: any) {
       // @todo should delete event  or separate catch
       logger.error(e);
       if (e instanceof UsageLimitExceededError) {
         logger.error(new Error(`Usage limit exceeded for ${queueItem.id}. Aborting retries. ${e.message}`));
-        lastFailResult = await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter); // Stop retries
-        continue;
+        retryIncrement = 20;
+        lastError = e;
+        break; // Stop checking other tokens if usage limit exceeded
       }
 
       logger.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.openId || serviceToken.userName} to ${queueItem.retryCount + 1} due to ${e.message}`));
-      lastFailResult = await increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
       continue;
     }
   }
@@ -378,7 +378,9 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     return updateToProcessed(queueItem, bulkWriter);
   }
 
-  return lastFailResult;
+  // If we finished the loop without returning, it means every token attempt failed.
+  logger.error(new Error(`Could not process ANY tokens for ${queueItem.id} after checking all ${tokenQuerySnapshots.size} tokens. Increasing retry count.`));
+  return increaseRetryCountForQueueItem(queueItem, lastError, retryIncrement, bulkWriter);
 }
 
 async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface | GarminHealthAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames): Promise<admin.firestore.DocumentReference> {
