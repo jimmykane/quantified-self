@@ -187,6 +187,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   async search(search: Search) {
+    this.isLoading = true;
     this.shouldSearch = true;
     this.searchTerm = search.searchTerm;
     this.searchStartDate = search.startDate;
