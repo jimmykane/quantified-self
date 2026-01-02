@@ -208,7 +208,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
 
     fetchQueueStats(): void {
         this.isLoadingStats = true;
-        this.adminService.getQueueStatsDirect().subscribe({
+        this.adminService.getQueueStatsDirect().pipe(takeUntil(this.destroy$)).subscribe({
             next: (stats) => {
                 this.queueStats = stats;
                 this.isLoadingStats = false;

@@ -63,6 +63,7 @@ export interface QueueStats {
         pending: number;
         succeeded: number;
         stuck: number;
+        dead: number;
     }[];
     dlq?: DLQStats;
     advanced?: {

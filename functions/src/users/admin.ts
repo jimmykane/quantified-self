@@ -396,7 +396,7 @@ export const getQueueStats = onCall({
 
         const ONE_HOUR_AGO = Date.now() - (60 * 60 * 1000);
 
-        const providers: { name: string; pending: number; succeeded: number; stuck: number }[] = [];
+        const providers: { name: string; pending: number; succeeded: number; stuck: number; dead: number }[] = [];
 
         // Map over providers to get individual and total stats
         for (const [providerName, collections] of Object.entries(PROVIDER_QUEUES)) {
@@ -448,6 +448,13 @@ export const getQueueStats = onCall({
                 totalThroughput += throughput.data().count;
             }));
 
+            // Get Dead/Failed count for this provider (efficient count query)
+            const deadSnap = await db.collection('failed_jobs')
+                .where('originalCollection', 'in', collections)
+                .count()
+                .get();
+            const providerDead = deadSnap.data().count;
+
             totalPending += providerPending;
             totalSucceeded += providerSucceeded;
             totalStuck += providerStuck;
@@ -456,7 +463,8 @@ export const getQueueStats = onCall({
                 name: providerName,
                 pending: providerPending,
                 succeeded: providerSucceeded,
-                stuck: providerStuck
+                stuck: providerStuck,
+                dead: providerDead
             });
         }
 

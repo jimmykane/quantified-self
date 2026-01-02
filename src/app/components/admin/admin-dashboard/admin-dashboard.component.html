@@ -352,15 +352,28 @@
                         <th mat-header-cell *matHeaderCellDef matTooltip="Items stuck in queue (retries >= 10)"> Stuck
                         </th>
                         <td mat-cell *matCellDef="let stat">
-                            <span [style.color]="stat.stuck > 0 ? '#f44336' : 'inherit'"
+                            <span [style.color]="stat.stuck > 0 ? '#ff9800' : 'inherit'"
                                 [style.fontWeight]="stat.stuck > 0 ? '500' : 'normal'">
                                 {{ stat.stuck }}
                             </span>
                         </td>
                     </ng-container>
 
-                    <tr mat-header-row *matHeaderRowDef="['provider', 'pending', 'succeeded', 'stuck']"></tr>
-                    <tr mat-row *matRowDef="let row; columns: ['provider', 'pending', 'succeeded', 'stuck'];"></tr>
+                    <!-- Dead Column -->
+                    <ng-container matColumnDef="dead">
+                        <th mat-header-cell *matHeaderCellDef matTooltip="Failed jobs in Dead Letter Queue"> Dead
+                        </th>
+                        <td mat-cell *matCellDef="let stat">
+                            <span [style.color]="stat.dead > 0 ? '#f44336' : 'inherit'"
+                                [style.fontWeight]="stat.dead > 0 ? '500' : 'normal'">
+                                {{ stat.dead }}
+                            </span>
+                        </td>
+                    </ng-container>
+
+                    <tr mat-header-row *matHeaderRowDef="['provider', 'pending', 'succeeded', 'stuck', 'dead']"></tr>
+                    <tr mat-row *matRowDef="let row; columns: ['provider', 'pending', 'succeeded', 'stuck', 'dead'];">
+                    </tr>
                 </table>
             </div>
         </div>
