@@ -140,6 +140,13 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       if ((!this.searchStartDate || !this.searchEndDate) && user.settings.dashboardSettings.dateRange === DateRanges.custom) {
         return of({ events: [], user: user })
       }
+
+      // OPTIMIZATION: If we already have data (from resolver) and settings haven't changed, 
+      // skip the redundant network call.
+      if (!this.shouldSearch && this.isInitialized) {
+        return of({ events: this.events, user: user });
+      }
+
       if (user.settings.dashboardSettings.dateRange !== DateRanges.all) {
         // this.searchStartDate.setHours(0, 0, 0, 0); // @todo this should be moved to the search component
         where.push({
