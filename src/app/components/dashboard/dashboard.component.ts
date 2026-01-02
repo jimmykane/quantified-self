@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit, inject } from '@angular/core';
+import { Component, OnChanges, OnDestroy, OnInit, inject } from '@angular/core';
 import { AppEventService } from '../../services/app.event.service';
 import { asyncScheduler, of, Subscription } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
@@ -49,7 +49,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     private router: Router,
     private eventService: AppEventService,
     private userService: AppUserService,
-    private changeDetector: ChangeDetectorRef,
     private route: ActivatedRoute,
     private dialog: MatDialog,
     private snackBar: MatSnackBar) {
