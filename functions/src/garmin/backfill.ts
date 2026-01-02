@@ -117,11 +117,20 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
         url: `${GARMIN_ACTIVITIES_BACKFILL_URI}?summaryStartTimeInSeconds=${Math.floor(batchStartDate.getTime() / 1000)}&summaryEndTimeInSeconds=${Math.ceil(batchEndDate.getTime() / 1000)}`,
       });
     } catch (e: any) {
-      // Only if there is an api error in terms
-      if (e.statusCode === 500) {
-        logger.error(e);
-        throw new Error(`Could not import history for dates ${batchStartDate} to ${batchEndDate}`);
+      // Log the full error for debugging
+      logger.error(`Error requesting Garmin backfill for range ${batchStartDate} - ${batchEndDate}:`, e);
+
+      // Handle specific API errors
+      if (e.statusCode === 409) {
+        throw new Error('Duplicate backfill detected by Garmin for this time range. Please try a different range or contact support.');
       }
+
+      if (e.statusCode === 500) {
+        throw new Error(`Garmin API error (500) for dates ${batchStartDate} to ${batchEndDate}`);
+      }
+
+      // Re-throw if it wasn't a handled non-fatal error
+      throw e;
     }
   }
   try {
