@@ -4,6 +4,7 @@ import { AppUserService } from '../../services/app.user.service';
 import { AppPaymentService } from '../../services/app.payment.service';
 import { of } from 'rxjs';
 import { Auth } from '@angular/fire/auth';
+import { Analytics } from '@angular/fire/analytics';
 import { Router } from '@angular/router';
 
 class MockAppPaymentService {
@@ -63,6 +64,10 @@ describe('PricingComponent', () => {
                     useValue: {
                         navigate: vi.fn()
                     }
+                },
+                {
+                    provide: Analytics,
+                    useValue: {}
                 }
             ]
         }).compileComponents();
