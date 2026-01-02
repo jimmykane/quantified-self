@@ -4,7 +4,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 
 // Use vi.hoisted to ensure mocks are initialized before vi.mock
-const { firestoreBuilderMock, adminFirestoreMock, adminStorageMock, batchDeleteMock, batchCommitMock } = vi.hoisted(() => {
+const { firestoreBuilderMock, adminFirestoreMock, adminStorageMock, batchDeleteMock, batchCommitMock, deleteFilesMock } = vi.hoisted(() => {
     const onDeleteMock = vi.fn((handler) => handler);
     const documentMock = vi.fn(() => ({ onDelete: onDeleteMock }));
 
@@ -30,12 +30,13 @@ const { firestoreBuilderMock, adminFirestoreMock, adminStorageMock, batchDeleteM
         batch: batchMock
     } as any;
 
-    const deleteFileMock = vi.fn().mockResolvedValue(undefined);
+    const deleteFilesMock = vi.fn().mockResolvedValue(undefined);
     const storageMock = {
         bucket: vi.fn().mockReturnValue({
             file: vi.fn().mockReturnValue({
-                delete: deleteFileMock,
+                delete: vi.fn(),
             }),
+            deleteFiles: deleteFilesMock,
         }),
     } as any;
 
@@ -44,7 +45,8 @@ const { firestoreBuilderMock, adminFirestoreMock, adminStorageMock, batchDeleteM
         adminFirestoreMock: firestoreMock,
         adminStorageMock: storageMock,
         batchDeleteMock,
-        batchCommitMock
+        batchCommitMock,
+        deleteFilesMock
     };
 });
 
@@ -77,6 +79,7 @@ describe('cleanupEventFile', () => {
         storage: adminStorageMock,
         recursiveDelete: adminFirestoreMock.recursiveDelete,
         deleteFile: adminStorageMock.bucket().file().delete,
+        deleteFiles: deleteFilesMock,
         batchDelete: batchDeleteMock,
         batchCommit: batchCommitMock
     };
@@ -91,7 +94,7 @@ describe('cleanupEventFile', () => {
         testEnv.cleanup();
     });
 
-    it('should recursively delete activities and delete the original file', async () => {
+    it('should recursively delete activities and delete the original files by prefix', async () => {
         // Since we mocked the builder to just return the handler, cleanupEventFile IS the handler
         const wrapped = cleanupEventFile as any;
 
@@ -125,11 +128,13 @@ describe('cleanupEventFile', () => {
         expect(mocks.batchDelete).toHaveBeenCalledTimes(2);
         expect(mocks.batchCommit).toHaveBeenCalled();
 
-        // Check file delete
-        expect(mocks.deleteFile).toHaveBeenCalled();
+        // Check file delete with prefix
+        expect(mocks.deleteFiles).toHaveBeenCalledWith({
+            prefix: 'users/testUser/events/testEvent/'
+        });
     });
 
-    it('should delete activities even if no original file exists', async () => {
+    it('should delete activities and files even if originalFile metadata is missing', async () => {
         // Mock snapshot for flat activities (EMPTY)
         (mocks.firestore.collection('users/testUser/activities').where as any).mockReturnValue({
             get: vi.fn().mockResolvedValue({
@@ -141,6 +146,7 @@ describe('cleanupEventFile', () => {
 
         const wrapped = cleanupEventFile as any;
 
+        // NO data in snapshot
         const snap = testEnv.firestore.makeDocumentSnapshot({}, 'users/testUser/events/testEvent');
 
         const event = {
@@ -156,7 +162,9 @@ describe('cleanupEventFile', () => {
         // Check flat activity delete query called
         expect(mocks.firestore.collection).toHaveBeenCalledWith('users/testUser/activities');
 
-        // Check file delete NOT called
-        expect(mocks.deleteFile).not.toHaveBeenCalled();
+        // Check file delete called with prefix regardless
+        expect(mocks.deleteFiles).toHaveBeenCalledWith({
+            prefix: 'users/testUser/events/testEvent/'
+        });
     });
 });

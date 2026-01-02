@@ -15,7 +15,7 @@ export const cleanupEventFile = onDocumentDeleted({
         return;
     }
 
-    const deletedData = snap.data();
+
 
     logger.info(`[Cleanup] Event ${eventId} for user ${userId} deleted. Checking for original file.`);
 
@@ -40,16 +40,13 @@ export const cleanupEventFile = onDocumentDeleted({
         logger.error(`[Cleanup] Failed to delete linked activities for event ${eventId}`, error);
     }
 
-    if (deletedData && deletedData.originalFile && deletedData.originalFile.path) {
-        const filePath = deletedData.originalFile.path;
-        logger.info(`[Cleanup] Found original file at ${filePath}. Deleting...`);
-        try {
-            await admin.storage().bucket().file(filePath).delete();
-            logger.info(`[Cleanup] Successfully deleted ${filePath}`);
-        } catch (error) {
-            logger.error(`[Cleanup] Failed to delete file ${filePath}`, error);
-        }
-    } else {
-        logger.info(`[Cleanup] No originalFile record found for ${eventId}.`);
+    const prefix = `users/${userId}/events/${eventId}/`;
+    logger.info(`[Cleanup] Deleting all files with prefix ${prefix}`);
+
+    try {
+        await admin.storage().bucket().deleteFiles({ prefix });
+        logger.info(`[Cleanup] Successfully deleted files with prefix ${prefix}`);
+    } catch (error) {
+        logger.error(`[Cleanup] Failed to delete files with prefix ${prefix}`, error);
     }
 });
