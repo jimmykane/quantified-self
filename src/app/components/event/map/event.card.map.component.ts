@@ -83,6 +83,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
   public apiLoaded = false;
   private processSequence = 0;
+  private pendingFitBoundsTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private zone: NgZone,
@@ -370,6 +371,10 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
   ngOnDestroy(): void {
     this.unSubscribeFromAll();
+    if (this.pendingFitBoundsTimeout) {
+      clearTimeout(this.pendingFitBoundsTimeout);
+      this.pendingFitBoundsTimeout = null;
+    }
   }
 
   private mapActivities(seq: number) {
@@ -436,7 +441,14 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     }
 
     // Fit bounds after a short delay to ensure map is ready and container has size
-    setTimeout(() => this.fitBoundsToActivities(), 500);
+    // Cancel any pending fitBounds to prevent duplicate calls
+    if (this.pendingFitBoundsTimeout) {
+      clearTimeout(this.pendingFitBoundsTimeout);
+    }
+    this.pendingFitBoundsTimeout = setTimeout(() => {
+      this.pendingFitBoundsTimeout = null;
+      this.fitBoundsToActivities();
+    }, 500);
   }
 
   private fitBoundsToActivities() {
