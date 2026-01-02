@@ -55,7 +55,7 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
       return;
     }
   }
-  logger.info(`Inserted to queue ${queueItemRefs.length}`);
+  logger.info(`Inserted to queue ${queueItemRefs.length}. Item Details: ${activityFiles.map(f => `[User: ${f.userId}, Type: ${f.fileType}]`).join(', ')}`);
   res.status(200).send();
 });
 

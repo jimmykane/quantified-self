@@ -97,6 +97,7 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
   // We need to break down the requests to multiple of 90 days max. 7776000s
   // So if the date range the user sent is 179 days we need to send 2 request with the respective ranges
   const maxDeltaInMS = 7776000000;
+  logger.info(`Starting backfill for Garmin User ID: ${tokensDocumentSnapshotData.userID}`);
   const batchCount = Math.ceil((+endDate - +startDate) / maxDeltaInMS);
 
   for (let i = 0; i < batchCount; i++) {
