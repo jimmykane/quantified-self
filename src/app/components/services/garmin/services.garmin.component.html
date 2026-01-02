@@ -72,12 +72,19 @@
     </mat-card>
 
     <!-- History Import Card -->
-    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
+    <!-- History Import Card -->
+    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess || (!isAdmin && hasProAccess)"
+      [class.coming-soon]="hasProAccess && !isAdmin" [class.unlocked]="hasProAccess && isAdmin"
       (click)="!hasProAccess && triggerUpsell()">
       @if (!hasProAccess) {
       <div class="lock-overlay">
         <mat-icon class="lock-icon-large">lock</mat-icon>
         <span class="pro-badge">PRO</span>
+      </div>
+      } @else if (!isAdmin) {
+      <div class="lock-overlay coming-soon-overlay">
+        <mat-icon class="lock-icon-large">schedule</mat-icon>
+        <span class="pro-badge">COMING SOON</span>
       </div>
       }
       <mat-card-header>
@@ -91,8 +98,12 @@
       <div class="feature-card-content">
         <p class="feature-description" *ngIf="!hasProAccess">Import your full activity history from Garmin Connect.
         </p>
+        @if (hasProAccess && isAdmin) {
         <app-history-import-form [serviceName]="serviceName"
           [userMetaForService]="serviceMeta"></app-history-import-form>
+        } @else if (hasProAccess) {
+        <p class="feature-description">Import history is coming soon for Garmin.</p>
+        }
       </div>
     </mat-card>
 

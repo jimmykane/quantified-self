@@ -36,6 +36,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   @Input() user: User;
   @Input() isGuest: boolean;
   @Input() hasProAccess: boolean;
+  @Input() isAdmin: boolean = false;
   public isLoading = false;
   public serviceTokens: Auth2ServiceTokenInterface[] | Auth1ServiceTokenInterface[];
   public serviceMeta: UserServiceMetaInterface

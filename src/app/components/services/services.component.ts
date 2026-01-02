@@ -29,6 +29,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public activeSection: 'suunto' | 'garmin' | 'coros' = 'suunto';
   public serviceNames = ServiceNames;
   public hasProAccess = false;
+  public isAdmin = false;
 
   private userSubscription!: Subscription;
 
@@ -48,7 +49,14 @@ export class ServicesComponent implements OnInit, OnDestroy {
     // Use resolver data if available
     const resolvedData = this.route.snapshot.data['userData'];
     if (resolvedData) {
+      // isAdmin is not in resolvedData currently, so we fetch it.
+      // We could update resolver, but for now let's just fetch it here.
+      // We accept that it might "pop" in a millisecond later.
       this.processUser(resolvedData.user, resolvedData.isPro);
+      this.userService.isAdmin().then(isAdmin => {
+        this.isAdmin = isAdmin;
+        // Re-process to update any dependent logic if necessary (though current processUser doesn't use isAdmin, UI does)
+      });
       this.isLoading = false;
     }
 
@@ -59,6 +67,8 @@ export class ServicesComponent implements OnInit, OnDestroy {
       // But efficiently:
       if (!this.user || (user && user.uid !== this.user.uid)) {
         const isPro = await this.userService.isPro();
+        const isAdmin = await this.userService.isAdmin();
+        this.isAdmin = isAdmin;
         this.processUser(user, isPro);
       }
     }));

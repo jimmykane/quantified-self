@@ -220,3 +220,22 @@ mat-icon {
     color: var(--mat-sys-primary, #3f51b5);
     opacity: 1;
 }
+
+.feature-card.coming-soon {
+    cursor: default;
+}
+
+.feature-card.coming-soon .feature-card-content {
+    opacity: 0.3;
+    filter: blur(1.5px);
+    pointer-events: none;
+}
+
+.coming-soon-overlay .pro-badge {
+    background-color: #ff9800;
+    color: black;
+}
+
+:host-context(.dark-theme) .coming-soon-overlay .pro-badge {
+    background-color: #ffb74d;
+}
