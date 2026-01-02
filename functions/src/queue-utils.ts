@@ -4,7 +4,16 @@ import { QueueItemInterface } from './queue/queue-item.interface';
 
 import { MAX_RETRY_COUNT, QUEUE_ITEM_TTL_MS } from './shared/queue-config';
 
-export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error: Error, bulkWriter?: admin.firestore.BulkWriter, context?: string) {
+
+export enum QueueResult {
+    Processed = 'PROCESSED',
+    MovedToDLQ = 'MOVED_TO_DLQ',
+    RetryIncremented = 'RETRY_INCREMENTED',
+    Failed = 'FAILED',
+}
+
+export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error: Error, bulkWriter?: admin.firestore.BulkWriter, context?: string): Promise<QueueResult.MovedToDLQ | QueueResult.Failed> {
+
     if (!queueItem.ref) {
         throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
     }
@@ -31,13 +40,17 @@ export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error
             batch.delete(queueItem.ref);
             await batch.commit();
         }
+
         logger.info(`Moved item ${queueItem.id} to Dead Letter Queue (failed_jobs)`);
+        return QueueResult.MovedToDLQ;
     } catch (e) {
         logger.error(new Error(`Failed to move item ${queueItem.id} to DLQ: ${e}`));
+        return QueueResult.Failed;
     }
 }
 
-export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterface, error: Error, incrementBy = 1, bulkWriter?: admin.firestore.BulkWriter) {
+
+export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterface, error: Error, incrementBy = 1, bulkWriter?: admin.firestore.BulkWriter): Promise<QueueResult.MovedToDLQ | QueueResult.RetryIncremented | QueueResult.Failed> {
     if (!queueItem.ref) {
         throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
     }
@@ -67,14 +80,18 @@ export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterfa
         } else {
             await ref.update(updateData);
         }
+
         queueItem.ref = ref;
         logger.info(`Updated retry count for ${queueItem.id} to ${queueItem.retryCount}`);
+        return QueueResult.RetryIncremented;
     } catch {
         logger.error(new Error(`Could not update retry count on ${queueItem.id}`));
+        return QueueResult.Failed;
     }
 }
 
-export async function updateToProcessed(queueItem: QueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, additionalData?: any) {
+
+export async function updateToProcessed(queueItem: QueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, additionalData?: any): Promise<QueueResult.Processed | QueueResult.Failed> {
     if (!queueItem.ref) {
         throw new Error(`No document reference supplied for queue item ${queueItem.id}`);
     }
@@ -90,8 +107,12 @@ export async function updateToProcessed(queueItem: QueueItemInterface, bulkWrite
         } else {
             await ref.update(updateData);
         }
+
         logger.info(`Updated to processed  ${queueItem.id}`);
+        return QueueResult.Processed;
     } catch {
         logger.error(new Error(`Could not update processed state for ${queueItem.id}`));
+        return QueueResult.Failed;
     }
 }
+

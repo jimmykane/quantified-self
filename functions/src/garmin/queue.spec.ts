@@ -73,6 +73,12 @@ vi.mock('../queue-utils', () => ({
     increaseRetryCountForQueueItem: mockIncreaseRetryCountForQueueItem,
     updateToProcessed: vi.fn(),
     moveToDeadLetterQueue: mockMoveToDeadLetterQueue,
+    QueueResult: {
+        Processed: 'PROCESSED',
+        MovedToDLQ: 'MOVED_TO_DLQ',
+        RetryIncremented: 'RETRY_INCREMENTED',
+        Failed: 'FAILED',
+    }
 }));
 
 // Mock parent queue functions
@@ -137,7 +143,11 @@ describe('processGarminHealthAPIActivityQueueItem', () => {
         mockSetEvent.mockRejectedValue(new UsageLimitExceededError('Limit reached'));
 
         // Execute
-        await processGarminHealthAPIActivityQueueItem(queueItem as any);
+        mockIncreaseRetryCountForQueueItem.mockResolvedValue('RETRY_INCREMENTED');
+        const result = await processGarminHealthAPIActivityQueueItem(queueItem as any);
+
+        // Verify
+        expect(result).toBe('RETRY_INCREMENTED');
 
         // Verify
         expect(mockSetEvent).toHaveBeenCalled();
@@ -170,7 +180,11 @@ describe('processGarminHealthAPIActivityQueueItem', () => {
         });
 
         // Execute
-        await processGarminHealthAPIActivityQueueItem(queueItem as any);
+        mockMoveToDeadLetterQueue.mockResolvedValue('MOVED_TO_DLQ');
+        const result = await processGarminHealthAPIActivityQueueItem(queueItem as any);
+
+        // Verify
+        expect(result).toBe('MOVED_TO_DLQ');
 
         // Verify
         expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('No token found'));

@@ -5,6 +5,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { parseWorkoutQueueItemForServiceName } from '../queue';
 import { getServiceWorkoutQueueName } from '../shared/queue-names';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
+import { QueueResult } from '../queue-utils';
 
 /**
  * Task worker that processes a single workout queue item.
@@ -40,11 +41,28 @@ export const processWorkoutTask = onTaskDispatched({
         // Process the individual item reusing the core logic
         // We pass null for caches/pendingWrites as this worker focuses on a single item
         // and Cloud Tasks handles the concurrency at the queue level.
-        await parseWorkoutQueueItemForServiceName(serviceName, Object.assign({
+        const result = await parseWorkoutQueueItemForServiceName(serviceName, Object.assign({
             id: queueDoc.id,
             ref: queueDoc.ref,
         }, queueItem) as any);
-        logger.info(`[TaskWorker] Successfully processed ${serviceName} item: ${queueItemId}`);
+
+        switch (result) {
+            case QueueResult.Processed:
+                logger.info(`[TaskWorker] Successfully processed ${serviceName} item: ${queueItemId}`);
+                break;
+            case QueueResult.MovedToDLQ:
+                logger.warn(`[TaskWorker] Item ${queueItemId} for ${serviceName} was moved to DLQ (failed_jobs).`);
+                break;
+            case QueueResult.RetryIncremented:
+                logger.info(`[TaskWorker] Item ${queueItemId} for ${serviceName} failed and retry count was incremented.`);
+                break;
+            case QueueResult.Failed:
+                logger.error(`[TaskWorker] Fatal failure updating state for ${serviceName} item: ${queueItemId}`);
+                break;
+            default:
+                logger.warn(`[TaskWorker] Unexpected result for ${serviceName} item: ${queueItemId}: ${result}`);
+        }
+
     } catch (error) {
         logger.error(`[TaskWorker] Error processing ${serviceName} item ${queueItemId}:`, error);
         // Throwing an error here triggers the Cloud Task retry with exponential backoff

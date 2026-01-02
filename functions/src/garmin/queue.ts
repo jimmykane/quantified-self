@@ -3,7 +3,7 @@ import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { QueueErrors, QueueLogs } from '../shared/constants';
 import { addToQueueForGarmin } from '../queue';
-import { increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue } from '../queue-utils';
+import { increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue, QueueResult } from '../queue-utils';
 
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { generateIDFromParts, setEvent, UsageLimitExceededError } from '../utils';
@@ -62,7 +62,7 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
 
 
 
-export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminHealthAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>) {
+export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminHealthAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<QueueResult> {
   logger.info(`Processing queue item ${queueItem.id} and userID ${queueItem.userID} at retry count ${queueItem.retryCount}`);
   // queueItem is never undefined for query queueItem snapshots
   let tokenQuerySnapshots: admin.firestore.QuerySnapshot | undefined;
@@ -126,8 +126,9 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
       await increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
     }
     logger.info('Ending timer: DownloadFile');
-    return;
+    return QueueResult.RetryIncremented;
   }
+
 
   try {
     let event;
@@ -188,13 +189,16 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
     if (e instanceof UsageLimitExceededError) {
       logger.error(new Error(`Usage limit exceeded for ${queueItem.id}. Aborting retries. ${e.message}`));
       await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
-      return;
+      return QueueResult.RetryIncremented;
     }
+
     const err = e instanceof Error ? e : new Error(String(e));
     logger.info(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.userID} to ${queueItem.retryCount + 1} due to ${err.message}`));
     await increaseRetryCountForQueueItem(queueItem, err, 1, bulkWriter);
+    return QueueResult.RetryIncremented;
   }
 }
+
 
 
 export interface GarminHealthAPIActivityFileInterface {

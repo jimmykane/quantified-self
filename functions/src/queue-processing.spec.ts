@@ -109,6 +109,12 @@ vi.mock('./queue-utils', () => ({
     increaseRetryCountForQueueItem: mockIncreaseRetryCountForQueueItem,
     updateToProcessed: vi.fn(),
     moveToDeadLetterQueue: vi.fn(),
+    QueueResult: {
+        Processed: 'PROCESSED',
+        MovedToDLQ: 'MOVED_TO_DLQ',
+        RetryIncremented: 'RETRY_INCREMENTED',
+        Failed: 'FAILED',
+    }
 }));
 
 vi.mock('firebase-functions/logger', () => ({
