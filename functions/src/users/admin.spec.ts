@@ -255,7 +255,7 @@ describe('getQueueStats Cloud Function', () => {
             };
 
             if (collectionName === 'failed_jobs') {
-                return {
+                const failedJobsMock: any = {
                     count: mockCount,
                     orderBy: vi.fn().mockReturnValue({
                         limit: vi.fn().mockReturnValue({
@@ -275,7 +275,10 @@ describe('getQueueStats Cloud Function', () => {
                             { data: () => ({ context: 'MAX_RETRY_REACHED', originalCollection: 'COROSAPIWorkoutQueue', error: 'Timeout' }) }
                         ]
                     })
-                }
+                };
+                // Make where chainable
+                failedJobsMock.where = vi.fn().mockReturnValue(failedJobsMock);
+                return failedJobsMock;
             }
             return mockQuery;
         });
