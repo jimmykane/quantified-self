@@ -55,19 +55,26 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
     });
   }
 
+  isHydrated() {
+    return this.activity.getAllStreams().length > 0;
+  }
+
   hasDistance() {
     return this.activity.hasStreamData(DataDistance.type);
   }
-
-
 
   async reGenerateStatistics() {
     this.snackBar.open('Re-calculating activity statistics', null, {
       duration: 2000,
     });
     // To use this component we need the full hydrated object and we might not have it
-    this.activity.clearStreams();
-    this.activity.addStreams(await this.eventService.getAllStreams(this.user, this.event.getID(), this.activity.getID()).pipe(take(1)).toPromise());
+    // We attach streams from the original file (if exists) instead of Firestore
+    const hydratedEvent = await this.eventService.attachStreamsToEventWithActivities(this.user, this.event as any).pipe(take(1)).toPromise();
+    const hydratedActivity = hydratedEvent.getActivities().find(a => a.getID() === this.activity.getID());
+    if (hydratedActivity) {
+      this.activity.clearStreams();
+      this.activity.addStreams(hydratedActivity.getAllStreams());
+    }
     this.activity.clearStats();
     ActivityUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
     EventUtilities.reGenerateStatsForEvent(this.event);
@@ -75,6 +82,7 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
     this.snackBar.open('Activity and event statistics have been recalculated', null, {
       duration: 2000,
     });
+    this.changeDetectorRef.detectChanges();
   }
 
   async deleteActivity() {

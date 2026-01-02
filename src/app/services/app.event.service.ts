@@ -233,7 +233,11 @@ export class AppEventService implements OnDestroy {
     )
   }
 
+  /**
+   * @deprecated Streams are no longer stored in Firestore. Use attachStreamsToEventWithActivities instead.
+   */
   public getAllStreams(user: User, eventID: string, activityID: string): Observable<StreamInterface[]> {
+    this.logger.warn('[AppEventService] getAllStreams is deprecated and will likely return empty results.');
     const streamsCollection = collection(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID, 'streams');
     return from(runInInjectionContext(this.injector, () => getDocs(streamsCollection))) // @todo replace with snapshot changes I suppose when @https://github.com/angular/angularfire2/issues/1552 is fixed
       .pipe(map((querySnapshot) => {
@@ -241,9 +245,12 @@ export class AppEventService implements OnDestroy {
       }))
   }
 
+  /**
+   * @deprecated Streams are no longer stored in Firestore. Use attachStreamsToEventWithActivities instead.
+   */
   public getStream(user: User, eventID: string, activityID: string, streamType: string): Observable<StreamInterface> {
-    const streamDoc = doc(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID, 'streams', streamType);
-    return from(runInInjectionContext(this.injector, () => getDoc(streamDoc))) // @todo replace with snapshot changes I suppose when @https://github.com/angular/angularfire2/issues/1552 is fixed
+    this.logger.warn('[AppEventService] getStream is deprecated and will likely return empty results.');
+    return from(runInInjectionContext(this.injector, () => getDoc(doc(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID, 'streams', streamType))))
       .pipe(map((queryDocumentSnapshot) => {
         // getDoc returns DocumentSnapshot, ensure data exists
         if (!queryDocumentSnapshot.exists()) return null; // Handle missing stream

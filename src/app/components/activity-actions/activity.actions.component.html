@@ -12,6 +12,13 @@
     <span>Crop</span>
   </button>
   }
+  <button mat-menu-item disabled="true">
+    <mat-icon [color]="isHydrated() ? 'accent' : 'warn'">
+      {{ isHydrated() ? 'cloud_done' : 'cloud_off' }}
+    </mat-icon>
+    <span>Streams {{ isHydrated() ? 'loaded' : 'not loaded' }}</span>
+  </button>
+  <mat-divider></mat-divider>
   <button mat-menu-item (click)="reGenerateStatistics()">
     <mat-icon>autorenew</mat-icon>
     <span>Refresh activity statistics <mat-icon class="toolTip"

@@ -156,7 +156,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     ).subscribe((cursors) => {
       cursors.filter(cursor => cursor.byChart === true).forEach(cursor => {
         const cursorActivityMapData = this.activitiesMapData.find(amd => amd.activity.getID() === cursor.activityID);
-        if (cursorActivityMapData) {
+        if (cursorActivityMapData && cursorActivityMapData.positions.length > 0) {
           const position = cursorActivityMapData.positions.reduce((prev, curr) =>
             Math.abs(curr.time - cursor.time) < Math.abs(prev.time - cursor.time) ? curr : prev);
           if (position) {

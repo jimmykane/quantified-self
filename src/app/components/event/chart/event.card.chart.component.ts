@@ -867,30 +867,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       }
     }
 
-    // Lazy load additional streams if "Show All Data" is enabled and we are not using client-side parsing (original files)
-    if (this.showAllData && !appEvent.originalFile && (!appEvent.originalFiles || appEvent.originalFiles.length === 0)) {
-      const user = new User(this.targetUserID);
-      const fetchPromises = this.selectedActivities
-        .filter(activity => !this.activitiesWithAllStreamsFetched.has(activity.getID()))
-        .map(activity => {
-          return this.eventService.getAllStreams(user, this.event.getID(), activity.getID())
-            .pipe(take(1))
-            .toPromise()
-            .then(streams => {
-              if (streams && streams.length) {
-                activity.addStreams(streams);
-                this.activitiesWithAllStreamsFetched.add(activity.getID());
-              }
-            });
-        });
-      if (fetchPromises.length > 0) {
-        await Promise.all(fetchPromises);
-        if (seq !== this.processSequence) {
-          this.logger.warn(`[EventCardChart] processChanges aborted AFTER fetching streams (seq mismatch: ${seq} !== ${this.processSequence})`);
-          return;
-        }
-      }
-    }
+    // Lazy load additional streams is no longer supported from Firestore as streams are not stored there anymore
+    // If "Show All Data" is enabled, streams should have been hydrated from the original file already
+    // via attachStreamsToEventWithActivities in the event service.
 
     const series = this.selectedActivities.reduce((seriesArray, activity) => {
       const streams = activity.getAllStreams();

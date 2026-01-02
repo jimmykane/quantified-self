@@ -116,8 +116,14 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
 
 
+  isHydrated() {
+    const activities = this.event.getActivities();
+    return activities.length > 0 && activities[0].getAllStreams().length > 0;
+  }
+
   hasDistance() {
-    return this.event.getFirstActivity().hasStreamData(DataDistance.type);
+    const activities = this.event.getActivities();
+    return activities.length > 0 && activities[0].hasStreamData(DataDistance.type);
   }
 
   hasPositionalData() {
@@ -140,15 +146,20 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       duration: 2000,
     });
     // To use this component we need the full hydrated object and we might not have it
-    this.event.getFirstActivity().clearStreams();
-    this.event.getFirstActivity().addStreams(await this.eventService.getAllStreams(this.user, this.event.getID(), this.event.getFirstActivity().getID()).pipe(take(1)).toPromise());
-    this.event.getFirstActivity().clearStats();
-    ActivityUtilities.generateMissingStreamsAndStatsForActivity(this.event.getFirstActivity());
+    // We attach streams from the original file (if exists) instead of Firestore
+    await this.eventService.attachStreamsToEventWithActivities(this.user, this.event as any).pipe(take(1)).toPromise();
+
+    this.event.getActivities().forEach(activity => {
+      activity.clearStats();
+      ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity);
+    });
+
     EventUtilities.reGenerateStatsForEvent(this.event);
     await this.eventService.writeAllEventData(this.user, this.event);
     this.snackBar.open('Activity and event statistics have been recalculated', undefined, {
       duration: 2000,
     });
+    this.changeDetectorRef.detectChanges();
   }
 
   // downloadEventAsTCX(event: EventInterface) {
