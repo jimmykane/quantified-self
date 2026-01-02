@@ -88,7 +88,8 @@ describe('checkSubscriptionNotifications', () => {
         expect(collectionGroupSpy).toHaveBeenCalledWith('subscriptions');
         expect(mailDocRef.set).toHaveBeenCalledWith(expect.objectContaining({
             toUids: ['user1'],
-            template: expect.objectContaining({ name: 'subscription_expiring_soon' })
+            template: expect.objectContaining({ name: 'subscription_expiring_soon' }),
+            expireAt: expect.any(Object)
         }));
     });
 
@@ -139,7 +140,8 @@ describe('checkSubscriptionNotifications', () => {
         expect(collectionGroupSpy).toHaveBeenCalledWith('system');
         expect(mailDocRef.set).toHaveBeenCalledWith(expect.objectContaining({
             toUids: ['user2'],
-            template: expect.objectContaining({ name: 'grace_period_ending' })
+            template: expect.objectContaining({ name: 'grace_period_ending' }),
+            expireAt: expect.any(Object)
         }));
     });
 

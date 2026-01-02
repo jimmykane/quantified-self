@@ -1,6 +1,7 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { MAIL_TTL_DAYS } from '../shared/constants';
 
 // Reusing the same ROLE_DISPLAY_NAMES map or importing simple map if needed
 const ROLE_DISPLAY_NAMES: { [key: string]: string } = {
@@ -74,7 +75,8 @@ export const checkSubscriptionNotifications = onSchedule('every 24 hours', async
                     role: ROLE_DISPLAY_NAMES[sub.role] || sub.role,
                     expiration_date: expirationDate
                 }
-            }
+            },
+            expireAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + MAIL_TTL_DAYS * 24 * 60 * 60 * 1000)),
         });
         logger.info(`Queued expiring email for user ${uid}`);
     }
@@ -131,7 +133,8 @@ export const checkSubscriptionNotifications = onSchedule('every 24 hours', async
                 data: {
                     expiration_date: expirationDate
                 }
-            }
+            },
+            expireAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + MAIL_TTL_DAYS * 24 * 60 * 60 * 1000)),
         });
         logger.info(`Queued grace period warning for user ${uid}`);
     }

@@ -11,38 +11,59 @@ vi.mock('../shared/pricing', () => ({
     }
 }));
 
-describe('checkAndSendSubscriptionEmails', () => {
-    let firestoreSpy: any;
-    let authSpy: any;
-    let collectionSpy: any;
-    let docSpy: any;
-    let getSpy: any;
-    let setSpy: any;
-    let getUserSpy: any;
+// Mocks
+const collectionSpy = vi.fn();
+const docSpy = vi.fn();
+const getSpy = vi.fn();
+const setSpy = vi.fn();
+const getUserSpy = vi.fn();
 
+// Firestore Mock Implementation
+const mockFirestore = {
+    collection: collectionSpy
+};
+
+vi.mock('firebase-admin', () => ({
+    initializeApp: vi.fn(),
+    firestore: Object.assign(
+        vi.fn(() => mockFirestore),
+        {
+            Timestamp: {
+                fromDate: (date: Date) => ({
+                    toDate: () => date,
+                    toMillis: () => date.getTime(),
+                    toISOString: () => date.toISOString()
+                })
+            }
+        }
+    ),
+    auth: vi.fn()
+}));
+
+describe('checkAndSendSubscriptionEmails', () => {
     beforeEach(() => {
         vi.clearAllMocks();
 
-        setSpy = vi.fn().mockResolvedValue({} as any);
-        getSpy = vi.fn().mockResolvedValue({ exists: false }); // Default: doc does not exist
+        setSpy.mockResolvedValue({} as any);
+        getSpy.mockResolvedValue({ exists: false }); // Default: doc does not exist
 
-        docSpy = vi.fn().mockReturnValue({
+        docSpy.mockReturnValue({
             get: getSpy,
             set: setSpy
         });
 
-        collectionSpy = vi.fn().mockReturnValue({
+        collectionSpy.mockReturnValue({
             doc: docSpy
         });
 
-        firestoreSpy = vi.spyOn(admin, 'firestore').mockReturnValue({
-            collection: collectionSpy
-        } as any);
+        mockFirestore.collection = collectionSpy; // Ensure it's linked
 
-        getUserSpy = vi.fn().mockResolvedValue({ email: 'test@example.com' });
-        authSpy = vi.spyOn(admin, 'auth').mockReturnValue({
+        getUserSpy.mockResolvedValue({ email: 'test@example.com' });
+
+        // Setup auth mock
+        (admin.auth as any as ReturnType<typeof vi.fn>).mockReturnValue({
             getUser: getUserSpy
-        } as any);
+        });
     });
 
     afterEach(() => {
@@ -65,7 +86,8 @@ describe('checkAndSendSubscriptionEmails', () => {
             template: {
                 name: 'welcome_email',
                 data: { role: 'pro' }
-            }
+            },
+            expireAt: expect.any(Object)
         }));
     });
 
@@ -83,7 +105,8 @@ describe('checkAndSendSubscriptionEmails', () => {
             template: {
                 name: 'subscription_upgrade',
                 data: { new_role: 'Pro', old_role: 'Basic' }
-            }
+            },
+            expireAt: expect.any(Object)
         }));
     });
 
@@ -105,7 +128,8 @@ describe('checkAndSendSubscriptionEmails', () => {
                     old_role: 'Pro',
                     limit: '100'
                 }
-            }
+            },
+            expireAt: expect.any(Object)
         }));
     });
 
@@ -135,7 +159,8 @@ describe('checkAndSendSubscriptionEmails', () => {
                     role: 'Pro',
                     expiration_date: expect.any(String)
                 })
-            }
+            },
+            expireAt: expect.any(Object)
         }));
     });
 
@@ -255,7 +280,8 @@ describe('checkAndSendSubscriptionEmails', () => {
                     new_role: 'Pro',
                     old_role: 'Basic'
                 }
-            }
+            },
+            expireAt: expect.any(Object)
         }));
     });
 });

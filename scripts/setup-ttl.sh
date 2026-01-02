@@ -8,6 +8,7 @@ COLLECTIONS=(
     "suuntoAppHistoryImportActivityQueue"
     "garminHealthAPIActivityQueue"
     "failed_jobs"
+    "mail"
 )
 
 # Field name for TTL

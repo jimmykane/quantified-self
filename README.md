@@ -44,6 +44,17 @@ How to run this project (incomplete)
 
 
 
+Data Retention & TTL
+-----------------
+
+To ensure data hygiene and compliance, the following Firestore Time-To-Live (TTL) policies are in place:
+
+| Collection | TTL Duration                   | Field      | Description |
+|------------|--------------------------------|------------|-------------|
+| `mail`     | 3 months (approx 90 days)      | `expireAt` | Transactional emails (Trigger Email extension) |
+| `failed_jobs` | 7 days | `expireAt` | Failed job logs |
+| `*Queue`   | 7 days | `expireAt` | Queue items for processing |
+
 Attributions
 
 - Icons: "Alessandro"
