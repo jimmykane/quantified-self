@@ -17,6 +17,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatDividerModule } from '@angular/material/divider';
 import { POLICY_CONTENT, PolicyItem } from '../../shared/policies.content';
 import { LoggerService } from '../../services/logger.service';
+import { Analytics, logEvent } from '@angular/fire/analytics';
 
 @Component({
     selector: 'app-onboarding',
@@ -52,8 +53,12 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
     private router = inject(Router);
     private _formBuilder = inject(FormBuilder);
     private logger = inject(LoggerService);
+    private analytics = inject(Analytics);
 
     ngOnInit() {
+        // Log onboarding start
+        logEvent(this.analytics, 'tutorial_begin');
+
         // If user wasn't passed via Input (routing), get it from service
         if (!this.user) {
             this.authService.user$.subscribe(user => {
@@ -184,6 +189,9 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
             // But we do NOT set 'onboardingCompleted' yet.
 
             try {
+                // Log terms accepted step
+                logEvent(this.analytics, 'onboarding_step', { step_name: 'terms_accepted' });
+
                 // Determine if we should save now or later. 
                 // We MUST save terms if we want them persisted even if user drops off.
                 // We use createOrUpdateUser to ensure legal policies are saved to the correct subcollection.
@@ -227,6 +235,9 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
 
             // Mark onboarding as completed in the database (ensures consistency)
             await this.userService.updateUserProperties(this.user, { onboardingCompleted: true });
+
+            // Log onboarding completion
+            logEvent(this.analytics, 'tutorial_complete');
 
             // Navigate to dashboard. The OnboardingGuard will now allow this.
             this.logger.log('[OnboardingComponent] Finishing onboarding, navigating to dashboard');

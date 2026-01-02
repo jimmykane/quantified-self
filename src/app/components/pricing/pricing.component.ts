@@ -12,6 +12,7 @@ import { Observable, map } from 'rxjs';
 import { StripeRole } from '../../models/stripe-role.model';
 import { Router } from '@angular/router';
 import { Auth } from '@angular/fire/auth';
+import { Analytics, logEvent } from '@angular/fire/analytics';
 import { environment } from '../../../environments/environment';
 
 import { MatDialog } from '@angular/material/dialog';
@@ -36,6 +37,7 @@ export class PricingComponent implements OnInit, OnDestroy {
 
     private auth = inject(Auth);
     private router = inject(Router);
+    private analytics = inject(Analytics);
 
     constructor(
         private paymentService: AppPaymentService,
@@ -130,6 +132,10 @@ export class PricingComponent implements OnInit, OnDestroy {
         this.isLoading = true;
 
         try {
+            logEvent(this.analytics, 'select_content', {
+                content_type: 'paid_plan',
+                item_id: priceId
+            });
             await this.paymentService.appendCheckoutSession(price);
         } catch (error) {
             const errorMessage = (error as Error).message || '';
@@ -205,6 +211,10 @@ export class PricingComponent implements OnInit, OnDestroy {
             const user = await firstValueFrom(this.userService.getUserByID(uid));
 
             if (user) {
+                logEvent(this.analytics, 'select_content', {
+                    content_type: 'free_plan',
+                    item_id: 'free_tier'
+                });
                 await this.userService.setFreeTier(user);
                 this.logger.log('Free tier selected. Waiting for reactive updates to handle navigation.');
 
