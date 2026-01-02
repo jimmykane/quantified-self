@@ -18,6 +18,3 @@ export const CLOUD_TASK_RETRY_CONFIG = {
     maxBackoffSeconds: 14400, // 4 hours
     maxDoublings: 4,
 } as const;
-
-/** Queue item TTL in milliseconds (7 days) */
-export const QUEUE_ITEM_TTL_MS = 1000 * 60 * 60 * 24 * 7;

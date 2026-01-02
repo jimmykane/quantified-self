@@ -1,5 +1,6 @@
 import * as functions from 'firebase-functions/v1';
-import { MAX_RETRY_COUNT, QUEUE_SCHEDULE, QUEUE_ITEM_TTL_MS } from './shared/queue-config';
+import { MAX_RETRY_COUNT, QUEUE_SCHEDULE } from './shared/queue-config';
+import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
 import { QueueErrors, QueueLogs } from './shared/constants';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
@@ -387,7 +388,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
 async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface | GarminHealthAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames): Promise<admin.firestore.DocumentReference> {
   const queueItemDocument = admin.firestore().collection(getServiceWorkoutQueueName(serviceName)).doc(queueItem.id);
   await queueItemDocument.set(Object.assign(queueItem, {
-    expireAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + QUEUE_ITEM_TTL_MS)),
+    expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
   }));
   // Dispatch a Cloud Task for immediate processing
   await enqueueWorkoutTask(serviceName, queueItem.id);

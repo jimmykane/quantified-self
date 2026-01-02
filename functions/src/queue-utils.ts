@@ -2,7 +2,8 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { QueueItemInterface } from './queue/queue-item.interface';
 
-import { MAX_RETRY_COUNT, QUEUE_ITEM_TTL_MS } from './shared/queue-config';
+import { MAX_RETRY_COUNT } from './shared/queue-config';
+import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
 
 
 export enum QueueResult {
@@ -23,7 +24,7 @@ export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error
         failedAt: (new Date()).getTime(),
         originalCollection: queueItem.ref.parent ? queueItem.ref.parent.id : 'unknown',
         context: context || 'MAX_RETRY_REACHED',
-        expireAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + QUEUE_ITEM_TTL_MS)),
+        expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
         // Remove ref from payload
         ref: undefined
     });

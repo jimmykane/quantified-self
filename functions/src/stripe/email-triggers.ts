@@ -1,7 +1,7 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { ROLE_HIERARCHY } from '../shared/pricing';
-import { MAIL_TTL_DAYS } from '../shared/constants';
+import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { DocumentData } from 'firebase-admin/firestore';
 
 
@@ -56,7 +56,7 @@ export async function checkAndSendSubscriptionEmails(
                             role: after.role,
                         },
                     },
-                    expireAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + MAIL_TTL_DAYS * 24 * 60 * 60 * 1000)),
+                    expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
                 });
             }
         }
@@ -93,7 +93,7 @@ export async function checkAndSendSubscriptionEmails(
                             old_role: ROLE_DISPLAY_NAMES[oldRole] || oldRole,
                         }
                     },
-                    expireAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + MAIL_TTL_DAYS * 24 * 60 * 60 * 1000)),
+                    expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
                 });
             }
         } else if (newLevel < oldLevel) {
@@ -114,7 +114,7 @@ export async function checkAndSendSubscriptionEmails(
                             limit: (newRole === 'basic') ? '100' : '10', // Basic=100, Free=10
                         }
                     },
-                    expireAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + MAIL_TTL_DAYS * 24 * 60 * 60 * 1000)),
+                    expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
                 });
             }
         }
@@ -147,7 +147,7 @@ export async function checkAndSendSubscriptionEmails(
                                 expiration_date: formatDate(currentPeriodEnd),
                             }
                         },
-                        expireAt: admin.firestore.Timestamp.fromDate(new Date(Date.now() + MAIL_TTL_DAYS * 24 * 60 * 60 * 1000)),
+                        expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
                     });
                 }
             }

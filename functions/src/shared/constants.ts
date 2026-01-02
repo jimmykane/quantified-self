@@ -6,5 +6,3 @@ export const QueueErrors = {
 export const QueueLogs = {
     NO_TOKEN_FOUND: 'No token found for queue item ${id}. Fail fast.'
 };
-
-export const MAIL_TTL_DAYS = 90;
