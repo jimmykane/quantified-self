@@ -16,6 +16,11 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { MatMenuModule } from '@angular/material/menu';
 
+vi.mock('@angular/fire/analytics', () => ({
+    Analytics: class { },
+    logEvent: vi.fn()
+}));
+
 describe('EventActionsComponent', () => {
     let component: EventActionsComponent;
     let fixture: ComponentFixture<EventActionsComponent>;
@@ -27,6 +32,8 @@ describe('EventActionsComponent', () => {
         mockEventService = {
             downloadFile: vi.fn(),
             getEventMetaData: vi.fn(),
+            getEventAsJSONBloB: vi.fn(),
+            getEventAsGPXBloB: vi.fn(),
         };
         mockFileService = {
             downloadAsZip: vi.fn(),
@@ -137,6 +144,91 @@ describe('EventActionsComponent', () => {
             await component.downloadOriginals();
 
             expect(mockSnackBar.open).toHaveBeenCalledWith('No original files found.', undefined, { duration: 3000 });
+        });
+    });
+
+    describe('downloadJSON', () => {
+        it('should call getEventAsJSONBloB with the event object', async () => {
+            const mockBlob = new Blob(['{}'], { type: 'application/json' });
+            mockEventService.getEventAsJSONBloB.mockResolvedValue(mockBlob);
+
+            await component.downloadJSON();
+
+            expect(mockEventService.getEventAsJSONBloB).toHaveBeenCalledWith(component.user, component.event);
+            expect(mockFileService.downloadFile).toHaveBeenCalled();
+            const args = mockFileService.downloadFile.mock.calls[0];
+            expect(args[0]).toBe(mockBlob);
+            expect(args[2]).toBe('json');
+        });
+    });
+
+    describe('downloadGPX', () => {
+        it('should call getEventAsGPXBloB with the event object', async () => {
+            const mockBlob = new Blob(['<gpx></gpx>'], { type: 'application/gpx+xml' });
+            mockEventService.getEventAsGPXBloB.mockResolvedValue(mockBlob);
+
+            await component.downloadGPX();
+
+            expect(mockEventService.getEventAsGPXBloB).toHaveBeenCalledWith(component.user, component.event);
+            expect(mockFileService.downloadFile).toHaveBeenCalled();
+            const args = mockFileService.downloadFile.mock.calls[0];
+            expect(args[0]).toBe(mockBlob);
+            expect(args[2]).toBe('gpx');
+        });
+    });
+
+    describe('isHydrated', () => {
+        it('should return true if first activity has streams', () => {
+            const mockActivity = { getAllStreams: () => ['stream1'] };
+            vi.spyOn(component.event, 'getActivities').mockReturnValue([mockActivity] as any);
+            expect(component.isHydrated()).toBe(true);
+        });
+
+        it('should return false if no activities', () => {
+            vi.spyOn(component.event, 'getActivities').mockReturnValue([]);
+            expect(component.isHydrated()).toBe(false);
+        });
+
+        it('should return false if first activity has no streams', () => {
+            const mockActivity = { getAllStreams: () => [] };
+            vi.spyOn(component.event, 'getActivities').mockReturnValue([mockActivity] as any);
+            expect(component.isHydrated()).toBe(false);
+        });
+    });
+
+    describe('hasDistance', () => {
+        it('should return true if first activity has distance stream', () => {
+            const mockActivity = { hasStreamData: vi.fn().mockReturnValue(true) };
+            vi.spyOn(component.event, 'getActivities').mockReturnValue([mockActivity] as any);
+            expect(component.hasDistance()).toBe(true);
+            expect(mockActivity.hasStreamData).toHaveBeenCalled();
+        });
+
+        it('should return false if no activities', () => {
+            vi.spyOn(component.event, 'getActivities').mockReturnValue([]);
+            expect(component.hasDistance()).toBe(false);
+        });
+    });
+
+    describe('hasPositionalData', () => {
+        it('should return true if event has start position', () => {
+            vi.spyOn(component.event, 'getStat').mockReturnValue({} as any);
+            expect(component.hasPositionalData()).toBeTruthy();
+        });
+
+        it('should return true if any activity has position data', () => {
+            vi.spyOn(component.event, 'getStat').mockReturnValue(null);
+            const mockActivity1 = { hasPositionData: () => false };
+            const mockActivity2 = { hasPositionData: () => true };
+            vi.spyOn(component.event, 'getActivities').mockReturnValue([mockActivity1, mockActivity2] as any);
+            expect(component.hasPositionalData()).toBeTruthy();
+        });
+
+        it('should return false if no start position and no activity position data', () => {
+            vi.spyOn(component.event, 'getStat').mockReturnValue(null);
+            const mockActivity = { hasPositionData: () => false };
+            vi.spyOn(component.event, 'getActivities').mockReturnValue([mockActivity] as any);
+            expect(component.hasPositionalData()).toBeFalsy();
         });
     });
 });

@@ -388,16 +388,16 @@ export class AppEventService implements OnDestroy {
     return numberOfStreamsDeleted
   }
 
-  public async getEventAsJSONBloB(user: User, eventID: string): Promise<Blob> {
-    const jsonString = await new EventExporterJSON().getAsString(await this.getEventActivitiesAndAllStreams(user, eventID).pipe(take(1)).toPromise());
+  public async getEventAsJSONBloB(user: User, event: AppEventInterface): Promise<Blob> {
+    const jsonString = await new EventExporterJSON().getAsString(await this.attachStreamsToEventWithActivities(user, event).pipe(take(1)).toPromise());
     return (new Blob(
       [jsonString],
       { type: new EventExporterJSON().fileType },
     ));
   }
 
-  public async getEventAsGPXBloB(user: User, eventID: string): Promise<Blob> {
-    const gpxString = await new EventExporterGPX().getAsString(await this.getEventActivitiesAndAllStreams(user, eventID).pipe(take(1)).toPromise());
+  public async getEventAsGPXBloB(user: User, event: AppEventInterface): Promise<Blob> {
+    const gpxString = await new EventExporterGPX().getAsString(await this.attachStreamsToEventWithActivities(user, event).pipe(take(1)).toPromise());
     return (new Blob(
       [gpxString],
       { type: new EventExporterGPX().fileType },

@@ -176,7 +176,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   // }
 
   async downloadJSON() {
-    const blob = await this.eventService.getEventAsJSONBloB(this.user, this.event.getID());
+    const blob = await this.eventService.getEventAsJSONBloB(this.user, this.event as any);
     this.fileService.downloadFile(
       blob,
       this.getFileName(this.event),
@@ -188,7 +188,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   async downloadGPX() {
-    const blob = await this.eventService.getEventAsGPXBloB(this.user, this.event.getID());
+    const blob = await this.eventService.getEventAsGPXBloB(this.user, this.event as any);
     this.fileService.downloadFile(
       blob,
       this.getFileName(this.event),
