@@ -85,7 +85,11 @@ export const eventResolver: ResolveFn<EventResolverData> = (
         }),
         catchError((error) => {
             logger.error('Error resolving event:', error);
-            snackBar.open('Error loading event', 'Close', { duration: 3000 });
+            let message = 'Error loading event';
+            if (error?.message?.includes('Missing or insufficient permissions') || error?.code === 'permission-denied') {
+                message = 'Event data unavailable: Original file missing and legacy access denied.';
+            }
+            snackBar.open(message, 'Close', { duration: 5000 });
             router.navigate(['/dashboard']);
             return EMPTY;
         }),

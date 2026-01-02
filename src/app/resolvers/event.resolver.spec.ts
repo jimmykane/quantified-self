@@ -102,6 +102,36 @@ describe('eventResolver', () => {
         });
     }));
 
+    it('should handle permission errors with specific message', () => new Promise<void>(done => {
+        const error = new Error('Missing or insufficient permissions');
+        // Simulate Firebase error code if needed, but message check involves substring
+        (error as any).code = 'permission-denied';
+        eventServiceSpy.getEventActivitiesAndSomeStreams.mockReturnValue(throwError(() => error));
+        userServiceSpy.getUserChartDataTypesToUse.mockReturnValue([]);
+
+        const route = new ActivatedRouteSnapshot();
+        vi.spyOn(route.paramMap, 'get').mockImplementation((key) => {
+            if (key === 'eventID') return '123';
+            if (key === 'userID') return '456';
+            return null;
+        });
+        const state = {} as RouterStateSnapshot;
+
+        (executeResolver(route, state) as any).subscribe({
+            next: () => { },
+            error: () => { },
+            complete: () => {
+                expect(routerSpy.navigate).toHaveBeenCalledWith(['/dashboard']);
+                expect(snackBarSpy.open).toHaveBeenCalledWith(
+                    'Event data unavailable: Original file missing and legacy access denied.',
+                    'Close',
+                    { duration: 5000 }
+                );
+                done();
+            }
+        });
+    }));
+
     it('should handle errors and redirect to dashboard', () => new Promise<void>(done => {
         eventServiceSpy.getEventActivitiesAndSomeStreams.mockReturnValue(throwError(() => new Error('Error')));
         userServiceSpy.getUserChartDataTypesToUse.mockReturnValue([]);
@@ -119,7 +149,7 @@ describe('eventResolver', () => {
             error: () => { },
             complete: () => {
                 expect(routerSpy.navigate).toHaveBeenCalledWith(['/dashboard']);
-                expect(snackBarSpy.open).toHaveBeenCalled();
+                expect(snackBarSpy.open).toHaveBeenCalledWith('Error loading event', 'Close', { duration: 5000 });
                 done();
             }
         });
