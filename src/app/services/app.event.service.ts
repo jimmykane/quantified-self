@@ -238,7 +238,7 @@ export class AppEventService implements OnDestroy {
    */
   public getAllStreams(user: User, eventID: string, activityID: string): Observable<StreamInterface[]> {
     this.logger.warn('[AppEventService] getAllStreams is deprecated and will likely return empty results.');
-    const streamsCollection = collection(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID, 'streams');
+    const streamsCollection = collection(this.firestore, 'users', user.uid, 'activities', activityID, 'streams');
     return from(runInInjectionContext(this.injector, () => getDocs(streamsCollection))) // @todo replace with snapshot changes I suppose when @https://github.com/angular/angularfire2/issues/1552 is fixed
       .pipe(map((querySnapshot) => {
         return querySnapshot.docs.map(queryDocumentSnapshot => this.processStreamQueryDocumentSnapshot(queryDocumentSnapshot))
@@ -250,7 +250,7 @@ export class AppEventService implements OnDestroy {
    */
   public getStream(user: User, eventID: string, activityID: string, streamType: string): Observable<StreamInterface> {
     this.logger.warn('[AppEventService] getStream is deprecated and will likely return empty results.');
-    return from(runInInjectionContext(this.injector, () => getDoc(doc(this.firestore, 'users', user.uid, 'events', eventID, 'activities', activityID, 'streams', streamType))))
+    return from(runInInjectionContext(this.injector, () => getDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID, 'streams', streamType))))
       .pipe(map((queryDocumentSnapshot) => {
         // getDoc returns DocumentSnapshot, ensure data exists
         if (!queryDocumentSnapshot.exists()) return null; // Handle missing stream
@@ -267,7 +267,7 @@ export class AppEventService implements OnDestroy {
       all[ch] = [].concat((all[ch] || []), one);
       return all
     }, []).map((typesBatch) => {
-      const streamsCollection = collection(this.firestore, 'users', userID, 'events', eventID, 'activities', activityID, 'streams');
+      const streamsCollection = collection(this.firestore, 'users', userID, 'activities', activityID, 'streams');
       const q = query(streamsCollection, where('type', 'in', typesBatch));
       return from(runInInjectionContext(this.injector, () => getDocs(q)))
         .pipe(map((documentSnapshots) => {
@@ -389,7 +389,8 @@ export class AppEventService implements OnDestroy {
   }
 
   public async getEventAsJSONBloB(user: User, event: AppEventInterface): Promise<Blob> {
-    const jsonString = await new EventExporterJSON().getAsString(await this.attachStreamsToEventWithActivities(user, event).pipe(take(1)).toPromise());
+    const populatedEvent = await this.attachStreamsToEventWithActivities(user, event, undefined, false).pipe(take(1)).toPromise();
+    const jsonString = await new EventExporterJSON().getAsString(populatedEvent);
     return (new Blob(
       [jsonString],
       { type: new EventExporterJSON().fileType },
@@ -397,7 +398,8 @@ export class AppEventService implements OnDestroy {
   }
 
   public async getEventAsGPXBloB(user: User, event: AppEventInterface): Promise<Blob> {
-    const gpxString = await new EventExporterGPX().getAsString(await this.attachStreamsToEventWithActivities(user, event).pipe(take(1)).toPromise());
+    const populatedEvent = await this.attachStreamsToEventWithActivities(user, event, undefined, false, true).pipe(take(1)).toPromise();
+    const gpxString = await new EventExporterGPX().getAsString(populatedEvent);
     return (new Blob(
       [gpxString],
       { type: new EventExporterGPX().fileType },
@@ -419,16 +421,28 @@ export class AppEventService implements OnDestroy {
    * @param streamTypes
    * @private
    */
-  public attachStreamsToEventWithActivities(user: User, event: AppEventInterface, streamTypes?: string[]): Observable<EventInterface> {
+  public attachStreamsToEventWithActivities(user: User, event: AppEventInterface, streamTypes?: string[], merge: boolean = true, skipEnrichment: boolean = false): Observable<EventInterface> {
     // Check if we have an original file to parse instead of fetching from Firestore
     this.logger.log(`[AppEventService] attachStreams for ${event.getID()}. Has originalFile?`, !!event.originalFile);
     this.logger.log(`[AppEventService] attachStreams for ${event.getID()}. Has originalFiles?`, !!event.originalFiles);
 
     if (event.originalFiles && event.originalFiles.length > 0) {
       this.logger.log('[AppEventService] Using client-side parsing for (Multiple)', event.getID());
-      return from(this.calculateStreamsFromWithOrchestration(event)).pipe(
+      return from(this.calculateStreamsFromWithOrchestration(event, skipEnrichment)).pipe(
         map((fullEvent) => {
           if (!fullEvent) return event;
+
+          if (merge === false) {
+            // Return fresh event (disposable)
+            // We need to ensure it has an ID matching the requested one for consistency, though export might not care.
+            fullEvent.setID(event.getID());
+            if (event.startDate) {
+              // Try to preserve start date if needed
+              // fullEvent.startDate = event.startDate; // EventInterface might not have setter, but let's assume it's fine
+            }
+            return fullEvent;
+          }
+
           const existingID = event.getID();
           event.clearActivities();
           event.addActivities(fullEvent.getActivities());
@@ -443,9 +457,15 @@ export class AppEventService implements OnDestroy {
 
     if (event.originalFile && event.originalFile.path) {
       this.logger.log('[AppEventService] Using client-side parsing for (Single)', event.getID());
-      return from(this.calculateStreamsFromWithOrchestration(event)).pipe(
+      return from(this.calculateStreamsFromWithOrchestration(event, skipEnrichment)).pipe(
         map((fullEvent) => {
           if (!fullEvent) return event;
+
+          if (merge === false) {
+            fullEvent.setID(event.getID());
+            return fullEvent;
+          }
+
           // Merge logic: Copy activities/streams from fullEvent to event
           // We assume the file is the source of truth.
           const existingID = event.getID();
@@ -475,7 +495,15 @@ export class AppEventService implements OnDestroy {
             // debugger;
             // This time we dont want to just get the streams but we want to attach them to the parent obj
             activity.clearStreams();
-            activity.addStreams(streams);
+            try {
+              activity.addStreams(streams);
+            } catch (e) {
+              if (e.message && e.message.indexOf('Duplicate type of stream') > -1) {
+                this.logger.warn('[attachStreamsLegacy] Duplicate stream warning:', e);
+              } else {
+                throw e;
+              }
+            }
             // Return what we actually want to return not the streams
             return event;
           }));
@@ -484,13 +512,13 @@ export class AppEventService implements OnDestroy {
       }));
   }
 
-  private async calculateStreamsFromWithOrchestration(event: AppEventInterface): Promise<EventInterface> {
+  private async calculateStreamsFromWithOrchestration(event: AppEventInterface, skipEnrichment: boolean = false): Promise<EventInterface> {
     this.logger.log('Calculating streams orchestration for event', event.getID());
 
     // 1. Array Strategy
     if (event.originalFiles && event.originalFiles.length > 0) {
       this.logger.log(`Orchestrating fetch and merge for ${event.originalFiles.length} files`);
-      const promises = event.originalFiles.map(fileMeta => this.fetchAndParseOneFile(fileMeta));
+      const promises = event.originalFiles.map(fileMeta => this.fetchAndParseOneFile(fileMeta, skipEnrichment));
       const parsedEvents = await Promise.all(promises);
 
       // remove nulls if any failure
@@ -518,7 +546,7 @@ export class AppEventService implements OnDestroy {
       this.logger.warn('Original file path missing', originalFile);
       return null;
     }
-    return this.fetchAndParseOneFile(originalFile);
+    return this.fetchAndParseOneFile(originalFile, skipEnrichment);
   }
 
   public async downloadFile(path: string): Promise<ArrayBuffer> {
@@ -526,7 +554,7 @@ export class AppEventService implements OnDestroy {
     return getBytes(fileRef);
   }
 
-  private async fetchAndParseOneFile(fileMeta: { path: string, bucket?: string }): Promise<EventInterface> {
+  private async fetchAndParseOneFile(fileMeta: { path: string, bucket?: string }, skipEnrichment: boolean = false): Promise<EventInterface> {
     try {
       const fileRef = ref(this.storage, fileMeta.path);
       const arrayBuffer = await getBytes(fileRef);
@@ -558,9 +586,20 @@ export class AppEventService implements OnDestroy {
 
       // Polyfill Time stream if missing
       if (newEvent) {
-        newEvent.getActivities().forEach(activity => {
-          AppEventUtilities.enrich(activity, ['Time', 'Duration']);
-        });
+        if (!skipEnrichment) {
+          newEvent.getActivities().forEach(activity => {
+            try {
+              AppEventUtilities.enrich(activity, ['Time', 'Duration']);
+            } catch (e) {
+              // Ignore duplicate stream errors as it means the stream already exists (possibly due to caching)
+              if (e.message && e.message.indexOf('Duplicate type of stream') > -1) {
+                this.logger.warn('Duplicate stream warning during enrichment:', e);
+              } else {
+                throw e;
+              }
+            }
+          });
+        }
       }
       return newEvent;
     } catch (e) {
