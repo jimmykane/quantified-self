@@ -157,11 +157,8 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       }
 
       // Get what is needed
-      const returnObservable = this.shouldSearch ?
-        this.eventService
-          .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit)
-        : (this.isInitialized) ? of(this.events) : this.eventService
-          .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit);
+      const returnObservable = this.eventService
+        .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit);
       return returnObservable
         .pipe(map((eventsArray) => {
           const t0 = performance.now();
