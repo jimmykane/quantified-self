@@ -34,13 +34,20 @@ const {
 
 mockAuth.listUsers = mockListUsers;
 
-vi.mock('firebase-admin', () => ({
-    auth: () => mockAuth,
-    initializeApp: vi.fn(),
-    apps: { length: 1 },
-    firestore: mockFirestore,
-    remoteConfig: mockRemoteConfig
-}));
+vi.mock('firebase-admin', () => {
+    const firestoreMock: any = mockFirestore;
+    firestoreMock.FieldValue = {
+        serverTimestamp: vi.fn().mockReturnValue('mock-timestamp')
+    };
+
+    return {
+        auth: () => mockAuth,
+        initializeApp: vi.fn(),
+        apps: { length: 1 },
+        firestore: firestoreMock,
+        remoteConfig: mockRemoteConfig
+    };
+});
 
 vi.mock('firebase-functions/v2/https', () => ({
     onCall: mockOnCall,
@@ -57,7 +64,7 @@ vi.mock('../utils', () => ({
     ALLOWED_CORS_ORIGINS: ['*']
 }));
 
-import { listUsers, getQueueStats, getUserCount, getMaintenanceStatus } from './admin';
+import { listUsers, getQueueStats, getUserCount, getMaintenanceStatus, setMaintenanceMode } from './admin';
 
 describe('listUsers Cloud Function', () => {
     beforeEach(() => {
@@ -392,67 +399,134 @@ describe('getMaintenanceStatus Cloud Function', () => {
         });
     });
 
-    it('should return enabled=true and message from Firestore when document exists', async () => {
-        // Mock Firestore doc present
-        const mockDoc = {
-            exists: true,
-            data: () => ({ enabled: true, message: 'Firestore Message', updatedAt: '2024-01-01', updatedBy: 'admin' })
+    it('should return status for all environments (prod/beta/dev)', async () => {
+        // Mock docs for each env
+        const docs: Record<string, any> = {
+            'maintenance_prod': { exists: true, data: () => ({ enabled: true, message: 'Prod Msg' }) },
+            'maintenance_beta': { exists: true, data: () => ({ enabled: false, message: 'Beta Msg' }) },
+            'maintenance_dev': { exists: true, data: () => ({ enabled: true, message: 'Dev Msg' }) },
+            'maintenance': { exists: false }
         };
-        const mockDocGet = vi.fn().mockResolvedValue(mockDoc);
 
         mockCollection.mockReturnValue({
-            doc: vi.fn().mockReturnValue({
-                get: mockDocGet
-            })
+            doc: vi.fn().mockImplementation((id) => ({
+                get: vi.fn().mockResolvedValue(docs[id] || { exists: false })
+            }))
         });
 
         const result: any = await (getMaintenanceStatus as any)(request);
 
-        expect(result.enabled).toBe(true);
-        expect(result.message).toBe('Firestore Message');
-        expect(result.updatedBy).toBe('admin');
-        // Remote Config should NOT be called
-        expect(mockRemoteConfig).not.toHaveBeenCalled();
+        expect(result.prod.enabled).toBe(true);
+        expect(result.prod.message).toBe('Prod Msg');
+        expect(result.beta.enabled).toBe(false);
+        expect(result.beta.message).toBe('Beta Msg');
+        expect(result.dev.enabled).toBe(true);
+        expect(result.dev.message).toBe('Dev Msg');
     });
 
-    it('should fallback to Remote Config if Firestore document is missing', async () => {
-        // Mock Firestore doc missing
-        const mockDoc = { exists: false };
-        const mockDocGet = vi.fn().mockResolvedValue(mockDoc);
+    it('should fallback to legacy Firestore document for prod if maintenance_prod is missing', async () => {
+        const docs: Record<string, any> = {
+            'maintenance_prod': { exists: false },
+            'maintenance_beta': { exists: false },
+            'maintenance_dev': { exists: false },
+            'maintenance': { exists: true, data: () => ({ enabled: true, message: 'Legacy Msg' }) }
+        };
 
         mockCollection.mockReturnValue({
-            doc: vi.fn().mockReturnValue({
-                get: mockDocGet
-            })
+            doc: vi.fn().mockImplementation((id) => ({
+                get: vi.fn().mockResolvedValue(docs[id] || { exists: false })
+            }))
         });
 
-        // Mock Remote Config (set in beforeEach)
         const result: any = await (getMaintenanceStatus as any)(request);
-
-        expect(result.enabled).toBe(true);
-        expect(result.message).toBe('RC Message');
-        expect(mockRemoteConfig).toHaveBeenCalled();
+        expect(result.prod.message).toBe('Legacy Msg');
     });
 
-    it('should handle Remote Config errors gracefully (default off)', async () => {
-        // Mock Firestore doc missing
-        const mockDoc = { exists: false };
-        const mockDocGet = vi.fn().mockResolvedValue(mockDoc);
-
+    it('should return default (off) if no docs exist', async () => {
         mockCollection.mockReturnValue({
             doc: vi.fn().mockReturnValue({
-                get: mockDocGet
+                get: vi.fn().mockResolvedValue({ exists: false })
             })
         });
 
-        // Mock Remote Config throws error
+        const result: any = await (getMaintenanceStatus as any)(request);
+        expect(result.prod.enabled).toBe(false);
+        expect(result.beta.enabled).toBe(false);
+        expect(result.dev.enabled).toBe(false);
+    });
+});
+
+describe('setMaintenanceMode Cloud Function', () => {
+    let request: any;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        request = {
+            auth: {
+                uid: 'admin-uid',
+                token: { admin: true }
+            },
+            data: {
+                enabled: true,
+                message: 'New Maintenance',
+                env: 'beta'
+            }
+        };
+
         mockRemoteConfig.mockReturnValue({
-            getTemplate: vi.fn().mockRejectedValue(new Error('RC Error'))
+            getTemplate: vi.fn().mockResolvedValue({ parameters: {} }),
+            validateTemplate: vi.fn().mockResolvedValue({}),
+            publishTemplate: vi.fn().mockResolvedValue({})
+        });
+    });
+
+    it('should update Firestore and Remote Config for the specific environment', async () => {
+        const mockSet = vi.fn().mockResolvedValue({});
+        const mockDoc = vi.fn().mockReturnValue({ set: mockSet });
+        mockCollection.mockReturnValue({ doc: mockDoc });
+
+        const result: any = await (setMaintenanceMode as any)(request);
+
+        expect(result.success).toBe(true);
+        // Verify Firestore update
+        expect(mockDoc).toHaveBeenCalledWith('maintenance_beta');
+        expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({
+            enabled: true,
+            message: 'New Maintenance'
+        }));
+
+        // Verify Remote Config update
+        const rc = mockRemoteConfig();
+        expect(rc.publishTemplate).toHaveBeenCalled();
+    });
+
+    it('should update legacy keys when environment is prod', async () => {
+        request.data.env = 'prod';
+        const template: any = { parameters: {} };
+        mockRemoteConfig.mockReturnValue({
+            getTemplate: vi.fn().mockResolvedValue(template),
+            validateTemplate: vi.fn(),
+            publishTemplate: vi.fn()
         });
 
-        const result: any = await (getMaintenanceStatus as any)(request);
+        await (setMaintenanceMode as any)(request);
 
-        expect(result.enabled).toBe(false);
-        expect(result.message).toBe('');
+        expect(template.parameters['maintenance_mode_prod']).toBeDefined();
+        expect(template.parameters['maintenance_mode']).toBeDefined(); // Legacy fallback
+    });
+
+    it('should NOT update legacy keys when environment is beta', async () => {
+        request.data.env = 'beta';
+        const template: any = { parameters: {} };
+        mockRemoteConfig.mockReturnValue({
+            getTemplate: vi.fn().mockResolvedValue(template),
+            validateTemplate: vi.fn(),
+            publishTemplate: vi.fn()
+        });
+
+        await (setMaintenanceMode as any)(request);
+
+        expect(template.parameters['maintenance_mode_beta']).toBeDefined();
+        expect(template.parameters['maintenance_mode']).toBeUndefined();
     });
 });
