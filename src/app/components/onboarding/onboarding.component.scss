@@ -80,3 +80,7 @@ h2 {
 }
 
 /* Removed manual overrides as they are now handled by global theme variables */
+
+:host ::ng-deep .mat-step-header {
+    pointer-events: none !important;
+}

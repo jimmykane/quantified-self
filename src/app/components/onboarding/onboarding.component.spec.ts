@@ -3,6 +3,7 @@ import { OnboardingComponent } from './onboarding.component';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
+import { Auth } from '@angular/fire/auth';
 import { LoggerService } from '../../services/logger.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
@@ -11,7 +12,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Privacy } from '@sports-alliance/sports-lib';
 import { Firestore } from '@angular/fire/firestore';
 import { Functions } from '@angular/fire/functions';
-import { Auth } from '@angular/fire/auth';
+import { AppPaymentService } from '../../services/app.payment.service';
+import { MatDialog } from '@angular/material/dialog';
 
 describe('OnboardingComponent', () => {
     let component: OnboardingComponent;
@@ -21,6 +23,8 @@ describe('OnboardingComponent', () => {
     let mockRouter: any;
     let mockLoggerService: any;
     let mockAnalyticsService: any;
+    let mockPaymentService: any;
+    let mockDialog: any;
 
     const mockUser = {
         uid: 'test-user-123',
@@ -41,11 +45,13 @@ describe('OnboardingComponent', () => {
             createOrUpdateUser: vi.fn().mockResolvedValue(undefined),
             isPro: vi.fn().mockResolvedValue(false),
             hasPaidAccess: vi.fn().mockResolvedValue(false),
-            updateUserProperties: vi.fn().mockResolvedValue(undefined)
+            updateUserProperties: vi.fn().mockResolvedValue(undefined),
+            getSubscriptionRole: vi.fn().mockResolvedValue(null)
         };
 
         mockAuthService = {
-            user$: of(mockUser)
+            user$: of(mockUser),
+            currentUser: { uid: 'test-user-123' }
         };
 
         mockRouter = {
@@ -61,6 +67,15 @@ describe('OnboardingComponent', () => {
             logEvent: vi.fn()
         };
 
+        mockPaymentService = {
+            getProducts: vi.fn().mockReturnValue(of([])),
+            getUserSubscriptions: vi.fn().mockReturnValue(of([]))
+        };
+
+        mockDialog = {
+            open: vi.fn()
+        };
+
         await TestBed.configureTestingModule({
             imports: [
                 OnboardingComponent,
@@ -72,9 +87,11 @@ describe('OnboardingComponent', () => {
                 { provide: Router, useValue: mockRouter },
                 { provide: LoggerService, useValue: mockLoggerService },
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
+                { provide: AppPaymentService, useValue: mockPaymentService },
+                { provide: MatDialog, useValue: mockDialog },
                 { provide: Firestore, useValue: {} },
                 { provide: Functions, useValue: {} },
-                { provide: Auth, useValue: {} }
+                { provide: Auth, useValue: { currentUser: { uid: 'test-user-123' } } }
             ]
         }).compileComponents();
 
