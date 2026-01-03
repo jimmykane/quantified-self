@@ -5,10 +5,24 @@ mat-sidenav-container {
 }
 
 mat-sidenav {
-  min-width: 250px;
-  /* Standard sidebar width */
-  max-width: 300px;
+  width: 300px;
+  min-width: 300px;
+  max-width: 360px;
   border-right: 1px solid rgba(0, 0, 0, 0.08);
+
+  // Hide scrollbar completely - sidenav should fit content
+  .mat-drawer-inner-container {
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
+    }
+  }
 }
 
 /* Top Navigation Bar Styling */

@@ -6,8 +6,29 @@
   </mat-toolbar-row>
 </mat-toolbar>
 
-
 <mat-nav-list>
+  <!-- User Profile Section (when logged in) -->
+  @if (user) {
+  <div class="sidenav-profile" routerLink="/settings" (click)="sideNav.close();">
+    <div class="sidenav-avatar"
+      [style.backgroundImage]="'url('+ ($any(user).photoURL ? $any(user).photoURL : 'https://ui-avatars.com/api/?name=' + (user.displayName || 'User')) +')'">
+    </div>
+    <div class="sidenav-user-info">
+      <span class="sidenav-user-name">{{ user.displayName || 'Welcome!' }}</span>
+      <span class="sidenav-user-email">{{ $any(user).email }}</span>
+      @if (isProUser) {
+      <span class="sidenav-pro-badge">
+        <mat-icon>verified</mat-icon>
+        PRO
+      </span>
+      }
+    </div>
+  </div>
+  }
+
+  <!-- Navigation Section -->
+  <div class="sidenav-section-header">Navigation</div>
+
   @if (!user) {
   <mat-list-item routerLinkActive="active" routerLink="/" (click)="sideNav.close();">
     <mat-icon>home</mat-icon>
@@ -36,9 +57,8 @@
     <span>My Tracks <span class="mat-small">(Beta)</span></span>
     <span class="fill-space"></span>
     @if (!isProUser) {
-    <mat-icon style="margin-right: 0;" class="mat-small">lock</mat-icon>
-    <span class="pro-badge"
-      style="font-size: 0.7em; font-weight: bold; color: var(--accent-color); margin-left: 4px;">PRO</span>
+    <mat-icon class="lock-icon">lock</mat-icon>
+    <span class="pro-badge">PRO</span>
     }
   </mat-list-item>
   }
@@ -48,6 +68,11 @@
     <mat-icon>sports</mat-icon>
     <span>Coaching</span>
   </mat-list-item>
+  }
+
+  <!-- Account Section -->
+  @if (user) {
+  <div class="sidenav-section-header">Account</div>
   }
 
   <mat-list-item routerLinkActive="active" routerLink="/services" (click)="sideNav.close();">
@@ -74,19 +99,19 @@
   }
   }
 
+  <!-- Preferences Section -->
+  <div class="sidenav-section-header">Preferences</div>
+
   <mat-list-item (click)="$event.stopPropagation(); $event.preventDefault(); themeService.toggleTheme()">
     <mat-icon svgIcon="dark-mode"></mat-icon>
-    <span matTooltip="Use dark theme">
-      Dark theme
-    </span>
+    <span>Dark theme</span>
     <span class="fill-space"></span>
     <mat-slide-toggle [disabled]="!appTheme" [color]="'accent'" [checked]="appTheme === appThemes.Dark">
     </mat-slide-toggle>
   </mat-list-item>
 
-  <mat-divider></mat-divider>
-
-
+  <!-- Support Section -->
+  <div class="sidenav-section-header">Support</div>
 
   <mat-list-item (click)="gitHubSponsor()">
     <mat-icon svgIcon="github_logo"></mat-icon>
@@ -96,17 +121,9 @@
 
   <mat-list-item (click)="gitHubStar()">
     <mat-icon>star</mat-icon>
-    <span>Star this on GitHub</span><span class="fill-space"></span>
+    <span>Star on GitHub</span><span class="fill-space"></span>
     <mat-icon>open_in_new</mat-icon>
   </mat-list-item>
-
-  <!--  <mat-list-item (click)="donate()">-->
-  <!--    <mat-icon svgIcon="paypal"></mat-icon>-->
-  <!--    <span>Donate via PayPal </span><span class="fill-space"></span>-->
-  <!--    <mat-icon>open_in_new</mat-icon>-->
-  <!--  </mat-list-item>-->
-
-  <mat-divider></mat-divider>
 
   <mat-list-item onclick="window.open('mailto:support@quantified-self.io')">
     <mat-icon>email</mat-icon>
@@ -120,25 +137,22 @@
     <mat-icon>open_in_new</mat-icon>
   </mat-list-item>
 
+  <!-- Legal Section -->
+  <div class="sidenav-section-header">Legal</div>
 
-  <mat-divider></mat-divider>
-
-  <mat-list-item routerLink="/policies">
+  <mat-list-item routerLink="/policies" (click)="sideNav.close();">
     <mat-icon>policy</mat-icon>
-    <span>Policies</span><span class="fill-space"></span>
+    <span>Policies</span>
   </mat-list-item>
 
+  <!-- Logout -->
+  @if (user) {
   <mat-divider></mat-divider>
 
-  @if (user) {
   <mat-list-item (click)="logout()">
     <mat-icon>power_settings_new</mat-icon>
     <span>Logout</span>
   </mat-list-item>
-  }
-
-  @if (user) {
-  <mat-divider></mat-divider>
   }
 
 </mat-nav-list>

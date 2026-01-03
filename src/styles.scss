@@ -309,6 +309,27 @@ mat-stepper,
   }
 }
 
+/* ==========================================================================
+   Sidenav Scrollbar Hiding
+   Hide scrollbars but keep scroll functionality
+   ========================================================================== */
+mat-sidenav,
+.mat-drawer,
+.mat-sidenav {
+  .mat-drawer-inner-container {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    scrollbar-width: none !important; // Firefox
+    -ms-overflow-style: none !important; // IE/Edge
+
+    &::-webkit-scrollbar {
+      display: none !important; // Chrome/Safari
+      width: 0 !important;
+      height: 0 !important;
+    }
+  }
+}
+
 /* Global Card Title - Standardized Typography */
 mat-table {
   width: 100%;
