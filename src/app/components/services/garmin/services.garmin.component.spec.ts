@@ -40,7 +40,8 @@ describe('ServicesGarminComponent', () => {
                 { provide: AppFileService, useValue: {} },
                 { provide: Analytics, useValue: {} },
                 { provide: AppEventService, useValue: {} },
-                { provide: AppAuthService, useValue: {} },
+                { provide: AppEventService, useValue: {} },
+                { provide: AppAuthService, useValue: { user$: { pipe: () => ({ subscribe: () => { } }) } } },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppWindowService, useValue: { currentDomain: 'http://localhost' } },
                 { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } }

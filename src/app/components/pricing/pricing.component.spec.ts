@@ -2,6 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { PricingComponent } from './pricing.component';
 import { AppUserService } from '../../services/app.user.service';
 import { AppPaymentService } from '../../services/app.payment.service';
+import { AppAuthService } from '../../authentication/app.auth.service';
 import { of } from 'rxjs';
 import { Auth } from '@angular/fire/auth';
 import { Analytics } from '@angular/fire/analytics';
@@ -52,6 +53,7 @@ describe('PricingComponent', () => {
             providers: [
                 { provide: AppPaymentService, useClass: MockAppPaymentService },
                 { provide: AppUserService, useClass: MockAppUserService },
+                { provide: AppAuthService, useValue: { user$: of(null) } },
                 { provide: MatDialog, useClass: MockMatDialog },
                 {
                     provide: Auth,

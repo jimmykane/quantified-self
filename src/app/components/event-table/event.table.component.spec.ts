@@ -8,6 +8,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { AppFileService } from '../../services/app.file.service';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { DatePipe } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of, Subject, delay } from 'rxjs';
@@ -162,6 +163,7 @@ describe('EventTableComponent', () => {
             declarations: [EventTableComponent],
             providers: [
                 { provide: Analytics, useValue: {} },
+                { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
                 { provide: AppEventService, useValue: mockEventService },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: Router, useValue: mockRouter },
