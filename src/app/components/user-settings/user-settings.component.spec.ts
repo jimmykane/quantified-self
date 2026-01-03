@@ -14,6 +14,7 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { MaterialModule } from '../../modules/material.module';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { of } from 'rxjs';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { Privacy, User } from '@sports-alliance/sports-lib';
 
 
@@ -51,10 +52,10 @@ describe('UserSettingsComponent', () => {
             } as any,
             appSettings: { theme: 'normal' } as any,
             unitSettings: {
-                speedUnits: [],
-                paceUnits: [],
-                swimPaceUnits: [],
-                verticalSpeedUnits: [],
+                speedUnits: ['kph'],
+                paceUnits: ['min/km'],
+                swimPaceUnits: ['min/100m'],
+                verticalSpeedUnits: ['m/h'],
                 startOfTheWeek: 1
             } as any,
             mapSettings: {
@@ -84,12 +85,14 @@ describe('UserSettingsComponent', () => {
             providers: [
                 { provide: AppAuthService, useValue: { user$: of(null) } },
                 { provide: ActivatedRoute, useValue: { snapshot: { data: {} } } },
-                { provide: AppUserService, useValue: { isBranded: vi.fn().mockResolvedValue(false) } },
+                { provide: ActivatedRoute, useValue: { snapshot: { data: {} } } },
+                { provide: AppUserService, useValue: { isBranded: vi.fn().mockResolvedValue(false), updateUserProperties: vi.fn() } },
                 { provide: Router, useValue: {} },
-                { provide: MatSnackBar, useValue: {} },
+                { provide: MatSnackBar, useValue: { open: vi.fn() } },
                 { provide: AppWindowService, useValue: {} },
                 { provide: MatDialog, useValue: {} },
-                { provide: LoggerService, useValue: {} },
+                { provide: LoggerService, useValue: { error: vi.fn() } },
+                { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
                 { provide: Analytics, useValue: {} },
             ],
             schemas: [NO_ERRORS_SCHEMA]
@@ -116,5 +119,38 @@ describe('UserSettingsComponent', () => {
         component.user.privacy = Privacy.Public;
         component.ngOnChanges();
         expect(component.userSettingsFormGroup.get('privacy').value).toBe(Privacy.Public);
+    });
+
+    it('should initialize acceptedTrackingPolicy from user data', () => {
+        component.user.acceptedTrackingPolicy = true;
+        component.ngOnChanges();
+        expect(component.userSettingsFormGroup.get('acceptedTrackingPolicy').value).toBe(true);
+
+        component.user.acceptedTrackingPolicy = false;
+        component.ngOnChanges();
+        expect(component.userSettingsFormGroup.get('acceptedTrackingPolicy').value).toBe(false);
+    });
+
+    it('should save acceptedTrackingPolicy when form is submitted', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+        const analyticsService = TestBed.inject(AppAnalyticsService as any); // Type assertion for mocked service
+        vi.spyOn(analyticsService, 'logEvent');
+
+        component.user.acceptedTrackingPolicy = false;
+        component.ngOnChanges();
+
+        // Change the value
+        component.userSettingsFormGroup.get('acceptedTrackingPolicy').setValue(true);
+
+        // Submit the form
+        await component.onSubmit(new Event('submit'));
+
+        expect(updateUserPropertiesSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ uid: 'test-uid' }),
+            expect.objectContaining({
+                acceptedTrackingPolicy: true
+            })
+        );
     });
 });

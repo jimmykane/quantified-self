@@ -129,6 +129,9 @@ export class UserSettingsComponent implements OnChanges {
         Validators.required,
         // Validators.minLength(1),
       ]),
+      acceptedTrackingPolicy: new UntypedFormControl(this.user.acceptedTrackingPolicy, [
+        // Validators.required,
+      ]),
 
       chartTheme: new UntypedFormControl(this.user.settings.chartSettings.theme, [
         Validators.required,
@@ -342,6 +345,7 @@ export class UserSettingsComponent implements OnChanges {
         privacy: this.userSettingsFormGroup.get('privacy').value,
         description: this.userSettingsFormGroup.get('description').value,
         brandText: this.userSettingsFormGroup.get('brandText').value || null,
+        acceptedTrackingPolicy: this.userSettingsFormGroup.get('acceptedTrackingPolicy').value,
         settings: <UserSettingsInterface>{
           chartSettings: userChartSettings,
           appSettings: <UserAppSettingsInterface>{ theme: this.userSettingsFormGroup.get('appTheme').value },
