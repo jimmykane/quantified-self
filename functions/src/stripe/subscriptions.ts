@@ -1,3 +1,41 @@
+/**
+ * @fileoverview Stripe Subscription Firestore Triggers Module
+ *
+ * Contains Firestore triggers that respond to subscription document changes.
+ * This module is the central orchestrator for subscription state changes,
+ * coordinating claims updates, grace periods, and email notifications.
+ *
+ * ## Architecture Overview
+ * ```
+ * Stripe Webhook → firestore-stripe-payments extension → customers/{uid}/subscriptions/{id}
+ *                                                                    ↓
+ *                                                        onSubscriptionUpdated (this module)
+ *                                                                    ↓
+ *                                          ┌─────────────────────────┼─────────────────────────┐
+ *                                          ↓                         ↓                         ↓
+ *                                   reconcileClaims()        Grace Period Mgmt      checkAndSendSubscriptionEmails()
+ *                                   (claims.ts)              (users/{uid}/system/status)    (email-triggers.ts)
+ * ```
+ *
+ * ## Grace Period System
+ * When a user's subscription becomes inactive, they are granted a grace period
+ * (defined by `GRACE_PERIOD_DAYS`) before losing access to premium features.
+ * This allows time for:
+ * - Payment method issues to be resolved
+ * - Subscription renewal decisions
+ * - Data export before downgrade
+ *
+ * Grace period data is stored in `users/{uid}/system/status`:
+ * - `gracePeriodUntil`: Timestamp when grace period expires
+ * - `lastDowngradedAt`: Timestamp of when the downgrade was detected
+ *
+ * ## Orphan Prevention
+ * The trigger checks if the user document exists before processing. This prevents
+ * creating orphaned subcollections when Stripe webhooks arrive for deleted users.
+ *
+ * @module stripe/subscriptions
+ */
+
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
@@ -6,8 +44,57 @@ import { checkAndSendSubscriptionEmails } from './email-triggers';
 import { GRACE_PERIOD_DAYS } from '../shared/limits';
 
 /**
- * Triggered whenever a subscription document is created or updated.
- * Ensures the user's custom claims are in sync and manages the grace period.
+ * Firestore Trigger: onSubscriptionUpdated
+ *
+ * Triggered whenever a subscription document is created, updated, or deleted
+ * in the `customers/{uid}/subscriptions/{subscriptionId}` collection.
+ *
+ * ## Trigger Path
+ * `customers/{uid}/subscriptions/{subscriptionId}`
+ *
+ * ## Responsibilities
+ * 1. **User Validation**: Verifies the user still exists to prevent orphaned data
+ * 2. **Claims Sync**: Calls `reconcileClaims()` to update Firebase Auth custom claims
+ * 3. **Grace Period Management**:
+ *    - Sets `gracePeriodUntil` when no active subscriptions remain
+ *    - Clears grace period when an active subscription is found
+ * 4. **Email Notifications**: Delegates to `checkAndSendSubscriptionEmails()` for
+ *    welcome, upgrade, downgrade, and cancellation emails
+ *
+ * ## Processing Flow
+ * ```
+ * Document Change Detected
+ *         ↓
+ * Check if user exists → No → Exit (prevent orphans)
+ *         ↓ Yes
+ * Call reconcileClaims()
+ *         ↓
+ * Query for active subscriptions
+ *         ↓
+ * ┌───────┴───────┐
+ * ↓               ↓
+ * Found        Not Found
+ * ↓               ↓
+ * Clear Grace    Set Grace Period
+ * Period         (if not already set)
+ * ↓               ↓
+ * └───────┬───────┘
+ *         ↓
+ * Send Email Notifications
+ * ```
+ *
+ * ## Error Handling
+ * - **User Not Found**: Logs warning and exits gracefully
+ * - **No Active Subscription**: Sets grace period and role to 'free'
+ * - **Other Errors**: Logged but don't crash the function
+ *
+ * ## Configuration
+ * - **Region**: europe-west3
+ * - **Document Path**: customers/{uid}/subscriptions/{subscriptionId}
+ *
+ * @see reconcileClaims - Updates Firebase Auth custom claims
+ * @see checkAndSendSubscriptionEmails - Handles email notifications
+ * @see GRACE_PERIOD_DAYS - Configuration for grace period duration
  */
 export const onSubscriptionUpdated = onDocumentWritten({
     document: 'customers/{uid}/subscriptions/{subscriptionId}',

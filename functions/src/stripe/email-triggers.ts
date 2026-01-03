@@ -1,3 +1,37 @@
+/**
+ * @fileoverview Stripe Subscription Email Triggers Module
+ *
+ * Handles automated transactional email notifications for subscription lifecycle events.
+ * This module integrates with Firebase's `mail` collection, which is processed by the
+ * Firebase Trigger Email extension to send actual emails.
+ *
+ * ## Email Types
+ * | Event | Template Name | Trigger Condition |
+ * |-------|--------------|-------------------|
+ * | Welcome | `welcome_email` | New active/trialing subscription |
+ * | Upgrade | `subscription_upgrade` | Role level increased |
+ * | Downgrade | `subscription_downgrade` | Role level decreased |
+ * | Cancellation | `subscription_cancellation` | `cancel_at_period_end` set to true |
+ *
+ * ## Deduplication Strategy
+ * Each email type uses a unique document ID in the `mail` collection to prevent
+ * duplicate sends:
+ * - Welcome: `welcome_email_{subscriptionId}`
+ * - Upgrade: `upgrade_{eventId}`
+ * - Downgrade: `downgrade_{eventId}`
+ * - Cancellation: `cancellation_{subscriptionId}_{periodEndTimestamp}`
+ *
+ * ## TTL (Time-To-Live)
+ * All mail documents include an `expireAt` timestamp for automatic cleanup by
+ * Firestore TTL policies. This prevents mail queue buildup from processed emails.
+ *
+ * ## Integration
+ * This module is called by `onSubscriptionUpdated` in `subscriptions.ts` whenever
+ * a subscription document changes in Firestore.
+ *
+ * @module stripe/email-triggers
+ */
+
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { ROLE_HIERARCHY } from '../shared/pricing';
@@ -5,7 +39,17 @@ import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { DocumentData } from 'firebase-admin/firestore';
 
 
-// Helper to format date
+/**
+ * Formats a Firestore Timestamp to a human-readable date string.
+ *
+ * @param timestamp - Firestore Timestamp to format
+ * @returns Formatted date string (e.g., "15 January 2025")
+ *
+ * @example
+ * formatDate(admin.firestore.Timestamp.now()) // "3 January 2026"
+ *
+ * @internal
+ */
 const formatDate = (timestamp: admin.firestore.Timestamp): string => {
     return timestamp.toDate().toLocaleDateString('en-GB', {
         day: 'numeric',
@@ -14,6 +58,10 @@ const formatDate = (timestamp: admin.firestore.Timestamp): string => {
     });
 };
 
+/**
+ * Maps internal role keys to display-friendly names for email templates.
+ * @internal
+ */
 const ROLE_DISPLAY_NAMES: { [key: string]: string } = {
     'free': 'Free',
     'basic': 'Basic',
@@ -21,7 +69,57 @@ const ROLE_DISPLAY_NAMES: { [key: string]: string } = {
 };
 
 /**
- * Checks for subscription changes and queues appropriate emails.
+ * Analyzes subscription changes and queues appropriate transactional emails.
+ *
+ * This function is the central dispatcher for all subscription-related emails.
+ * It compares the before/after states of a subscription document and determines
+ * which emails (if any) should be sent.
+ *
+ * ## Email Trigger Logic
+ *
+ * ### 1. Welcome Email
+ * - **Condition**: Subscription becomes active/trialing when it wasn't before
+ * - **Template**: `welcome_email`
+ * - **Data**: `{ role }`
+ *
+ * ### 2. Upgrade Email
+ * - **Condition**: Role changes to a higher tier (based on `ROLE_HIERARCHY`)
+ * - **Template**: `subscription_upgrade`
+ * - **Data**: `{ new_role, old_role }`
+ *
+ * ### 3. Downgrade Email
+ * - **Condition**: Role changes to a lower tier
+ * - **Template**: `subscription_downgrade`
+ * - **Data**: `{ new_role, old_role, limit }`
+ *
+ * ### 4. Cancellation Email
+ * - **Condition**: `cancel_at_period_end` changes from false to true
+ * - **Template**: `subscription_cancellation`
+ * - **Data**: `{ role, expiration_date }`
+ *
+ * ## Idempotency
+ * Each email type checks if a mail document with its unique ID already exists
+ * before creating a new one. This ensures emails are not duplicated even if
+ * the function is triggered multiple times for the same event.
+ *
+ * @param uid - Firebase user ID (owner of the subscription)
+ * @param subscriptionId - Stripe subscription ID (sub_xxx)
+ * @param before - Subscription document data before the change (undefined for creates)
+ * @param after - Subscription document data after the change (undefined for deletes)
+ * @param eventId - Unique event ID from the Firestore trigger (used for deduplication)
+ *
+ * @example
+ * ```typescript
+ * // Called from onSubscriptionUpdated trigger
+ * await checkAndSendSubscriptionEmails(
+ *     'user123',
+ *     'sub_1234567890',
+ *     { status: 'trialing', role: 'basic' },
+ *     { status: 'active', role: 'pro' },
+ *     'abc123-event-id'
+ * );
+ * // This would trigger an upgrade email (basic → pro)
+ * ```
  */
 export async function checkAndSendSubscriptionEmails(
     uid: string,
