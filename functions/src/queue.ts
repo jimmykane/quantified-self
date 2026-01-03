@@ -11,9 +11,12 @@ import {
   COROSAPIWorkoutQueueItemInterface,
   GarminHealthAPIActivityQueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface,
+  HistoryImportRequestQueueItemInterface,
+  QueueItemInterface,
 } from './queue/queue-item.interface';
 import { generateIDFromParts, setEvent, UsageLimitExceededError, enqueueWorkoutTask } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { processHistoryImportRequest } from './history';
 import { getServiceWorkoutQueueName } from './shared/queue-names';
 import {
   COROSAPIAuth2ServiceTokenInterface,
@@ -25,18 +28,27 @@ import { getTokenData } from './tokens';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 
+interface QueueStats {
+  successCount: number;
+  errorCount: number;
+  ignoreCount: number;
+}
 
-
-export async function parseQueueItems(serviceName: ServiceNames, fromHistoryQueue = false) {
+export async function parseQueueItems(serviceName: ServiceNames, isHistoryImport: boolean = false): Promise<QueueStats> {
   const RETRY_COUNT = MAX_RETRY_COUNT;
   const LIMIT = 200;
   // @todo add queue item sort date for creation
   const querySnapshot = await admin.firestore()
-    .collection(getServiceWorkoutQueueName(serviceName, fromHistoryQueue))
+    .collection(getServiceWorkoutQueueName(serviceName, isHistoryImport))
     .where('processed', '==', false)
     .where('retryCount', '<', RETRY_COUNT)
     .limit(LIMIT).get(); // Max 10 retries
-  logger.info(`Found ${querySnapshot.size} queue items to process`);
+
+  return processQueueItems(serviceName, querySnapshot.docs);
+}
+
+export async function processQueueItems(serviceName: ServiceNames, items: admin.firestore.QueryDocumentSnapshot[]): Promise<QueueStats> {
+  logger.info(`Found ${items.length} queue items to process`);
   let count = 0;
   logger.info('Starting timer: ParseQueueItems');
 
@@ -46,9 +58,37 @@ export async function parseQueueItems(serviceName: ServiceNames, fromHistoryQueu
   const usageCache = new Map<string, Promise<{ role: string, limit: number, currentCount: number }>>();
   const pendingWrites = new Map<string, number>();
 
-  const promises = querySnapshot.docs.map(async (queueItem) => {
+  if (items.length === 0) {
+    return { successCount: 0, errorCount: 0, ignoreCount: 0 };
+  }
+
+  const promises = items.map(async (queueItem) => {
     return limit(async () => {
       try {
+        const itemData = queueItem.data() as QueueItemInterface;
+
+        // Handle History Import Requests Generic Check
+        if (itemData.type === 'import_request') {
+          // We can pass it to the parser, or handle it here?
+          // The parser `parseWorkoutQueueItemForServiceName` has the logic now.
+          // We just need to construct the object correctly.
+          const itemWithRef = Object.assign({
+            id: queueItem.id,
+            ref: queueItem.ref,
+          }, itemData);
+
+          // Reuse the Suunto/COROS parser call since generic parser handles it?
+          // or direct call?
+          // Logic in `parseWorkoutQueueItemForServiceName` checks type.
+          // So we just need to pass the object.
+
+          await parseWorkoutQueueItemForServiceName(serviceName, <any>itemWithRef, bulkWriter, tokenCache, usageCache, pendingWrites);
+          // We can break or continue, but switch below might re-process?
+          // We should restructure this or add 'continue' ?
+          // If we call parser, it returns.
+          return;
+        }
+
         switch (serviceName) {
           default:
             throw new Error('Not Implemented');
@@ -56,23 +96,23 @@ export async function parseQueueItems(serviceName: ServiceNames, fromHistoryQueu
             await parseWorkoutQueueItemForServiceName(serviceName, <COROSAPIWorkoutQueueItemInterface>Object.assign({
               id: queueItem.id,
               ref: queueItem.ref,
-            }, queueItem.data()), bulkWriter, tokenCache, usageCache, pendingWrites);
+            }, itemData), bulkWriter, tokenCache, usageCache, pendingWrites);
             break;
           case ServiceNames.SuuntoApp:
             await parseWorkoutQueueItemForServiceName(serviceName, <SuuntoAppWorkoutQueueItemInterface>Object.assign({
               id: queueItem.id,
               ref: queueItem.ref,
-            }, queueItem.data()), bulkWriter, tokenCache, usageCache, pendingWrites);
+            }, itemData), bulkWriter, tokenCache, usageCache, pendingWrites);
             break;
           case ServiceNames.GarminHealthAPI:
             await processGarminHealthAPIActivityQueueItem(Object.assign({
               id: queueItem.id,
               ref: queueItem.ref,
-            }, <GarminHealthAPIActivityQueueItemInterface>queueItem.data()), bulkWriter, tokenCache, usageCache, pendingWrites);
+            }, <GarminHealthAPIActivityQueueItemInterface>itemData), bulkWriter, tokenCache, usageCache, pendingWrites);
             break;
         }
         count++;
-        logger.info(`Parsed queue item ${count}/${querySnapshot.size} and id ${queueItem.id}`);
+        logger.info(`Parsed queue item ${count}/${items.length} and id ${queueItem.id}`);
         // console.timeLog('ParseQueueItems'); // timeLog might be noisy in parallel
       } catch (e: unknown) {
         const error = e as Error;
@@ -85,7 +125,9 @@ export async function parseQueueItems(serviceName: ServiceNames, fromHistoryQueu
   await bulkWriter.close();
 
   logger.info('Ending timer: ParseQueueItems');
-  logger.info(`Parsed ${count} queue items out of ${querySnapshot.size}`);
+  logger.info(`Parsed ${count} queue items out of ${items.length}`);
+
+  return { successCount: count, errorCount: 0, ignoreCount: 0 };
 }
 
 const TIMEOUT_DEFAULT = 300;
@@ -210,6 +252,19 @@ export function getWorkoutForService(
 
 
 export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNames, queueItem: COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface | GarminHealthAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<QueueResult> {
+  // Handle History Import Requests
+  if (queueItem.type === 'import_request') {
+    const requestItem = queueItem as unknown as HistoryImportRequestQueueItemInterface;
+    logger.info(`Processing history import request for ${requestItem.userID} service ${serviceName}`);
+    try {
+      await processHistoryImportRequest(requestItem.userID, serviceName, new Date(requestItem.startDate), new Date(requestItem.endDate));
+      return updateToProcessed(queueItem, bulkWriter);
+    } catch (e: any) {
+      logger.error(`History import request failed`, e);
+      return increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
+    }
+  }
+
   if (serviceName === ServiceNames.GarminHealthAPI) {
     return processGarminHealthAPIActivityQueueItem(queueItem as GarminHealthAPIActivityQueueItemInterface, bulkWriter, tokenCache, usageCache, pendingWrites);
   }

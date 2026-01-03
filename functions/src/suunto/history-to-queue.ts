@@ -10,7 +10,7 @@ import {
   PRO_REQUIRED_MESSAGE,
 } from '../utils';
 import { SERVICE_NAME } from './constants';
-import { addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
+import { addToHistoryImportQueue, isAllowedToDoHistoryImport } from '../history';
 
 /**
  * Add to the workout queue the workouts of a user for a selected date range
@@ -61,7 +61,8 @@ export const addSuuntoAppHistoryToQueue = functions.region('europe-west2').https
     return;
   }
 
-  await addHistoryToQueue(userID, SERVICE_NAME, startDate, endDate);
+
+  await addToHistoryImportQueue(userID, SERVICE_NAME, startDate, endDate);
 
   // Respond
   res.status(200);

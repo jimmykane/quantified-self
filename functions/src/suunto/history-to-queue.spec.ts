@@ -21,7 +21,7 @@ vi.mock('../utils', () => ({
 }));
 
 vi.mock('../history', () => ({
-    addHistoryToQueue: vi.fn().mockResolvedValue({}),
+    addToHistoryImportQueue: vi.fn().mockResolvedValue({}),
     isAllowedToDoHistoryImport: vi.fn().mockResolvedValue(true)
 }));
 
@@ -56,7 +56,7 @@ describe('Suunto History to Queue', () => {
             await addSuuntoAppHistoryToQueue(req, res);
 
             expect(history.isAllowedToDoHistoryImport).toHaveBeenCalledWith('testUserID', SERVICE_NAME);
-            expect(history.addHistoryToQueue).toHaveBeenCalledWith(
+            expect(history.addToHistoryImportQueue).toHaveBeenCalledWith(
                 'testUserID',
                 SERVICE_NAME,
                 expect.any(Date),
