@@ -3,7 +3,7 @@
     justify-content: center;
     padding: 2rem 1rem;
     min-height: calc(100vh - 64px);
-    background-color: var(--mat-sys-background, #fafafa);
+    /* Inherits background from body/theme */
 }
 
 .onboarding-card {
@@ -62,12 +62,12 @@ h2 {
     justify-content: space-between;
     margin-top: 2rem;
     padding-top: 1rem;
-    border-top: 1px solid rgba(0, 0, 0, 0.12);
+    border-top: 1px solid var(--mat-app-outline-variant);
 }
 
 .policy-required-label {
     font-size: 0.85em;
-    color: var(--mat-sys-error, #f44336);
+    color: var(--mat-sys-error);
     margin-left: 0.5em;
     font-weight: 500;
 }
@@ -79,12 +79,4 @@ h2 {
     margin-left: 0.5em;
 }
 
-:host-context(.dark-theme) {
-    .pricing-step .actions {
-        border-top-color: rgba(255, 255, 255, 0.12);
-    }
-
-    .policy-required-label {
-        color: var(--mat-sys-error, #ffb4ab);
-    }
-}
+/* Removed manual overrides as they are now handled by global theme variables */

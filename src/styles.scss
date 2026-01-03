@@ -72,12 +72,10 @@ body {
 }
 
 body {
-  $light-bg: map.get($app-light-theme, background);
-  $light-fg: map.get($app-light-theme, foreground);
-
-  background-color: mat.m2-get-color-from-palette($light-bg, background);
-  color: mat.m2-get-color-from-palette($light-fg, text);
-  font-family: 'QSFont', sans-serif;
+  background-color: var(--mat-sys-background);
+  color: var(--mat-sys-on-surface);
+  font-family: 'QSFont',
+    sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -249,29 +247,41 @@ section.component-container {
 
 /* CSS Variables for Theming */
 :root {
+  --mat-sys-background: #fafafa;
   --mat-sys-surface: rgba(255, 255, 255, 0.90);
   --mat-sys-on-surface: rgba(0, 0, 0, 0.87);
   --mat-sys-on-surface-variant: rgba(0, 0, 0, 0.60);
+  --mat-sys-error: #f44336;
+  --mat-sys-primary: #3f51b5;
+  --mat-sys-primary-rgb: 63, 81, 181;
+  --mat-sys-secondary: #ff4081;
+  --mat-sys-secondary-rgb: 255, 64, 129;
   --mat-app-surface: var(--mat-sys-surface);
   --mat-app-on-surface: var(--mat-sys-on-surface);
   --mat-app-on-surface-variant: var(--mat-sys-on-surface-variant);
   --mat-app-surface-container-low: rgba(0, 0, 0, 0.03);
   --mat-app-surface-container-high: rgba(0, 0, 0, 0.08);
   --mat-app-outline-variant: rgba(0, 0, 0, 0.1);
-  --mat-app-primary: #3f51b5;
+  --mat-app-primary: var(--mat-sys-primary);
 }
 
 .dark-theme {
+  --mat-sys-background: #121212;
   --mat-sys-surface: rgba(30, 30, 30, 0.80);
   --mat-sys-on-surface: rgba(255, 255, 255, 0.87);
   --mat-sys-on-surface-variant: rgba(255, 255, 255, 0.60);
+  --mat-sys-error: #ffb4ab;
+  --mat-sys-primary: #90caf9;
+  --mat-sys-primary-rgb: 144, 202, 249;
+  --mat-sys-secondary: #f48fb1;
+  --mat-sys-secondary-rgb: 244, 143, 177;
   --mat-app-surface: var(--mat-sys-surface);
   --mat-app-on-surface: var(--mat-sys-on-surface);
   --mat-app-on-surface-variant: var(--mat-sys-on-surface-variant);
   --mat-app-surface-container-low: rgba(255, 255, 255, 0.05);
   --mat-app-surface-container-high: rgba(255, 255, 255, 0.12);
   --mat-app-outline-variant: rgba(255, 255, 255, 0.1);
-  --mat-app-primary: #90caf9;
+  --mat-app-primary: var(--mat-sys-primary);
 }
 
 /* Global Glassmorphism Card Style */
