@@ -43,12 +43,14 @@ service cloud.firestore {
              'acceptedPrivacyPolicy', 
              'acceptedDataPolicy', 
              'acceptedTrackingPolicy', 
+             'acceptedMarketingPolicy',
              'acceptedDiagnosticsPolicy', 
              'acceptedTos'
            ]) &&
            (request.resource.data.get('acceptedPrivacyPolicy', true) == true) &&
            (request.resource.data.get('acceptedDataPolicy', true) == true) &&
            (request.resource.data.get('acceptedTrackingPolicy', false) is bool) &&
+           (request.resource.data.get('acceptedMarketingPolicy', false) is bool) &&
            (request.resource.data.get('acceptedDiagnosticsPolicy', true) == true) &&
            (request.resource.data.get('acceptedTos', true) == true);
         }
@@ -60,12 +62,14 @@ service cloud.firestore {
              'acceptedPrivacyPolicy', 
              'acceptedDataPolicy', 
              'acceptedTrackingPolicy', 
+             'acceptedMarketingPolicy',
              'acceptedDiagnosticsPolicy', 
              'acceptedTos'
            ])
           && (request.resource.data.get('acceptedPrivacyPolicy', true) == true)
           && (request.resource.data.get('acceptedDataPolicy', true) == true)
           && (request.resource.data.get('acceptedTrackingPolicy', false) is bool)
+          && (request.resource.data.get('acceptedMarketingPolicy', false) is bool)
           && (request.resource.data.get('acceptedDiagnosticsPolicy', true) == true)
           && (request.resource.data.get('acceptedTos', true) == true);
            

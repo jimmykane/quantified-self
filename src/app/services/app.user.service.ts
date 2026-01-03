@@ -39,6 +39,7 @@ import {
   TableSettings,
   UserDashboardSettingsInterface
 } from '@sports-alliance/sports-lib';
+import { AppUserInterface } from '../models/app-user.interface';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -335,6 +336,15 @@ export class AppUserService implements OnDestroy {
     return [ActivityTypes.AlpineSki, ActivityTypes.Snowboard]
   }
 
+  public static readonly legalFields = [
+    'acceptedPrivacyPolicy',
+    'acceptedDataPolicy',
+    'acceptedTrackingPolicy',
+    'acceptedMarketingPolicy',
+    'acceptedDiagnosticsPolicy',
+    'acceptedTos',
+  ];
+
   constructor(
     private eventService: AppEventService,
     private http: HttpClient,
@@ -357,7 +367,7 @@ export class AppUserService implements OnDestroy {
     });
   }
 
-  public getUserByID(userID: string): Observable<User | null> {
+  public getUserByID(userID: string): Observable<AppUserInterface | null> {
     return runInInjectionContext(this.injector, () => {
       const userDoc = doc(this.firestore, 'users', userID);
       const legalDoc = doc(this.firestore, `users/${userID}/legal/agreements`);
@@ -378,7 +388,7 @@ export class AppUserService implements OnDestroy {
 
           // Merge all sources
           // Merge order: Main Doc -> Legal -> System (System overrides if overlap)
-          const u = { ...user, ...(legal || {}), ...(system || {}) } as User;
+          const u = { ...user, ...(legal || {}), ...(system || {}) } as AppUserInterface;
 
           // Settings is a special case (nested object)
           if (settings && Object.keys(settings).length > 0) {
@@ -392,7 +402,7 @@ export class AppUserService implements OnDestroy {
     });
   }
 
-  public async createOrUpdateUser(user: User) {
+  public async createOrUpdateUser(user: AppUserInterface) {
     if (!user.acceptedPrivacyPolicy || !user.acceptedDataPolicy) {
       throw new Error('User has not accepted privacy or data policy');
     }
@@ -403,17 +413,10 @@ export class AppUserService implements OnDestroy {
     return this.updateUser(user);
   }
 
-  public async acceptPolicies(policies: Partial<User>) {
-    const legalFields = [
-      'acceptedPrivacyPolicy',
-      'acceptedDataPolicy',
-      'acceptedTrackingPolicy',
-      'acceptedDiagnosticsPolicy',
-      'acceptedTos'
-    ];
+  public async acceptPolicies(policies: Partial<AppUserInterface>) {
     const dataToWrite: any = {};
     let hasChanges = false;
-    legalFields.forEach(field => {
+    AppUserService.legalFields.forEach(field => {
       if ((policies as any)[field] === true) {
         dataToWrite[field] = true;
         hasChanges = true;
@@ -555,12 +558,25 @@ export class AppUserService implements OnDestroy {
       }).toPromise();
   }
 
-  public async updateUserProperties(user: User, propertiesToUpdate: any) {
+  public async updateUserProperties(user: AppUserInterface, propertiesToUpdate: any) {
     return runInInjectionContext(this.injector, async () => {
       const promises = [];
       if (propertiesToUpdate.settings) {
         promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), propertiesToUpdate.settings, { merge: true }));
         delete propertiesToUpdate.settings;
+      }
+
+      // Handle legal fields separately
+      const legalUpdates: any = {};
+      AppUserService.legalFields.forEach(field => {
+        if (field in propertiesToUpdate) {
+          legalUpdates[field] = propertiesToUpdate[field];
+          delete propertiesToUpdate[field];
+        }
+      });
+
+      if (Object.keys(legalUpdates).length > 0) {
+        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/legal/agreements`), legalUpdates, { merge: true }));
       }
 
       if (Object.keys(propertiesToUpdate).length > 0) {
@@ -571,7 +587,7 @@ export class AppUserService implements OnDestroy {
     });
   }
 
-  public async updateUser(user: User) {
+  public async updateUser(user: AppUserInterface) {
     const data = typeof user.toJSON === 'function' ? user.toJSON() : { ...user };
 
     // Filter out restricted fields that should live in sub-collections or system locations
@@ -582,11 +598,7 @@ export class AppUserService implements OnDestroy {
       'lastDowngradedAt',
       'stripeRole',
       'isPro',
-      'acceptedPrivacyPolicy',
-      'acceptedDataPolicy',
-      'acceptedTrackingPolicy',
-      'acceptedDiagnosticsPolicy',
-      'acceptedTos',
+      ...AppUserService.legalFields
     ];
 
     forbiddenFields.forEach(field => delete (data as any)[field]);

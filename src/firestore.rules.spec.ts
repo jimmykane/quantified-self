@@ -185,6 +185,28 @@ describe('Firestore Security Rules', () => {
                 }));
             });
 
+            it('should allow user to update acceptedMarketingPolicy to true or false', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                // Setup: User has agreements
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/legal/agreements`).set({
+                        acceptedPrivacyPolicy: true,
+                        acceptedDataPolicy: true,
+                        acceptedTos: true
+                    });
+                });
+
+                // Update marketing policy to true
+                await assertSucceeds(db.collection('users').doc(userId).collection('legal').doc('agreements').update({
+                    acceptedMarketingPolicy: true
+                }));
+
+                // Update marketing policy to false
+                await assertSucceeds(db.collection('users').doc(userId).collection('legal').doc('agreements').update({
+                    acceptedMarketingPolicy: false
+                }));
+            });
+
             it('should deny updates to unknown fields', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await assertFails(db.collection('users').doc(userId).collection('legal').doc('agreements').set({

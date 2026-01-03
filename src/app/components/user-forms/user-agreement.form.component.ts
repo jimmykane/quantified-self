@@ -5,7 +5,7 @@ import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { LoggerService } from '../../services/logger.service';
 import { Privacy } from '@sports-alliance/sports-lib';
-import { User } from '@sports-alliance/sports-lib';
+import { AppUserInterface } from '../../models/app-user.interface';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
@@ -25,7 +25,7 @@ import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 export class UserAgreementFormComponent implements OnInit {
 
   public privacy = Privacy;
-  public user: User;
+  public user: AppUserInterface;
   public originalValues: {
     displayName: string;
   };
@@ -64,6 +64,8 @@ export class UserAgreementFormComponent implements OnInit {
         Validators.requiredTrue,
         // Validators.minLength(4),
       ]),
+      acceptMarketingPolicy: new UntypedFormControl(this.user.acceptedMarketingPolicy || false, [
+      ]),
 
       // 'alterEgo': new FormControl(this.hero.alterEgo),
       // 'power': new FormControl(this.hero.power, Validators.required)
@@ -83,6 +85,7 @@ export class UserAgreementFormComponent implements OnInit {
     try {
       this.user.acceptedPrivacyPolicy = true;
       this.user.acceptedTrackingPolicy = true;
+      this.user.acceptedMarketingPolicy = this.userFormGroup.get('acceptMarketingPolicy').value;
       this.user.acceptedDiagnosticsPolicy = true;
       await this.userService.createOrUpdateUser(this.user);
       this.snackBar.open('User updated', null, {

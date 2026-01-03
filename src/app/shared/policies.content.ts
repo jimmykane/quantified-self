@@ -84,5 +84,19 @@ export const POLICY_CONTENT: PolicyItem[] = [
         ],
         checkboxLabel: 'I accept the Terms of Service and Subscription Policy.',
         formControlName: 'acceptTos'
+    },
+    {
+        id: 'marketing',
+        title: 'Marketing & Updates',
+        subtitle: 'Optional',
+        icon: 'mail_outline',
+        content: [
+            '<strong>Promotional Emails:</strong> Receive occasional emails about new features, promotions, and special offers.',
+            '<strong>Unsubscribe Anytime:</strong> You can unsubscribe at any time from your account settings.',
+            '<strong>No Spam:</strong> We respect your inbox and only send relevant updates about the service.'
+        ],
+        checkboxLabel: 'I would like to receive marketing emails and updates (optional).',
+        formControlName: 'acceptMarketingPolicy',
+        isOptional: true
     }
 ];

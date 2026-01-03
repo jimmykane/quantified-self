@@ -101,6 +101,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
                 else if (policy.formControlName === 'acceptDataPolicy') initialValue = user.acceptedDataPolicy;
                 else if (policy.formControlName === 'acceptTrackingPolicy') initialValue = user.acceptedTrackingPolicy;
                 else if (policy.formControlName === 'acceptTos') initialValue = (user as any).acceptedTos;
+                else if (policy.formControlName === 'acceptMarketingPolicy') initialValue = (user as any).acceptedMarketingPolicy;
 
                 if (policy.isOptional) {
                     group[policy.formControlName] = [initialValue || false];
@@ -179,8 +180,10 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
             this.isLoading = true;
             this.policies.forEach(policy => {
                 const userProperty = this.mapFormControlNameToUserProperty(policy.formControlName || '');
-                if (userProperty) {
-                    (this.user as any)[userProperty] = true;
+                if (userProperty && policy.formControlName) {
+                    // For optional policies, use the actual form value; for required ones, it's always true
+                    const formValue = this.termsFormGroup.get(policy.formControlName)?.value;
+                    (this.user as any)[userProperty] = policy.isOptional ? !!formValue : true;
                 }
             });
 

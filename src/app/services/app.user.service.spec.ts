@@ -6,6 +6,7 @@ import { Functions } from '@angular/fire/functions';
 import { HttpClient } from '@angular/common/http';
 import { AppEventService } from './app.event.service';
 import { AppWindowService } from './app.window.service';
+import { AppUserInterface } from '../models/app-user.interface';
 import { of, firstValueFrom } from 'rxjs';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
@@ -147,6 +148,36 @@ describe('AppUserService', () => {
 
             // Expect setDoc to be called for the settings
             expect(setDoc).toHaveBeenCalledWith(expect.anything(), settings, { merge: true });
+        });
+
+        it('should split writes for legal fields', async () => {
+            const user = { uid: 'test-uid' } as AppUserInterface;
+            const propertiesToUpdate = {
+                displayName: 'New Name',
+                acceptedMarketingPolicy: true
+            };
+
+            await service.updateUserProperties(user, propertiesToUpdate);
+
+            // Should write legal fields to legal/agreements using setDoc
+            // We need to verify which call to setDoc was for legal
+            // The previous test expects setDoc for settings, here we might have multiple if settings were included.
+            // But here we only have legal. So we expect 1 setDoc call.
+
+            // Find the call that writes to the legal path ?? 
+            // Since we mocked `doc`, checking the path is hard without examining the doc() mock calls.
+            // But we can check the data passed to setDoc.
+            expect(setDoc).toHaveBeenCalledWith(
+                expect.anything(), // doc ref
+                { acceptedMarketingPolicy: true },
+                { merge: true }
+            );
+
+            // Should update remaining propeties on user doc
+            expect(updateDoc).toHaveBeenCalledWith(
+                expect.anything(), // doc ref
+                { displayName: 'New Name' }
+            );
         });
     });
 });

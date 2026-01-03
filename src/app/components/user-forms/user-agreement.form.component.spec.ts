@@ -35,6 +35,7 @@ describe('UserAgreementFormComponent', () => {
         acceptedPrivacyPolicy: false,
         acceptedDataPolicy: false,
         acceptedTrackingPolicy: false,
+        acceptedMarketingPolicy: false,
         acceptedDiagnosticsPolicy: false, // Initial state
         privacy: Privacy.Private
     } as User;
@@ -140,5 +141,27 @@ describe('UserAgreementFormComponent', () => {
         // Also check logical flow
         expect(mockAnalytics.logEvent).toHaveBeenCalledWith('sign_up', { method: 'google' });
         expect(mockRouter.navigate).toHaveBeenCalledWith(['dashboard']);
+    });
+
+    it('should handle marketing policy correctly', async () => {
+        // Initialize with default (false)
+        expect(component.userFormGroup.get('acceptMarketingPolicy')?.value).toBe(false);
+
+        // Accept everything including marketing
+        component.userFormGroup.patchValue({
+            acceptPrivacyPolicy: true,
+            acceptDataPolicy: true,
+            acceptTrackingPolicy: true,
+            acceptMarketingPolicy: true
+        });
+
+        const event = { preventDefault: vi.fn() };
+        await component.onSubmit(event);
+
+        expect(mockUserService.createOrUpdateUser).toHaveBeenCalled();
+        const saveCallArg = mockUserService.createOrUpdateUser.mock.calls[0][0];
+
+        // VERIFICATION: Check marketing policy was saved as true
+        expect(saveCallArg.acceptedMarketingPolicy).toBe(true);
     });
 });

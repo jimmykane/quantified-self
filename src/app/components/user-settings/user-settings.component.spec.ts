@@ -131,6 +131,16 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('acceptedTrackingPolicy').value).toBe(false);
     });
 
+    it('should initialize acceptedMarketingPolicy from user data', () => {
+        component.user.acceptedMarketingPolicy = true;
+        component.ngOnChanges();
+        expect(component.userSettingsFormGroup.get('acceptedMarketingPolicy').value).toBe(true);
+
+        component.user.acceptedMarketingPolicy = false;
+        component.ngOnChanges();
+        expect(component.userSettingsFormGroup.get('acceptedMarketingPolicy').value).toBe(false);
+    });
+
     it('should save acceptedTrackingPolicy when form is submitted', async () => {
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
@@ -150,6 +160,27 @@ describe('UserSettingsComponent', () => {
             expect.objectContaining({ uid: 'test-uid' }),
             expect.objectContaining({
                 acceptedTrackingPolicy: true
+            })
+        );
+    });
+
+    it('should save acceptedMarketingPolicy when form is submitted', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+
+        component.user.acceptedMarketingPolicy = false;
+        component.ngOnChanges();
+
+        // Change the value
+        component.userSettingsFormGroup.get('acceptedMarketingPolicy').setValue(true);
+
+        // Submit the form
+        await component.onSubmit(new Event('submit'));
+
+        expect(updateUserPropertiesSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ uid: 'test-uid' }),
+            expect.objectContaining({
+                acceptedMarketingPolicy: true
             })
         );
     });

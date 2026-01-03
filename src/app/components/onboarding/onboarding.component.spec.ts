@@ -1,0 +1,192 @@
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { OnboardingComponent } from './onboarding.component';
+import { AppUserService } from '../../services/app.user.service';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { Router } from '@angular/router';
+import { LoggerService } from '../../services/logger.service';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { of } from 'rxjs';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { Privacy } from '@sports-alliance/sports-lib';
+import { Firestore } from '@angular/fire/firestore';
+import { Functions } from '@angular/fire/functions';
+import { Auth } from '@angular/fire/auth';
+
+describe('OnboardingComponent', () => {
+    let component: OnboardingComponent;
+    let fixture: ComponentFixture<OnboardingComponent>;
+    let mockUserService: any;
+    let mockAuthService: any;
+    let mockRouter: any;
+    let mockLoggerService: any;
+    let mockAnalyticsService: any;
+
+    const mockUser = {
+        uid: 'test-user-123',
+        displayName: 'Test User',
+        email: 'test@example.com',
+        privacy: Privacy.Private,
+        acceptedPrivacyPolicy: false,
+        acceptedDataPolicy: false,
+        acceptedTrackingPolicy: false,
+        acceptedTos: false,
+        acceptedMarketingPolicy: false,
+        acceptedDiagnosticsPolicy: true,
+        settings: {}
+    };
+
+    beforeEach(async () => {
+        mockUserService = {
+            createOrUpdateUser: vi.fn().mockResolvedValue(undefined),
+            isPro: vi.fn().mockResolvedValue(false),
+            hasPaidAccess: vi.fn().mockResolvedValue(false),
+            updateUserProperties: vi.fn().mockResolvedValue(undefined)
+        };
+
+        mockAuthService = {
+            user$: of(mockUser)
+        };
+
+        mockRouter = {
+            navigate: vi.fn().mockResolvedValue(true)
+        };
+
+        mockLoggerService = {
+            log: vi.fn(),
+            error: vi.fn()
+        };
+
+        mockAnalyticsService = {
+            logEvent: vi.fn()
+        };
+
+        await TestBed.configureTestingModule({
+            imports: [
+                OnboardingComponent,
+                NoopAnimationsModule
+            ],
+            providers: [
+                { provide: AppUserService, useValue: mockUserService },
+                { provide: AppAuthService, useValue: mockAuthService },
+                { provide: Router, useValue: mockRouter },
+                { provide: LoggerService, useValue: mockLoggerService },
+                { provide: AppAnalyticsService, useValue: mockAnalyticsService },
+                { provide: Firestore, useValue: {} },
+                { provide: Functions, useValue: {} },
+                { provide: Auth, useValue: {} }
+            ]
+        }).compileComponents();
+
+        fixture = TestBed.createComponent(OnboardingComponent);
+        component = fixture.componentInstance;
+        component.user = { ...mockUser } as any;
+        fixture.detectChanges();
+    });
+
+    it('should create', () => {
+        expect(component).toBeTruthy();
+    });
+
+    it('should initialize termsFormGroup with all policy controls', () => {
+        expect(component.termsFormGroup).toBeTruthy();
+        expect(component.termsFormGroup.get('acceptPrivacyPolicy')).toBeTruthy();
+        expect(component.termsFormGroup.get('acceptDataPolicy')).toBeTruthy();
+        expect(component.termsFormGroup.get('acceptTrackingPolicy')).toBeTruthy();
+        expect(component.termsFormGroup.get('acceptTos')).toBeTruthy();
+        expect(component.termsFormGroup.get('acceptMarketingPolicy')).toBeTruthy();
+    });
+
+    it('should mark acceptMarketingPolicy as optional (no validators)', () => {
+        const marketingControl = component.termsFormGroup.get('acceptMarketingPolicy');
+        expect(marketingControl).toBeTruthy();
+
+        // Set to false, should still be valid (optional)
+        marketingControl!.setValue(false);
+        expect(marketingControl!.valid).toBe(true);
+
+        // Set to true, should also be valid
+        marketingControl!.setValue(true);
+        expect(marketingControl!.valid).toBe(true);
+    });
+
+    it('should mark acceptTrackingPolicy as optional (no validators)', () => {
+        const trackingControl = component.termsFormGroup.get('acceptTrackingPolicy');
+        expect(trackingControl).toBeTruthy();
+
+        // Set to false, should still be valid (optional)
+        trackingControl!.setValue(false);
+        expect(trackingControl!.valid).toBe(true);
+    });
+
+    it('should require acceptPrivacyPolicy to be true', () => {
+        const privacyControl = component.termsFormGroup.get('acceptPrivacyPolicy');
+        expect(privacyControl).toBeTruthy();
+
+        // Set to false, should be invalid (required)
+        privacyControl!.setValue(false);
+        expect(privacyControl!.valid).toBe(false);
+
+        // Set to true, should be valid
+        privacyControl!.setValue(true);
+        expect(privacyControl!.valid).toBe(true);
+    });
+
+    it('should use form value for optional policies on submit', async () => {
+        // Set all required policies to true
+        component.termsFormGroup.get('acceptPrivacyPolicy')!.setValue(true);
+        component.termsFormGroup.get('acceptDataPolicy')!.setValue(true);
+        component.termsFormGroup.get('acceptTos')!.setValue(true);
+
+        // Set optional policies explicitly
+        component.termsFormGroup.get('acceptTrackingPolicy')!.setValue(false);
+        component.termsFormGroup.get('acceptMarketingPolicy')!.setValue(true);
+
+        await component.onTermsSubmit();
+
+        // Required policies should be true
+        expect(component.user.acceptedPrivacyPolicy).toBe(true);
+        expect(component.user.acceptedDataPolicy).toBe(true);
+        expect((component.user as any).acceptedTos).toBe(true);
+
+        // Optional policies should reflect form values
+        expect(component.user.acceptedTrackingPolicy).toBe(false);
+        expect((component.user as any).acceptedMarketingPolicy).toBe(true);
+    });
+
+    it('should preserve false value for acceptMarketingPolicy when unchecked', async () => {
+        // Set all required policies to true
+        component.termsFormGroup.get('acceptPrivacyPolicy')!.setValue(true);
+        component.termsFormGroup.get('acceptDataPolicy')!.setValue(true);
+        component.termsFormGroup.get('acceptTos')!.setValue(true);
+        component.termsFormGroup.get('acceptTrackingPolicy')!.setValue(true);
+
+        // Leave marketing unchecked (false)
+        component.termsFormGroup.get('acceptMarketingPolicy')!.setValue(false);
+
+        await component.onTermsSubmit();
+
+        // Marketing should remain false
+        expect((component.user as any).acceptedMarketingPolicy).toBe(false);
+    });
+
+    it('should call createOrUpdateUser on valid form submission', async () => {
+        // Make form valid
+        component.termsFormGroup.get('acceptPrivacyPolicy')!.setValue(true);
+        component.termsFormGroup.get('acceptDataPolicy')!.setValue(true);
+        component.termsFormGroup.get('acceptTos')!.setValue(true);
+
+        await component.onTermsSubmit();
+
+        expect(mockUserService.createOrUpdateUser).toHaveBeenCalledWith(component.user);
+    });
+
+    it('should not submit if form is invalid', async () => {
+        // Leave required fields as false
+        component.termsFormGroup.get('acceptPrivacyPolicy')!.setValue(false);
+
+        await component.onTermsSubmit();
+
+        expect(mockUserService.createOrUpdateUser).not.toHaveBeenCalled();
+    });
+});

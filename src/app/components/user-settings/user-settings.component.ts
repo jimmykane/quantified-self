@@ -1,7 +1,7 @@
 import { Component, Input, OnChanges, inject } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { AppWindowService } from '../../services/app.window.service';
-import { User } from '@sports-alliance/sports-lib';
+import { AppUserInterface } from '../../models/app-user.interface';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 
@@ -43,7 +43,7 @@ import {
 })
 export class UserSettingsComponent implements OnChanges {
 
-  @Input() user: User;
+  @Input() user: AppUserInterface;
   public privacy = Privacy;
   public isSaving: boolean;
   public isDeleting: boolean;
@@ -130,6 +130,9 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
       acceptedTrackingPolicy: new UntypedFormControl(this.user.acceptedTrackingPolicy, [
+        // Validators.required,
+      ]),
+      acceptedMarketingPolicy: new UntypedFormControl(this.user.acceptedMarketingPolicy || false, [
         // Validators.required,
       ]),
 
@@ -346,6 +349,7 @@ export class UserSettingsComponent implements OnChanges {
         description: this.userSettingsFormGroup.get('description').value,
         brandText: this.userSettingsFormGroup.get('brandText').value || null,
         acceptedTrackingPolicy: this.userSettingsFormGroup.get('acceptedTrackingPolicy').value,
+        acceptedMarketingPolicy: this.userSettingsFormGroup.get('acceptedMarketingPolicy').value,
         settings: <UserSettingsInterface>{
           chartSettings: userChartSettings,
           appSettings: <UserAppSettingsInterface>{ theme: this.userSettingsFormGroup.get('appTheme').value },
