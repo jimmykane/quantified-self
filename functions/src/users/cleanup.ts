@@ -5,6 +5,29 @@ import { deauthorizeServiceForUser, getServiceConfig } from '../OAuth2';
 import { deauthorizeGarminHealthAPIForUser } from '../garmin/auth/wrapper';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
+/**
+ * Helper to delete a token document and its subcollections.
+ * Firestore doesn't automatically delete subcollections when you delete a parent document,
+ * so we must manually delete the 'tokens' subcollection first.
+ */
+async function deleteTokenDocumentWithSubcollections(collectionName: string, uid: string): Promise<void> {
+    const db = admin.firestore();
+    const userDocRef = db.collection(collectionName).doc(uid);
+
+    // First, delete all documents in the 'tokens' subcollection
+    const tokensSnapshot = await userDocRef.collection('tokens').get();
+    if (!tokensSnapshot.empty) {
+        const batch = db.batch();
+        tokensSnapshot.docs.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+        logger.info(`[Cleanup] Deleted ${tokensSnapshot.size} token(s) from ${collectionName}/${uid}/tokens`);
+    }
+
+    // Then delete the parent document
+    await userDocRef.delete();
+    logger.info(`[Cleanup] Deleted parent doc ${collectionName}/${uid}`);
+}
+
 export const cleanupUserAccounts = functions.region('europe-west2').auth.user().onDelete(async (user) => {
     const uid = user.uid;
     logger.info(`[Cleanup] User ${uid} deleted. Starting service deauthorization cleanup.`);
@@ -13,22 +36,30 @@ export const cleanupUserAccounts = functions.region('europe-west2').auth.user().
     try {
         logger.info(`[Cleanup] Deauthorizing Suunto for user ${uid}`);
         await deauthorizeServiceForUser(uid, ServiceNames.SuuntoApp);
-        const config = getServiceConfig(ServiceNames.SuuntoApp);
-        await admin.firestore().collection(config.tokenCollectionName).doc(uid).delete();
-        logger.info(`[Cleanup] Deleted Suunto parent doc for user ${uid}`);
     } catch (e) {
-        logger.error(`[Cleanup] Error disconnecting Suunto for ${uid}`, e);
+        logger.error(`[Cleanup] Error deauthorizing Suunto for ${uid}`, e);
+    }
+    // Always ensure local cleanup happens, even if deauthorization failed or threw
+    try {
+        const config = getServiceConfig(ServiceNames.SuuntoApp);
+        await deleteTokenDocumentWithSubcollections(config.tokenCollectionName, uid);
+    } catch (e) {
+        logger.error(`[Cleanup] Error deleting Suunto tokens for ${uid}`, e);
     }
 
     // Deauthorize COROS
     try {
         logger.info(`[Cleanup] Deauthorizing COROS for user ${uid}`);
         await deauthorizeServiceForUser(uid, ServiceNames.COROSAPI);
-        const config = getServiceConfig(ServiceNames.COROSAPI);
-        await admin.firestore().collection(config.tokenCollectionName).doc(uid).delete();
-        logger.info(`[Cleanup] Deleted COROS parent doc for user ${uid}`);
     } catch (e) {
-        logger.error(`[Cleanup] Error disconnecting COROS for ${uid}`, e);
+        logger.error(`[Cleanup] Error deauthorizing COROS for ${uid}`, e);
+    }
+    // Always ensure local cleanup happens, even if deauthorization failed or threw
+    try {
+        const config = getServiceConfig(ServiceNames.COROSAPI);
+        await deleteTokenDocumentWithSubcollections(config.tokenCollectionName, uid);
+    } catch (e) {
+        logger.error(`[Cleanup] Error deleting COROS tokens for ${uid}`, e);
     }
 
     // Deauthorize Garmin
