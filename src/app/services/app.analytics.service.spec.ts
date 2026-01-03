@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { AppAnalyticsService } from './app.analytics.service';
 import { Analytics, logEvent } from '@angular/fire/analytics';
 import { AppAuthService } from '../authentication/app.auth.service';
-import { of, BehaviorSubject } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 

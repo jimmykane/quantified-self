@@ -1,5 +1,5 @@
-import { inject, Injectable, EnvironmentInjector, runInInjectionContext } from '@angular/core';
-import { collection, Firestore, getCountFromServer, query, where } from '@angular/fire/firestore';
+import { inject, Injectable, EnvironmentInjector } from '@angular/core';
+import { Firestore } from '@angular/fire/firestore';
 import { Functions, httpsCallableFromURL } from '@angular/fire/functions';
 import { from, Observable, timer } from 'rxjs';
 import { map, switchMap } from 'rxjs/operators';

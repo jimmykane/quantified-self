@@ -270,7 +270,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
 
         this.adminService.getUsers(params).subscribe({
             next: (response) => {
-                let users = response.users;
+                const users = response.users;
 
                 this.users = users;
                 this.totalCount = response.totalCount;

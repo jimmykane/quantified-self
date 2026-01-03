@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppUserService } from '../../../services/app.user.service';
@@ -27,7 +27,7 @@ import { EventJSONSanitizer } from '../../../utils/event-json-sanitizer';
   styleUrls: ['../upload-abstract.css', './upload-activities.component.css'],
   standalone: false
 })
-export class UploadActivitiesComponent extends UploadAbstractDirective {
+export class UploadActivitiesComponent extends UploadAbstractDirective implements OnInit {
   private analyticsService = inject(AppAnalyticsService);
   public uploadCount: number | null = null;
   public uploadLimit: number | null = null;

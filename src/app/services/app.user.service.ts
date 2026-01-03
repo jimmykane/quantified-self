@@ -1,5 +1,5 @@
 import { inject, Injectable, OnDestroy, EnvironmentInjector, runInInjectionContext } from '@angular/core';
-import { Observable, from, firstValueFrom, forkJoin, of, combineLatest, distinctUntilChanged } from 'rxjs';
+import { Observable, from, firstValueFrom, of, combineLatest, distinctUntilChanged } from 'rxjs';
 import { StripeRole } from '../models/stripe-role.model';
 import { User } from '@sports-alliance/sports-lib';
 import { Privacy } from '@sports-alliance/sports-lib';
@@ -30,7 +30,7 @@ import {
   UserUnitSettingsInterface,
   VerticalSpeedUnits
 } from '@sports-alliance/sports-lib';
-import { Auth, deleteUser, authState } from '@angular/fire/auth';
+import { Auth, authState } from '@angular/fire/auth';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { environment } from '../../environments/environment';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
@@ -64,7 +64,6 @@ import { DataAltitude } from '@sports-alliance/sports-lib';
 import { DataHeartRate } from '@sports-alliance/sports-lib';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { UserSummariesSettingsInterface } from '@sports-alliance/sports-lib';
-import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
@@ -78,14 +77,11 @@ import { DataSpeedAvg } from '@sports-alliance/sports-lib';
 import { DataPowerAvg } from '@sports-alliance/sports-lib';
 import { DataVO2Max } from '@sports-alliance/sports-lib';
 import { DataDeviceNames } from '@sports-alliance/sports-lib';
-import { DataPowerMax } from '@sports-alliance/sports-lib';
-import { DataPeakTrainingEffect } from '@sports-alliance/sports-lib';
-import { DataEPOC } from '@sports-alliance/sports-lib';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
-import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc, getDoc, DocumentData } from '@angular/fire/firestore';
-import { getFunctions, httpsCallable, httpsCallableFromURL, Functions } from '@angular/fire/functions';
+import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc, getDoc } from '@angular/fire/firestore';
+import { httpsCallableFromURL, Functions } from '@angular/fire/functions';
 
 
 /**
@@ -793,7 +789,7 @@ export class AppUserService implements OnDestroy {
     return runInInjectionContext(this.injector, () => {
       const collectionRef = collection(this.firestore, collectionName, user.uid, 'tokens');
       return collectionData(collectionRef).pipe(
-        catchError(error => {
+        catchError(() => {
           return [];
         })
       );
@@ -805,7 +801,7 @@ export class AppUserService implements OnDestroy {
       const docRef = doc(this.firestore, 'garminHealthAPITokens', user.uid);
       return docData(docRef).pipe(
         map(d => [d]),
-        catchError(error => {
+        catchError(() => {
           return [];
         })
       );

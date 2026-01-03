@@ -40,7 +40,7 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
     templateUrl: './onboarding.component.html',
     styleUrls: ['./onboarding.component.scss']
 })
-export class OnboardingComponent implements OnInit, AfterViewInit {
+export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
     @Input() user!: User;
     @ViewChild('stepper') stepper!: MatStepper;
 

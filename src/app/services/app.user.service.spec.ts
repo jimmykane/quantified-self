@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { AppUserService } from './app.user.service';
 import { Auth, authState } from '@angular/fire/auth';
-import { Firestore, doc, docData, setDoc, updateDoc } from '@angular/fire/firestore';
+import { Firestore, docData, setDoc, updateDoc } from '@angular/fire/firestore';
 import { Functions } from '@angular/fire/functions';
 import { HttpClient } from '@angular/common/http';
 import { AppEventService } from './app.event.service';

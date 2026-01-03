@@ -8,10 +8,9 @@ import { DomSanitizer } from '@angular/platform-browser';
 import { LoggerService } from './logger.service';
 import { of } from 'rxjs';
 import { AppEventInterface } from '../../../functions/src/shared/app-event.interface';
-import { EventUtilities, EventInterface, ActivityInterface } from '@sports-alliance/sports-lib';
+import { EventInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as StorageModule from '@angular/fire/storage';
 import { AppEventUtilities } from '../utils/app.event.utilities';
 
 // Mocks
@@ -62,8 +61,8 @@ describe('AppEventService', () => {
         mockEvent = {
             getID: () => 'event_1',
             getActivities: () => [],
-            setID: (id) => { },
-            addActivities: (activities) => { },
+            setID: (_) => { },
+            addActivities: (_) => { },
             clearActivities: () => { },
             toJSON: () => ({}),
             startDate: new Date(),

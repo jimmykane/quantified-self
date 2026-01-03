@@ -1,11 +1,13 @@
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { EventJSONSanitizer } from './event-json-sanitizer';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { DynamicDataLoader, UnitSystem } from '@sports-alliance/sports-lib';
 
 // Mock Data class
 class MockData {
     static type = 'KnownType';
+    static unit = 'test_unit';
+    static unitSystem = UnitSystem.Metric;
 }
 
 describe('EventJSONSanitizer', () => {
@@ -24,7 +26,7 @@ describe('EventJSONSanitizer', () => {
     const setupMock = () => {
         DynamicDataLoader.getDataClassFromDataType = (type: string) => {
             if (type === mockKnownType) {
-                return MockData;
+                return MockData as any;
             }
             return null;
         };

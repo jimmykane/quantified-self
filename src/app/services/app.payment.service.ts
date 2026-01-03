@@ -2,8 +2,8 @@ import { Injectable, inject, Injector, runInInjectionContext } from '@angular/co
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { environment } from '../../environments/environment';
-import { Firestore, collection, collectionData, addDoc, doc, docData, query, where, orderBy } from '@angular/fire/firestore';
-import { Functions, httpsCallable, httpsCallableFromURL } from '@angular/fire/functions';
+import { Firestore, collection, collectionData, addDoc, doc, docData, query, where } from '@angular/fire/firestore';
+import { Functions, httpsCallableFromURL } from '@angular/fire/functions';
 
 // ... (other imports)
 

@@ -204,7 +204,7 @@ describe('AppRemoteConfigService', () => {
             // If the test environment is 'dev', it should be true. 
             // If it's something else, it might be false.
             // Let's check what the environment actually is in this test.
-            const env = (service as any).environment; // Accessing private/internal if possible or just assume
+            // const env = (service as any).environment;
 
             // For now, let's just assert that it's NOT throwing and it's doing something sensible
             expect(mode).toBeDefined();

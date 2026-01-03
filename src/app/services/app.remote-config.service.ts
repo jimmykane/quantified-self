@@ -1,6 +1,6 @@
-import { Injectable, inject } from '@angular/core';
-import { Observable, BehaviorSubject, from, of, combineLatest } from 'rxjs';
-import { map, filter, shareReplay, switchMap, take, catchError } from 'rxjs/operators';
+import { Injectable } from '@angular/core';
+import { Observable, BehaviorSubject, combineLatest } from 'rxjs';
+import { map, filter, shareReplay } from 'rxjs/operators';
 import { AppWindowService } from './app.window.service';
 import { AppUserService } from './app.user.service';
 import { environment } from '../../environments/environment';

@@ -8,7 +8,7 @@ import { AppUserService } from '../../services/app.user.service';
     styleUrls: ['./grace-period-banner.component.scss'],
     standalone: false
 })
-export class GracePeriodBannerComponent implements OnInit {
+export class GracePeriodBannerComponent implements OnInit, AfterViewInit, OnDestroy {
     @Output() heightChanged = new EventEmitter<number>();
 
     private _bannerElement: ElementRef<HTMLDivElement> | undefined;

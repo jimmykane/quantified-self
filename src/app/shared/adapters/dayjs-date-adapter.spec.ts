@@ -39,7 +39,7 @@ describe('DayjsDateAdapter', () => {
 
     it('should handle locale changes', () => {
         adapter.setLocale('fr');
-        const date = dayjs('2023-01-01');
+        // const date = dayjs('2023-01-01'); // Unused
         const monthName = adapter.getMonthNames('long')[0];
         expect(monthName.toLowerCase()).toBe('janvier');
     });
@@ -52,7 +52,7 @@ describe('DayjsDateAdapter', () => {
 
     it('should not mutate original date when adding days', () => {
         const date = dayjs('2023-01-01');
-        const newDate = adapter.addCalendarDays(date, 5);
+        adapter.addCalendarDays(date, 5);
         expect(date.date()).toBe(1);
     });
 });

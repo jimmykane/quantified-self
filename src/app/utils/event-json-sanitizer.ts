@@ -53,7 +53,7 @@ export class EventJSONSanitizer {
             let dataClass;
             try {
                 dataClass = DynamicDataLoader.getDataClassFromDataType(type);
-            } catch (e) {
+            } catch {
                 dataClass = null;
             }
 
@@ -75,7 +75,7 @@ export class EventJSONSanitizer {
                 let dataClass;
                 try {
                     dataClass = DynamicDataLoader.getDataClassFromDataType(type);
-                } catch (e) {
+                } catch {
                     dataClass = null;
                 }
 
@@ -92,7 +92,7 @@ export class EventJSONSanitizer {
                 let dataClass;
                 try {
                     dataClass = DynamicDataLoader.getDataClassFromDataType(type);
-                } catch (e) {
+                } catch {
                     dataClass = null;
                 }
 

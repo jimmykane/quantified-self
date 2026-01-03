@@ -115,7 +115,7 @@ export class ActivityFormComponent implements OnInit {
   }
 
   onStartDateAndStartTimeChange(event) {
-    let starDateVal = this.activityFormGroup.get('startDate').value;
+    const starDateVal = this.activityFormGroup.get('startDate').value;
     if (!starDateVal) {
       return;
     }

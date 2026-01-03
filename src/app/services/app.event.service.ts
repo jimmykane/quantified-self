@@ -1,9 +1,9 @@
 import { inject, Injectable, Injector, OnDestroy, runInInjectionContext } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
-import { combineLatest, from, Observable, Observer, of, zip } from 'rxjs';
-import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, doc, docData, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, DocumentData, CollectionReference, getCountFromServer } from '@angular/fire/firestore';
-import { bufferCount, catchError, concatMap, map, switchMap, take } from 'rxjs/operators';
+import { combineLatest, from, Observable, of, zip } from 'rxjs';
+import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, doc, docData, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, CollectionReference, getCountFromServer } from '@angular/fire/firestore';
+import { catchError, map, switchMap, take } from 'rxjs/operators';
 import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
@@ -61,7 +61,7 @@ export class AppEventService implements OnDestroy {
       runInInjectionContext(this.injector, () => docData(eventDoc)).pipe(
         map(eventSnapshot => {
           if (!eventSnapshot) return null;
-          const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
+          const { sanitizedJson } = EventJSONSanitizer.sanitize(eventSnapshot);
           const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventID) as AppEventInterface;
 
           // Hydrate with original file(s) info if present

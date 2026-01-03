@@ -21,7 +21,7 @@ export class AppUpdateService {
     everySixHoursOnceAppIsStable$.subscribe(() => updates.checkForUpdate());
     updates.versionUpdates
       .pipe(filter((evt): evt is VersionReadyEvent => evt.type === 'VERSION_READY'))
-      .subscribe(evt => {
+      .subscribe(() => {
         const snack = this.snackbar.open('There is a new version available', 'Reload');
         snack
           .onAction()
