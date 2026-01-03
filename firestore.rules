@@ -5,21 +5,6 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)) && get(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)).data.accepted == true;
     }
     
-    function isBasic() {
-      return request.auth != null && request.auth.token.stripeRole == 'basic';
-    }
-
-    function isPro() {
-      return request.auth != null && request.auth.token.stripeRole == 'pro';
-    }
-
-    function isSubscribed() {
-      return request.auth != null && request.auth.token.stripeRole in ['basic', 'pro'];
-    }
-
-    function isFree() {
-      return request.auth != null && !('stripeRole' in request.auth.token);
-    }
 
     function isAdmin() {
       return request.auth != null && request.auth.token.admin == true;
@@ -93,9 +78,6 @@ service cloud.firestore {
           // TEMPORARILY DISABLED FOR TESTING - Re-enable when ready to enforce paywall
           // allow read, write: if request.auth.uid == userID && isSubscribed();
           allow read, write: if request.auth.uid == userID;
-          function eventData() {
-            return get(/databases/$(database)/documents/users/$(userID)/events/$(eventID)).data
-          }
 
 
           // Restoring metaData inside events
@@ -113,9 +95,6 @@ service cloud.firestore {
             allow read: if isCoach(userID) == true; // @todo restrict to coach/privacy?
             allow read, write: if request.auth.uid == userID;
           }
-
-
-
 
         match /meta/{document=**} {
           allow read: if request.auth.uid == userID;
