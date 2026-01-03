@@ -46,8 +46,12 @@ async function safeDeauthorizeAndCleanup(uid: string, config: ServiceCleanupConf
         logger.info(`[Cleanup] Deauthorizing ${config.name} for user ${uid}`);
         await config.deauthFn(uid);
     } catch (e: any) {
-        // Log error but continue to forced cleanup
-        logger.error(`[Cleanup] Error deauthorizing ${config.name} for ${uid}`, e);
+        if (e.name === 'TokenNotFoundError') {
+            logger.info(`[Cleanup] No ${config.name} token found for ${uid}, skipping deauthorization.`);
+        } else {
+            // Log error but continue to forced cleanup
+            logger.error(`[Cleanup] Error deauthorizing ${config.name} for ${uid}`, e);
+        }
     }
 
     // 2. Local Cleanup (Mandatory)
