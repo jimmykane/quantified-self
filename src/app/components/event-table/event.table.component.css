@@ -47,11 +47,11 @@
 .mat-mdc-cell {
   white-space: nowrap !important;
   padding: 0 16px !important;
-  border-bottom-color: rgba(255, 255, 255, 0.05) !important;
+  border-bottom-color: var(--mat-app-outline-variant) !important;
 }
 
 .mat-mdc-header-cell {
-  color: rgba(255, 255, 255, 0.6) !important;
+  color: var(--mat-sys-on-surface-variant) !important;
   font-weight: 500 !important;
   text-transform: uppercase;
   font-size: 11px;
@@ -63,7 +63,7 @@
 }
 
 .mat-mdc-row:hover {
-  background-color: rgba(255, 255, 255, 0.03) !important;
+  background-color: var(--mat-app-surface-container-low) !important;
 }
 
 /* Specific column adjustments */
@@ -112,8 +112,8 @@ mat-icon {
 .table-container {
   border-radius: 12px;
   backdrop-filter: blur(10px);
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--mat-app-surface-container-low);
+  border: 1px solid var(--mat-app-outline-variant);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   overflow: hidden;
   margin-bottom: 3rem;
@@ -129,7 +129,7 @@ mat-icon {
 /* Paginator styling to match glass theme */
 mat-paginator {
   background: transparent !important;
-  color: rgba(255, 255, 255, 0.7) !important;
+  color: var(--mat-sys-on-surface-variant) !important;
 }
 
 
