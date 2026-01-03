@@ -8,6 +8,10 @@ import * as Sentry from '@sentry/browser';
 })
 export class LoggerService {
 
+    static readonly IGNORED_ERRORS = [
+        'Firestore shutting down',
+    ];
+
     constructor() { }
 
     log(message: any, ...optionalParams: any[]) {
@@ -27,6 +31,10 @@ export class LoggerService {
     }
 
     error(message: any, ...optionalParams: any[]) {
+        const errorString = [message, ...optionalParams].map(arg => String(arg)).join(' ');
+        if (LoggerService.IGNORED_ERRORS.some(ignored => errorString.includes(ignored))) {
+            return;
+        }
         console.error(message, ...optionalParams);
         const error = [message, ...optionalParams].find(arg => arg instanceof Error);
         if (error) {
