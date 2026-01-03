@@ -40,11 +40,6 @@
 
     <!-- Right: Actions -->
     <div class="summary-actions">
-      @if (hasDevices) {
-      <button mat-icon-button (click)="openDevices()" matTooltip="View devices">
-        <mat-icon>devices</mat-icon>
-      </button>
-      }
       @if (isOwner) {
       <button mat-icon-button (click)="openEditDetails()" matTooltip="Edit details">
         <mat-icon>edit</mat-icon>
@@ -67,6 +62,17 @@
     <div class="stats-container">
       <app-event-card-stats-grid [event]="event" [selectedActivities]="selectedActivities"
         [unitSettings]="unitSettings">
+        @if (hasDevices) {
+        <div stats-suffix class="stat-item devices-item" (click)="openDevices()" matTooltip="View sensors & devices">
+          <div class="stat-avatar">
+            <mat-icon [style.width.px]="20" [style.height.px]="20" [style.font-size.px]="20">sensors</mat-icon>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">Sensors</div>
+            <div class="stat-value-grid">View</div>
+          </div>
+        </div>
+        }
         <div stats-suffix class="stat-item show-more-item" (click)="openDetailedStats()"
           matTooltip="Show more statistics">
           <div class="stat-avatar">

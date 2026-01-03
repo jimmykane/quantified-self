@@ -14,7 +14,6 @@
 .summary-primary-info {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 24px 40px;
   width: 100%;
   box-sizing: border-box;
@@ -27,7 +26,7 @@
   align-items: center;
   gap: 20px;
   min-width: 0;
-  flex: 1;
+  flex: 0 1 auto;
 }
 
 .activity-icon-container {
@@ -121,6 +120,7 @@
   background: var(--mat-app-primary-container);
   color: var(--mat-app-on-primary-container);
   text-transform: uppercase;
+  padding-left: 0;
 }
 
 .feeling-chip {
@@ -141,7 +141,11 @@
   display: flex;
   align-items: center;
   gap: 32px;
-  padding: 0 20px;
+  padding: 16px 20px;
+  background: var(--mat-app-surface-container-lowest);
+  border-radius: 16px;
+  box-shadow: inset 0 0 0 1px var(--mat-app-outline-variant);
+  box-sizing: border-box;
 }
 
 .metric-item {
@@ -171,6 +175,7 @@
   align-items: center;
   gap: 4px;
   flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .summary-stats-area {
@@ -199,19 +204,18 @@
 
 @media (max-width: 768px) {
   .summary-primary-info {
-    display: grid;
-    grid-template-areas:
-      "identity actions"
-      "metrics metrics";
-    grid-template-columns: 1fr auto;
+    display: flex;
+    flex-direction: column;
+    position: relative;
     padding: 16px;
     gap: 16px;
-    align-items: start;
+    align-items: stretch;
   }
 
   .identity-section {
-    grid-area: identity;
     gap: 12px;
+    padding-right: 48px;
+    /* Room for absolute actions */
   }
 
   .activity-icon-container {
@@ -246,7 +250,6 @@
   }
 
   .hero-metrics {
-    grid-area: metrics;
     width: 100%;
     justify-content: space-evenly;
     background: var(--mat-app-surface-container-lowest);
@@ -258,10 +261,12 @@
   }
 
   .summary-actions {
-    grid-area: actions;
-    flex-direction: column;
-    gap: 0;
-    margin-top: -4px;
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    flex-direction: row;
+    gap: 4px;
+    margin: 0;
   }
 
   .summary-actions ::ng-deep .mat-mdc-icon-button {
@@ -287,4 +292,41 @@
   .metric-item .unit {
     font-size: 0.65rem;
   }
+}
+/* Stats Grid Action Buttons */
+.devices-item,
+.show-more-item {
+  cursor: pointer;
+  background: var(--mat-app-surface-container-high);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  min-height: 56px; /* Ensure uniform height with other stats */
+  justify-content: center;
+  padding: 8px; /* Add some padding */
+  box-sizing: border-box;
+}
+
+.devices-item:hover,
+.show-more-item:hover {
+  background: var(--mat-app-surface-container-highest);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.devices-item:active,
+.show-more-item:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.devices-item .stat-value-grid,
+.show-more-item .stat-value-grid {
+  color: var(--mat-app-primary);
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.devices-item .stat-avatar mat-icon,
+.show-more-item .stat-avatar mat-icon {
+  color: var(--mat-app-primary);
 }
