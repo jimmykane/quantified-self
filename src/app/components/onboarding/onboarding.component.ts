@@ -131,10 +131,12 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
             // Re-check pro status whenever user data changes
             this.isPro = await this.userService.isPro();
 
-            const termsAccepted = this.policies.every(policy => {
-                const userProperty = this.mapFormControlNameToUserProperty(policy.formControlName || '');
-                return (this.user as any)[userProperty] === true;
-            });
+            const termsAccepted = this.policies
+                .filter(p => !p.isOptional)
+                .every(policy => {
+                    const userProperty = this.mapFormControlNameToUserProperty(policy.formControlName || '');
+                    return (this.user as any)[userProperty] === true;
+                });
 
             const isSubscribed = await this.userService.hasPaidAccess();
             const isFreeCompleted = (this.user as any).onboardingCompleted === true;

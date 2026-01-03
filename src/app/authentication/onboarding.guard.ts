@@ -28,8 +28,8 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
                 return true; // Let authGuard handle unauthenticated users
             }
 
-            // Dynamically check all policies that require acceptance
-            const requiredPolicies = POLICY_CONTENT.filter(p => !!p.checkboxLabel);
+            // Dynamically check all policies that require acceptance (exclude optional ones)
+            const requiredPolicies = POLICY_CONTENT.filter(p => !!p.checkboxLabel && !p.isOptional);
             const termsAccepted = requiredPolicies.every(policy => {
                 const userProperty = mapFormControlNameToUserProperty(policy.formControlName);
                 return (user as any)[userProperty] === true;
