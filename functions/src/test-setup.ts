@@ -146,3 +146,12 @@ vi.mock('@sports-alliance/sports-lib', () => ({
         authorize: () => ({}),
     }),
 }));
+
+// Mock firebase-functions/logger globally
+vi.mock('firebase-functions/logger', () => ({
+    info: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    debug: vi.fn(),
+    write: vi.fn(),
+}));
