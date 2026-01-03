@@ -132,12 +132,12 @@ describe('cleanupUserAccounts', () => {
         expect(deauthorizeGarminMock).toHaveBeenCalledWith('testUser123');
     });
 
-    it('should continue and still delete tokens even if deauthorization fails', async () => {
+    it('should force delete Suunto tokens even if deauthorization fails', async () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
 
         // Make Suunto fail
-        deauthorizeServiceMock.mockRejectedValueOnce(new Error('Suunto failed'));
+        deauthorizeServiceMock.mockRejectedValueOnce(new Error('Suunto 500 API Error'));
 
         await wrapped(user, { eventId: 'eventId' } as any);
 
@@ -292,5 +292,31 @@ describe('cleanupUserAccounts', () => {
         expect(firestoreMock().collection).toHaveBeenCalledWith('garminHealthAPITokens');
         expect(firestoreMock().collection('garminHealthAPITokens').doc).toHaveBeenCalledWith('testUser123');
         expect(firestoreMock().collection('garminHealthAPITokens').doc('testUser123').delete).toHaveBeenCalled();
+    });
+
+    it('should force delete COROS tokens even if deauthorization fails', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        // Make COROS fail. Since deauthorizeServiceForUser is used for both Suunto and COROS,
+        // we need to verify the call args to distinguish.
+        // We can mock it to throw ONLY when called with COROSAPI.
+        deauthorizeServiceMock.mockImplementation((userId, serviceName) => {
+            if (serviceName === ServiceNames.COROSAPI) {
+                return Promise.reject(new Error('COROS 500 API Error'));
+            }
+            return Promise.resolve();
+        });
+
+        await wrapped(user, { eventId: 'eventId' } as any);
+
+        // Verify COROS deauth attempted
+        expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.COROSAPI);
+
+        // Verify local cleanup encountered error but TRIED to delete (COROS collection from config mock)
+        // Note: Config mock returns 'mockCollection' for all calls currently
+        expect(firestoreMock().collection).toHaveBeenCalledWith('mockCollection');
+        expect(firestoreMock().collection('mockCollection').doc).toHaveBeenCalledWith('testUser123');
+        expect(firestoreMock().collection('mockCollection').doc('testUser123').delete).toHaveBeenCalled();
     });
 });
