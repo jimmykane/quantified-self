@@ -130,3 +130,28 @@ mat-card-content p {
 .policy-card.gdpr mat-icon {
     color: #9C27B0;
 }
+
+/* Content items within cards */
+.policy-content-item {
+    margin-bottom: 0.8em;
+    line-height: 1.5;
+    color: inherit; // Inherit from mat-card for theme compatibility
+
+    a {
+        color: var(--mat-sys-primary, #3f51b5);
+        text-decoration: underline;
+    }
+
+    ul {
+        padding-left: 1.2rem;
+        margin: 0.5rem 0;
+    }
+
+    li {
+        margin-bottom: 0.5rem;
+    }
+}
+
+:host-context(.dark-theme) .policy-content-item a {
+    color: var(--mat-sys-tertiary, #bb86fc);
+}
