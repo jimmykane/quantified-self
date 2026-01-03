@@ -164,7 +164,15 @@ export class AppRemoteConfigService {
     }
 
     private isBypassEnabled(): boolean {
-        return this.windowService.windowRef.location.search.includes('bypass_maintenance=true');
+        const STORAGE_KEY = 'bypass_maintenance';
+        const hasQueryParam = this.windowService.windowRef.location.search.includes('bypass_maintenance=true');
+
+        if (hasQueryParam) {
+            localStorage.setItem(STORAGE_KEY, 'true');
+            return true;
+        }
+
+        return localStorage.getItem(STORAGE_KEY) === 'true';
     }
 
     getMaintenanceMode(): Observable<boolean> {
