@@ -1215,35 +1215,46 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     const labelContainer = container.createChild(this.core.Container);
 
     labelContainer.id = this.getSeriesRangeLabelContainerID(series);
-    labelContainer.background.fillOpacity = 0.8;
-    labelContainer.background.fill = <am4core.Color>series.stroke;
-    labelContainer.padding(10, 15, 10, 15);
+    labelContainer.background.fillOpacity = 0.6;
+    labelContainer.background.fill = this.core.color('#000000');
+    labelContainer.padding(12, 16, 12, 16);
     labelContainer.verticalCenter = 'bottom';
-    labelContainer.background.stroke = this.core.color('#FFF');
-    labelContainer.background.strokeOpacity = 0.3;
-    labelContainer.background.strokeWidth = 1;
+    labelContainer.background.stroke = <am4core.Color>series.stroke;
+    labelContainer.background.strokeOpacity = 1;
+    labelContainer.background.strokeWidth = 2;
+
+    // Add Drop Shadow
+    const shadow = new this.core.DropShadowFilter();
+    shadow.dy = 4;
+    shadow.dx = 0;
+    shadow.opacity = 0.5;
+    shadow.blur = 8;
+    labelContainer.filters.push(shadow);
+
     const bg = <am4core.RoundedRectangle>labelContainer.background;
     bg.cornerRadiusTopLeft = 10;
     bg.cornerRadiusTopRight = 10;
     bg.cornerRadiusBottomRight = 10;
     bg.cornerRadiusBottomLeft = 10;
-    labelContainer.zIndex = 2;
+    labelContainer.zIndex = 100;
 
     const label = labelContainer.createChild(this.core.Label);
     label.align = 'center';
 
     const headerTextColor = this.core.color('#FFFFFF');
+    const labelColor = this.core.color('#FFFFFF');
+    // const valueColor = this.core.color('#FFFFFF'); // Bright white for values
 
     label.text = `
-      [bold font-size: 1.1em ${headerTextColor}]${labelData.name}[/]\n
+      [bold font-size: 1.2em ${headerTextColor}]${labelData.name}[/]\n
       ${this.event.getActivities().length !== 1 ? `[bold font-size: 1.0em ${headerTextColor}]${series.dummyData.activity.creator.name}[/]\n` : ``}
-      [bold font-size: 1.0em ${headerTextColor}]Avg:[/] [bold font-size: 1.0em ${headerTextColor}]${labelData.average.value}[/][${headerTextColor}]${labelData.average.unit}[/]\n
-      [bold font-size: 1.0em ${headerTextColor}]Max:[/] [bold font-size: 1.0em ${headerTextColor}]${labelData.max.value}[/][${headerTextColor}]${labelData.max.unit}[/]\n
-      [bold font-size: 1.0em ${headerTextColor}]Min:[/] [bold font-size: 1.0em ${headerTextColor}]${labelData.min.value}[/][${headerTextColor}]${labelData.min.unit}[/]\n
-      [bold font-size: 1.0em ${headerTextColor}]Diff:[/] [bold font-size: 1.0em ${headerTextColor}]${labelData.minToMaxDiff === undefined ? '--' : labelData.minToMaxDiff.value}[/][${headerTextColor}]${labelData.minToMaxDiff === undefined ? '' : labelData.minToMaxDiff.unit}[/]\n
-      [bold font-size: 1.0em ${headerTextColor}]Gain:[/] [bold font-size: 1.0em ${headerTextColor}]${labelData.gain === undefined ? '--' : labelData.gain.value}[/][${headerTextColor}]${labelData.gain === undefined ? '' : labelData.gain.unit}[/]\n
-      [bold font-size: 1.0em ${headerTextColor}]Loss:[/] [bold font-size: 1.0em ${headerTextColor}]${labelData.loss === undefined ? '--' : labelData.loss.value}[/][${headerTextColor}]${labelData.loss === undefined ? '' : labelData.loss.unit}[/]\n
-      [bold font-size: 1.0em ${headerTextColor}]Gradient:[/] [bold font-size: 1.0em ${headerTextColor}]${labelData.slopePercentage === undefined ? '--' : labelData.slopePercentage.value}[/][${headerTextColor}]${labelData.slopePercentage === undefined ? '' : '%'}[/]\n
+      [font-size: 1.0em opacity: 0.7 ${labelColor}]Avg:[/] [bold font-size: 1.1em ${headerTextColor}]${labelData.average.value}[/][opacity: 0.7 ${labelColor}]${labelData.average.unit}[/]\n
+      [font-size: 1.0em opacity: 0.7 ${labelColor}]Max:[/] [bold font-size: 1.1em ${headerTextColor}]${labelData.max.value}[/][opacity: 0.7 ${labelColor}]${labelData.max.unit}[/]\n
+      [font-size: 1.0em opacity: 0.7 ${labelColor}]Min:[/] [bold font-size: 1.1em ${headerTextColor}]${labelData.min.value}[/][opacity: 0.7 ${labelColor}]${labelData.min.unit}[/]\n
+      [font-size: 1.0em opacity: 0.7 ${labelColor}]Diff:[/] [bold font-size: 1.1em ${headerTextColor}]${labelData.minToMaxDiff === undefined ? '--' : labelData.minToMaxDiff.value}[/][opacity: 0.7 ${labelColor}]${labelData.minToMaxDiff === undefined ? '' : labelData.minToMaxDiff.unit}[/]\n
+      [font-size: 1.0em opacity: 0.7 ${labelColor}]Gain:[/] [bold font-size: 1.1em ${headerTextColor}]${labelData.gain === undefined ? '--' : labelData.gain.value}[/][opacity: 0.7 ${labelColor}]${labelData.gain === undefined ? '' : labelData.gain.unit}[/]\n
+      [font-size: 1.0em opacity: 0.7 ${labelColor}]Loss:[/] [bold font-size: 1.1em ${headerTextColor}]${labelData.loss === undefined ? '--' : labelData.loss.value}[/][opacity: 0.7 ${labelColor}]${labelData.loss === undefined ? '' : labelData.loss.unit}[/]\n
+      [font-size: 1.0em opacity: 0.7 ${labelColor}]Gradient:[/] [bold font-size: 1.1em ${headerTextColor}]${labelData.slopePercentage === undefined ? '--' : labelData.slopePercentage.value}[/][opacity: 0.7 ${labelColor}]${labelData.slopePercentage === undefined ? '' : '%'}[/]\n
       `;
 
     labelContainer.disabled = hidden;
