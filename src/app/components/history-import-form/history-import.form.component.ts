@@ -7,13 +7,14 @@ import {
   Validators,
 } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppEventService } from '../../services/app.event.service';
+import { AppUserService } from '../../services/app.user.service';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
 import { User } from '@sports-alliance/sports-lib';
 
-import { AppUserService } from '../../services/app.user.service';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
-import { Analytics, logEvent } from '@angular/fire/analytics';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../../constants/coros';
 import dayjs from 'dayjs';
@@ -40,14 +41,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public serviceNames = ServiceNames
   public isPro = false;
   public corosHistoryLimitMonths = COROS_HISTORY_IMPORT_LIMIT_MONTHS;
-  private analytics = inject(Analytics);
-
-  constructor(
-    private userService: AppUserService,
-    private snackBar: MatSnackBar,
-    private logger: LoggerService,
-  ) {
-  }
+  private eventService = inject(AppEventService);
+  private userService = inject(AppUserService);
+  private analyticsService = inject(AppAnalyticsService);
+  private logger = inject(LoggerService);
+  private snackBar = inject(MatSnackBar);
 
   async ngOnInit() {
     this.formGroup = new UntypedFormGroup({
@@ -130,6 +128,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.isLoading = true;
 
     try {
+      this.analyticsService.logEvent('imported_history', { method: this.serviceName });
       await this.userService.importServiceHistoryForCurrentUser(
         this.serviceName,
         dayjs(this.formGroup.get('startDate')?.value).toDate(),
@@ -138,7 +137,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       this.snackBar.open('History import has been queued', null, {
         duration: 2000,
       });
-      logEvent(this.analytics, 'imported_history', { method: this.serviceName });
     } catch (e) {
       // debugger;
       this.logger.error(e);

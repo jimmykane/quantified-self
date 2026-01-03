@@ -10,7 +10,7 @@ import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
 import { EventImporterGPX } from '@sports-alliance/sports-lib';
 import { EventImporterSuuntoSML } from '@sports-alliance/sports-lib';
-import { Analytics, logEvent } from '@angular/fire/analytics';
+import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
@@ -28,7 +28,7 @@ import { EventJSONSanitizer } from '../../../utils/event-json-sanitizer';
   standalone: false
 })
 export class UploadActivitiesComponent extends UploadAbstractDirective {
-  private analytics = inject(Analytics);
+  private analyticsService = inject(AppAnalyticsService);
   public uploadCount: number | null = null;
   public uploadLimit: number | null = null;
   public isPro: boolean = false;
@@ -68,7 +68,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective {
   }
 
   processAndUploadFile(file): Promise<EventInterface> {
-    logEvent(this.analytics, 'upload_file', { method: file.extension });
+    this.analyticsService.logEvent('upload_file', { method: file.extension });
     return new Promise((resolve, reject) => {
       const fileReader = new FileReader;
       fileReader.onload = async () => {

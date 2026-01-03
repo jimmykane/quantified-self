@@ -7,13 +7,13 @@ import { User } from '@sports-alliance/sports-lib';
 import { take } from 'rxjs/operators';
 import { AppUserService } from '../../services/app.user.service';
 import { Auth, signInWithCustomToken, authState, OAuthProvider, signInWithPopup } from '@angular/fire/auth';
-import { Analytics, logEvent } from '@angular/fire/analytics';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { LoggerService } from '../../services/logger.service';
 import { AccountLinkingDialogComponent } from './account-linking-dialog/account-linking-dialog.component';
 import { ErrorDialogComponent } from './error-dialog/error-dialog.component';
-
+import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppEventService } from '../../services/app.event.service';
 
 
 @Component({
@@ -29,7 +29,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   email: string = '';
   private userSubscription: Subscription | undefined;
   private auth = inject(Auth);
-  private analytics = inject(Analytics);
+
 
 
   @HostListener('window:tokensReceived', ['$event'])
@@ -42,11 +42,14 @@ export class LoginComponent implements OnInit, OnDestroy {
 
   constructor(
     public authService: AppAuthService,
-    public userService: AppUserService,
     private router: Router,
-    private snackBar: MatSnackBar,
     private dialog: MatDialog,
-    private logger: LoggerService
+    // Injected services
+    private eventService: AppEventService = inject(AppEventService),
+    public userService: AppUserService = inject(AppUserService),
+    private analyticsService: AppAnalyticsService = inject(AppAnalyticsService),
+    private logger: LoggerService = inject(LoggerService),
+    private snackBar: MatSnackBar = inject(MatSnackBar),
   ) {
   }
 
@@ -72,7 +75,7 @@ export class LoginComponent implements OnInit, OnDestroy {
             if (pendingLinkProvider) {
               this.isLoading = false;
               const confirmLink = window.confirm(
-                `You are now signed in with your email. Please sign in with ${pendingLinkProvider} to finish linking your accounts.`
+                `You are now signed in with your email.Please sign in with ${pendingLinkProvider} to finish linking your accounts.`
               );
 
               if (confirmLink) {
@@ -165,12 +168,14 @@ export class LoginComponent implements OnInit, OnDestroy {
 
     switch (provider) {
       case SignInProviders.Google:
+        this.analyticsService.logEvent('login', { method: 'google' });
         // Call synchronously (no await before popup) to avoid Safari blocking
         this.authService.googleLogin()
           .then(handleResult)
           .catch(handleError);
         break;
       case SignInProviders.GitHub:
+        this.analyticsService.logEvent('login', { method: 'github' });
         this.authService.githubLogin()
           .then(handleResult)
           .catch(handleError);
@@ -210,7 +215,7 @@ export class LoginComponent implements OnInit, OnDestroy {
               // This means we need to "park" the pending credential (if any) or just the intent.
               // 1. Send Link
               await this.sendEmailLink(email);
-              // 2. Save intent. We want to link the *original* pending credential (e.g. GitHub) 
+              // 2. Save intent. We want to link the *original* pending credential (e.g. GitHub)
               // to the account that will be signed in via email.
               if (pendingCredential) {
                 // We can't save the full credential object :(
@@ -234,10 +239,10 @@ export class LoginComponent implements OnInit, OnDestroy {
                 }
                 // If we didn't have a pending credential (e.g. reverse case), we just logged them in.
                 // But usually we want to link the *failed* method.
-                // If 'signinWithEmailLink' failed, we don't have a 'credential' object to link easily 
-                // unless we ask them to click the link *again*? 
+                // If 'signinWithEmailLink' failed, we don't have a 'credential' object to link easily
+                // unless we ask them to click the link *again*?
                 // Actually, for "Reverse": User triggers Email Link -> Fails -> User logs in with Google.
-                // User is now logged in. The Email Link is "lost" unless they click it again? 
+                // User is now logged in. The Email Link is "lost" unless they click it again?
                 // Or do we say "You are logged in. To add email link sign-in, go to settings"?
                 // For now, simple login is good enough for the 'base' account retrieval.
                 return this.redirectOrShowDataPrivacyDialog(result);
@@ -281,7 +286,7 @@ export class LoginComponent implements OnInit, OnDestroy {
   private async linkPendingProvider(providerId: string, user: any) {
     try {
       const provider = this.authService.getProviderForId(providerId);
-      // We need to re-authenticate/link. 
+      // We need to re-authenticate/link.
       // `linkWithPopup` will open the provider popup and link it to the 'user'.
       await this.authService.linkWithPopup(user, provider as any);
       this.snackBar.open('Accounts successfully linked!', 'Close', { duration: 5000 });
@@ -296,7 +301,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     this.isLoading = true;
     try {
       const databaseUser = await this.userService.getUserByID(loginServiceUser.user.uid).pipe(take(1)).toPromise();
-      logEvent(this.analytics, 'login', { method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest' });
+      this.analyticsService.logEvent('login', { method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest' });
       await this.router.navigate(['/dashboard']);
       this.snackBar.open(`Welcome back ${databaseUser?.displayName || 'Guest'} `, undefined, {
         duration: 5000,

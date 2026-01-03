@@ -3,13 +3,13 @@ import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms
 import { HttpClient } from '@angular/common/http';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router, ActivatedRoute } from '@angular/router';
-import { Analytics, logEvent } from '@angular/fire/analytics';
 import { LoggerService } from '../../../services/logger.service';
 import { AppFileService } from '../../../services/app.file.service';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
+import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { environment } from '../../../../environments/environment';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -32,16 +32,13 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
 
   constructor(protected http: HttpClient,
     protected fileService: AppFileService,
-    protected analytics: Analytics,
     protected eventService: AppEventService,
     protected authService: AppAuthService,
     protected userService: AppUserService,
-    protected router: Router,
     protected route: ActivatedRoute,
     protected windowService: AppWindowService,
-    protected snackBar: MatSnackBar,
-    protected logger: LoggerService) {
-    super(http, fileService, analytics, eventService, authService, userService, router, route, windowService, snackBar, logger);
+    protected snackBar: MatSnackBar) {
+    super(http, fileService, eventService, authService, userService, route, windowService, snackBar);
   }
 
   isConnectedToService(): boolean {
@@ -112,7 +109,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
         this.snackBar.open('Activity download started', null, {
           duration: 2000,
         });
-        logEvent(this.analytics, 'downloaded_fit_file', { method: ServiceNames.SuuntoApp });
+        this.analyticsService.logEvent('downloaded_fit_file', { method: ServiceNames.SuuntoApp });
       } else {
         const newEvent = await EventImporterFIT.getFromArrayBuffer(result);
         await this.eventService.writeAllEventData(this.user, newEvent, {
@@ -120,7 +117,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
           extension: 'fit',
           startDate: newEvent.startDate
         });
-        logEvent(this.analytics, 'imported_fit_file', { method: ServiceNames.SuuntoApp });
+        this.analyticsService.logEvent('imported_fit_file', { method: ServiceNames.SuuntoApp });
         await this.router.navigate(['/user', this.user.uid, 'event', newEvent.getID()], {});
       }
     } catch (e) {

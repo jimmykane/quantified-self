@@ -143,6 +143,7 @@ describe('Firestore Security Rules', () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await assertSucceeds(db.collection('users').doc(userId).collection('legal').doc('agreements').set({
                     acceptedPrivacyPolicy: true,
+                    acceptedDiagnosticsPolicy: true,
                     acceptedTos: true
                 }));
             });
@@ -188,6 +189,7 @@ describe('Firestore Security Rules', () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await assertFails(db.collection('users').doc(userId).collection('legal').doc('agreements').set({
                     acceptedPrivacyPolicy: true,
+                    acceptedDiagnosticsPolicy: true,
                     someRandomField: true
                 }));
             });

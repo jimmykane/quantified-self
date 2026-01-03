@@ -11,7 +11,7 @@ import { Search } from '../event-search/event-search.component';
 import { AppUserService } from '../../services/app.user.service';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { map, switchMap, take, throttleTime } from 'rxjs/operators';
-import { Analytics, logEvent } from '@angular/fire/analytics';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
@@ -39,9 +39,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public isInitialized = false;
 
   private shouldSearch: boolean;
-
-
-  private analytics = inject(Analytics);
+  private analyticsService = inject(AppAnalyticsService);
 
 
   constructor(public authService: AppAuthService,
@@ -200,7 +198,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     this.user.settings.dashboardSettings.startDate = search.startDate && search.startDate.getTime();
     this.user.settings.dashboardSettings.endDate = search.endDate && search.endDate.getTime();
     this.user.settings.dashboardSettings.activityTypes = search.activityTypes;
-    logEvent(this.analytics, 'dashboard_search', { method: DateRanges[search.dateRange] });
+    this.analyticsService.logEvent('dashboard_search', { method: DateRanges[search.dateRange] });
     await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
   }
 

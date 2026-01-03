@@ -7,6 +7,7 @@ export interface PolicyItem {
     checkboxLabel?: string;
     formControlName?: string;
     isGdpr?: boolean;
+    isOptional?: boolean;
 }
 
 export const POLICY_CONTENT: PolicyItem[] = [
@@ -66,18 +67,8 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Withdraw Consent:</strong> You can withdraw your analytics consent at any time in your account settings.'
         ],
         checkboxLabel: 'I consent to the collection of anonymized usage data for analytics.',
-        formControlName: 'acceptTrackingPolicy'
-    },
-    {
-        id: 'diagnostics',
-        title: 'Diagnostics',
-        subtitle: 'Error Reporting',
-        icon: 'bug_report',
-        content: [
-            'To help improve service quality, your browser may automatically report anonymized error data (stack traces) when technical issues occur.'
-        ],
-        checkboxLabel: 'I consent to the automated reporting of anonymous diagnostic data.',
-        formControlName: 'acceptDiagnosticsPolicy'
+        formControlName: 'acceptTrackingPolicy',
+        isOptional: true
     },
     {
         id: 'tos',

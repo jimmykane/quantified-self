@@ -25,16 +25,13 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
 
   constructor(protected http: HttpClient,
     protected fileService: AppFileService,
-    protected analytics: Analytics,
     protected eventService: AppEventService,
     protected authService: AppAuthService,
     protected userService: AppUserService,
-    protected router: Router,
     protected route: ActivatedRoute,
     protected windowService: AppWindowService,
-    protected snackBar: MatSnackBar,
-    protected logger: LoggerService) {
-    super(http, fileService, analytics, eventService, authService, userService, router, route, windowService, snackBar, logger);
+    protected snackBar: MatSnackBar) {
+    super(http, fileService, eventService, authService, userService, route, windowService, snackBar);
   }
 
   async requestAndSetToken() {

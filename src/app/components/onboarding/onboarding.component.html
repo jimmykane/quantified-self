@@ -21,6 +21,8 @@
 
                                     <mat-checkbox [formControlName]="policy.formControlName">
                                         {{policy.checkboxLabel}}
+                                        <span class="policy-required-label" *ngIf="!policy.isOptional">(Required)</span>
+                                        <span class="policy-optional-label" *ngIf="policy.isOptional">(Optional)</span>
                                     </mat-checkbox>
                                 </section>
                                 <mat-divider *ngIf="!last"></mat-divider>

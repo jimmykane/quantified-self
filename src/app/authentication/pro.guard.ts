@@ -29,8 +29,7 @@ class PermissionsService {
 
             const termsAccepted = user.acceptedPrivacyPolicy === true &&
                 user.acceptedDataPolicy === true &&
-                user.acceptedTrackingPolicy === true &&
-                user.acceptedDiagnosticsPolicy === true;
+                (user as any).acceptedTos === true;
 
             const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
             const stripeRole = (user as any).stripeRole;

@@ -6,7 +6,6 @@ import { Auth, user, signInWithPopup, getRedirectResult, signOut, sendSignInLink
 import { Firestore, doc, onSnapshot, terminate, clearIndexedDbPersistence } from '@angular/fire/firestore';
 import { Privacy, User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../services/app.user.service';
-import { Analytics } from '@angular/fire/analytics';
 import { LocalStorageService } from '../services/storage/app.local.storage.service';
 import { LoggerService } from '../services/logger.service';
 import { environment } from '../../environments/environment';
@@ -21,9 +20,12 @@ export class AppAuthService {
 
   private firestore = inject(Firestore);
   private auth = inject(Auth);
-  private analytics = inject(Analytics);
   private injector = inject(EnvironmentInjector);
   private zone = inject(NgZone);
+
+  get currentUser() {
+    return this.auth.currentUser;
+  }
 
   constructor(
     private userService: AppUserService,
@@ -56,10 +58,9 @@ export class AppAuthService {
                   photoURL: firebaseUser.photoURL,
                   emailVerified: firebaseUser.emailVerified,
                   settings: this.userService.fillMissingAppSettings({} as any),
-                  acceptedPrivacyPolicy: false,
                   acceptedDataPolicy: false,
                   acceptedTrackingPolicy: false,
-                  acceptedDiagnosticsPolicy: false,
+                  acceptedDiagnosticsPolicy: true, // Legitimate interest
                   privacy: Privacy.Private,
                   isAnonymous: firebaseUser.isAnonymous,
                   stripeRole: stripeRole,

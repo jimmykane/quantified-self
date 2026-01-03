@@ -27,7 +27,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { UserDashboardSettingsInterface } from '@sports-alliance/sports-lib';
 import { LapTypesHelper } from '@sports-alliance/sports-lib';
-import { Analytics, logEvent } from '@angular/fire/analytics';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import {
   MapThemes,
@@ -83,7 +83,7 @@ export class UserSettingsComponent implements OnChanges {
   public userSettingsFormGroup: UntypedFormGroup;
 
   public activityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray();
-  private analytics = inject(Analytics);
+  private analyticsService = inject(AppAnalyticsService);
 
 
 
@@ -383,7 +383,7 @@ export class UserSettingsComponent implements OnChanges {
       this.snackBar.open('User updated', null, {
         duration: 2000,
       });
-      logEvent(this.analytics, 'user_settings_update');
+      this.analyticsService.logEvent('user_settings_update');
     } catch (e) {
 
       this.snackBar.open('Could not update user', null, {
@@ -412,7 +412,7 @@ export class UserSettingsComponent implements OnChanges {
     this.isDeleting = true;
     try {
       await this.userService.deleteAllUserData(this.user);
-      logEvent(this.analytics, 'user_delete', {});
+      this.analyticsService.logEvent('user_delete', {});
       await this.authService.signOut();
       await this.router.navigate(['/']);
       this.snackBar.open('Account deleted! You are now logged out.', null, {

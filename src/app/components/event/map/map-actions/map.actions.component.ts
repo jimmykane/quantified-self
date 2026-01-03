@@ -4,10 +4,13 @@ import {
   Input,
   OnChanges,
   Output,
+  inject,
 } from '@angular/core';
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
 import { User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../../services/app.user.service';
-import { Analytics, logEvent } from '@angular/fire/analytics';
+import { AppAnalyticsService } from '../../../../services/app.analytics.service';
 
 @Component({
   selector: 'app-map-actions',
@@ -25,11 +28,17 @@ export class MapActionsComponent implements OnChanges {
 
   @Output() showLapsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() showArrowsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
+  @Output() onCenter = new EventEmitter<void>();
 
+  private analyticsService = inject(AppAnalyticsService);
 
   constructor(
-    private userService: AppUserService,
-    private analytics: Analytics) {
+    private userService: AppUserService) {
+  }
+
+  centerMap() {
+    this.analyticsService.logEvent('map_center_click');
+    this.onCenter.emit();
   }
 
   async checkBoxChanged(event) {
@@ -42,7 +51,7 @@ export class MapActionsComponent implements OnChanges {
       this.user.settings.mapSettings.showArrows = this.showArrows;
       await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
     }
-    return logEvent(this.analytics, 'event_map_settings_change');
+    this.analyticsService.logEvent('event_map_settings_change');
   }
 
   ngOnChanges(simpleChanges) {

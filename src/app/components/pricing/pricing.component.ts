@@ -7,18 +7,20 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatBadgeModule } from '@angular/material/badge';
 import { AppPaymentService, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
+import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { Auth } from '@angular/fire/auth';
+import { LoggerService } from '../../services/logger.service';
 import { Observable, map } from 'rxjs';
 import { StripeRole } from '../../models/stripe-role.model';
 import { Router } from '@angular/router';
-import { Auth } from '@angular/fire/auth';
-import { Analytics, logEvent } from '@angular/fire/analytics';
+
 import { environment } from '../../../environments/environment';
 
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { firstValueFrom } from 'rxjs';
-import { LoggerService } from '../../services/logger.service';
 
 @Component({
     selector: 'app-pricing',
@@ -35,15 +37,16 @@ export class PricingComponent implements OnInit, OnDestroy {
     isLoading = false;
     loadingPriceId: string | null = null;
 
+    private authService = inject(AppAuthService);
     private auth = inject(Auth);
+    private userService = inject(AppUserService);
+    private analyticsService = inject(AppAnalyticsService);
+    private logger = inject(LoggerService);
     private router = inject(Router);
-    private analytics = inject(Analytics);
 
     constructor(
         private paymentService: AppPaymentService,
-        private userService: AppUserService,
         private dialog: MatDialog,
-        private logger: LoggerService
     ) { }
 
     isLoadingRole = true;
@@ -107,7 +110,7 @@ export class PricingComponent implements OnInit, OnDestroy {
     };
 
     async subscribe(price: any) {
-        if (!this.auth.currentUser) {
+        if (!this.authService.currentUser) {
             this.router.navigate(['/login'], { queryParams: { returnUrl: '/pricing' } });
             return;
         }
@@ -132,7 +135,7 @@ export class PricingComponent implements OnInit, OnDestroy {
         this.isLoading = true;
 
         try {
-            logEvent(this.analytics, 'select_content', {
+            this.analyticsService.logEvent('select_content', {
                 content_type: 'paid_plan',
                 item_id: priceId
             });
@@ -191,7 +194,7 @@ export class PricingComponent implements OnInit, OnDestroy {
     }
 
     async selectFreeTier() {
-        if (!this.auth.currentUser) {
+        if (!this.authService.currentUser) {
             this.router.navigate(['/login']);
             return;
         }
@@ -211,7 +214,7 @@ export class PricingComponent implements OnInit, OnDestroy {
             const user = await firstValueFrom(this.userService.getUserByID(uid));
 
             if (user) {
-                logEvent(this.analytics, 'select_content', {
+                this.analyticsService.logEvent('select_content', {
                     content_type: 'free_plan',
                     item_id: 'free_tier'
                 });

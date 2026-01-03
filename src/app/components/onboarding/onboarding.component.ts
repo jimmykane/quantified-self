@@ -17,7 +17,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatDividerModule } from '@angular/material/divider';
 import { POLICY_CONTENT, PolicyItem } from '../../shared/policies.content';
 import { LoggerService } from '../../services/logger.service';
-import { Analytics, logEvent } from '@angular/fire/analytics';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 
 @Component({
     selector: 'app-onboarding',
@@ -41,11 +41,11 @@ import { Analytics, logEvent } from '@angular/fire/analytics';
     styleUrls: ['./onboarding.component.scss']
 })
 export class OnboardingComponent implements OnInit, AfterViewInit {
-    @Input() user: User;
-    @ViewChild('stepper') stepper: MatStepper;
+    @Input() user!: User;
+    @ViewChild('stepper') stepper!: MatStepper;
 
     policies: PolicyItem[] = POLICY_CONTENT.filter(p => !!p.checkboxLabel);
-    termsFormGroup: FormGroup;
+    termsFormGroup!: FormGroup;
     isPro = false;
 
     private authService = inject(AppAuthService);
@@ -53,11 +53,11 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
     private router = inject(Router);
     private _formBuilder = inject(FormBuilder);
     private logger = inject(LoggerService);
-    private analytics = inject(Analytics);
+    private analyticsService = inject(AppAnalyticsService);
 
     ngOnInit() {
         // Log onboarding start
-        logEvent(this.analytics, 'tutorial_begin');
+        this.analyticsService.logEvent('tutorial_begin');
 
         // If user wasn't passed via Input (routing), get it from service
         if (!this.user) {
@@ -100,10 +100,13 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
                 if (policy.formControlName === 'acceptPrivacyPolicy') initialValue = user.acceptedPrivacyPolicy;
                 else if (policy.formControlName === 'acceptDataPolicy') initialValue = user.acceptedDataPolicy;
                 else if (policy.formControlName === 'acceptTrackingPolicy') initialValue = user.acceptedTrackingPolicy;
-                else if (policy.formControlName === 'acceptDiagnosticsPolicy') initialValue = user.acceptedDiagnosticsPolicy;
                 else if (policy.formControlName === 'acceptTos') initialValue = (user as any).acceptedTos;
 
-                group[policy.formControlName] = [initialValue || false, Validators.requiredTrue];
+                if (policy.isOptional) {
+                    group[policy.formControlName] = [initialValue || false];
+                } else {
+                    group[policy.formControlName] = [initialValue || false, Validators.requiredTrue];
+                }
             }
         });
 
@@ -128,7 +131,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
             this.isPro = await this.userService.isPro();
 
             const termsAccepted = this.policies.every(policy => {
-                const userProperty = this.mapFormControlNameToUserProperty(policy.formControlName);
+                const userProperty = this.mapFormControlNameToUserProperty(policy.formControlName || '');
                 return (this.user as any)[userProperty] === true;
             });
 
@@ -175,7 +178,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
         if (this.termsFormGroup.valid) {
             this.isLoading = true;
             this.policies.forEach(policy => {
-                const userProperty = this.mapFormControlNameToUserProperty(policy.formControlName);
+                const userProperty = this.mapFormControlNameToUserProperty(policy.formControlName || '');
                 if (userProperty) {
                     (this.user as any)[userProperty] = true;
                 }
@@ -189,10 +192,9 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
             // But we do NOT set 'onboardingCompleted' yet.
 
             try {
-                // Log terms accepted step
-                logEvent(this.analytics, 'onboarding_step', { step_name: 'terms_accepted' });
-
-                // Determine if we should save now or later. 
+                if (this.stepper.selectedIndex > 0) {
+                    this.analyticsService.logEvent('onboarding_step', { step_index: this.stepper.selectedIndex, step_label: this.stepper.selected?.label });
+                }         // Determine if we should save now or later. 
                 // We MUST save terms if we want them persisted even if user drops off.
                 // We use createOrUpdateUser to ensure legal policies are saved to the correct subcollection.
                 await this.userService.createOrUpdateUser(this.user);
@@ -237,7 +239,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit {
             await this.userService.updateUserProperties(this.user, { onboardingCompleted: true });
 
             // Log onboarding completion
-            logEvent(this.analytics, 'tutorial_complete');
+            this.analyticsService.logEvent('tutorial_complete');
 
             // Navigate to dashboard. The OnboardingGuard will now allow this.
             this.logger.log('[OnboardingComponent] Finishing onboarding, navigating to dashboard');

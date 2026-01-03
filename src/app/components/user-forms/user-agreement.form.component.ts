@@ -9,7 +9,7 @@ import { User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
-import { Analytics, logEvent } from '@angular/fire/analytics';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 
 
@@ -32,7 +32,7 @@ export class UserAgreementFormComponent implements OnInit {
 
   public userFormGroup: UntypedFormGroup;
   private readonly signInMethod: string;
-  private analytics = inject(Analytics);
+  private analyticsService = inject(AppAnalyticsService);
 
   constructor(
     public dialogRef: MatDialogRef<UserAgreementFormComponent>,
@@ -64,10 +64,6 @@ export class UserAgreementFormComponent implements OnInit {
         Validators.requiredTrue,
         // Validators.minLength(4),
       ]),
-      acceptDiagnosticsPolicy: new UntypedFormControl(this.user.acceptedDiagnosticsPolicy, [
-        Validators.requiredTrue,
-        // Validators.minLength(4),
-      ]),
 
       // 'alterEgo': new FormControl(this.hero.alterEgo),
       // 'power': new FormControl(this.hero.power, Validators.required)
@@ -85,7 +81,6 @@ export class UserAgreementFormComponent implements OnInit {
       return;
     }
     try {
-      this.user.acceptedDataPolicy = true;
       this.user.acceptedPrivacyPolicy = true;
       this.user.acceptedTrackingPolicy = true;
       this.user.acceptedDiagnosticsPolicy = true;
@@ -93,7 +88,7 @@ export class UserAgreementFormComponent implements OnInit {
       this.snackBar.open('User updated', null, {
         duration: 2000,
       });
-      logEvent(this.analytics, 'sign_up', { method: this.signInMethod });
+      this.analyticsService.logEvent('sign_up', { method: this.signInMethod });
       await this.router.navigate(['dashboard']);
       this.snackBar.open(`Thanks for signing in ${this.user.displayName || 'guest'}!`, null, {
         duration: 2000,

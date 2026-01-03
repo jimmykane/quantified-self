@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit, inject } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit, inject, Output, EventEmitter } from '@angular/core';
 import { Router } from '@angular/router';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
@@ -9,14 +9,16 @@ import { Privacy } from '@sports-alliance/sports-lib';
 import { AppSharingService } from '../../services/app.sharing.service';
 import { User } from '@sports-alliance/sports-lib';
 import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
-import { Analytics, logEvent } from '@angular/fire/analytics';
 import { ActivityFormComponent } from '../activity-form/activity.form.component';
 import { take } from 'rxjs/operators';
+import { Subscription } from 'rxjs';
 import { EventUtilities } from '@sports-alliance/sports-lib';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { Clipboard } from '@angular/cdk/clipboard';
+import { MatIconModule } from '@angular/material/icon';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 
 import { DataDistance } from '@sports-alliance/sports-lib';
 import { environment } from '../../../environments/environment';
@@ -47,10 +49,12 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
 
 
-  public garminHealthAPIServiceMetaData: GarminHealthAPIEventMetaDataInterface;
-  private deleteConfirmationSubscription;
+  public garminHealthAPIServiceMetaData!: GarminHealthAPIEventMetaDataInterface;
+  private deleteConfirmationSubscription!: Subscription;
+  @Output() onDelete = new EventEmitter<void>();
   private auth = inject(Auth);
-  private analytics = inject(Analytics);
+  private analyticsService = inject(AppAnalyticsService);
+  private logger = inject(LoggerService);
 
 
   constructor(
@@ -64,8 +68,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     private deleteConfirmationBottomSheet: MatBottomSheet,
     private http: HttpClient,
     private windowService: AppWindowService,
-    private dialog: MatDialog,
-    private logger: LoggerService) {
+    private dialog: MatDialog) {
   }
 
   async ngOnInit() {
@@ -91,7 +94,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       await this.eventService.setEventPrivacy(this.user, this.event.getID(), Privacy.Public);
     }
     this.clipboardService.copy(this.sharingService.getShareURLForEvent(this.user.uid, this.event.getID()));
-    logEvent(this.analytics, 'share', { method: 'event_actions', content_type: 'event' });
+    this.analyticsService.logEvent('share', { method: 'event_actions', content_type: 'event', item_id: this.event.getID() });
     this.snackBar.open('Privacy is changed to public and link copied to your clipboard', undefined, {
       duration: 20000,
     })
@@ -189,7 +192,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       this.getFileName(this.event),
       new EventExporterGPX().fileExtension,
     );
-    logEvent(this.analytics, 'downloaded_gpx_file');
+    this.analyticsService.logEvent('downloaded_gpx_file');
     this.snackBar.open('GPX file served', undefined, {
       duration: 2000,
     });
@@ -223,7 +226,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
         const zipFileName = this.fileService.generateDateRangeZipFilename(eventDate, eventDate);
         await this.fileService.downloadAsZip(filesToZip, zipFileName);
-        logEvent(this.analytics, 'downloaded_original_files_zip');
+        this.analyticsService.logEvent('downloaded_original_files_zip');
 
       } else if (eventAny.originalFile && eventAny.originalFile.path) {
         // Single file -> Direct download
@@ -234,7 +237,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         // Download with basename (without extension) and extension separately
         const baseNameWithoutExt = fileName.replace(`.${extension}`, '');
         this.fileService.downloadFile(blob, baseNameWithoutExt, extension);
-        logEvent(this.analytics, 'downloaded_original_file');
+        this.analyticsService.logEvent('downloaded_original_file');
       } else {
         this.snackBar.open('No original files found.', undefined, { duration: 3000 });
       }

@@ -53,9 +53,9 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
   public bannerHeight = 0;
   public hasBanner = false;
-  public title;
-  private actionButtonsSubscription: Subscription;
-  private routerEventSubscription: Subscription;
+  public title!: string;
+  private actionButtonsSubscription!: Subscription;
+  private routerEventSubscription!: Subscription;
   public authState: boolean | null = null;
   public isOnboardingRoute = false;
   public onboardingCompleted = true; // Default to true to avoid hiding chrome of non-authenticated users prematurely
@@ -102,10 +102,14 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
         this.updateOnboardingState();
       }
       switch (true) {
-        case event instanceof RoutesRecognized:
-          this.title = (<RoutesRecognized>event).state.root.firstChild.data['title'];
-          this.titleService.setTitle(`${this.title} - Quantified Self`);
+        case event instanceof RoutesRecognized: {
+          const firstChild = (<RoutesRecognized>event).state.root.firstChild;
+          if (firstChild) {
+            this.title = firstChild.data['title'];
+            this.titleService.setTitle(`${this.title} - Quantified Self`);
+          }
           break;
+        }
         default: {
           break;
         }
@@ -121,8 +125,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     if (user) {
       const termsAccepted = user.acceptedPrivacyPolicy === true &&
         user.acceptedDataPolicy === true &&
-        user.acceptedTrackingPolicy === true &&
-        user.acceptedDiagnosticsPolicy === true;
+        (user as any).acceptedTos === true;
 
       const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
       const stripeRole = user.stripeRole;

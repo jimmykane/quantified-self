@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Out
 import { XAxisTypes } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../../services/app.user.service';
-import { Analytics, logEvent } from '@angular/fire/analytics';
+import { AppAnalyticsService } from '../../../../services/app.analytics.service';
 import { EventInterface } from '@sports-alliance/sports-lib';
 
 @Component({
@@ -27,7 +27,7 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Output() xAxisTypeChange: EventEmitter<XAxisTypes> = new EventEmitter<XAxisTypes>();
 
   public xAxisTypes = XAxisTypes;
-  private analytics = inject(Analytics);
+  private analyticsService = inject(AppAnalyticsService);
 
   constructor(
     private userService: AppUserService) {
@@ -45,7 +45,7 @@ export class EventCardChartActionsComponent implements OnChanges {
       this.user.settings.chartSettings.stackYAxes = this.stackYAxes;
       await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
     }
-    return logEvent(this.analytics, 'event_chart_settings_change');
+    this.analyticsService.logEvent('event_chart_settings_change');
   }
 
   formatLabel(value: number | null) {

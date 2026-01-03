@@ -37,7 +37,6 @@ import { DataRPE } from '@sports-alliance/sports-lib';
 import { TileActionsAbstractDirective } from '../tile-actions-abstract.directive';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { SpeedUnitsToGradeAdjustedSpeedUnits } from '@sports-alliance/sports-lib';
-import { logEvent } from '@angular/fire/analytics';
 
 
 @Component({
@@ -131,7 +130,7 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
   }
 
   async changeChartType(event) {
-    logEvent(this.analytics, 'dashboard_tile_action', { method: 'changeChartType' });
+    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartType' });
     const chart = (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order));
     chart.chartType = event.value;
     // If its pie show only totals
@@ -142,25 +141,25 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
   }
 
   async changeChartDataType(event) {
-    logEvent(this.analytics, 'dashboard_tile_action', { method: 'changeChartDataType' });
+    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartDataType' });
     (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataType = event.value;
     return this.userService.updateUserProperties(this.user, { settings: this.user.settings });
   }
 
   async changeChartDataValueType(event) {
-    logEvent(this.analytics, 'dashboard_tile_action', { method: 'changeChartDataValueType' });
+    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartDataValueType' });
     (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataValueType = event.value;
     return this.userService.updateUserProperties(this.user, { settings: this.user.settings });
   }
 
   async changeChartDataCategoryType(event) {
-    logEvent(this.analytics, 'dashboard_tile_action', { method: 'changeChartDataCategoryType' });
+    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartDataCategoryType' });
     (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataCategoryType = event.value;
     return this.userService.updateUserProperties(this.user, { settings: this.user.settings });
   }
 
   async changeChartTimeInterval(event) {
-    logEvent(this.analytics, 'dashboard_tile_action', { method: 'changeChartTimeInterval' });
+    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartTimeInterval' });
     (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataTimeInterval = event.value;
     return this.userService.updateUserProperties(this.user, { settings: this.user.settings });
   }

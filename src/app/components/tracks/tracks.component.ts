@@ -23,7 +23,7 @@ import { GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES } from '@sports-allianc
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MyTracksProgressComponent } from './progress/tracks.progress';
 import { Overlay } from '@angular/cdk/overlay';
-import { Analytics, logEvent } from '@angular/fire/analytics';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserService } from '../../services/app.user.service';
 import { WhereFilterOp } from 'firebase/firestore';
 
@@ -58,7 +58,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   private eventsSubscription: Subscription;
 
   private promiseTime: number;
-  private analytics = inject(Analytics);
+  private analyticsService = inject(AppAnalyticsService);
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
@@ -93,7 +93,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.clearAllPolylines();
     this.centerMapToStartingLocation(this.map)
     await this.loadTracksMapForUserByDateRange(this.user, this.map, this.user.settings.myTracksSettings.dateRange)
-    logEvent(this.analytics, 'my_tracks_search', { method: DateRanges[event.dateRange] });
+    this.analyticsService.logEvent('my_tracks_search', { method: DateRanges[event.dateRange] });
   }
 
   public ngOnDestroy() {

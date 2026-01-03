@@ -7,7 +7,7 @@ import { AppThemes } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Analytics, logEvent } from '@angular/fire/analytics';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserService } from '../../services/app.user.service';
@@ -31,7 +31,7 @@ export class SideNavComponent implements OnInit, OnDestroy {
 
   private userSubscription!: Subscription
   private themeSubscription!: Subscription
-  private analytics = inject(Analytics);
+  private analyticsService = inject(AppAnalyticsService);
 
   constructor(
     public authService: AppAuthService,
@@ -66,24 +66,24 @@ export class SideNavComponent implements OnInit, OnDestroy {
   }
 
   async donate() {
-    logEvent(this.analytics, 'donate_click', { method: 'PayPal' });
+    this.analyticsService.logEvent('donate_click', { method: 'PayPal' });
     window.open('https://paypal.me/DKanellopoulos');
   }
 
 
 
   async gitHubSponsor() {
-    logEvent(this.analytics, 'github_sponsor');
+    this.analyticsService.logEvent('github_sponsor');
     window.open('https://github.com/sponsors/jimmykane?utm_source=qs');
   }
 
   async gitHubStar() {
-    logEvent(this.analytics, 'github_star');
+    this.analyticsService.logEvent('github_star');
     window.open('https://github.com/jimmykane/quantified-self/');
   }
 
   async logout() {
-    logEvent(this.analytics, 'logout', {});
+    this.analyticsService.logEvent('logout', {});
     this.router.navigate(['/']).then(async () => {
       await this.authService.signOut();
       localStorage.clear();

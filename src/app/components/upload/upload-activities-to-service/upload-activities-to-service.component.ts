@@ -2,8 +2,10 @@ import { Component, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppEventService } from '../../../services/app.event.service';
+import { AppUserService } from '../../../services/app.user.service';
+import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { LoggerService } from '../../../services/logger.service';
-import { Analytics, logEvent } from '@angular/fire/analytics';
 import { environment } from '../../../../environments/environment';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Auth, getIdToken } from '@angular/fire/auth';
@@ -22,17 +24,17 @@ import { getSize } from '@sports-alliance/sports-lib';
 })
 
 export class UploadActivitiesToServiceComponent extends UploadAbstractDirective {
-  private analytics = inject(Analytics);
   private auth = inject(Auth);
+  private eventService = inject(AppEventService);
+  private userService = inject(AppUserService);
+  private analyticsService = inject(AppAnalyticsService);
 
   constructor(
-    protected snackBar: MatSnackBar,
     protected dialog: MatDialog,
     protected filesStatusService: AppFilesStatusService,
     private http: HttpClient,
-    protected router: Router,
-    protected logger: LoggerService) {
-    super(snackBar, dialog, filesStatusService, router, logger);
+    protected router: Router) {
+    super(inject(MatSnackBar), dialog, filesStatusService, router, inject(LoggerService));
   }
 
   /**
@@ -41,7 +43,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
    * @param file
    */
   async processAndUploadFile(file: FileInterface) {
-    logEvent(this.analytics, 'upload_activity_to_service', { service: ServiceNames.SuuntoApp });
+    this.analyticsService.logEvent('upload_activity_to_service', { service: ServiceNames.SuuntoApp });
     return new Promise((resolve, reject) => {
       const fileReader = new FileReader;
       fileReader.onload = async () => {
@@ -60,13 +62,13 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
             {
               headers:
                 new HttpHeaders({
-                  'Authorization': `Bearer ${idToken}`,
+                  'Authorization': `Bearer ${idToken} `,
                   'Content-Type': 'application/octet-stream'
                 })
             }).toPromise();
         } catch (e) {
           this.logger.error(e);
-          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message}`, 'OK', { duration: 10000 });
+          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message} `, 'OK', { duration: 10000 });
           reject(e);
           return;
         }

@@ -1,7 +1,9 @@
 import {
+  ChangeDetectorRef,
   Component,
   Directive,
   HostListener,
+  inject,
   Input,
   OnChanges,
   OnDestroy,
@@ -17,7 +19,6 @@ import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { switchMap, take, tap } from 'rxjs/operators';
-import { Analytics, logEvent } from '@angular/fire/analytics';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -27,6 +28,7 @@ import { AppWindowService } from '../../services/app.window.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppEventService } from '../../services/app.event.service';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 
 
 @Directive()
@@ -45,21 +47,24 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   public isConnecting = false;
   public isDisconnecting = false;
   public forceConnected = false;
+  public isConnected = false;
 
 
   protected serviceDataSubscription: Subscription;
 
+  protected router = inject(Router);
+  protected changeDetectorRef = inject(ChangeDetectorRef);
+  protected analyticsService = inject(AppAnalyticsService);
+  protected logger = inject(LoggerService);
+
   constructor(protected http: HttpClient,
     protected fileService: AppFileService,
-    protected analytics: Analytics,
     protected eventService: AppEventService,
     protected authService: AppAuthService,
     protected userService: AppUserService,
-    protected router: Router,
     protected route: ActivatedRoute,
     protected windowService: AppWindowService,
-    protected snackBar: MatSnackBar,
-    protected logger: LoggerService) {
+    protected snackBar: MatSnackBar) {
   }
 
   async ngOnChanges() {
@@ -95,12 +100,21 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       }
       if (!shouldConnect || this.isConnecting) {
         this.isLoading = false;
+        if (this.route.snapshot.queryParamMap.get('connect')) {
+          this.logger.log(`[ServicesAbstractComponent] connect param found for ${this.serviceName}, showing success`);
+          this.analyticsService.logEvent('service_connected', { service_name: this.serviceName });
+          // If we just connected, triggering sync automatically might be nice
+          // But usually we just show connected state.
+          this.snackBar.open(`Successfully connected to ${this.serviceName}`, null, {
+            duration: 10000,
+          });
+        }
         return;
       }
       this.isConnecting = true;
       try {
         await this.requestAndSetToken(this.route.snapshot.queryParamMap)
-        logEvent(this.analytics, 'connected_to_service', { serviceName: this.serviceName });
+        this.analyticsService.logEvent('connected_to_service', { serviceName: this.serviceName });
         this.forceConnected = true;
         this.snackBar.open(`Successfully connected to ${this.serviceName}`, null, {
           duration: 10000,
@@ -128,6 +142,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     }
     this.isConnecting = true;
     try {
+      this.analyticsService.logEvent('service_connect_start', { service_name: this.serviceName });
       const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(this.serviceName);
       // Get the redirect url for the unsigned token created with the post
       this.windowService.windowRef.location.href = this.buildRedirectURIFromServiceToken(tokenAndURI);
@@ -151,7 +166,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       this.snackBar.open(`Disconnected successfully`, null, {
         duration: 2000,
       });
-      logEvent(this.analytics, 'disconnected_from_service', { serviceName: this.serviceName });
+      this.analyticsService.logEvent('disconnected_from_service', { serviceName: this.serviceName });
     } catch (e) {
       this.logger.error(e);
       this.snackBar.open(`Could not disconnect due to ${e.message}`, null, {
@@ -163,7 +178,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   }
 
   triggerUpsell() {
-    logEvent(this.analytics, 'upsell_triggered', { serviceName: this.serviceName, source: 'locked_card' });
+    this.analyticsService.logEvent('upsell_triggered', { serviceName: this.serviceName, source: 'locked_card' });
     const snackBarRef = this.snackBar.open('This feature is available for Pro users.', 'UPGRADE', {
       duration: 5000,
     });

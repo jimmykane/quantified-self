@@ -47,17 +47,6 @@
 
     <mat-divider></mat-divider>
 
-    <mat-checkbox formControlName="acceptDiagnosticsPolicy">
-      <mat-card class="mat-elevation-z0">
-        <b>You accept that: </b>
-        <ul>
-          <li>
-            Your browser can send anonymised data when errors happen to help improve the quality of the service.
-          </li>
-        </ul>
-      </mat-card>
-    </mat-checkbox>
-
     <div class="qs-form-actions">
       <button mat-stroked-button (click)="close($event)">Cancel</button>
       <button [disabled]="!this.userFormGroup.valid" mat-flat-button color="accent" (click)="onSubmit($event)">Create My

@@ -32,10 +32,10 @@ import { rowsAnimation } from '../../animations/animations';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
 import { AppUserService } from '../../services/app.user.service';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DataTableAbstractDirective, StatRowElement } from '../data-table/data-table-abstract.directive';
-import { Analytics, logEvent } from '@angular/fire/analytics';
-import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { EventsExportFormComponent } from '../events-export-form/events-export.form.component';
 import { MatDialog } from '@angular/material/dialog';
@@ -78,7 +78,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
 
   private searchSubject: Subject<string> = new Subject();
-  private analytics = inject(Analytics);
+  private analyticsService = inject(AppAnalyticsService);
 
   constructor(private snackBar: MatSnackBar,
     private eventService: AppEventService,
@@ -269,7 +269,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.logger.log('[EventTable] Valid original files to write:', validOriginalFiles);
       await this.eventService.writeAllEventData(this.user, mergedEvent, validOriginalFiles);
 
-      logEvent(this.analytics, 'merge_events');
+      this.analyticsService.logEvent('merge_events');
       await this.router.navigate(['/user', this.user.uid, 'event', mergedEvent.getID()], {});
       this.snackBar.open('Events merged', null, {
         duration: 2000,
@@ -310,7 +310,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         this.processChanges();
       }
 
-      logEvent(this.analytics, 'delete_events');
+      this.analyticsService.logEvent('delete_events');
       this.snackBar.open('Events deleted', null, {
         duration: 2000,
       });
@@ -411,7 +411,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       // Create and download ZIP
       await this.fileService.downloadAsZip(downloadedFiles, zipFileName);
 
-      logEvent(this.analytics, 'download_originals', { count: downloadedFiles.length });
+      this.analyticsService.logEvent('download_originals', { count: downloadedFiles.length });
       this.snackBar.open(`Downloaded ${downloadedFiles.length} file(s)`, null, { duration: 2000 });
     } catch (e) {
       this.logger.error('Error downloading originals:', e);

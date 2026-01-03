@@ -1,112 +1,90 @@
 .onboarding-container {
     display: flex;
     justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    // background-color: #f5f5f5; /* REMOVED: Managed by global theme */
-    padding: 20px;
+    padding: 2rem 1rem;
+    min-height: calc(100vh - 64px);
+    background-color: var(--mat-sys-background, #fafafa);
 }
 
 .onboarding-card {
+    max-width: 800px;
     width: 100%;
-    max-width: 900px;
-    min-height: 600px;
-    padding: 20px;
-
-    // Remove default padding from stepper content
-    ::ng-deep .mat-horizontal-content-container {
-        padding: 0 !important;
-    }
+    margin-bottom: 2rem;
 }
 
 .step-content {
-    padding: 20px 0;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    width: 100%; // Ensure full width usage
-
-    h2 {
-        margin-top: 0;
-    }
+    padding: 1rem 0;
 }
 
-// Ensure the form itself takes full width of the mat-step
-// Ensure the form itself takes full width of the mat-step
-form.qs-form {
-    width: 100%;
-    max-width: 100%; // Override global 600px limit
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-
-    // Ensure all inputs inside span full width
-    mat-form-field {
-        width: 100%;
-    }
+h2 {
+    margin-bottom: 0.5rem;
+    font-weight: 300;
 }
 
 .checkbox-group {
     display: flex;
     flex-direction: column;
-    gap: 25px; // Increased gap for better separation of sections
-    margin: 20px 0;
-    width: 100%; // Ensure full width
+    gap: 1.5rem;
+    margin: 2rem 0;
 }
 
-// New styles for the clean policy design
 .policy-item {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding-bottom: 5px;
-    width: 100%; // Ensure full width
+    gap: 0.5rem;
+}
 
-    h3 {
-        margin: 0;
-        font-size: 1.1rem;
-        font-weight: 400;
-        // color: rgba(0,0,0,0.87); /* REMOVED */
-    }
+.policy-item h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 500;
+}
 
-    .policy-text {
-        margin: 0;
-        font-size: 0.95rem;
-        line-height: 1.5;
-        // color: rgba(0,0,0,0.6); /* REMOVED */
-        opacity: 0.7; // Use opacity instead
-        // max-width: 850px; // REMOVED: User requested full width, so let it expand.
-        width: 100%;
-    }
+.policy-text {
+    font-size: 0.95rem;
+    opacity: 0.8;
+    line-height: 1.5;
+}
 
-    mat-checkbox {
-        margin-top: 5px;
-    }
+.qs-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 2rem;
 }
 
 .pricing-step {
-
-    // Ensure pricing component fits well
-    ::ng-deep app-pricing {
-        width: 100%;
-
-        .pricing-container {
-            padding: 0; // Reset padding if needed
-            min-height: auto; // Let it fit availability
-            background: none; // Remove gradient overlap if any
-        }
-    }
+    padding-top: 1rem;
 }
 
-// Consolidated actions class for consistency across key steps
-.actions,
-.qs-form-actions {
+.pricing-step .actions {
     display: flex;
-    justify-content: flex-end; // Align buttons to the right
-    gap: 15px; // Consistent spacing
-    margin-top: 30px;
-    padding-top: 20px;
-    border-top: 1px solid rgba(0, 0, 0, 0.05); // Subtle separator
-    width: 100%; // Ensure controls span full width
-    box-sizing: border-box; // Ensure padding fits in width
+    justify-content: space-between;
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+.policy-required-label {
+    font-size: 0.85em;
+    color: var(--mat-sys-error, #f44336);
+    margin-left: 0.5em;
+    font-weight: 500;
+}
+
+.policy-optional-label {
+    font-size: 0.85em;
+    opacity: 0.6;
+    font-style: italic;
+    margin-left: 0.5em;
+}
+
+:host-context(.dark-theme) {
+    .pricing-step .actions {
+        border-top-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .policy-required-label {
+        color: var(--mat-sys-error, #ffb4ab);
+    }
 }

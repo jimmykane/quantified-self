@@ -26,7 +26,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DataPace } from '@sports-alliance/sports-lib';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { DataSwimPace } from '@sports-alliance/sports-lib';
-import { Analytics, logEvent } from '@angular/fire/analytics';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 
 
 @Component({
@@ -46,7 +46,7 @@ export class EventsExportFormComponent extends FormsAbstract {
   public startDate: Date;
   public endDate: Date;
   public isLoading: boolean;
-  private analytics = inject(Analytics);
+  private analyticsService = inject(AppAnalyticsService);
 
 
   constructor(
@@ -354,7 +354,7 @@ export class EventsExportFormComponent extends FormsAbstract {
       this.userService.updateUserProperties(this.user, {
         settings: this.user.settings
       });
-      logEvent(this.analytics, 'download_csv', {});
+      this.analyticsService.logEvent('download_csv', {});
     })
   }
 }
