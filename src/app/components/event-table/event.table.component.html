@@ -82,6 +82,7 @@
             @if (row['Merged Event']) {
             <span><mat-icon>compare_arrows</mat-icon></span>
             }
+            <app-activity-type-icon [activityType]="row[column]" size="18px" vAlign="middle"></app-activity-type-icon>
             {{ row[column] }}
           </span>
           }
