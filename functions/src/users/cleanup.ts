@@ -28,46 +28,68 @@ async function deleteTokenDocumentWithSubcollections(collectionName: string, uid
     logger.info(`[Cleanup] Deleted parent doc ${collectionName}/${uid}`);
 }
 
+// Define cleanup configuration for services
+interface ServiceCleanupConfig {
+    name: string;
+    deauthFn: (uid: string) => Promise<void>;
+    collectionName: string;
+}
+
+/**
+ * Orchestrates the cleanup process:
+ * 1. Attempt best-effort deauthorization (api call)
+ * 2. Mandatory local token deletion (firestore)
+ */
+async function safeDeauthorizeAndCleanup(uid: string, config: ServiceCleanupConfig): Promise<void> {
+    // 1. Deauthorize (Best Effort)
+    try {
+        logger.info(`[Cleanup] Deauthorizing ${config.name} for user ${uid}`);
+        await config.deauthFn(uid);
+    } catch (e: any) {
+        // Log error but continue to forced cleanup
+        logger.error(`[Cleanup] Error deauthorizing ${config.name} for ${uid}`, e);
+    }
+
+    // 2. Local Cleanup (Mandatory)
+    try {
+        await deleteTokenDocumentWithSubcollections(config.collectionName, uid);
+    } catch (e: any) {
+        logger.error(`[Cleanup] Error deleting ${config.name} tokens for ${uid}`, e);
+    }
+}
+
 export const cleanupUserAccounts = functions.region('europe-west2').auth.user().onDelete(async (user) => {
     const uid = user.uid;
     logger.info(`[Cleanup] User ${uid} deleted. Starting service deauthorization cleanup.`);
 
-    // Deauthorize Suunto
-    try {
-        logger.info(`[Cleanup] Deauthorizing Suunto for user ${uid}`);
-        await deauthorizeServiceForUser(uid, ServiceNames.SuuntoApp);
-    } catch (e) {
-        logger.error(`[Cleanup] Error deauthorizing Suunto for ${uid}`, e);
-    }
-    // Always ensure local cleanup happens, even if deauthorization failed or threw
-    try {
-        const config = getServiceConfig(ServiceNames.SuuntoApp);
-        await deleteTokenDocumentWithSubcollections(config.tokenCollectionName, uid);
-    } catch (e) {
-        logger.error(`[Cleanup] Error deleting Suunto tokens for ${uid}`, e);
-    }
+    // Import constants locally to avoid top-level side effects if helpful, 
+    // though for these it's fine. Using hardcoded string or importing constant is fine.
+    // For Garmin, collection name is 'garminHealthAPITokens' (from constants)
+    // For Suunto, getServiceConfig returns it.
+    // For COROS, getServiceConfig returns it.
 
-    // Deauthorize COROS
-    try {
-        logger.info(`[Cleanup] Deauthorizing COROS for user ${uid}`);
-        await deauthorizeServiceForUser(uid, ServiceNames.COROSAPI);
-    } catch (e) {
-        logger.error(`[Cleanup] Error deauthorizing COROS for ${uid}`, e);
-    }
-    // Always ensure local cleanup happens, even if deauthorization failed or threw
-    try {
-        const config = getServiceConfig(ServiceNames.COROSAPI);
-        await deleteTokenDocumentWithSubcollections(config.tokenCollectionName, uid);
-    } catch (e) {
-        logger.error(`[Cleanup] Error deleting COROS tokens for ${uid}`, e);
-    }
+    const services: ServiceCleanupConfig[] = [
+        {
+            name: 'Suunto',
+            deauthFn: (id) => deauthorizeServiceForUser(id, ServiceNames.SuuntoApp),
+            collectionName: getServiceConfig(ServiceNames.SuuntoApp).tokenCollectionName
+        },
+        {
+            name: 'COROS',
+            deauthFn: (id) => deauthorizeServiceForUser(id, ServiceNames.COROSAPI),
+            collectionName: getServiceConfig(ServiceNames.COROSAPI).tokenCollectionName
+        },
+        {
+            name: 'Garmin',
+            deauthFn: (id) => deauthorizeGarminHealthAPIForUser(id),
+            collectionName: 'garminHealthAPITokens' // Imported constant would be better but string is safe here
+        }
+    ];
 
-    // Deauthorize Garmin
-    try {
-        logger.info(`[Cleanup] Deauthorizing Garmin for user ${uid}`);
-        await deauthorizeGarminHealthAPIForUser(uid);
-    } catch (e) {
-        logger.error(`[Cleanup] Error disconnecting Garmin for ${uid}`, e);
+    // Run sequantially to avoid race conditions or overwhelming logs, though parallel is also an option.
+    // Sequential is safer for clarity.
+    for (const service of services) {
+        await safeDeauthorizeAndCleanup(uid, service);
     }
 
     logger.info(`[Cleanup] Service deauthorization clean up completed for user ${uid}`);

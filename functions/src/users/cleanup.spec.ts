@@ -274,4 +274,23 @@ describe('cleanupUserAccounts', () => {
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.COROSAPI);
         expect(deauthorizeGarminMock).toHaveBeenCalledWith('testUser123');
     });
+
+    it('should force delete Garmin tokens even if deauthorization fails', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        // Make Garmin fail
+        deauthorizeGarminMock.mockRejectedValueOnce(new Error('Garmin 500 API Error'));
+
+        await wrapped(user, { eventId: 'eventId' } as any);
+
+        // Verify Garmin deauth attempted
+        expect(deauthorizeGarminMock).toHaveBeenCalledWith('testUser123');
+
+        // Verify local cleanup encountered error but TRIED to delete
+        // Note: The helper calls deleteTokenDocumentWithSubcollections, which calls doc(uid).delete()
+        expect(firestoreMock().collection).toHaveBeenCalledWith('garminHealthAPITokens');
+        expect(firestoreMock().collection('garminHealthAPITokens').doc).toHaveBeenCalledWith('testUser123');
+        expect(firestoreMock().collection('garminHealthAPITokens').doc('testUser123').delete).toHaveBeenCalled();
+    });
 });
