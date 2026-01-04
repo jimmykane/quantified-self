@@ -8,8 +8,8 @@
 /** Maximum retry attempts before giving up on a queue item for background processing */
 export const MAX_RETRY_COUNT = 10;
 
-/** Cron schedule for background processing (every hour) */
-export const QUEUE_SCHEDULE = '0 * * * *';
+/** Cron schedule for background processing (every 15 minutes) */
+export const QUEUE_SCHEDULE = '*/15 * * * *';
 
 /** Cloud Tasks retry configuration for immediate processing */
 export const CLOUD_TASK_RETRY_CONFIG = {
