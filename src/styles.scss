@@ -26,6 +26,22 @@ $dark-warn: mat.m2-define-palette(mat.$m2-red-palette);
 $app-typography: mat.m2-define-typography-config($font-family: "'QSFont', sans-serif",
   );
 
+// Activity Gradients
+:root {
+  --gradient-running: linear-gradient(135deg, #FDD300, #FF9100);
+  --gradient-trail-running: linear-gradient(135deg, #c7ef0c, #8bc34a);
+  --gradient-cycling: linear-gradient(135deg, #FF7C3B, #d84315);
+  --gradient-swimming: linear-gradient(135deg, #40C4FF, #0288D1);
+  --gradient-performance: linear-gradient(135deg, #AFE443, #689F38);
+  --gradient-indoor-sports: linear-gradient(135deg, #FF467E, #C2185B);
+  --gradient-outdoor-adventures: linear-gradient(135deg, #55D781, #2E7D32);
+  --gradient-winter-sports: linear-gradient(135deg, #6289FE, #303F9F);
+  --gradient-water-sports: linear-gradient(135deg, #59C7FE, #0277BD);
+  --gradient-diving: linear-gradient(135deg, #72E3DE, #0097A7);
+  --gradient-team-racket: linear-gradient(135deg, #9A7DEA, #512DA8);
+  --gradient-unspecified: linear-gradient(135deg, #A3ADB0, #546E7A);
+}
+
 // Create the theme object. A theme consists of configurations for individual
 // theming systems such as "color" or "typography".
 $app-light-theme: mat.m2-define-light-theme((color: (primary: $light-primary,

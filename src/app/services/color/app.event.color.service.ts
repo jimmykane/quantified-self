@@ -3,6 +3,7 @@ import { AppDeviceColors } from './app.device.colors';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import { AppActivityTypeGroupColors } from './app.activity-type-group.colors';
+import { AppActivityTypeGroupGradients } from './app.activity-type-group.gradients';
 import type * as am4core from '@amcharts/amcharts4/core';
 import { AppColors } from './app.colors';
 import { AmChartsService } from '../am-charts.service';
@@ -90,6 +91,20 @@ export class AppEventColorService {
 
   getColorForActivityTypeByActivityTypeGroup(activityType: ActivityTypes): string {
     return AppActivityTypeGroupColors[ActivityTypesHelper.getActivityGroupForActivityType(activityType)];
+  }
+
+  /**
+   * Returns a CSS linear-gradient string for the given activity type.
+   */
+  getGradientForActivityTypeGroup(activityType: ActivityTypes): string {
+    const group = ActivityTypesHelper.getActivityGroupForActivityType(activityType);
+    const gradient = AppActivityTypeGroupGradients[group];
+    if (gradient) {
+      return `linear-gradient(135deg, ${gradient.start}, ${gradient.end})`;
+    }
+    // Fallback to solid color if gradient not defined
+    const solid = AppActivityTypeGroupColors[group] || '#999';
+    return `linear-gradient(135deg, ${solid}, ${solid})`;
   }
 
   getColorForZone(zone: string): am4core.Color | null {

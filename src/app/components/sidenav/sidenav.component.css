@@ -202,6 +202,15 @@ mat-icon {
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
+/* Force SVGs to respect color */
+mat-list-item mat-icon svg,
+mat-list-item mat-icon svg path,
+mat-list-item mat-icon svg circle,
+mat-list-item mat-icon svg polygon,
+mat-list-item mat-icon svg rect {
+  fill: currentColor !important;
+}
+
 mat-list-item:hover mat-icon {
   opacity: 1;
   transform: scale(1.05);

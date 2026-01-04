@@ -99,7 +99,7 @@
       <tr mat-header-row *matHeaderRowDef="getColumnsToDisplay(); sticky: true"></tr>
       <tr mat-row *matRowDef="let row; columns: getColumnsToDisplay();" [@rowsAnimation]=""
         [routerLink]="['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
-        [class.merged]="row['Merged Event']" class="normal-row">
+        [class.merged]="row['Merged Event']" [style.--row-gradient]="row['Gradient']" class="normal-row activity-row">
       </tr>
 
       <!-- Row shown when there is no matching data. -->

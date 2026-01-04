@@ -536,6 +536,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       statRowElement['Color'] = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(
         event.getActivityTypesAsArray().length > 1 ? ActivityTypes.Multisport : ActivityTypes[event.getActivityTypesAsArray()[0]]
       );
+      statRowElement['Gradient'] = this.eventColorService.getGradientForActivityTypeGroup(
+        event.getActivityTypesAsArray().length > 1 ? ActivityTypes.Multisport : ActivityTypes[event.getActivityTypesAsArray()[0]]
+      );
       statRowElement['Event'] = event;
 
       // Add the sorts

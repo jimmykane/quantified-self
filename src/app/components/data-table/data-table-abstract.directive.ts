@@ -161,4 +161,6 @@ export interface StatRowElement {
   'sort.Duration': number,
   'sort.Device Names'?: string,
   'sort.Description'?: string,
+  Gradient?: string,
+  Color?: string,
 }
