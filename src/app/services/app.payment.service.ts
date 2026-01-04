@@ -410,19 +410,20 @@ export class AppPaymentService {
     /**
      * Restores purchases by force-refreshing the user's claims.
      */
-    async restorePurchases(): Promise<void> {
+    async restorePurchases(): Promise<string> {
         const restoreUserClaims = httpsCallableFromURL<void, { success: boolean, role: string }>(
             this.functions,
             environment.functions.restoreUserClaims
         );
 
         try {
-            await restoreUserClaims();
+            const result = await restoreUserClaims();
             // Force token refresh to pick up new claims
             const user = this.auth.currentUser;
             if (user) {
                 await user.getIdToken(true);
             }
+            return result.data.role;
         } catch (error) {
             this.logger.error('Error restoring purchases:', error);
             throw error;

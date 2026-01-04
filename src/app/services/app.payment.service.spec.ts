@@ -168,4 +168,15 @@ describe('AppPaymentService', () => {
             expect(payload.subscription_data).toBeUndefined();
         });
     });
+    describe('restorePurchases', () => {
+        it('should return the role from the cloud function response', async () => {
+            // Mock the callable function to return specific data
+            mockHttpsCallableFromURL.mockReturnValue(() => Promise.resolve({ data: { success: true, role: 'pro' } }));
+
+            const role = await service.restorePurchases();
+
+            expect(role).toBe('pro');
+            expect(mockHttpsCallableFromURL).toHaveBeenCalled();
+        });
+    });
 });

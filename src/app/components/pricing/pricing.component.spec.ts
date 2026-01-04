@@ -19,6 +19,9 @@ class MockAppPaymentService {
         return Promise.resolve();
     }
     restorePurchases() {
+        return Promise.resolve('pro');
+    }
+    appendCheckoutSession() {
         return Promise.resolve();
     }
 }
@@ -53,7 +56,13 @@ describe('PricingComponent', () => {
             providers: [
                 { provide: AppPaymentService, useClass: MockAppPaymentService },
                 { provide: AppUserService, useClass: MockAppUserService },
-                { provide: AppAuthService, useValue: { user$: of(null) } },
+                {
+                    provide: AppAuthService,
+                    useValue: {
+                        user$: of(null),
+                        currentUser: { uid: 'test-uid' }
+                    }
+                },
                 { provide: MatDialog, useClass: MockMatDialog },
                 {
                     provide: Auth,
@@ -111,6 +120,46 @@ describe('PricingComponent', () => {
             data: expect.objectContaining({
                 title: 'Error',
                 message: expect.stringContaining('mailto:support@quantified-self.io')
+            })
+        }));
+        expect(component.isLoading).toBe(false);
+    });
+
+    it('should show success dialog when restorePurchases succeeds', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const dialog = TestBed.inject(MatDialog);
+        const dialogSpy = vi.spyOn(dialog, 'open');
+
+        // Mock success with a specific role
+        vi.spyOn(paymentService, 'restorePurchases').mockResolvedValue('pro');
+
+        await component.restorePurchases();
+
+        expect(dialogSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            data: expect.objectContaining({
+                title: 'Subscription Restored!',
+                message: expect.stringContaining('We found your existing pro subscription'),
+                confirmText: 'OK'
+            })
+        }));
+        expect(component.isLoading).toBe(false);
+    });
+
+    it('should show success dialog when subscribe fails with SUBSCRIPTION_RESTORED error', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const dialog = TestBed.inject(MatDialog);
+        const dialogSpy = vi.spyOn(dialog, 'open');
+
+        vi.spyOn(paymentService, 'appendCheckoutSession').mockRejectedValue(new Error('SUBSCRIPTION_RESTORED:basic'));
+
+        // Pass a mock price object
+        await component.subscribe({ id: 'price_123' });
+
+        expect(dialogSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            data: expect.objectContaining({
+                title: 'Subscription Restored!',
+                message: expect.stringContaining('We found your existing basic subscription'),
+                confirmText: 'OK'
             })
         }));
         expect(component.isLoading).toBe(false);

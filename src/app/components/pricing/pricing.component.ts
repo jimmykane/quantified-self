@@ -148,15 +148,7 @@ export class PricingComponent implements OnInit, OnDestroy {
             } else if (errorMessage.startsWith('SUBSCRIPTION_RESTORED:')) {
                 // Existing subscription was linked, show success message
                 const role = errorMessage.split(':')[1];
-                this.dialog.open(ConfirmationDialogComponent, {
-                    data: {
-                        title: 'Subscription Restored!',
-                        message: `We found your existing ${role} subscription and linked it to your account. No need to subscribe again!`,
-                        confirmText: 'OK'
-                    }
-                }).afterClosed().subscribe(() => {
-                    window.location.reload();
-                });
+                this.showSubscriptionRestoredDialog(role);
             } else {
                 this.logger.error('Error starting checkout:', error);
                 alert('Failed to start checkout. Please try again.');
@@ -246,9 +238,8 @@ export class PricingComponent implements OnInit, OnDestroy {
 
         this.isLoading = true;
         try {
-            await this.paymentService.restorePurchases();
-            // Reload window to reflect new state
-            window.location.reload();
+            const role = await this.paymentService.restorePurchases();
+            this.showSubscriptionRestoredDialog(role);
         } catch (error) {
             this.logger.error('Error restoring purchases:', error);
             const message = `Failed to restore purchases. Please <a href="mailto:${environment.supportEmail}">contact support</a>.`;
@@ -259,7 +250,19 @@ export class PricingComponent implements OnInit, OnDestroy {
                     confirmText: 'OK'
                 }
             });
+        } finally {
             this.isLoading = false;
         }
     }
+
+    private showSubscriptionRestoredDialog(role: string): void {
+        this.dialog.open(ConfirmationDialogComponent, {
+            data: {
+                title: 'Subscription Restored!',
+                message: `We found your existing ${role} subscription and linked it to your account. No need to subscribe again!`,
+                confirmText: 'OK'
+            }
+        });
+    }
 }
+
