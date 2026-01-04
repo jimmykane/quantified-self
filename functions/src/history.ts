@@ -19,6 +19,7 @@ import {
   SuuntoAPIAuth2ServiceTokenInterface,
 } from '@sports-alliance/sports-lib';
 import { convertCOROSWorkoutsToQueueItems } from './coros/queue';
+import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
 
 const BATCH_SIZE = 450;
 
@@ -63,11 +64,16 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
       const batch = admin.firestore().batch();
       let processedWorkoutsCount = 0;
       for (const workoutQueueItem of batchToProcess) {
-        // Maybe do a get or insert it at another queue (Done for Suunto app so far)
-        batch.set(
-          admin.firestore()
-            .collection(getServiceWorkoutQueueName(serviceName, true))
-            .doc(workoutQueueItem.id), workoutQueueItem);
+        // Writing to Standard Queue now (false for isHistory)
+        const queueRef = admin.firestore()
+          .collection(getServiceWorkoutQueueName(serviceName))
+          .doc(workoutQueueItem.id);
+
+        batch.set(queueRef, {
+          ...workoutQueueItem,
+          expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
+          fromHistory: true
+        });
         processedWorkoutsCount++;
       }
       // Try to commit it
@@ -82,6 +88,7 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
           }, { merge: true });
 
         await batch.commit();
+
         logger.info(`Batch #${processedBatchesCount} with ${processedWorkoutsCount} activities saved for token ${tokenQueryDocumentSnapshot.id} and user ${userID} `);
       } catch (e: any) {
         logger.error(`Could not save batch ${processedBatchesCount} for token ${tokenQueryDocumentSnapshot.id} and user ${userID} due to service error aborting`, e);
@@ -90,13 +97,10 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
         continue; // Unnecessary but clear to the dev that it will continue
       }
     }
-    logger.info(`${processedBatchesCount} out of ${batchesToProcess.length} processed and saved for token ${tokenQueryDocumentSnapshot.id} and user ${userID} `);
   }
 
   logger.info(`Total: ${totalProcessedWorkoutsCount} workouts via ${processedBatchesCount} batches added to queue for user ${userID}`);
 }
-
-// getServiceWorkoutQueueName moved to shared/queue-names.ts
 
 export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceToken: COROSAPIAuth2ServiceTokenInterface | SuuntoAPIAuth2ServiceTokenInterface, startDate: Date, endDate: Date): Promise<SuuntoAppWorkoutQueueItemInterface | COROSAPIWorkoutQueueItemInterface[]> {
   let result;
