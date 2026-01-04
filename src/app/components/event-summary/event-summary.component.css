@@ -293,16 +293,28 @@
     font-size: 0.65rem;
   }
 }
+
 /* Stats Grid Action Buttons */
 .devices-item,
 .show-more-item {
+  display: flex !important;
+  /* Ensure grouping container is flex row */
+  flex-direction: row !important;
+  align-items: center;
+  gap: 12px;
+  /* Match standard grid gap */
   cursor: pointer;
   background: var(--mat-app-surface-container-high);
   border-radius: 12px;
   transition: all 0.2s ease;
-  min-height: 56px; /* Ensure uniform height with other stats */
-  justify-content: center;
-  padding: 8px; /* Add some padding */
+  min-height: 100% !important;
+  /* Stretch to fill the grid cell */
+  /* Allow natural height, preventing row expansion */
+  /* Prevent stretching to fill grid cell height */
+  justify-content: flex-start;
+  /* Align left like standard grid items */
+  padding: 8px 12px;
+  /* Add some padding */
   box-sizing: border-box;
 }
 
@@ -329,4 +341,54 @@
 .devices-item .stat-avatar mat-icon,
 .show-more-item .stat-avatar mat-icon {
   color: var(--mat-app-primary);
+}
+
+.devices-item .stat-content,
+.show-more-item .stat-content {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Replicating HeaderStats styles for projected content */
+.devices-item .stat-avatar,
+.show-more-item .stat-avatar {
+  flex-shrink: 0;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.devices-item .stat-content,
+.show-more-item .stat-content {
+  display: flex !important;
+  flex-direction: column !important;
+  /* Standard stack: Label on top, Value below */
+  align-items: flex-start !important;
+  justify-content: center;
+  min-width: 0;
+  gap: 0 !important;
+  /* Reset any gap */
+}
+
+.devices-item .stat-label,
+.show-more-item .stat-label {
+  font-size: 0.65rem;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--mat-app-on-surface-variant);
+  opacity: 0.8;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.devices-item .stat-value-grid,
+.show-more-item .stat-value-grid {
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: var(--mat-app-on-surface);
+  line-height: 1.2;
+  white-space: nowrap;
 }
