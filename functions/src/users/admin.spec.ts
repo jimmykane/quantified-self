@@ -291,11 +291,11 @@ describe('getQueueStats Cloud Function', () => {
         expect(result.advanced.topErrors).toHaveLength(2);
 
         expect(result).toHaveProperty('pending');
-        // Check totals from mocked count (5) * (3 providers * 2 queues per provider * 3 statuses) = this logic is simpler in the implementation loop
-        // pending: 5 count * 5 queues = 25
-        expect(result.pending).toBe(25);
-        expect(result.succeeded).toBe(25);
-        expect(result.stuck).toBe(25);
+        // Check totals from mocked count (5) * (3 providers * 1 queue per provider * 3 statuses)
+        // pending: 5 count * 3 queues = 15
+        expect(result.pending).toBe(15);
+        expect(result.succeeded).toBe(15);
+        expect(result.stuck).toBe(15);
         expect(result.providers).toHaveLength(3);
 
         // Check DLQ stats

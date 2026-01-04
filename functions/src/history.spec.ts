@@ -34,7 +34,10 @@ vi.mock('firebase-admin', () => {
             collection: collectionMock,
             batch: batchMock
         }), {
-            batch: batchMock
+            batch: batchMock,
+            Timestamp: {
+                fromDate: vi.fn((date) => date)
+            }
         })
     };
 });

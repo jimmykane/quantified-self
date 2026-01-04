@@ -77,7 +77,6 @@ export {
 } from './coros/queue';
 
 export {
-  parseCOROSAPIHistoryImportWorkoutQueue,
   parseCOROSAPIWorkoutQueue,
 } from './queue';
 
@@ -93,7 +92,6 @@ export {
 
 export {
   parseSuuntoAppActivityQueue,
-  parseSuuntoAppHistoryImportActivityQueue,
 } from './queue';
 
 

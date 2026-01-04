@@ -379,8 +379,8 @@ export const getQueueStats = onCall({
     }
 
     const PROVIDER_QUEUES: Record<string, string[]> = {
-        'Suunto': ['suuntoAppWorkoutQueue', 'suuntoAppHistoryImportActivityQueue'],
-        'COROS': ['COROSAPIWorkoutQueue', 'COROSAPIHistoryImportWorkoutQueue'],
+        'Suunto': ['suuntoAppWorkoutQueue'],
+        'COROS': ['COROSAPIWorkoutQueue'],
         'Garmin': ['garminHealthAPIActivityQueue']
     };
 

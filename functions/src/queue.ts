@@ -27,12 +27,12 @@ import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/
 
 
 
-export async function parseQueueItems(serviceName: ServiceNames, fromHistoryQueue = false) {
+export async function parseQueueItems(serviceName: ServiceNames) {
   const RETRY_COUNT = MAX_RETRY_COUNT;
   const LIMIT = 200;
   // @todo add queue item sort date for creation
   const querySnapshot = await admin.firestore()
-    .collection(getServiceWorkoutQueueName(serviceName, fromHistoryQueue))
+    .collection(getServiceWorkoutQueueName(serviceName))
     .where('processed', '==', false)
     .where('retryCount', '<', RETRY_COUNT)
     .limit(LIMIT).get(); // Max 10 retries
@@ -109,28 +109,12 @@ export const parseCOROSAPIWorkoutQueue = functions.region('europe-west2').runWit
   await parseQueueItems(ServiceNames.COROSAPI);
 });
 
-export const parseCOROSAPIHistoryImportWorkoutQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_DEFAULT,
-  memory: MEMORY_DEFAULT,
-  maxInstances: 1,
-}).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
-  await parseQueueItems(ServiceNames.COROSAPI, true);
-});
-
 export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_HIGH,
   memory: MEMORY_HIGH,
   maxInstances: 1,
 }).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
   await parseQueueItems(ServiceNames.SuuntoApp);
-});
-
-export const parseSuuntoAppHistoryImportActivityQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_HIGH,
-  memory: MEMORY_HIGH,
-  maxInstances: 1,
-}).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
-  await parseQueueItems(ServiceNames.SuuntoApp, true);
 });
 
 
