@@ -82,19 +82,19 @@
 
   @if (user) {
   <mat-list-item routerLinkActive="active" [routerLink]="'/settings'" (click)="sideNav.close();">
-    <mat-icon>settings_applications</mat-icon>
-    Settings
+    <mat-icon>settings</mat-icon>
+    <span>Settings</span>
   </mat-list-item>
 
   <mat-list-item routerLinkActive="active" routerLink="/pricing" (click)="sideNav.close();">
     <mat-icon>card_membership</mat-icon>
-    Subscription
+    <span>Subscription</span>
   </mat-list-item>
 
   @if (isAdminUser) {
   <mat-list-item routerLinkActive="active" routerLink="/admin" (click)="sideNav.close();">
     <mat-icon>admin_panel_settings</mat-icon>
-    Admin
+    <span>Admin</span>
   </mat-list-item>
   }
   }
