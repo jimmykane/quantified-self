@@ -16,7 +16,7 @@ export class ActivityTypeIconComponent {
 
     getIcon(): string {
         if (!this.activityType) {
-            return 'fitness_center';
+            return 'sports';
         }
         const activities = this.activityType.split(',').map(a => a.trim());
         const activity = activities[0];
@@ -31,6 +31,6 @@ export class ActivityTypeIconComponent {
 
         const activityTypeEnum = ActivityTypes[activity as keyof typeof ActivityTypes] || (Object.values(ActivityTypes).includes(activity as ActivityTypes) ? activity as ActivityTypes : ActivityTypes.Other);
         const group = ActivityTypesHelper.getActivityGroupForActivityType(activityTypeEnum);
-        return AppActivityTypeGroupIcons[group] || 'fitness_center';
+        return AppActivityTypeGroupIcons[group] || 'sports';
     }
 }

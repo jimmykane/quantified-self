@@ -12,5 +12,5 @@ export const AppActivityTypeGroupIcons: { [key in ActivityTypeGroups]: string } 
     [ActivityTypeGroups.WaterSports]: 'rowing',
     [ActivityTypeGroups.Diving]: 'scuba_diving',
     [ActivityTypeGroups.TeamRacket]: 'sports_tennis',
-    [ActivityTypeGroups.Unspecified]: 'fitness_center',
+    [ActivityTypeGroups.Unspecified]: 'sports',
 };

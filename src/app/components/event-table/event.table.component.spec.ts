@@ -8,6 +8,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { AppFileService } from '../../services/app.file.service';
+import { AppProcessingService } from '../../services/app.processing.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { DatePipe } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
@@ -87,6 +88,7 @@ describe('EventTableComponent', () => {
     let mockBottomSheet: any;
     let mockColorService: any;
     let mockFileService: any;
+    let mockProcessingService: any;
 
     const mockUser = new User('testUser');
     mockUser.settings = {
@@ -121,7 +123,8 @@ describe('EventTableComponent', () => {
         };
 
         mockColorService = {
-            getColorForActivityTypeByActivityTypeGroup: vi.fn()
+            getColorForActivityTypeByActivityTypeGroup: vi.fn(),
+            getGradientForActivityTypeGroup: vi.fn()
         };
 
         mockFileService = {
@@ -158,6 +161,14 @@ describe('EventTableComponent', () => {
             })
         };
 
+        mockProcessingService = {
+            addJob: vi.fn().mockReturnValue('job-id'),
+            updateJob: vi.fn(),
+            completeJob: vi.fn(),
+            failJob: vi.fn(),
+            removeJob: vi.fn()
+        };
+
         await TestBed.configureTestingModule({
             imports: [NoopAnimationsModule],
             declarations: [EventTableComponent],
@@ -172,6 +183,7 @@ describe('EventTableComponent', () => {
                 { provide: MatBottomSheet, useValue: mockBottomSheet },
                 { provide: AppEventColorService, useValue: mockColorService },
                 { provide: AppFileService, useValue: mockFileService },
+                { provide: AppProcessingService, useValue: mockProcessingService },
                 DatePipe
             ],
             schemas: [NO_ERRORS_SCHEMA]
@@ -264,7 +276,7 @@ describe('EventTableComponent', () => {
             expect(mockEventService.downloadFile).toHaveBeenCalledWith('users/123/files/activity1.fit');
             expect(mockEventService.downloadFile).toHaveBeenCalledWith('users/123/files/activity2.fit');
             expect(mockFileService.downloadAsZip).toHaveBeenCalled();
-            expect(mockSnackBar.open).toHaveBeenCalledWith('Downloaded 2 file(s)', null, { duration: 2000 });
+            expect(mockProcessingService.completeJob).toHaveBeenCalledWith(expect.any(String), 'Downloaded 2 files');
         });
 
         it('should download and zip files from events with legacy originalFile', async () => {
@@ -278,7 +290,7 @@ describe('EventTableComponent', () => {
 
             expect(mockEventService.downloadFile).toHaveBeenCalledWith('users/123/files/legacy.fit');
             expect(mockFileService.downloadAsZip).toHaveBeenCalled();
-            expect(mockSnackBar.open).toHaveBeenCalledWith('Downloaded 1 file(s)', null, { duration: 2000 });
+            expect(mockProcessingService.completeJob).toHaveBeenCalledWith(expect.any(String), 'Downloaded 1 files');
         });
 
         it('should generate correct ZIP filename from date range', async () => {
@@ -396,7 +408,7 @@ describe('EventTableComponent', () => {
                 expect.arrayContaining([expect.objectContaining({ fileName: expect.stringMatching(/2024-12-01.*\.fit/) })]),
                 expect.any(String)
             );
-            expect(mockSnackBar.open).toHaveBeenCalledWith('Downloaded 1 file(s)', null, { duration: 2000 });
+            expect(mockProcessingService.completeJob).toHaveBeenCalledWith(expect.any(String), 'Downloaded 1 files');
         });
     });
 });
