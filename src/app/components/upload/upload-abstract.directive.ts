@@ -6,7 +6,7 @@ import { UPLOAD_STATUS } from './upload-status/upload.status';
 import { LoggerService } from '../../services/logger.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
-import { AppFilesStatusService } from '../../services/upload/app-files-status.service';
+import { AppProcessingService } from '../../services/app.processing.service';
 
 
 @Directive()
@@ -20,7 +20,7 @@ export abstract class UploadAbstractDirective implements OnInit {
   constructor(
     protected snackBar: MatSnackBar,
     protected dialog: MatDialog,
-    protected filesStatusService: AppFilesStatusService,
+    protected processingService: AppProcessingService,
     protected router: Router,
     protected logger: LoggerService) {
 
@@ -54,31 +54,35 @@ export abstract class UploadAbstractDirective implements OnInit {
       return;
     }
 
+    const rawFiles = [...(event.target.files || event.dataTransfer.files)];
     // Add as local to show totals
-    const files = [];
-    [...(event.target.files || event.dataTransfer.files)].forEach(file => {
-      files.push(this.filesStatusService.addOrUpdate({
-        file: file,
-        name: file.name,
-        status: UPLOAD_STATUS.PROCESSING,
-        extension: file.name.split('.').pop().toLowerCase(),
-        filename: file.name.split('.').shift(),
-      }));
-    })
+    const filesToProcess = rawFiles.map(file => {
+      const name = file.name;
+      const extension = name.split('.').pop().toLowerCase();
+      const filename = name.split('.').shift();
+      const jobId = this.processingService.addJob('upload', `Uploading ${name}...`);
+
+      return {
+        file,
+        name,
+        extension,
+        filename,
+        jobId,
+        status: UPLOAD_STATUS.PROCESSING
+      }
+    });
 
     // Then actually start processing them
     this.isUploading = true;
     try {
-      for (let index = 0; index < files.length; index++) {
+      for (const fileItem of filesToProcess) {
+        this.processingService.updateJob(fileItem.jobId, { status: 'processing', progress: 0 });
         try {
-          await this.processAndUploadFile(files[index]);
-          files[index].status = UPLOAD_STATUS.PROCESSED;
+          await this.processAndUploadFile(fileItem);
+          this.processingService.completeJob(fileItem.jobId);
         } catch (e) {
-          files[index].status = UPLOAD_STATUS.ERROR;
-
           this.logger.error(e);
-        } finally {
-          this.filesStatusService.addOrUpdate(files[index]);
+          this.processingService.failJob(fileItem.jobId, e.message || 'Upload failed');
         }
       }
     } finally {
@@ -86,7 +90,7 @@ export abstract class UploadAbstractDirective implements OnInit {
     }
 
     // this.isUploadActive = false;
-    this.snackBar.open('Processed ' + files.length + ' files', null, {
+    this.snackBar.open('Processed ' + filesToProcess.length + ' files', null, {
       duration: 2000,
     });
 

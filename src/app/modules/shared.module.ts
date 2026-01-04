@@ -9,18 +9,18 @@ import { EventFormComponent } from '../components/event-form/event.form.componen
 import { ActivityFormComponent } from '../components/activity-form/activity.form.component';
 import { DeleteConfirmationComponent } from '../components/delete-confirmation/delete-confirmation.component';
 import { DataTypeIconComponent } from '../components/data-type-icon/data-type-icon.component';
-import { UploadErrorComponent } from '../components/upload/upload-error/upload-error.component';
-import { UploadInfoComponent } from '../components/upload/upload-info/upload-info.component';
-import { FilesStatusListComponent } from '../components/files-status-list/files-status-list.component';
+
+import { RouterModule } from '@angular/router';
 
 import { EventSearchComponent } from '../components/event-search/event-search.component';
 import { ActivityTypesMultiSelectComponent } from '../components/activity-types-multi-select/activity-types-multi-select.component';
 import { ActivityTypeIconComponent } from '../components/activity-type-icon/activity-type-icon.component';
-import { DateAdapter, MAT_DATE_FORMATS, MAT_DATE_LOCALE } from '@angular/material/core';
+
 @NgModule({
     imports: [
         CommonModule,
         MaterialModule,
+        RouterModule,
         ReactiveFormsModule,
         FormsModule
     ],
@@ -29,33 +29,27 @@ import { DateAdapter, MAT_DATE_FORMATS, MAT_DATE_LOCALE } from '@angular/materia
         PrivacyIconComponent,
         EventActionsComponent,
         EventFormComponent,
-
         ActivityFormComponent,
         DeleteConfirmationComponent,
         DataTypeIconComponent,
-        UploadInfoComponent,
-        UploadErrorComponent,
-        FilesStatusListComponent,
         EventSearchComponent,
         ActivityTypesMultiSelectComponent,
         ActivityTypeIconComponent,
     ],
     providers: [],
     exports: [
+        CommonModule,
+        MaterialModule,
+        RouterModule,
         ShadeComponent,
         PrivacyIconComponent,
         EventActionsComponent,
         EventFormComponent,
         ActivityFormComponent,
-        ActivityFormComponent,
         DeleteConfirmationComponent,
         DataTypeIconComponent,
         ReactiveFormsModule,
         FormsModule,
-        UploadInfoComponent,
-        UploadErrorComponent,
-        FilesStatusListComponent,
-
         EventSearchComponent,
         ActivityTypesMultiSelectComponent,
         ActivityTypeIconComponent,

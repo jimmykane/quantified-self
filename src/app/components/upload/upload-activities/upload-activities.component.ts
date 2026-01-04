@@ -13,7 +13,7 @@ import { EventImporterSuuntoSML } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
+import { AppProcessingService } from '../../../services/app.processing.service';
 import { Overlay } from '@angular/cdk/overlay';
 import { USAGE_LIMITS } from '../../../../../functions/src/shared/limits';
 import { LoggerService } from '../../../services/logger.service';
@@ -38,12 +38,12 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
     protected snackBar: MatSnackBar,
     protected dialog: MatDialog,
     protected bottomSheet: MatBottomSheet,
-    protected filesStatusService: AppFilesStatusService,
+    protected processingService: AppProcessingService,
     protected overlay: Overlay,
     private eventService: AppEventService,
     protected router: Router,
     logger: LoggerService) {
-    super(snackBar, dialog, filesStatusService, router, logger);
+    super(snackBar, dialog, processingService, router, logger);
   }
 
   async ngOnInit() {

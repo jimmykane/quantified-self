@@ -1,0 +1,105 @@
+:host {
+    display: inline-block;
+}
+
+.indicator-button {
+    position: relative;
+}
+
+.spinning {
+    animation: spin 2s linear infinite;
+}
+
+.badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background-color: var(--mat-sys-secondary);
+    color: white;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+.jobs-header {
+    padding: 12px 16px;
+    font-weight: 500;
+    color: var(--mat-sys-on-surface);
+    font-size: 0.9rem;
+}
+
+.jobs-list {
+    max-height: 300px;
+    overflow-y: auto;
+    min-width: 320px;
+    padding: 8px 0;
+}
+
+.job-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.job-item:last-child {
+    border-bottom: none;
+}
+
+.job-info {
+    flex: 1;
+    min-width: 0;
+    /* Text truncation */
+}
+
+.job-title {
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.job-details {
+    font-size: 0.75rem;
+    opacity: 0.7;
+    margin-bottom: 4px;
+}
+
+.job-icon {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.success {
+    color: #4caf50;
+}
+
+.error {
+    color: #f44336;
+}
+
+@keyframes spin {
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+/* Adjust mat-progress-bar height if needed */
+mat-progress-bar {
+    height: 2px !important;
+}

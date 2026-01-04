@@ -42,6 +42,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { OrderByDirection } from 'firebase/firestore';
 import { AppFileService } from '../../services/app.file.service';
 import { LoggerService } from '../../services/logger.service';
+import { AppProcessingService } from '../../services/app.processing.service';
 
 @Component({
   selector: 'app-event-table',
@@ -90,6 +91,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     private fileService: AppFileService,
     private router: Router, private datePipe: DatePipe,
     private logger: LoggerService,
+    private processingService: AppProcessingService,
     private breakpointObserver: BreakpointObserver) {
     super(changeDetector);
   }
@@ -330,12 +332,14 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   public async downloadOriginals() {
-    this.loading();
+    // Start background job instead of blocking UI
+    const jobId = this.processingService.addJob('download', 'Preparing download...');
+
     try {
       const selectedEvents = this.selection.selected.map(s => s.Event) as EventInterface[];
       if (selectedEvents.length === 0) {
         this.snackBar.open('No events selected', null, { duration: 2000 });
-        this.loaded();
+        this.processingService.removeJob(jobId);
         return;
       }
 
@@ -343,6 +347,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       const filesToDownload: { path: string, fileName: string }[] = [];
       let minDate: Date | null = null;
       let maxDate: Date | null = null;
+
+      this.processingService.updateJob(jobId, { title: 'Gathering file info...', progress: 10 });
 
       for (const event of selectedEvents) {
         // Use shared utility for date conversion
@@ -355,8 +361,6 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
         const appEvent = event as any;
         const eventId = event.getID ? event.getID() : null;
-        this.logger.log(`[EventTable] Processing event for download: ${eventId}`, event);
-        this.logger.log(`[EventTable] originalFiles metadata:`, appEvent.originalFiles);
 
         // Handle array of original files
         if (appEvent.originalFiles && Array.isArray(appEvent.originalFiles) && appEvent.originalFiles.length > 0) {
@@ -364,7 +368,6 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
           appEvent.originalFiles.forEach((fileMeta: any, index: number) => {
             if (fileMeta.path) {
               const extension = this.fileService.getExtensionFromPath(fileMeta.path);
-              // Use fileMeta.startDate if available, fallback to event startDate
               const fileDate = this.fileService.toDate(fileMeta.startDate) || startDate;
               const fileName = this.fileService.generateDateBasedFilename(
                 fileDate, extension, index + 1, totalFiles, eventId
@@ -383,27 +386,35 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
       if (filesToDownload.length === 0) {
         this.snackBar.open('No original files available for selected events', null, { duration: 3000 });
-        this.loaded();
+        this.processingService.removeJob(jobId);
         return;
       }
 
       // Download all files
+      this.processingService.updateJob(jobId, { title: `Downloading ${filesToDownload.length} files...`, progress: 20 });
+
       const downloadedFiles: { data: ArrayBuffer, fileName: string }[] = [];
+      let completed = 0;
+
       for (const file of filesToDownload) {
         try {
           const data = await this.eventService.downloadFile(file.path);
           downloadedFiles.push({ data, fileName: file.fileName });
         } catch (e) {
           this.logger.error('Failed to download file:', file.path, e);
-          // Continue with other files
         }
+        completed++;
+        const progress = 20 + Math.round((completed / filesToDownload.length) * 60); // 20% to 80%
+        this.processingService.updateJob(jobId, { progress });
       }
 
       if (downloadedFiles.length === 0) {
         this.snackBar.open('Failed to download any files', null, { duration: 3000 });
-        this.loaded();
+        this.processingService.failJob(jobId, 'No files downloaded');
         return;
       }
+
+      this.processingService.updateJob(jobId, { title: 'Zipping files...', progress: 85 });
 
       // Generate ZIP filename using shared utility
       const zipFileName = this.fileService.generateDateRangeZipFilename(minDate, maxDate);
@@ -411,14 +422,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       // Create and download ZIP
       await this.fileService.downloadAsZip(downloadedFiles, zipFileName);
 
+      this.processingService.completeJob(jobId, `Downloaded ${downloadedFiles.length} files`);
       this.analyticsService.logEvent('download_originals', { count: downloadedFiles.length });
-      this.snackBar.open(`Downloaded ${downloadedFiles.length} file(s)`, null, { duration: 2000 });
     } catch (e) {
       this.logger.error('Error downloading originals:', e);
-      this.logger.error(e);
+      this.processingService.failJob(jobId, 'Download failed');
       this.snackBar.open('Error downloading files', null, { duration: 3000 });
-    } finally {
-      this.loaded();
     }
   }
 

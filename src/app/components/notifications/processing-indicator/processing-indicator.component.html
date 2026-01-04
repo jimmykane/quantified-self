@@ -1,0 +1,44 @@
+<button mat-icon-button [matMenuTriggerFor]="jobsMenu" *ngIf="hasActiveJobs$ | async" class="indicator-button">
+    <mat-icon [class.spinning]="true">sync</mat-icon>
+    <span class="badge" *ngIf="(activeJobs$ | async)?.length as count">{{count}}</span>
+</button>
+
+<mat-menu #jobsMenu="matMenu" class="jobs-menu">
+    <div class="jobs-header" (click)="$event.stopPropagation()">
+        Processing Tasks
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <div class="jobs-list" (click)="$event.stopPropagation()">
+        @for (job of jobs$ | async; track job.id) {
+        <div class="job-item">
+            <div class="job-icon">
+                @if (job.status === 'processing') {
+                <mat-spinner diameter="20"></mat-spinner>
+                } @else if (job.status === 'completed') {
+                <mat-icon class="success">check_circle</mat-icon>
+                } @else if (job.status === 'failed') {
+                <mat-icon class="error">error</mat-icon>
+                } @else {
+                <mat-icon>hourglass_empty</mat-icon>
+                }
+            </div>
+
+            <div class="job-info">
+                <div class="job-title">{{job.title}}</div>
+                <div class="job-details" *ngIf="job.details">{{job.details}}</div>
+                <mat-progress-bar *ngIf="job.status === 'processing'" mode="determinate" [value]="job.progress || 0">
+                </mat-progress-bar>
+            </div>
+
+            <button mat-icon-button (click)="removeJob(job.id)">
+                <mat-icon>close</mat-icon>
+            </button>
+        </div>
+        }
+        @if ((jobs$ | async)?.length === 0) {
+        <div class="empty-state">No active tasks</div>
+        }
+    </div>
+</mat-menu>

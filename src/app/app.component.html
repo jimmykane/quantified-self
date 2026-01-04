@@ -42,6 +42,7 @@
         }
 
         @if (title && title === 'Dashboard' && authService.user$ | async; as user) {
+        <app-processing-indicator class="right"></app-processing-indicator>
         <app-upload-activities class="right" [user]="user">
         </app-upload-activities>
         }

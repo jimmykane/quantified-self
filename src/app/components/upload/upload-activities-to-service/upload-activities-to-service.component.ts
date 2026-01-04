@@ -1,6 +1,6 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, Inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppUserService } from '../../../services/app.user.service';
@@ -11,7 +11,7 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Auth, getIdToken } from '@angular/fire/auth';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { FileInterface } from '../file.interface';
-import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
+import { AppProcessingService } from '../../../services/app.processing.service';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getSize } from '@sports-alliance/sports-lib';
 
@@ -28,13 +28,21 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   private eventService = inject(AppEventService);
   private userService = inject(AppUserService);
   private analyticsService = inject(AppAnalyticsService);
+  private http = inject(HttpClient);
+  private serviceName: ServiceNames;
 
   constructor(
+    protected snackBar: MatSnackBar,
     protected dialog: MatDialog,
-    protected filesStatusService: AppFilesStatusService,
-    private http: HttpClient,
-    protected router: Router) {
-    super(inject(MatSnackBar), dialog, filesStatusService, router, inject(LoggerService));
+    protected processingService: AppProcessingService,
+    protected router: Router,
+    @Inject(MAT_DIALOG_DATA) public data: any,
+    public dialogRef: MatDialogRef<UploadActivitiesToServiceComponent>,
+    logger: LoggerService) {
+    super(snackBar, dialog, processingService, router, logger);
+    if (data.serviceName) {
+      this.serviceName = data.serviceName;
+    }
   }
 
   /**

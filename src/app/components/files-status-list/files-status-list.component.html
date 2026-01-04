@@ -1,9 +1,0 @@
-<mat-list class="list">
-  <div mat-subheader>Failed uploads</div>
-  @for (file of files; track file) {
-    <mat-list-item style="text-align: left">
-      <mat-icon mat-list-icon>{{fileStatusIcon(file)}}</mat-icon>
-      <div mat-line>{{file.filename}}.{{file.extension}}</div>
-    </mat-list-item>
-  }
-</mat-list>

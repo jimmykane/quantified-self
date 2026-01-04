@@ -1,6 +1,6 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, Inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { MatDialog } from '@angular/material/dialog';
+import { MatDialog, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { LoggerService } from '../../../services/logger.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
@@ -9,7 +9,7 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Auth, getIdToken } from '@angular/fire/auth';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { FileInterface } from '../file.interface';
-import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
+import { AppProcessingService } from '../../../services/app.processing.service';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as Pako from 'pako';
 import { getSize } from '@sports-alliance/sports-lib';
@@ -24,15 +24,21 @@ import { getSize } from '@sports-alliance/sports-lib';
 export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
   private analyticsService = inject(AppAnalyticsService);
   private auth = inject(Auth);
+  private serviceName: ServiceNames; // Added this line
 
   constructor(
     protected snackBar: MatSnackBar,
     protected dialog: MatDialog,
-    protected filesStatusService: AppFilesStatusService,
+    protected processingService: AppProcessingService,
     private http: HttpClient,
     protected router: Router,
-    protected logger: LoggerService) {
-    super(snackBar, dialog, filesStatusService, router, logger);
+    @Inject(MAT_DIALOG_DATA) public data: any,
+    public dialogRef: MatDialogRef<UploadRoutesToServiceComponent>,
+    logger: LoggerService) {
+    super(snackBar, dialog, processingService, router, logger);
+    if (data.serviceName) {
+      this.serviceName = data.serviceName;
+    }
   }
 
   /**

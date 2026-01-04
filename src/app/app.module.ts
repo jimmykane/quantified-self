@@ -21,12 +21,13 @@ import { ClipboardModule } from '@angular/cdk/clipboard';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { ServiceWorkerModule } from '@angular/service-worker';
 import { UploadActivitiesComponent } from './components/upload/upload-activities/upload-activities.component';
-import { AppFilesInfoSheetService } from './services/upload/app-files-info-sheet.service';
+
 import { AppUpdateService } from './services/app.update.service';
 import { OnboardingComponent } from './components/onboarding/onboarding.component';
 import { MaintenanceComponent } from './components/maintenance/maintenance.component';
 import { GracePeriodBannerComponent } from './components/grace-period-banner/grace-period-banner.component';
 import { RouteLoaderComponent } from './components/route-loader/route-loader.component';
+import { ProcessingIndicatorComponent } from './components/notifications/processing-indicator/processing-indicator.component';
 import { AppRemoteConfigService } from './services/app.remote-config.service';
 import { firstValueFrom } from 'rxjs';
 
@@ -35,37 +36,20 @@ export function initializeRemoteConfig(remoteConfigService: AppRemoteConfigServi
   return () => firstValueFrom(remoteConfigService.getMaintenanceMode());
 }
 
-import { MAT_DATE_LOCALE } from '@angular/material/core';
-import 'dayjs/locale/en-gb';
-import 'dayjs/locale/de';
-import 'dayjs/locale/fr';
-import 'dayjs/locale/es';
-import 'dayjs/locale/it';
-import 'dayjs/locale/nl';
-import 'dayjs/locale/el';
+import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/date-locale.config';
+
+
 
 // ... (existing imports)
 
-/**
- * Gets the user's locale using the modern Intl API.
- * This respects system/OS regional settings, not just browser language.
- * Falls back to navigator.language if Intl is unavailable.
- */
-export function getBrowserLocale(): string {
-  try {
-    // Use Intl.DateTimeFormat to get the actual system locale for dates
-    const systemLocale = Intl.DateTimeFormat().resolvedOptions().locale;
-    return systemLocale || navigator.language || 'en-US';
-  } catch {
-    return navigator.language || 'en-US';
-  }
-}
+
 
 @NgModule({
   declarations: [
     AppComponent,
     SideNavComponent,
     UploadActivitiesComponent,
+    ProcessingIndicatorComponent,
     GracePeriodBannerComponent,
     RouteLoaderComponent,
   ],
@@ -116,14 +100,13 @@ export function getBrowserLocale(): string {
     provideAnalytics(() => getAnalytics()),
     provideRemoteConfig(() => getRemoteConfig()),
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
-    { provide: MAT_DATE_LOCALE, useFactory: getBrowserLocale },
+    MAT_DATE_LOCALE_PROVIDER,
     { provide: LOCALE_ID, useFactory: getBrowserLocale }
   ]
 })
 export class AppModule {
   // Services are not used, just to make sure they're instantiated
   constructor(
-    private appFilesInfoSheetService: AppFilesInfoSheetService,
     private updateService: AppUpdateService
   ) {
   }
