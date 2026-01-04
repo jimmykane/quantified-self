@@ -1,63 +1,6 @@
 {
   "indexes": [
     {
-      "collectionGroup": "COROSAPIHistoryImportWorkoutQueue",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "processed",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "dateCreated",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
-      "collectionGroup": "COROSAPIHistoryImportWorkoutQueue",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "processed",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "processedAt",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
-      "collectionGroup": "COROSAPIHistoryImportWorkoutQueue",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "processed",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "retryCount",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
       "collectionGroup": "COROSAPIWorkoutQueue",
       "queryScope": "COLLECTION",
       "fields": [
@@ -780,63 +723,6 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "suuntoAppHistoryImportActivityQueue",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "processed",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "dateCreated",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
-      "collectionGroup": "suuntoAppHistoryImportActivityQueue",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "processed",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "processedAt",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
-      "collectionGroup": "suuntoAppHistoryImportActivityQueue",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "processed",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "retryCount",
-          "order": "ASCENDING"
-        },
-        {
-          "fieldPath": "__name__",
-          "order": "ASCENDING"
-        }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
       "collectionGroup": "suuntoAppWorkoutQueue",
       "queryScope": "COLLECTION",
       "fields": [
@@ -915,25 +801,6 @@
   ],
   "fieldOverrides": [
     {
-      "collectionGroup": "COROSAPIHistoryImportWorkoutQueue",
-      "fieldPath": "expireAt",
-      "ttl": true,
-      "indexes": [
-        {
-          "order": "ASCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "order": "DESCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "arrayConfig": "CONTAINS",
-          "queryScope": "COLLECTION"
-        }
-      ]
-    },
-    {
       "collectionGroup": "COROSAPIWorkoutQueue",
       "fieldPath": "expireAt",
       "ttl": true,
@@ -991,6 +858,25 @@
       ]
     },
     {
+      "collectionGroup": "mail",
+      "fieldPath": "expireAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
       "collectionGroup": "subscriptions",
       "fieldPath": "status",
       "ttl": false,
@@ -1010,25 +896,6 @@
         {
           "order": "ASCENDING",
           "queryScope": "COLLECTION_GROUP"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "suuntoAppHistoryImportActivityQueue",
-      "fieldPath": "expireAt",
-      "ttl": true,
-      "indexes": [
-        {
-          "order": "ASCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "order": "DESCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "arrayConfig": "CONTAINS",
-          "queryScope": "COLLECTION"
         }
       ]
     },
