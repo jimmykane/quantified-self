@@ -169,29 +169,41 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
     }
 
     if (shouldDeleteToken && serviceToken) {
+      let deauthorizationRequest;
+
       switch (serviceName) {
         default:
           break;
-        case ServiceNames.SuuntoApp:
-          try {
-            await requestPromise.get({
-              headers: {
-                'Authorization': `Bearer ${serviceToken.accessToken}`,
-              },
-              url: `https://cloudapi-oauth.suunto.com/oauth/deauthorize?client_id=${config.suuntoapp.client_id}`,
-            });
-            logger.info(`Deauthorized token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
-          } catch (apiError: any) {
-            const statusCode = apiError.statusCode || (apiError.output && apiError.output.statusCode);
-            if (statusCode === 500) {
-              logger.error(`Suunto API deauthorization failed with 500 for ${userID}. Preserving local token.`);
-              shouldDeleteToken = false;
-              failedTokenCount++;
-            } else {
-              logger.warn(`Failed to deauthorize on Suunto API for ${userID}: ${apiError.message}. Proceeding with local cleanup.`);
-            }
-          }
+        case ServiceNames.COROSAPI:
+          // Per COROS API Reference V2.0.6: POST https://open.coros.com/oauth2/deauthorize?token=xxxxxxxx
+          deauthorizationRequest = requestPromise.post({
+            url: `https://open.coros.com/oauth2/deauthorize?token=${serviceToken.accessToken}`,
+          });
           break;
+        case ServiceNames.SuuntoApp:
+          deauthorizationRequest = requestPromise.get({
+            headers: {
+              'Authorization': `Bearer ${serviceToken.accessToken}`,
+            },
+            url: `https://cloudapi-oauth.suunto.com/oauth/deauthorize?client_id=${config.suuntoapp.client_id}`,
+          });
+          break;
+      }
+
+      if (deauthorizationRequest) {
+        try {
+          await deauthorizationRequest;
+          logger.info(`Deauthorized ${serviceName} token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
+        } catch (apiError: any) {
+          const statusCode = apiError.statusCode || (apiError.output && apiError.output.statusCode);
+          if (statusCode === 500) {
+            logger.error(`${serviceName} API deauthorization failed with 500 for ${userID}. Preserving local token.`);
+            shouldDeleteToken = false;
+            failedTokenCount++;
+          } else {
+            logger.warn(`Failed to deauthorize on ${serviceName} API for ${userID}: ${apiError.message}. Proceeding with local cleanup.`);
+          }
+        }
       }
     }
 

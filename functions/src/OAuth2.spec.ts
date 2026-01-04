@@ -281,6 +281,23 @@ describe('OAuth2', () => {
             expect(mockDelete).toHaveBeenCalledTimes(2);
         });
 
+        it('should make correct Suunto API call for deauthorization', async () => {
+            await deauthorizeServiceForUser(userID, serviceName);
+
+            expect(requestPromise.get).toHaveBeenCalledWith(expect.objectContaining({
+                url: expect.stringContaining('https://cloudapi-oauth.suunto.com/oauth/deauthorize'),
+                headers: expect.objectContaining({ 'Authorization': 'Bearer mock-access' })
+            }));
+        });
+
+        it('should make correct COROS API call for deauthorization', async () => {
+            await deauthorizeServiceForUser(userID, ServiceNames.COROSAPI);
+
+            expect(requestPromise.post).toHaveBeenCalledWith(expect.objectContaining({
+                url: expect.stringContaining('https://open.coros.com/oauth2/deauthorize?token=mock-access')
+            }));
+        });
+
         it('should NOT delete local records if getTokenData fails with 500', async () => {
             const error500 = new Error('Server error');
             (error500 as any).statusCode = 500;

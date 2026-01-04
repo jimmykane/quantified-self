@@ -196,6 +196,16 @@ describe('Garmin Auth Wrapper', () => {
             expect(mockDelete).toHaveBeenCalled();
         });
 
+        it('should make correct Garmin API call for deauthorization', async () => {
+            (requestHelper.delete as any).mockResolvedValue({});
+
+            await deauthorizeGarminHealthAPIForUser(userID);
+
+            expect(requestHelper.delete).toHaveBeenCalledWith(expect.objectContaining({
+                url: 'https://healthapi.garmin.com/wellness-api/rest/user/registration',
+            }));
+        });
+
         it('should NOT delete local records if Garmin API returns 500', async () => {
             const error500 = new Error('Server error');
             (error500 as any).statusCode = 500;
