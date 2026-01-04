@@ -213,7 +213,10 @@ export class AppAuthService {
     await signOut(this.auth);
     await terminate(this.firestore);
     this.localStorageService.clearAllStorage();
-    return clearIndexedDbPersistence(this.firestore);
+    await clearIndexedDbPersistence(this.firestore);
+    // Reload the page to reinitialize the app with a fresh Firestore instance
+    // This is necessary because terminate() makes the current instance unusable
+    window.location.href = '/login';
   }
 
   async fetchSignInMethods(email: string) {
