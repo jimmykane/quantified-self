@@ -170,3 +170,10 @@ mat-paginator {
   font-family: 'QSFont', sans-serif !important;
   font-weight: 400 !important;
 }
+
+/* Align activity type icon and text */
+.activity-type-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
