@@ -130,6 +130,19 @@ describe('reconcileClaims', () => {
 
         // Should set claims
         expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', expect.objectContaining({ stripeRole: 'pro' }));
+
+        // Should update customer metadata to trigger extension sync
+        expect(mockStripeInstance.customers.update).toHaveBeenCalledWith('cus_123', {
+            metadata: { firebaseUID: 'user1' }
+        });
+
+        // Should update subscription metadata to new UID
+        expect(mockStripeInstance.subscriptions.update).toHaveBeenCalledWith('sub_123', expect.objectContaining({
+            metadata: expect.objectContaining({
+                firebaseUID: 'user1',
+                linkedToUid: 'user1'
+            })
+        }));
     });
 
     it('should throw failed-precondition if no firebaseRole OR role found', async () => {

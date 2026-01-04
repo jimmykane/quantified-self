@@ -124,9 +124,14 @@ async function findAndLinkStripeCustomerByEmail(
             logger.info(`[findAndLinkStripeCustomerByEmail] Updated Stripe customer ${customer.id} metadata.firebaseUID to ${uid}`);
 
             // Trigger a subscription.updated webhook by updating subscription metadata
+            // Also update the firebaseUID in the subscription metadata to match the new user
             // This causes the extension to sync the subscription to the new user's Firestore path
             await stripe.subscriptions.update(sub.id, {
-                metadata: { linkedAt: Date.now().toString(), linkedToUid: uid }
+                metadata: {
+                    linkedAt: Date.now().toString(),
+                    linkedToUid: uid,
+                    firebaseUID: uid // Ensure this matches the new user
+                }
             });
             logger.info(`[findAndLinkStripeCustomerByEmail] Triggered subscription.updated webhook for ${sub.id}`);
 
