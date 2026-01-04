@@ -12,11 +12,71 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { FormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
-import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
+import { provideCharts, withDefaultRegisterables, BaseChartDirective } from 'ng2-charts';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ActivatedRoute } from '@angular/router';
 
-import { ChangeDetectorRef, NO_ERRORS_SCHEMA } from '@angular/core';
+import { ChangeDetectorRef, NO_ERRORS_SCHEMA, Component, Input, Directive } from '@angular/core';
+
+// Mock Component/Directive for BaseChartDirective
+@Directive({
+    selector: '[baseChart]',
+    standalone: true
+})
+class MockBaseChartDirective {
+    @Input() data: any;
+    @Input() labels: any;
+    @Input() options: any;
+    @Input() type: any;
+    @Input() legend: any;
+    @Input() plugins: any;
+}
+
+// Mock canvas for charts
+Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+    value: () => ({
+        getAll: () => { },
+        fillRect: () => { },
+        clearRect: () => { },
+        getImageData: () => ({ data: [] }),
+        putImageData: () => { },
+        createImageData: () => [],
+        setTransform: () => { },
+        drawer: { draw: () => { } },
+        save: () => { },
+        restore: () => { },
+        beginPath: () => { },
+        moveTo: () => { },
+        lineTo: () => { },
+        clip: () => { },
+        fill: () => { },
+        stroke: () => { },
+        rect: () => { },
+        arc: () => { },
+        quadraticCurveTo: () => { },
+        closePath: () => { },
+        translate: () => { },
+        rotate: () => { },
+        scale: () => { },
+        fillText: () => { },
+        strokeText: () => { },
+        measureText: () => ({ width: 0 }),
+        drawImage: () => { },
+        canvas: {
+            width: 0,
+            height: 0,
+            style: {}
+        }
+    }),
+    configurable: true
+});
+
+// Mock ResizeObserver
+global.ResizeObserver = class ResizeObserver {
+    observe() { }
+    unobserve() { }
+    disconnect() { }
+};
 
 describe('AdminDashboardComponent', () => {
     let component: AdminDashboardComponent;
@@ -88,6 +148,7 @@ describe('AdminDashboardComponent', () => {
             ],
             providers: [
                 { provide: AdminService, useValue: adminServiceSpy },
+                { provide: MatDialog, useValue: matDialogSpy },
                 provideCharts(withDefaultRegisterables()),
                 {
                     provide: ActivatedRoute,
@@ -105,12 +166,10 @@ describe('AdminDashboardComponent', () => {
             ],
             schemas: [NO_ERRORS_SCHEMA]
         })
+            .overrideProvider(MatDialog, { useValue: matDialogSpy })
             .overrideComponent(AdminDashboardComponent, {
-                add: {
-                    providers: [
-                        { provide: MatDialog, useValue: matDialogSpy }
-                    ]
-                }
+                remove: { imports: [BaseChartDirective] },
+                add: { imports: [MockBaseChartDirective] }
             })
             .compileComponents();
 

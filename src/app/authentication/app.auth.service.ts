@@ -58,6 +58,7 @@ export class AppAuthService {
                   photoURL: firebaseUser.photoURL,
                   emailVerified: firebaseUser.emailVerified,
                   settings: this.userService.fillMissingAppSettings({} as any),
+                  acceptedPrivacyPolicy: false,
                   acceptedDataPolicy: false,
                   acceptedTrackingPolicy: false,
                   acceptedDiagnosticsPolicy: true, // Legitimate interest

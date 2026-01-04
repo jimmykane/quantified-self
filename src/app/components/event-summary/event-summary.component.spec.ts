@@ -3,16 +3,45 @@ import { EventSummaryComponent } from './event-summary.component';
 import { AppEventService } from '../../services/app.event.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { ChangeDetectorRef } from '@angular/core';
-import { EventInterface, User, Privacy, ActivityTypes, ActivityInterface } from '@sports-alliance/sports-lib';
+import { ChangeDetectorRef, Component, Input } from '@angular/core';
+import { EventInterface, User, Privacy, ActivityTypes } from '@sports-alliance/sports-lib';
 import { of } from 'rxjs';
-import { ActivityTypeIconComponent } from '../activity-type-icon/activity-type-icon.component';
-import { PrivacyIconComponent } from '../privacy-icon/privacy-icon.component';
-import { MockComponent, MockProvider } from 'ng-mocks';
-import { ActivitiesTogglesComponent } from '../event/activities-toggles/activities-toggles.component';
-import { EventCardStatsGridComponent } from '../event-card/event-card-stats-grid/event-card-stats-grid.component';
-import { MatIcon } from '@angular/material/icon';
-import { EventActionsComponent } from '../event-actions/event.actions.component';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
+
+// Mock Child Components
+@Component({ selector: 'app-activity-type-icon', template: '', standalone: false })
+class MockActivityTypeIconComponent {
+    @Input() activityType: any;
+    @Input() size: any;
+}
+
+@Component({ selector: 'app-privacy-icon', template: '', standalone: false })
+class MockPrivacyIconComponent {
+    @Input() privacy: any;
+}
+
+@Component({ selector: 'app-activities-toggles', template: '', standalone: false })
+class MockActivitiesTogglesComponent {
+    @Input() event: any;
+}
+
+@Component({ selector: 'app-event-card-stats-grid', template: '', standalone: false })
+class MockEventCardStatsGridComponent {
+    @Input() event: any;
+    @Input() stats: any;
+}
+
+@Component({ selector: 'mat-icon', template: '', standalone: false })
+class MockMatIcon {
+    @Input() fontIcon: any;
+}
+
+@Component({ selector: 'app-event-actions', template: '', standalone: false })
+class MockEventActionsComponent {
+    @Input() event: any;
+    @Input() user: any;
+    @Input() iconOnly: any;
+}
 
 describe('EventSummaryComponent', () => {
     let component: EventSummaryComponent;
@@ -44,18 +73,18 @@ describe('EventSummaryComponent', () => {
         await TestBed.configureTestingModule({
             declarations: [
                 EventSummaryComponent,
-                MockComponent(ActivityTypeIconComponent),
-                MockComponent(PrivacyIconComponent),
-                MockComponent(ActivitiesTogglesComponent),
-                MockComponent(EventCardStatsGridComponent),
-                MockComponent(MatIcon),
-                MockComponent(EventActionsComponent)
+                MockActivityTypeIconComponent,
+                MockPrivacyIconComponent,
+                MockActivitiesTogglesComponent,
+                MockEventCardStatsGridComponent,
+                MockMatIcon,
+                MockEventActionsComponent
             ],
             providers: [
                 { provide: AppEventService, useValue: mockEventService },
                 { provide: MatBottomSheet, useValue: mockBottomSheet },
-                MockProvider(MatSnackBar),
-                MockProvider(ChangeDetectorRef),
+                { provide: MatSnackBar, useValue: { open: vi.fn() } },
+                { provide: ChangeDetectorRef, useValue: { markForCheck: vi.fn() } },
             ],
         }).compileComponents();
 
@@ -122,3 +151,4 @@ describe('EventSummaryComponent', () => {
         });
     });
 });
+

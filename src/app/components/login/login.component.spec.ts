@@ -33,8 +33,8 @@ describe('LoginComponent', () => {
     const mockAuthService = {
         user$: of(null),
         isSignInWithEmailLink: () => false,
-        googleLogin: vi.fn().mockResolvedValue({}),
-        githubLogin: vi.fn().mockResolvedValue({}),
+        googleLogin: vi.fn().mockResolvedValue({ user: { uid: '123' } }),
+        githubLogin: vi.fn().mockResolvedValue({ user: { uid: '123' } }),
         fetchSignInMethods: vi.fn().mockResolvedValue([]),
         getProviderForId: vi.fn().mockReturnValue({}),
         linkCredential: vi.fn().mockResolvedValue({}),

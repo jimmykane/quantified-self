@@ -1,10 +1,20 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AccountLinkingDialogComponent, AccountLinkingData } from './account-linking-dialog.component';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogModule } from '@angular/material/dialog';
-import { MatIconModule } from '@angular/material/icon'; // Import MatIconModule
+import { Component, Input } from '@angular/core';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { By } from '@angular/platform-browser';
+
+@Component({
+    selector: 'mat-icon',
+    template: '<span></span>',
+    standalone: false
+})
+class MockMatIcon {
+    @Input() svgIcon: any;
+    @Input() fontIcon: any;
+}
 
 describe('AccountLinkingDialogComponent', () => {
     let component: AccountLinkingDialogComponent;
@@ -23,10 +33,9 @@ describe('AccountLinkingDialogComponent', () => {
         };
 
         await TestBed.configureTestingModule({
-            declarations: [AccountLinkingDialogComponent],
+            declarations: [AccountLinkingDialogComponent, MockMatIcon],
             imports: [
-                MatDialogModule,
-                MatIconModule
+                MatDialogModule
             ],
             providers: [
                 { provide: MatDialogRef, useValue: mockDialogRef },
