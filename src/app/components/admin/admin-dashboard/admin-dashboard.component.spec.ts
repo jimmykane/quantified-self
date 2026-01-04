@@ -18,19 +18,7 @@ import { ActivatedRoute } from '@angular/router';
 
 import { ChangeDetectorRef, NO_ERRORS_SCHEMA, Component, Input, Directive } from '@angular/core';
 
-// Mock Component/Directive for BaseChartDirective
-@Directive({
-    selector: '[baseChart]',
-    standalone: true
-})
-class MockBaseChartDirective {
-    @Input() data: any;
-    @Input() labels: any;
-    @Input() options: any;
-    @Input() type: any;
-    @Input() legend: any;
-    @Input() plugins: any;
-}
+
 
 // Mock canvas for charts
 Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
@@ -168,8 +156,7 @@ describe('AdminDashboardComponent', () => {
         })
             .overrideProvider(MatDialog, { useValue: matDialogSpy })
             .overrideComponent(AdminDashboardComponent, {
-                remove: { imports: [BaseChartDirective] },
-                add: { imports: [MockBaseChartDirective] }
+                remove: { imports: [BaseChartDirective] }
             })
             .compileComponents();
 

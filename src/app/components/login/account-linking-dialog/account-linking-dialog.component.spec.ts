@@ -6,15 +6,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { By } from '@angular/platform-browser';
 
-@Component({
-    selector: 'mat-icon',
-    template: '<span></span>',
-    standalone: false
-})
-class MockMatIcon {
-    @Input() svgIcon: any;
-    @Input() fontIcon: any;
-}
+
 
 describe('AccountLinkingDialogComponent', () => {
     let component: AccountLinkingDialogComponent;
@@ -33,7 +25,7 @@ describe('AccountLinkingDialogComponent', () => {
         };
 
         await TestBed.configureTestingModule({
-            declarations: [AccountLinkingDialogComponent, MockMatIcon],
+            declarations: [AccountLinkingDialogComponent],
             imports: [
                 MatDialogModule
             ],

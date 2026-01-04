@@ -51,7 +51,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
   public garminHealthAPIServiceMetaData!: GarminHealthAPIEventMetaDataInterface;
   private deleteConfirmationSubscription!: Subscription;
-  @Output() onDelete = new EventEmitter<void>();
+
   private auth = inject(Auth);
   private analyticsService = inject(AppAnalyticsService);
   private logger = inject(LoggerService);

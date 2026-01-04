@@ -28,7 +28,7 @@ export class MapActionsComponent implements OnChanges {
 
   @Output() showLapsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
   @Output() showArrowsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
-  @Output() onCenter = new EventEmitter<void>();
+
 
   private analyticsService = inject(AppAnalyticsService);
 
@@ -36,10 +36,7 @@ export class MapActionsComponent implements OnChanges {
     private userService: AppUserService) {
   }
 
-  centerMap() {
-    this.analyticsService.logEvent('map_center_click');
-    this.onCenter.emit();
-  }
+
 
   async checkBoxChanged(event) {
     this.showLapsChange.emit(this.showLaps);
