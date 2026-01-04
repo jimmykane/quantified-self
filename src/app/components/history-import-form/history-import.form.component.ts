@@ -1,4 +1,4 @@
-import { Component, Inject, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, inject } from '@angular/core';
+import { Component, Inject, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, inject, Output, EventEmitter } from '@angular/core';
 import {
   AbstractControl,
   UntypedFormArray,
@@ -32,6 +32,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   @Input() serviceName: ServiceNames;
   @Input() userMetaForService: UserServiceMetaInterface;
   @Input() minDate: Date | null = null;
+  @Output() importInitiated = new EventEmitter<void>();
 
 
   public formGroup: UntypedFormGroup;
@@ -134,6 +135,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         dayjs(this.formGroup.get('startDate')?.value).toDate(),
         dayjs(this.formGroup.get('endDate')?.value).toDate()
       );
+      this.importInitiated.emit();
       this.snackBar.open('History import has been queued', null, {
         duration: 2000,
       });

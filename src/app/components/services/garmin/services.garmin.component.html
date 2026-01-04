@@ -99,8 +99,8 @@
         <p class="feature-description" *ngIf="!hasProAccess">Import your full activity history from Garmin Connect.
         </p>
         @if (hasProAccess && isAdmin) {
-        <app-history-import-form [serviceName]="serviceName"
-          [userMetaForService]="serviceMeta"></app-history-import-form>
+        <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"
+          (importInitiated)="onHistoryImportInitiated()"></app-history-import-form>
         } @else if (hasProAccess) {
         <p class="feature-description">Import history is coming soon for Garmin.</p>
         }

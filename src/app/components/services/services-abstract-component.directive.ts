@@ -198,4 +198,13 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   abstract buildRedirectURIFromServiceToken(redirectUri: { redirect_uri: string } | { redirect_uri: string, state: string, oauthToken: string }): string
 
   abstract requestAndSetToken(params: ParamMap)
+
+  onHistoryImportInitiated() {
+    this.serviceMeta = {
+      ...this.serviceMeta,
+      didLastHistoryImport: new Date().getTime(),
+      processedActivitiesFromLastHistoryImportCount: 0 // Optimistically set to 0, or could be kept undefined until backend updates
+    };
+    this.changeDetectorRef.detectChanges();
+  }
 }
