@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CommonModule } from '@angular/common';
+import { firstValueFrom } from 'rxjs';
 import { ProcessingIndicatorComponent } from './processing-indicator.component';
 import { AppProcessingService, BackgroundJob } from '../../../services/app.processing.service';
 import { BehaviorSubject } from 'rxjs';
@@ -71,19 +72,17 @@ describe('ProcessingIndicatorComponent', () => {
         });
     });
 
-    it('should identify if processing is active', () => {
-        // No jobs
-        component.hasActiveJobs$.subscribe(hasActive => {
-            expect(hasActive).toBeFalse();
-        });
+    it('should identify if processing is active', async () => {
+        // No jobs initially
+        const hasActive1 = await firstValueFrom(component.hasActiveJobs$);
+        expect(hasActive1).toBe(false);
 
-        // Add jobs
+        // Add active job
         activeJobsSubject.next([
             { id: '1', title: 'Job 1', status: 'processing', type: 'upload', createdAt: Date.now() }
         ]);
 
-        component.hasActiveJobs$.subscribe(hasActive => {
-            expect(hasActive).toBeTrue();
-        });
+        const hasActive2 = await firstValueFrom(component.hasActiveJobs$);
+        expect(hasActive2).toBe(true);
     });
 });
