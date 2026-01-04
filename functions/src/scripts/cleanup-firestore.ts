@@ -28,8 +28,6 @@ const COLLECTION_GROUPS = [
     "garminHealthAPIActivityQueue",
     "suuntoAppWorkoutQueue",
     "COROSAPIWorkoutQueue",
-    "COROSAPIHistoryImportWorkoutQueue",
-    "suuntoAppHistoryImportActivityQueue",
     "system",
     "config",
     "failed_jobs"
