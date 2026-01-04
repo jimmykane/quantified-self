@@ -258,6 +258,15 @@ export class AppPaymentService {
         const checkoutSessionsRef = collection(this.firestore, `customers/${user.uid}/checkout_sessions`);
 
         try {
+            // CRITICAL FIX: Explicitly add metadata to the session and subscription_data.
+            // The `firestore-stripe-payments` extension relies on finding `firebaseUID` in the Stripe object's metadata
+            // to map the payment/invoice back to the correct Firestore User Document.
+            //
+            // Without this, the extension fails with: 'Value for argument "documentPath" is not a valid resource path'
+            // because it receives an empty UID when processing webhooks (like invoice.paid).
+            //
+            // Stripe DOES NOT automatically propagate Customer metadata to Invoices/Subscriptions.
+            // We must force this propagation here during Checkout Session creation.
             const sessionPayload: any = {
                 price: priceId,
                 success_url: success,
@@ -270,6 +279,9 @@ export class AppPaymentService {
             };
 
             if (mode === 'subscription') {
+                // Ensure the metadata is attached to the Subscription object created by this checkout.
+                // This ensures that future recurring invoices generated from this subscription
+                // will carry this metadata, allowing the extension to process renewal webhooks correctly.
                 sessionPayload.subscription_data = {
                     metadata: {
                         firebaseUID: user.uid
