@@ -5,7 +5,7 @@ import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { getTokenData } from './tokens';
 import * as requestPromise from './request-helper';
 import { config } from './config';
-import { generateIDFromParts, enqueueWorkoutTask } from './utils';
+import { generateIDFromParts } from './utils';
 import { COROSAPIWorkoutQueueItemInterface, SuuntoAppWorkoutQueueItemInterface } from './queue/queue-item.interface';
 import { getServiceConfig } from './OAuth2';
 import { getServiceWorkoutQueueName } from './shared/queue-names';
@@ -20,45 +20,9 @@ import {
 } from '@sports-alliance/sports-lib';
 import { convertCOROSWorkoutsToQueueItems } from './coros/queue';
 
-
 const BATCH_SIZE = 450;
 
-/**
- * Validates the history import request and enqueues a task to process it.
- */
-export async function addToHistoryImportQueue(userID: string, serviceName: ServiceNames, startDate: Date, endDate: Date): Promise<void> {
-
-  // @todo improve ?
-  // Create a queue item for the *request* itself
-  const queueItem: any = {
-    id: await generateIDFromParts(['history-import', userID, serviceName, startDate.toISOString(), endDate.toISOString()]),
-    dateCreated: new Date().getTime(),
-    processed: false,
-    retryCount: 0,
-    type: 'import_request',
-    // Specific fields for the request
-    userID,
-    serviceName,
-    startDate: startDate.getTime(),
-    endDate: endDate.getTime(),
-  };
-
-  const queueName = getServiceWorkoutQueueName(serviceName, true);
-  await admin.firestore().collection(queueName).doc(queueItem.id).set(queueItem);
-
-  // Dispatch the task (reusing the existing workout task dispatcher)
-  // The worker will see type='import_request' and call processHistoryImportRequest
-  await enqueueWorkoutTask(serviceName, queueItem.id);
-
-  logger.info(`Enqueued history import request ${queueItem.id} for user ${userID} service ${serviceName}`);
-}
-
-
-/**
- * Processes the history import *request* (fetching the list of workouts).
- * This is called by the Cloud Task worker when it encounters an item with type='import_request'.
- */
-export async function processHistoryImportRequest(userID: string, serviceName: ServiceNames, startDate: Date, endDate: Date): Promise<void> {
+export async function addHistoryToQueue(userID: string, serviceName: ServiceNames, startDate: Date, endDate: Date) {
   const serviceConfig = getServiceConfig(serviceName);
   const tokenQuerySnapshots = await admin.firestore().collection(serviceConfig.tokenCollectionName).doc(userID).collection('tokens').get();
 
@@ -99,18 +63,11 @@ export async function processHistoryImportRequest(userID: string, serviceName: S
       const batch = admin.firestore().batch();
       let processedWorkoutsCount = 0;
       for (const workoutQueueItem of batchToProcess) {
-        await enqueueWorkoutTask(serviceName, workoutQueueItem.id);
-        // Explicitly set type to 'workout_item' (or rely on undefined being treated as such)
-        // Helper to ensure consistency
-        const item = {
-          ...workoutQueueItem,
-          type: 'workout_item',
-        };
-
+        // Maybe do a get or insert it at another queue (Done for Suunto app so far)
         batch.set(
           admin.firestore()
             .collection(getServiceWorkoutQueueName(serviceName, true))
-            .doc(item.id), item);
+            .doc(workoutQueueItem.id), workoutQueueItem);
         processedWorkoutsCount++;
       }
       // Try to commit it
@@ -130,8 +87,7 @@ export async function processHistoryImportRequest(userID: string, serviceName: S
         logger.error(`Could not save batch ${processedBatchesCount} for token ${tokenQueryDocumentSnapshot.id} and user ${userID} due to service error aborting`, e);
         processedBatchesCount--;
         totalProcessedWorkoutsCount -= processedWorkoutsCount;
-        // Reading file via view_file in next step because I need to see the implementation first.
-        // I will just use `view_file` now.
+        continue; // Unnecessary but clear to the dev that it will continue
       }
     }
     logger.info(`${processedBatchesCount} out of ${batchesToProcess.length} processed and saved for token ${tokenQueryDocumentSnapshot.id} and user ${userID} `);

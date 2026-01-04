@@ -21,7 +21,7 @@ vi.mock('../utils', () => ({
 }));
 
 vi.mock('../history', () => ({
-    addToHistoryImportQueue: vi.fn().mockResolvedValue({}),
+    addHistoryToQueue: vi.fn().mockResolvedValue({}),
     isAllowedToDoHistoryImport: vi.fn().mockResolvedValue(true)
 }));
 
@@ -60,7 +60,7 @@ describe('COROS History to Queue', () => {
             await addCOROSAPIHistoryToQueue(req, res);
 
             expect(history.isAllowedToDoHistoryImport).toHaveBeenCalledWith('testUserID', SERVICE_NAME);
-            expect(history.addToHistoryImportQueue).toHaveBeenCalledWith(
+            expect(history.addHistoryToQueue).toHaveBeenCalledWith(
                 'testUserID',
                 SERVICE_NAME,
                 expect.any(Date),
@@ -81,12 +81,12 @@ describe('COROS History to Queue', () => {
             await addCOROSAPIHistoryToQueue(req, res);
 
             // 40 days / 30 days batches = 2 batches
-            expect(history.addToHistoryImportQueue).toHaveBeenCalledTimes(2);
+            expect(history.addHistoryToQueue).toHaveBeenCalledTimes(2);
             expect(res.status).toHaveBeenCalledWith(200);
         });
 
         it('should handle errors during batch processing', async () => {
-            (history.addToHistoryImportQueue as any).mockRejectedValueOnce(new Error('Queue failure'));
+            (history.addHistoryToQueue as any).mockRejectedValueOnce(new Error('Queue failure'));
 
             await addCOROSAPIHistoryToQueue(req, res);
 
@@ -123,9 +123,9 @@ describe('COROS History to Queue', () => {
 
             await addCOROSAPIHistoryToQueue(req, res);
 
-            expect(history.addToHistoryImportQueue).toHaveBeenCalled();
+            expect(history.addHistoryToQueue).toHaveBeenCalled();
             // The first call (or only call if range is small) should use the limitDate as startDate
-            const callArgs = (history.addToHistoryImportQueue as any).mock.calls[0];
+            const callArgs = (history.addHistoryToQueue as any).mock.calls[0];
             // callArgs[2] is startDate
             expect(callArgs[2].getTime()).toBeGreaterThanOrEqual(limitDate.getTime());
             expect(res.status).toHaveBeenCalledWith(200);

@@ -102,10 +102,8 @@ vi.mock('simple-oauth2', () => ({
     },
 }));
 
-
-// Consolidate mocks for the history module
+// Mock the history module
 vi.mock('./history', () => ({
-    processHistoryImportRequest: vi.fn().mockResolvedValue(undefined),
     getServiceWorkoutQueueName: vi.fn((serviceName: ServiceNames, fromHistory = false) => {
         const baseName = `${serviceName}WorkoutQueue`;
         return fromHistory ? `${baseName}History` : baseName;
@@ -127,102 +125,7 @@ import {
     addToQueueForGarmin,
     addToQueueForCOROS,
 } from './queue';
-import { parseQueueItems, processQueueItems } from './queue';
-import { QueueItemInterface, HistoryImportRequestQueueItemInterface } from './queue/queue-item.interface';
-import { processHistoryImportRequest } from './history';
-import * as admin from 'firebase-admin';
-
-describe('parseQueueItems', () => {
-
-    it('should call processHistoryImportRequest for import_request items', async () => {
-        const mockRequestItem: HistoryImportRequestQueueItemInterface = {
-            id: 'test-req-1',
-            dateCreated: 123,
-            processed: false,
-            retryCount: 0,
-            type: 'import_request',
-            userID: 'user1',
-            serviceName: ServiceNames.SuuntoApp,
-            startDate: 1000,
-            endDate: 2000,
-            ref: { update: vi.fn(), set: vi.fn() } as any,
-        };
-
-        const querySnapshot = {
-            empty: false,
-            docs: [{
-                data: () => mockRequestItem as any,
-                ref: mockRequestItem.ref,
-                id: mockRequestItem.id,
-            }],
-            size: 1,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any;
-
-        await processQueueItems(ServiceNames.SuuntoApp, querySnapshot.docs);
-
-        expect(processHistoryImportRequest).toHaveBeenCalledWith(
-            'user1',
-            ServiceNames.SuuntoApp,
-            new Date(1000),
-            new Date(2000)
-        );
-    });
-
-    it('should process standard workout items and attempt to fetch tokens', async () => {
-        const mockWorkoutItem = {
-            id: 'test-workout-1',
-            dateCreated: 123,
-            processed: false,
-            retryCount: 0,
-            userName: 'test-user',
-            workoutID: 'w1',
-            ref: { update: vi.fn(), set: vi.fn() } as any,
-        };
-
-        const querySnapshot = {
-            empty: false,
-            docs: [{
-                data: () => mockWorkoutItem as any,
-                ref: mockWorkoutItem.ref,
-                id: mockWorkoutItem.id,
-            }],
-            size: 1,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any;
-
-        // Mock collectionGroup for tokens
-        const mockTokenDoc = {
-            id: 'token-1',
-            ref: {
-                parent: {
-                    id: 'tokens',
-                    parent: { id: 'user-1' } // Parent is user doc
-                }
-            },
-            data: () => ({ access_token: 'abc' })
-        };
-
-        const mockCollectionGroup = {
-            where: vi.fn().mockReturnThis(),
-            get: vi.fn().mockResolvedValue({
-                empty: false,
-                docs: [mockTokenDoc],
-                size: 1
-            })
-        };
-
-        // Hijack the firestore mock for this test
-        const firestoreMock = admin.firestore();
-        (firestoreMock.collectionGroup as any) = vi.fn(() => mockCollectionGroup);
-
-        await processQueueItems(ServiceNames.SuuntoApp, querySnapshot.docs);
-
-        expect(firestoreMock.collectionGroup).toHaveBeenCalledWith('tokens');
-        // We expect normal processing to proceed to token fetching
-        expect(mockCollectionGroup.where).toHaveBeenCalledWith('userName', '==', 'test-user');
-    });
-});
+import { QueueItemInterface } from './queue/queue-item.interface';
 
 describe('queue', () => {
     beforeEach(() => {

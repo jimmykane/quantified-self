@@ -1,4 +1,3 @@
-
 import * as admin from 'firebase-admin';
 import DocumentReference = admin.firestore.DocumentReference;
 
@@ -12,14 +11,6 @@ export interface QueueItemInterface {
   errors?: QueueItemError[],
   processedAt?: number,
   expireAt?: admin.firestore.Timestamp | Date,
-  type?: 'import_request' | 'workout_item'
-}
-
-export interface HistoryImportRequestQueueItemInterface extends QueueItemInterface {
-  startDate: number,
-  endDate: number,
-  serviceName: string, // ServiceNames
-  userID: string,
 }
 
 export interface SuuntoAppWorkoutQueueItemInterface extends QueueItemInterface {

@@ -10,7 +10,7 @@ import {
   PRO_REQUIRED_MESSAGE,
 } from '../utils';
 import { SERVICE_NAME, COROS_HISTORY_IMPORT_LIMIT_MONTHS } from './constants';
-import { addToHistoryImportQueue, isAllowedToDoHistoryImport } from '../history';
+import { addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
 
 
 /**
@@ -90,7 +90,7 @@ export const addCOROSAPIHistoryToQueue = functions.region('europe-west2').https.
       new Date(batchStartDate.getTime() + maxDeltaInMS);
 
     try {
-      await addToHistoryImportQueue(userID, SERVICE_NAME, batchStartDate, batchEndDate);
+      await addHistoryToQueue(userID, SERVICE_NAME, batchStartDate, batchEndDate);
     } catch (e: any) {
       logger.error(e);
       res.status(500).send(e.message);
