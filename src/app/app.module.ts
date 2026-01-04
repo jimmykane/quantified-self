@@ -13,7 +13,7 @@ import { provideFirestore, initializeFirestore } from '@angular/fire/firestore';
 import { getApp } from '@angular/fire/app';
 import { provideFunctions, getFunctions, httpsCallable } from '@angular/fire/functions';
 import { providePerformance, getPerformance } from '@angular/fire/performance';
-import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService } from '@angular/fire/analytics';
+import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService, setAnalyticsCollectionEnabled } from '@angular/fire/analytics';
 import { provideRemoteConfig, getRemoteConfig } from '@angular/fire/remote-config';
 import { provideStorage, getStorage } from '@angular/fire/storage';
 import { MaterialModule } from './modules/material.module';
@@ -97,7 +97,11 @@ import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/da
     provideStorage(() => getStorage()),
     provideFunctions(() => getFunctions(undefined, 'europe-west2')),
     providePerformance(() => getPerformance()),
-    provideAnalytics(() => getAnalytics()),
+    provideAnalytics(() => {
+      const analytics = getAnalytics();
+      setAnalyticsCollectionEnabled(analytics, false);
+      return analytics;
+    }),
     provideRemoteConfig(() => getRemoteConfig()),
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
     MAT_DATE_LOCALE_PROVIDER,

@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Analytics, logEvent as firebaseLogEvent } from '@angular/fire/analytics';
+import { Analytics, logEvent as firebaseLogEvent, setAnalyticsCollectionEnabled } from '@angular/fire/analytics';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
@@ -11,7 +11,13 @@ export class AppAnalyticsService {
 
     constructor() {
         this.authService.user$.pipe(takeUntilDestroyed()).subscribe(user => {
-            this.hasConsent = user?.acceptedTrackingPolicy === true;
+            if (user) {
+                this.hasConsent = user.acceptedTrackingPolicy === true;
+                setAnalyticsCollectionEnabled(this.analytics, this.hasConsent);
+            } else {
+                this.hasConsent = false;
+                setAnalyticsCollectionEnabled(this.analytics, false);
+            }
         });
     }
 

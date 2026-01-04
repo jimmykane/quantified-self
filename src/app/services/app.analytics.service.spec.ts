@@ -9,8 +9,10 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 // Mock Firebase Analytics logEvent
 vi.mock('@angular/fire/analytics', () => ({
     Analytics: vi.fn(),
-    logEvent: vi.fn()
+    logEvent: vi.fn(),
+    setAnalyticsCollectionEnabled: vi.fn()
 }));
+import { setAnalyticsCollectionEnabled } from '@angular/fire/analytics';
 
 describe('AppAnalyticsService', () => {
     let service: AppAnalyticsService;
@@ -49,6 +51,7 @@ describe('AppAnalyticsService', () => {
         service.logEvent('test_event', { param: 1 });
 
         expect(logEvent).not.toHaveBeenCalled();
+        expect(setAnalyticsCollectionEnabled).toHaveBeenCalledWith(expect.anything(), false);
     });
 
     it('should log event if user HAS consented', () => {
@@ -58,6 +61,7 @@ describe('AppAnalyticsService', () => {
         service.logEvent('test_event', { param: 1 });
 
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'test_event', { param: 1 });
+        expect(setAnalyticsCollectionEnabled).toHaveBeenCalledWith(expect.anything(), true);
     });
 
     it('should NOT log event if user is null (logged out)', () => {
@@ -66,5 +70,6 @@ describe('AppAnalyticsService', () => {
         service.logEvent('test_event');
 
         expect(logEvent).not.toHaveBeenCalled();
+        expect(setAnalyticsCollectionEnabled).toHaveBeenCalledWith(expect.anything(), false);
     });
 });
