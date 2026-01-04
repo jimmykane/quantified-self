@@ -1,145 +1,68 @@
-.delete-account-dialog {
-    max-width: 520px;
-}
-
-.dialog-header {
+.dialog-title {
     display: flex;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 8px;
+    gap: 8px;
+    color: var(--warn-color, #f44336);
+    padding-top: 8px;
 
     .warning-icon {
-        color: var(--warn-color, #f44336);
-        font-size: 32px;
-        width: 32px;
-        height: 32px;
-    }
-
-    h2 {
-        margin: 0;
-        font-size: 1.5rem;
-        font-weight: 600;
         color: var(--warn-color, #f44336);
     }
 }
 
 mat-dialog-content {
     font-size: 14px;
-    line-height: 1.6;
-    padding-top: 8px !important;
-}
+    min-width: 380px;
+    max-width: 450px;
 
-.intro-text {
-    margin: 0 0 20px 0;
-    opacity: 0.9;
-}
-
-.consequences-section {
-    margin-bottom: 20px;
-
-    h3 {
-        margin: 0 0 12px 0;
-        font-size: 1rem;
-        font-weight: 600;
+    p {
+        margin: 0 0 16px 0;
+        line-height: 1.5;
     }
 }
 
 .consequences-list {
     list-style: none;
     padding: 0;
-    margin: 0;
+    margin: 0 0 16px 0;
 
     li {
         display: flex;
-        align-items: flex-start;
-        gap: 12px;
-        padding: 10px 0;
-        border-bottom: 1px solid rgba(128, 128, 128, 0.15);
-
-        &:last-child {
-            border-bottom: none;
-        }
+        align-items: center;
+        gap: 8px;
+        padding: 6px 0;
+        font-size: 13px;
 
         mat-icon {
-            flex-shrink: 0;
+            font-size: 18px;
+            width: 18px;
+            height: 18px;
             opacity: 0.7;
-            font-size: 20px;
-            width: 20px;
-            height: 20px;
-            margin-top: 2px;
         }
 
-        span {
-            flex: 1;
-        }
-
-        &.subscription-warning {
-            background: rgba(255, 152, 0, 0.1);
-            margin: 0 -16px;
-            padding: 12px 16px;
-            border-radius: 4px;
-            border-bottom: none;
+        &.subscription-item {
+            color: #ff9800;
 
             mat-icon {
+                opacity: 1;
                 color: #ff9800;
             }
         }
     }
 }
 
-.warning-box {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
+.warning-text {
     background: rgba(244, 67, 54, 0.1);
-    border: 1px solid rgba(244, 67, 54, 0.3);
-    border-radius: 8px;
-    padding: 16px;
-    margin-bottom: 20px;
-
-    mat-icon {
-        flex-shrink: 0;
-        color: var(--warn-color, #f44336);
-    }
-
-    p {
-        margin: 0;
-        font-size: 13px;
-        line-height: 1.5;
-    }
+    padding: 12px;
+    border-radius: 6px;
+    font-size: 13px;
 }
 
-.confirm-checkbox {
-    margin-top: 16px;
-
-    ::ng-deep {
-        .mdc-checkbox {
-            margin-left: -10px;
-        }
-
-        .mdc-form-field {
-            align-items: flex-start;
-        }
-
-        .mdc-label {
-            font-size: 14px;
-            line-height: 1.4;
-            padding-top: 10px;
-        }
-    }
+mat-checkbox {
+    margin-top: 8px;
+    font-size: 13px;
 }
 
 mat-dialog-actions {
-    margin-top: 16px;
-    padding: 16px 0 0 0 !important;
-    border-top: 1px solid rgba(128, 128, 128, 0.2);
-
-    button {
-        mat-icon {
-            margin-right: 4px;
-            font-size: 18px;
-            width: 18px;
-            height: 18px;
-        }
-    }
+    padding-bottom: 8px;
 }

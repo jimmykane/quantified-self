@@ -424,7 +424,6 @@ export class UserSettingsComponent implements OnChanges {
     const hasActiveSubscription = stripeRole === 'pro' || stripeRole === 'basic';
 
     const dialogRef = this.dialog.open(DeleteAccountDialogComponent, {
-      width: '540px',
       data: {
         displayName: this.user.displayName,
         hasActiveSubscription
