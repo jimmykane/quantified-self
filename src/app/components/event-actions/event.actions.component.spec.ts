@@ -12,6 +12,7 @@ import { AppSharingService } from '../../services/app.sharing.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { MatMenuModule } from '@angular/material/menu';
@@ -78,7 +79,8 @@ describe('EventActionsComponent', () => {
                 { provide: MatBottomSheet, useValue: { open: vi.fn() } },
                 { provide: AppSharingService, useValue: { getShareURLForEvent: vi.fn() } },
                 { provide: AppWindowService, useValue: { windowRef: { open: vi.fn() } } },
-                { provide: Clipboard, useValue: { copy: vi.fn() } }
+                { provide: Clipboard, useValue: { copy: vi.fn() } },
+                { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } }
             ],
             schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();

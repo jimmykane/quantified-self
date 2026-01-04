@@ -15,6 +15,7 @@ import { FilesStatusListComponent } from '../components/files-status-list/files-
 
 import { EventSearchComponent } from '../components/event-search/event-search.component';
 import { ActivityTypesMultiSelectComponent } from '../components/activity-types-multi-select/activity-types-multi-select.component';
+import { ActivityTypeIconComponent } from '../components/activity-type-icon/activity-type-icon.component';
 import { DateAdapter, MAT_DATE_FORMATS, MAT_DATE_LOCALE } from '@angular/material/core';
 @NgModule({
     imports: [
@@ -37,6 +38,7 @@ import { DateAdapter, MAT_DATE_FORMATS, MAT_DATE_LOCALE } from '@angular/materia
         FilesStatusListComponent,
         EventSearchComponent,
         ActivityTypesMultiSelectComponent,
+        ActivityTypeIconComponent,
     ],
     providers: [],
     exports: [
@@ -56,6 +58,7 @@ import { DateAdapter, MAT_DATE_FORMATS, MAT_DATE_LOCALE } from '@angular/materia
 
         EventSearchComponent,
         ActivityTypesMultiSelectComponent,
+        ActivityTypeIconComponent,
     ]
 })
 

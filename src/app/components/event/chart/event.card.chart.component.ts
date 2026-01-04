@@ -144,6 +144,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   private activitiesWithAllStreamsFetched = new Set<string>();
   private processSequence = 0;
 
+  private rangeLabelsContainer: am4core.Container | undefined;
+  private clearSelectionButton: am4core.Button | undefined;
+
   constructor(changeDetector: ChangeDetectorRef,
     protected zone: NgZone,
     private windowService: AppWindowService,
@@ -400,7 +403,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     });
     // On select
     chart.cursor.events.on('selectended', (ev) => {
+      console.log('EventCardChartComponent: selectended triggered');
       if (!ev.target.xRange) {
+        console.warn('EventCardChartComponent: No xRange in event target');
         return;
       }
       this.disposeRangeLabelsContainer(ev.target.chart);
@@ -428,79 +433,90 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
       // alert('Selected start ' + start + ' end ' + end);
       // Now since we know the actual start end we need end iterate over the visible series and calculate AVG, Max,Min, Gain and loss not an easy job I suppose
+      console.log('EventCardChartComponent: Iterating series to create labels');
       this.chart.series.values.forEach(series => {
-        let data;
-        switch (this.xAxisType) {
-          case XAxisTypes.Time:
-            data = series.data.reduce((array, dataItem) => {
-              if (new Date(dataItem.time) >= start && new Date(dataItem.time) <= end) {
-                array.push(dataItem.value);
-              }
-              return array
-            }, []);
-            break;
-          case XAxisTypes.Duration:
-            data = series.data.reduce((array, dataItem) => {
-              if (new Date(dataItem.time) >= start && new Date(dataItem.time) <= end) {
-                array.push(dataItem.value);
-              }
-              return array
-            }, []);
-            break;
-          default:
-            data = series.data.reduce((array, dataItem) => {
-              if (dataItem.axisValue >= start && dataItem.axisValue <= end) {
-                array.push(dataItem.value);
-              }
-              return array
-            }, []);
-            break;
-        }
-
-        if (!data.length) {
-          return;
-        }
-
-        // Here we have all the data we need
-        const dataTypeUnit = DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).unit;
-        const labelData = <LabelData>{
-          name: DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).type,
-          average: {
-            value: data.length ? `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getAverage(data)).getDisplayValue()}` : '--',
-            unit: `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getAverage(data)).getDisplayUnit()}`
-          },
-          max: {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data)).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data)).getDisplayUnit()}`
-          },
-          min: {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMin(data)).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMin(data)).getDisplayUnit()}`
-          },
-          minToMaxDiff: {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)).getDisplayUnit()}`
+        try {
+          if (!series.dummyData || !series.dummyData.stream) {
+            console.warn(`EventCardChartComponent: Series ${series.name || series.id} missing dummyData or stream`);
+            return;
           }
-        };
-        if (this.doesDataTypeSupportGainOrLoss(series.dummyData.stream.type)) {
-          labelData.gain = {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayUnit()}`
+
+          let data;
+          switch (this.xAxisType) {
+            case XAxisTypes.Time:
+              data = series.data.reduce((array, dataItem) => {
+                if (new Date(dataItem.time) >= start && new Date(dataItem.time) <= end) {
+                  array.push(dataItem.value);
+                }
+                return array
+              }, []);
+              break;
+            case XAxisTypes.Duration:
+              data = series.data.reduce((array, dataItem) => {
+                if (new Date(dataItem.time) >= start && new Date(dataItem.time) <= end) {
+                  array.push(dataItem.value);
+                }
+                return array
+              }, []);
+              break;
+            default:
+              data = series.data.reduce((array, dataItem) => {
+                if (dataItem.axisValue >= start && dataItem.axisValue <= end) {
+                  array.push(dataItem.value);
+                }
+                return array
+              }, []);
+              break;
+          }
+
+          if (!data.length) {
+            return;
+          }
+
+          // Here we have all the data we need
+          const dataTypeUnit = DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).unit;
+          const labelData = <LabelData>{
+            name: DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).type,
+            average: {
+              value: data.length ? `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getAverage(data)).getDisplayValue()}` : '--',
+              unit: `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getAverage(data)).getDisplayUnit()}`
+            },
+            max: {
+              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data)).getDisplayValue()}` : '--',
+              unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data)).getDisplayUnit()}`
+            },
+            min: {
+              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMin(data)).getDisplayValue()}` : '--',
+              unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMin(data)).getDisplayUnit()}`
+            },
+            minToMaxDiff: {
+              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)).getDisplayValue()}` : '--',
+              unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)).getDisplayUnit()}`
+            }
           };
-          labelData.loss = {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayUnit()}`
-          };
+          if (this.doesDataTypeSupportGainOrLoss(series.dummyData.stream.type)) {
+            labelData.gain = {
+              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
+              unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayUnit()}`
+            };
+            labelData.loss = {
+              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
+              unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayUnit()}`
+            };
+          }
+          if (this.doesDataTypeSupportSlope(series.dummyData.stream.type) && this.xAxisType === XAxisTypes.Distance) {
+            labelData.slopePercentage = {
+              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)) / (end - start) * 100).getDisplayValue()}` : '--',
+              unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)) / (end - start) * 100).getDisplayUnit()}`
+            };
+          }
+          // Todo should group pace and derived units
+          // Should use dynamic data loader
+          console.log(`EventCardChartComponent: Creating label for series ${series.name || series.id}`);
+          this.createLabel(rangeLabelsContainer, series, labelData, series.hidden);
+        } catch (error) {
+          console.error(`EventCardChartComponent: Error processing series ${series.name || series.id}`, error);
         }
-        if (this.doesDataTypeSupportSlope(series.dummyData.stream.type) && this.xAxisType === XAxisTypes.Distance) {
-          labelData.slopePercentage = {
-            value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)) / (end - start) * 100).getDisplayValue()}` : '--',
-            unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)) / (end - start) * 100).getDisplayUnit()}`
-          };
-        }
-        // Todo should group pace and derived units
-        // Should use dynamic data loader
-        this.createLabel(rangeLabelsContainer, series, labelData, series.hidden)
       });
 
     });
@@ -590,16 +606,16 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   protected disposeRangeLabelsContainer(chart: am4charts.XYChart) {
-    const rangeLabelsContainer = chart.map.getKey('rangeLabelsContainer');
-    if (rangeLabelsContainer) {
-      rangeLabelsContainer.dispose();
+    if (this.rangeLabelsContainer) {
+      this.rangeLabelsContainer.dispose();
+      this.rangeLabelsContainer = undefined;
     }
   }
 
   protected disposeClearSelectionButton(chart: am4charts.XYChart) {
-    const clearSelectionButton = chart.map.getKey('clearSelectionButton');
-    if (clearSelectionButton) {
-      clearSelectionButton.dispose();
+    if (this.clearSelectionButton) {
+      this.clearSelectionButton.dispose();
+      this.clearSelectionButton = undefined;
     }
   }
 
@@ -1189,7 +1205,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     rangeLabelsContainer.layout = 'horizontal';
     // rangeLabelsContainer.align = 'right';
     // rangeLabelsContainer.verticalCenter = 'rop';
-    rangeLabelsContainer.zIndex = 2;
+    rangeLabelsContainer.zIndex = 100;
+    this.rangeLabelsContainer = rangeLabelsContainer;
     return rangeLabelsContainer
 
   }
@@ -1198,31 +1215,46 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     const labelContainer = container.createChild(this.core.Container);
 
     labelContainer.id = this.getSeriesRangeLabelContainerID(series);
-    labelContainer.background.fillOpacity = 0.8;
-    labelContainer.background.fill = <am4core.Color>series.stroke;
-    labelContainer.padding(10, 15, 10, 15);
+    labelContainer.background.fillOpacity = 0.6;
+    labelContainer.background.fill = this.core.color('#000000');
+    labelContainer.padding(12, 16, 12, 16);
     labelContainer.verticalCenter = 'bottom';
-    labelContainer.background.stroke = this.core.color('#FFF');
-    labelContainer.background.strokeOpacity = 0.3;
-    labelContainer.background.strokeWidth = 1;
-    (<am4core.RoundedRectangle>labelContainer.background).cornerRadius(10, 10, 10, 10);
-    labelContainer.zIndex = 2;
+    labelContainer.background.stroke = <am4core.Color>series.stroke;
+    labelContainer.background.strokeOpacity = 1;
+    labelContainer.background.strokeWidth = 2;
+
+    // Add Drop Shadow
+    const shadow = new this.core.DropShadowFilter();
+    shadow.dy = 4;
+    shadow.dx = 0;
+    shadow.opacity = 0.5;
+    shadow.blur = 8;
+    labelContainer.filters.push(shadow);
+
+    const bg = <am4core.RoundedRectangle>labelContainer.background;
+    bg.cornerRadiusTopLeft = 10;
+    bg.cornerRadiusTopRight = 10;
+    bg.cornerRadiusBottomRight = 10;
+    bg.cornerRadiusBottomLeft = 10;
+    labelContainer.zIndex = 100;
 
     const label = labelContainer.createChild(this.core.Label);
     label.align = 'center';
 
     const headerTextColor = this.core.color('#FFFFFF');
+    const labelColor = this.core.color('#FFFFFF');
+    // const valueColor = this.core.color('#FFFFFF'); // Bright white for values
 
     label.text = `
-      [bold font-size: 1.1em ${headerTextColor}]${labelData.name}[/]\n
+      [bold font-size: 1.2em ${headerTextColor}]${labelData.name}[/]\n
       ${this.event.getActivities().length !== 1 ? `[bold font-size: 1.0em ${headerTextColor}]${series.dummyData.activity.creator.name}[/]\n` : ``}
-      [bold font-size: 1.0em ${headerTextColor}]Avg:[/] [bold font-size: 1.0em ${headerTextColor}]${labelData.average.value}[/][${headerTextColor}]${labelData.average.unit}[/]\n
-      [bold font-size: 1.0em ${headerTextColor}]Max:[/] [bold font-size: 1.0em ${headerTextColor}]${labelData.max.value}[/][${headerTextColor}]${labelData.max.unit}[/]\n
-      [bold font-size: 1.0em ${headerTextColor}]Min:[/] [bold font-size: 1.0em ${headerTextColor}]${labelData.min.value}[/][${headerTextColor}]${labelData.min.unit}[/]\n
-      [bold font-size: 1.0em ${headerTextColor}]Diff:[/] [bold font-size: 1.0em ${headerTextColor}]${labelData.minToMaxDiff === undefined ? '--' : labelData.minToMaxDiff.value}[/][${headerTextColor}]${labelData.minToMaxDiff === undefined ? '' : labelData.minToMaxDiff.unit}[/]\n
-      [bold font-size: 1.0em ${headerTextColor}]Gain:[/] [bold font-size: 1.0em ${headerTextColor}]${labelData.gain === undefined ? '--' : labelData.gain.value}[/][${headerTextColor}]${labelData.gain === undefined ? '' : labelData.gain.unit}[/]\n
-      [bold font-size: 1.0em ${headerTextColor}]Loss:[/] [bold font-size: 1.0em ${headerTextColor}]${labelData.loss === undefined ? '--' : labelData.loss.value}[/][${headerTextColor}]${labelData.loss === undefined ? '' : labelData.loss.unit}[/]\n
-      [bold font-size: 1.0em ${headerTextColor}]Gradient:[/] [bold font-size: 1.0em ${headerTextColor}]${labelData.slopePercentage === undefined ? '--' : labelData.slopePercentage.value}[/][${headerTextColor}]${labelData.slopePercentage === undefined ? '' : '%'}[/]\n
+      [font-size: 1.0em opacity: 0.7 ${labelColor}]Avg:[/] [bold font-size: 1.1em ${headerTextColor}]${labelData.average.value}[/][opacity: 0.7 ${labelColor}]${labelData.average.unit}[/]\n
+      [font-size: 1.0em opacity: 0.7 ${labelColor}]Max:[/] [bold font-size: 1.1em ${headerTextColor}]${labelData.max.value}[/][opacity: 0.7 ${labelColor}]${labelData.max.unit}[/]\n
+      [font-size: 1.0em opacity: 0.7 ${labelColor}]Min:[/] [bold font-size: 1.1em ${headerTextColor}]${labelData.min.value}[/][opacity: 0.7 ${labelColor}]${labelData.min.unit}[/]\n
+      [font-size: 1.0em opacity: 0.7 ${labelColor}]Diff:[/] [bold font-size: 1.1em ${headerTextColor}]${labelData.minToMaxDiff === undefined ? '--' : labelData.minToMaxDiff.value}[/][opacity: 0.7 ${labelColor}]${labelData.minToMaxDiff === undefined ? '' : labelData.minToMaxDiff.unit}[/]\n
+      [font-size: 1.0em opacity: 0.7 ${labelColor}]Gain:[/] [bold font-size: 1.1em ${headerTextColor}]${labelData.gain === undefined ? '--' : labelData.gain.value}[/][opacity: 0.7 ${labelColor}]${labelData.gain === undefined ? '' : labelData.gain.unit}[/]\n
+      [font-size: 1.0em opacity: 0.7 ${labelColor}]Loss:[/] [bold font-size: 1.1em ${headerTextColor}]${labelData.loss === undefined ? '--' : labelData.loss.value}[/][opacity: 0.7 ${labelColor}]${labelData.loss === undefined ? '' : labelData.loss.unit}[/]\n
+      [font-size: 1.0em opacity: 0.7 ${labelColor}]Gradient:[/] [bold font-size: 1.1em ${headerTextColor}]${labelData.slopePercentage === undefined ? '--' : labelData.slopePercentage.value}[/][opacity: 0.7 ${labelColor}]${labelData.slopePercentage === undefined ? '' : '%'}[/]\n
       `;
 
     labelContainer.disabled = hidden;
@@ -1277,6 +1309,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       this.disposeCursorSelection(chart);
       this.disposeClearSelectionButton(chart);
     });
+    this.clearSelectionButton = button;
     return button;
   }
 
@@ -1355,7 +1388,10 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   private getSeriesRangeLabelContainer(series): am4core.Container | null {
-    return <am4core.Container>series.chart.map.getKey(this.getSeriesRangeLabelContainerID(series));
+    if (!this.rangeLabelsContainer) {
+      return null;
+    }
+    return <am4core.Container>this.rangeLabelsContainer.children.values.find(child => child.id === this.getSeriesRangeLabelContainerID(series));
   }
 
   private getSeriesIDFromActivityAndStream(activity, stream): string {

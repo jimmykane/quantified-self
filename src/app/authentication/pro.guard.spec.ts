@@ -65,6 +65,7 @@ describe('proGuard', () => {
         authServiceStub.user$ = of({
             uid: '123',
             stripeRole: 'free',
+            acceptedTos: true,
             hasSubscribedOnce: true,
             acceptedPrivacyPolicy: true,
             acceptedDataPolicy: true,

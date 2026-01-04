@@ -9,6 +9,22 @@ import { AppWindowService } from './app.window.service';
 import { of } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
+const { mockHttpsCallableFromURL } = vi.hoisted(() => {
+    return {
+        mockHttpsCallableFromURL: vi.fn().mockReturnValue(() => Promise.resolve({ data: {} }))
+    };
+});
+
+// Mock functions module
+vi.mock('@angular/fire/functions', async () => {
+    const actual = await vi.importActual('@angular/fire/functions');
+    return {
+        ...actual,
+        httpsCallableFromURL: mockHttpsCallableFromURL
+    };
+});
+
+
 const {
     mockAddDoc,
     mockDocData,
