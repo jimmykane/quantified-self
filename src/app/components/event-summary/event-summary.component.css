@@ -141,10 +141,11 @@
   display: flex;
   align-items: center;
   gap: 32px;
-  padding: 16px 20px;
-  background: var(--mat-app-surface-container-lowest);
-  border-radius: 16px;
-  box-shadow: inset 0 0 0 1px var(--mat-app-outline-variant);
+  padding: 0;
+  /* Removed background/border to match identity section on desktop */
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
   box-sizing: border-box;
 }
 
