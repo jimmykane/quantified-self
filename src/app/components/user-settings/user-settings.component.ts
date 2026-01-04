@@ -6,6 +6,7 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 
 import { MatDialog } from '@angular/material/dialog';
+import { DeleteAccountDialogComponent } from '../delete-account-dialog/delete-account-dialog.component';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import { LoggerService } from '../../services/logger.service';
@@ -415,23 +416,42 @@ export class UserSettingsComponent implements OnChanges {
     });
   }
 
-  public async deleteUser(event) {
+  public deleteUser(event: Event) {
     event.preventDefault();
-    this.isDeleting = true;
-    try {
-      await this.userService.deleteAllUserData(this.user);
-      this.analyticsService.logEvent('user_delete', {});
-      await this.authService.signOut();
-      await this.router.navigate(['/']);
-      this.snackBar.open('Account deleted! You are now logged out.', null, {
-        duration: 5000,
-      });
-      localStorage.clear();
-      this.windowService.windowRef.location.reload();
-    } catch (e) {
-      this.logger.error(e);
-      this.errorDeleting = e;
-      this.isDeleting = false;
-    }
+
+    // Check if user has an active paid subscription
+    const stripeRole = (this.user as any).stripeRole;
+    const hasActiveSubscription = stripeRole === 'pro' || stripeRole === 'basic';
+
+    const dialogRef = this.dialog.open(DeleteAccountDialogComponent, {
+      width: '540px',
+      data: {
+        displayName: this.user.displayName,
+        hasActiveSubscription
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(async (confirmed: boolean) => {
+      if (!confirmed) {
+        return;
+      }
+
+      this.isDeleting = true;
+      try {
+        await this.userService.deleteAllUserData(this.user);
+        this.analyticsService.logEvent('user_delete', {});
+        await this.authService.signOut();
+        await this.router.navigate(['/']);
+        this.snackBar.open('Account deleted! You are now logged out.', null, {
+          duration: 5000,
+        });
+        localStorage.clear();
+        this.windowService.windowRef.location.reload();
+      } catch (e) {
+        this.logger.error(e);
+        this.errorDeleting = e;
+        this.isDeleting = false;
+      }
+    });
   }
 }

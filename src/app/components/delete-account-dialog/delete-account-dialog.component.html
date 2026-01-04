@@ -1,0 +1,68 @@
+<div class="delete-account-dialog">
+    <div class="dialog-header">
+        <mat-icon class="warning-icon">warning</mat-icon>
+        <h2 mat-dialog-title>Delete Your Account</h2>
+    </div>
+
+    <mat-dialog-content>
+        <p class="intro-text">
+            You are about to permanently delete your account <strong>{{ data.displayName || 'Guest' }}</strong>.
+            Please read the following carefully before proceeding.
+        </p>
+
+        <div class="consequences-section">
+            <h3>What will happen:</h3>
+            <ul class="consequences-list">
+                <li>
+                    <mat-icon>delete_forever</mat-icon>
+                    <span><strong>All your activities</strong> and fitness data will be permanently deleted</span>
+                </li>
+                <li>
+                    <mat-icon>settings</mat-icon>
+                    <span>Your <strong>settings</strong>, preferences, and profile information will be removed</span>
+                </li>
+                <li>
+                    <mat-icon>link_off</mat-icon>
+                    <span>All <strong>connected services</strong> (Garmin, Suunto, Polar, etc.) will be
+                        disconnected</span>
+                </li>
+                @if (data.hasActiveSubscription) {
+                <li class="subscription-warning">
+                    <mat-icon>credit_card</mat-icon>
+                    <span>
+                        Your <strong>active subscription</strong> will be cancelled via Stripe.
+                        You will not be charged after the current billing period ends.
+                    </span>
+                </li>
+                }
+                <li>
+                    <mat-icon>cloud_off</mat-icon>
+                    <span>All <strong>uploaded files</strong> and backups in cloud storage will be deleted</span>
+                </li>
+            </ul>
+        </div>
+
+        <div class="warning-box">
+            <mat-icon>error_outline</mat-icon>
+            <p>
+                <strong>This action is irreversible.</strong> Once deleted, your data cannot be recovered.
+                If you have a paid subscription, please ensure you've cancelled it in the Stripe portal
+                if you wish to stop payments immediately.
+            </p>
+        </div>
+
+        <div class="confirm-checkbox">
+            <mat-checkbox [(ngModel)]="confirmChecked" color="warn">
+                I understand that my account and all associated data will be permanently deleted
+            </mat-checkbox>
+        </div>
+    </mat-dialog-content>
+
+    <mat-dialog-actions align="end">
+        <button mat-button (click)="onCancel()">Cancel</button>
+        <button mat-flat-button color="warn" [disabled]="!confirmChecked" (click)="onConfirm()">
+            <mat-icon>delete_forever</mat-icon>
+            Delete My Account
+        </button>
+    </mat-dialog-actions>
+</div>

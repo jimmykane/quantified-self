@@ -100,19 +100,17 @@
             <mat-icon>warning</mat-icon>
             <span>Danger Zone</span>
           </div>
-          <p>Once you delete your account, all your data will be permanently removed. This action cannot be undone.</p>
+          <p>
+            Deleting your account will permanently remove all your activities, settings, connected services,
+            and any other associated data. If you have an active subscription, it will also be cancelled.
+            This action cannot be undone.
+          </p>
 
-          <div style="margin-top: 8px;">
-            @if (!consentToDelete) {
-            <button mat-stroked-button color="warn" (click)="$event.preventDefault(); consentToDelete = true">
-              Delete Account
+          <div style="margin-top: 16px;">
+            <button mat-stroked-button color="warn" (click)="deleteUser($event)">
+              <mat-icon>delete_forever</mat-icon>
+              Delete My Account
             </button>
-            }
-            @if (consentToDelete) {
-            <button mat-flat-button color="warn" (click)="deleteUser($event)">
-              Confirm Permanent Deletion
-            </button>
-            }
           </div>
         </div>
       </mat-card>
