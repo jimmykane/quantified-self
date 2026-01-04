@@ -111,10 +111,13 @@ async function findAndLinkStripeCustomerByEmail(
             const sub = subscriptions.data[0];
             logger.info(`[findAndLinkStripeCustomerByEmail] Found subscription ${sub.id} for customer ${customer.id}`);
 
-            // Link this customer to the Firebase user
+            // Link this customer to the Firebase user and sync basic details immediately
             await db.collection('customers').doc(uid).set({
                 stripeId: customer.id,
-                stripeLink: `https://dashboard.stripe.com/customers/${customer.id}`
+                stripeLink: `https://dashboard.stripe.com/customers/${customer.id}`,
+                email: customer.email,
+                name: customer.name ?? undefined,
+                phone: customer.phone ?? undefined
             }, { merge: true });
 
             // Update Stripe Customer metadata with new Firebase UID

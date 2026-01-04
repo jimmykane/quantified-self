@@ -123,10 +123,11 @@ describe('reconcileClaims', () => {
         expect(result.role).toBe('pro');
         // Should update firestore link
         expect(mockDoc).toHaveBeenCalledWith('user1');
-        expect(mockSet).toHaveBeenCalledWith({
+        expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({
             stripeId: 'cus_123',
             stripeLink: 'https://dashboard.stripe.com/customers/cus_123'
-        }, { merge: true });
+            // email/name/phone might be undefined in mock response, so objectContaining is safer
+        }), { merge: true });
 
         // Should set claims
         expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', expect.objectContaining({ stripeRole: 'pro' }));
