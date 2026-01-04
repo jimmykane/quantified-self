@@ -38,16 +38,18 @@ vi.mock('firebase-functions/v2/https', () => ({
 }));
 
 // Mock Stripe Client
-const { mockStripeInstance, mockStripeCustomersSearch, mockStripeSubscriptionsList, mockStripeProductsRetrieve } = vi.hoisted(() => {
+const { mockStripeInstance, mockStripeCustomersSearch, mockStripeCustomersUpdate, mockStripeSubscriptionsList, mockStripeProductsRetrieve } = vi.hoisted(() => {
     const search = vi.fn();
+    const update = vi.fn().mockResolvedValue({}); // Mocks stripe.customers.update
     const list = vi.fn();
     const retrieve = vi.fn();
     return {
         mockStripeCustomersSearch: search,
+        mockStripeCustomersUpdate: update,
         mockStripeSubscriptionsList: list,
         mockStripeProductsRetrieve: retrieve,
         mockStripeInstance: {
-            customers: { search },
+            customers: { search, update },
             subscriptions: { list },
             products: { retrieve }
         }

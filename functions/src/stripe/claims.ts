@@ -117,6 +117,14 @@ async function findAndLinkStripeCustomerByEmail(
                 stripeLink: `https://dashboard.stripe.com/customers/${customer.id}`
             }, { merge: true });
 
+            // Update Stripe Customer metadata with new Firebase UID
+            // This triggers a `customer.updated` webhook that the extension handles,
+            // which will sync subscription data to the new user's Firestore path.
+            await stripe.customers.update(customer.id, {
+                metadata: { firebaseUID: uid }
+            });
+            logger.info(`[findAndLinkStripeCustomerByEmail] Updated Stripe customer ${customer.id} metadata.firebaseUID to ${uid}`);
+
             // Determine the role from subscription or product metadata
             let role = sub.metadata?.role || sub.metadata?.firebaseRole;
 
