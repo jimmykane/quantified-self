@@ -85,4 +85,20 @@ describe('ProcessingIndicatorComponent', () => {
         const hasActive2 = await firstValueFrom(component.hasActiveJobs$);
         expect(hasActive2).toBe(true);
     });
+
+    it('should calculate active jobs progress correctly', async () => {
+        activeJobsSubject.next([
+            { id: '1', title: 'Job 1', status: 'processing', type: 'upload', progress: 50, createdAt: Date.now() },
+            { id: '2', title: 'Job 2', status: 'processing', type: 'upload', progress: 100, createdAt: Date.now() }
+        ]);
+
+        const progress = await firstValueFrom(component.activeJobsProgress$);
+        expect(progress).toBe(75); // (50 + 100) / 2 = 75
+    });
+
+    it('should return 0 progress if no active jobs', async () => {
+        activeJobsSubject.next([]);
+        const progress = await firstValueFrom(component.activeJobsProgress$);
+        expect(progress).toBe(0);
+    });
 });
