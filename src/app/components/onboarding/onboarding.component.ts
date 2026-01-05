@@ -95,7 +95,9 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
                 if (policy.formControlName) {
                     const newValue = this.getPolicyValue(policy, user);
                     const control = this.termsFormGroup.get(policy.formControlName);
-                    if (control && control.value !== newValue) {
+                    // Only update if value is different AND control is not dirty (user hasn't touched it)
+                    // This prevents backend latency from reverting user selection
+                    if (control && !control.dirty && control.value !== newValue) {
                         control.setValue(newValue, { emitEvent: false });
                     }
                 }
