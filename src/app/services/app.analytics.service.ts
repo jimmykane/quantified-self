@@ -3,6 +3,8 @@ import { Analytics, logEvent as firebaseLogEvent, setAnalyticsCollectionEnabled 
 import { AppAuthService } from '../authentication/app.auth.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
+import { environment } from '../../environments/environment';
+
 @Injectable({ providedIn: 'root' })
 export class AppAnalyticsService {
     private analytics = inject(Analytics, { optional: true });
@@ -11,26 +13,27 @@ export class AppAnalyticsService {
 
     constructor() {
         this.authService.user$.pipe(takeUntilDestroyed()).subscribe(user => {
-            if (user) {
+            if (environment.forceAnalyticsCollection) {
+                this.hasConsent = true;
+                this.setCollectionEnabled(true);
+            } else if (user) {
                 this.hasConsent = user.acceptedTrackingPolicy === true;
-                if (this.analytics) {
-                    try {
-                        setAnalyticsCollectionEnabled(this.analytics, this.hasConsent);
-                    } catch (error) {
-                        console.warn('Analytics error:', error);
-                    }
-                }
+                this.setCollectionEnabled(this.hasConsent);
             } else {
                 this.hasConsent = false;
-                if (this.analytics) {
-                    try {
-                        setAnalyticsCollectionEnabled(this.analytics, false);
-                    } catch (error) {
-                        console.warn('Analytics error:', error);
-                    }
-                }
+                this.setCollectionEnabled(false);
             }
         });
+    }
+
+    private setCollectionEnabled(enabled: boolean) {
+        if (this.analytics) {
+            try {
+                setAnalyticsCollectionEnabled(this.analytics, enabled);
+            } catch (error) {
+                console.warn('Analytics error:', error);
+            }
+        }
     }
 
     logEvent(eventName: string, params?: Record<string, any>) {

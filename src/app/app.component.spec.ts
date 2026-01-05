@@ -5,6 +5,7 @@ import { AppAuthService } from './authentication/app.auth.service';
 import { AppSideNavService } from './services/side-nav/app-side-nav.service';
 import { AppUserService } from './services/app.user.service';
 import { AppRemoteConfigService } from './services/app.remote-config.service';
+import { AppAnalyticsService } from './services/app.analytics.service';
 import { MatIconRegistry } from '@angular/material/icon';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { Router, RouterModule, ActivatedRoute } from '@angular/router';
@@ -58,6 +59,10 @@ describe('AppComponent', () => {
         getMaintenanceMessage: vi.fn().mockReturnValue(of(''))
     };
 
+    const mockAnalyticsService = {
+        logEvent: vi.fn()
+    };
+
     beforeEach(async () => {
         await TestBed.configureTestingModule({
             declarations: [AppComponent],
@@ -76,6 +81,7 @@ describe('AppComponent', () => {
                 { provide: DomSanitizer, useValue: mockDomSanitizer },
                 { provide: Title, useValue: mockTitleService },
                 { provide: AppRemoteConfigService, useValue: mockRemoteConfigService },
+                { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 {
                     provide: AppUserService, useValue: {
                         updateUserProperties: vi.fn().mockReturnValue(Promise.resolve()),
@@ -95,6 +101,10 @@ describe('AppComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should initialize analytics service', () => {
+        expect(component['analyticsService']).toBeTruthy();
     });
 
     it('should show navigation for free users on pricing page', () => {

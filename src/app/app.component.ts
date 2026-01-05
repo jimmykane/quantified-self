@@ -34,6 +34,7 @@ declare function require(moduleName: string): any;
 
 
 import { LoggerService } from './services/logger.service';
+import { AppAnalyticsService } from './services/app.analytics.service';
 
 @Component({
   selector: 'app-root',
@@ -74,7 +75,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     private matIconRegistry: MatIconRegistry,
     private domSanitizer: DomSanitizer,
     private titleService: Title,
-    private logger: LoggerService) {
+    private logger: LoggerService,
+    private analyticsService: AppAnalyticsService) {
     // this.afa.setAnalyticsCollectionEnabled(true)
     this.addIconsToRegistry();
   }
