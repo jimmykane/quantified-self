@@ -230,4 +230,27 @@ describe('OnboardingComponent', () => {
         // The fix will use patchValue, so this confirms the fix behaves as expected 
         // regarding the instance identity.
     });
+    it('should NOT overwrite dirty form controls with incoming user data', () => {
+        const initialFormGroup = component.termsFormGroup;
+        const privacyControl = component.termsFormGroup.get('acceptPrivacyPolicy');
+
+        // User checks the box (making it dirty)
+        privacyControl!.setValue(true);
+        privacyControl!.markAsDirty();
+
+        // Incoming user data says it's false (e.g. from backend latency)
+        component.user = { ...mockUser, acceptedPrivacyPolicy: false };
+        component.ngOnChanges({
+            user: {
+                currentValue: component.user,
+                previousValue: mockUser,
+                firstChange: false,
+                isFirstChange: () => false
+            }
+        });
+
+        // Should remain TRUE because it was dirty
+        expect(privacyControl!.value).toBe(true);
+    });
 });
+
