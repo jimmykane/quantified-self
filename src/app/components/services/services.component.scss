@@ -1,12 +1,8 @@
-:host {
-    // Inherit global defaults
-}
-
 .settings-container {
     display: block;
     min-height: calc(100vh - 64px);
     // background-color: #f4f7f6; /* REMOVED */
-    // font-family: 'Inter', sans-serif; /* REMOVED: Managed by global theme */
+
     position: relative;
 }
 
