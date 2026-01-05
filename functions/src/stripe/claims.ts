@@ -122,7 +122,11 @@ async function findAndLinkStripeCustomerByEmail(
 
             // Update Stripe Customer metadata with new Firebase UID
             await stripe.customers.update(customer.id, {
-                metadata: { firebaseUID: uid }
+                metadata: {
+                    linkedAt: Date.now().toString(),
+                    linkedToUid: uid,
+                    firebaseUID: uid // Ensure this matches the new user
+                }
             });
             logger.info(`[findAndLinkStripeCustomerByEmail] Updated Stripe customer ${customer.id} metadata.firebaseUID to ${uid}`);
 
