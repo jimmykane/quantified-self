@@ -307,6 +307,11 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
         stripeRole: role
     });
 
+    // Semantic update: Signal that claims have been updated so the client can refresh
+    await db.doc(`users/${uid}/system/status`).set({
+        claimsUpdatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+
     return { role };
 }
 

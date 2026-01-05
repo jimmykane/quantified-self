@@ -51,15 +51,13 @@ export class SideNavComponent implements OnInit, OnDestroy {
     })
     this.userSubscription = this.authService.user$.subscribe(async (user) => {
       this.user = user;
-      console.log('SideNavComponent: User update', user);
+      this.user = user;
       if (user) {
         this.isAdminUser = await this.userService.isAdmin();
-        console.log('SideNavComponent: stripeRole', (user as any).stripeRole);
-        console.log('SideNavComponent: isAdminUser', this.isAdminUser);
       } else {
         this.isAdminUser = false;
       }
-    })
+    });
   }
 
   get isProUser(): boolean {
