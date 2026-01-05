@@ -64,4 +64,4 @@ jobs:
       - name: Deploy to Firebase
         run: |
           export GOOGLE_APPLICATION_CREDENTIALS="${{ runner.temp }}/firebase_service_account.json"
-          firebase deploy --only hosting:production,functions,firestore,storage,extensions,remoteconfig
+          firebase deploy --only hosting:production,functions,firestore,storage,remoteconfig
