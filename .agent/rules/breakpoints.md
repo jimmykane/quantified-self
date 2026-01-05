@@ -1,6 +1,7 @@
-# Breakpoint Standards
-
-Use this rule when working with responsive design and media queries.
+---
+trigger: model_decision
+description: Use this rule when working with responsive design and media queries.
+---
 
 ## Standard Breakpoints
 

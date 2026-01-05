@@ -1,3 +1,7 @@
+---
+trigger: model_decision
+---
+
 # Date Formatting Standards
 
 Use this rule when working with dates and localization in the Angular application.

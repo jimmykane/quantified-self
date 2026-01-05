@@ -1,3 +1,7 @@
+---
+trigger: always_on
+---
+
 # Agent Rules for quantified-self
 
 ## Project Overview
