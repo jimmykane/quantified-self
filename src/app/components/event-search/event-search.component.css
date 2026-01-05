@@ -2,6 +2,7 @@ mat-icon {
   vertical-align: middle;
 }
 
+
 .big {
   width: auto;
   /* Fallback */
@@ -10,40 +11,71 @@ mat-icon {
 
 form {
   position: relative;
-  height: 100%;
+  /* height: 100%;  -- Removed to let content dictate height naturally */
+  padding: 8px 0;
+  /* Add subtle breathing room */
 }
 
+/* Ensure Search Button aligns well */
 .search-button {
   min-height: 48px;
-  border: 0;
+  /* border: 0; -- Default material button has no border usually, keeping safety if needed but prefer standard */
 }
 
-mat-button-toggle-group {
-  margin-top: 0.5em;
-  margin-right: 0.5em;
-}
-
+/* Container for the date range toggles */
 .button-groups {
-  height: 100%;
   display: flex;
   align-items: center;
-  vertical-align: middle;
+  flex-wrap: wrap;
+  gap: 16px;
+  /* Modern spacing */
+  margin-top: 16px;
+  /* Separate from the row above */
+}
+
+
+
+
+/* Remove direct margin hacks on the components, let the container gap handle it */
+mat-button-toggle-group {
+  margin: 0;
+  /* Shadow depth adjustment to make them pop slightly if desired, 
+     but keeping strictly to material defaults as requested */
+}
+
+
+.filters-row {
+  display: flex;
+  align-items: center;
+  /* Center align items vertically */
+  gap: 16px;
+  /* consistent gap */
   flex-wrap: wrap;
 }
 
-/*::ng-deep .mat-option:first-child .mat-pseudo-checkbox{ display: none; }*/
-
-.filters-row {
-  align-items: baseline;
-  gap: 1em;
-}
-
-/* Mobile: Ensure filters stay on one row */
+/* Mobile: Ensure filters stay on one row or wrap gracefully */
 @media (max-width: 599.98px) {
   .filters-row {
     flex-direction: column;
     align-items: stretch;
-    gap: 0.5em;
+    gap: 16px;
+  }
+
+  .button-groups {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  /* Make groups span full width on mobile for easier touch targets */
+  mat-button-toggle-group {
+    display: flex;
+    width: 100%;
+  }
+
+  /* Ensure toggles inside grow to fill space */
+  ::ng-deep mat-button-toggle-group .mat-button-toggle {
+    flex: 1;
   }
 
   .big {
