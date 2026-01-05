@@ -345,6 +345,23 @@ export class AppUserService implements OnDestroy {
     'acceptedTos',
   ];
 
+  public static isProUser(user: User | null, isAdmin: boolean = false): boolean {
+    if (!user) return false;
+    const stripeRole = (user as any).stripeRole;
+    return stripeRole === 'pro' || isAdmin || (user as any).isPro === true;
+  }
+
+  public static isBasicUser(user: User | null): boolean {
+    if (!user) return false;
+    const stripeRole = (user as any).stripeRole;
+    return stripeRole === 'basic';
+  }
+
+  public static hasPaidAccessUser(user: User | null, isAdmin: boolean = false): boolean {
+    if (!user) return false;
+    return AppUserService.isProUser(user, isAdmin) || AppUserService.isBasicUser(user);
+  }
+
   constructor(
     private eventService: AppEventService,
     private http: HttpClient,

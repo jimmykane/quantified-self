@@ -10,13 +10,20 @@
         <div class="header-info">
           <div class="name-row">
             <app-privacy-icon [privacy]="user.privacy"></app-privacy-icon>
-            <h2>{{ user.displayName || 'Guest' }}</h2>
-            @if (isProUser) {
-            <span class="pro-badge">
-              <mat-icon>verified</mat-icon>
-              PRO
-            </span>
-            }
+            <div class="user-display-name-wrapper">
+              <h2 class="user-display-name">{{ user.displayName }}</h2>
+              @if (isProUser) {
+              <span class="pro-badge">
+                <mat-icon>verified</mat-icon>
+                PRO
+              </span>
+              } @else if (isBasicUser) {
+              <span class="basic-badge">
+                <mat-icon>verified</mat-icon>
+                BASIC
+              </span>
+              }
+            </div>
           </div>
           <p class="user-id">ID: {{ user.uid }}</p>
           @if (user.description) {

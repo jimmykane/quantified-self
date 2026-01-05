@@ -40,26 +40,34 @@
         }
     }
 
-    .pro-badge {
+    .pro-badge,
+    .basic-badge {
         display: inline-flex;
         align-items: center;
         gap: 4px;
-        font-size: 0.7rem;
-        font-weight: 700;
+        font-size: 0.65rem;
+        font-weight: 600;
         color: #fff;
-        background: linear-gradient(135deg, #FFD700, #FFA000);
-        padding: 4px 10px;
+        padding: 2px 8px;
         border-radius: 10px;
+        margin-left: 8px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 
         mat-icon {
+            font-size: 14px;
             width: 14px;
             height: 14px;
-            font-size: 14px;
-            margin: 0;
         }
+    }
+
+    .pro-badge {
+        background: linear-gradient(135deg, #FFD700, #FFA000);
+    }
+
+    .basic-badge {
+        background: linear-gradient(135deg, #64B5F6, #1976D2);
     }
 }
 

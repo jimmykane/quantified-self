@@ -86,7 +86,7 @@ describe('UserSettingsComponent', () => {
                 { provide: AppAuthService, useValue: { user$: of(null) } },
                 { provide: ActivatedRoute, useValue: { snapshot: { data: {} } } },
                 { provide: ActivatedRoute, useValue: { snapshot: { data: {} } } },
-                { provide: AppUserService, useValue: { isBranded: vi.fn().mockResolvedValue(false), updateUserProperties: vi.fn() } },
+                { provide: AppUserService, useValue: { isBranded: vi.fn().mockResolvedValue(false), updateUserProperties: vi.fn(), isAdmin: vi.fn().mockResolvedValue(false) } },
                 { provide: Router, useValue: {} },
                 { provide: MatSnackBar, useValue: { open: vi.fn() } },
                 { provide: AppWindowService, useValue: {} },

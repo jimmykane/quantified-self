@@ -88,10 +88,14 @@ export class UserSettingsComponent implements OnChanges {
 
 
 
+  public isAdminUser = false;
+
   get isProUser(): boolean {
-    if (!this.user) return false;
-    const stripeRole = (this.user as any).stripeRole;
-    return stripeRole === 'pro' || stripeRole === 'basic' || (this.user as any).isPro === true;
+    return AppUserService.isProUser(this.user, this.isAdminUser);
+  }
+
+  get isBasicUser(): boolean {
+    return AppUserService.isBasicUser(this.user);
   }
 
   constructor(private authService: AppAuthService,
@@ -107,6 +111,9 @@ export class UserSettingsComponent implements OnChanges {
 
 
   ngOnChanges(): void {
+    if (this.user) {
+      this.userService.isAdmin().then(isAdmin => this.isAdminUser = isAdmin);
+    }
     // Initialize the user settings and get the enabled ones
     const dataTypesToUse = Object.keys(this.user.settings.chartSettings.dataTypeSettings).filter((dataTypeSettingKey) => {
       return this.user.settings.chartSettings.dataTypeSettings[dataTypeSettingKey].enabled === true;

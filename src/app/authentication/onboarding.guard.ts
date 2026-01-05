@@ -4,6 +4,7 @@ import { map, take, tap } from 'rxjs/operators';
 import { AppAuthService } from './app.auth.service';
 import { POLICY_CONTENT } from '../shared/policies.content';
 
+import { AppUserService } from '../services/app.user.service';
 import { LoggerService } from '../services/logger.service';
 
 /**
@@ -31,13 +32,13 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
             // Dynamically check all policies that require acceptance (exclude optional ones)
             const requiredPolicies = POLICY_CONTENT.filter(p => !!p.checkboxLabel && !p.isOptional);
             const termsAccepted = requiredPolicies.every(policy => {
-                const userProperty = mapFormControlNameToUserProperty(policy.formControlName);
+                const userProperty = mapFormControlNameToUserProperty(policy.formControlName || '');
                 return (user as any)[userProperty] === true;
             });
 
             const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
             const stripeRole = (user as any).stripeRole;
-            const hasPaidAccess = stripeRole === 'pro' || stripeRole === 'basic' || (user as any).isPro === true;
+            const hasPaidAccess = AppUserService.hasPaidAccessUser(user);
             const explicitlyCompleted = (user as any).onboardingCompleted === true;
 
             // User must have accepted terms AND (be pro OR have subscribed once OR explicitly completed free onboarding)
