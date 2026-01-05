@@ -1,39 +1,41 @@
-import {ChangeDetectionStrategy, Component, Input, OnChanges} from '@angular/core';
-import {MatTableDataSource} from '@angular/material/table';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {ActivityInterface} from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import {DataInterface} from '@sports-alliance/sports-lib/lib/data/data.interface';
-import {AppColors} from '../../../services/color/app.colors';
-import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
-import {UserUnitSettingsInterface} from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import {DataSpeed} from '@sports-alliance/sports-lib/lib/data/data.speed';
-import {DataPace} from '@sports-alliance/sports-lib/lib/data/data.pace';
-import {DataVerticalSpeed} from '@sports-alliance/sports-lib/lib/data/data.vertical-speed';
-import {DataSwimPace} from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
-import {ActivityTypes} from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import {AppEventColorService} from '../../../services/color/app.event.color.service';
-import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-pace';
+import { ChangeDetectionStrategy, Component, Input, OnChanges } from '@angular/core';
+import { MatTableDataSource } from '@angular/material/table';
+import { EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { DataInterface } from '@sports-alliance/sports-lib';
+import { AppColors } from '../../../services/color/app.colors';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { DataSpeed } from '@sports-alliance/sports-lib';
+import { DataPace } from '@sports-alliance/sports-lib';
+import { DataVerticalSpeed } from '@sports-alliance/sports-lib';
+import { DataSwimPace } from '@sports-alliance/sports-lib';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib';
 
 @Component({
   selector: 'app-event-stats-table',
   templateUrl: './event.card.stats-table.component.html',
   styleUrls: ['./event.card.stats-table.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 
 export class EventCardStatsTableComponent implements OnChanges {
-  @Input() event: EventInterface;
-  @Input() userUnitSettings: UserUnitSettingsInterface;
-  @Input() selectedActivities: ActivityInterface[];
-  data: MatTableDataSource<Object>;
-  columns: Array<Object>;
+  @Input() event!: EventInterface;
+  @Input() userUnitSettings!: UserUnitSettingsInterface;
+  @Input() selectedActivities!: ActivityInterface[];
+  @Input() showAsExpansion = true;
+  data: MatTableDataSource<any> = new MatTableDataSource<any>();
+  columns!: string[];
   appColors = AppColors;
 
   constructor(private eventColorService: AppEventColorService) {
   }
 
-  ngOnChanges(simpleChanges) {
-    this.data = new MatTableDataSource<Object>();
+  ngOnChanges(simpleChanges: any) {
+    this.data = new MatTableDataSource<object>();
     this.columns = [];
     if (!this.selectedActivities.length || !this.userUnitSettings) {
       return;
@@ -42,54 +44,57 @@ export class EventCardStatsTableComponent implements OnChanges {
     // Create the columns
     this.columns = ['Name'].concat(this.selectedActivities
       .map((activity, index) => {
-        return `${activity.creator.name} ${this.eventColorService.getActivityColor(this.event.getActivities(), activity)}`
+        return `${activity.creator.name} ${this.eventColorService.getActivityColor(this.selectedActivities, activity)}`
       }));
 
     // Collect all the stat types from all the activities
-    // @todo refactor and extract to service
-    const stats = this.selectedActivities.reduce((statsMap, activity) => {
+    const stats = this.selectedActivities.reduce((statsMap: Map<string, DataInterface>, activity) => {
       activity.getStatsAsArray().forEach((stat) => {
-        // Exlcude swim pace from non swims
-        if ([ActivityTypes.Swimming, ActivityTypes['Open water swimming']].indexOf(activity.type) === -1 &&
-          ((Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(stat))).getType() === DataSwimPace.type && this.userUnitSettings.swimPaceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1)
-            || (Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType() === DataSwimPace.type && this.userUnitSettings.swimPaceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1))) {
-          return;
-        }
-        // If its not derived set it
-        if (!DynamicDataLoader.isUnitDerivedDataType(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType())) {
-          statsMap.set(stat.getType(), stat);
-          return
+        const statType = stat.getType();
+
+        // Helper to check if a stat belongs to a base type group by traversing prototypes
+        const isOfBaseType = (s: any, baseType: string) => {
+          let current = Object.getPrototypeOf(s);
+          while (current && typeof current.getType === 'function') {
+            try {
+              if (current.getType() === baseType) {
+                return true;
+              }
+            } catch (e) {
+              // Ignore errors if getType fails on some prototype
+            }
+            current = Object.getPrototypeOf(current);
+          }
+          return false;
+        };
+
+        const isSwimming = [ActivityTypes.Swimming, ActivityTypes['Open water swimming']].includes(activity.type as any);
+
+        // Define unit preferences and their base types
+        const unitPreferences: { baseType: string, units: string[], onlyIfSwimming?: boolean }[] = [
+          { baseType: DataSwimPace.type, units: this.userUnitSettings.swimPaceUnits, onlyIfSwimming: true },
+          { baseType: DataPace.type, units: this.userUnitSettings.paceUnits },
+          { baseType: DataGradeAdjustedPace.type, units: this.userUnitSettings.gradeAdjustedPaceUnits },
+          { baseType: DataSpeed.type, units: this.userUnitSettings.speedUnits },
+          { baseType: DataVerticalSpeed.type, units: this.userUnitSettings.verticalSpeedUnits },
+        ];
+
+        // Check each preference
+        for (const pref of unitPreferences) {
+          if (isOfBaseType(stat, pref.baseType)) {
+            if (pref.onlyIfSwimming && !isSwimming) {
+              return;
+            }
+            if (pref.units.includes(statType)) {
+              statsMap.set(statType, stat);
+            }
+            return;
+          }
         }
 
-        // IF it's derived and there are no user uni settings noop
-        if (!this.userUnitSettings) {
-          return
-        }
-
-        // If the user has preference
-        if (
-          (Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(stat))).getType() === DataPace.type && this.userUnitSettings.paceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1)
-          || (Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType() === DataPace.type && this.userUnitSettings.paceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1)
-        ) {
-          statsMap.set(stat.getType(), stat);
-          return;
-        }
-
-        if (
-          (Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(stat))).getType() === DataGradeAdjustedPace.type && this.userUnitSettings.gradeAdjustedPaceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1)
-          || (Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType() === DataGradeAdjustedPace.type && this.userUnitSettings.gradeAdjustedPaceUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1)
-        ) {
-          statsMap.set(stat.getType(), stat);
-          return;
-        }
-
-        if (Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(stat))).getType() === DataSpeed.type && this.userUnitSettings.speedUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1) {
-          statsMap.set(stat.getType(), stat);
-          return;
-        }
-        if (Object.getPrototypeOf(Object.getPrototypeOf(Object.getPrototypeOf(stat))).getType() === DataVerticalSpeed.type && this.userUnitSettings.verticalSpeedUnits.indexOf(Object.getPrototypeOf(Object.getPrototypeOf(stat)).getType()) !== -1) {
-          statsMap.set(stat.getType(), stat);
-          return;
+        // If it's not a derived type (or not one we specifically handle above), just add it if it's not unit-derived
+        if (!DynamicDataLoader.isUnitDerivedDataType(statType)) {
+          statsMap.set(statType, stat);
         }
       });
       return statsMap;
@@ -98,20 +103,20 @@ export class EventCardStatsTableComponent implements OnChanges {
     // Create the data as rows
     const data = Array.from(stats.values()).reduce((array, stat) => {
       array.push(
-        this.selectedActivities.reduce((rowObj, activity, index) => {
+        this.selectedActivities.reduce((rowObj: any, activity, index) => {
           const activityStat = activity.getStat(stat.getType());
           if (!activityStat) {
             return rowObj;
           }
-          rowObj[`${activity.creator.name} ${this.eventColorService.getActivityColor(this.event.getActivities(), activity)}`] =
+          rowObj[`${activity.creator.name} ${this.eventColorService.getActivityColor(this.selectedActivities, activity)}`] =
             (activityStat ? activityStat.getDisplayValue() : '') +
             ' ' +
             (activityStat ? activityStat.getDisplayUnit() : '');
           return rowObj;
-        }, {Name: `${stat.getDisplayType()}`}),
+        }, { Name: `${stat.getDisplayType()}` } as any),
       );
       return array;
-    }, []);
+    }, [] as any[]);
 
     // If we are comparing only 2 activities then add a diff column.
     // @todo support more than 2 activities for diff
@@ -129,7 +134,7 @@ export class EventCardStatsTableComponent implements OnChanges {
           return;
         }
         // Create an obj
-        data[index]['Difference'] = {};
+        data[index]['Difference'] = {} as any;
         data[index]['Difference']['display'] = (DynamicDataLoader.getDataInstanceFromDataType(stat.getType(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayValue() + ' ' + (DynamicDataLoader.getDataInstanceFromDataType(stat.getType(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayUnit();
         data[index]['Difference']['percent'] = 100 * Math.abs((firstActivityStatValue - secondActivityStatValue) / ((firstActivityStatValue + secondActivityStatValue) / 2));
         // Correct the NaN with both 0's
@@ -152,10 +157,10 @@ export class EventCardStatsTableComponent implements OnChanges {
     // debugger;
 
     // Set the data
-    this.data = new MatTableDataSource(data);
+    this.data = new MatTableDataSource<any>(data);
   }
 
-  applyFilter(event) {
+  applyFilter(event: any) {
     this.data.filter = event.target.value.trim().toLowerCase();
   }
 

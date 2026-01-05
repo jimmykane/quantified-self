@@ -1,24 +1,30 @@
 <mat-card-header>
-  <div mat-card-avatar *ngIf="showToggle">
-    <mat-slide-toggle
-      (change)="onActivitySelect($event, activity)"
-      [color]="'accent'"
-      [checked]="activitySelectionService.selectedActivities.isSelected(activity)">
+  @if (showToggle()) {
+  <div mat-card-avatar>
+    <mat-slide-toggle (change)="onActivitySelect($event, activity())" [color]="'accent'" [checked]="isSelected()">
     </mat-slide-toggle>
   </div>
+  }
 
-  <mat-card-title (click)="onActivityClick($event, activity)"
-    [ngStyle]="event.isMerge && this.activitySelectionService.selectedActivities.isSelected(activity) && {color: eventColorService.getActivityColor(event.getActivities(), activity)}">
-    <span><b>{{activity.type}}</b></span>
-    <span *ngIf="event.isMerge" style="font-size: 0.8em;"> {{activity.creator.name}} {{activity.creator.swInfo}}</span>
+  <mat-card-title (click)="onActivityClick($event, activity())"
+    [ngStyle]="event().isMerge && isSelected() && {color: activityColor()}">
+    <span><b>{{activity().type}}</b></span>
+    @if (event().isMerge) {
+    <span style="font-size: 0.8em;"> {{activity().creator.name}} {{activity().creator.swInfo}}</span>
+    }
   </mat-card-title>
-  <mat-card-subtitle *ngIf="showDate">
-    {{activity.startDate | date:'medium'}}
+  @if (showDate()) {
+  <mat-card-subtitle>
+    {{activity().startDate | date:'medium'}}
   </mat-card-subtitle>
-  <mat-card-subtitle *ngIf="showStats">
-    <span><b>{{activity.getDuration().getDisplayValue()}}</b>, </span>
-    <span><b>{{activity.getDistance().getDisplayValue()}}</b>{{activity.getDistance().getDisplayUnit()}}</span>
+  }
+  @if (showStats()) {
+  <mat-card-subtitle>
+    <span><b>{{activity().getDuration().getDisplayValue()}}</b>, </span>
+    <span><b>{{activity().getDistance().getDisplayValue()}}</b>{{activity().getDistance().getDisplayUnit()}}</span>
   </mat-card-subtitle>
-  <app-activity-actions *ngIf="user && isOwner && showActions" [user]="user" [event]="event"
-                        [activity]="activity" align="end"></app-activity-actions>
+  }
+  @if (user() && isOwner() && showActions()) {
+  <app-activity-actions [user]="user()!" [event]="event()" [activity]="activity()" align="end"></app-activity-actions>
+  }
 </mat-card-header>

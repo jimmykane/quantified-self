@@ -1,20 +1,13 @@
 <section>
-  <mat-slide-toggle
-    [disabled]="!user"
-    [color]="'accent'"
-    (change)="checkBoxChanged($event)"
-    [(ngModel)]="showLaps">
-      <span [matTooltip]="user ? 'When enabled auto lap markers will be added to the map' :  'You need to sign in to user this feature'">
-        Show laps
-      </span>
-  </mat-slide-toggle>
-  <mat-slide-toggle
-    [disabled]="!user"
-    [color]="'accent'"
-    (change)="checkBoxChanged($event)"
-    [(ngModel)]="showArrows">
-      <span [matTooltip]="user ? 'When enabled directional arrows will be shown on the map' :  'You need to sign in to user this feature'">
-        Show directional arrows
-      </span>
-  </mat-slide-toggle>
+  <mat-chip-listbox multiple>
+    <mat-chip-option [selected]="showLaps" (selectionChange)="showLaps = $event.selected; checkBoxChanged($event)"
+      [color]="'accent'" [disabled]="!user" [matTooltip]="user ? 'Show lap markers on map' : 'Sign in to use this'">
+      Show Laps
+    </mat-chip-option>
+    <mat-chip-option [selected]="showArrows" (selectionChange)="showArrows = $event.selected; checkBoxChanged($event)"
+      [color]="'accent'" [disabled]="!user"
+      [matTooltip]="user ? 'Show direction arrows on route' : 'Sign in to use this'">
+      Show Arrows
+    </mat-chip-option>
+  </mat-chip-listbox>
 </section>

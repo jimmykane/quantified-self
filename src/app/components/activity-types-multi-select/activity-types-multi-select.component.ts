@@ -8,10 +8,10 @@ import {
   Output,
   SimpleChanges
 } from '@angular/core';
-import { FormControl } from '@angular/forms';
+import { UntypedFormControl } from '@angular/forms';
 import { Observable } from 'rxjs';
 import { map, startWith } from 'rxjs/operators';
-import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../services/app.user.service';
 
 export class ActivityTypeSelectionModel {
@@ -23,17 +23,18 @@ export class ActivityTypeSelectionModel {
  * @title Multi-select autocomplete
  */
 @Component({
-  selector: 'app-activity-types-multi-select',
-  templateUrl: 'activity-types-multi-select.component.html',
-  styleUrls: ['activity-types-multi-select.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+    selector: 'app-activity-types-multi-select',
+    templateUrl: 'activity-types-multi-select.component.html',
+    styleUrls: ['activity-types-multi-select.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 export class ActivityTypesMultiSelectComponent implements OnInit, OnChanges {
 
   @Input() selectedActivityTypes: ActivityTypes[];
   @Output() selectedActivityTypesChange: EventEmitter<ActivityTypes[]> = new EventEmitter<ActivityTypes[]>();
 
-  activityTypesControl = new FormControl();
+  activityTypesControl = new UntypedFormControl();
 
   activityTypesSelectionModelList: ActivityTypeSelectionModel[] = ActivityTypesHelper.getActivityTypesAsUniqueArray().map(a => new ActivityTypeSelectionModel(ActivityTypes[a]));
 

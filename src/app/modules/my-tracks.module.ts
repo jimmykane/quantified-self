@@ -8,16 +8,15 @@ import { MyTracksProgressComponent } from '../components/tracks/progress/tracks.
 
 
 @NgModule({
-  imports: [
-    CommonModule,
-    SharedModule,
-    MaterialModule,
-    MyTracksRoutingModule,
-  ],
-  exports: [],
-  declarations: [TracksComponent, MyTracksProgressComponent],
-  entryComponents: [],
-  providers: []
+    imports: [
+        CommonModule,
+        SharedModule,
+        MaterialModule,
+        MyTracksRoutingModule,
+    ],
+    exports: [],
+    declarations: [TracksComponent, MyTracksProgressComponent],
+    providers: []
 })
 
 export class MyTracksModule {

@@ -1,7 +1,7 @@
-mat-card{
-  /*padding: 0;*/
+.intensity-zones-container {
   padding-top: 0;
   padding-bottom: 0;
   margin: 0;
   height: 32vh;
+  background: transparent;
 }

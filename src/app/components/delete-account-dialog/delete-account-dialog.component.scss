@@ -1,0 +1,68 @@
+.dialog-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--warn-color, #f44336);
+    padding-top: 8px;
+
+    .warning-icon {
+        color: var(--warn-color, #f44336);
+    }
+}
+
+mat-dialog-content {
+    font-size: 14px;
+    min-width: 380px;
+    max-width: 450px;
+
+    p {
+        margin: 0 0 16px 0;
+        line-height: 1.5;
+    }
+}
+
+.consequences-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 16px 0;
+
+    li {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 0;
+        font-size: 13px;
+
+        mat-icon {
+            font-size: 18px;
+            width: 18px;
+            height: 18px;
+            opacity: 0.7;
+        }
+
+        &.subscription-item {
+            color: #ff9800;
+
+            mat-icon {
+                opacity: 1;
+                color: #ff9800;
+            }
+        }
+    }
+}
+
+.warning-text {
+    background: rgba(244, 67, 54, 0.1);
+    padding: 12px;
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+mat-checkbox {
+    margin-top: 8px;
+    font-size: 13px;
+}
+
+mat-dialog-actions {
+    padding-bottom: 8px;
+}

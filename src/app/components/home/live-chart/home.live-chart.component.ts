@@ -9,13 +9,16 @@ import {
   OnDestroy,
 } from '@angular/core';
 
-import * as am4charts from '@amcharts/amcharts4/charts';
+import type * as am4charts from '@amcharts/amcharts4/charts';
+import type * as am4core from '@amcharts/amcharts4/core';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { ChartAbstractDirective } from '../../charts/chart-abstract.directive';
-import { LinearGradient } from '@amcharts/amcharts4/core';
+import { AmChartsService } from '../../../services/am-charts.service';
+import { LoggerService } from '../../../services/logger.service';
+
 import { range, Subscription, timer } from 'rxjs';
 import { take } from 'rxjs/operators';
-import { LineSeriesDataItem } from '@amcharts/amcharts4/charts';
+import type { LineSeriesDataItem } from '@amcharts/amcharts4/charts';
 
 
 @Component({
@@ -23,23 +26,26 @@ import { LineSeriesDataItem } from '@amcharts/amcharts4/charts';
   templateUrl: './home.live-chart.component.html',
   styleUrls: ['./home.live-chart.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 export class HomeLiveChartComponent extends ChartAbstractDirective implements OnDestroy, AfterViewInit {
 
 
   protected liveDataSubscription: Subscription;
 
-  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected eventColorService: AppEventColorService) {
-    super(zone, changeDetector);
+  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, protected eventColorService: AppEventColorService, protected amChartsService: AmChartsService, protected logger: LoggerService) {
+    super(zone, changeDetector, amChartsService, logger);
   }
 
-  ngAfterViewInit(): void {
-    this.chart = this.createChart();
+  async ngAfterViewInit(): Promise<void> {
+    this.chart = await this.createChart();
     this.subscribeToLiveData();
   }
 
-  protected createChart(): am4charts.XYChart {
-    const chart = <am4charts.XYChart>super.createChart(am4charts.XYChart);
+  protected async createChart(): Promise<am4charts.XYChart> {
+    const { core, charts } = await this.amChartsService.load();
+    const chart = await super.createChart(charts.XYChart) as am4charts.XYChart;
+
     // chart.exporting.menu = this.getExportingMenu();
     chart.hiddenState.properties.opacity = 0;
     chart.padding(10, 0, 0, 1);
@@ -50,7 +56,7 @@ export class HomeLiveChartComponent extends ChartAbstractDirective implements On
 
     chart.data = this.getInitialData();
 
-    const dateAxis = chart.xAxes.push(new am4charts.DateAxis());
+    const dateAxis = chart.xAxes.push(new charts.DateAxis());
     dateAxis.renderer.grid.template.location = 0;
     dateAxis.renderer.minGridDistance = 30;
     dateAxis.dateFormats.setKey('second', 'ss');
@@ -61,7 +67,7 @@ export class HomeLiveChartComponent extends ChartAbstractDirective implements On
     dateAxis.renderer.axisFills.template.disabled = true;
     dateAxis.renderer.ticks.template.disabled = true;
 
-    const valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
+    const valueAxis = chart.yAxes.push(new charts.ValueAxis());
     valueAxis.tooltip.disabled = true;
     valueAxis.interpolationDuration = 500;
     valueAxis.rangeChangeDuration = 500;
@@ -71,7 +77,7 @@ export class HomeLiveChartComponent extends ChartAbstractDirective implements On
     valueAxis.renderer.axisFills.template.disabled = true;
     valueAxis.renderer.ticks.template.disabled = true;
 
-    const series = chart.series.push(new am4charts.LineSeries());
+    const series = chart.series.push(new charts.LineSeries());
     series.dataFields.dateX = 'date';
     series.dataFields.valueY = 'value';
     series.interpolationDuration = 500;
@@ -86,7 +92,7 @@ export class HomeLiveChartComponent extends ChartAbstractDirective implements On
     dateAxis.rangeChangeDuration = 500;
 
     series.fillOpacity = 1;
-    const gradient = new LinearGradient();
+    const gradient = new core.LinearGradient();
     gradient.addColor(chart.colors.getIndex(0), 0.2);
     gradient.addColor(chart.colors.getIndex(0), 0);
     series.fill = gradient;
@@ -113,7 +119,7 @@ export class HomeLiveChartComponent extends ChartAbstractDirective implements On
         1
       );
     })
-  };
+  }
 
   ngOnDestroy() {
     super.ngOnDestroy();

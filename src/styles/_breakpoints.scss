@@ -1,0 +1,72 @@
+/**
+ * Global SCSS Breakpoints
+ * Mirrors the TypeScript AppBreakpoints constants.
+ * @see src/app/constants/breakpoints.ts
+ * @see https://material.io/design/layout/responsive-layout-grid.html#breakpoints
+ */
+
+// Breakpoint values (max-width for mobile-first approach)
+$bp-xsmall-max: 599.98px; // Matches AppBreakpoints.XSmall
+$bp-small-min: 600px;
+$bp-small-max: 959.98px; // Matches AppBreakpoints.Small
+$bp-medium-min: 960px;
+$bp-medium-max: 1279.98px; // Matches AppBreakpoints.Medium
+$bp-large-min: 1280px;
+$bp-large-max: 1919.98px; // Matches AppBreakpoints.Large
+$bp-xlarge-min: 1920px; // Matches AppBreakpoints.XLarge
+
+// Convenience mixins
+@mixin xsmall {
+    @media only screen and (max-width: $bp-xsmall-max) {
+        @content;
+    }
+}
+
+@mixin small {
+    @media only screen and (min-width: $bp-small-min) and (max-width: $bp-small-max) {
+        @content;
+    }
+}
+
+@mixin small-and-up {
+    @media only screen and (min-width: $bp-small-min) {
+        @content;
+    }
+}
+
+@mixin medium {
+    @media only screen and (min-width: $bp-medium-min) and (max-width: $bp-medium-max) {
+        @content;
+    }
+}
+
+@mixin medium-and-up {
+    @media only screen and (min-width: $bp-medium-min) {
+        @content;
+    }
+}
+
+@mixin large {
+    @media only screen and (min-width: $bp-large-min) and (max-width: $bp-large-max) {
+        @content;
+    }
+}
+
+@mixin large-and-up {
+    @media only screen and (min-width: $bp-large-min) {
+        @content;
+    }
+}
+
+@mixin xlarge {
+    @media only screen and (min-width: $bp-xlarge-min) {
+        @content;
+    }
+}
+
+// Handset or tablet portrait (anything below medium)
+@mixin handset-or-tablet-portrait {
+    @media only screen and (max-width: $bp-small-max) {
+        @content;
+    }
+}

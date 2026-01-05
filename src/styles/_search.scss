@@ -1,0 +1,27 @@
+/* Global Search & Filter Styles */
+.qs-filter-container {
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    border-radius: 12px;
+}
+
+.qs-search-field {
+    width: 100%;
+    max-width: 400px;
+
+    .mat-mdc-text-field-wrapper {
+        background-color: rgba(255, 255, 255, 0.5);
+    }
+
+    .mat-mdc-form-field-subscript-wrapper {
+        display: none !important;
+    }
+}
+
+.dark-theme {
+    .qs-search-field .mat-mdc-text-field-wrapper {
+        background-color: rgba(0, 0, 0, 0.2) !important;
+    }
+}

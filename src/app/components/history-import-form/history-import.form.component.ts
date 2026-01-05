@@ -1,20 +1,23 @@
-import { Component, Inject, Input, OnChanges, OnDestroy, OnInit, SimpleChanges } from '@angular/core';
+import { Component, Inject, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, inject, Output, EventEmitter } from '@angular/core';
 import {
   AbstractControl,
-  FormArray,
-  FormControl,
-  FormGroup,
+  UntypedFormArray,
+  UntypedFormControl,
+  UntypedFormGroup,
   Validators,
 } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import * as Sentry from '@sentry/browser';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
+import { AppEventService } from '../../services/app.event.service';
+import { AppUserService } from '../../services/app.user.service';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { LoggerService } from '../../services/logger.service';
+import { User } from '@sports-alliance/sports-lib';
 
-import {AppUserService} from '../../services/app.user.service';
-import {UserServiceMetaInterface} from '@sports-alliance/sports-lib/lib/users/user.service.meta.interface';
-import {Subscription} from 'rxjs';
-import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
+import { Subscription } from 'rxjs';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../../constants/coros';
+import dayjs from 'dayjs';
 
 
 @Component({
@@ -22,47 +25,45 @@ import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-me
   templateUrl: './history-import.form.component.html',
   styleUrls: ['./history-import.form.component.css'],
   providers: [],
+  standalone: false
 })
 
 export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges {
   @Input() serviceName: ServiceNames;
   @Input() userMetaForService: UserServiceMetaInterface;
+  @Input() minDate: Date | null = null;
+  @Output() importInitiated = new EventEmitter<void>();
 
 
-  public formGroup: FormGroup;
+  public formGroup: UntypedFormGroup;
   public isAllowedToDoHistoryImport = false;
   public nextImportAvailableDate: Date;
   public isLoading: boolean;
   public serviceNames = ServiceNames
-
-  constructor(
-    private userService: AppUserService,
-    private snackBar: MatSnackBar,
-    private afa: AngularFireAnalytics,
-  ) {
-  }
+  public isPro = false;
+  public corosHistoryLimitMonths = COROS_HISTORY_IMPORT_LIMIT_MONTHS;
+  private eventService = inject(AppEventService);
+  private userService = inject(AppUserService);
+  private analyticsService = inject(AppAnalyticsService);
+  private logger = inject(LoggerService);
+  private snackBar = inject(MatSnackBar);
 
   async ngOnInit() {
-    this.formGroup = new FormGroup({
-      formArray: new FormArray([
-        new FormGroup({
-          startDate: new FormControl(new Date(new Date().setHours(0, 0, 0, 0)), [
-            Validators.required,
-          ]),
-          endDate: new FormControl(new Date(new Date().setHours(24, 0, 0, 0)), [
-            Validators.required,
-          ])
-        }),
-        new FormGroup({
-          accepted: new FormControl(false, [
-            Validators.requiredTrue,
-            // Validators.minLength(4),
-          ]),
-        })
-      ])
+    this.formGroup = new UntypedFormGroup({
+      startDate: new UntypedFormControl(new Date(new Date().setHours(0, 0, 0, 0)), [
+        Validators.required,
+      ]),
+      endDate: new UntypedFormControl(new Date(new Date().setHours(24, 0, 0, 0)), [
+        Validators.required,
+      ]),
+      accepted: new UntypedFormControl(false, [
+        Validators.requiredTrue,
+      ]),
     });
 
     this.formGroup.disable();
+
+    this.isPro = await this.userService.isPro();
 
     this.processChanges();
   }
@@ -104,7 +105,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + (3 * 24 * 60 * 60 * 1000));
         break;
       default:
-        Sentry.captureException(new Error(`Service name is not available ${this.serviceName} for history import`));
+        this.logger.error(new Error(`Service name is not available ${this.serviceName} for history import`));
         // this.formGroup.disable();
         // this.isAllowedToDoHistoryImport = false;
         break;
@@ -112,19 +113,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.isAllowedToDoHistoryImport ? this.formGroup.enable() : this.formGroup.disable();
     // Set this to done loading
     this.isLoading = false;
-  }
-
-  /** Returns a FormArray with the name 'formArray'. */
-  get formArray(): AbstractControl | null {
-    return this.formGroup.get('formArray');
-  }
-
-  hasError(formGroupIndex?: number, field?: string) {
-    if (!field) {
-      return !this.formGroup.valid;
-    }
-    const formArray = <FormArray>this.formGroup.get('formArray');
-    return !(formArray.controls[formGroupIndex].get(field).valid && formArray.controls[formGroupIndex].get(field).touched);
   }
 
   async onSubmit(event) {
@@ -141,14 +129,19 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.isLoading = true;
 
     try {
-      await this.userService.importServiceHistoryForCurrentUser(this.serviceName, this.formGroup.get('formArray')['controls'][0].get('startDate').value, this.formGroup.get('formArray')['controls'][0].get('endDate').value)
+      this.analyticsService.logEvent('imported_history', { method: this.serviceName });
+      await this.userService.importServiceHistoryForCurrentUser(
+        this.serviceName,
+        dayjs(this.formGroup.get('startDate')?.value).toDate(),
+        dayjs(this.formGroup.get('endDate')?.value).toDate()
+      );
+      this.importInitiated.emit();
       this.snackBar.open('History import has been queued', null, {
         duration: 2000,
       });
-      this.afa.logEvent('imported_history', {method: this.serviceName});
     } catch (e) {
       // debugger;
-      Sentry.captureException(e);
+      this.logger.error(e);
 
       this.snackBar.open(`Could not import history for ${this.serviceName} due to ${e.message}`, null, {
         duration: 2000,
@@ -158,12 +151,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     }
   }
 
-  validateAllFormFields(formGroup: FormGroup) {
+  validateAllFormFields(formGroup: UntypedFormGroup) {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
-      if (control instanceof FormControl) {
-        control.markAsTouched({onlySelf: true});
-      } else if (control instanceof FormGroup) {
+      if (control instanceof UntypedFormControl) {
+        control.markAsTouched({ onlySelf: true });
+      } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }
     });

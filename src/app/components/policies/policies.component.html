@@ -1,96 +1,32 @@
-<mat-card class="outer mat-elevation-z0">
+<div class="policies-hero">
+  <h1>Legal & Privacy</h1>
+  <p>Transparency about how we handle your data, your rights, and our terms of service.</p>
+</div>
 
-  <mat-card class="inner mat-elevation-z0">
-    <mat-card-header>
-      <div mat-card-avatar>
-        <mat-icon>lock_outline</mat-icon>
-      </div>
-      <mat-card-title>
-        Privacy
-      </mat-card-title>
-      <mat-card-subtitle>
-        Policy
-      </mat-card-subtitle>
-    </mat-card-header>
-    <mat-card-content>
-      <ul>
-        <li> Your data are stored and held encrypted by Google (Google Cloud)</li>
-        <li>You choose what part of your data to make public or private (profile, individual data)</li>
-        <li>We provide all default privacy settings to private, only seen by you and you can choose what to make
-          public
-        </li>
-        <li>We don't sell or send your data to any other 3rd party nor do we process your private data in any other way rather than allowing you to visualize them</li>
-      </ul>
-    </mat-card-content>
-  </mat-card>
+<div class="policies-container">
+  <div class="policies-grid">
 
-  <mat-card class="inner mat-elevation-z0">
-    <mat-card-header>
-      <div mat-card-avatar>
-        <mat-icon>data_usage</mat-icon>
-      </div>
-      <mat-card-title>
-        Data
-      </mat-card-title>
-      <mat-card-subtitle>
-        Policy
-      </mat-card-subtitle>
-    </mat-card-header>
-    <mat-card-content>
-      <ul>
-        <li>
-          While we will employ the best endeavours we don't promise to keep your files and data accessible at
-          any time, it's best advised to keep your own private copies
-        </li>
-      </ul>
-    </mat-card-content>
-  </mat-card>
+    <mat-card *ngFor="let policy of policies" class="policy-card mat-elevation-z2" [ngClass]="[policy.id]">
+      <mat-card-header>
+        <div mat-card-avatar class="policy-avatar">
+          <mat-icon>{{policy.icon}}</mat-icon>
+        </div>
+        <mat-card-title>{{policy.title}}</mat-card-title>
+        <mat-card-subtitle>{{policy.subtitle}}</mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <!-- Generic Loop for content items -->
+        <ng-container *ngFor="let item of policy.content">
+          <!-- Check if item starts with tags that suggest it should be rendered as HTML directly, 
+                  or wrap in <p> or <li>. 
+                  My content array has some strings starting with <ul> (GDPR) and others just <strong> text.
+                  Let's use [innerHTML] for flexibility since source is trusted.
+             -->
+          <div [innerHTML]="item" class="policy-content-item"></div>
+        </ng-container>
 
+      </mat-card-content>
+    </mat-card>
 
-  <mat-card class="inner mat-elevation-z0">
-    <mat-card-header>
-      <div mat-card-avatar>
-        <mat-icon>track_changes</mat-icon>
-      </div>
-      <mat-card-title>
-        Tracking
-      </mat-card-title>
-      <mat-card-subtitle>
-        Policy
-      </mat-card-subtitle>
-    </mat-card-header>
-    <mat-card-content>
-      <ul>
-        <li>Your IP and user id is anonymised and is used to determine visits by country, monthly active users (MAU) etc
-          via Google Analytics
-        </li>
-        <li>We don't allow Google or any other 3rd party to access these data</li>
-        <li>We don't use cross device recognition nor any non-anonymised data</li>
-      </ul>
-    </mat-card-content>
-  </mat-card>
-
-
-  <mat-card class="inner mat-elevation-z0">
-    <mat-card-header>
-      <div mat-card-avatar>
-        <mat-icon>bug_report</mat-icon>
-      </div>
-      <mat-card-title>
-        Diagnostics
-      </mat-card-title>
-      <mat-card-subtitle>
-        Policy
-      </mat-card-subtitle>
-    </mat-card-header>
-    <mat-card-content>
-      <ul>
-        <li>
-          Your browser can send anonymised data when errors happen to help improve the quality of the service.
-        </li>
-      </ul>
-    </mat-card-content>
-  </mat-card>
-
-
-</mat-card>
+  </div>
+</div>

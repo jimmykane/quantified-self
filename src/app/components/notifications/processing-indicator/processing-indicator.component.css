@@ -1,0 +1,122 @@
+:host {
+    display: inline-block;
+}
+
+.indicator-button {
+    position: relative;
+}
+
+.spinner-container {
+    position: relative;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: auto;
+    /* Center in button */
+}
+
+.center-icon {
+    position: absolute;
+    font-size: 16px;
+    /* Slightly smaller to fit inside 24px spinner */
+    width: 16px;
+    height: 16px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--mat-sys-primary);
+    /* Use primary color for icon */
+}
+
+.badge {
+    position: absolute;
+    top: 0px;
+    right: 0px;
+    background-color: var(--mat-sys-error);
+    /* Changed to error/accent for visibility */
+    color: var(--mat-sys-on-error);
+    border-radius: 50%;
+    width: 14px;
+    height: 14px;
+    font-size: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    z-index: 10;
+    pointer-events: none;
+}
+
+/* ... existing styles ... */
+
+.jobs-header {
+    padding: 12px 16px;
+    font-weight: 500;
+    color: var(--mat-sys-on-surface);
+    font-size: 0.9rem;
+}
+
+.jobs-list {
+    max-height: 300px;
+    overflow-y: auto;
+    min-width: 320px;
+    padding: 8px 0;
+}
+
+.job-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 16px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.job-item:last-child {
+    border-bottom: none;
+}
+
+.job-info {
+    flex: 1;
+    min-width: 0;
+    /* Text truncation */
+}
+
+.job-title {
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.job-details {
+    font-size: 0.75rem;
+    opacity: 0.7;
+    margin-bottom: 4px;
+}
+
+.job-icon {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.success {
+    color: var(--mat-sys-primary);
+    /* Use theme variable */
+}
+
+.error {
+    color: var(--mat-sys-error);
+    /* Use theme variable */
+}
+
+/* Adjust mat-progress-bar height if needed */
+mat-progress-bar {
+    height: 2px !important;
+}

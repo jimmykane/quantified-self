@@ -1,12 +1,16 @@
 import { NgModule } from '@angular/core';
 import { Routes, RouterModule } from '@angular/router';
-import {ServicesComponent} from './components/services/services.component';
+import { ServicesComponent } from './components/services/services.component';
+import { userResolver } from './resolvers/user.resolver';
 
 
 const routes: Routes = [
   {
     path: '',
-    component: ServicesComponent
+    component: ServicesComponent,
+    resolve: {
+      userData: userResolver
+    }
   }
 ];
 

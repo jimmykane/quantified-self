@@ -1,55 +1,40 @@
-import * as functions from 'firebase-functions'
-import { addToQueueForSuunto, parseQueueItems } from '../queue';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import * as functions from 'firebase-functions/v1';
+import * as logger from 'firebase-functions/logger';
+import { addToQueueForSuunto } from '../queue';
 
-const TIMEOUT_IN_SECONDS = 540;
-const MEMORY = "4GB";
+import { config } from '../config';
 
 export const insertSuuntoAppActivityToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,
-  memory: '256MB'
+  memory: '256MB',
 }).https.onRequest(async (req, res) => {
   // Check Auth first
-  const authentication = `Basic ${Buffer.from(`${functions.config().suuntoapp.client_id}:${functions.config().suuntoapp.client_secret}`).toString('base64')}`;
-  if (authentication !== req.headers.authorization){
-    console.error(new Error(`Not authorised to post here received: ${req.headers.authorization}`));
+  const authentication = `Basic ${Buffer.from(`${config.suuntoapp.client_id}:${config.suuntoapp.client_secret}`).toString('base64')}`;
+  if (authentication !== req.headers.authorization) {
+    logger.error(new Error(`Not authorised to post here received: ${req.headers.authorization}`));
     res.status(403);
     res.send();
     return;
   }
 
-  const userName = req.query.username ||  req.body.username;
-  const workoutID = req.query.workoutid ||  req.body.workoutid;
+  const userName = req.query.username || req.body.username;
+  const workoutID = req.query.workoutid || req.body.workoutid;
 
-  console.log(`Inserting to queue or processing ${workoutID} for ${userName}`);
+  logger.info(`Inserting to queue or processing ${workoutID} for ${userName}`);
   let queueItemDocumentReference;
   try {
     queueItemDocumentReference = await addToQueueForSuunto({
       userName: userName,
       workoutID: workoutID,
     });
-  }catch (e) {
-    console.error(e);
+  } catch (e: any) {
+    logger.error(e);
     res.status(500).send();
-    return
+    return;
   }
 
-  console.log(`Inserted to queue ${queueItemDocumentReference.id} for workoutID ${workoutID} and userName ${userName}`);
-  res.status(200).send()
-})
-
-export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_IN_SECONDS,
-  memory: MEMORY,
-  maxInstances: 1,
-}).pubsub.schedule('every 20 minutes').onRun(async (context) => {
-  await parseQueueItems(ServiceNames.SuuntoApp);
+  logger.info(`Inserted to queue ${queueItemDocumentReference.id} for workoutID ${workoutID} and userName ${userName}`);
+  res.status(200).send();
 });
 
-export const parseSuuntoAppHistoryImportActivityQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_IN_SECONDS,
-  memory: MEMORY,
-  maxInstances: 1,
-}).pubsub.schedule('every 20 minutes').onRun(async (context) => {
-  await parseQueueItems(ServiceNames.SuuntoApp, true);
-});
+

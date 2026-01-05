@@ -27,6 +27,7 @@ yarn-error.log
 !.vscode/extensions.json
 
 # misc
+/.angular/cache
 /.sass-cache
 /connect.lock
 /coverage
@@ -51,6 +52,8 @@ credentials.tar.gz
 #firebase
 .firebase
 firebase-debug.log
+firestore-debug.log
+ui-debug.log
 quantified-self-io-firebase-adminsdk.json
 
 functions/src/service-account.json
@@ -62,3 +65,11 @@ src/assets/fonts/
 
 #Lisences
 licenses.json
+
+# SSL certificates (generate locally with mkcert)
+/certs
+functions/.env
+
+PR_DESCRIPTION.md
+
+COROS API Reference V2.0.6 (Updated April 2025).pdf

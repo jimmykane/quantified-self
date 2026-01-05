@@ -1,108 +1,71 @@
-<mat-list *ngIf="userMetaForService && userMetaForService.didLastHistoryImport && !isAllowedToDoHistoryImport">
-  <div mat-subheader>Status</div>
+@if (userMetaForService && userMetaForService.didLastHistoryImport && !isAllowedToDoHistoryImport) {
+<div class="status-section">
+  <h4>Status</h4>
+  <p><strong>Last import:</strong> {{ userMetaForService.didLastHistoryImport | date: 'short' }}</p>
+  @if (serviceName === serviceNames.SuuntoApp) {
+  <p><strong>Queued:</strong> {{ userMetaForService.processedActivitiesFromLastHistoryImportCount }} activities</p>
+  }
+  <p><strong>Next available:</strong> {{ nextImportAvailableDate | date: 'short' }}</p>
+</div>
+}
 
-  <mat-list-item style="text-align: left">
-    <mat-icon mat-list-icon>date_range</mat-icon>
-    <div mat-line>Your last history import was at</div>
-    <div mat-line>{{ userMetaForService.didLastHistoryImport | date: 'medium'}}</div>
-  </mat-list-item>
-
-  <mat-list-item style="text-align: left" *ngIf="serviceName === serviceNames.SuuntoApp">
-    <mat-icon mat-list-icon>confirmation_number</mat-icon>
-    <div mat-line>Activities Queued</div>
-    <div mat-line>{{ userMetaForService.processedActivitiesFromLastHistoryImportCount }} activities</div>
-  </mat-list-item>
-
-  <mat-list-item style="text-align: left">
-    <mat-icon mat-list-icon>replay</mat-icon>
-    <div mat-line>You can run the next history import at</div>
-    <div mat-line>{{ nextImportAvailableDate | date: 'medium'}}</div>
-  </mat-list-item>
-
-  <span>Please support this project on Patreon</span>
-
-  <button mat-stroked-button onclick="window.open('https://www.patreon.com/dimitrioskanellopoulos')">Support this
-    project on Patreon
-  </button>
-
-</mat-list>
-
-<form *ngIf="formGroup && isAllowedToDoHistoryImport" [formGroup]="formGroup">
-
-  <app-shade [isActive]="isLoading"></app-shade>
-
-  <mat-horizontal-stepper formArrayName="formArray" [linear]="true" #stepper>
-
-    <mat-step formGroupName="0" [stepControl]="formArray?.get([0])">
-      <ng-template matStepLabel>Setup the dates</ng-template>
-
-      <!-- Start Date -->
-      <mat-form-field>
-        <input matInput [matDatepicker]="startDate" placeholder="Start Date" formControlName="startDate"
-               (click)="startDate.open()">
-        <mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>
-        <mat-datepicker #startDate></mat-datepicker>
-        <mat-hint>The start date</mat-hint>
-        <mat-error *ngIf="hasError(0, 'startDate')">
-          invalid date
-        </mat-error>
-      </mat-form-field>
-
-      <!-- End Date -->
-      <mat-form-field>
-        <input matInput [matDatepicker]="endDate" placeholder="End Date" formControlName="endDate"
-               (click)="endDate.open()">
-        <mat-datepicker-toggle matSuffix [for]="endDate"></mat-datepicker-toggle>
-        <mat-datepicker #endDate></mat-datepicker>
-        <mat-hint>The end date</mat-hint>
-        <mat-error *ngIf="hasError(0, 'startDate')">
-          invalid date
-        </mat-error>
-      </mat-form-field>
-
-      <button mat-flat-button color="primary" matStepperNext>Next</button>
-    </mat-step>
-
-    <mat-step formGroupName="1" [stepControl]="formArray?.get([1])">
-      <ng-template matStepLabel>Confirm</ng-template>
-
-      <mat-list>
-
-        <mat-list-item style="text-align: left">
-          <mat-icon mat-list-icon>date_range</mat-icon>
-          <div mat-line>Start date</div>
-          <div mat-line>{{ formGroup.get('formArray')['controls'][0].get('startDate').value | date: 'medium' }}</div>
-        </mat-list-item>
-        <mat-list-item style="text-align: left">
-          <mat-icon mat-list-icon>date_range</mat-icon>
-          <div mat-line>End date</div>
-          <div mat-line>{{ formGroup.get('formArray')['controls'][0].get('endDate').value | date: 'medium' }}</div>
-        </mat-list-item>
-      </mat-list>
-
-      <mat-checkbox formControlName="accepted">
-        <mat-hint>
-          <b>I understand that</b>
-          <br/>
-          <span class="smaller">
-            <span *ngIf="serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI">
-              History import can take some hours or up to days depending on how many activities you have.
-            </span>
-            <span *ngIf="serviceName === serviceNames.GarminHealthAPI">
-              You can do a history import every 3 days.
-              <br/>
-              For any other reason contact us.
-            </span>
-            <br/>
-            Your activities will start appearing at your dashboard.</span><br/>
-        </mat-hint>
-      </mat-checkbox>
-
-      <mat-error *ngIf="!isAllowedToDoHistoryImport">You cannot import your history at this moment</mat-error>
-      <button mat-flat-button color="warn" matStepperPrevious>Back</button>
-      <button mat-flat-button color="primary" (click)="onSubmit($event)" [disabled]="!this.formGroup.valid">Import
-      </button>
-    </mat-step>
-
-  </mat-horizontal-stepper>
+@if (formGroup && isAllowedToDoHistoryImport) {
+@if (isPro) {
+<form [formGroup]="formGroup" class="qs-form history-import-form">
+  @if (minDate && serviceName === serviceNames.COROSAPI) {
+  <div class="limit-info">
+    <mat-icon>info</mat-icon>
+    <div class="limit-text">
+      <span class="limit-title">{{corosHistoryLimitMonths}}-Month Import Limit</span>
+      <p class="limit-description">
+        Dates before {{ minDate | date:'mediumDate' }} are disabled in the picker due to API restrictions.
+      </p>
+    </div>
+  </div>
+  }
+  <div class="date-fields">
+    <mat-form-field appearance="outline">
+      <mat-label>Start Date</mat-label>
+      <input matInput [matDatepicker]="startDate" [min]="minDate" formControlName="startDate"
+        (click)="startDate.open()">
+      <mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>
+      <mat-datepicker #startDate></mat-datepicker>
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>End Date</mat-label>
+      <input matInput [matDatepicker]="endDate" formControlName="endDate" (click)="endDate.open()">
+      <mat-datepicker-toggle matSuffix [for]="endDate"></mat-datepicker-toggle>
+      <mat-datepicker #endDate></mat-datepicker>
+    </mat-form-field>
+  </div>
+  <div class="confirmation-section">
+    <mat-checkbox formControlName="accepted" color="primary">
+      <span class="checkbox-label">
+        @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI) {
+        I understand this may take hours to days.
+        }
+        @if (serviceName === serviceNames.GarminHealthAPI) {
+        I understand I can only import every 3 days.
+        }
+      </span>
+    </mat-checkbox>
+  </div>
+  <div class="qs-form-actions">
+    <button mat-flat-button color="primary" (click)="onSubmit($event)" [disabled]="!formGroup.valid || isLoading">
+      @if (isLoading) {
+      <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
+        color="accent"></mat-spinner>
+      Importing History...
+      } @else {
+      Import History
+      }
+    </button>
+  </div>
 </form>
+} @else {
+<div class="pro-required">
+  <p>History import is a Pro feature.</p>
+  <button mat-flat-button color="primary" routerLink="/pricing">Upgrade to Pro</button>
+</div>
+}
+}

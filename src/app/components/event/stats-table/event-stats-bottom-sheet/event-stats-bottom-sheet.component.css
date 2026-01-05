@@ -1,0 +1,36 @@
+:host {
+    display: block;
+    height: 100%;
+}
+
+.bottom-sheet-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.bottom-sheet-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    flex-shrink: 0;
+    /* Consistent padding with other sheets */
+}
+
+.bottom-sheet-header h2 {
+    margin: 0;
+    font-weight: 400;
+}
+
+.bottom-sheet-content {
+    /* Removed max-height here, let flex container handle it */
+    overflow-y: auto;
+    flex: 1;
+    /* Fill remaining space */
+    padding: 0 1rem 1rem 1rem;
+}
+
+@media (min-width: 1200px) {
+    /* Removed redundant max-height media query as it's handled globally or by parent */
+}

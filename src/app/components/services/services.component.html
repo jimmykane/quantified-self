@@ -1,31 +1,78 @@
-<section class="component-container">
-  <mat-tab-group [dynamicHeight]="true" [selectedIndex]="selectedTabIndex">
-    <mat-tab label="Suunto">
-      <ng-template matTabLabel>
-        <mat-icon class="large-svg-icon" svgIcon="suunto"></mat-icon>
-      </ng-template>
-      <ng-template matTabContent>
-        <app-services-suunto [user]="user" [isGuest]="isGuest"></app-services-suunto>
-      </ng-template>
-    </mat-tab>
-    <mat-tab label="Garmin" [disabled]="!user || isGuest">
-      <ng-template matTabLabel>
-        <mat-icon class="large-svg-icon" svgIcon="garmin"></mat-icon>
-      </ng-template>
-      <ng-template matTabContent>
-        <app-services-garmin [user]="user" [isGuest]="isGuest"></app-services-garmin>
-      </ng-template>
-    </mat-tab>
+<div class="settings-container">
+  <!-- Horizontal Navigation -->
+  <nav class="settings-nav">
+    <ul class="nav-list">
+      <li class="nav-item" [class.active]="activeSection === 'suunto'" (click)="activeSection = 'suunto'">
+        <mat-icon svgIcon="suunto"></mat-icon> Suunto
+      </li>
+      <li class="nav-item" [class.active]="activeSection === 'garmin'" (click)="activeSection = 'garmin'">
+        <mat-icon svgIcon="garmin"></mat-icon> Garmin
+      </li>
+      <li class="nav-item" [class.active]="activeSection === 'coros'" (click)="activeSection = 'coros'">
+        <mat-icon svgIcon="coros"></mat-icon> COROS
+      </li>
+    </ul>
+  </nav>
 
-    <mat-tab label="COROS" [disabled]="!user || isGuest">
-      <ng-template matTabLabel>
-        <mat-icon class="large-svg-icon-coros" svgIcon="coros"></mat-icon>
-      </ng-template>
-      <ng-template matTabContent>
-        <app-services-coros [user]="user" [isGuest]="isGuest"></app-services-coros>
-      </ng-template>
-    </mat-tab>
-  </mat-tab-group>
+  <!-- Main Content Area -->
+  <main class="settings-content">
+
+    <!-- Suunto Section -->
+    @if (activeSection === 'suunto') {
+    <mat-card class="settings-card glass-card">
+      <div class="header-content" style="padding: 24px; padding-bottom: 0;">
+        <div class="header-avatar">
+          <mat-icon class="layer-icon" svgIcon="suunto" style="width: 40px; height: 40px;"></mat-icon>
+        </div>
+        <div class="header-info">
+          <h1>Suunto Integration</h1>
+          <p>Manage your connection with Suunto App.</p>
+        </div>
+      </div>
+      <div class="card-content">
+        <app-services-suunto [user]="user" [isGuest]="isGuest" [hasProAccess]="hasProAccess"></app-services-suunto>
+      </div>
+    </mat-card>
+    }
+
+    <!-- Garmin Section -->
+    @if (activeSection === 'garmin') {
+    <mat-card class="settings-card glass-card">
+      <div class="header-content" style="padding: 24px; padding-bottom: 0;">
+        <div class="header-avatar">
+          <mat-icon class="layer-icon" svgIcon="garmin" style="width: 40px; height: 40px;"></mat-icon>
+        </div>
+        <div class="header-info">
+          <h1>Garmin Integration</h1>
+          <p>Manage your connection with Garmin Connect.</p>
+        </div>
+      </div>
+      <div class="card-content">
+        <app-services-garmin [user]="user" [isGuest]="isGuest" [hasProAccess]="hasProAccess"
+          [isAdmin]="isAdmin"></app-services-garmin>
+      </div>
+    </mat-card>
+    }
+
+    <!-- COROS Section -->
+    @if (activeSection === 'coros') {
+    <mat-card class="settings-card glass-card">
+      <div class="header-content" style="padding: 24px; padding-bottom: 0;">
+        <div class="header-avatar">
+          <mat-icon class="layer-icon" svgIcon="coros" style="width: 40px; height: 40px;"></mat-icon>
+        </div>
+        <div class="header-info">
+          <h1>COROS Integration</h1>
+          <p>Manage your connection with COROS.</p>
+        </div>
+      </div>
+      <div class="card-content">
+        <app-services-coros [user]="user" [isGuest]="isGuest" [hasProAccess]="hasProAccess"></app-services-coros>
+      </div>
+    </mat-card>
+    }
+
+  </main>
 
   <app-shade [isActive]="isLoading"></app-shade>
-</section>
+</div>

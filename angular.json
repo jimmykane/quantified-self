@@ -9,15 +9,18 @@
       "projectType": "application",
       "architect": {
         "build": {
-          "builder": "@angular-devkit/build-angular:browser",
+          "builder": "@angular-devkit/build-angular:application",
           "options": {
             "outputPath": "dist",
             "index": "src/index.html",
-            "main": "src/main.ts",
+            "browser": "src/main.ts",
             "tsConfig": "src/tsconfig.app.json",
-            "polyfills": "src/polyfills.ts",
+            "polyfills": [
+              "zone.js"
+            ],
             "assets": [
               "src/assets",
+              "src/favicon.ico",
               "src/manifest.webmanifest",
               "src/robots.txt",
               "src/sitemap.xml"
@@ -28,14 +31,22 @@
               "./node_modules/leaflet-fullscreen/dist/leaflet.fullscreen.css",
               "./src/styles.scss"
             ],
-            "scripts": [
-            ],
-            "vendorChunk": true,
+            "scripts": [],
             "extractLicenses": false,
-            "buildOptimizer": false,
             "sourceMap": true,
             "optimization": false,
-            "namedChunks": true
+            "namedChunks": true,
+            "externalDependencies": [
+              "jsdom"
+            ],
+            "allowedCommonJsDependencies": [
+              "@amcharts/amcharts4/core",
+              "@amcharts/amcharts4/charts",
+              "@amcharts/amcharts4/maps",
+              "@amcharts/amcharts4/themes/animated",
+              "@amcharts/amcharts4/themes/material",
+              "@amcharts/amcharts4/themes/dark"
+            ]
           },
           "configurations": {
             "production": {
@@ -50,16 +61,13 @@
               "sourceMap": false,
               "namedChunks": false,
               "extractLicenses": true,
-              "vendorChunk": false,
-              "buildOptimizer": true,
               "fileReplacements": [
                 {
                   "replace": "src/environments/environment.ts",
                   "with": "src/environments/environment.prod.ts"
                 }
               ],
-              "serviceWorker": true,
-              "ngswConfigPath": "ngsw-config.json"
+              "serviceWorker": "ngsw-config.json"
             },
             "beta": {
               "budgets": [
@@ -81,85 +89,62 @@
         "serve": {
           "builder": "@angular-devkit/build-angular:dev-server",
           "options": {
-            "browserTarget": "track-tools:build"
+            "buildTarget": "track-tools:build",
+            "ssl": true,
+            "sslCert": "./certs/localhost.crt",
+            "sslKey": "./certs/localhost.key"
           },
           "configurations": {
             "production": {
-              "browserTarget": "track-tools:build:production"
+              "buildTarget": "track-tools:build:production"
             }
           }
         },
         "extract-i18n": {
           "builder": "@angular-devkit/build-angular:extract-i18n",
           "options": {
-            "browserTarget": "track-tools:build"
+            "buildTarget": "track-tools:build"
           }
         },
-        "test": {
-          "builder": "@angular-devkit/build-angular:karma",
+        "lint": {
+          "builder": "@angular-eslint/builder:lint",
           "options": {
-            "main": "src/test.ts",
-            "karmaConfig": "./karma.conf.js",
-            "polyfills": "src/polyfills.ts",
-            "tsConfig": "src/tsconfig.spec.json",
-            "scripts": [
-            ],
-            "styles": [
-              "node_modules/material-design-icons-iconfont/dist/material-design-icons.css",
-              "src/styles.scss"
-            ],
-            "assets": [
-              "src/assets",
-              "src/manifest.webmanifest",
-              "src/robots.txt",
-              "src/sitemap.xml"
+            "lintFilePatterns": [
+              "src/**/*.ts",
+              "src/**/*.html"
             ]
-          }
-        },
-        "lint": {
-          "builder": "@angular-devkit/build-angular:tslint",
-          "options": {
-            "tsConfig": [
-              "src/tsconfig.app.json",
-              "src/tsconfig.spec.json"
-            ],
-            "exclude": []
-          }
-        }
-      }
-    },
-    "track-tools-e2e": {
-      "root": "",
-      "sourceRoot": "",
-      "projectType": "application",
-      "architect": {
-        "e2e": {
-          "builder": "@angular-devkit/build-angular:protractor",
-          "options": {
-            "protractorConfig": "./protractor.conf.js",
-            "devServerTarget": "track-tools:serve"
-          }
-        },
-        "lint": {
-          "builder": "@angular-devkit/build-angular:tslint",
-          "options": {
-            "tsConfig": [
-              "e2e/tsconfig.e2e.json"
-            ],
-            "exclude": []
           }
         }
       }
     }
   },
-  "defaultProject": "track-tools",
   "schematics": {
     "@schematics/angular:component": {
       "prefix": "app",
-      "style": "css"
+      "style": "css",
+      "type": "component"
     },
     "@schematics/angular:directive": {
-      "prefix": "app"
+      "prefix": "app",
+      "type": "directive"
+    },
+    "@schematics/angular:service": {
+      "type": "service"
+    },
+    "@schematics/angular:guard": {
+      "typeSeparator": "."
+    },
+    "@schematics/angular:interceptor": {
+      "typeSeparator": "."
+    },
+    "@schematics/angular:module": {
+      "typeSeparator": "."
+    },
+    "@schematics/angular:pipe": {
+      "typeSeparator": "."
+    },
+    "@schematics/angular:resolver": {
+      "typeSeparator": "."
     }
   }
 }

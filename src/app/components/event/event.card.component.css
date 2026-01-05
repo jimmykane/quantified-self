@@ -1,54 +1,98 @@
-mat-card.outer{
+/* Dashboard Layout Styles */
+
+.event-dashboard-container {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  gap: 0.5rem;
+  /* Tight gap between sections */
+  padding: 16px;
+  max-width: 1600px;
+  /* Cap width for ultra-wide screens */
+  margin: 0 auto;
+}
+
+.global-download-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  height: 3px;
+}
+
+/* Specific section tweaks if needed */
+
+/* Map should typically be full bleed */
+.map-section {
   padding: 0;
-  margin: 0;
-  border-radius: 0;
-  border: 0;
-  padding-top: 0.8em;
-  padding-bottom: 0.8em;
-  padding-left: 4px;
-  padding-right: 4px;
-  min-height: 100vh;
-}
-
-
-mat-card {
-  /*margin-top: 0.0em;*/
-  /*margin-bottom: 0.8em;*/
-  /*margin-left: 0.8em;*/
-  /*margin-right: 0.8em;*/
-  /*padding: 16px 0 0;*/
-  /*min-height: calc(30vh);*/
-}
-
-.mat-card-avatar{
-  text-align: center;
-  height: auto;
-  width: auto;
-  /*padding-top: 12px;*/
-}
-
-
-mat-card-content{
-  /*max-height: 20vh;*/
 }
 
 mat-card-header mat-icon {
   vertical-align: middle;
 }
 
-::ng-deep .mat-card-header-text{
-  width: 100%;
-}
-
-::ng-deep .mat-expansion-panel-body{
-  padding: 0!important;
-}
-app-event-stats-table{
-  /*height: 50vh;*/
-}
+/* Removed ::ng-deep for card header text and expansion panel body */
 
 .title {
   display: flex;
   align-content: center;
   align-items: center;
+}
+
+/* --- V2 Layout Tweaks --- */
+.secondary-details-container {
+  margin-top: 0.5rem;
+}
+
+.condensed-stats-row {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.responsive-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Inside tabs, we might want cards to be flatter or blend in.
+   "no-shadow" helper to remove elevation if we want them to feel like part of the background,
+   OR keep them as cards. User didn't specify, but nested cards usually look better without double padding/shadow.
+   Let's keep them distinct for now, but remove margin/padding if needed.
+*/
+.no-shadow {
+  box-shadow: none !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+/* --- Pill Tabs Styling --- */
+/* Standard Material Tabs (No Overrides) */
+::ng-deep .mat-mdc-tab-body-wrapper {
+  margin-top: 1rem;
+}
+
+.tab-content-wrapper {
+  /* Optional: specific padding for tab content if not provided by children */
+  padding: 0.5rem 0;
+}
+
+/* Ensure identical padding and sizing for alignment */
+.secondary-details-container {
+  padding: 16px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.intensity-zones-summary-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  margin-top: 16px;
+}
+
+.intensity-zones-summary-wrapper mat-divider {
+  margin-bottom: 8px;
 }

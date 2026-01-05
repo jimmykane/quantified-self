@@ -7,20 +7,28 @@ const appVersion = require('../../package.json').version;
 
 export const environment = {
   appVersion: appVersion,
+  supportEmail: 'support@quantified-self.io',
   production: false,
   beta: true,
   localhost: false,
+  forceAnalyticsCollection: true,
+  useAuthEmulator: false,
   firebase: {
     apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
     authDomain: 'beta.quantified-self.io',
     databaseURL: 'https://quantified-self-io.firebaseio.com',
     projectId: 'quantified-self-io',
-    storageBucket: 'quantified-self-io.appspot.com',
+    storageBucket: 'quantified-self-io',
     messagingSenderId: '242713487388',
     appId: '1:242713487388:web:df287e1940b40a90',
-    measurementId: 'G-6YE27NNKDT'
+    measurementId: 'G-6YE27NNKDT',
+    recaptchaSiteKey: '6LfOOS0sAAAAAOqqukfJOPGUGC-h5REYwGTqPGpM'
   },
   functions: {
+    createPortalLink: 'https://europe-west3-quantified-self-io.cloudfunctions.net/ext-firestore-stripe-payments-createPortalLink',
+    restoreUserClaims: 'https://europe-west2-quantified-self-io.cloudfunctions.net/restoreUserClaims',
+    linkExistingStripeCustomer: 'https://europe-west2-quantified-self-io.cloudfunctions.net/linkExistingStripeCustomer',
+    cleanupStripeCustomer: 'https://europe-west2-quantified-self-io.cloudfunctions.net/cleanupStripeCustomer',
     deauthorizeSuuntoApp: 'https://europe-west2-quantified-self-io.cloudfunctions.net/deauthorizeSuuntoApp',
     uploadRoute: 'https://europe-west2-quantified-self-io.cloudfunctions.net/importRouteToSuuntoApp',
     uploadActivity: 'https://europe-west2-quantified-self-io.cloudfunctions.net/importActivityToSuuntoApp',
@@ -37,5 +45,11 @@ export const environment = {
     requestAndSetCOROSAPIAccessToken: 'https://europe-west2-quantified-self-io.cloudfunctions.net/requestAndSetCOROSAPIAccessToken',
     deauthorizeCOROSAPI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/deauthorizeCOROSAPI',
     COROSAPIHistoryImportURI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/addCOROSAPIHistoryToQueue',
+    deleteSelf: 'https://europe-west2-quantified-self-io.cloudfunctions.net/deleteSelf',
+    listUsers: 'https://europe-west2-quantified-self-io.cloudfunctions.net/listUsers',
+    getQueueStats: 'https://europe-west2-quantified-self-io.cloudfunctions.net/getQueueStats',
+    getUserCount: 'https://europe-west2-quantified-self-io.cloudfunctions.net/getUserCount',
+    setMaintenanceMode: 'https://europe-west2-quantified-self-io.cloudfunctions.net/setMaintenanceMode',
+    getMaintenanceStatus: 'https://europe-west2-quantified-self-io.cloudfunctions.net/getMaintenanceStatus',
   }
 };

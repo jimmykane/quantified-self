@@ -1,22 +1,49 @@
-agm-map {
+.map-component-wrapper {
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+}
+
+.map-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  gap: 16px;
+}
+
+.map-header-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.map-header-actions {
+  flex: 1;
+}
+
+google-map {
   width: 100%;
-  min-height:60vh;
+  min-height: 60vh;
   height: 60vh;
+  display: block;
+  overflow: hidden;
 }
 
-section.container{
+section.container {
   position: relative;
+  min-height: 60vh;
 }
 
-section.placeholder{
-  min-height:45vh;
+section.placeholder {
+  min-height: 45vh;
 }
 
-mat-icon{
+mat-icon {
   vertical-align: middle;
 }
 
-mat-card.map-legend{
+mat-card.map-legend {
   padding-top: 0.4em;
   padding-bottom: 0.4em;
   padding-left: 0;
@@ -27,6 +54,6 @@ mat-card.map-legend{
   z-index: 1;
 }
 
-mat-slide-toggle{
+mat-slide-toggle {
   margin-top: 10000px !important;
 }

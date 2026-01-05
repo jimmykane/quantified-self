@@ -1,12 +1,15 @@
-mat-icon{
+mat-icon {
   vertical-align: middle;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 [data-letters]:before {
-  content:attr(data-letters);
-  display:inline-block;
+  content: attr(data-letters);
+  display: inline-block;
   font-size: 0.7em;
-  text-align:center;
-  vertical-align:middle;
-  margin-right:1em;
+  text-align: center;
+  vertical-align: middle;
+  margin-right: 1em;
 }

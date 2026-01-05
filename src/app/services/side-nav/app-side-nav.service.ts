@@ -1,4 +1,4 @@
-import {Injectable} from '@angular/core';
+import { Injectable } from '@angular/core';
 import { MatSidenav } from '@angular/material/sidenav';
 
 @Injectable({
@@ -14,15 +14,15 @@ export class AppSideNavService {
   }
 
   public open() {
-    return this.sidenav.open();
+    return this.sidenav?.open();
   }
 
 
   public close() {
-    return this.sidenav.close();
+    return this.sidenav?.close();
   }
 
   public toggle(): void {
-    this.sidenav.toggle();
+    this.sidenav?.toggle();
   }
 }

@@ -1,0 +1,400 @@
+@use '../../../styles/breakpoints' as bp;
+
+:host {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+// Mobile-specific footer styles
+@include bp.xsmall {
+    .footer.rich-footer {
+        padding: 1.5rem 1rem 1rem;
+        gap: 1rem;
+        width: 100%;
+        box-sizing: border-box;
+        align-items: center;
+    }
+
+    .ecosystem {
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 0.75rem;
+        width: auto;
+        max-width: none;
+    }
+
+    .logo-group {
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        justify-content: center;
+        width: 100%;
+    }
+
+    .partner-logo {
+        width: 24px;
+        height: 24px;
+        font-size: 24px;
+
+        &.wide {
+            width: 56px;
+            height: 24px;
+        }
+    }
+
+    .vertical-divider {
+        width: 50%;
+        height: 1px;
+    }
+
+    .bottom-legal {
+        flex-wrap: wrap;
+        justify-content: center;
+        text-align: center;
+    }
+}
+
+/* Split Layout Container */
+.split-container {
+    display: flex;
+    flex: 1;
+    max-width: 1400px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+/* Left Side: Hero content */
+.hero-section {
+    flex: 0 0 35%;
+    padding: 2rem 3rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.brand-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 2rem;
+}
+
+.brand-logo {
+    width: 48px !important;
+    height: 48px !important;
+}
+
+.brand-name {
+    font-size: 1.5rem;
+    font-weight: 400;
+    color: var(--mat-sys-primary, #3f51b5);
+}
+
+.hero-section h1 {
+    font-size: 2.5rem;
+    font-weight: 300;
+    margin: 0 0 1rem;
+    line-height: 1.1;
+}
+
+.hero-section .subtitle {
+    font-size: 1rem;
+    opacity: 0.7;
+    margin-bottom: 2rem;
+    font-weight: 400;
+    line-height: 1.5;
+}
+
+.cta-container {
+    display: flex;
+    gap: 1rem;
+}
+
+.btn-large {
+    height: 48px;
+    padding: 0 24px;
+    border-radius: 24px;
+    font-size: 0.9rem;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 1.25px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Right Side: Grid Feature List */
+.features-section {
+    flex: 1;
+    padding: 1.5rem 2rem;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(3, auto);
+    gap: 1rem;
+    align-content: center;
+}
+
+.feature-card {
+    // Glass styles handled by .glass-card
+    padding: 1rem 1.2rem;
+    border-left: 4px solid transparent;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+}
+
+
+
+/* Last card spans full width */
+.feature-card.full-width {
+    grid-column: span 2;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.feature-card.full-width .card-header {
+    margin-bottom: 0;
+    margin-right: 2rem;
+    min-width: 200px;
+}
+
+.feature-card.full-width .card-content-wrapper {
+    flex: 1;
+}
+
+.feature-card:hover {
+    border-left-color: var(--mat-sys-secondary, #ff4081);
+    transform: scale(1.01);
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    margin-bottom: 0.5rem;
+}
+
+.card-icon {
+    color: var(--mat-sys-primary, #3f51b5);
+}
+
+
+
+.card-text {
+    opacity: 0.7;
+    font-size: 1rem; // Increased from 0.85rem
+    margin-bottom: 0.5rem;
+    line-height: 1.5; // Increased for readability
+    // Removed line-clamp to show full text
+}
+
+.tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: auto;
+}
+
+.tag {
+    background: rgba(0, 0, 0, 0.06);
+    opacity: 0.7;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 400;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+:host-context(.dark-theme) .tag {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.tag mat-icon {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    min-height: 18px;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Footer - Option 3: Maker Brand */
+.footer {
+    position: relative;
+    width: 100%;
+    background: transparent;
+    border-top: 1px solid var(--mat-sys-outline-variant, rgba(0, 0, 0, 0.12));
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem 1.5rem;
+    gap: 1.5rem;
+    margin-top: auto;
+    overflow: hidden;
+}
+
+/* 1. Maker Section */
+.maker-profile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+
+
+.maker-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-size: 0.75rem;
+    color: var(--mat-sys-on-surface-variant);
+}
+
+.maker-link {
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 400;
+    text-decoration: none;
+    letter-spacing: -0.2px;
+    background-size: 200% auto;
+    transition: background-position 0.5s;
+
+    &:hover {
+        background-position: right center;
+    }
+}
+
+
+/* 2. Ecosystem Row */
+.ecosystem {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 2rem;
+    padding: 0.8rem 1.5rem;
+    border-radius: 24px;
+
+    // Neutral transparent gray works on both Light (greyish) and Dark (lighter greyish)
+    background: rgba(127, 127, 127, 0.08);
+    border: 1px solid var(--mat-sys-outline-variant, rgba(127, 127, 127, 0.2));
+}
+
+.logo-group {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.vertical-divider {
+    width: 2px; // Slightly thicker for visibility
+    height: 36px; // Taller for larger logos
+    background: var(--mat-sys-outline-variant, rgba(127, 127, 127, 0.3));
+}
+
+// Unified Icon Styling
+.partner-logo {
+    cursor: pointer;
+    vertical-align: middle;
+
+    // Increased size by 50% (24px -> 36px)
+    width: 36px;
+    height: 36px;
+    font-size: 36px;
+
+    // Wide icons
+    &.wide {
+        width: 90px; // 60px -> 90px
+        height: 36px;
+    }
+
+    &:hover {
+        transform: translateY(-2px);
+    }
+}
+
+/* 3. Bottom Legal */
+.bottom-legal {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    color: var(--mat-sys-on-surface-variant); // Adapts to theme (dark/light)
+}
+
+.privacy-link {
+    cursor: pointer;
+    transition: color 0.2s;
+
+    &:hover {
+        color: var(--mat-sys-primary, #3f51b5);
+        text-decoration: underline;
+    }
+}
+
+.dot-separator {
+    opacity: 0.5;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .split-container {
+        flex-direction: column;
+        overflow: auto;
+    }
+
+    .hero-section {
+        flex: 0 0 auto;
+        padding: 2rem;
+        text-align: center;
+
+        // In mobile, hero might need background if overlaying something? 
+        // Usually fine as transparent/default body bg.
+    }
+
+    .cta-container {
+        justify-content: center;
+    }
+
+    .features-section {
+        grid-template-columns: 1fr;
+    }
+
+    .feature-card.full-width {
+        grid-column: auto;
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .feature-card.full-width .card-header {
+        margin-bottom: 0.5rem;
+    }
+
+    // Footer adjustments
+    .ecosystem {
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .vertical-divider {
+        width: 40px;
+        height: 1px; // Turn into horizontal divider
+    }
+}
+
+/* Shadow helpers */
+.elevation-2 {
+    box-shadow: 0 3px 1px -2px rgba(0, 0, 0, 0.2), 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 1px 5px 0 rgba(0, 0, 0, 0.12);
+}

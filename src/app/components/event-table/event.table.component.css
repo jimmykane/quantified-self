@@ -1,141 +1,177 @@
-mat-cell, .mat-header-cell {
-  overflow: visible;
-  min-width: 68px;
-}
+/* Consolidated and cleaned up styles for event table */
 
-.mat-cell{
-  font-size: 0.85em ;
-  padding-left: 0.5em;
-  padding-right: 0.5em;
-}
-
-.container{
+/* Keep basic layout but remove fighting against Material */
+.container {
   width: 100%;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  align-content: space-between;
-}
-
-.buttons{
-  display: flex;
   align-items: center;
 }
 
-.mat-column-Checkbox, .mat-column-Privacy, .mat-column-Actions{
- min-width: 20px;
- max-width: 20px;
- width: 20px;
+.buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  /* Push buttons to the right */
 }
 
-.mat-column-Average-Speed{
-  width: 10vw;
-  max-width: 10vw;
-}
-
-.mat-column-Description{
-  min-width: 10vw;
-}
-
-
-td.mat-cell:last-of-type, td.mat-footer-cell:last-of-type, th.mat-header-cell:last-of-type{
-  padding-right: 0;
-}
-
-
-.mat-column-Checkbox{
-  justify-content: flex-start;
-  padding-left:  0.2em !important;
-  /*padding-right:  1em !important;*/
-}
-
-.mat-column-Checkbox{
-  /*padding-left: 0.2em;*/
-}
-
-.mat-header-cell.mat-column-Checkbox{
-  /*padding-left: 0.5em;*/
-}
-
+/* Allow columns to size naturally or use flex */
+.mat-column-Privacy,
 .mat-column-Actions {
-  justify-content: flex-end;
-  padding-right: 2em !important;
-  padding-left: 0.2em;
-  /*padding-left:  1em !important;*/
+  width: 50px;
+  /* Minimal constraint */
 }
 
-.mat-row {
-  min-height: 50px;
+.mat-column-Checkbox {
+  width: 50px;
 }
 
-.mat-header-cell.mat-sort-header-sorted {
-  color: black;
+/* Responsive width for the Start Date column */
+.mat-column-Start-Date {
+  min-width: 90px;
+  width: auto;
+  white-space: nowrap;
+}
+
+@media (min-width: 960px) {
+  .mat-column-Start-Date {
+    min-width: 200px;
+    width: 220px;
+  }
+}
+
+/* Standardize cell behavior */
+.mat-mdc-header-cell,
+.mat-mdc-cell {
+  white-space: nowrap !important;
+  padding: 0 16px !important;
+  border-bottom-color: var(--mat-app-outline-variant) !important;
+}
+
+.mat-mdc-header-cell {
+  color: var(--mat-sys-on-surface-variant) !important;
+  font-weight: 500 !important;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+.mat-mdc-row {
+  transition: background-color 0.2s;
+}
+
+.mat-mdc-row:hover {
+  background-color: var(--mat-app-surface-container-low) !important;
+}
+
+
+
+/* Gradient strip on the left of the first cell */
+.activity-row td:first-child {
+  position: relative;
+}
+
+.activity-row td:first-child::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--row-gradient);
+  opacity: 0.8;
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+  transition: width 0.2s ease;
+}
+
+.activity-row:hover td:first-child::before {
+  width: 6px;
+  opacity: 1;
+}
+
+/* Specific column adjustments */
+.mat-column-Start-Date {
+  min-width: 120px;
+}
+
+.mat-column-Activity-Types {
+  min-width: 140px;
+}
+
+/* Icons alignment in headers */
+::ng-deep .mat-sort-header-container {
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* Mobile Adjustments for Overall Table Compactness */
+@media (max-width: 599.98px) {
+
+  .mat-mdc-header-cell,
+  .mat-mdc-cell {
+    padding: 0 10px !important;
+  }
+
+  .mat-column-Checkbox,
+  .mat-column-Privacy,
+  .mat-column-Actions {
+    width: 44px !important;
+    min-width: 44px !important;
+  }
 }
 
 mat-icon {
   vertical-align: middle;
-  /*font-size: 22px;*/
-  /*height: 22px;*/
-  /*width: 22px;*/
 }
 
-.mat-header-row, .mat-row{
-  /*padding: 0;*/
-}
 
-/*td.mat-cell, th.mat-header-cell{*/
-
-/*}*/
-
-mat-card{
-  /*min-height: 90vh;*/
-  /*margin-bottom: 1vh;*/
-  /*padding: 0.5em;*/
-  margin: 0;
-  padding: 0;
-}
+/* Removed mat-card specific margins/padding since we use glass-card now */
 
 .merged {
- opacity: 0.7;
+  opacity: 0.7;
 }
 
-::ng-deep .mat-paginator-container{
-  justify-content: flex-start !important;
+/* Table Container and Glass Card Styles (matching Admin Dashboard) */
+.table-container {
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  background: var(--mat-app-surface-container-low);
+  border: 1px solid var(--mat-app-outline-variant);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  overflow: hidden;
+  margin-bottom: 3rem;
+  width: 100%;
+  max-width: 100%;
 }
 
-::ng-deep  .mat-checkbox-inner-container-no-side-margin{
-  width: 17px !important;
-  height: 17px !important;
-}
-
-::ng-deep  .mat-checkbox-frame{
-  border-radius: 1px !important;
-}
-
-.table-container{
+.table-wrapper {
   overflow: auto;
   width: 100%;
-  max-width: 100%
 }
 
-table {
-  width: 100%;
-}
-
-tr.mat-row:hover td:not(.mat-table-sticky){
-  background: rgba(239, 239, 239, 0.4);
-  cursor: pointer;
+/* Paginator styling to match glass theme */
+mat-paginator {
+  background: transparent !important;
+  color: var(--mat-sys-on-surface-variant) !important;
 }
 
 
-tr.mat-row:focus{
-  outline-width: 0;
+/* Force smaller badges for table actions */
+.buttons ::ng-deep .mat-badge-content {
+  width: 16px !important;
+  height: 16px !important;
+  line-height: 16px !important;
+  font-size: 10px !important;
+
+  font-weight: 400 !important;
 }
 
-tr.mat-row.normal-row td {
-  /*border-bottom-width: 0;*/
+/* Align activity type icon and text */
+.activity-type-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-
-
-
-th.mat-header-cell .mat-sort-header-container.mat-sort-header-sorted .mat-sort-header-arrow{ opacity: 1 !important; }

@@ -4,10 +4,11 @@ import { MatSelectionListChange } from '@angular/material/list';
 
 
 @Component({
-  selector: 'app-event-table-actions',
-  templateUrl: 'event.table.actions.component.html',
-  styleUrls: ['event.table.actions.component.css'],
-  providers: [],
+    selector: 'app-event-table-actions',
+    templateUrl: 'event.table.actions.component.html',
+    styleUrls: ['event.table.actions.component.css'],
+    providers: [],
+    standalone: false
 })
 export class EventTableActionsComponent implements OnInit {
   @Input() selectedDataTypes: string[];

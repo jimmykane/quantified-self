@@ -1,7 +1,0 @@
-<mat-list class="list">
-  <div mat-subheader>Failed uploads</div>
-  <mat-list-item style="text-align: left" *ngFor="let file of files">
-    <mat-icon mat-list-icon>{{fileStatusIcon(file)}}</mat-icon>
-    <div mat-line>{{file.filename}}.{{file.extension}}</div>
-  </mat-list-item>
-</mat-list>

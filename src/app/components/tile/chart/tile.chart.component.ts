@@ -3,8 +3,8 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   ChartTypes, TimeIntervals
-} from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
-import { ChartThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
+} from '@sports-alliance/sports-lib';
+import { ChartThemes } from '@sports-alliance/sports-lib';
 import { TileAbstractDirective } from '../tile-abstract.directive';
 
 @Component({
@@ -12,10 +12,10 @@ import { TileAbstractDirective } from '../tile-abstract.directive';
   templateUrl: './tile.chart.component.html',
   styleUrls: ['../tile.abstract.css', './tile.chart.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 
 export class TileChartComponent extends TileAbstractDirective {
-  @Input() isLoading: boolean;
   @Input() chartType: ChartTypes;
   @Input() dataType: string;
   @Input() dataValueType: ChartDataValueTypes;

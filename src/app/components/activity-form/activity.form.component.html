@@ -1,117 +1,133 @@
 <mat-dialog-content>
-  <form *ngIf="activityFormGroup" [formGroup]="activityFormGroup" (submit)="onSubmit($event)"
-        (keyup.enter)="onSubmit($event)">
-
+  @if (activityFormGroup) {
+  <form [formGroup]="activityFormGroup" (submit)="onSubmit($event)" (keyup.enter)="onSubmit($event)" class="qs-form">
     <app-shade [isActive]="isLoading"></app-shade>
-
     <span class="mat-headline">Editing activity</span>
     <mat-divider></mat-divider>
-
-    <section  style="margin-top: 1em;">
+    <section style="margin-top: 1em;" class="qs-form-section">
       Type
       <mat-form-field>
         <mat-select placeholder="Type of the activity" formControlName="type">
-          <mat-option *ngFor="let activityType of activityTypesArray" [value]="activityType">
+          @for (activityType of activityTypesArray; track activityType) {
+          <mat-option [value]="activityType">
             {{activityType}}
           </mat-option>
+          }
         </mat-select>
       </mat-form-field>
     </section>
-
-    <section>
+    <section class="qs-form-section">
       Device
-
       <mat-form-field>
         <input matInput placeholder="Device name" type="text" [min]="3" [max]="20" formControlName="creatorName">
         <mat-hint>How would you label/name this device that the activity was made with</mat-hint>
-        <mat-error *ngIf="hasError('creatorName')">
+        @if (hasError('creatorName')) {
+        <mat-error>
           invalid name
         </mat-error>
+        }
       </mat-form-field>
     </section>
-
-
-    <section>
+    <section class="qs-form-section">
       Date
       <mat-form-field>
         <input matInput [matDatepicker]="startDate" (click)="startDate.open()" placeholder="Start Date"
-               (dateChange)="onStartDateAndStartTimeChange($event)"
-               formControlName="startDate">
+          (dateChange)="onStartDateAndStartTimeChange($event)" formControlName="startDate">
         <mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>
         <mat-datepicker #startDate></mat-datepicker>
-        <mat-error *ngIf="hasError('startDate')">
+        @if (hasError('startDate')) {
+        <mat-error>
           invalid start date
         </mat-error>
+        }
       </mat-form-field>
-
       <mat-form-field>
         <input matInput placeholder="Start Time" type="time" formControlName="startTime" step="1"
-               (change)="onStartDateAndStartTimeChange($event)">
-        <mat-error *ngIf="hasError('startTime')">
+          (change)="onStartDateAndStartTimeChange($event)">
+        @if (hasError('startTime')) {
+        <mat-error>
           invalid start time
         </mat-error>
+        }
       </mat-form-field>
-
-
       <mat-form-field>
         <input matInput [matDatepicker]="endDate" (click)="endDate.open()" placeholder="End Date"
-               formControlName="endDate">
+          formControlName="endDate">
         <mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>
         <mat-datepicker #endDate></mat-datepicker>
-        <mat-error *ngIf="hasError('endDate')">
+        @if (hasError('endDate')) {
+        <mat-error>
           invalid end date
         </mat-error>
+        }
       </mat-form-field>
-
       <mat-form-field>
         <input matInput placeholder="End Time" type="time" formControlName="endTime" step="1">
-        <mat-error *ngIf="hasError('endTime')">
+        @if (hasError('endTime')) {
+        <mat-error>
           invalid end time
         </mat-error>
+        }
       </mat-form-field>
-
     </section>
-
-    <section>
+    <section class="qs-form-section">
       Stats
-      <mat-form-field *ngIf="activityFormGroup.get('ascent')">
+      @if (activityFormGroup.get('ascent')) {
+      <mat-form-field>
         <input matInput placeholder="Ascent" type="number" formControlName="ascent">
         <span matSuffix="">m &nbsp;</span>
-        <mat-error *ngIf="hasError('ascent')">
+        @if (hasError('ascent')) {
+        <mat-error>
           invalid ascent
         </mat-error>
+        }
       </mat-form-field>
-
-      <mat-form-field *ngIf="activityFormGroup.get('descent')">
+      }
+      @if (activityFormGroup.get('descent')) {
+      <mat-form-field>
         <input matInput placeholder="Descent" type="number" formControlName="descent">
         <span matSuffix="">m &nbsp;</span>
-        <mat-error *ngIf="hasError('descent')">
+        @if (hasError('descent')) {
+        <mat-error>
           invalid descent
         </mat-error>
+        }
       </mat-form-field>
-
-      <mat-form-field *ngIf="activityFormGroup.get('energy')">
+      }
+      @if (activityFormGroup.get('energy')) {
+      <mat-form-field>
         <input matInput placeholder="Energy" type="number" formControlName="energy">
         <span matSuffix="">KCal &nbsp;</span>
-        <mat-error *ngIf="hasError('energy')">
+        @if (hasError('energy')) {
+        <mat-error>
           invalid energy
         </mat-error>
+        }
       </mat-form-field>
-
-      <mat-form-field *ngIf="activityFormGroup.get('distance')">
+      }
+      @if (activityFormGroup.get('distance')) {
+      <mat-form-field>
         <input matInput placeholder="Distance" type="number" formControlName="distance">
         <span matSuffix="">m &nbsp;</span>
-        <mat-error *ngIf="hasError('distance')">
+        @if (hasError('distance')) {
+        <mat-error>
           invalid distance
         </mat-error>
+        }
       </mat-form-field>
+      }
     </section>
-
-    <mat-error class="generic-form-error" *ngIf="hasError()">Something does not seem logical above 🤔</mat-error>
-
-    <button mat-stroked-button (click)="close($event)">Cancel</button>
-    <button mat-flat-button color="primary" (click)="onSubmit($event)" *ngIf="!hasError()">Save</button>
+    @if (hasError()) {
+    <mat-error class="generic-form-error">Something does not seem logical above 🤔</mat-error>
+    }
+    <div class="qs-form-actions">
+      <button mat-stroked-button (click)="close($event)">Cancel</button>
+      @if (!hasError()) {
+      <button mat-flat-button color="primary" (click)="onSubmit($event)">Save</button>
+      }
+    </div>
   </form>
+  }
 
 
 </mat-dialog-content>

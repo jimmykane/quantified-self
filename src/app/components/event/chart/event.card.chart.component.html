@@ -1,25 +1,18 @@
-<mat-card class="mat-elevation-z0 inner">
-  <mat-card-header>
-    <div mat-card-avatar>
-      <mat-icon>show_chart</mat-icon>
-    </div>
-    <mat-card-subtitle>
-      <app-event-card-chart-actions
-        [(xAxisType)]="xAxisType"
-        [(showAllData)]="showAllData"
-        [(showLaps)]="showLaps"
-        [(stackYAxes)]="stackYAxes"
-        [event]="event"
-        [user]="user">
-      </app-event-card-chart-actions>
-    </mat-card-subtitle>
-  </mat-card-header>
-  <mat-card-content>
+<mat-card-header>
+  <div mat-card-avatar>
+    <mat-icon>show_chart</mat-icon>
+  </div>
+  <mat-card-subtitle>
+    <app-event-card-chart-actions [(xAxisType)]="xAxisType" [(showAllData)]="showAllData" [(showLaps)]="showLaps"
+      [(stackYAxes)]="stackYAxes" [event]="event" [user]="user">
+    </app-event-card-chart-actions>
+  </mat-card-subtitle>
+</mat-card-header>
+<mat-card-content>
 
-    <app-shade [isActive]="isLoading"></app-shade>
-    <!-- @todo should be different per orientation etc -->
-    <div #chartDiv style="min-width: 280px; width: 100%; min-height: 90vh; height: 90vh"></div>
-    <div #legendDiv style="min-width: 280px; width: 100%; height: 10vh; min-height: 10vh;"></div>
+  <app-shade [isActive]="isLoading"></app-shade>
+  <!-- @todo should be different per orientation etc -->
+  <div #chartDiv style="min-width: 280px; width: 100%; min-height: 90vh; height: 90vh"></div>
+  <div #legendDiv style="min-width: 280px; width: 100%; height: 10vh; min-height: 10vh;"></div>
 
-  </mat-card-content>
-</mat-card>
+</mat-card-content>

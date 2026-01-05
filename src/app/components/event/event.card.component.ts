@@ -1,32 +1,34 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit } from '@angular/core';
-import { combineLatest, of, Subscription } from 'rxjs';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  inject,
+  OnInit,
+  signal
+} from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
-import { AppEventService } from '../../services/app.event.service';
-import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
+import { debounceTime } from 'rxjs/operators';
+
+import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { EventInterface } from '@sports-alliance/sports-lib';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 import {
   ChartCursorBehaviours,
   ChartThemes,
   XAxisTypes
-} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
+} from '@sports-alliance/sports-lib';
 import { AppThemeService } from '../../services/app.theme.service';
-import { AppThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
-import { MapThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
+import { AppThemes } from '@sports-alliance/sports-lib';
+import { MapThemes } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../services/app.user.service';
 import { AppActivitySelectionService } from '../../services/activity-selection-service/app-activity-selection.service';
-import { DataLatitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.latitude-degrees';
-import { DataLongitudeDegrees } from '@sports-alliance/sports-lib/lib/data/data.longitude-degrees';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
-import { DataSpeed } from '@sports-alliance/sports-lib/lib/data/data.speed';
-import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
-import { switchMap } from 'rxjs/operators';
-import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
-import { DataGradeAdjustedSpeed } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-speed';
-import { ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { LapTypes } from '@sports-alliance/sports-lib';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { LoggerService } from '../../services/logger.service';
 
 
 @Component({
@@ -34,190 +36,215 @@ import { ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/
   templateUrl: './event.card.component.html',
   styleUrls: ['./event.card.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
+export class EventCardComponent implements OnInit {
+  // Inject services
+  private destroyRef = inject(DestroyRef);
+  private route = inject(ActivatedRoute);
+  public router = inject(Router);
+  private authService = inject(AppAuthService);
+  private userService = inject(AppUserService);
+  private activitySelectionService = inject(AppActivitySelectionService);
+  private snackBar = inject(MatSnackBar);
+  private themeService = inject(AppThemeService);
+  private bottomSheet = inject(MatBottomSheet);
+  private logger = inject(LoggerService);
 
-export class EventCardComponent extends LoadingAbstractDirective implements OnInit, OnDestroy, OnChanges {
-  public event: EventInterface;
-  public targetUserID: string;
-  public currentUser: User;
-  public selectedActivities: ActivityInterface[] = [];
+  // Signal-based state
+  public event = signal<EventInterface | null>(null);
+  public currentUser = signal<User | null>(null);
+  public selectedActivitiesInstant = signal<ActivityInterface[]>([]);
+  public selectedActivitiesDebounced = signal<ActivityInterface[]>([]);
+  public isDownloading = signal<boolean>(false);
+  public targetUserID = signal<string>('');
 
-  public userUnitSettings = AppUserService.getDefaultUserUnitSettings();
-  public showAllData = false;
-  public showChartLaps = true;
-  public showChartGrid = true;
-  public stackChartYAxes = true;
-  public useChartAnimations = false;
-  public chartDisableGrouping = false;
-  public chartHideAllSeriesOnInit = false;
-  public chartXAxisType = XAxisTypes.Duration;
-  public mapLapTypes = AppUserService.getDefaultMapLapTypes();
-  public chartLapTypes = AppUserService.getDefaultChartLapTypes();
-  public chartStrokeWidth: number = AppUserService.getDefaultChartStrokeWidth();
-  public chartStrokeOpacity: number = AppUserService.getDefaultChartStrokeOpacity();
-  public chartFillOpacity: number = AppUserService.getDefaultChartFillOpacity();
-  public chartExtraMaxForPower: number = AppUserService.getDefaultExtraMaxForPower();
-  public chartExtraMaxForPace: number = AppUserService.getDefaultExtraMaxForPace();
-  public chartGainAndLossThreshold: number = AppUserService.getDefaultGainAndLossThreshold();
-  public chartDataTypesToUse: string[];
-  public showMapLaps = true;
-  public showMapPoints = false;
-  public showMapArrows = true;
-  public chartDownSamplingLevel = AppUserService.getDefaultDownSamplingLevel();
-  public chartTheme: ChartThemes;
-  public appTheme: AppThemes;
-  public mapTheme: MapThemes;
-  public mapStrokeWidth: number = AppUserService.getDefaultMapStrokeWidth();
-  public chartCursorBehaviour: ChartCursorBehaviours = AppUserService.getDefaultChartCursorBehaviour();
+  // Computed signals for template - replaces method calls
+  public hasLapsFlag = computed(() =>
+    this.event()?.getActivities().some(a => a.getLaps().length > 0) ?? false
+  );
+
+  public hasIntensityZonesFlag = computed(() =>
+    this.event()?.getActivities().some(a => a.intensityZones?.length > 0) ?? false
+  );
+
+  public hasDevicesFlag = computed(() =>
+    this.event()?.getActivities().some(a => a.creator?.devices?.length > 0) ?? false
+  );
+
+  public hasPositionsFlag = computed(() =>
+    this.event()?.getActivities().some(a => a.hasPositionData()) ?? false
+  );
+
+  // Computed ownership check
+  public isOwner = computed(() => {
+    const targetUID = this.targetUserID();
+    const user = this.currentUser();
+    return !!(targetUID && user && targetUID === user.uid);
+  });
+
+  // Convert theme observables to signals
+  public chartTheme = toSignal(this.themeService.getChartTheme(), { initialValue: ChartThemes.Material });
+  public appTheme = toSignal(this.themeService.getAppTheme(), { initialValue: AppThemes.Normal });
+  public mapTheme = toSignal(this.themeService.getMapTheme(), { initialValue: MapThemes.Normal });
+
+  // User settings (derived from currentUser signal)
+  public userUnitSettings = computed(() =>
+    this.currentUser()?.settings?.unitSettings ?? AppUserService.getDefaultUserUnitSettings()
+  );
+
+  public chartXAxisType = computed(() =>
+    this.currentUser()?.settings?.chartSettings?.xAxisType ?? XAxisTypes.Duration
+  );
+
+  public chartDownSamplingLevel = computed(() =>
+    this.currentUser()?.settings?.chartSettings?.downSamplingLevel ?? AppUserService.getDefaultDownSamplingLevel()
+  );
+
+  public chartGainAndLossThreshold = computed(() =>
+    this.currentUser()?.settings?.chartSettings?.gainAndLossThreshold ?? AppUserService.getDefaultGainAndLossThreshold()
+  );
+
+  public chartCursorBehaviour = computed(() =>
+    this.currentUser()?.settings?.chartSettings?.chartCursorBehaviour ?? AppUserService.getDefaultChartCursorBehaviour()
+  );
+
+  public showAllData = computed(() =>
+    this.currentUser()?.settings?.chartSettings?.showAllData ?? false
+  );
+
+  public useChartAnimations = computed(() =>
+    this.currentUser()?.settings?.chartSettings?.useAnimations ?? false
+  );
+
+  public chartDisableGrouping = computed(() =>
+    this.currentUser()?.settings?.chartSettings?.disableGrouping ?? false
+  );
+
+  public showMapLaps = computed(() =>
+    this.currentUser()?.settings?.mapSettings?.showLaps ?? true
+  );
+
+  public showMapPoints = computed(() =>
+    this.currentUser()?.settings?.mapSettings?.showPoints ?? false
+  );
+
+  public showChartLaps = computed(() =>
+    this.currentUser()?.settings?.chartSettings?.showLaps ?? true
+  );
+
+  public showChartGrid = computed(() =>
+    this.currentUser()?.settings?.chartSettings?.showGrid ?? true
+  );
+
+  public stackChartYAxes = computed(() =>
+    this.currentUser()?.settings?.chartSettings?.stackYAxes ?? true
+  );
+
+  public chartHideAllSeriesOnInit = computed(() =>
+    this.currentUser()?.settings?.chartSettings?.hideAllSeriesOnInit ?? false
+  );
+
+  public showMapArrows = computed(() =>
+    this.currentUser()?.settings?.mapSettings?.showArrows ?? true
+  );
+
+  public mapStrokeWidth = computed(() =>
+    this.currentUser()?.settings?.mapSettings?.strokeWidth ?? AppUserService.getDefaultMapStrokeWidth()
+  );
+
+  public mapLapTypes = computed<LapTypes[]>(() =>
+    this.currentUser()?.settings?.mapSettings?.lapTypes ?? AppUserService.getDefaultMapLapTypes()
+  );
+
+  public chartLapTypes = computed<LapTypes[]>(() =>
+    this.currentUser()?.settings?.chartSettings?.lapTypes ?? AppUserService.getDefaultChartLapTypes()
+  );
+
+  public chartStrokeWidth = computed(() =>
+    this.currentUser()?.settings?.chartSettings?.strokeWidth ?? AppUserService.getDefaultChartStrokeWidth()
+  );
+
+  public chartStrokeOpacity = computed(() =>
+    this.currentUser()?.settings?.chartSettings?.strokeOpacity ?? AppUserService.getDefaultChartStrokeOpacity()
+  );
+
+  public chartFillOpacity = computed(() =>
+    this.currentUser()?.settings?.chartSettings?.fillOpacity ?? AppUserService.getDefaultChartFillOpacity()
+  );
+
+  public chartExtraMaxForPower = computed(() =>
+    this.currentUser()?.settings?.chartSettings?.extraMaxForPower ?? AppUserService.getDefaultExtraMaxForPower()
+  );
+
+  public chartExtraMaxForPace = computed(() =>
+    this.currentUser()?.settings?.chartSettings?.extraMaxForPace ?? AppUserService.getDefaultExtraMaxForPace()
+  );
+
+  public chartDataTypesToUse = computed(() => {
+    const user = this.currentUser();
+    return user ? this.userService.getUserChartDataTypesToUse(user) : [];
+  });
+
+  public basicStatsTypes = [
+    'Duration',
+    'Distance',
+    'SpeedMean',
+    'HeartRateMean',
+    'PowerMean',
+    'Ascent',
+    'Calories'
+  ];
+
+  ngOnInit() {
+    // Activity selection - debounced
+    // Instant selection update
+    this.activitySelectionService.selectedActivities.changed
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((change) => {
+        this.selectedActivitiesInstant.set([...change.source.selected]);
+      });
+
+    // Debounced selection update for heavy components (Chart, Map)
+    this.activitySelectionService.selectedActivities.changed
+      .pipe(
+        debounceTime(50),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe((change) => {
+        this.selectedActivitiesDebounced.set([...change.source.selected]);
+      });
+
+    // Route data subscription
+    this.route.data
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((data: any) => {
+        const resolvedData = data.event as any;
+
+        if (resolvedData && resolvedData.event) {
+          this.event.set(resolvedData.event);
+          this.currentUser.set(resolvedData.user);
+        } else {
+          this.event.set(resolvedData);
+        }
 
 
-  private subscriptions: Subscription[] = [];
 
+        this.activitySelectionService.selectedActivities.clear();
+        const activities = this.event()?.getActivities() ?? [];
+        this.activitySelectionService.selectedActivities.select(...activities);
+        // Initial set for both
+        this.selectedActivitiesInstant.set(activities);
+        this.selectedActivitiesDebounced.set(activities);
 
+        this.targetUserID.set(this.route.snapshot.paramMap.get('userID') ?? '');
+      });
 
-  constructor(
-    private changeDetectorRef: ChangeDetectorRef,
-    public router: Router,
-    private route: ActivatedRoute,
-    private authService: AppAuthService,
-    private eventService: AppEventService,
-    private userService: AppUserService,
-    private activitySelectionService: AppActivitySelectionService,
-    private snackBar: MatSnackBar,
-    private themeService: AppThemeService) {
-    super(changeDetectorRef)
-  }
-
-  ngOnChanges() {
-  }
-
-  async ngOnInit() {
-    this.loading();
-    // Get the path params
-    const userID = this.route.snapshot.paramMap.get('userID');
-    const eventID = this.route.snapshot.paramMap.get('eventID');
-
-    // Set a "user from params"
-    this.targetUserID = userID;
-
-    this.subscriptions.push(this.authService.user.pipe(switchMap((user) => {
-      this.currentUser = user;
-
-      // @todo check against no current user
-
-      /**
-       * Get all now
-       */
-      return this.eventService.getEventActivitiesAndSomeStreams(new User(this.targetUserID), eventID,
-        [
-          ...[
-            DataLatitudeDegrees.type,
-            DataLongitudeDegrees.type,
-            DataSpeed.type,
-            DataGradeAdjustedSpeed.type,
-            DataDistance.type
-          ],
-          ...user ?
-            new Set(DynamicDataLoader.getNonUnitBasedDataTypes(user.settings.chartSettings.showAllData, this.userService.getUserChartDataTypesToUse(user)))
-            : []
-        ])
-    })).subscribe((event) => {
-      if (!event) {
-        this.router.navigate(['/dashboard']).then(() => {
-          this.snackBar.open('Not found', null, {
-            duration: 2000,
-          });
-        });
-        return
-      }
-      // Set the data
-      if (this.currentUser) {
-        const user = this.currentUser
-        this.userUnitSettings = user.settings.unitSettings;
-        this.chartXAxisType = user.settings.chartSettings.xAxisType;
-        this.chartDownSamplingLevel = user.settings.chartSettings.downSamplingLevel;
-        this.chartGainAndLossThreshold = user.settings.chartSettings.gainAndLossThreshold;
-        this.chartCursorBehaviour = user.settings.chartSettings.chartCursorBehaviour;
-        this.showAllData = user.settings.chartSettings.showAllData;
-        this.useChartAnimations = user.settings.chartSettings.useAnimations;
-        this.chartDisableGrouping = user.settings.chartSettings.disableGrouping;
-        this.showMapLaps = user.settings.mapSettings.showLaps;
-        this.showMapPoints = user.settings.mapSettings.showPoints;
-        this.showChartLaps = user.settings.chartSettings.showLaps;
-        this.showChartGrid = user.settings.chartSettings.showGrid;
-        this.stackChartYAxes = user.settings.chartSettings.stackYAxes;
-        this.chartHideAllSeriesOnInit = user.settings.chartSettings.hideAllSeriesOnInit;
-        this.showMapArrows = user.settings.mapSettings.showArrows;
-        this.mapStrokeWidth = user.settings.mapSettings.strokeWidth;
-        this.mapLapTypes = user.settings.mapSettings.lapTypes;
-        this.chartLapTypes = user.settings.chartSettings.lapTypes;
-        this.chartStrokeWidth = user.settings.chartSettings.strokeWidth;
-        this.chartStrokeOpacity = user.settings.chartSettings.strokeOpacity;
-        this.chartFillOpacity = user.settings.chartSettings.fillOpacity;
-        this.chartExtraMaxForPower = user.settings.chartSettings.extraMaxForPower;
-        this.chartExtraMaxForPace = user.settings.chartSettings.extraMaxForPace;
-        this.chartDataTypesToUse = this.userService.getUserChartDataTypesToUse(user);
-      }
-      this.event = event;
-      //
-      // @todo perhaps if the event is the same do not update
-      this.activitySelectionService.selectedActivities.clear();
-
-      this.activitySelectionService.selectedActivities.select(...event.getActivities());
-      this.loaded(); // will also do detect changes
-    }));
-
-    // Subscribe to the chartTheme changes
-    this.subscriptions.push(this.themeService.getChartTheme().subscribe((chartTheme) => {
-      this.chartTheme = chartTheme;
-      this.changeDetectorRef.detectChanges();
-    }));
-
-    // Subscribe to the appTheme changes
-    this.subscriptions.push(this.themeService.getAppTheme().subscribe((appTheme) => {
-      this.appTheme = appTheme;
-      this.changeDetectorRef.detectChanges();
-    }));
-
-    // Subscribe to the appTheme changes
-    this.subscriptions.push(this.themeService.getMapTheme().subscribe((mapTheme) => {
-      this.mapTheme = mapTheme;
-      this.changeDetectorRef.detectChanges();
-    }));
-
-    // Subscribe to selected activities
-    this.subscriptions.push(this.activitySelectionService.selectedActivities.changed.asObservable().subscribe((selectedActivities) => {
-      this.selectedActivities = selectedActivities.source.selected;
-      this.changeDetectorRef.detectChanges();
-    }));
-  }
-
-
-  isOwner() {
-    return !!(this.targetUserID && this.currentUser && (this.targetUserID === this.currentUser.uid));
-  }
-
-  ngOnDestroy(): void {
-    this.subscriptions.forEach(subscription => {
-      if (subscription) {
-        subscription.unsubscribe()
-      }
-    })
-  }
-
-  hasLaps(event: EventInterface): boolean {
-    return !!this.event.getActivities().reduce((lapsArray, activity) => lapsArray.concat(activity.getLaps()), []).length
-  }
-
-  hasIntensityZones(event: EventInterface): boolean {
-    return !!this.event.getActivities().reduce((intensityZonesArray, activity) => intensityZonesArray.concat(activity.intensityZones), []).length
-  }
-
-  hasDevices(event: EventInterface): boolean {
-    return !!this.event.getActivities().reduce((devicesArray, activity) => devicesArray.concat(activity.creator.devices), []).length
-  }
-
-  hasPositions(event: EventInterface): boolean {
-    return !!this.event.getActivities().filter(a => a.hasPositionData()).length
+    // User auth subscription
+    this.authService.user$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((user: User | null) => {
+        this.currentUser.set(user);
+      });
   }
 }

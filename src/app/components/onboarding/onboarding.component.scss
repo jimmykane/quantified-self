@@ -1,0 +1,86 @@
+.onboarding-container {
+    display: flex;
+    justify-content: center;
+    padding: 2rem 1rem;
+    min-height: calc(100vh - 64px);
+    /* Inherits background from body/theme */
+}
+
+.onboarding-card {
+    max-width: 800px;
+    width: 100%;
+    margin-bottom: 2rem;
+}
+
+.step-content {
+    padding: 1rem 0;
+}
+
+h2 {
+    margin-bottom: 0.5rem;
+    font-weight: 300;
+}
+
+.checkbox-group {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin: 2rem 0;
+}
+
+.policy-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.policy-item h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+
+.policy-text {
+    font-size: 0.95rem;
+    opacity: 0.8;
+    line-height: 1.5;
+}
+
+.qs-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 2rem;
+}
+
+.pricing-step {
+    padding-top: 1rem;
+}
+
+.pricing-step .actions {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--mat-app-outline-variant);
+}
+
+.policy-required-label {
+    font-size: 0.85em;
+    color: var(--mat-sys-error);
+    margin-left: 0.5em;
+    font-weight: 500;
+}
+
+.policy-optional-label {
+    font-size: 0.85em;
+    opacity: 0.6;
+    font-style: italic;
+    margin-left: 0.5em;
+}
+
+/* Removed manual overrides as they are now handled by global theme variables */
+
+:host ::ng-deep .mat-step-header {
+    pointer-events: none !important;
+}

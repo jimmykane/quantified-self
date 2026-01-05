@@ -1,14 +1,9 @@
-/*mat-slide-toggle{*/
-/*  max-width: 50%;*/
-/*  width: 50%;*/
-/*}*/
+section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
-/*section{*/
-/*  display: flex;*/
-/*  flex-wrap: wrap;*/
-/*}*/
-
-
-mat-slide-toggle{
-  display: block;
+mat-chip-option {
+  font-size: 0.85rem;
 }

@@ -1,88 +1,201 @@
+/* Main App Layout */
+/* Note: margin-top is set dynamically via [style.margin-top.px] binding */
 mat-sidenav-container {
-  min-height: 100vh;
+  min-height: calc(100vh - 64px);
 }
 
-mat-card{
-  margin: 0.5em;
-}
-
-.mat-tab-link{
-  min-width: 5%;
-  //padding-right: 1em;
-  //font-size: 1.3em;
-  //font-weight: 400;
-}
-
-mat-sidenav{
+mat-sidenav {
+  width: 300px;
   min-width: 300px;
-  max-width: 300px;
-  //padding: 1vw;
-  //border-right: 1px solid rgba(0,0,0,.12);
+  max-width: 360px;
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
+
+  // Hide scrollbar completely - sidenav should fit content
+  .mat-drawer-inner-container {
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
+    }
+  }
 }
 
-mat-icon{
-  vertical-align: middle;
+/* Top Navigation Bar Styling */
+nav[mat-tab-nav-bar] {
+  display: flex !important;
+  /* Force flex */
+  align-items: center;
+  height: 64px;
+  /* Standard toolbar height */
+  padding: 0 16px;
+  // background-color: #ffffff;
+  background-color: #ffffff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  /* Subtle shadow for depth */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1001;
+  /* Above sidenav backdrop (z-index: 1000) */
+  overflow: visible !important;
+
+  ::ng-deep .mat-mdc-tab-header,
+  ::ng-deep .mat-mdc-tab-header-pagination,
+  ::ng-deep .mat-mdc-tab-link-container,
+  ::ng-deep .mat-mdc-tab-list,
+  ::ng-deep .mat-tab-header,
+  ::ng-deep .mat-tab-header-pagination,
+  ::ng-deep .mat-tab-link-container,
+  ::ng-deep .mat-tab-list {
+    overflow: visible !important;
+  }
 }
 
-.icon-theme{
-  font-size: 1.3em;
+/* Navigation Items */
+.mat-tab-link {
+  min-width: auto !important;
+  /* Override default tab width */
+  padding: 0 12px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 0.2s;
 }
 
+.mat-tab-link:hover {
+  opacity: 1;
+}
+
+.mat-tab-link mat-icon {
+  margin: 0;
+  color: #5f6368;
+  /* Standard icon color */
+}
+
+/* Header Logo */
+mat-icon.header-logo {
+  margin-left: 16px;
+  width: 36px;
+  height: 36px;
+  font-size: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  /* Ensure it centers in the parent flex container */
+  line-height: 1;
+  cursor: pointer;
+  /* Ensure resizing works */
+}
+
+
+
+/* Utilities */
 .fill-space {
   flex: 1 1 auto;
 }
 
-.right{
-  margin-right: 1.0em;
+/* Right-side Actions */
+.right {
+  margin-left: 12px;
+  /* Consistent spacing */
 }
 
-mat-icon.larger_icon{
-  //margin-right: 1em;
-  padding: 0;
-  font-size: 28px;
-  height: 28px;
-  width: 28px;
-}
-
-button{
-  font-size: 1em;
-}
-
-.theme{
-  margin: 0;
-  padding: 0;
-  margin-right: 0.5em;
-}
-
-.mat-tab-link{
-}
-
-
-nav button{
-  margin-bottom: 6px;
-  margin-top: 6px;
-}
-
-nav app-upload-activities{
-  margin-bottom: 6px;
-  margin-top: 6px;
-}
-
-
-nav{
-  height: 59px;
+/* Buttons inside nav */
+nav button[mat-flat-button],
+nav button[mat-stroked-button],
+nav button[mat-icon-button] {
+  border-radius: 20px;
+  /* Rounded pill shape */
+  padding: 0 24px;
+  height: 40px;
+  line-height: 40px;
+  font-weight: 400;
+  box-shadow: none !important;
+  /* Cleaner look */
+  align-self: center;
+  /* Ensure vertical centering */
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
 }
 
+/* Admin button specific styling */
+nav button.admin-button {
+  border-radius: 50%;
+  padding: 0;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: white;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 
-.mat-drawer-container {
-  overflow: visible;
+  &:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4) !important;
+  }
+
+  mat-icon {
+    color: white;
+    font-size: 22px;
+    width: 22px;
+    height: 22px;
+  }
 }
 
+/* Specific styling for the Upload Activities component if it appears in nav */
+nav app-upload-activities {
+  display: flex;
+  align-items: center;
+  margin-left: 12px;
+}
 
-mat-progress-bar{
-  position: absolute;
+/* Hamburger button specific styling */
+nav button.hamburger-link {
+  border-radius: 50%;
+  padding: 0;
+  width: 40px;
+  min-width: 40px;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+mat-progress-bar {
+  position: fixed;
   top: 0;
   left: 0;
-  z-index: 10000;
+  width: 100%;
+  z-index: 10003;
+  /* Highest priority */
+}
+
+/* Dark Theme Overrides */
+:host-context(.dark-theme) {
+  nav[mat-tab-nav-bar] {
+    background-color: #424242;
+    /* Standard Material Dark Surface */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .mat-tab-link mat-icon {
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .mat-tab-link:hover mat-icon {
+    color: #ffffff;
+  }
+
+  mat-sidenav {
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+  }
 }

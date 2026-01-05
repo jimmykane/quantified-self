@@ -4,14 +4,38 @@ jobs:
   run_tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Setup Node
-        uses: actions/setup-node@v1
+        uses: actions/setup-node@v4
         with:
-          node-version: '12'
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Firebase Tools
+        run: npm install -g firebase-tools
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Install and test functions
+        run: |
+          cd functions
+          npm ci
+          npm run test
+          npm run build
+          cd ..
+
       - name: Install dependencies
-        run: npm i
+        run: npm ci
+
       - name: Run lint
         run: npm run lint
-      - name: Run tests
+
+      - name: Run firestore rules tests
+        run: npm run test:rules
+
+      - name: Run app tests
         run: npm run test

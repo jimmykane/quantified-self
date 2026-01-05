@@ -1,47 +1,128 @@
+rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isCoach(userID) {
+      return exists(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)) && get(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)).data.accepted == true;
+    }
+    
+
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
     // Make sure the uid of the requesting user matches name of the user
     // document. The wildcard expression {userId} makes the userId variable
     // available in rules.
     match /users/{userID} {
-
-     function isCoach() {
-       return exists(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)) && get(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)).data.accepted == true;
-      }
-
       allow read: if resource.data.privacy == 'public';
-      allow read: if isCoach() == true;
+      allow read: if isCoach(userID) == true;
       allow read, write: if request.auth.uid == userID;
       allow create: if request.auth.uid != null;
+      
+      // Legal Agreements (Write-Once / Monotonic)
+      match /legal/agreements {
+        allow read: if request.auth.uid == userID;
+        
+        function isValidLegalAgreement() {
+           return request.resource.data.keys().hasOnly([
+             'acceptedPrivacyPolicy', 
+             'acceptedDataPolicy', 
+             'acceptedTrackingPolicy', 
+             'acceptedMarketingPolicy',
+             'acceptedDiagnosticsPolicy', 
+             'acceptedTos'
+           ]) &&
+           (request.resource.data.get('acceptedPrivacyPolicy', true) == true) &&
+           (request.resource.data.get('acceptedDataPolicy', true) == true) &&
+           (request.resource.data.get('acceptedTrackingPolicy', false) is bool) &&
+           (request.resource.data.get('acceptedMarketingPolicy', false) is bool) &&
+           (request.resource.data.get('acceptedDiagnosticsPolicy', true) == true) &&
+           (request.resource.data.get('acceptedTos', true) == true);
+        }
+
+        allow create: if request.auth.uid == userID && isValidLegalAgreement();
+        
+        allow update: if request.auth.uid == userID 
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+             'acceptedPrivacyPolicy', 
+             'acceptedDataPolicy', 
+             'acceptedTrackingPolicy', 
+             'acceptedMarketingPolicy',
+             'acceptedDiagnosticsPolicy', 
+             'acceptedTos'
+           ])
+          && (request.resource.data.get('acceptedPrivacyPolicy', true) == true)
+          && (request.resource.data.get('acceptedDataPolicy', true) == true)
+          && (request.resource.data.get('acceptedTrackingPolicy', false) is bool)
+          && (request.resource.data.get('acceptedMarketingPolicy', false) is bool)
+          && (request.resource.data.get('acceptedDiagnosticsPolicy', true) == true)
+          && (request.resource.data.get('acceptedTos', true) == true);
+           
+      }
+
+      // Config Settings (Private / Owner Read-Write)
+      match /config/settings {
+         allow read, write: if request.auth.uid == userID;
+      }
+
+      // System Status (Admin Only)
+      match /system/status {
+         allow read: if request.auth.uid == userID;
+         allow write: if false; // Only Cloud Functions (Admin SDK)
+      }
 
         match /events/{eventID} {
           allow read: if resource.data.privacy == 'public';
-          allow read: if isCoach() == true;
+          allow read: if isCoach(userID) == true;
+          // RESTRICTED ACCESS: Must be owner AND have a valid role (Free, Basic, or PRO)
+          // TEMPORARILY DISABLED FOR TESTING - Re-enable when ready to enforce paywall
+          // allow read, write: if request.auth.uid == userID && isSubscribed();
           allow read, write: if request.auth.uid == userID;
-          function eventData() {
-            return get(/databases/$(database)/documents/users/$(userID)/events/$(eventID)).data
-          }
 
-          match /activities/{activityID} {
-            allow read: if eventData().privacy == 'public'
-            allow read: if isCoach() == true;
-            allow read, write: if request.auth.uid == userID;
-            match /streams/{streamID} {
-              allow read: if eventData().privacy == 'public'
-              allow read: if isCoach() == true;
-              allow read, write: if request.auth.uid == userID;
-            }
-          }
 
+          // Restoring metaData inside events
           match /metaData/{document=**} {
             allow read: if request.auth.uid == userID;
           }
-        }
 
+
+           // New Flat Activities Collection
+           // @note: This is the new way to access activities
+          }
+          
+          match /activities/{activityID} {
+            // New Flat Activities Collection
+            allow read: if isCoach(userID) == true; // @todo restrict to coach/privacy?
+            allow read, write: if request.auth.uid == userID;
+          }
 
         match /meta/{document=**} {
           allow read: if request.auth.uid == userID;
         }
+    }
+
+    match /customers/{userID} {
+      allow read: if request.auth.uid == userID;
+      
+      match /checkout_sessions/{id} {
+        allow read, write: if request.auth.uid == userID;
+      }
+      match /subscriptions/{id} {
+        allow read: if request.auth.uid == userID;
+      }
+      match /payments/{id} {
+        allow read: if request.auth.uid == userID;
+      }
+    }
+    
+    match /products/{id} {
+      allow read: if true;
+      match /prices/{id} {
+        allow read: if true;
+      }
+      match /tax_rates/{id} {
+        allow read: if true;
+      }
     }
 
 
@@ -64,23 +145,28 @@ service cloud.firestore {
     }
 
     match /garminHealthAPIActivityQueue/{userID} {
-      allow read, write: if false;
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     match /COROSAPIWorkoutQueue/{userID} {
-      allow read, write: if false;
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     match /COROSAPIHistoryImportWorkoutQueue/{userID} {
-      allow read, write: if false;
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     match /suuntoAppWorkoutQueue/{userID} {
-       allow read, write: if false;
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     match /suuntoAppHistoryImportActivityQueue/{userID} {
-         allow read, write: if false;
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
 
@@ -97,6 +183,11 @@ service cloud.firestore {
           allow read,delete: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
           allow read, write: if request.auth.uid == athleteUserID && request.auth.token.firebase.sign_in_provider != 'anonymous';
        }
+    }
+
+    match /failed_jobs/{document=**} {
+      allow read: if isAdmin();
+      allow write: if false;
     }
   }
 }

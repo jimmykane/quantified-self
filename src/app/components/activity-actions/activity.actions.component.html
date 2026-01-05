@@ -6,17 +6,29 @@
     <mat-icon>edit</mat-icon>
     <span>Edit</span>
   </button>
-  <button *ngIf="hasDistance()" mat-menu-item (click)="cropActivity() ">
+  @if (hasDistance()) {
+  <button mat-menu-item (click)="cropActivity() " disabled="true">
     <mat-icon>crop</mat-icon>
     <span>Crop</span>
   </button>
-  <button mat-menu-item (click)="reGenerateStatistics()">
-  <mat-icon>autorenew</mat-icon>
-  <span>Refresh activity statistics <mat-icon  class="toolTip" matTooltip="This will re-calculate statistics like distance, ascent, descent etc...">info</mat-icon>
-</span>
+  }
+  <button mat-menu-item disabled="true">
+    <mat-icon [color]="isHydrated() ? 'accent' : 'warn'">
+      {{ isHydrated() ? 'cloud_done' : 'cloud_off' }}
+    </mat-icon>
+    <span>Streams {{ isHydrated() ? 'loaded' : 'not loaded' }}</span>
   </button>
-  <button mat-menu-item (click)="deleteActivity()" *ngIf="event.getActivities().length > 1">
+  <mat-divider></mat-divider>
+  <button mat-menu-item (click)="reGenerateStatistics()">
+    <mat-icon>autorenew</mat-icon>
+    <span>Refresh activity statistics <mat-icon class="toolTip"
+        matTooltip="This will re-calculate statistics like distance, ascent, descent etc...">info</mat-icon>
+    </span>
+  </button>
+  @if (event.getActivities().length > 1) {
+  <button mat-menu-item (click)="deleteActivity()">
     <mat-icon>delete</mat-icon>
     <span>Delete</span>
   </button>
+  }
 </mat-menu>

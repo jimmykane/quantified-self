@@ -13,5 +13,14 @@
         ]
       }
     }
+  },
+  "etags": {
+    "quantified-self-io": {
+      "extensionInstances": {
+        "delete-user-data": "0458d765e9f3db68ba5014562df202a33cc5e41ad4979542b05e81cb471ff36f",
+        "firestore-send-email": "aebfef979ee9f552a9bef0b4584a1a762d981a7004b5bf1c3210092a091e344c",
+        "firestore-stripe-payments": "27da818f1601db655fe2e541b0a3f9303427947633748c6cdb441ca62adf5b7e"
+      }
+    }
   }
 }

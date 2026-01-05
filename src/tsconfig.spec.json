@@ -2,19 +2,20 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "../out-tsc/spec",
-    "target": "es2015",
     "baseUrl": "",
     "types": [
-      "jasmine",
+      "vitest/globals",
+      "vitest/importMeta",
+      "vite/client",
       "node"
     ]
   },
   "files": [
-    "test.ts",
-    "polyfills.ts"
+    "test-setup.ts"
   ],
   "include": [
     "**/*.spec.ts",
-    "**/*.d.ts"
+    "**/*.d.ts",
+    "../scripts/**/*.spec.ts"
   ]
 }

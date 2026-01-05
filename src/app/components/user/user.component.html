@@ -1,21 +1,3 @@
-<mat-card class="container  component-container mat-elevation-z0" *ngIf="user"> <!-- todo check a valid if -->
-  <mat-card-header>
-    <app-user-actions [user]="user" align="end"></app-user-actions>
-    <div mat-card-avatar class="avatar"
-         [style.backgroundImage]="'url('+ (user.photoURL ? user.photoURL :  'https://ui-avatars.com/api/?name=' + (this.user.displayName || 'Guest') ) +')'">
-    </div>
-    <mat-card-title>
-      <app-privacy-icon [privacy]="user.privacy" align="end"></app-privacy-icon>
-      {{ user.displayName || 'Guest' }}
-    </mat-card-title>
-    <mat-card-subtitle>ID: {{ user.uid }}</mat-card-subtitle>
-    <mat-card-subtitle *ngIf="user.description">{{ user.description }}</mat-card-subtitle>
-    <mat-card-subtitle *ngIf="!user.description">
-      <button mat-button color="basic" (click)="edit()">add a description</button>
-    </mat-card-subtitle>
-    <mat-card-subtitle></mat-card-subtitle>
-  </mat-card-header>
-  <mat-card-content>
-      <app-user-settings [user]="user"></app-user-settings>
-  </mat-card-content>
-</mat-card>
+@if (user) {
+<app-user-settings [user]="user"></app-user-settings>
+}

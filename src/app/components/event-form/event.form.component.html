@@ -1,24 +1,24 @@
 <mat-dialog-content>
-  <form [formGroup]="eventFormGroup" (submit)="onSubmit($event)" (keyup.enter)="onSubmit($event)">
+  <form [formGroup]="eventFormGroup" (submit)="onSubmit($event)" (keyup.enter)="onSubmit($event)" class="qs-form">
 
     <span class="mat-headline">{{event.name}}</span>
 
-<!--    <mat-form-field>-->
-<!--      <input matInput placeholder="Name" formControlName="name">-->
-<!--      &lt;!&ndash;<mat-hint></mat-hint>&ndash;&gt;-->
-<!--      <mat-error *ngIf="hasError('name')">-->
-<!--        Name must not be empty-->
-<!--      </mat-error>-->
-<!--    </mat-form-field>-->
+    <!--    <mat-form-field>-->
+    <!--      <input matInput placeholder="Name" formControlName="name">-->
+    <!--      &lt;!&ndash;<mat-hint></mat-hint>&ndash;&gt;-->
+    <!--      <mat-error *ngIf="hasError('name')">-->
+    <!--        Name must not be empty-->
+    <!--      </mat-error>-->
+    <!--    </mat-form-field>-->
 
 
-<!--    <mat-form-field>-->
-<!--      <textarea matInput placeholder="Description" formControlName="description"></textarea>-->
-<!--      &lt;!&ndash;<mat-hint></mat-hint>&ndash;&gt;-->
-<!--      <mat-error *ngIf="hasError('name')">-->
-<!--        Something is wrong with the description-->
-<!--      </mat-error>-->
-<!--    </mat-form-field>-->
+    <!--    <mat-form-field>-->
+    <!--      <textarea matInput placeholder="Description" formControlName="description"></textarea>-->
+    <!--      &lt;!&ndash;<mat-hint></mat-hint>&ndash;&gt;-->
+    <!--      <mat-error *ngIf="hasError('name')">-->
+    <!--        Something is wrong with the description-->
+    <!--      </mat-error>-->
+    <!--    </mat-form-field>-->
 
     <div class="radio-container">
       <mat-radio-group formControlName="privacy">
@@ -43,8 +43,10 @@
     </div>
 
 
-    <button mat-stroked-button (click)="close($event)">Cancel</button>
-    <button mat-flat-button color="primary" (click)="onSubmit($event)">Save</button>
+    <div class="qs-form-actions">
+      <button mat-stroked-button (click)="close($event)">Cancel</button>
+      <button mat-flat-button color="primary" (click)="onSubmit($event)">Save</button>
+    </div>
 
   </form>
 </mat-dialog-content>

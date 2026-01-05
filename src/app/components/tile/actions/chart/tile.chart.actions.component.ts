@@ -1,50 +1,50 @@
 import { Component, Input, OnInit } from '@angular/core';
-import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
-import { DataTotalTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data.total-training-effect';
-import { DataDuration } from '@sports-alliance/sports-lib/lib/data/data.duration';
-import { DataEnergy } from '@sports-alliance/sports-lib/lib/data/data.energy';
-import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
-import { DataDescent } from '@sports-alliance/sports-lib/lib/data/data.descent';
-import { DataHeartRateAvg } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
+import { DataDistance } from '@sports-alliance/sports-lib';
+import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
+import { DataDuration } from '@sports-alliance/sports-lib';
+import { DataEnergy } from '@sports-alliance/sports-lib';
+import { DataAscent } from '@sports-alliance/sports-lib';
+import { DataDescent } from '@sports-alliance/sports-lib';
+import { DataHeartRateAvg } from '@sports-alliance/sports-lib';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   TileChartSettingsInterface,
   TimeIntervals
-} from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
+} from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../../services/app.user.service';
-import { DataAltitudeMax } from '@sports-alliance/sports-lib/lib/data/data.altitude-max';
-import { DataAltitudeMin } from '@sports-alliance/sports-lib/lib/data/data.altitude-min';
-import { DataAltitudeAvg } from '@sports-alliance/sports-lib/lib/data/data.altitude-avg';
-import { DataHeartRateMax } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-max';
-import { DataHeartRateMin } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-min';
-import { DataPowerMax } from '@sports-alliance/sports-lib/lib/data/data.power-max';
-import { DataPowerMin } from '@sports-alliance/sports-lib/lib/data/data.power-min';
-import { DataPowerAvg } from '@sports-alliance/sports-lib/lib/data/data.power-avg';
-import { DataTemperatureMax } from '@sports-alliance/sports-lib/lib/data/data.temperature-max';
-import { DataTemperatureAvg } from '@sports-alliance/sports-lib/lib/data/data.temperature-avg';
-import { DataTemperatureMin } from '@sports-alliance/sports-lib/lib/data/data.temperature-min';
-import { DataCadenceMax } from '@sports-alliance/sports-lib/lib/data/data.cadence-max';
-import { DataCadenceAvg } from '@sports-alliance/sports-lib/lib/data/data.cadence-avg';
-import { DataCadenceMin } from '@sports-alliance/sports-lib/lib/data/data.cadence-min';
-import * as SpeedMax from '@sports-alliance/sports-lib/lib/data/data.speed-max';
-import * as SpeedAvg from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
-import * as SpeedMin from '@sports-alliance/sports-lib/lib/data/data.speed-min';
-import { DataVO2Max } from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
-import { DataPeakEPOC } from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
-import { DataFeeling } from '@sports-alliance/sports-lib/lib/data/data.feeling';
-import { DataRPE } from '@sports-alliance/sports-lib/lib/data/data.rpe';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
+import { DataAltitudeMax } from '@sports-alliance/sports-lib';
+import { DataAltitudeMin } from '@sports-alliance/sports-lib';
+import { DataAltitudeAvg } from '@sports-alliance/sports-lib';
+import { DataHeartRateMax } from '@sports-alliance/sports-lib';
+import { DataHeartRateMin } from '@sports-alliance/sports-lib';
+import { DataPowerMax } from '@sports-alliance/sports-lib';
+import { DataPowerMin } from '@sports-alliance/sports-lib';
+import { DataPowerAvg } from '@sports-alliance/sports-lib';
+import { DataTemperatureMax } from '@sports-alliance/sports-lib';
+import { DataTemperatureAvg } from '@sports-alliance/sports-lib';
+import { DataTemperatureMin } from '@sports-alliance/sports-lib';
+import { DataCadenceMax } from '@sports-alliance/sports-lib';
+import { DataCadenceAvg } from '@sports-alliance/sports-lib';
+import { DataCadenceMin } from '@sports-alliance/sports-lib';
+import * as SpeedMax from '@sports-alliance/sports-lib';
+import * as SpeedAvg from '@sports-alliance/sports-lib';
+import * as SpeedMin from '@sports-alliance/sports-lib';
+import { DataVO2Max } from '@sports-alliance/sports-lib';
+import { DataPeakEPOC } from '@sports-alliance/sports-lib';
+import { DataFeeling } from '@sports-alliance/sports-lib';
+import { DataRPE } from '@sports-alliance/sports-lib';
 import { TileActionsAbstractDirective } from '../tile-actions-abstract.directive';
-import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.recovery-time';
-import { SpeedUnitsToGradeAdjustedSpeedUnits } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
+import { DataRecoveryTime } from '@sports-alliance/sports-lib';
+import { SpeedUnitsToGradeAdjustedSpeedUnits } from '@sports-alliance/sports-lib';
 
 
 @Component({
   selector: 'app-tile-chart-actions',
   templateUrl: './tile.chart.actions.component.html',
   styleUrls: ['../tile.actions.abstract.css', './tile.chart.actions.component.css'],
-  providers: []
+  providers: [],
+  standalone: false
 })
 export class TileChartActionsComponent extends TileActionsAbstractDirective implements OnInit {
   @Input() chartType: ChartTypes;
@@ -117,7 +117,7 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
         DataFeeling.type,
         DataRPE.type,
         DataVO2Max.type,
-        DataTotalTrainingEffect.type,
+        DataAerobicTrainingEffect.type,
         DataPeakEPOC.type,
         DataRecoveryTime.type
       ]
@@ -125,13 +125,12 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
   ];
 
   constructor(
-    userService: AppUserService,
-    afa: AngularFireAnalytics) {
-    super(userService, afa);
+    userService: AppUserService) {
+    super(userService);
   }
 
   async changeChartType(event) {
-    this.afa.logEvent('dashboard_tile_action', { method: 'changeChartType' });
+    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartType' });
     const chart = (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order));
     chart.chartType = event.value;
     // If its pie show only totals
@@ -142,25 +141,25 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
   }
 
   async changeChartDataType(event) {
-    this.afa.logEvent('dashboard_tile_action', { method: 'changeChartDataType' });
+    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartDataType' });
     (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataType = event.value;
     return this.userService.updateUserProperties(this.user, { settings: this.user.settings });
   }
 
   async changeChartDataValueType(event) {
-    this.afa.logEvent('dashboard_tile_action', { method: 'changeChartDataValueType' });
+    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartDataValueType' });
     (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataValueType = event.value;
     return this.userService.updateUserProperties(this.user, { settings: this.user.settings });
   }
 
   async changeChartDataCategoryType(event) {
-    this.afa.logEvent('dashboard_tile_action', { method: 'changeChartDataCategoryType' });
+    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartDataCategoryType' });
     (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataCategoryType = event.value;
     return this.userService.updateUserProperties(this.user, { settings: this.user.settings });
   }
 
   async changeChartTimeInterval(event) {
-    this.afa.logEvent('dashboard_tile_action', { method: 'changeChartTimeInterval' });
+    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeChartTimeInterval' });
     (<TileChartSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).dataTimeInterval = event.value;
     return this.userService.updateUserProperties(this.user, { settings: this.user.settings });
   }

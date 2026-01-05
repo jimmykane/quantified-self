@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Deletion & Deauthorization Workflow</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --text-color: #c9d1d9;
+            --accent-color: #58a6ff;
+            --border-color: #30363d;
+            --card-bg: #161b22;
+            --success-color: #238636;
+            --warning-color: #d29922;
+            --header-bg: #21262d;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            margin: 0;
+            padding: 2rem;
+        }
+
+        h1,
+        h2,
+        h3 {
+            color: var(--text-color);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+
+        h1 {
+            color: var(--accent-color);
+            border: none;
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background-color: var(--header-bg);
+            font-weight: 600;
+        }
+
+        code {
+            background-color: rgba(110, 118, 129, 0.4);
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+            font-size: 85%;
+        }
+
+        /* Analytics Badge */
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            background-color: var(--accent-color);
+            color: #000;
+        }
+
+        .mermaid {
+            background-color: var(--card-bg);
+            padding: 1rem;
+            border-radius: 6px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h1>User Deletion Architecture</h1>
+        <p>Comprehensive workflow of data cleanup, service deauthorization, and analytics events triggered upon user
+            account deletion.</p>
+
+        <div class="card">
+            <h2>📊 Analytics & Monitoring</h2>
+            <p>The following key events are tracked during the deletion process:</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Context</th>
+                        <th>Event Name</th>
+                        <th>Parameters</th>
+                        <th>Source</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Frontend</td>
+                        <td><span class="badge">user_delete</span></td>
+                        <td><code>{}</code> (Empty payload)</td>
+                        <td><code>user-settings.component.ts</code></td>
+                    </tr>
+                    <tr>
+                        <td>Backend Logs</td>
+                        <td><code>[Cleanup] User {uid} deleted...</code></td>
+                        <td>UID, Deauthorization Status</td>
+                        <td>Cloud Logging (Info/Error levels)</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>🔄 Process Workflow</h2>
+            <div class="mermaid">
+                flowchart TB
+                subgraph Frontend["🖥️ Frontend Application"]
+                User(("👤 User"))
+                UI["User Settings UI"]
+                Analytics["📊 Analytics: user_delete"]
+                Service["AppUserService"]
+
+                User -->|Clicks Delete| UI
+                UI -->|Log Event| Analytics
+                UI -->|Call| Service
+                end
+
+                subgraph Backend["☁️ Backend Services"]
+                DeleteFn["Cloud Function: deleteSelf"]
+                Auth["Firebase Auth"]
+
+                Service -->|Call| DeleteFn
+                DeleteFn -->|Admin SDK| Auth
+                end
+
+                subgraph Triggers["⚡ Parallel Cleanup Triggers"]
+                direction TB
+
+                subgraph CustomCleanup["🛠️ cleanupUserAccounts (Functions)"]
+                Suunto["🔵 Suunto"]
+                Coros["🟢 COROS"]
+                Garmin["🟠 Garmin"]
+                Email["📧 Email"]
+
+                Suunto -->|"1. Deauthorize API<br />2. Delete Tokens<br />3. Delete Parent Doc"| Suunto
+                Garmin -->|"1. DELETE API<br />2. Delete Doc"| Garmin
+                Coros -->|"1. Delete Tokens<br />2. Delete Parent Doc"| Coros
+                end
+
+                subgraph ExtensionCleanup["📦 delete-user-data (Extension)"]
+                Config["Configuration Rules"]
+                Firestore["🔥 Firestore Recursive Delete"]
+                Storage["📂 Storage Bucket Delete"]
+
+                Firestore -->|"paths: users/{uid}, customers/{uid}, privileges"| Firestore
+                end
+                end
+
+                Auth -->|onDelete Trigger| CustomCleanup
+                Auth -->|onDelete Trigger| ExtensionCleanup
+
+                style Frontend fill:#0d1117,stroke:#58a6ff,stroke-width:2px
+                style Backend fill:#0d1117,stroke:#a371f7,stroke-width:2px
+                style CustomCleanup fill:#161b22,stroke:#d29922,stroke-width:2px,stroke-dasharray: 5 5
+                style ExtensionCleanup fill:#161b22,stroke:#238636,stroke-width:2px,stroke-dasharray: 5 5
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>🗑️ Data Cleanup Matrix</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Data Domain</th>
+                        <th>Target Path/Resource</th>
+                        <th>Cleanup Mechanism</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>User Profile</strong></td>
+                        <td><code>users/{uid}</code><br><code>users/{uid}/events/*</code><br><code>users/{uid}/config/*</code>
+                        </td>
+                        <td>Extension</td>
+                        <td>Recursive deletion enabled</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Stripe Data</strong></td>
+                        <td><code>customers/{uid}</code><br><code>customers/{uid}/subscriptions/*</code></td>
+                        <td>Extension</td>
+                        <td>Stripe Customer object is <strong>preserved</strong> in Dashboard</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Access Tokens</strong></td>
+                        <td><code>suuntoAppAccessTokens/{uid}</code><br><code>COROSAPIAccessTokens/{uid}</code><br><code>garminHealthAPITokens/{uid}</code>
+                        </td>
+                        <td><code>cleanupUserAccounts</code></td>
+                        <td>Includes deauthorization API calls</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Email Logs</strong></td>
+                        <td><code>mail/{docId}</code></td>
+                        <td><code>cleanupUserAccounts</code></td>
+                        <td>Queries by UID and Email</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Files</strong></td>
+                        <td>Storage: <code>users/{uid}/*</code></td>
+                        <td>Extension</td>
+                        <td>All user-uploaded content</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Permissions</strong></td>
+                        <td><code>userAccountPrivileges/{uid}</code></td>
+                        <td>Extension</td>
+                        <td>System access levels</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'dark',
+            flowchart: { curve: 'basis' }
+        });
+    </script>
+</body>
+
+</html>

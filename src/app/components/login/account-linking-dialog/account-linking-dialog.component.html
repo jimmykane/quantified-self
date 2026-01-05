@@ -1,0 +1,60 @@
+<div class="dialog-container">
+    <div class="dialog-content">
+        <h2 class="title">Account Already Exists</h2>
+
+        <div class="info-section">
+            <p class="description">
+                We found existing account(s) for <strong>{{ data.email }}</strong>.
+            </p>
+            <p class="description">
+                Please sign in with one of your existing methods to link your new <strong>{{
+                    getProviderName(data.pendingProvider) }}</strong> login.
+            </p>
+
+            <div class="verbose-explanation">
+                <div class="options-list">
+                    <!-- Iterate over all existing providers -->
+                    <ng-container *ngFor="let provider of data.existingProviders">
+
+                        <!-- Google -->
+                        <button mat-stroked-button class="provider-button google" *ngIf="provider.includes('google')"
+                            (click)="onSelectProvider(provider)">
+                            <mat-icon svgIcon="google_logo_light" class="provider-icon"></mat-icon>
+                            Sign in with Google
+                        </button>
+
+                        <!-- GitHub -->
+                        <button mat-stroked-button class="provider-button github" *ngIf="provider.includes('github')"
+                            (click)="onSelectProvider(provider)">
+                            <mat-icon svgIcon="github_logo" class="provider-icon"></mat-icon>
+                            Sign in with GitHub
+                        </button>
+
+                        <!-- Password / Email Link Option -->
+                        <!-- If provider is password, we can offer magic link as a "better" option or standard password -->
+                        <!-- For this request, we specifically want to support "Email Link" -->
+                        <button mat-stroked-button class="provider-button email" *ngIf="provider === 'password'"
+                            (click)="onSelectProvider('emailLink')">
+                            <mat-icon class="provider-icon">mail_outline</mat-icon>
+                            Send Magic Link
+                        </button>
+
+                    </ng-container>
+                </div>
+
+                <div class="explanation-box link-box">
+                    <p class="benefit">
+                        <mat-icon>check_circle</mat-icon>
+                        Once linked, you can use any of these methods to sign in.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="actions">
+            <button mat-button (click)="onCancel()" class="cancel-button">
+                Cancel
+            </button>
+        </div>
+    </div>
+</div>

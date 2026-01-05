@@ -1,22 +1,41 @@
-<mat-card class="mat-elevation-z0" style="padding-bottom: 0;">
-<!--  <mat-card class="mat-elevation-z0" style="padding-bottom: 0;"-->
-<!--            [ngStyle]="{'padding-top': activities.length > 1 ? '0' : '0'}">-->
-  <mat-card-subtitle>
-    <section>
-      <mat-card *ngFor="let stat of stats" class="mat-elevation-z0 item">
-        <mat-card-header class="no-margin">
-          <div mat-card-avatar>
-            <app-data-type-icon [size]="'24px'" [vAlign]="'top'"
-                                [dataType]="stat.getType()"></app-data-type-icon>
-          </div>
-          <mat-card-subtitle>
-            {{stat.getDisplayType()}}
-          </mat-card-subtitle>
-          <mat-card-title>
-            {{stat.getDisplayValue()}} {{stat.getDisplayUnit()}}
-          </mat-card-title>
-        </mat-card-header>
-      </mat-card>
-    </section>
-  </mat-card-subtitle>
-</mat-card>
+<mat-card-subtitle>
+  <!-- Grid Layout -->
+  @if (layout === 'grid') {
+  <section class="grid">
+    @for (stat of displayedStats; track stat) {
+    <div class="stat-item">
+      <div class="stat-avatar">
+        <app-data-type-icon [size]="'20px'" [vAlign]="'middle'" [dataType]="stat.getType()"></app-data-type-icon>
+      </div>
+      <div class="stat-content">
+        <div class="stat-label">
+          {{stat.getDisplayType()}}
+        </div>
+        <div class="stat-value-grid">
+          {{stat.getDisplayValue()}} {{stat.getDisplayUnit()}}
+        </div>
+      </div>
+
+    </div>
+    }
+    <ng-content select="[grid-suffix]"></ng-content>
+  </section>
+  }
+
+  <!-- Condensed Layout (Chips) -->
+  @if (layout === 'condensed') {
+  <section class="condensed">
+    <mat-chip-set role="list">
+      @for (stat of displayedStats; track stat) {
+      <mat-chip role="listitem" [matTooltip]="stat.getDisplayType()" class="stat-chip" [highlighted]="false"
+        [disableRipple]="true">
+        <app-data-type-icon matChipAvatar [size]="'18px'" [vAlign]="'middle'"
+          [dataType]="stat.getType()"></app-data-type-icon>
+        <span class="stat-value">{{stat.getDisplayValue()}} {{stat.getDisplayUnit()}}</span>
+      </mat-chip>
+      }
+    </mat-chip-set>
+    <ng-content select="[chip-suffix]"></ng-content>
+  </section>
+  }
+</mat-card-subtitle>

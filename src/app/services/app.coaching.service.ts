@@ -1,15 +1,14 @@
-import { Injectable } from '@angular/core';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { AngularFirestore } from '@angular/fire/compat/firestore';
+import { Injectable, inject } from '@angular/core';
+import { User } from '@sports-alliance/sports-lib';
+import { Firestore, collection, collectionData } from '@angular/fire/firestore';
 import { map, switchMap } from 'rxjs/operators';
 import { combineLatest, Observable } from 'rxjs';
 import { AppUserService } from './app.user.service';
 import { AppEventService } from './app.event.service';
-import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
-import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
+import { DateRanges } from '@sports-alliance/sports-lib';
+import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { getDatesForDateRange } from '../helpers/date-range-helper';
-import firebase from 'firebase/compat/app';
-import WhereFilterOp = firebase.firestore.WhereFilterOp;
+import { WhereFilterOp } from 'firebase/firestore';
 
 
 @Injectable({
@@ -17,25 +16,23 @@ import WhereFilterOp = firebase.firestore.WhereFilterOp;
 })
 export class AppCoachingService {
 
+  private firestore = inject(Firestore);
+
   constructor(
-    private afs: AngularFirestore,
     private userService: AppUserService,
     private eventService: AppEventService
   ) {
   }
 
   public getCoachedAthletesForUser(user: User): Observable<User[]> {
-    return this.afs
-      .collection('coaches')
-      .doc(user.uid)
-      .collection('athletes')
-      .snapshotChanges()// @todo use value changes for lighter operation
-      .pipe(map((documentSnapshots) => {
-        return documentSnapshots.reduce((idArray: string[], documentSnapshot) => {
-          idArray.push(documentSnapshot.payload.doc.id);
-          return idArray;
-        }, [])
+    const athletesCollection = collection(this.firestore, 'coaches', user.uid, 'athletes');
+    return collectionData(athletesCollection, { idField: 'id' })
+      .pipe(map((documents: any[]) => {
+        return documents.map(doc => doc.id);
       })).pipe(switchMap((userIDS) => {
+        if (userIDS.length === 0) {
+          return new Observable<User[]>((subscriber) => subscriber.next([]));
+        }
         return combineLatest(userIDS.map((userID) => {
           return this.userService.getUserByID(userID);
         }));

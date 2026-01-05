@@ -1,76 +1,101 @@
-<mat-card class="mat-elevation-z0 service-card">
-  <mat-card-header>
-    <mat-card-subtitle>
-      COROS is a performance sports technology company that helps athletes train to be their best.<br/>
-      For COROS it’s all about outdoors, mountains, and a passionate active lifestyle.<br/>
-      We combine high grade hardware with innovative technology to provide endurance athletes with the gear they rely on in the world’s most extreme environments.
-    </mat-card-subtitle>
-  </mat-card-header>
-  <mat-tab-group [dynamicHeight]="true">
-    <mat-tab label="Sync" [disabled]="!user || isGuest">
-      <ng-template matTabLabel>
-        <mat-icon matTooltip="Sync settings">sync</mat-icon>
-      </ng-template>
-      <ng-template matTabContent>
-        <mat-card class="mat-elevation-z0">
-          <mat-card-header>
-            <mat-card-subtitle *ngIf="!isConnectedToService()">
-              Connect to COROS API
-              <mat-icon matTooltip="NOTE: Automatic sync happens for activities done after this date">
-                info
-              </mat-icon>
-            </mat-card-subtitle>
-            <mat-card-subtitle *ngIf="isConnectedToService()">Connected</mat-card-subtitle>
-          </mat-card-header>
-          <mat-divider></mat-divider>
+<p class="description-text">
+  COROS is a performance sports technology company that helps athletes train to be their best. For COROS it’s all
+  about outdoors, mountains, and a passionate active lifestyle. We combine high grade hardware with innovative
+  technology to provide endurance athletes with the gear they rely on in the world’s most extreme environments.
+</p>
 
-          <mat-list *ngIf="isConnectedToService()">
+<div class="service-container">
 
-            <div mat-subheader>Accounts</div>
+  <!-- Pro Features Grid -->
+  <h3 class="section-title">Pro Tools</h3>
+  <div class="features-grid">
 
-            <mat-list-item style="text-align: left">
-              <mat-icon mat-list-icon>account_circle</mat-icon>
-              <div mat-line>{{ serviceTokens[0].openId }} </div>
-              <div mat-line>Connected at {{serviceTokens[0].dateCreated  | date:'medium'}}</div>
-            </mat-list-item>
-          </mat-list>
+    <!-- Connectivity Card (Now inside Pro Grid) -->
+    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess && !isConnectedToService()"
+      [class.unlocked]="hasProAccess || isConnectedToService()"
+      (click)="!hasProAccess && !isConnectedToService() && triggerUpsell()">
+      @if (!hasProAccess && !isConnectedToService()) {
+      <div class="lock-overlay">
+        <mat-icon class="lock-icon-large">lock</mat-icon>
+        <span class="pro-badge">PRO</span>
+      </div>
+      }
+      <mat-card-header>
+        <mat-card-subtitle class="tab-subtitle">
+          <mat-icon>sync</mat-icon>
+          <span>{{ isConnectedToService() ? 'Connected' : 'Connect Account' }}</span>
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-divider></mat-divider>
+      <mat-card-content class="feature-card-content" style="align-items: stretch; text-align: left;">
+        <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
 
-          <button class="big"
-                  mat-flat-button color="warn"
-                  *ngIf="isConnectedToService()"
-                  (click)="deauthorizeService($event)">Disconnect
+        @if (isConnectedToService()) {
+        <mat-list style="width: 100%; padding: 0;">
+          <mat-list-item style="height: auto; padding: 8px 0;">
+            <mat-icon matListItemIcon style="margin-right: 8px;">account_circle</mat-icon>
+            <div matListItemTitle style="font-size: 0.9rem;">{{ serviceTokens[0].openId }} </div>
+            <div matListItemLine style="font-size: 0.8rem; opacity: 0.7;">Connected: {{serviceTokens[0].dateCreated
+              | date:'short'}}</div>
+          </mat-list-item>
+        </mat-list>
+        }
+
+        <div style="margin-top: auto; padding-top: 16px;">
+          @if (!isConnectedToService()) {
+          <button mat-flat-button color="primary" style="width: 100%"
+            [disabled]="!user || this.isGuest || isLoading || isConnecting || !hasProAccess"
+            (click)="connectWithService($event)">
+            @if (isConnecting) {
+            <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
+              color="accent"></mat-spinner>
+            Connecting...
+            } @else {
+            <mat-icon>link</mat-icon> Connect
+            }
           </button>
+          }
 
-          <button mat-stroked-button
-                  class="big"
-                  mat-flat-button color="primary" [disabled]="!user || this.isGuest"
-                  *ngIf="!isConnectedToService()"
-                  (click)="connectWithService($event)">
-            Connect with COROS
+          @if (isConnectedToService()) {
+          <button mat-stroked-button color="warn" style="width: 100%" [disabled]="isLoading || isDisconnecting"
+            (click)="deauthorizeService($event)">
+            @if (isDisconnecting) {
+            <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
+              color="warn"></mat-spinner>
+            Disconnecting...
+            } @else {
+            <mat-icon>link_off</mat-icon> Disconnect
+            }
           </button>
-        </mat-card>
-      </ng-template>
-    </mat-tab>
+          }
+        </div>
+      </mat-card-content>
+    </mat-card>
 
-    <mat-tab label="History import"
-             [disabled]="isGuest || !isConnectedToService()">
-      <ng-template matTabLabel>
-        <mat-icon matTooltip="History import">history</mat-icon>
-      </ng-template>
+    <!-- History Import Card -->
+    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
+      (click)="!hasProAccess && triggerUpsell()">
+      @if (!hasProAccess) {
+      <div class="lock-overlay">
+        <mat-icon class="lock-icon-large">lock</mat-icon>
+        <span class="pro-badge">PRO</span>
+      </div>
+      }
+      <mat-card-header>
+        <mat-card-subtitle class="tab-subtitle">
+          <mat-icon>history</mat-icon>
+          <span>History Import</span>
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-divider></mat-divider>
 
-      <ng-template matTabContent>
-        <mat-card class="mat-elevation-z0">
-          <mat-card-header>
-            <mat-card-subtitle>
-              Import your COROS workout history
-            </mat-card-subtitle>
-          </mat-card-header>
-          <mat-divider></mat-divider>
-          <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"></app-history-import-form>
-        </mat-card>
-      </ng-template>
-    </mat-tab>
+      <div class="feature-card-content">
+        <p class="feature-description" *ngIf="!hasProAccess">Import your full activity history from COROS.</p>
+        <app-history-import-form [serviceName]="serviceName" [minDate]="minDate" [userMetaForService]="serviceMeta"
+          (importInitiated)="onHistoryImportInitiated()"></app-history-import-form>
+      </div>
+    </mat-card>
 
-  </mat-tab-group>
-</mat-card>
+  </div>
+</div>
 <app-shade [isActive]="isLoading"></app-shade>

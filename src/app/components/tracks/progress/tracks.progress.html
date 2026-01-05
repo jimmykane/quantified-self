@@ -1,10 +1,14 @@
 <mat-card class="mat-elevation-z0">
-  <mat-card-title *ngIf="totalProgress < 100 && bufferProgress < 100">
-    Getting your activities
-  </mat-card-title>
-  <mat-card-title *ngIf="totalProgress < 100 && bufferProgress >= 100">
-    Loading your tracks
-  </mat-card-title>
+  @if (totalProgress < 100 && bufferProgress < 100) {
+    <mat-card-title>
+      Getting your activities
+    </mat-card-title>
+  }
+  @if (totalProgress < 100 && bufferProgress >= 100) {
+    <mat-card-title>
+      Loading your tracks
+    </mat-card-title>
+  }
   <mat-card-content>
     <mat-progress-bar
       [color]="'primary'"

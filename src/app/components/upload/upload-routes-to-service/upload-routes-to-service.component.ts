@@ -1,34 +1,44 @@
-import { Component } from '@angular/core';
-import { MatDialog } from '@angular/material/dialog';
+import { Component, inject, Inject } from '@angular/core';
+import { Router } from '@angular/router';
+import { MatDialog, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import * as Sentry from '@sentry/browser';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
+import { LoggerService } from '../../../services/logger.service';
+import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { environment } from '../../../../environments/environment';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { AngularFireAuth } from '@angular/fire/compat/auth';
+import { Auth, getIdToken } from '@angular/fire/auth';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { FileInterface } from '../file.interface';
-import { AppFilesStatusService } from '../../../services/upload/app-files-status.service';
-import { ServiceNames } from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
+import { AppProcessingService } from '../../../services/app.processing.service';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as Pako from 'pako';
-import { getSize } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
+import { getSize } from '@sports-alliance/sports-lib';
 
 @Component({
   selector: 'app-upload-route-to-service',
   templateUrl: './upload-routes-to-service.component.html',
-  styleUrls: ['../upload-abstract.css', './upload-routes-to-service.component.css']
+  styleUrls: ['../upload-abstract.css', './upload-routes-to-service.component.css'],
+  standalone: false
 })
 
 export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
+  private analyticsService = inject(AppAnalyticsService);
+  private auth = inject(Auth);
+  private serviceName: ServiceNames; // Added this line
 
   constructor(
     protected snackBar: MatSnackBar,
     protected dialog: MatDialog,
-    protected filesStatusService: AppFilesStatusService,
+    protected processingService: AppProcessingService,
     private http: HttpClient,
-    private afAuth: AngularFireAuth,
-    private afa: AngularFireAnalytics) {
-    super(snackBar, dialog, filesStatusService);
+    protected router: Router,
+    @Inject(MAT_DIALOG_DATA) public data: any,
+    public dialogRef: MatDialogRef<UploadRoutesToServiceComponent>,
+    logger: LoggerService) {
+    super(snackBar, dialog, processingService, router, logger);
+    if (data.serviceName) {
+      this.serviceName = data.serviceName;
+    }
   }
 
   /**
@@ -37,7 +47,7 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
    * @param file
    */
   async processAndUploadFile(file: FileInterface) {
-    this.afa.logEvent('upload_route_to_service', {service: ServiceNames.SuuntoApp});
+    this.analyticsService.logEvent('upload_route_to_service', { service: ServiceNames.SuuntoApp });
     return new Promise((resolve, reject) => {
       const fileReader = new FileReader;
       fileReader.onload = async () => {
@@ -45,9 +55,9 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
           reject(`Not a GPX file`)
           return;
         }
-        const idToken = await (await this.afAuth.currentUser).getIdToken(true)
+        const idToken = await getIdToken(this.auth.currentUser, true)
         try {
-          const compressed = btoa(Pako.gzip(fileReader.result as string, {to: 'string'}));
+          const compressed = btoa(Pako.gzip(fileReader.result as string, { to: 'string' }));
           if (getSize(compressed) > 10485760) {
             throw new Error(`Cannot upload route because the size is greater than 10MB`);
           }
@@ -56,12 +66,12 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
             {
               headers:
                 new HttpHeaders({
-                  'Authorization': `Bearer ${idToken}`
+                  'Authorization': `Bearer ${idToken} `
                 })
             }).toPromise();
         } catch (e) {
-          Sentry.captureException(e);
-          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message}`, 'OK', {duration: 10000});
+          this.logger.error(e);
+          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message} `, 'OK', { duration: 10000 });
           reject(e);
           return;
         }

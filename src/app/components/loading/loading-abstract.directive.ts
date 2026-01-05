@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Directive } from '@angular/core';
+import { ChangeDetectorRef, Directive, Input } from '@angular/core';
 
 /**
  * Class for handling loading with no change detection
@@ -6,9 +6,9 @@ import { ChangeDetectorRef, Directive } from '@angular/core';
 @Directive()
 export abstract class LoadingAbstractDirective {
 
-  public isLoading: boolean;
+  @Input() public isLoading: boolean;
 
-  constructor(private  changeDetector: ChangeDetectorRef) {
+  constructor(protected changeDetector: ChangeDetectorRef) {
   }
 
   public loading() {

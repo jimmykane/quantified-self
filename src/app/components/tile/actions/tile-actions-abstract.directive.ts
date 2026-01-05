@@ -1,56 +1,52 @@
 import {
   TileSettingsInterface, TileTypes,
-} from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
+} from '@sports-alliance/sports-lib';
 import { TileAbstractDirective } from '../tile-abstract.directive';
 import { AppUserService } from '../../../services/app.user.service';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
-import { Input, Directive } from '@angular/core';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { AppAnalyticsService } from '../../../services/app.analytics.service';
+import { Input, Directive, inject } from '@angular/core';
+import { User } from '@sports-alliance/sports-lib';
 
 @Directive()
 export class TileActionsAbstractDirective extends TileAbstractDirective {
-  @Input() isLoading: boolean;
-  @Input() user: User;
-  @Input() order: number;
-  @Input() type:  TileTypes;
-  @Input() size:  { columns: number, rows: number };
+  protected analyticsService = inject(AppAnalyticsService);
 
-  constructor(protected userService: AppUserService, protected afa: AngularFireAnalytics) {
+  constructor(protected userService: AppUserService) {
     super();
   }
 
   async changeTileType(event) {
-    this.afa.logEvent('dashboard_tile_action', {method: 'changeTileType'});
+    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeTileType' });
     const tileIndex = this.user.settings.dashboardSettings.tiles.findIndex(tile => tile.order === this.order);
     this.user.settings.dashboardSettings.tiles[tileIndex] = this.type === TileTypes.Map ? AppUserService.getDefaultUserDashboardChartTile() : AppUserService.getDefaultUserDashboardMapTile();
     this.user.settings.dashboardSettings.tiles[tileIndex].order = this.order;
-    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
   }
 
   async changeTileColumnSize(event) {
-    this.afa.logEvent('dashboard_tile_action', {method: 'changeTileSize'});
+    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeTileSize' });
     const tile = <TileSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tileToFind => tileToFind.order === this.order);
     tile.size.columns = event.value;
-    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
   }
 
   async changeTileRowSize(event) {
-    this.afa.logEvent('dashboard_tile_action', {method: 'changeTileSize'});
+    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeTileSize' });
     const tile = <TileSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tileToFind => tileToFind.order === this.order);
     tile.size.rows = event.value;
-    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
   }
 
   async addNewTile($event: MouseEvent) {
-    this.afa.logEvent('dashboard_tile_action', {method: 'addNewTile'});
+    this.analyticsService.logEvent('dashboard_tile_action', { method: 'addNewTile' });
     const chart = Object.assign({}, (<TileSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)));
     chart.order = this.user.settings.dashboardSettings.tiles.length;
     this.user.settings.dashboardSettings.tiles.push(chart);
-    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
   }
 
   async deleteTile(event) {
-    this.afa.logEvent('dashboard_tile_action', {method: 'deleteTile'});
+    this.analyticsService.logEvent('dashboard_tile_action', { method: 'deleteTile' });
     if (this.user.settings.dashboardSettings.tiles.length === 1) {
       throw new Error('Cannot delete tile there is only one left');
     }
@@ -61,13 +57,13 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
         chartSetting.order = index;
         return chartSetting
       });
-    return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
   }
 
   /**
    * see https://github.com/angular/components/issues/11677
    */
-  fixDisappearIOSBug () {
+  fixDisappearIOSBug() {
     const styleNode = document.createElement('style');
     styleNode.type = 'text/css';
     styleNode.id = 'panel-fix';

@@ -19,10 +19,10 @@
       [max]="220"
       [min]="0"
       [step]="1"
-      [thumbLabel]="true"
-      [tickInterval]="true"
+      discrete
+      
       [(ngModel)]="lowLimitFilterValue"
-      [vertical]="false">
+      >
     </mat-slider>
     {{ lowLimitFilterValue }} bpm
   </mat-list-item>
@@ -33,10 +33,10 @@
       [max]="300"
       [min]="0"
       [step]="1"
-      [thumbLabel]="true"
-      [tickInterval]="true"
+      discrete
+      
       [(ngModel)]="highLimitValue"
-      [vertical]="false">
+      >
     </mat-slider>
     {{ highLimitValue }} bpm
   </mat-list-item>
@@ -48,10 +48,10 @@
       [max]="20"
       [min]="0"
       [step]="1"
-      [thumbLabel]="true"
-      [tickInterval]="true"
+      discrete
+      
       [(ngModel)]="movingMedianValue"
-      [vertical]="false">
+      >
     </mat-slider>
     {{ movingMedianValue }}
   </mat-list-item>
@@ -63,10 +63,10 @@
       [max]="20"
       [min]="0"
       [step]="1"
-      [thumbLabel]="true"
-      [tickInterval]="true"
+      discrete
+      
       [(ngModel)]="movingWeightAverageValue"
-      [vertical]="false">
+      >
     </mat-slider>
     {{ movingWeightAverageValue }}
   </mat-list-item>

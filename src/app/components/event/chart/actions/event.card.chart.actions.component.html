@@ -1,57 +1,36 @@
 <section class="container">
-  <section class="item">
-    <section class="item">
-      <mat-slide-toggle
-        [disabled]="!user"
-        [color]="'accent'"
-        (change)="somethingChanged($event)"
-        (click)="$event.stopPropagation();"
-        [(ngModel)]="stackYAxes">
-      <span [matTooltip]="user ? 'Show charts on top of each other' : 'You need to sign in to user this feature'">
-        Stack Y Axes
-      </span>
-      </mat-slide-toggle>
-    </section>
+  <mat-chip-listbox multiple>
+    <!-- Stack Y Axes -->
+    <mat-chip-option [selected]="stackYAxes" (selectionChange)="stackYAxes = $event.selected; somethingChanged($event)"
+      [color]="'accent'" [disabled]="!user"
+      [matTooltip]="user ? 'Show charts on top of each other' : 'Sign in to use this'">
+      Stack Y Axes
+    </mat-chip-option>
 
-    <section class="item">
-      <mat-slide-toggle
-        [disabled]="!user"
-        [color]="'accent'"
-        (change)="somethingChanged($event)"
-        (click)="$event.stopPropagation();"
-        [(ngModel)]="showLaps">
-      <span [matTooltip]="user ? 'When enabled auto lap markers will be added to the chart' :  'You need to sign in to user this feature'">
-        Show laps
-      </span>
-      </mat-slide-toggle>
-    </section>
+    <!-- Show Laps -->
+    <mat-chip-option [selected]="showLaps" (selectionChange)="showLaps = $event.selected; somethingChanged($event)"
+      [color]="'accent'" [disabled]="!user" [matTooltip]="user ? 'Show lap markers on chart' : 'Sign in to use this'">
+      Show Laps
+    </mat-chip-option>
 
-    <section class="item">
-      <mat-slide-toggle
-        [disabled]="!user"
-        [color]="'accent'"
-        (change)="somethingChanged($event)"
-        (click)="$event.stopPropagation();"
-        [(ngModel)]="showAllData">
-      <span [matTooltip]="user ? 'Show everything that was read from the file' :  'You need to sign in to user this feature'">
-        Show all data
-      </span>
-      </mat-slide-toggle>
-    </section>
-  </section>
+    <!-- Show All Data -->
+    <mat-chip-option [selected]="showAllData"
+      (selectionChange)="showAllData = $event.selected; somethingChanged($event)" [color]="'accent'" [disabled]="!user"
+      [matTooltip]="user ? 'Show all available data from file' : 'Sign in to use this'">
+      Show All Data
+    </mat-chip-option>
+  </mat-chip-listbox>
+
+  <span class="spacer"></span>
 
   <section class="item">
-    <mat-form-field>
-      <mat-label>X Axis type</mat-label>
-      <mat-select
-        [disabled]="!user || event.isMultiSport()"
-        placeholder="X Axis type"
-        [(value)]="xAxisType"
-        (selectionChange)="somethingChanged($event)">
-        <mat-option *ngFor="let xAxisType of xAxisTypes | keyvalue" [value]="xAxisType.value">
-          {{xAxisType.key}}
-        </mat-option>
-      </mat-select>
-    </mat-form-field>
+    <mat-button-toggle-group [disabled]="!user || event.isMultiSport()" [value]="xAxisType"
+      (change)="xAxisType = $event.value; somethingChanged($event)" appearance="standard">
+      @for (xAxisType of xAxisTypes | keyvalue; track xAxisType) {
+      <mat-button-toggle [value]="xAxisType.value">
+        {{xAxisType.key}}
+      </mat-button-toggle>
+      }
+    </mat-button-toggle-group>
   </section>
 </section>

@@ -1,10 +1,11 @@
-import { ActivityTypeGroups } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { ActivityTypeGroups } from '@sports-alliance/sports-lib';
 
-export const AppActivityTypeGroupColors: {[key in ActivityTypeGroups]: string} = {
+export const AppActivityTypeGroupColors: { [key in ActivityTypeGroups]: string } = {
   [ActivityTypeGroups.Running]: '#FDD300',
   [ActivityTypeGroups.TrailRunning]: '#c7ef0c',
   // [ActivityTypeGroups.TrailRunning]: '#aeea00',
   [ActivityTypeGroups.Cycling]: '#FF7C3B',
+  [ActivityTypeGroups.Swimming]: '#40C4FF',
   [ActivityTypeGroups.Performance]: '#AFE443',
   [ActivityTypeGroups.IndoorSports]: '#FF467E',
   [ActivityTypeGroups.OutdoorAdventures]: '#55D781',

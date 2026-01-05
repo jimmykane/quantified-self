@@ -1,70 +1,128 @@
-@use '~@angular/material' as mat;
-// Plus imports for other components in your app.
+// Custom Theming for Angular Material
+// For more information: https://material.angular.io/guide/theming
+@use '@angular/material' as mat;
+@use 'sass:map';
+@use 'styles/forms';
+@use 'styles/search';
 
 // Include the common styles for Angular Material. We include this here so that you only
 // have to load a single css file for Angular Material in your app.
-// **Be sure that you only ever include this mixin once!**
-$custom-typography: mat.define-typography-config(
-  $font-family: '"QSFont", Roboto, sans-serif;'
-  //$body-1:        mat-typography-level(14px, 20px, 400)
-);
-@include mat.core($custom-typography);
-// Define the default theme (same as the example above).
-$candy-app-primary: mat.define-palette(mat.$indigo-palette);
-$candy-app-accent: mat.define-palette(mat.$pink-palette, A200, A100, A400);
-$candy-app-theme: mat.define-light-theme($candy-app-primary, $candy-app-accent);
+// Be sure that you only ever include this mixin once!
+@include mat.core();
 
-// Include the default theme styles.
-@include mat.all-component-themes($candy-app-theme);
+// Light Theme Palettes (Royal Blue)
+// A classic, trustworthy blue with a warm distinctive accent
+$light-primary: mat.m2-define-palette(mat.$m2-blue-palette);
+$light-accent: mat.m2-define-palette(mat.$m2-amber-palette, A200, A100, A400);
+$light-warn: mat.m2-define-palette(mat.$m2-red-palette);
 
+// Dark Theme Palettes (Deep Ocean)
+// Dark blue-grey background with a bright, electric blue accent
+$dark-primary: mat.m2-define-palette(mat.$m2-blue-grey-palette);
+$dark-accent: mat.m2-define-palette(mat.$m2-light-blue-palette, A200, A100, A400);
+$dark-warn: mat.m2-define-palette(mat.$m2-red-palette);
 
-// Define an alternate dark theme.
-$dark-primary: mat.define-palette(mat.$blue-palette);
-$dark-accent: mat.define-palette(mat.$pink-palette, A200, A100, A400);
-$dark-warn: mat.define-palette(mat.$deep-orange-palette);
-$dark-theme: mat.define-dark-theme($dark-primary, $dark-accent, $dark-warn);
+// Define typography using our local font
+$app-typography: mat.m2-define-typography-config($font-family: "'Noto Sans', sans-serif");
 
-// Include the alternative theme styles inside of a block with a CSS class. You can make this
-// CSS class whatever you want. In this example, any component inside of an element with
-// `.dark-theme` will be affected by this alternate dark theme instead of the default theme.
+// Activity Gradients
+:root {
+  --gradient-running: linear-gradient(135deg, #FDD300, #FF9100);
+  --gradient-trail-running: linear-gradient(135deg, #c7ef0c, #8bc34a);
+  --gradient-cycling: linear-gradient(135deg, #FF7C3B, #d84315);
+  --gradient-swimming: linear-gradient(135deg, #40C4FF, #0288D1);
+  --gradient-performance: linear-gradient(135deg, #AFE443, #689F38);
+  --gradient-indoor-sports: linear-gradient(135deg, #FF467E, #C2185B);
+  --gradient-outdoor-adventures: linear-gradient(135deg, #55D781, #2E7D32);
+  --gradient-winter-sports: linear-gradient(135deg, #6289FE, #303F9F);
+  --gradient-water-sports: linear-gradient(135deg, #59C7FE, #0277BD);
+  --gradient-diving: linear-gradient(135deg, #72E3DE, #0097A7);
+  --gradient-team-racket: linear-gradient(135deg, #9A7DEA, #512DA8);
+  --gradient-unspecified: linear-gradient(135deg, #A3ADB0, #546E7A);
+}
+
+// Create the theme object. A theme consists of configurations for individual
+// theming systems such as "color" or "typography".
+$app-light-theme: mat.m2-define-light-theme((color: (primary: $light-primary,
+        accent: $light-accent,
+        warn: $light-warn,
+      ),
+      typography: $app-typography,
+    ));
+
+$app-dark-theme: mat.m2-define-dark-theme((color: (primary: $dark-primary,
+        accent: $dark-accent,
+        warn: $dark-warn,
+      ),
+      typography: $app-typography,
+    ));
+
+// Include theme styles for core and each component used in your app.
+// Alternatively, you can import and @include the theme mixins for each component
+// that you are using.
+@include mat.all-component-themes($app-light-theme);
+
 .dark-theme {
-  @include mat.all-component-themes($dark-theme);
+  @include mat.all-component-themes($app-dark-theme);
 }
 
-.mat-header-cell{
-  color: black!important;
-}
-.dark-theme .mat-header-cell{
-  color: white!important;
-}
 
-@font-face {
-  font-family: 'QSFont';
-  src: url('/assets/fonts/proxima-nova-regular.woff2') format('woff2'),
-  url('/assets/fonts/proxima-nova-regular.woff') format('woff');
-  font-weight: normal;
-  font-style: normal;
-}
+// Font face removed - using Google Fonts (Noto Sans)
 
+
+// ... (existing imports)
+
+
+// Apply global background and color based on theme
+html,
 body {
+  height: 100%;
   margin: 0;
-  font-family: '"QSFont", Roboto, sans-serif;', sans-serif;
 }
 
-/* Hide scrollbar for Chrome, Safari and Opera */
-body::-webkit-scrollbar {
-  display: none;
-}
-
-/* Hide scrollbar for IE and Edge */
 body {
-  -ms-overflow-style: none;
+  background-color: var(--mat-sys-background);
+  color: var(--mat-sys-on-surface);
+  font-family: 'Noto Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.dark-theme {
+  $dark-bg: map.get($app-dark-theme, background);
+  $dark-fg: map.get($app-dark-theme, foreground);
+
+  background-color: mat.m2-get-color-from-palette($dark-bg, background);
+  color: mat.m2-get-color-from-palette($dark-fg, text);
+
+  // Force SVG text to be light in dark mode for amCharts
+  text,
+  tspan,
+  .amcharts-Label {
+    fill: mat.m2-get-color-from-palette($dark-fg, text) !important;
+  }
+
+  // Ensure tooltips have dark background
+  .amcharts-Tooltip-bg {
+    fill: mat.m2-get-color-from-palette($dark-bg, background) !important;
+    stroke: mat.m2-get-color-from-palette($dark-fg, text) !important;
+    fill-opacity: 0.9 !important;
+  }
+}
+
+// ... existing code ...
+
+section.component-container {
+  position: relative;
+  background: inherit;
+  /* Allow it to inherit the theme background */
 }
 
 @keyframes FadeIn {
   0% {
     opacity: 0;
   }
+
   100% {
     opacity: 1;
   }
@@ -92,9 +150,6 @@ body {
   width: 40px;
   height: 40px;
   position: relative;
-  //width: 40px;
-  //height: 40px;
-  //margin: 100px auto;
 }
 
 .sk-cube-grid .sk-cube {
@@ -105,93 +160,579 @@ body {
   -webkit-animation: sk-cubeGridScaleDelay 1.3s infinite ease-in-out;
   animation: sk-cubeGridScaleDelay 1.3s infinite ease-in-out;
 }
+
+.dark-theme .sk-cube-grid .sk-cube {
+  background-color: #eee;
+}
+
 .sk-cube-grid .sk-cube1 {
   -webkit-animation-delay: 0.2s;
-  animation-delay: 0.2s; }
+  animation-delay: 0.2s;
+}
+
 .sk-cube-grid .sk-cube2 {
   -webkit-animation-delay: 0.3s;
-  animation-delay: 0.3s; }
+  animation-delay: 0.3s;
+}
+
 .sk-cube-grid .sk-cube3 {
   -webkit-animation-delay: 0.4s;
-  animation-delay: 0.4s; }
+  animation-delay: 0.4s;
+}
+
 .sk-cube-grid .sk-cube4 {
   -webkit-animation-delay: 0.1s;
-  animation-delay: 0.1s; }
+  animation-delay: 0.1s;
+}
+
 .sk-cube-grid .sk-cube5 {
   -webkit-animation-delay: 0.2s;
-  animation-delay: 0.2s; }
+  animation-delay: 0.2s;
+}
+
 .sk-cube-grid .sk-cube6 {
   -webkit-animation-delay: 0.3s;
-  animation-delay: 0.3s; }
+  animation-delay: 0.3s;
+}
+
 .sk-cube-grid .sk-cube7 {
   -webkit-animation-delay: 0s;
-  animation-delay: 0s; }
+  animation-delay: 0s;
+}
+
 .sk-cube-grid .sk-cube8 {
   -webkit-animation-delay: 0.1s;
-  animation-delay: 0.1s; }
+  animation-delay: 0.1s;
+}
+
 .sk-cube-grid .sk-cube9 {
   -webkit-animation-delay: 0.2s;
-  animation-delay: 0.2s; }
+  animation-delay: 0.2s;
+}
 
 @-webkit-keyframes sk-cubeGridScaleDelay {
-  0%, 70%, 100% {
+
+  0%,
+  70%,
+  100% {
     -webkit-transform: scale3D(1, 1, 1);
     transform: scale3D(1, 1, 1);
-  } 35% {
-      -webkit-transform: scale3D(0, 0, 1);
-      transform: scale3D(0, 0, 1);
-    }
+  }
+
+  35% {
+    -webkit-transform: scale3D(0, 0, 1);
+    transform: scale3D(0, 0, 1);
+  }
 }
 
 @keyframes sk-cubeGridScaleDelay {
-  0%, 70%, 100% {
+
+  0%,
+  70%,
+  100% {
     -webkit-transform: scale3D(1, 1, 1);
     transform: scale3D(1, 1, 1);
-  } 35% {
-      -webkit-transform: scale3D(0, 0, 1);
-      transform: scale3D(0, 0, 1);
-    }
+  }
+
+  35% {
+    -webkit-transform: scale3D(0, 0, 1);
+    transform: scale3D(0, 0, 1);
+  }
 }
 
-
-mat-icon.large-svg-icon{
-  padding-bottom: 2px!important;
-  padding-top: 2px!important;
-  width: 80px!important;
-  height: 36px!important;
-  font-size: 1em!important;
-}
-
-mat-icon.large-svg-icon-coros{
-  padding-bottom: 2px!important;
-  height: 36px!important;
-  font-size: 1em!important;
-  padding-top: 10px !important;
-  width: 100px !important;
-}
-
-
-.dark-theme section.component-container {
-  background: #424242;
-}
-
-.white-theme section.component-container {
-}
 
 section.component-container {
   position: relative;
-  background: white;
-}
-
-mat-card.component-container{
-  border-radius: 0;
+  // background: white; // Removed to allow theme inheritance
 }
 
 
-.mat-tab-label.mat-tab-label-active {
-  opacity: 1 !important;
-}
 
-.avatar{
+
+.avatar {
   background-size: cover;
+}
+
+/* CSS Variables for Theming */
+:root {
+  --mat-sys-background: #fafafa;
+  --mat-sys-surface: rgba(255, 255, 255, 0.90);
+  --mat-sys-on-surface: rgba(0, 0, 0, 0.87);
+  --mat-sys-on-surface-variant: rgba(0, 0, 0, 0.60);
+  --mat-sys-error: #f44336;
+  --mat-sys-primary: #3f51b5;
+  --mat-sys-primary-rgb: 63, 81, 181;
+  --mat-sys-secondary: #ff4081;
+  --mat-sys-secondary-rgb: 255, 64, 129;
+  --mat-app-surface: var(--mat-sys-surface);
+  --mat-app-on-surface: var(--mat-sys-on-surface);
+  --mat-app-on-surface-variant: var(--mat-sys-on-surface-variant);
+  --mat-app-surface-container-low: rgba(0, 0, 0, 0.03);
+  --mat-app-surface-container-high: rgba(0, 0, 0, 0.08);
+  --mat-app-outline-variant: rgba(0, 0, 0, 0.1);
+  --mat-app-primary: var(--mat-sys-primary);
+}
+
+.dark-theme {
+  --mat-sys-background: #121212;
+  --mat-sys-surface: rgba(30, 30, 30, 0.80);
+  --mat-sys-on-surface: rgba(255, 255, 255, 0.87);
+  --mat-sys-on-surface-variant: rgba(255, 255, 255, 0.60);
+  --mat-sys-error: #ffb4ab;
+  --mat-sys-primary: #90caf9;
+  --mat-sys-primary-rgb: 144, 202, 249;
+  --mat-sys-secondary: #f48fb1;
+  --mat-sys-secondary-rgb: 244, 143, 177;
+  --mat-app-surface: var(--mat-sys-surface);
+  --mat-app-on-surface: var(--mat-sys-on-surface);
+  --mat-app-on-surface-variant: var(--mat-sys-on-surface-variant);
+  --mat-app-surface-container-low: rgba(255, 255, 255, 0.05);
+  --mat-app-surface-container-high: rgba(255, 255, 255, 0.12);
+  --mat-app-outline-variant: rgba(255, 255, 255, 0.1);
+  --mat-app-primary: var(--mat-sys-primary);
+}
+
+/* Global Glassmorphism Card Style */
+.glass-card {
+  background: var(--mat-sys-surface) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 20px !important;
+  /* Force border radius */
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.05),
+    0 2px 4px -1px rgba(0, 0, 0, 0.03),
+    0 10px 15px -3px rgba(0, 0, 0, 0.05) !important;
+  /* Override material elevation */
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Global Paginator Transparent Override */
+mat-paginator,
+.mat-mdc-paginator,
+mat-stepper,
+.mat-stepper-horizontal,
+.mat-stepper-vertical {
+  background: transparent !important;
+}
+
+/* Dark Theme Overrides */
+.dark-theme {
+
+  .glass-card {
+    /* Background handled by variable */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2) !important;
+  }
+}
+
+/* ==========================================================================
+   Sidenav Scrollbar Hiding
+   Hide scrollbars but keep scroll functionality
+   ========================================================================== */
+mat-sidenav,
+.mat-drawer,
+.mat-sidenav {
+  .mat-drawer-inner-container {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    scrollbar-width: none !important; // Firefox
+    -ms-overflow-style: none !important; // IE/Edge
+
+    &::-webkit-scrollbar {
+      display: none !important; // Chrome/Safari
+      width: 0 !important;
+      height: 0 !important;
+    }
+  }
+}
+
+/* Global Card Title - Standardized Typography */
+mat-table {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.mat-header-cell {
+  font-size: unset;
+}
+
+.card-title {
+  font-size: 1.3rem;
+  font-weight: 400;
+  margin: 0;
+  line-height: 1.2;
+  color: var(--mat-sys-on-surface, inherit);
+}
+
+/* Global App Header Card Standard */
+.app-header-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 40px;
+  background: var(--mat-sys-surface);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--mat-app-outline-variant);
+  gap: 24px;
+  margin-bottom: 24px;
+  position: relative;
+  overflow: hidden;
+
+  /* Inner Structural Classes */
+  .header-content {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    flex: 1;
+  }
+
+  .header-avatar {
+    flex-shrink: 0;
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+  }
+
+  .header-info {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+
+    h1,
+    h2 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 400;
+      line-height: 1.2;
+    }
+
+    p {
+      margin: 4px 0 0 0;
+      font-size: 0.95rem;
+      color: var(--mat-app-on-surface-variant);
+      opacity: 0.8;
+    }
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+}
+
+/* Dark Theme specific overrides for header card */
+.dark-theme .app-header-card {
+  background: var(--mat-app-surface) !important;
+  /* Ensure it stays surface color */
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Mobile Responsive */
+@media (max-width: 600px) {
+  .app-header-card {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 20px;
+    gap: 16px;
+
+    .header-content {
+      width: 100%;
+      flex-direction: column;
+      gap: 16px;
+      text-align: center;
+    }
+
+    .header-info {
+      align-items: center;
+    }
+
+    .header-actions {
+      width: 100%;
+      justify-content: center;
+      margin-left: 0;
+      margin-top: 8px;
+    }
+  }
+}
+
+/* ==========================================================================
+   Global App Card Components
+   Standardized widgets for dashboard stats and metrics.
+   ========================================================================== */
+
+.app-stat-card {
+  padding: 1.25rem;
+  border-radius: 12px;
+  // Glass background handled by .glass-card if combined, or inherit transparency
+  background: transparent;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.25rem;
+  transition: transform 0.2s;
+  color: var(--mat-sys-on-surface, inherit);
+  min-height: 100px; // Ensure consistent height
+}
+
+.dark-theme .app-stat-card {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+}
+
+.app-stat-card:hover {
+  transform: translateY(-4px);
+}
+
+.app-stat-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+
+  mat-icon {
+    width: 24px;
+    height: 24px;
+    font-size: 24px;
+  }
+
+  span {
+    font-size: 0.9rem;
+    opacity: 0.7;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 400;
+  }
+}
+
+.app-stat-value {
+  margin: 4px 0 0;
+  font-size: 2rem;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.app-spinner-mini {
+  height: 32px; // Matches 2rem font size
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+/* Status Variants (Global) */
+.app-stat-card.status-pending {
+  border-bottom: 4px solid #f59e0b;
+
+  .app-stat-value,
+  mat-icon {
+    color: #f59e0b;
+  }
+}
+
+.dark-theme .app-stat-card.status-pending {
+  border-bottom: 4px solid #f59e0b;
+}
+
+.app-stat-card.status-success {
+  border-bottom: 4px solid #10b981;
+
+  .app-stat-value,
+  mat-icon {
+    color: #10b981;
+  }
+}
+
+.dark-theme .app-stat-card.status-success {
+  border-bottom: 4px solid #10b981;
+}
+
+.app-stat-card.status-error {
+  border-bottom: 4px solid #ef4444;
+
+  .app-stat-value,
+  mat-icon {
+    color: #ef4444;
+  }
+}
+
+.dark-theme .app-stat-card.status-error {
+  border-bottom: 4px solid #ef4444;
+}
+
+.app-stat-card.status-dlq {
+  border-bottom: 4px solid #d32f2f;
+  background: rgba(244, 67, 54, 0.05);
+
+  .app-stat-value,
+  mat-icon {
+    color: #d32f2f;
+  }
+}
+
+/* Global Text Gradient (Fancy Title) */
+.app-text-gradient {
+  font-size: 2.5rem;
+  font-weight: 400;
+  margin: 0;
+  background: linear-gradient(135deg, var(--mat-sys-primary, #3f51b5), var(--mat-sys-secondary, #ff4081));
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
+}
+
+/* Reusable Custom Scrollbar */
+.qs-scrollbar {
+  &::-webkit-scrollbar {
+    height: 8px;
+    /* Horizontal scrollbar height */
+    width: 8px;
+    /* Vertical scrollbar width */
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* Dark theme support for global scrollbar */
+.dark-theme .qs-scrollbar {
+  &::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+  }
+}
+
+/* Bottom Sheet Overrides */
+/* Bottom Sheet Overrides */
+.qs-full-width-bottom-sheet {
+  padding: 0 !important;
+  overflow: hidden !important;
+  max-width: none !important;
+  max-height: 80vh !important;
+  height: 80vh !important;
+
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Specific Material targets */
+.mat-mdc-bottom-sheet-container.qs-full-width-bottom-sheet,
+.mat-bottom-sheet-container.qs-full-width-bottom-sheet {
+  padding: 0 !important;
+  overflow: hidden !important;
+  max-width: none !important;
+  max-height: 80vh !important;
+  height: 80vh !important;
+
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Ensure Overlays (Bottom Sheets, Dialogs) are always on top of App Bars and Banners */
+.cdk-overlay-container {
+  z-index: 2000 !important;
+}
+
+/* ==========================================================================
+   Global Table Styles
+   Standardized Material table overrides for glassmorphism.
+   ========================================================================== */
+table.mat-mdc-table,
+mat-table {
+  width: 100%;
+  background: transparent !important;
+}
+
+/* Header Cells */
+.mat-mdc-header-cell,
+th.mat-header-cell {
+  font-weight: 400 !important;
+  font-size: 0.85rem !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.8;
+}
+
+
+
+/* Body Cells */
+.mat-mdc-cell,
+td.mat-cell {
+  font-size: 0.95rem;
+}
+
+/* Row Hover Effects */
+.mat-mdc-row:hover .mat-mdc-cell:not(.mat-column-sticky),
+tr.mat-row:hover td:not(.mat-table-sticky) {
+  background: rgba(0, 0, 0, 0.04);
+  background: var(--mat-sys-state-hover, rgba(0, 0, 0, 0.04));
+  cursor: pointer;
+}
+
+.dark-theme .mat-mdc-row:hover .mat-mdc-cell:not(.mat-column-sticky),
+.dark-theme tr.mat-row:hover td:not(.mat-table-sticky) {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+tr.mat-row:focus,
+.mat-mdc-row:focus {
+  outline: none;
+}
+
+/* ==========================================================================
+   Global Menu Form Layouts
+   Ensures configuration forms inside mat-menu look properly spaced.
+   ========================================================================== */
+
+/* Panel Overrides */
+.mat-mdc-menu-panel.qs-config-menu {
+  max-width: none !important;
+  min-width: 300px !important;
+}
+
+/* Section/Item Layout for menus used for settings */
+.qs-config-menu {
+  section[mat-menu-item] {
+    height: auto !important;
+    min-height: unset !important;
+    padding: 4px 16px !important;
+    background: transparent !important;
+    overflow: visible;
+    line-height: normal;
+
+    &:hover {
+      background: transparent !important;
+    }
+
+    .mat-mdc-menu-item-text {
+      width: 100%;
+    }
+  }
+
+  mat-form-field {
+    width: 100%;
+    display: block;
+  }
 }

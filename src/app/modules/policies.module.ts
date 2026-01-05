@@ -6,17 +6,16 @@ import {PoliciesComponent} from '../components/policies/policies.component';
 import {PoliciesRoutingModule} from '../policies.routing.module';
 
 @NgModule({
-  imports: [
-    CommonModule,
-    SharedModule,
-    MaterialModule,
-    PoliciesRoutingModule,
-  ],
-  exports: [],
-  declarations: [
-    PoliciesComponent
-  ],
-  entryComponents: [],
+    imports: [
+        CommonModule,
+        SharedModule,
+        MaterialModule,
+        PoliciesRoutingModule,
+    ],
+    exports: [],
+    declarations: [
+        PoliciesComponent
+    ]
 })
 
 

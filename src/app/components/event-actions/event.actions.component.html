@@ -2,49 +2,58 @@
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #menu="matMenu">
-   <button mat-menu-item (click)="share()">
+  <button mat-menu-item (click)="share()">
     <mat-icon>share</mat-icon>
     <span>Share</span>
   </button>
-  <button  mat-menu-item (click)="editEvent()">
+  <button mat-menu-item (click)="editEvent()">
     <mat-icon>drive_file_rename_outline</mat-icon>
     <span>Edit settings</span>
   </button>
-  <button *ngIf="event.getActivities().length === 1" mat-menu-item (click)="editEventActivity()">
+  @if (event.getActivities().length === 1) {
+  <button mat-menu-item (click)="editEventActivity()" disabled="true">
     <mat-icon>edit</mat-icon>
     <span>Edit activity</span>
   </button>
+  }
 
-  <button *ngIf="event.getActivities().length === 1 && hasDistance()" mat-menu-item (click)="cropEventActivity()">
-    <mat-icon>crop</mat-icon>
-    <span>Crop activity</span>
+
+  <button mat-menu-item disabled="true">
+    <mat-icon [color]="isHydrated() ? 'accent' : 'warn'">
+      {{ isHydrated() ? 'cloud_done' : 'cloud_off' }}
+    </mat-icon>
+    <span>Streams {{ isHydrated() ? 'loaded' : 'not loaded' }}</span>
   </button>
-  <!--<button mat-menu-item (click)="downloadEventAsTCX(event)">-->
-    <!--<mat-icon>file_download</mat-icon>-->
-    <!--<span>Download as TCX</span>-->
-  <!--</button>-->
-    <button mat-menu-item (click)="reGenerateStatistics()">
-      <mat-icon>autorenew</mat-icon>
-      <span>Refresh activity statistics <mat-icon  class="toolTip" matTooltip="This will re-calculate statistics like distance, ascent, descent etc...">info</mat-icon>
-      </span>
-    </button>
+  <mat-divider></mat-divider>
+  <button mat-menu-item (click)="reGenerateStatistics()">
+    <mat-icon>autorenew</mat-icon>
+    <span>Refresh activity statistics <mat-icon class="toolTip"
+        matTooltip="This will re-calculate statistics like distance, ascent, descent etc...">info</mat-icon>
+    </span>
+  </button>
   <button mat-menu-item (click)="downloadJSON()">
     <mat-icon>file_download</mat-icon>
     <span>Download as JSON</span>
   </button>
-  <button mat-menu-item *ngIf="hasPositionalData()" (click)="downloadGPX()">
+  @if (hasPositionalData()) {
+  <button mat-menu-item (click)="downloadGPX()">
     <mat-icon>file_download</mat-icon>
     <span>Download as GPX</span>
   </button>
-  <button *ngIf="suuntoAppServiceMetaData" mat-menu-item (click)="downloadSuuntoFIT()">
-    <mat-icon>file_download</mat-icon>
-    <span>Download Suunto FIT file</span>
-  </button>
+  }
 
-  <button *ngIf="corosAPIServiceMetaData" mat-menu-item (click)="downloadCOROSFIT()">
-    <mat-icon>file_download</mat-icon>
-    <span>Download COROS FIT file</span>
+
+
+
+
+  @if ((event['originalFiles'] && event['originalFiles'].length > 0) || (event['originalFile'] &&
+  event['originalFile'].path)) {
+  <button mat-menu-item (click)="downloadOriginals()">
+    <mat-icon>cloud_download</mat-icon>
+    <span>Download original(s)</span>
   </button>
+  }
+
   <button mat-menu-item (click)="delete()">
     <mat-icon>delete</mat-icon>
     <span>Delete</span>

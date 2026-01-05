@@ -1,0 +1,36 @@
+<h2 mat-dialog-title class="dialog-title">
+    <mat-icon class="warning-icon">warning</mat-icon>
+    Delete Your Account
+</h2>
+
+<mat-dialog-content>
+    <p>
+        You are about to permanently delete your account <strong>{{ data.displayName || 'Guest' }}</strong>.
+        This will remove:
+    </p>
+
+    <ul class="consequences-list">
+        <li><mat-icon>delete_forever</mat-icon> All activities and fitness data</li>
+        <li><mat-icon>settings</mat-icon> Settings and profile information</li>
+        <li><mat-icon>link_off</mat-icon> Connected services (Garmin, Suunto, etc.)</li>
+        <li><mat-icon>cloud_off</mat-icon> Uploaded files and backups</li>
+        @if (data.hasActiveSubscription) {
+        <li class="subscription-item"><mat-icon>credit_card</mat-icon> Your subscription will be cancelled</li>
+        }
+    </ul>
+
+    <p class="warning-text">
+        <strong>This action is irreversible.</strong> Your data cannot be recovered.
+    </p>
+
+    <mat-checkbox [(ngModel)]="confirmChecked" color="warn">
+        I understand and want to delete my account
+    </mat-checkbox>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+    <button mat-button (click)="onCancel()">Cancel</button>
+    <button mat-flat-button color="warn" [disabled]="!confirmChecked" (click)="onConfirm()">
+        Delete Account
+    </button>
+</mat-dialog-actions>

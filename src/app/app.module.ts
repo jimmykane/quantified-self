@@ -1,101 +1,116 @@
-import 'firebase/database';
-import 'firebase/firestore';
-import { ErrorHandler, NgModule } from '@angular/core';
+import { APP_INITIALIZER, ErrorHandler, LOCALE_ID, NgModule } from '@angular/core';
+import { LoggerService, GlobalErrorHandler } from './services/logger.service';
 import { BrowserModule } from '@angular/platform-browser';
 import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app.routing.module';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { SideNavComponent } from './components/sidenav/sidenav.component';
 import { environment } from '../environments/environment';
-import { HttpClientModule } from '@angular/common/http';
-import { AngularFireModule } from '@angular/fire/compat';
-import { AngularFirestoreModule } from '@angular/fire/compat/firestore';
-import { AngularFireAuthModule } from '@angular/fire/compat/auth';
-import { AngularFireFunctionsModule, REGION } from '@angular/fire/compat/functions';
-import * as Sentry from '@sentry/angular';
-import {
-  AngularFirePerformanceModule,
-  DATA_COLLECTION_ENABLED,
-  INSTRUMENTATION_ENABLED, PerformanceMonitoringService
-} from '@angular/fire/compat/performance';
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
+import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
+import { provideAuth, getAuth, connectAuthEmulator } from '@angular/fire/auth';
+import { provideFirestore, initializeFirestore } from '@angular/fire/firestore';
+import { getApp } from '@angular/fire/app';
+import { provideFunctions, getFunctions, httpsCallable } from '@angular/fire/functions';
+import { providePerformance, getPerformance } from '@angular/fire/performance';
+import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService, setAnalyticsCollectionEnabled } from '@angular/fire/analytics';
+import { provideRemoteConfig, getRemoteConfig } from '@angular/fire/remote-config';
+import { provideStorage, getStorage } from '@angular/fire/storage';
 import { MaterialModule } from './modules/material.module';
-import { AgmCoreModule } from '@agm/core';
-import {
-  AngularFireAnalyticsModule,
-  APP_NAME,
-  APP_VERSION,
-  COLLECTION_ENABLED,
-  CONFIG,
-  DEBUG_MODE,
-  ScreenTrackingService,
-  UserTrackingService
-} from '@angular/fire/compat/analytics';
 import { ClipboardModule } from '@angular/cdk/clipboard';
+import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { ServiceWorkerModule } from '@angular/service-worker';
 import { UploadActivitiesComponent } from './components/upload/upload-activities/upload-activities.component';
-import { AppFilesInfoSheetService } from './services/upload/app-files-info-sheet.service';
+
 import { AppUpdateService } from './services/app.update.service';
+import { OnboardingComponent } from './components/onboarding/onboarding.component';
+import { MaintenanceComponent } from './components/maintenance/maintenance.component';
+import { GracePeriodBannerComponent } from './components/grace-period-banner/grace-period-banner.component';
+import { RouteLoaderComponent } from './components/route-loader/route-loader.component';
+import { ProcessingIndicatorComponent } from './components/notifications/processing-indicator/processing-indicator.component';
+import { AppRemoteConfigService } from './services/app.remote-config.service';
+import { firstValueFrom } from 'rxjs';
+
+// Factory function that blocks until Remote Config is initialized
+export function initializeRemoteConfig(remoteConfigService: AppRemoteConfigService) {
+  return () => firstValueFrom(remoteConfigService.getMaintenanceMode());
+}
+
+import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/date-locale.config';
+
+
+
+// ... (existing imports)
+
 
 
 @NgModule({
-  imports: [
-    BrowserModule,
-    BrowserAnimationsModule,
-    AppRoutingModule,
-    HttpClientModule,
-    AngularFireModule.initializeApp(environment.firebase),
-    AngularFirestoreModule,
-    AngularFirestoreModule.enablePersistence({synchronizeTabs: true}),
-    AngularFireFunctionsModule,
-    AngularFireAuthModule,
-    AngularFirePerformanceModule,
-    AngularFireAnalyticsModule,
-    ClipboardModule,
-    MaterialModule,
-    AgmCoreModule.forRoot({
-      apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
-      apiVersion: 'weekly',
-      libraries: ['visualization']
-    }),
-    ServiceWorkerModule.register('ngsw-worker.js', {enabled: environment.production})
-  ],
   declarations: [
     AppComponent,
     SideNavComponent,
     UploadActivitiesComponent,
+    ProcessingIndicatorComponent,
+    GracePeriodBannerComponent,
+    RouteLoaderComponent,
   ],
-  entryComponents: [],
+  bootstrap: [AppComponent],
+  imports: [
+    BrowserModule,
+    BrowserAnimationsModule,
+    AppRoutingModule,
+    ClipboardModule,
+    MaterialModule,
+    ServiceWorkerModule.register('ngsw-worker.js', { enabled: environment.production }),
+    OnboardingComponent,
+    MaintenanceComponent
+  ],
   providers: [
     ScreenTrackingService,
     UserTrackingService,
-    PerformanceMonitoringService,
     {
       provide: ErrorHandler,
-      useValue: Sentry.createErrorHandler({
-        showDialog: true,
-      }),
+      useClass: GlobalErrorHandler,
     },
-    {provide: REGION, useValue: 'europe-west2'},
     {
-      provide: CONFIG, useValue: {
-        allow_ad_personalization_signals: false,
-        anonymize_ip: true
-      }
+      provide: APP_INITIALIZER,
+      useFactory: initializeRemoteConfig,
+      deps: [AppRemoteConfigService],
+      multi: true
     },
-    {provide: DATA_COLLECTION_ENABLED, useValue: (environment.production || environment.beta)},
-    {provide: INSTRUMENTATION_ENABLED, useValue: (environment.production || environment.beta)},
-    {provide: COLLECTION_ENABLED, useValue: (environment.production || environment.beta)},
-    {provide: APP_VERSION, useValue: environment.appVersion},
-    {provide: APP_NAME, useValue: 'quantified-self.io'},
-    {provide: DEBUG_MODE, useValue: (environment.localhost || environment.beta)},
-  ],
-  bootstrap: [AppComponent],
+    provideHttpClient(withInterceptorsFromDi()),
+    provideFirebaseApp(() => initializeApp(environment.firebase)),
+    provideAuth(() => {
+      const auth = getAuth();
+      if (environment.useAuthEmulator) {
+        connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
+      }
+      return auth;
+    }),
+    // Use initializeFirestore with ignoreUndefinedProperties to handle undefined values
+    // in activity/event data (e.g., TCX files may have undefined creator.manufacturer).
+    // This is the official Firebase approach - undefined fields are silently skipped, not stored.
+    provideFirestore(() => {
+      return initializeFirestore(getApp(), {
+        ignoreUndefinedProperties: true
+      });
+    }),
+    provideStorage(() => getStorage()),
+    provideFunctions(() => getFunctions(undefined, 'europe-west2')),
+    providePerformance(() => getPerformance()),
+    provideAnalytics(() => {
+      const analytics = getAnalytics();
+      setAnalyticsCollectionEnabled(analytics, false);
+      return analytics;
+    }),
+    provideRemoteConfig(() => getRemoteConfig()),
+    { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
+    MAT_DATE_LOCALE_PROVIDER,
+    { provide: LOCALE_ID, useFactory: getBrowserLocale }
+  ]
 })
-
 export class AppModule {
   // Services are not used, just to make sure they're instantiated
   constructor(
-    private appFilesInfoSheetService: AppFilesInfoSheetService,
     private updateService: AppUpdateService
   ) {
   }

@@ -1,43 +1,27 @@
 <section class="component-container">
   <app-shade [isActive]="!isInitialized"></app-shade>
-<!--  <ng-container *ngIf="(targetUser) && isInitialized">-->
-  <ng-container *ngIf="(targetUser || user) && isInitialized">
-    <mat-card-header>
-      <div mat-card-avatar class="avatar"
-           [style.backgroundImage]="'url('+ ((targetUser || user).photoURL ? (targetUser || user).photoURL :  'https://ui-avatars.com/api/?name=' + ((targetUser || user).displayName || 'Guest'))  +')'">
-      </div>
-      <mat-card-title>
-        {{(targetUser || user).displayName || "Guest"}}
-      </mat-card-title>
-      <mat-card-subtitle *ngIf="(targetUser || user).description">{{ (targetUser || user).description }}</mat-card-subtitle>
-      <mat-card-subtitle *ngIf="!(targetUser || user).description">
-        No description available
-      </mat-card-subtitle>
-    </mat-card-header>
-    <mat-divider style="margin-bottom: 1em"></mat-divider>
-  </ng-container>
 
-  <app-event-search *ngIf="user"
-                    [isLoading]="isLoading"
-                    [selectedDateRange]="user.settings.dashboardSettings.dateRange"
-                    [selectedStartDate]="searchStartDate"
-                    [selectedEndDate]="searchEndDate"
-                    [startOfTheWeek]="startOfTheWeek"
-                    [selectedActivityTypes]="user.settings.dashboardSettings.activityTypes"
-                    (searchChange)="search($event)">
-  </app-event-search>
 
-  <mat-divider  *ngIf="user" [inset]="false"></mat-divider>
 
-  <!--  <app-events-map *ngIf="user" [isLoading]="isLoading" [events]="events" [theme]="user.settings.mapSettings.theme"></app-events-map>-->
+  <div class="dashboard-content">
+    @if (user) {
+    <app-event-search [isLoading]="isLoading" [selectedDateRange]="user.settings.dashboardSettings.dateRange"
+      [selectedStartDate]="searchStartDate" [selectedEndDate]="searchEndDate" [startOfTheWeek]="startOfTheWeek"
+      [selectedActivityTypes]="user.settings.dashboardSettings.activityTypes" (searchChange)="search($event)">
+    </app-event-search>
+    }
 
-  <app-summaries *ngIf="user"
-                 [isLoading]="isLoading"
-                 [user]="user"
-                 [showActions]="!targetUser || targetUser.uid === user.uid"
-                 [events]="events">
-  </app-summaries>
+    <!-- Removed mat-divider in favor of CSS spacing/gap -->
 
-  <app-event-table *ngIf="user" [targetUser]="targetUser"
-                   [isLoading]="isLoading" [user]="user" [showActions]="!targetUser || targetUser.uid === user.uid" [events]="events"></app-event-table>
+    @if (user) {
+    <app-summaries [isLoading]="isLoading" [user]="user" [showActions]="!targetUser || targetUser.uid === user.uid"
+      [events]="events">
+    </app-summaries>
+    }
+
+    @if (user) {
+    <app-event-table [targetUser]="targetUser" [isLoading]="isLoading" [user]="user"
+      [showActions]="!targetUser || targetUser.uid === user.uid" [events]="events"></app-event-table>
+    }
+  </div>
 </section>

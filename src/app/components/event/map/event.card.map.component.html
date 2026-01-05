@@ -1,128 +1,76 @@
-<mat-card class="mat-elevation-z0">
-  <mat-card-header>
-    <div mat-card-avatar>
+<div class="map-component-wrapper">
+  <div class="map-header">
+    <div class="map-header-avatar">
       <mat-icon>map</mat-icon>
     </div>
-    <mat-card-subtitle>
-      <app-map-actions
-        [(showLaps)]="showLaps"
-        [(showArrows)]="showArrows"
-        [user]="user">
+    <div class="map-header-actions">
+      <app-map-actions [(showLaps)]="showLaps" [(showArrows)]="showArrows" [user]="user">
       </app-map-actions>
-    </mat-card-subtitle>
-  </mat-card-header>
+    </div>
+  </div>
   <section class="container">
-    <mat-card class="map-legend mat-elevation-z0" *ngIf="agmMap && event.getActivities().length > 1">
-      <app-activity-toggle *ngFor="let activity of event.getActivities()"
-                           [activity]="activity"
-                           [event]="event"
-                           [showActions]="false"
-                           [showToggle]="false"
-                           [showStats]="false"
-                           [showDate]="false">
+    @if (googleMap && event.getActivities().length > 1) {
+    <mat-card class="map-legend mat-elevation-z0">
+      @for (activity of event.getActivities(); track activity) {
+      <app-activity-toggle [activity]="activity" [event]="event" [showActions]="false" [showToggle]="false"
+        [showStats]="false" [showDate]="false" [selectedActivities]="selectedActivities">
       </app-activity-toggle>
+      }
     </mat-card>
+    }
     <app-shade [isActive]="isLoading" [hasError]="noMapData" errorMessage="No Map Data"></app-shade>
-    <!-- Map -->
-    <section class="placeholder" *ngIf="activitiesMapData.length === 0"></section>
-    <agm-map *ngIf="activitiesMapData.length > 0"
-             [mapTypeId]="user && user.settings ? user.settings.mapSettings.mapType : 'roadmap'"
-             (mapTypeIdChange)="changeMapType($event)"
-             [gestureHandling]="'cooperative'"
-             [scrollwheel]="null"
-             [tilt]="45"
-             [controlSize]="32"
-             [disableDefaultUI]="true"
-             [styles]="getStyles(theme)">
-      <agm-fullscreen-control></agm-fullscreen-control>
-      <agm-scale-control></agm-scale-control>
-      <agm-rotate-control [position]="6"></agm-rotate-control>
-      <agm-zoom-control [position]="7"></agm-zoom-control>
-      <agm-street-view-control></agm-street-view-control>
-      <agm-map-type-control [style]="0" [mapTypeIds]="mapTypeIds" [position]="2"></agm-map-type-control>
-      <ng-container *ngFor="let activityMapData of activitiesMapData">
-        <!-- Start Marker -->
-        <!-- @todo fix for non existen activity positions -->
-        <agm-marker
-          [iconUrl]="getHomeMarkerIcon(activityMapData.activity)"
-          [markerClickable]="false"
-          [zIndex]="9999"
-          [latitude]="activityMapData.positions[0].latitudeDegrees"
-          [longitude]="activityMapData.positions[0].longitudeDegrees">
-        </agm-marker>
 
+    <!-- Placeholder when no data -->
+    @if (activitiesMapData.length === 0) {
+    <section class="placeholder"></section>
+    }
 
-        <!-- marker for cursor -->
-        <agm-marker
-          *ngIf="activitiesCursors.get(activityMapData.activity.getID())"
-          [markerClickable]="false"
-          [iconUrl]="getCursorMarkerIcon(activityMapData.activity)"
-          [zIndex]="9999"
-          [latitude]="activitiesCursors.get(activityMapData.activity.getID()).latitudeDegrees"
-          [longitude]="activitiesCursors.get(activityMapData.activity.getID()).longitudeDegrees">
-        </agm-marker>
-
-        <!-- Polyline for the activity -->
-        <agm-polyline
-          (lineMouseMove)="onLineMouseMove($event, activityMapData)"
-          (lineMouseDown)="onLineMouseMove($event, activityMapData)"
-          (lineMouseOut)="onLineMouseMove($event, activityMapData)"
-          [strokeColor]="activityMapData.strokeColor"
-          [strokeWeight]="strokeWidth">
-          <!-- Points -->
-          <agm-polyline-point
-            *ngFor="let position of activityMapData.positions"
-            [latitude]="position.latitudeDegrees"
-            [longitude]="position.longitudeDegrees">
-          </agm-polyline-point>
-
-          <agm-icon-sequence
-            *ngIf="showArrows"
-            [fixedRotation]="false"
-            [scale]="4"
-            [offset]="'10%'"
-            [repeat]="'200px'"
-            [strokeColor]="'#00000'"
-            [fillColor]="'#FFFFFF'"
-            [strokeWeight]="1.2"
-            [fillOpacity]="0.8"
-            [path]="'FORWARD_CLOSED_ARROW'">
-          </agm-icon-sequence>
-        </agm-polyline>
-        <!-- End marker -->
-        <!-- @todo fix for non existen activity positions -->
-        <agm-marker
-          [iconUrl]="getFlagMarkerIcon(activityMapData.activity)"
-          [markerClickable]="false"
-          [zIndex]="9999"
-          [latitude]="activityMapData.positions[activityMapData.positions.length -1].latitudeDegrees"
-          [longitude]="activityMapData.positions[activityMapData.positions.length -1].longitudeDegrees">
-        </agm-marker>
-        <!--      [iconUrl]="'https://chart.googleapis.com/chart?chst=' +  'd_map_pin_letter&chld=' + (i+1) + '|' + eventColorService.getActivityColor(event, activityMapData.activity).slice(1)"-->
-        <!-- Laps -->
-        <agm-marker
-          *ngFor="let lap of activityMapData.laps; let i = index; last as isLast"
-          [markerClickable]="false"
-          [iconUrl]="getMarkerIcon(activityMapData.activity)"
-          [zIndex]="i+1"
-          [label]="getLabel((i+1).toString())"
-          [latitude]="lap.lapPosition.latitudeDegrees"
-          [longitude]="lap.lapPosition.longitudeDegrees">
-        </agm-marker>
-
-        <ng-container *ngIf="showPoints">
-          <agm-marker
-            *ngFor="let position of activityMapData.positions"
-            [iconUrl]="getCircleMarkerIcon(activityMapData.activity)"
-            [markerClickable]="false"
-            [latitude]="position.latitudeDegrees"
-            [longitude]="position.longitudeDegrees">
-          </agm-marker>
-        </ng-container>
-
-      </ng-container>
-
-
-    </agm-map>
+    <!-- Google Map -->
+    @if (activitiesMapData.length > 0 && apiLoaded) {
+    <google-map height="100%" width="100%" [center]="mapCenter" [zoom]="mapZoom" [mapTypeId]="mapTypeId"
+      [options]="mapOptions" (mapInitialized)="onMapReady($event)">
+      @for (activityMapData of activitiesMapData; track activityMapData) {
+      <!-- Start Marker -->
+      @if (activityMapData.positions.length > 0) {
+      <map-marker
+        [position]="{lat: activityMapData.positions[0].latitudeDegrees, lng: activityMapData.positions[0].longitudeDegrees}"
+        [options]="getHomeMarkerOptions(activityMapData.activity, activityMapData.strokeColor)">
+      </map-marker>
+      }
+      <!-- Cursor Marker -->
+      @if (activitiesCursors.get(activityMapData.activity.getID())) {
+      <map-marker
+        [position]="{lat: activitiesCursors.get(activityMapData.activity.getID()).latitudeDegrees, lng: activitiesCursors.get(activityMapData.activity.getID()).longitudeDegrees}"
+        [options]="getCursorMarkerOptions(activityMapData.activity, activityMapData.strokeColor)">
+      </map-marker>
+      }
+      <!-- Activity Polyline -->
+      <map-polyline [path]="getPolylinePath(activityMapData)" [options]="getPolylineOptions(activityMapData)"
+        (polylineClick)="onPolylineClick($event, activityMapData)">
+      </map-polyline>
+      <!-- End Marker -->
+      @if (activityMapData.positions.length > 0) {
+      <map-marker
+        [position]="{lat: activityMapData.positions[activityMapData.positions.length - 1].latitudeDegrees, lng: activityMapData.positions[activityMapData.positions.length - 1].longitudeDegrees}"
+        [options]="getFlagMarkerOptions(activityMapData.activity, activityMapData.strokeColor)">
+      </map-marker>
+      }
+      <!-- Lap Markers -->
+      @for (lap of activityMapData.laps; track lap; let i = $index) {
+      <map-marker [position]="{lat: lap.lapPosition.latitudeDegrees, lng: lap.lapPosition.longitudeDegrees}"
+        [options]="getLapMarkerOptions(activityMapData.activity, activityMapData.strokeColor, i)">
+      </map-marker>
+      }
+      <!-- Point Markers (optional) -->
+      @if (showPoints) {
+      @for (position of activityMapData.positions; track position) {
+      <map-marker [position]="{lat: position.latitudeDegrees, lng: position.longitudeDegrees}"
+        [options]="{icon: {path: 0, fillColor: activityMapData.strokeColor, fillOpacity: 1, strokeColor: '#FFF', strokeWeight: 0.8, scale: 1.2}}">
+      </map-marker>
+      }
+      }
+      }
+    </google-map>
+    }
   </section>
-</mat-card>
+</div>

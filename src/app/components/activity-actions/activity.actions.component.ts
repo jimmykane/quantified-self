@@ -1,19 +1,18 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { EventInterface } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { ActivityFormComponent } from '../activity-form/activity.form.component';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { EventUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
+import { User } from '@sports-alliance/sports-lib';
+import { EventUtilities } from '@sports-alliance/sports-lib';
 import { take } from 'rxjs/operators';
 import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { ActivityCropFormComponent } from '../activity-crop-form/activity.crop.form.component';
-import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
-import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
+import { DataDistance } from '@sports-alliance/sports-lib';
+import { ActivityUtilities } from '@sports-alliance/sports-lib';
 
 @Component({
   selector: 'app-activity-actions',
@@ -21,13 +20,14 @@ import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilit
   styleUrls: ['./activity.actions.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   providers: [],
+  standalone: false
 })
 export class ActivityActionsComponent implements OnInit, OnDestroy {
   @Input() event: EventInterface;
   @Input() user: User;
   @Input() activity: ActivityInterface;
 
-  private deleteConfirmationSubscription;
+  private deleteConfirmationSubscription: any;
 
   constructor(
     private eventService: AppEventService,
@@ -55,19 +55,12 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
     });
   }
 
-  hasDistance() {
-    return this.activity.hasStreamData(DataDistance.type);
+  isHydrated() {
+    return this.activity.getAllStreams().length > 0;
   }
 
-  cropActivity() {
-    const dialogRef = this.dialog.open(ActivityCropFormComponent, {
-      width: '75vw',
-      data: {
-        event: this.event,
-        activity: this.activity,
-        user: this.user
-      },
-    });
+  hasDistance() {
+    return this.activity.hasStreamData(DataDistance.type);
   }
 
   async reGenerateStatistics() {
@@ -75,8 +68,13 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
       duration: 2000,
     });
     // To use this component we need the full hydrated object and we might not have it
-    this.activity.clearStreams();
-    this.activity.addStreams(await this.eventService.getAllStreams(this.user, this.event.getID(), this.activity.getID()).pipe(take(1)).toPromise());
+    // We attach streams from the original file (if exists) instead of Firestore
+    const hydratedEvent = await this.eventService.attachStreamsToEventWithActivities(this.user, this.event as any).pipe(take(1)).toPromise();
+    const hydratedActivity = hydratedEvent.getActivities().find(a => a.getID() === this.activity.getID());
+    if (hydratedActivity) {
+      this.activity.clearStreams();
+      this.activity.addStreams(hydratedActivity.getAllStreams());
+    }
     this.activity.clearStats();
     ActivityUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
     EventUtilities.reGenerateStatsForEvent(this.event);
@@ -84,6 +82,7 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
     this.snackBar.open('Activity and event statistics have been recalculated', null, {
       duration: 2000,
     });
+    this.changeDetectorRef.detectChanges();
   }
 
   async deleteActivity() {

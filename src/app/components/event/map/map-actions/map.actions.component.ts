@@ -4,16 +4,20 @@ import {
   Input,
   OnChanges,
   Output,
+  inject,
 } from '@angular/core';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {AppUserService} from '../../../../services/app.user.service';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
+import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { User } from '@sports-alliance/sports-lib';
+import { AppUserService } from '../../../../services/app.user.service';
+import { AppAnalyticsService } from '../../../../services/app.analytics.service';
 
 @Component({
   selector: 'app-map-actions',
   templateUrl: './map.actions.component.html',
   styleUrls: ['./map.actions.component.css'],
   providers: [],
+  standalone: false
 })
 
 export class MapActionsComponent implements OnChanges {
@@ -26,21 +30,25 @@ export class MapActionsComponent implements OnChanges {
   @Output() showArrowsChange: EventEmitter<boolean> = new EventEmitter<boolean>();
 
 
+  private analyticsService = inject(AppAnalyticsService);
+
   constructor(
-    private userService: AppUserService,
-    private afa: AngularFireAnalytics) {
+    private userService: AppUserService) {
   }
 
+
+
   async checkBoxChanged(event) {
+    this.showLapsChange.emit(this.showLaps);
+    this.showArrowsChange.emit(this.showArrows);
+
     // debugger;
     if (this.user) {
       this.user.settings.mapSettings.showLaps = this.showLaps;
       this.user.settings.mapSettings.showArrows = this.showArrows;
-      await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+      await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
     }
-    this.showLapsChange.emit(this.showLaps);
-    this.showArrowsChange.emit(this.showArrows);
-    return this.afa.logEvent('event_map_settings_change');
+    this.analyticsService.logEvent('event_map_settings_change');
   }
 
   ngOnChanges(simpleChanges) {

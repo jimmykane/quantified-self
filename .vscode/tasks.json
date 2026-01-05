@@ -1,0 +1,84 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "npm",
+            "script": "start",
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "typescript",
+                "pattern": "$tsc",
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": {
+                        "regexp": "(.*?)"
+                    },
+                    "endsPattern": {
+                        "regexp": "bundle generation complete"
+                    }
+                }
+            },
+            "label": "npm: start",
+            "detail": "ng serve"
+        },
+        {
+            "type": "npm",
+            "script": "test",
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "karma",
+                "pattern": [
+                    {
+                        "regexp": ".",
+                        "file": 1,
+                        "location": 2,
+                        "message": 3
+                    }
+                ],
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": {
+                        "regexp": ".*"
+                    },
+                    "endsPattern": {
+                        "regexp": "Executed \\d+ of \\d+"
+                    }
+                }
+            },
+            "label": "npm: test",
+            "detail": "ng test"
+        },
+        {
+            "label": "firebase: auth-emulator",
+            "type": "shell",
+            "command": "firebase emulators:start --only auth",
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "firebase",
+                "pattern": {
+                    "regexp": "^(.*)$",
+                    "message": 1
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": {
+                        "regexp": "Starting emulators"
+                    },
+                    "endsPattern": {
+                        "regexp": "All emulators ready"
+                    }
+                }
+            },
+            "detail": "Start Firebase Auth Emulator"
+        },
+        {
+            "label": "start:with-emulator",
+            "dependsOn": [
+                "firebase: auth-emulator",
+                "npm: start"
+            ],
+            "dependsOrder": "parallel",
+            "problemMatcher": []
+        }
+    ]
+}

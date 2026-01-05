@@ -11,16 +11,16 @@ import {
 } from '@angular/core';
 import { AppEventService } from '../../services/app.event.service';
 import { Subscription } from 'rxjs';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { EventInterface } from '@sports-alliance/sports-lib';
 import { Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { ChartThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
+import { User } from '@sports-alliance/sports-lib';
+import { ChartThemes } from '@sports-alliance/sports-lib';
 import { AppThemeService } from '../../services/app.theme.service';
-import { DataActivityTypes } from '@sports-alliance/sports-lib/lib/data/data.activity-types';
-import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import * as Sentry from '@sentry/browser';
+import { DataActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { LoggerService } from '../../services/logger.service';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
@@ -30,12 +30,12 @@ import {
   TileSettingsInterface,
   TileTypes,
   TimeIntervals,
-} from '@sports-alliance/sports-lib/lib/tiles/tile.settings.interface';
-import { isNumber } from '@sports-alliance/sports-lib/lib/events/utilities/helpers';
+} from '@sports-alliance/sports-lib';
+import { isNumber } from '@sports-alliance/sports-lib';
 import { MatDialog } from '@angular/material/dialog';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
-import * as equal from 'fast-deep-equal';
-import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
+import equal from 'fast-deep-equal';
+import { DataAscent } from '@sports-alliance/sports-lib';
 import * as weeknumber from 'weeknumber'
 import { convertIntensityZonesStatsToChartData } from '../../helpers/intensity-zones-chart-data-helper';
 
@@ -44,13 +44,13 @@ import { convertIntensityZonesStatsToChartData } from '../../helpers/intensity-z
   templateUrl: './summaries.component.html',
   styleUrls: ['./summaries.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 
 export class SummariesComponent extends LoadingAbstractDirective implements OnInit, OnDestroy, OnChanges {
   @Input() events: EventInterface[];
   @Input() user: User;
   @Input() showActions: boolean;
-  @Input() isLoading: boolean;
 
   public rowHeight;
   public numberOfCols: number;
@@ -67,12 +67,13 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private getChartDataCache: { string: SummariesChartDataInterface[] }[] = []
 
   constructor(private router: Router,
-              private authService: AppAuthService,
-              private eventService: AppEventService,
-              private themeService: AppThemeService,
-              private snackBar: MatSnackBar,
-              private dialog: MatDialog,
-              changeDetector: ChangeDetectorRef,
+    private authService: AppAuthService,
+    private eventService: AppEventService,
+    private themeService: AppThemeService,
+    private snackBar: MatSnackBar,
+    private dialog: MatDialog,
+    changeDetector: ChangeDetectorRef,
+    private logger: LoggerService,
   ) {
     super(changeDetector);
     this.rowHeight = this.getRowHeight();
@@ -106,12 +107,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         const eventTypeDisplayStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
         // this should not happen :-)
         if (!eventTypeDisplayStat) {
-          Sentry.captureException(new Error(`No eventTypeDisplayStat found for event with id ${event.getID()} and user ${this.user.uid}`));
+          this.logger.error(new Error(`No eventTypeDisplayStat found for event with id ${event.getID()} and user ${this.user.uid}`));
           return '??'
         }
         // Log an error to notify us what is missing
         if (eventTypeDisplayStat.getValue().length === 1 && !ActivityTypes[eventTypeDisplayStat.getDisplayValue()]) {
-          Sentry.captureException(new Error(`Activity type with ${eventTypeDisplayStat.getDisplayValue()} is not known`));
+          this.logger.error(new Error(`Activity type with ${eventTypeDisplayStat.getDisplayValue()} is not known`));
           return '??';
         }
         return eventTypeDisplayStat.getValue().length > 1 ? ActivityTypes.Multisport : ActivityTypes[eventTypeDisplayStat.getDisplayValue()];
@@ -326,11 +327,11 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       const key = this.getEventCategoryKey(event, events, ChartDataCategoryTypes.ActivityType, timeInterval)
       const summariesChartDataInterface = valueByTypeMap.get(this.getEventCategoryKey(event, events, categoryType, timeInterval))
         || {
-          [key]: null,
-          [`${key}-Count`]: 0,
-          [valueType]: null,
-          count: 0
-        };
+        [key]: null,
+        [`${key}-Count`]: 0,
+        [valueType]: null,
+        count: 0
+      };
       // Bump em up
       summariesChartDataInterface.count++;
       // additional check here and bump up intentionaly
@@ -410,7 +411,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   private convertToCategories(valueByType: Map<string | number, { [type: string]: number, count: number }>): SummariesChartDataInterface[] {
     const data = [];
     valueByType.forEach((item, type) => {
-      data.push({...{time: type, type: type, ...item}});
+      data.push({ ...{ time: type, type: type, ...item } });
     });
     return data // @todo ?
     //   .filter(dataItem => isNumber(dataItem.value))

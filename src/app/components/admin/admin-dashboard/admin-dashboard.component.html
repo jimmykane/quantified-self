@@ -1,0 +1,590 @@
+<div class="admin-container">
+    <div class="header-container">
+        <h1 class="app-text-gradient">Admin Dashboard</h1>
+        <p class="premium-subtitle">Manage users and subscriptions</p>
+    </div>
+
+    <!-- System Maintenance Section -->
+    <div class="dashboard-section">
+        <div class="section-title">
+            <h2>
+                <mat-icon>build</mat-icon>
+                System Maintenance
+            </h2>
+        </div>
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 24px;">
+            <!-- Production Maintenance -->
+            <mat-expansion-panel class="maintenance-panel glass-card">
+                <mat-expansion-panel-header
+                    [style.border-left]="prodMaintenance.enabled ? '4px solid #f44336' : '4px solid #4caf50'">
+                    <mat-panel-title class="maintenance-header-title">
+                        <mat-icon [style.color]="prodMaintenance.enabled ? '#f44336' : '#4caf50'">
+                            {{ prodMaintenance.enabled ? 'engineering' : 'check_circle' }}
+                        </mat-icon>
+                        <span>Production</span>
+                    </mat-panel-title>
+                    <mat-panel-description class="maintenance-header-description">
+                        <span *ngIf="!prodMaintenance.enabled" class="status-text online">Online</span>
+                        <span *ngIf="prodMaintenance.enabled" class="status-text offline">Offline</span>
+
+                        <mat-slide-toggle [checked]="prodMaintenance.enabled"
+                            (change)="onMaintenanceToggle($event, 'prod')" (click)="$event.stopPropagation()"
+                            [disabled]="isUpdatingMaintenance" color="warn">
+                        </mat-slide-toggle>
+                    </mat-panel-description>
+                </mat-expansion-panel-header>
+
+                <div class="maintenance-content">
+                    <p class="maintenance-description">
+                        Non-admin users on Production will be redirected.
+                    </p>
+
+                    <div class="maintenance-form-container">
+                        <mat-form-field appearance="outline" class="maintenance-message-field">
+                            <mat-label>Message (Prod)</mat-label>
+                            <textarea matInput [(ngModel)]="prodMaintenance.message" rows="2"
+                                placeholder="Message shown to users" [disabled]="isUpdatingMaintenance"></textarea>
+                        </mat-form-field>
+
+                        <div class="maintenance-actions">
+                            <button mat-raised-button color="primary" (click)="saveMaintenanceMessage('prod')"
+                                [disabled]="isUpdatingMaintenance || !hasMessageChanged('prod')" class="save-btn">
+                                <mat-icon>save</mat-icon>
+                                Save
+                            </button>
+                            <mat-spinner *ngIf="isUpdatingMaintenance" diameter="24"
+                                style="align-self: center;"></mat-spinner>
+                        </div>
+                    </div>
+                </div>
+            </mat-expansion-panel>
+
+            <!-- Beta Maintenance -->
+            <mat-expansion-panel class="maintenance-panel glass-card">
+                <mat-expansion-panel-header
+                    [style.border-left]="betaMaintenance.enabled ? '4px solid #f44336' : '4px solid #4caf50'">
+                    <mat-panel-title class="maintenance-header-title">
+                        <mat-icon [style.color]="betaMaintenance.enabled ? '#f44336' : '#4caf50'">
+                            {{ betaMaintenance.enabled ? 'engineering' : 'check_circle' }}
+                        </mat-icon>
+                        <span>Beta</span>
+                    </mat-panel-title>
+                    <mat-panel-description class="maintenance-header-description">
+                        <span *ngIf="!betaMaintenance.enabled" class="status-text online">Online</span>
+                        <span *ngIf="betaMaintenance.enabled" class="status-text offline">Offline</span>
+
+                        <mat-slide-toggle [checked]="betaMaintenance.enabled"
+                            (change)="onMaintenanceToggle($event, 'beta')" (click)="$event.stopPropagation()"
+                            [disabled]="isUpdatingMaintenance" color="warn">
+                        </mat-slide-toggle>
+                    </mat-panel-description>
+                </mat-expansion-panel-header>
+
+                <div class="maintenance-content">
+                    <p class="maintenance-description">
+                        Non-admin users on Beta will be redirected.
+                    </p>
+
+                    <div class="maintenance-form-container">
+                        <mat-form-field appearance="outline" class="maintenance-message-field">
+                            <mat-label>Message (Beta)</mat-label>
+                            <textarea matInput [(ngModel)]="betaMaintenance.message" rows="2"
+                                placeholder="Message shown to users" [disabled]="isUpdatingMaintenance"></textarea>
+                        </mat-form-field>
+
+                        <div class="maintenance-actions">
+                            <button mat-raised-button color="primary" (click)="saveMaintenanceMessage('beta')"
+                                [disabled]="isUpdatingMaintenance || !hasMessageChanged('beta')" class="save-btn">
+                                <mat-icon>save</mat-icon>
+                                Save
+                            </button>
+                            <mat-spinner *ngIf="isUpdatingMaintenance" diameter="24"
+                                style="align-self: center;"></mat-spinner>
+                        </div>
+                    </div>
+                </div>
+            </mat-expansion-panel>
+
+            <!-- Dev Maintenance -->
+            <mat-expansion-panel class="maintenance-panel glass-card">
+                <mat-expansion-panel-header
+                    [style.border-left]="devMaintenance.enabled ? '4px solid #f44336' : '4px solid #4caf50'">
+                    <mat-panel-title class="maintenance-header-title">
+                        <mat-icon [style.color]="devMaintenance.enabled ? '#f44336' : '#4caf50'">
+                            {{ devMaintenance.enabled ? 'engineering' : 'check_circle' }}
+                        </mat-icon>
+                        <span>Dev / Localhost</span>
+                    </mat-panel-title>
+                    <mat-panel-description class="maintenance-header-description">
+                        <span *ngIf="!devMaintenance.enabled" class="status-text online">Online</span>
+                        <span *ngIf="devMaintenance.enabled" class="status-text offline">Offline</span>
+
+                        <mat-slide-toggle [checked]="devMaintenance.enabled"
+                            (change)="onMaintenanceToggle($event, 'dev')" (click)="$event.stopPropagation()"
+                            [disabled]="isUpdatingMaintenance" color="warn">
+                        </mat-slide-toggle>
+                    </mat-panel-description>
+                </mat-expansion-panel-header>
+
+                <div class="maintenance-content">
+                    <p class="maintenance-description">
+                        Non-admin users on Localhost will be redirected.
+                    </p>
+
+                    <div class="maintenance-form-container">
+                        <mat-form-field appearance="outline" class="maintenance-message-field">
+                            <mat-label>Message (Dev)</mat-label>
+                            <textarea matInput [(ngModel)]="devMaintenance.message" rows="2"
+                                placeholder="Message shown to users" [disabled]="isUpdatingMaintenance"></textarea>
+                        </mat-form-field>
+
+                        <div class="maintenance-actions">
+                            <button mat-raised-button color="primary" (click)="saveMaintenanceMessage('dev')"
+                                [disabled]="isUpdatingMaintenance || !hasMessageChanged('dev')" class="save-btn">
+                                <mat-icon>save</mat-icon>
+                                Save
+                            </button>
+                            <mat-spinner *ngIf="isUpdatingMaintenance" diameter="24"
+                                style="align-self: center;"></mat-spinner>
+                        </div>
+                    </div>
+                </div>
+            </mat-expansion-panel>
+        </div>
+    </div>
+
+
+    <!-- Queue Status & Health Section -->
+    <div class="dashboard-section">
+        <div class="section-title">
+            <h2>
+                <mat-icon>dns</mat-icon>
+                Queue Status & Health
+            </h2>
+        </div>
+
+        <!-- Queue Stats -->
+        <div class="stats-grid">
+            <div class="glass-card app-stat-card status-pending">
+                <div class="app-stat-header">
+                    <mat-icon>hourglass_empty</mat-icon>
+                    <span>Pending</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!isLoadingStats">{{ queueStats?.pending ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="isLoadingStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </div>
+            <div class="glass-card app-stat-card status-success">
+                <div class="app-stat-header">
+                    <mat-icon>check_circle</mat-icon>
+                    <span>Succeeded</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!isLoadingStats">{{ queueStats?.succeeded ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="isLoadingStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </div>
+            <div class="glass-card app-stat-card status-error">
+                <div class="app-stat-header">
+                    <mat-icon>error</mat-icon>
+                    <span>Stuck</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!isLoadingStats">{{ queueStats?.stuck ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="isLoadingStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </div>
+        </div>
+
+        <!-- Advanced Stats -->
+        <div class="stats-grid" *ngIf="queueStats?.advanced">
+            <!-- Throughput -->
+            <div class="glass-card app-stat-card status-success">
+                <div class="app-stat-header">
+                    <mat-icon>speed</mat-icon>
+                    <span>Throughput (1h)</span>
+                </div>
+                <div class="app-stat-value">{{ queueStats?.advanced?.throughput ?? 0 }}</div>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">items processed</span>
+            </div>
+
+            <!-- Max Lag -->
+            <div class="glass-card app-stat-card status-pending">
+                <div class="app-stat-header">
+                    <mat-icon>update</mat-icon>
+                    <span>Max Lag</span>
+                </div>
+                <div class="app-stat-value">{{ formatDuration(queueStats?.advanced?.maxLagMs || 0) }}</div>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">oldest pending</span>
+            </div>
+        </div>
+
+        <!-- Queue Status & Charts Grid -->
+        <div
+            style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; margin-bottom: 24px;">
+            <!-- Retry Distribution Chart -->
+            <div class="glass-card" style="margin-bottom: 0;">
+                <h3 class="chart-header">Retry Distribution (Pending Items)</h3>
+
+                <div class="spinner-container" *ngIf="isLoadingStats" style="height: 180px; justify-content: center;">
+                    <mat-spinner diameter="40"></mat-spinner>
+                </div>
+
+                <div class="chart-wrapper" *ngIf="!isLoadingStats && queueStats?.advanced?.retryHistogram"
+                    style="height: 220px;">
+                    <canvas baseChart [data]="barChartData" [options]="barChartOptions" [plugins]="barChartPlugins"
+                        [legend]="barChartLegend" [type]="'bar'">
+                    </canvas>
+                </div>
+            </div>
+
+            <!-- Auth Provider Breakdown Chart -->
+            <div class="glass-card" style="margin-bottom: 0;">
+                <h3 class="chart-header">
+                    <mat-icon style="margin-right: 8px; vertical-align: middle;">security</mat-icon>
+                    Auth Provider Breakdown
+                </h3>
+
+                <div class="chart-wrapper" style="height: 220px; padding: 16px;">
+                    <canvas baseChart [data]="authPieChartData" [options]="authPieChartOptions" [type]="'pie'">
+                    </canvas>
+                </div>
+
+                <div *ngIf="!userStats?.providers" class="empty-state" style="padding: 0 24px 24px;">
+                    No provider data available
+                </div>
+            </div>
+        </div>
+
+        <!-- DLQ Stats -->
+        <div class="stats-grid" *ngIf="queueStats?.dlq">
+            <div class="glass-card app-stat-card status-dlq" style="background: rgba(244, 67, 54, 0.1);">
+                <div class="app-stat-header">
+                    <mat-icon style="color: #f44336;">error_outline</mat-icon>
+                    <span style="color: #f44336;">Dead Letter Queue</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!isLoadingStats" style="color: #f44336;">{{ queueStats?.dlq?.total ??
+                    0
+                    }}
+                </div>
+                <div class="app-spinner-mini" *ngIf="isLoadingStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </div>
+        </div>
+
+        <!-- DLQ Breakdown -->
+        <div class="glass-card table-container" *ngIf="queueStats?.dlq?.total" style="margin-bottom: 24px;">
+            <h3 class="card-title">Recent Failures Analysis (Last 50)</h3>
+            <div class="failures-analysis-container">
+
+                <!-- By Context -->
+                <div class="analysis-column">
+                    <h4 class="subsection-title">By Reason</h4>
+                    <div *ngFor="let item of queueStats?.dlq?.byContext" class="analysis-item">
+                        <span class="analysis-label">{{ item.context }}</span>
+                        <span class="status-badge disabled">{{ item.count }}</span>
+                    </div>
+                </div>
+
+                <!-- By Collection -->
+                <div class="analysis-column">
+                    <h4 class="subsection-title">By Queue</h4>
+                    <div *ngFor="let item of queueStats?.dlq?.byProvider" class="analysis-item">
+                        <span class="analysis-label-sm">{{ item.provider }}</span>
+                        <span class="status-badge disabled">{{ item.count }}</span>
+                    </div>
+                </div>
+
+                <!-- Top Errors -->
+                <div class="analysis-column">
+                    <h4 class="subsection-title">Top Errors</h4>
+                    <div *ngFor="let item of queueStats?.advanced?.topErrors" class="analysis-item">
+                        <span class="analysis-error-text" [matTooltip]="item.error">{{ item.error }}</span>
+                        <span class="status-badge disabled" style="flex-shrink: 0; margin-left: 8px;">{{ item.count
+                            }}</span>
+                    </div>
+                    <div *ngIf="!queueStats?.advanced?.topErrors?.length" class="empty-state">
+                        No errors recorded
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Provider Queue Status -->
+        <div class="glass-card table-container" *ngIf="queueStats?.providers?.length" style="margin-bottom: 0;">
+            <h3 class="card-title">Provider Queue Status</h3>
+            <div class="table-wrapper">
+                <table mat-table [dataSource]="queueStats?.providers || []">
+                    <!-- Provider Column -->
+                    <ng-container matColumnDef="provider">
+                        <th mat-header-cell *matHeaderCellDef> Provider </th>
+                        <td mat-cell *matCellDef="let stat">
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <img [src]="getServiceLogo(stat.name)" [alt]="stat.name"
+                                    style="height: 24px; width: 24px;">
+                                <span style="font-weight: 500;">{{ stat.name }}</span>
+                            </div>
+                        </td>
+                    </ng-container>
+
+                    <!-- Pending Column -->
+                    <ng-container matColumnDef="pending">
+                        <th mat-header-cell *matHeaderCellDef> Pending </th>
+                        <td mat-cell *matCellDef="let stat">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span class="status-dot" [class.active]="stat.pending > 0"></span>
+                                {{ stat.pending }}
+                            </div>
+                        </td>
+                    </ng-container>
+
+                    <!-- Succeeded Column -->
+                    <ng-container matColumnDef="succeeded">
+                        <th mat-header-cell *matHeaderCellDef> Succeeded </th>
+                        <td mat-cell *matCellDef="let stat" style="color: #4caf50;"> {{ stat.succeeded }} </td>
+                    </ng-container>
+
+                    <!-- Stuck Column -->
+                    <ng-container matColumnDef="stuck">
+                        <th mat-header-cell *matHeaderCellDef matTooltip="Items stuck in queue (retries >= 10)"> Stuck
+                        </th>
+                        <td mat-cell *matCellDef="let stat">
+                            <span [style.color]="stat.stuck > 0 ? '#ff9800' : 'inherit'"
+                                [style.fontWeight]="stat.stuck > 0 ? '500' : 'normal'">
+                                {{ stat.stuck }}
+                            </span>
+                        </td>
+                    </ng-container>
+
+                    <!-- Dead Column -->
+                    <ng-container matColumnDef="dead">
+                        <th mat-header-cell *matHeaderCellDef matTooltip="Failed jobs in Dead Letter Queue"> Dead
+                        </th>
+                        <td mat-cell *matCellDef="let stat">
+                            <span [style.color]="stat.dead > 0 ? '#f44336' : 'inherit'"
+                                [style.fontWeight]="stat.dead > 0 ? '500' : 'normal'">
+                                {{ stat.dead }}
+                            </span>
+                        </td>
+                    </ng-container>
+
+                    <tr mat-header-row *matHeaderRowDef="['provider', 'pending', 'succeeded', 'stuck', 'dead']"></tr>
+                    <tr mat-row *matRowDef="let row; columns: ['provider', 'pending', 'succeeded', 'stuck', 'dead'];">
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Management Section -->
+    <div class="dashboard-section">
+        <div class="section-title">
+            <h2>
+                <mat-icon>people</mat-icon>
+                User Management
+            </h2>
+        </div>
+
+        <!-- User Stats -->
+        <div class="stats-grid" style="margin-bottom: 24px;">
+            <!-- Total Users -->
+            <div class="glass-card app-stat-card users">
+                <div class="app-stat-header">
+                    <mat-icon>people</mat-icon>
+                    <span>Total Users</span>
+                </div>
+                <div class="app-stat-value" *ngIf="userStats">{{ userStats.total }}</div>
+                <div class="app-spinner-mini" *ngIf="!userStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </div>
+
+            <!-- Pro Users -->
+            <div class="glass-card app-stat-card status-success">
+                <div class="app-stat-header">
+                    <mat-icon>verified</mat-icon>
+                    <span>Pro Users</span>
+                </div>
+                <div class="app-stat-value" *ngIf="userStats">{{ userStats.pro }}</div>
+                <div class="app-spinner-mini" *ngIf="!userStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </div>
+
+            <!-- Basic Users -->
+            <div class="glass-card app-stat-card status-pending">
+                <div class="app-stat-header">
+                    <mat-icon>person_outline</mat-icon>
+                    <span>Basic Users</span>
+                </div>
+                <div class="app-stat-value" *ngIf="userStats">{{ userStats.basic }}</div>
+                <div class="app-spinner-mini" *ngIf="!userStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </div>
+
+            <!-- Free Users -->
+            <div class="glass-card app-stat-card">
+                <div class="app-stat-header">
+                    <mat-icon>money_off</mat-icon>
+                    <span>Free Users</span>
+                </div>
+                <!-- Use opacity for "neutral/basic" look -->
+                <div class="app-stat-value" *ngIf="userStats" style="opacity: 0.7;">{{ userStats.free }}</div>
+                <div class="app-spinner-mini" *ngIf="!userStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-card qs-filter-container">
+            <mat-form-field appearance="outline" class="qs-search-field">
+                <mat-label>Search users</mat-label>
+                <input matInput [value]="searchTerm" (input)="onSearchInput($event)"
+                    placeholder="Search by email, name, or UID">
+                <mat-icon matSuffix *ngIf="!searchTerm">search</mat-icon>
+                <button mat-icon-button matSuffix *ngIf="searchTerm" (click)="clearSearch()" aria-label="Clear">
+                    <mat-icon>close</mat-icon>
+                </button>
+            </mat-form-field>
+        </div>
+
+        <div class="glass-card table-container">
+            <div class="loading-shade" *ngIf="isLoading">
+                <mat-spinner></mat-spinner>
+            </div>
+
+            <div class="error-message" *ngIf="error">
+                {{ error }}
+            </div>
+
+            <div class="table-wrapper">
+                <table mat-table [dataSource]="users" matSort (matSortChange)="onSortChange($event)">
+
+                    <!-- Photo Column -->
+                    <ng-container matColumnDef="photoURL">
+                        <th mat-header-cell *matHeaderCellDef></th>
+                        <td mat-cell *matCellDef="let user">
+                            <img [src]="user.photoURL || 'assets/icons/user.svg'" class="user-avatar" alt="Avatar"
+                                referrerpolicy="no-referrer"
+                                (error)="$any($event.target).src = 'assets/icons/user.svg'">
+                        </td>
+                    </ng-container>
+
+                    <!-- Email Column -->
+                    <ng-container matColumnDef="email">
+                        <th mat-header-cell *matHeaderCellDef mat-sort-header> Email </th>
+                        <td mat-cell *matCellDef="let user"> {{user.email}} </td>
+                    </ng-container>
+
+                    <!-- Providers Column -->
+                    <ng-container matColumnDef="providerIds">
+                        <th mat-header-cell *matHeaderCellDef mat-sort-header> Auth </th>
+                        <td mat-cell *matCellDef="let user">
+                            <div class="provider-icons">
+                                <ng-container *ngFor="let provider of user.providerIds">
+                                    <mat-icon *ngIf="provider === 'google.com'" matTooltip="Google"
+                                        class="provider-google">public</mat-icon>
+                                    <mat-icon *ngIf="provider === 'password'" matTooltip="Email/Password"
+                                        class="provider-email">email</mat-icon>
+                                    <mat-icon *ngIf="provider === 'apple.com'" matTooltip="Apple"
+                                        class="provider-apple">apple</mat-icon>
+                                    <mat-icon *ngIf="provider === 'facebook.com'" matTooltip="Facebook"
+                                        class="provider-facebook">facebook</mat-icon>
+                                    <mat-icon
+                                        *ngIf="provider !== 'google.com' && provider !== 'password' && provider !== 'apple.com' && provider !== 'facebook.com'"
+                                        [matTooltip]="provider">person</mat-icon>
+                                </ng-container>
+                            </div>
+                        </td>
+                    </ng-container>
+
+                    <!-- Display Name Column -->
+                    <ng-container matColumnDef="displayName">
+                        <th mat-header-cell *matHeaderCellDef mat-sort-header> Name </th>
+                        <td mat-cell *matCellDef="let user"> {{user.displayName || '-'}} </td>
+                    </ng-container>
+
+                    <!-- Role Column -->
+                    <ng-container matColumnDef="role">
+                        <th mat-header-cell *matHeaderCellDef mat-sort-header> Role </th>
+                        <td mat-cell *matCellDef="let user">
+                            <span class="role-badge" [ngClass]="getRole(user)">
+                                {{getRole(user) | uppercase}}
+                            </span>
+                        </td>
+                    </ng-container>
+
+                    <!-- Subscription Column -->
+                    <ng-container matColumnDef="subscription">
+                        <th mat-header-cell *matHeaderCellDef mat-sort-header> Subscription </th>
+                        <td mat-cell *matCellDef="let user">
+                            {{ getSubscriptionDetails(user) }}
+                            <a *ngIf="user.subscription?.stripeLink" [href]="user.subscription.stripeLink"
+                                target="_blank" mat-icon-button color="primary" matTooltip="View in Stripe">
+                                <mat-icon>open_in_new</mat-icon>
+                            </a>
+                        </td>
+                    </ng-container>
+
+                    <!-- Services Column -->
+                    <ng-container matColumnDef="services">
+                        <th mat-header-cell *matHeaderCellDef> Services </th>
+                        <td mat-cell *matCellDef="let user">
+                            <div style="display: flex; flex-direction: column; gap: 4px; padding: 4px 0;">
+                                <ng-container *ngFor="let service of user.connectedServices">
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <img [src]="getServiceLogo(service.provider)" [alt]="service.provider"
+                                            style="height: 18px; width: 18px;">
+                                        <span class="text-detail-date">
+                                            {{ formatConnectionDate(service.connectedAt) }}
+                                        </span>
+                                    </div>
+                                </ng-container>
+                                <span *ngIf="!user.connectedServices?.length" class="text-detail-muted">-</span>
+                            </div>
+                        </td>
+                    </ng-container>
+
+                    <!-- Created Column -->
+                    <ng-container matColumnDef="created">
+                        <th mat-header-cell *matHeaderCellDef mat-sort-header> Created </th>
+                        <td mat-cell *matCellDef="let user"> {{user.metadata.creationTime | date:'shortDate'}} </td>
+                    </ng-container>
+
+                    <!-- Last Login Column -->
+                    <ng-container matColumnDef="lastLogin">
+                        <th mat-header-cell *matHeaderCellDef mat-sort-header> Last Login </th>
+                        <td mat-cell *matCellDef="let user"> {{user.metadata.lastSignInTime | date:'short'}} </td>
+                    </ng-container>
+
+                    <!-- Status Column -->
+                    <ng-container matColumnDef="status">
+                        <th mat-header-cell *matHeaderCellDef mat-sort-header> Status </th>
+                        <td mat-cell *matCellDef="let user">
+                            <span class="status-badge" [ngClass]="user.disabled ? 'disabled' : 'active'">
+                                {{user.disabled ? 'Disabled' : 'Active'}}
+                            </span>
+                        </td>
+                    </ng-container>
+
+                    <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+                    <tr mat-row *matRowDef="let row; columns: displayedColumns;"></tr>
+
+                    <!-- Row shown when there is no matching data. -->
+                    <tr class="mat-row" *matNoDataRow>
+                        <td class="mat-cell" colspan="10">
+                            <span *ngIf="searchTerm">No users found matching "{{searchTerm}}"</span>
+                            <span *ngIf="!searchTerm && !isLoading">No users found</span>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <mat-paginator [length]="totalCount" [pageIndex]="currentPage" [pageSize]="pageSize"
+                [pageSizeOptions]="pageSizeOptions" (page)="onPageChange($event)" aria-label="Select page of users">
+            </mat-paginator>
+        </div>

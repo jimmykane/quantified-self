@@ -1,0 +1,113 @@
+.dialog-container {
+    padding: 16px;
+    max-width: 500px;
+}
+
+.dialog-content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.title {
+    margin: 0;
+    text-align: center;
+
+    font-size: 24px;
+    font-weight: 400;
+    // color: #333; /* REMOVED: Global theme */
+}
+
+.info-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.description {
+    text-align: center;
+    // color: rgba(0, 0, 0, 0.7); /* REMOVED: Global theme */
+    opacity: 0.7;
+    font-size: 16px;
+    line-height: 1.5;
+    margin: 0;
+}
+
+.verbose-explanation {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 12px;
+}
+
+.options-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.provider-button {
+    height: 52px;
+    border-radius: 26px;
+    font-size: 16px;
+    border: 1px solid currentColor;
+    opacity: 0.8;
+    /* Slight border fade */
+    justify-content: flex-start;
+    padding-left: 24px;
+}
+
+.provider-icon {
+    margin-right: 16px;
+}
+
+
+
+.explanation-box {
+    padding: 12px 16px;
+    border-radius: 12px;
+    // background-color: #f9f9f9; /* REMOVED */
+    background-color: rgba(0, 0, 0, 0.04);
+    /* Safe transparent gray for light/dark */
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.link-box {
+    // background-color: rgba(46, 125, 50, 0.04); /* Light green tint */
+    /* Keep generic or specific semantic color with low opacity allowed in dark mode? */
+    /* Use a safe primary color tint */
+    background-color: rgba(var(--mat-sys-primary-rgb, 0, 0, 0), 0.04);
+}
+
+.benefit {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    // color: #2e7d32 !important; /* Material Green 800 */
+    color: inherit;
+    /* Let it inherit or use primary */
+    opacity: 0.9;
+    font-weight: 400;
+    font-size: 14px;
+    margin: 0;
+}
+
+.benefit mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+}
+
+.actions {
+    display: flex;
+    justify-content: center;
+    margin-top: 8px;
+}
+
+.cancel-button {
+    height: 48px;
+    border-radius: 24px;
+    padding: 0 24px;
+    // color: rgba(0, 0, 0, 0.6); /* REMOVED */
+    opacity: 0.6;
+}

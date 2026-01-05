@@ -1,49 +1,101 @@
-<mat-progress-bar
-  *ngIf="loading" color="primary" mode="query">
-</mat-progress-bar>
-<nav mat-tab-nav-bar class="mat-app-background mat-typography">
-  <a matTabLink (click)="sidenav.toggle()">
-    <mat-icon class="larger_icon">menu</mat-icon>
-  </a>
+<ng-container *ngIf="(maintenanceMode$ | async) !== true; else maintenanceTemplate">
+  <ng-container *ngIf="authState !== null; else loadingApp">
+    <div [class.has-banner]="hasBanner" class="app-layout-wrapper">
+      <app-grace-period-banner (heightChanged)="onBannerHeightChanged($event)"></app-grace-period-banner>
 
-  <span class="fill-space"></span>
+      <app-route-loader></app-route-loader>
 
-  <button mat-flat-button class="right" color="accent"
-          *ngIf="authService.authenticated() === null && title && title !== 'Dashboard' && title !== 'Login'"
-          disabled>
-    Loading
-  </button>
-  <button mat-flat-button class="right" color="accent"
-          *ngIf="authService.authenticated() === true && title && title !== 'Dashboard'"
-          (click)="router.navigate(['/dashboard']);">
-    My dashboard
-  </button>
-  <button mat-flat-button class="right" color="accent"
-          *ngIf="authService.authenticated() === false && title && title !== 'Login'"
-          (click)="router.navigate(['/login']);">
-    Login or Register
-  </button>
+      <style>
+        .no-margin-top {
+          margin-top: 0 !important;
+        }
 
-  <app-upload-activities class="right"
-                         *ngIf="title && title === 'Dashboard' && authService.user | async as user"
-                         [user]="user">
-  </app-upload-activities>
+        .fill-space {
+          flex: 1 1 auto;
+        }
 
-</nav>
+        .right {
+          margin-left: 10px;
+        }
+      </style>
 
-<mat-sidenav-container class="mat-typography">
+      <!-- Only show navigation if onboarding is completed OR user is not logged in -->
+      <nav *ngIf="showNavigation" mat-tab-nav-bar [tabPanel]="tabPanel" class="mat-typography custom-nav-bar"
+        [style.top.px]="bannerHeight">
+        <button mat-icon-button (click)="toggleSidenav()" class="hamburger-link">
+          <mat-icon class="larger_icon">menu</mat-icon>
+        </button>
 
-  <mat-sidenav [fixedInViewport]="true" #sidenav mode="slide" [autoFocus]="false">
-    <app-sidenav></app-sidenav>
-  </mat-sidenav>
+        <mat-icon class="app-icon header-logo" svgIcon="logo" (click)="onLogoClick()"></mat-icon>
 
+        <span class="fill-space"></span>
 
-  <!--<mat-card>-->
-  <!--<mat-progress-bar mode="buffer"></mat-progress-bar>-->
-  <!--</mat-card>-->
-<!--  <div [@routeAnimations]="routerOutlet && routerOutlet.activatedRouteData-->
-<!--        && routerOutlet.activatedRouteData['animation']">-->
-    <router-outlet #routerOutlet="outlet"></router-outlet>
-<!--  </div>-->
+        @if (authState === null && title && title !== 'Dashboard' && title !== 'Login') {
+        <button mat-flat-button class="right" color="accent" disabled>
+          Loading
+        </button>
+        }
+        @if (authState === true && title && title !== 'Dashboard') {
+        <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);">
+          Dashboard
+        </button>
+        }
 
-</mat-sidenav-container>
+        @if (title && title === 'Dashboard' && authService.user$ | async; as user) {
+        <app-processing-indicator class="right"></app-processing-indicator>
+        <app-upload-activities class="right" [user]="user">
+        </app-upload-activities>
+        }
+
+        @if (isAdminUser && title !== 'Admin') {
+        <button mat-icon-button class="right admin-button" matTooltip="Admin Dashboard"
+          (click)="router.navigate(['/admin']);">
+          <mat-icon>admin_panel_settings</mat-icon>
+        </button>
+        }
+
+        @if (authState === false && title && title !== 'Login') {
+        <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/login']);">
+          Login or Register
+        </button>
+        }
+      </nav>
+
+      <mat-sidenav-container class="app-sidenav-container" [class.no-margin-top]="!onboardingCompleted"
+        [style.margin-top.px]="bannerHeight + 64">
+        <mat-sidenav #sidenav [mode]="'over'" *ngIf="showNavigation" [fixedInViewport]="true"
+          [fixedTopGap]="bannerHeight + 64" [autoFocus]="false">
+          <app-sidenav></app-sidenav>
+        </mat-sidenav>
+
+        <mat-sidenav-content>
+          <mat-tab-nav-panel #tabPanel>
+            <div class="router-outlet-container" [@routeAnimations]="prepareRoute(outlet)">
+              <router-outlet #outlet="outlet"></router-outlet>
+            </div>
+          </mat-tab-nav-panel>
+        </mat-sidenav-content>
+      </mat-sidenav-container>
+    </div>
+  </ng-container>
+</ng-container>
+
+<ng-template #maintenanceTemplate>
+  <app-maintenance [message]="(maintenanceMessage$ | async) || ''"></app-maintenance>
+</ng-template>
+
+<ng-template #loadingApp>
+  <div class="spinner-container">
+    <div class="sk-cube-grid">
+      <div class="sk-cube sk-cube1"></div>
+      <div class="sk-cube sk-cube2"></div>
+      <div class="sk-cube sk-cube3"></div>
+      <div class="sk-cube sk-cube4"></div>
+      <div class="sk-cube sk-cube5"></div>
+      <div class="sk-cube sk-cube6"></div>
+      <div class="sk-cube sk-cube7"></div>
+      <div class="sk-cube sk-cube8"></div>
+      <div class="sk-cube sk-cube9"></div>
+    </div>
+  </div>
+</ng-template>

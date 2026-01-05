@@ -1,0 +1,61 @@
+<div class="onboarding-container">
+    <mat-card class="onboarding-card">
+        <mat-horizontal-stepper [linear]="true" #stepper>
+            <!-- Step 1: Terms & Conditions -->
+            <mat-step [stepControl]="termsFormGroup" label="Agreements">
+                <form [formGroup]="termsFormGroup" class="qs-form">
+                    <div class="step-content">
+                        <h2>Welcome to Quantified Self</h2>
+                        <p>Please review and accept our policies to continue.</p>
+
+                        <div class="checkbox-group">
+                            <span class="mat-subheader">Please examine the following agreements carefully</span>
+
+                            <ng-container *ngFor="let policy of policies; let last = last">
+                                <section class="policy-item">
+                                    <h3>{{policy.title}}</h3>
+                                    <!-- Use innerHTML for content paragraphs/bullets -->
+                                    <ng-container *ngFor="let item of policy.content">
+                                        <div [innerHTML]="item" class="policy-text" style="margin-bottom: 0.5em;"></div>
+                                    </ng-container>
+
+                                    <mat-checkbox [formControlName]="policy.formControlName">
+                                        {{policy.checkboxLabel}}
+                                        <span class="policy-required-label" *ngIf="!policy.isOptional">(Required)</span>
+                                        <span class="policy-optional-label" *ngIf="policy.isOptional">(Optional)</span>
+                                    </mat-checkbox>
+                                </section>
+                                <mat-divider *ngIf="!last"></mat-divider>
+                            </ng-container>
+                        </div>
+
+                        <div class="qs-form-actions">
+                            <button mat-flat-button color="primary" [disabled]="!termsFormGroup.valid || isLoading"
+                                (click)="onTermsSubmit()">
+                                @if (isLoading) {
+                                Processing...
+                                } @else {
+                                Next
+                                }
+                            </button>
+                            <button mat-stroked-button color="warn" (click)="logout()">Logout</button>
+                        </div>
+                    </div>
+                </form>
+            </mat-step>
+
+            <!-- Step 2: Pricing -->
+            <mat-step label="Plan">
+                <div class="step-content pricing-step">
+                    <app-pricing (planSelected)="onPlanSelected()"></app-pricing>
+
+                    <div class="actions">
+                        <button mat-button matStepperPrevious>Back</button>
+                        <button mat-stroked-button (click)="finishOnboarding()">Continue to
+                            Dashboard</button>
+                    </div>
+                </div>
+            </mat-step>
+        </mat-horizontal-stepper>
+    </mat-card>
+</div>

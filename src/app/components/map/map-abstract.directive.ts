@@ -1,53 +1,67 @@
-import { ChangeDetectorRef, Directive } from '@angular/core';
+import { ChangeDetectorRef, Directive, Inject } from '@angular/core';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
-import { DataPositionInterface } from '@sports-alliance/sports-lib/lib/data/data.position.interface';
-import { MapThemes } from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
-import LatLngBoundsLiteral = google.maps.LatLngBoundsLiteral;
+import { DataPositionInterface } from '@sports-alliance/sports-lib';
+import { MapThemes } from '@sports-alliance/sports-lib';
+// import LatLngBoundsLiteral = google.maps.LatLngBoundsLiteral;
+import { LoggerService } from '../../services/logger.service';
 
 declare function require(moduleName: string): any;
 
 const mapStyles = require('./map-styles.json');
 
+export interface LiteralBounds {
+  east: number;
+  west: number;
+  north: number;
+  south: number;
+}
+
 @Directive()
 export abstract class MapAbstractDirective extends LoadingAbstractDirective {
 
-  constructor(changeDetector: ChangeDetectorRef) {
+  constructor(changeDetector: ChangeDetectorRef, protected logger: LoggerService) {
     super(changeDetector)
   }
 
-  getBounds(postions: DataPositionInterface[]): LatLngBoundsLiteral {
-    if (!postions.length) {
-      return <LatLngBoundsLiteral>{
+  getBounds(positions: DataPositionInterface[]): LiteralBounds {
+    // Filter out potential 0,0 points which are often GPS noise/start-up errors
+    const validPositions = positions.filter(p => p.latitudeDegrees !== 0 || p.longitudeDegrees !== 0);
+
+    if (!validPositions.length) {
+      return <LiteralBounds>{
         east: 0,
         west: 0,
         north: 0,
         south: 0,
       };
     }
-    const mostEast = postions.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+    const mostEast = validPositions.reduce((acc, latLongPair) => {
       return (acc.longitudeDegrees < latLongPair.longitudeDegrees) ? latLongPair : acc;
     });
-    const mostWest = postions.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+    const mostWest = validPositions.reduce((acc, latLongPair) => {
       return (acc.longitudeDegrees > latLongPair.longitudeDegrees) ? latLongPair : acc;
     });
 
-    const mostNorth = postions.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+    const mostNorth = validPositions.reduce((acc, latLongPair) => {
       return (acc.latitudeDegrees < latLongPair.latitudeDegrees) ? latLongPair : acc;
     });
 
-    const mostSouth = postions.reduce((acc: { latitudeDegrees: number, longitudeDegrees: number }, latLongPair: { latitudeDegrees: number, longitudeDegrees: number }) => {
+    const mostSouth = validPositions.reduce((acc, latLongPair) => {
       return (acc.latitudeDegrees > latLongPair.latitudeDegrees) ? latLongPair : acc;
     });
 
-    return <LatLngBoundsLiteral>{
+    const bounds = <LiteralBounds>{
       east: mostEast.longitudeDegrees,
       west: mostWest.longitudeDegrees,
       north: mostNorth.latitudeDegrees,
       south: mostSouth.latitudeDegrees,
     };
+    this.logger.log('[MapAbstractDirective] getBounds result:', bounds, 'from', validPositions.length, 'valid points');
+    return bounds;
   }
 
   getStyles(mapTheme: MapThemes) {
-    return mapStyles[mapTheme] || MapThemes.Black
+    // If the theme is not found try to find the Dark theme or else return the default
+    return mapStyles[mapTheme] || mapStyles['Dark'] || [];
   }
 }

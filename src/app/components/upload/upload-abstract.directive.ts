@@ -1,22 +1,28 @@
 import { Directive, Input, OnInit } from '@angular/core';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { Router } from '@angular/router';
+import { User } from '@sports-alliance/sports-lib';
 import { FileInterface } from './file.interface';
 import { UPLOAD_STATUS } from './upload-status/upload.status';
-import * as Sentry from '@sentry/browser';
+import { LoggerService } from '../../services/logger.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
-import { AppFilesStatusService } from '../../services/upload/app-files-status.service';
+import { AppProcessingService } from '../../services/app.processing.service';
 
 
 @Directive()
 export abstract class UploadAbstractDirective implements OnInit {
 
   @Input() user: User;
+  @Input() hasProAccess: boolean = false;
+  @Input() requiresPro: boolean = false;
+  public isUploading = false;
 
   constructor(
     protected snackBar: MatSnackBar,
     protected dialog: MatDialog,
-    protected filesStatusService: AppFilesStatusService) {
+    protected processingService: AppProcessingService,
+    protected router: Router,
+    protected logger: LoggerService) {
 
   }
 
@@ -35,36 +41,56 @@ export abstract class UploadAbstractDirective implements OnInit {
    */
   async getFiles(event) {
     event.stopPropagation();
+    event.stopPropagation();
     event.preventDefault();
 
+    if (this.requiresPro && !this.hasProAccess) {
+      const snackBarRef = this.snackBar.open('This feature is available for Pro users.', 'UPGRADE', {
+        duration: 5000,
+      });
+      snackBarRef.onAction().subscribe(() => {
+        this.router.navigate(['/settings']);
+      });
+      return;
+    }
+
+    const rawFiles = [...(event.target.files || event.dataTransfer.files)];
     // Add as local to show totals
-    const files = [];
-    [...(event.target.files || event.dataTransfer.files)].forEach(file => {
-      files.push(this.filesStatusService.addOrUpdate({
-        file: file,
-        name: file.name,
-        status: UPLOAD_STATUS.PROCESSING,
-        extension: file.name.split('.').pop().toLowerCase(),
-        filename: file.name.split('.').shift(),
-      }));
-    })
+    const filesToProcess = rawFiles.map(file => {
+      const name = file.name;
+      const extension = name.split('.').pop().toLowerCase();
+      const filename = name.split('.').shift();
+      const jobId = this.processingService.addJob('upload', `Uploading ${name}...`);
+
+      return {
+        file,
+        name,
+        extension,
+        filename,
+        jobId,
+        status: UPLOAD_STATUS.PROCESSING
+      }
+    });
 
     // Then actually start processing them
-    for (let index = 0; index < files.length; index++) {
-      try {
-        await this.processAndUploadFile(files[index]);
-        files[index].status = UPLOAD_STATUS.PROCESSED;
-      } catch (e) {
-        files[index].status = UPLOAD_STATUS.ERROR;
-
-        Sentry.captureException(e);
-      } finally {
-        this.filesStatusService.addOrUpdate(files[index]);
+    this.isUploading = true;
+    try {
+      for (const fileItem of filesToProcess) {
+        this.processingService.updateJob(fileItem.jobId, { status: 'processing', progress: 0 });
+        try {
+          await this.processAndUploadFile(fileItem);
+          this.processingService.completeJob(fileItem.jobId);
+        } catch (e) {
+          this.logger.error(e);
+          this.processingService.failJob(fileItem.jobId, e.message || 'Upload failed');
+        }
       }
+    } finally {
+      this.isUploading = false;
     }
 
     // this.isUploadActive = false;
-    this.snackBar.open('Processed ' + files.length + ' files', null, {
+    this.snackBar.open('Processed ' + filesToProcess.length + ' files', null, {
       duration: 2000,
     });
 

@@ -1,32 +1,32 @@
-import { Component, Inject } from '@angular/core';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import { FormControl, FormGroup, Validators } from '@angular/forms';
+import { Component, Inject, inject } from '@angular/core';
+import { EventInterface } from '@sports-alliance/sports-lib';
+import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { FormsAbstract } from '../forms/forms.abstract';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
+import { User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../services/app.user.service';
 import { AppFileService } from '../../services/app.file.service';
-import { DataRPE } from '@sports-alliance/sports-lib/lib/data/data.rpe';
-import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
-import { DataDescent } from '@sports-alliance/sports-lib/lib/data/data.descent';
-import { DataEnergy } from '@sports-alliance/sports-lib/lib/data/data.energy';
-import { DataFeeling } from '@sports-alliance/sports-lib/lib/data/data.feeling';
-import { DataSpeedAvg } from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
-import { DataPaceAvg } from '@sports-alliance/sports-lib/lib/data/data.pace-avg';
-import { DataSwimPaceAvg } from '@sports-alliance/sports-lib/lib/data/data.swim-pace-avg';
-import { DataGradeAdjustedPaceAvg } from '@sports-alliance/sports-lib/lib/data/data.grade-adjusted-pace-avg';
-import { DataHeartRateAvg } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
-import { DataPowerAvg } from '@sports-alliance/sports-lib/lib/data/data.power-avg';
-import { DataPowerMax } from '@sports-alliance/sports-lib/lib/data/data.power-max';
-import { DataVO2Max } from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
+import { DataRPE } from '@sports-alliance/sports-lib';
+import { DataAscent } from '@sports-alliance/sports-lib';
+import { DataDescent } from '@sports-alliance/sports-lib';
+import { DataEnergy } from '@sports-alliance/sports-lib';
+import { DataFeeling } from '@sports-alliance/sports-lib';
+import { DataSpeedAvg } from '@sports-alliance/sports-lib';
+import { DataPaceAvg } from '@sports-alliance/sports-lib';
+import { DataSwimPaceAvg } from '@sports-alliance/sports-lib';
+import { DataGradeAdjustedPaceAvg } from '@sports-alliance/sports-lib';
+import { DataHeartRateAvg } from '@sports-alliance/sports-lib';
+import { DataPowerAvg } from '@sports-alliance/sports-lib';
+import { DataPowerMax } from '@sports-alliance/sports-lib';
+import { DataVO2Max } from '@sports-alliance/sports-lib';
 import { AppSharingService } from '../../services/app.sharing.service';
-import { DataActivityTypes } from '@sports-alliance/sports-lib/lib/data/data.activity-types';
-import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import { DataPace } from '@sports-alliance/sports-lib/lib/data/data.pace';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
-import { DataSwimPace } from '@sports-alliance/sports-lib/lib/data/data.swim-pace';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
+import { DataActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { DataPace } from '@sports-alliance/sports-lib';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { DataSwimPace } from '@sports-alliance/sports-lib';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 
 
 @Component({
@@ -34,17 +34,19 @@ import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
   templateUrl: './events-export.form.component.html',
   styleUrls: ['./events-export.form.component.css'],
   providers: [],
+  standalone: false
 })
 
 
 export class EventsExportFormComponent extends FormsAbstract {
 
-  public exportFromGroup: FormGroup;
+  public exportFromGroup: UntypedFormGroup;
   public user: User;
   public events: EventInterface[];
   public startDate: Date;
   public endDate: Date;
   public isLoading: boolean;
+  private analyticsService = inject(AppAnalyticsService);
 
 
   constructor(
@@ -54,7 +56,6 @@ export class EventsExportFormComponent extends FormsAbstract {
     private userService: AppUserService,
     private fileService: AppFileService,
     private sharingService: AppSharingService,
-    private afa: AngularFireAnalytics,
   ) {
     super(dialogRef, data, snackBar);
     this.user = data.user;
@@ -70,31 +71,31 @@ export class EventsExportFormComponent extends FormsAbstract {
     this.startDate = this.events[0].startDate;
     this.endDate = this.events[this.events.length - 1].endDate;
 
-    this.exportFromGroup = new FormGroup({
-        startDate: new FormControl(this.user.settings.exportToCSVSettings.startDate, [
-          Validators.required
-        ]),
-        name: new FormControl(this.user.settings.exportToCSVSettings.name, []),
-        description: new FormControl(this.user.settings.exportToCSVSettings.description, []),
-        activityTypes: new FormControl(this.user.settings.exportToCSVSettings.activityTypes, []),
-        distance: new FormControl(this.user.settings.exportToCSVSettings.distance, []),
-        duration: new FormControl(this.user.settings.exportToCSVSettings.duration, []),
-        ascent: new FormControl(this.user.settings.exportToCSVSettings.ascent, []),
-        descent: new FormControl(this.user.settings.exportToCSVSettings.descent, []),
-        calories: new FormControl(this.user.settings.exportToCSVSettings.calories, []),
-        feeling: new FormControl(this.user.settings.exportToCSVSettings.feeling, []),
-        rpe: new FormControl(this.user.settings.exportToCSVSettings.rpe, []),
-        averageSpeed: new FormControl(this.user.settings.exportToCSVSettings.averageSpeed, []),
-        averagePace: new FormControl(this.user.settings.exportToCSVSettings.averagePace, []),
-        averageSwimPace: new FormControl(this.user.settings.exportToCSVSettings.averageSwimPace, []),
-        averageGradeAdjustedPace: new FormControl(this.user.settings.exportToCSVSettings.avgGradeAdjustedPace, []),
-        averageHeartRate: new FormControl(this.user.settings.exportToCSVSettings.averageHeartRate, []),
-        maximumHeartRate: new FormControl(this.user.settings.exportToCSVSettings.maximumHeartRate, []),
-        averagePower: new FormControl(this.user.settings.exportToCSVSettings.averagePower, []),
-        maximumPower: new FormControl(this.user.settings.exportToCSVSettings.maximumPower, []),
-        vO2Max: new FormControl(this.user.settings.exportToCSVSettings.vO2Max, []),
-        includeLink: new FormControl(this.user.settings.exportToCSVSettings.includeLink, []),
-      }
+    this.exportFromGroup = new UntypedFormGroup({
+      startDate: new UntypedFormControl(this.user.settings.exportToCSVSettings.startDate, [
+        Validators.required
+      ]),
+      name: new UntypedFormControl(this.user.settings.exportToCSVSettings.name, []),
+      description: new UntypedFormControl(this.user.settings.exportToCSVSettings.description, []),
+      activityTypes: new UntypedFormControl(this.user.settings.exportToCSVSettings.activityTypes, []),
+      distance: new UntypedFormControl(this.user.settings.exportToCSVSettings.distance, []),
+      duration: new UntypedFormControl(this.user.settings.exportToCSVSettings.duration, []),
+      ascent: new UntypedFormControl(this.user.settings.exportToCSVSettings.ascent, []),
+      descent: new UntypedFormControl(this.user.settings.exportToCSVSettings.descent, []),
+      calories: new UntypedFormControl(this.user.settings.exportToCSVSettings.calories, []),
+      feeling: new UntypedFormControl(this.user.settings.exportToCSVSettings.feeling, []),
+      rpe: new UntypedFormControl(this.user.settings.exportToCSVSettings.rpe, []),
+      averageSpeed: new UntypedFormControl(this.user.settings.exportToCSVSettings.averageSpeed, []),
+      averagePace: new UntypedFormControl(this.user.settings.exportToCSVSettings.averagePace, []),
+      averageSwimPace: new UntypedFormControl(this.user.settings.exportToCSVSettings.averageSwimPace, []),
+      averageGradeAdjustedPace: new UntypedFormControl(this.user.settings.exportToCSVSettings.avgGradeAdjustedPace, []),
+      averageHeartRate: new UntypedFormControl(this.user.settings.exportToCSVSettings.averageHeartRate, []),
+      maximumHeartRate: new UntypedFormControl(this.user.settings.exportToCSVSettings.maximumHeartRate, []),
+      averagePower: new UntypedFormControl(this.user.settings.exportToCSVSettings.averagePower, []),
+      maximumPower: new UntypedFormControl(this.user.settings.exportToCSVSettings.maximumPower, []),
+      vO2Max: new UntypedFormControl(this.user.settings.exportToCSVSettings.vO2Max, []),
+      includeLink: new UntypedFormControl(this.user.settings.exportToCSVSettings.includeLink, []),
+    }
     );
   }
 
@@ -179,7 +180,7 @@ export class EventsExportFormComponent extends FormsAbstract {
     }
 
     if (this.user.settings.exportToCSVSettings.averageGradeAdjustedPace) {
-     headers.push(`Average Grade Adjusted Pace`);
+      headers.push(`Average Grade Adjusted Pace`);
     }
 
     if (this.user.settings.exportToCSVSettings.averageHeartRate) {
@@ -217,7 +218,7 @@ export class EventsExportFormComponent extends FormsAbstract {
         row.push(`"${event.name}"`);
       }
       if (this.user.settings.exportToCSVSettings.description) {
-        row.push(`"${event.description || '' }"`);
+        row.push(`"${event.description || ''}"`);
       }
       if (this.user.settings.exportToCSVSettings.activityTypes) {
         const stat = event.getStat(DataActivityTypes.type);
@@ -346,14 +347,14 @@ export class EventsExportFormComponent extends FormsAbstract {
 
     this.fileService.downloadFile((new Blob(
       [csvString],
-      {type: 'data:text/csv;charset=utf-8'},
+      { type: 'data:text/csv;charset=utf-8' },
     )), `${this.startDate.toLocaleDateString()}-${this.endDate.toLocaleDateString()}`, 'csv');
 
     this.close(new Event('Done')).then(() => {
       this.userService.updateUserProperties(this.user, {
         settings: this.user.settings
       });
-      this.afa.logEvent('download_csv', {});
+      this.analyticsService.logEvent('download_csv', {});
     })
   }
 }

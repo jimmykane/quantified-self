@@ -1,0 +1,39 @@
+.bottom-sheet-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 16px 8px 16px;
+    border-bottom: 1px solid var(--mat-app-outline-variant);
+    margin-bottom: 1rem;
+}
+
+.title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.title-row h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 400;
+}
+
+.bottom-sheet-content {
+    padding: 0 16px 24px 16px;
+}
+
+mat-form-field {
+    width: 100%;
+}
+
+.split-row {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.half-width {
+    flex: 1;
+    min-width: 200px;
+}

@@ -1,76 +1,99 @@
-<form *ngIf="searchFormGroup" [formGroup]="searchFormGroup" autocomplete="off" >
-
+@if (searchFormGroup) {
+<form [formGroup]="searchFormGroup" autocomplete="off">
   <app-shade [isActive]="isLoading"></app-shade>
-
-  <section [ngStyle]="{display: showDatePicker || showActivityTypePicker ? 'block' : 'none' }">
-    <mat-form-field [ngStyle]="{display: showDatePicker ? 'inline-block' : 'none' }" *ngIf="searchFormGroup" style=" margin-right: 1em;" class="big">
-      <mat-date-range-input [formGroup]="searchFormGroup"  [rangePicker]="picker" placeholder="From 00:00:00" (click)="setCustomDateRange($event); picker.open()">
-        <input matStartDate [formControl]="searchFormGroup.controls.startDate" (dateChange)="onDateChange($event, true)">
-        <input matEndDate [formControl]="searchFormGroup.controls.endDate" (dateChange)="onDateChange($event, false)">
+  <section class="filters-row" [ngStyle]="{display: showDatePicker || showActivityTypePicker ? 'flex' : 'none' }">
+    @if (searchFormGroup) {
+    <mat-form-field [style.display]="showDatePicker ? null : 'none'" class="big">
+      <mat-label>Select date range</mat-label>
+      <mat-date-range-input [formGroup]="searchFormGroup" [rangePicker]="picker"
+        (click)="setCustomDateRange($event); picker.open()">
+        <input matStartDate [formControl]="searchFormGroup.controls.startDate" placeholder="Start date"
+          (dateChange)="onDateChange($event, true)">
+        <input matEndDate [formControl]="searchFormGroup.controls.endDate" placeholder="End date"
+          (dateChange)="onDateChange($event, false)">
       </mat-date-range-input>
       <mat-datepicker-toggle [disabled]='false' matSuffix [for]="picker"></mat-datepicker-toggle>
       <mat-date-range-picker #picker></mat-date-range-picker>
-      <mat-hint *ngIf="!searchFormGroup.controls.startDate.hasError('matStartDateInvalid') && !searchFormGroup.controls.endDate.hasError('matEndDateInvalid') && selectedDateRange === dateRanges.custom">Select a date range</mat-hint>
-      <mat-error *ngIf="searchFormGroup.controls.startDate.hasError('matStartDateInvalid') || searchFormGroup.controls.endDate.hasError('matEndDateInvalid')">Invalid date range</mat-error>
-
-
+      @if (!searchFormGroup.controls.startDate.hasError('matStartDateInvalid') &&
+      !searchFormGroup.controls.endDate.hasError('matEndDateInvalid') && selectedDateRange === dateRanges.custom) {
+      <mat-hint>Select a date range</mat-hint>
+      }
+      @if (searchFormGroup.controls.startDate.hasError('matStartDateInvalid') ||
+      searchFormGroup.controls.endDate.hasError('matEndDateInvalid')) {
+      <mat-error>Invalid date range</mat-error>
+      }
     </mat-form-field>
-
-    <app-activity-types-multi-select class="big" *ngIf="showActivityTypePicker" [selectedActivityTypes]="selectedActivityTypes"
-                                     (selectedActivityTypesChange)="onActivityTypesChange($event)"></app-activity-types-multi-select>
-
-<!--    <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.endDateSmallerThanStartDate">-->
-<!--      There is something wrong with the date range-->
-<!--    </mat-error>-->
-<!--    <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.dateRange">You can select-->
-<!--      a range up to 3 months-->
-<!--    </mat-error>-->
+    }
+    @if (showActivityTypePicker) {
+    <app-activity-types-multi-select class="big" [selectedActivityTypes]="selectedActivityTypes"
+      (selectedActivityTypesChange)="onActivityTypesChange($event)"></app-activity-types-multi-select>
+    }
+    <!--    <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.endDateSmallerThanStartDate">-->
+    <!--      There is something wrong with the date range-->
+    <!--    </mat-error>-->
+    <!--    <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.dateRange">You can select-->
+    <!--      a range up to 3 months-->
+    <!--    </mat-error>-->
   </section>
   <section class="button-groups">
-    <mat-button-toggle-group [value]="selectedDateRange"
-                             (change)="dateToggleChange($event)">
-      <mat-button-toggle *ngIf="dateRangesToShow.indexOf(dateRanges.thisWeek) !== -1" [value]="dateRanges.thisWeek" aria-label="This week">
+    <mat-button-toggle-group [value]="selectedDateRange" (change)="dateToggleChange($event)">
+      @if (dateRangesToShow.indexOf(dateRanges.thisWeek) !== -1) {
+      <mat-button-toggle [value]="dateRanges.thisWeek" aria-label="This week">
         This week
       </mat-button-toggle>
-      <mat-button-toggle *ngIf="dateRangesToShow.indexOf(dateRanges.lastWeek) !== -1" [value]="dateRanges.lastWeek" aria-label="Last week">
+      }
+      @if (dateRangesToShow.indexOf(dateRanges.lastWeek) !== -1) {
+      <mat-button-toggle [value]="dateRanges.lastWeek" aria-label="Last week">
         Last week
       </mat-button-toggle>
-      <mat-button-toggle *ngIf="dateRangesToShow.indexOf(dateRanges.lastSevenDays) !== -1" [value]="dateRanges.lastSevenDays" aria-label="Last 7 days">
+      }
+      @if (dateRangesToShow.indexOf(dateRanges.lastSevenDays) !== -1) {
+      <mat-button-toggle [value]="dateRanges.lastSevenDays" aria-label="Last 7 days">
         Last 7 days
       </mat-button-toggle>
+      }
     </mat-button-toggle-group>
-    <mat-button-toggle-group [value]="selectedDateRange"
-                             (change)="dateToggleChange($event)">
-      <mat-button-toggle *ngIf="dateRangesToShow.indexOf(dateRanges.thisMonth) !== -1" [value]="dateRanges.thisMonth" aria-label="This month">
+    <mat-button-toggle-group [value]="selectedDateRange" (change)="dateToggleChange($event)">
+      @if (dateRangesToShow.indexOf(dateRanges.thisMonth) !== -1) {
+      <mat-button-toggle [value]="dateRanges.thisMonth" aria-label="This month">
         This month
       </mat-button-toggle>
-      <mat-button-toggle *ngIf="dateRangesToShow.indexOf(dateRanges.lastThirtyDays) !== -1" [value]="dateRanges.lastThirtyDays" aria-label="Last 30 days">
+      }
+      @if (dateRangesToShow.indexOf(dateRanges.lastThirtyDays) !== -1) {
+      <mat-button-toggle [value]="dateRanges.lastThirtyDays" aria-label="Last 30 days">
         Last 30 days
       </mat-button-toggle>
-      <mat-button-toggle *ngIf="dateRangesToShow.indexOf(dateRanges.lastMonth) !== -1" [value]="dateRanges.lastMonth" aria-label="Last month">
+      }
+      @if (dateRangesToShow.indexOf(dateRanges.lastMonth) !== -1) {
+      <mat-button-toggle [value]="dateRanges.lastMonth" aria-label="Last month">
         Last month
       </mat-button-toggle>
+      }
     </mat-button-toggle-group>
-
-    <mat-button-toggle-group [value]="selectedDateRange"
-                             (change)="dateToggleChange($event)">
-      <mat-button-toggle *ngIf="dateRangesToShow.indexOf(dateRanges.thisYear) !== -1" [value]="dateRanges.thisYear" aria-label="This year">
+    <mat-button-toggle-group [value]="selectedDateRange" (change)="dateToggleChange($event)">
+      @if (dateRangesToShow.indexOf(dateRanges.thisYear) !== -1) {
+      <mat-button-toggle [value]="dateRanges.thisYear" aria-label="This year">
         {{currentYear}}
       </mat-button-toggle>
-      <mat-button-toggle *ngIf="dateRangesToShow.indexOf(dateRanges.lastYear) !== -1" [value]="dateRanges.lastYear" aria-label="Last year">
+      }
+      @if (dateRangesToShow.indexOf(dateRanges.lastYear) !== -1) {
+      <mat-button-toggle [value]="dateRanges.lastYear" aria-label="Last year">
         {{currentYear - 1}}
       </mat-button-toggle>
+      }
     </mat-button-toggle-group>
-    <mat-button-toggle-group [value]="selectedDateRange"
-                             (change)="dateToggleChange($event)">
-      <mat-button-toggle *ngIf="dateRangesToShow.indexOf(dateRanges.all) !== -1" [value]="dateRanges.all" aria-label="All">
+    <mat-button-toggle-group [value]="selectedDateRange" (change)="dateToggleChange($event)">
+      @if (dateRangesToShow.indexOf(dateRanges.all) !== -1) {
+      <mat-button-toggle [value]="dateRanges.all" aria-label="All">
         All
       </mat-button-toggle>
-      <mat-button-toggle *ngIf="dateRangesToShow.indexOf(dateRanges.custom) !== -1" [value]="dateRanges.custom" aria-label="Custom">
+      }
+      @if (dateRangesToShow.indexOf(dateRanges.custom) !== -1) {
+      <mat-button-toggle [value]="dateRanges.custom" aria-label="Custom">
         Custom
       </mat-button-toggle>
+      }
     </mat-button-toggle-group>
   </section>
 </form>
-
-
+}

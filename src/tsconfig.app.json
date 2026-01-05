@@ -3,13 +3,14 @@
   "compilerOptions": {
     "outDir": "../out-tsc/app",
     "baseUrl": "",
-    "types": ["googlemaps"]
+    "types": [
+      "googlemaps"
+    ]
   },
   "angularCompilerOptions": {
     "preserveWhitespaces": false
-},
+  },
   "files": [
-    "main.ts",
-    "polyfills.ts"
+    "main.ts"
   ]
 }

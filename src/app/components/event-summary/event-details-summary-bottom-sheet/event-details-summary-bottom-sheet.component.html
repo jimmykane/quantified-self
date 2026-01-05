@@ -1,0 +1,53 @@
+<div class="bottom-sheet-header">
+    <div class="title-row">
+        <mat-icon color="primary">edit_note</mat-icon>
+        <h2 mat-dialog-title>Edit Event Details</h2>
+    </div>
+    <button mat-icon-button (click)="close()">
+        <mat-icon>close</mat-icon>
+    </button>
+</div>
+
+<div class="bottom-sheet-content">
+    <mat-card-subtitle style="margin-top: 0.1em; margin-bottom: 0px; color: unset;">
+        <mat-form-field appearance="outline">
+            <mat-label>Name</mat-label>
+            <input matInput [placeholder]="'Add a name'" (change)="saveEventName()"
+                (keydown.enter)='$event.target.blur()' [(ngModel)]='event.name' [type]="'text'">
+        </mat-form-field>
+    </mat-card-subtitle>
+
+    <mat-card-subtitle style="margin-top: 0em; margin-bottom: 0; color: unset;">
+        <mat-form-field appearance="outline">
+            <mat-label>Description</mat-label>
+            <textarea matInput rows="6" [placeholder]="'Add a description'" (change)="saveEventDescription()"
+                (keydown.enter)='$event.target.blur()' [(ngModel)]='event.description'>
+        </textarea>
+        </mat-form-field>
+    </mat-card-subtitle>
+
+    <div class="split-row">
+        <mat-form-field appearance="outline" class="half-width">
+            <mat-label>Feeling</mat-label>
+            <mat-select (selectionChange)="saveEventFeeling()" [(ngModel)]='feeling' [placeholder]="'Feeling'">
+                @for (selectOption of feelings | keyvalue : returnZero; track selectOption) {
+                <mat-option [value]="selectOption.value">
+                    {{selectOption.key}}
+                </mat-option>
+                }
+            </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="half-width">
+            <mat-label>RPE</mat-label>
+            <mat-select (selectionChange)="saveEventRPE()" [(ngModel)]='rpe'
+                [placeholder]="'Rating of Perceived Exertion'">
+                @for (selectOption of rpeBorgCR10SCale | keyvalue : returnZero; track selectOption) {
+                <mat-option [value]="selectOption.value">
+                    {{selectOption.key}}
+                </mat-option>
+                }
+            </mat-select>
+        </mat-form-field>
+    </div>
+</div>

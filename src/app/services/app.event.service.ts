@@ -1,64 +1,104 @@
-import { Injectable, OnDestroy } from '@angular/core';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import { EventImporterJSON } from '@sports-alliance/sports-lib/lib/events/adapters/importers/json/importer.json';
-import { combineLatest, from, Observable, Observer, of, zip } from 'rxjs';
-import { AngularFirestore, AngularFirestoreCollection, } from '@angular/fire/compat/firestore';
-import { bufferCount, catchError, concatMap, map, switchMap, take } from 'rxjs/operators';
-import { EventJSONInterface } from '@sports-alliance/sports-lib/lib/events/event.json.interface';
-import { ActivityJSONInterface } from '@sports-alliance/sports-lib/lib/activities/activity.json.interface';
-import { ActivityInterface } from '@sports-alliance/sports-lib/lib/activities/activity.interface';
-import { StreamInterface } from '@sports-alliance/sports-lib/lib/streams/stream.interface';
-import * as Sentry from '@sentry/browser';
-import { EventExporterJSON } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.json';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
+import { inject, Injectable, Injector, OnDestroy, runInInjectionContext } from '@angular/core';
+import { EventInterface } from '@sports-alliance/sports-lib';
+import { EventImporterJSON } from '@sports-alliance/sports-lib';
+import { combineLatest, from, Observable, of, zip } from 'rxjs';
+import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, doc, docData, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, CollectionReference, getCountFromServer } from '@angular/fire/firestore';
+import { catchError, map, switchMap, take } from 'rxjs/operators';
+import { EventJSONInterface } from '@sports-alliance/sports-lib';
+import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { StreamInterface } from '@sports-alliance/sports-lib';
+import { EventExporterJSON } from '@sports-alliance/sports-lib';
+import { User } from '@sports-alliance/sports-lib';
+import { Privacy } from '@sports-alliance/sports-lib';
 import { AppWindowService } from './app.window.service';
 import {
   EventMetaDataInterface,
   ServiceNames
-} from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
-import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
-import { StreamEncoder } from '../helpers/stream.encoder';
-import { CompressedJSONStreamInterface } from '@sports-alliance/sports-lib/lib/streams/compressed.stream.interface';
-import firebase from 'firebase/compat/app'
-import DocumentData = firebase.firestore.DocumentData;
-import firestore = firebase.firestore
+} from '@sports-alliance/sports-lib';
+import { EventExporterGPX } from '@sports-alliance/sports-lib';
 
+import { EventWriter, FirestoreAdapter, StorageAdapter, OriginalFile } from '../../../functions/src/shared/event-writer';
+import { generateActivityID, generateEventID } from '../../../functions/src/shared/id-generator';
+import { Bytes } from 'firebase/firestore';
+import { Storage, ref, uploadBytes, getBytes } from '@angular/fire/storage';
+import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
+import { EventImporterFIT } from '@sports-alliance/sports-lib';
+import { EventImporterTCX } from '@sports-alliance/sports-lib';
+import { EventImporterGPX } from '@sports-alliance/sports-lib';
+import { EventImporterSuuntoSML } from '@sports-alliance/sports-lib';
+import { EventUtilities } from '@sports-alliance/sports-lib';
+
+
+import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
+
+import { AppUserService } from './app.user.service';
+import { USAGE_LIMITS } from '../../../functions/src/shared/limits';
+import { AppEventInterface } from '../../../functions/src/shared/app-event.interface'; // Import Shared Interface
+import { AppEventUtilities } from '../utils/app.event.utilities';
+import { LoggerService } from './logger.service';
 
 @Injectable({
   providedIn: 'root',
 })
 export class AppEventService implements OnDestroy {
 
-
+  private firestore = inject(Firestore);
+  private storage = inject(Storage);
+  private injector = inject(Injector);
+  private static reportedUnknownTypes = new Set<string>();
 
   constructor(
     private windowService: AppWindowService,
-    private afs: AngularFirestore) {
+    private logger: LoggerService) {
   }
 
-  public getEventAndActivities(user: User, eventID: string): Observable<EventInterface> {
+  public getEventAndActivities(user: User, eventID: string): Observable<AppEventInterface> {
     // See
     // https://stackoverflow.com/questions/42939978/avoiding-nested-subscribes-with-combine-latest-when-one-observable-depends-on-th
+    const eventDoc = doc(this.firestore, 'users', user.uid, 'events', eventID);
     return combineLatest([
-      this.afs
-        .collection('users')
-        .doc(user.uid)
-        .collection('events')
-        .doc(eventID)
-        .valueChanges().pipe(
+      runInInjectionContext(this.injector, () => docData(eventDoc)).pipe(
         map(eventSnapshot => {
-          return EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot).setID(eventID);
+          if (!eventSnapshot) return null;
+          const { sanitizedJson } = EventJSONSanitizer.sanitize(eventSnapshot);
+          const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventID) as AppEventInterface;
+
+          // Hydrate with original file(s) info if present
+          const rawData = eventSnapshot as any;
+
+          if (rawData.originalFiles) {
+            event.originalFiles = rawData.originalFiles.map((file: any) => {
+              if (file.startDate) {
+                // Convert Firestore Timestamp to Date
+                if (file.startDate.toDate && typeof file.startDate.toDate === 'function') {
+                  file.startDate = file.startDate.toDate();
+                } else if (file.startDate.seconds !== undefined) {
+                  file.startDate = new Date(file.startDate.seconds * 1000 + (file.startDate.nanoseconds || 0) / 1000000);
+                } else if (typeof file.startDate === 'string') {
+                  file.startDate = new Date(file.startDate);
+                }
+              } else {
+                throw new Error('Event Metadata Error: Missing startDate for file ' + file.path);
+              }
+              return file;
+            });
+          }
+          if (rawData.originalFile) {
+            event.originalFile = rawData.originalFile;
+          }
+
+          return event;
         })),
       this.getActivities(user, eventID),
     ]).pipe(catchError((error) => {
       if (error && error.code && error.code === 'permission-denied') {
-        return of([null, null])
+        return of([null, null] as [AppEventInterface | null, ActivityInterface[] | null]);
       }
-      Sentry.captureException(error);
+      this.logger.error('Error fetching event or activities:', error);
 
-      return of([null, null]) // @todo fix this
-    })).pipe(map(([event, activities]: [EventInterface, ActivityInterface[]]) => {
+      return of([null, null] as [AppEventInterface | null, ActivityInterface[] | null]); // @todo fix this
+    })).pipe(map(([event, activities]: [AppEventInterface, ActivityInterface[]]) => {
       if (!event) {
         return null;
       }
@@ -67,17 +107,46 @@ export class AppEventService implements OnDestroy {
       return event;
     })).pipe(catchError((error) => {
       // debugger;
-      Sentry.captureException(error);
+      this.logger.error('Error adding activities to event:', error);
 
       return of(null); // @todo is this the best we can do?
     }))
   }
 
-  public getEventsBy(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
+  public getEventsBy(user: User, where: { fieldPath: string | any, opStr: any, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
     if (startAfter || endBefore) {
       return this.getEventsStartingAfterOrEndingBefore(user, false, where, orderBy, asc, limit, startAfter, endBefore);
     }
     return this._getEvents(user, where, orderBy, asc, limit);
+  }
+
+  public getEventsOnceBy(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10): Observable<EventInterface[]> {
+    const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount);
+    return from(runInInjectionContext(this.injector, () => getDocs(q))).pipe(map((querySnapshot) => {
+      return querySnapshot.docs.map((queryDocumentSnapshot) => {
+        const eventSnapshot = queryDocumentSnapshot.data();
+        const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
+        if (unknownTypes.length > 0) {
+          const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
+          if (newUnknownTypes.length > 0) {
+            newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
+            this.logger.captureMessage('Unknown Data Types in getEventsOnceBy', { extra: { types: newUnknownTypes, eventID: queryDocumentSnapshot.id } });
+          }
+        }
+        const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(queryDocumentSnapshot.id) as AppEventInterface;
+
+        // Hydrate with original file(s) info if present
+        const rawData = eventSnapshot as any;
+        if (rawData.originalFiles) {
+          event.originalFiles = rawData.originalFiles;
+        }
+        if (rawData.originalFile) {
+          event.originalFile = rawData.originalFile;
+        }
+
+        return event;
+      });
+    }));
   }
 
   /**
@@ -90,7 +159,7 @@ export class AppEventService implements OnDestroy {
    * @param startAfter
    * @param endBefore
    */
-  public getEventsAndActivitiesBy(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
+  public getEventsAndActivitiesBy(user: User, where: { fieldPath: string | any, opStr: any, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
     if (startAfter || endBefore) {
       return this.getEventsStartingAfterOrEndingBefore(user, true, where, orderBy, asc, limit, startAfter, endBefore);
     }
@@ -103,7 +172,7 @@ export class AppEventService implements OnDestroy {
    * @param eventID
    * @param streamTypes
    */
-  public getEventActivitiesAndSomeStreams(user: User, eventID, streamTypes: string[]) {
+  public getEventActivitiesAndSomeStreams(user: User, eventID: string, streamTypes: string[]) {
     return this._getEventActivitiesAndAllOrSomeStreams(user, eventID, streamTypes);
   }
 
@@ -112,68 +181,75 @@ export class AppEventService implements OnDestroy {
    * @param user
    * @param eventID
    */
-  public getEventActivitiesAndAllStreams(user: User, eventID) {
+  public getEventActivitiesAndAllStreams(user: User, eventID: string) {
     return this._getEventActivitiesAndAllOrSomeStreams(user, eventID);
   }
 
   public getActivities(user: User, eventID: string): Observable<ActivityInterface[]> {
-    return this.afs
-      .collection('users')
-      .doc(user.uid)
-      .collection('events').doc(eventID).collection('activities')
-      .valueChanges({ idField: 'id' }).pipe(
-        map(activitySnapshots => {
-          return activitySnapshots.reduce((activitiesArray: ActivityInterface[], activitySnapshot) => {
-            activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>activitySnapshot).setID(activitySnapshot.id));
-            return activitiesArray;
-          }, []);
-        }),
-      )
+    const activitiesCollection = collection(this.firestore, 'users', user.uid, 'activities');
+    const q = query(activitiesCollection, where('eventID', '==', eventID));
+    return (runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })) as Observable<any[]>).pipe(
+      map((activitySnapshots: any[]) => {
+        return activitySnapshots.reduce((activitiesArray: ActivityInterface[], activitySnapshot: any) => {
+          try {
+            // Ensure required properties exist for sports-lib 6.x compatibility
+            const safeActivityData = {
+              ...activitySnapshot,
+              stats: activitySnapshot.stats || {},
+              laps: activitySnapshot.laps || [],
+              streams: activitySnapshot.streams || [],
+              intensityZones: activitySnapshot.intensityZones || [],
+              events: activitySnapshot.events || []
+            };
+            const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(safeActivityData);
+            if (unknownTypes.length > 0) {
+              const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
+              if (newUnknownTypes.length > 0) {
+                newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
+                this.logger.captureMessage('Unknown Data Types in getActivities', { extra: { types: newUnknownTypes, eventID, activityID: activitySnapshot.id } });
+              }
+            }
+            activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>sanitizedJson).setID(activitySnapshot.id));
+          } catch (e) {
+            this.logger.error('Failed to parse activity:', activitySnapshot.id, 'Error:', e);
+          }
+          return activitiesArray;
+        }, []);
+      }),
+    )
   }
 
   public getEventMetaData(user: User, eventID: string, serviceName: ServiceNames): Observable<EventMetaDataInterface> {
-    return this.afs
-      .collection('users')
-      .doc(user.uid)
-      .collection('events')
-      .doc(eventID)
-      .collection('metaData')
-      .doc(serviceName)
-      .valueChanges().pipe(
-        map(metaDataSnapshot => {
-          return <EventMetaDataInterface>metaDataSnapshot;
-        }),
-      )
+    const metaDataDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID, 'metaData', serviceName));
+    return runInInjectionContext(this.injector, () => docData(metaDataDoc)).pipe(
+      map(metaDataSnapshot => {
+        return <EventMetaDataInterface>metaDataSnapshot;
+      }),
+    )
   }
 
+  /**
+   * @deprecated Streams are no longer stored in Firestore. Use attachStreamsToEventWithActivities instead.
+   */
   public getAllStreams(user: User, eventID: string, activityID: string): Observable<StreamInterface[]> {
-    return this.afs
-      .collection('users')
-      .doc(user.uid)
-      .collection('events')
-      .doc(eventID)
-      .collection('activities')
-      .doc(activityID)
-      .collection('streams')
-      .get() // @todo replace with snapshot changes I suppose when @https://github.com/angular/angularfire2/issues/1552 is fixed
+    this.logger.warn('[AppEventService] getAllStreams is deprecated and will likely return empty results.');
+    const streamsCollection = collection(this.firestore, 'users', user.uid, 'activities', activityID, 'streams');
+    return from(runInInjectionContext(this.injector, () => getDocs(streamsCollection))) // @todo replace with snapshot changes I suppose when @https://github.com/angular/angularfire2/issues/1552 is fixed
       .pipe(map((querySnapshot) => {
         return querySnapshot.docs.map(queryDocumentSnapshot => this.processStreamQueryDocumentSnapshot(queryDocumentSnapshot))
       }))
   }
 
+  /**
+   * @deprecated Streams are no longer stored in Firestore. Use attachStreamsToEventWithActivities instead.
+   */
   public getStream(user: User, eventID: string, activityID: string, streamType: string): Observable<StreamInterface> {
-    return this.afs
-      .collection('users')
-      .doc(user.uid)
-      .collection('events')
-      .doc(eventID)
-      .collection('activities')
-      .doc(activityID)
-      .collection('streams')
-      .doc(streamType)
-      .get() // @todo replace with snapshot changes I suppose when @https://github.com/angular/angularfire2/issues/1552 is fixed
+    this.logger.warn('[AppEventService] getStream is deprecated and will likely return empty results.');
+    return from(runInInjectionContext(this.injector, () => getDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID, 'streams', streamType))))
       .pipe(map((queryDocumentSnapshot) => {
-        return this.processStreamQueryDocumentSnapshot(queryDocumentSnapshot)
+        // getDoc returns DocumentSnapshot, ensure data exists
+        if (!queryDocumentSnapshot.exists()) return null; // Handle missing stream
+        return this.processStreamDocumentSnapshot(queryDocumentSnapshot) // DocumentSnapshot is a DocumentData
       }))
   }
 
@@ -186,17 +262,9 @@ export class AppEventService implements OnDestroy {
       all[ch] = [].concat((all[ch] || []), one);
       return all
     }, []).map((typesBatch) => {
-      return this.afs
-        .collection('users')
-        .doc(userID)
-        .collection('events')
-        .doc(eventID)
-        .collection('activities')
-        .doc(activityID)
-        .collection('streams', ((ref) => {
-          return ref.where('type', 'in', typesBatch);
-        }))
-        .get()
+      const streamsCollection = collection(this.firestore, 'users', userID, 'activities', activityID, 'streams');
+      const q = query(streamsCollection, where('type', 'in', typesBatch));
+      return from(runInInjectionContext(this.injector, () => getDocs(q)))
         .pipe(map((documentSnapshots) => {
           return documentSnapshots.docs.reduce((streamArray: StreamInterface[], documentSnapshot) => {
             streamArray.push(this.processStreamDocumentSnapshot(documentSnapshot));
@@ -208,123 +276,133 @@ export class AppEventService implements OnDestroy {
     return combineLatest(x).pipe(map(arrayOfArrays => arrayOfArrays.reduce((a, b) => a.concat(b), [])));
   }
 
-  public async writeAllEventData(user: User, event: EventInterface) {
-    const writePromises: Promise<void>[] = [];
-    event.setID(event.getID() || this.afs.createId());
-    event.getActivities()
-      .forEach((activity) => {
-        activity.setID(activity.getID() || this.afs.createId());
-
-        writePromises.push(
-          this.afs.collection('users')
-            .doc(user.uid)
-            .collection('events')
-            .doc(event.getID())
-            .collection('activities')
-            .doc(activity.getID())
-            .set(activity.toJSON()));
-
-        activity.getAllExportableStreams().forEach((stream) => {
-          writePromises.push(this.afs
-            .collection('users')
-            .doc(user.uid)
-            .collection('events')
-            .doc(event.getID())
-            .collection('activities')
-            .doc(activity.getID())
-            .collection('streams')
-            .doc(stream.type)
-            .set(StreamEncoder.compressStream(stream.toJSON())))
-        });
-      });
-    try {
-      await Promise.all(writePromises);
-      return this.afs.collection('users').doc(user.uid).collection('events').doc(event.getID()).set(event.toJSON());
-    } catch (e) {
-
-      // Try to delete the parent entity and all subdata
-      await this.deleteAllEventData(user, event.getID());
-      throw new Error('Could not parse event');
+  public async writeAllEventData(user: User, event: AppEventInterface, originalFiles?: OriginalFile[] | OriginalFile) {
+    // 0. Ensure deterministic IDs to prevent duplicates
+    if (!event.getID()) {
+      event.setID(await generateEventID(user.uid, event.startDate));
     }
+    const eventID = event.getID();
+    const activities = event.getActivities();
+    for (let i = 0; i < activities.length; i++) {
+      if (!activities[i].getID()) {
+        activities[i].setID(await generateActivityID(eventID, i));
+      }
+    }
+
+    // 1. Check Pro Status
+    const userService = this.injector.get(AppUserService);
+    const isPro = await userService.isPro();
+    if (!isPro) {
+      // 2. Check Limits
+      const role = await userService.getSubscriptionRole() || 'free';
+      const limit = USAGE_LIMITS[role] || USAGE_LIMITS['free'];
+      const currentCount = await this.getEventCount(user);
+
+      if (currentCount >= limit) {
+        throw new Error(`Upload limit reached for ${role} tier. You have ${currentCount} events. Limit is ${limit}. Please upgrade to upload more.`);
+      }
+    }
+
+    const adapter: FirestoreAdapter = {
+      setDoc: (path: string[], data: any) => {
+        // Construct the full path from the array parts
+        // The first part is 'users', then uid, etc.
+        // path example: ['users', userID, 'events', eventID]
+        // collection(firestore, path[0], path[1], ...) seems wrong if it mixes coll/doc
+        // doc() takes (firestore, path...)
+        return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, ...path as [string, ...string[]]), data));
+      },
+      createBlob: (data: Uint8Array) => {
+        return Bytes.fromUint8Array(data);
+      },
+      generateID: () => {
+        return runInInjectionContext(this.injector, () => doc(collection(this.firestore, 'users'))).id;
+      }
+    };
+
+    const storageAdapter: StorageAdapter = {
+      uploadFile: async (path: string, data: any) => {
+        const fileRef = ref(this.storage, path);
+        // data can be Blob, Uint8Array or ArrayBuffer. If string, convert to Blob.
+        let payload = data;
+        if (typeof data === 'string') {
+          payload = new Blob([data], { type: 'text/plain' });
+        }
+        await uploadBytes(fileRef, payload);
+      },
+      getBucketName: () => {
+        // Return the Firebase Storage bucket name from config
+        return 'quantified-self-io.appspot.com';
+      }
+    }
+
+    const writer = new EventWriter(adapter, storageAdapter);
+    await writer.writeAllEventData(user.uid, event, originalFiles);
   }
 
   public async setEvent(user: User, event: EventInterface) {
-    return this.afs.collection('users').doc(user.uid).collection('events').doc(event.getID()).set(event.toJSON());
+    return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, 'users', user.uid, 'events', event.getID()), event.toJSON()));
   }
 
   public async setActivity(user: User, event: EventInterface, activity: ActivityInterface) {
-    return this.afs.collection('users').doc(user.uid).collection('events').doc(event.getID()).collection('activities').doc(activity.getID()).set(activity.toJSON());
+    const data = activity.toJSON() as any;
+    data.eventID = event.getID();
+    data.userID = user.uid;
+    if (event.startDate) {
+      data.eventStartDate = event.startDate;
+    }
+    return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, 'users', user.uid, 'activities', activity.getID()), data));
   }
 
   public async updateEventProperties(user: User, eventID: string, propertiesToUpdate: any) {
     // @todo check if properties are allowed on object via it's JSON export interface keys
-    return this.afs.collection('users').doc(user.uid).collection('events').doc(eventID).update(propertiesToUpdate);
+    return runInInjectionContext(this.injector, () => updateDoc(doc(this.firestore, 'users', user.uid, 'events', eventID), propertiesToUpdate));
   }
 
   public async deleteAllEventData(user: User, eventID: string): Promise<boolean> {
-    const activityDeletePromises: Promise<boolean>[] = [];
-    const queryDocumentSnapshots = await this.afs
-      .collection('users')
-      .doc(user.uid)
-      .collection('events')
-      .doc(eventID).collection('activities').ref.get();
-    queryDocumentSnapshots.docs.forEach((queryDocumentSnapshot) => {
-      activityDeletePromises.push(this.deleteAllActivityData(user, eventID, queryDocumentSnapshot.id))
-    });
-    await this.afs
-      .collection('users')
-      .doc(user.uid)
-      .collection('events')
-      .doc(eventID).delete();
-
-    await Promise.all(activityDeletePromises);
+    await runInInjectionContext(this.injector, () => deleteDoc(doc(this.firestore, 'users', user.uid, 'events', eventID)));
     return true;
   }
 
   public async deleteAllActivityData(user: User, eventID: string, activityID: string): Promise<boolean> {
     // @todo add try catch etc
     await this.deleteAllStreams(user, eventID, activityID);
-    await this.afs
-      .collection('users')
-      .doc(user.uid)
-      .collection('events')
-      .doc(eventID)
-      .collection('activities')
-      .doc(activityID).delete();
+    await runInInjectionContext(this.injector, () => deleteDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID)));
 
     return true;
   }
 
   public deleteStream(user: User, eventID, activityID, streamType: string) {
-    return this.afs.collection('users').doc(user.uid).collection('events').doc(eventID).collection('activities').doc(activityID).collection('streams').doc(streamType).delete();
+    return runInInjectionContext(this.injector, () => deleteDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID, 'streams', streamType)));
   }
 
-  public async deleteAllStreams(user: User, eventID, activityID): Promise<number> {
-    const numberOfStreamsDeleted = await this.deleteAllDocsFromCollections([
-      this.afs.collection('users').doc(user.uid).collection('events').doc(eventID).collection('activities').doc(activityID).collection('streams'),
-    ]);
+  public async deleteAllStreams(user: User, eventID: string, activityID: string): Promise<number> {
+    const streamsCollection = collection(this.firestore, 'users', user.uid, 'activities', activityID, 'streams');
+    const numberOfStreamsDeleted = await this.deleteAllDocsFromCollections([streamsCollection]);
 
     return numberOfStreamsDeleted
   }
 
-  public async getEventAsJSONBloB(user: User, eventID: string): Promise<Blob> {
-    const jsonString = await new EventExporterJSON().getAsString(await this.getEventActivitiesAndAllStreams(user, eventID).pipe(take(1)).toPromise());
+  public async getEventAsJSONBloB(user: User, event: AppEventInterface): Promise<Blob> {
+    const populatedEvent = await this.attachStreamsToEventWithActivities(user, event, undefined, false).pipe(take(1)).toPromise();
+    const jsonString = await new EventExporterJSON().getAsString(populatedEvent);
     return (new Blob(
       [jsonString],
-      {type: new EventExporterJSON().fileType},
+      { type: new EventExporterJSON().fileType },
     ));
   }
 
-  public async getEventAsGPXBloB(user: User, eventID: string): Promise<Blob> {
-    const gpxString = await new EventExporterGPX().getAsString(await this.getEventActivitiesAndAllStreams(user, eventID).pipe(take(1)).toPromise());
+  public async getEventAsGPXBloB(user: User, event: AppEventInterface): Promise<Blob> {
+    const populatedEvent = await this.attachStreamsToEventWithActivities(user, event, undefined, false, true).pipe(take(1)).toPromise();
+    const gpxString = await new EventExporterGPX().getAsString(populatedEvent);
     return (new Blob(
       [gpxString],
-      {type: new EventExporterGPX().fileType},
+      { type: new EventExporterGPX().fileType },
     ));
   }
 
   public async setEventPrivacy(user: User, eventID: string, privacy: Privacy) {
-    return this.updateEventProperties(user, eventID, {privacy: privacy});
+    return this.updateEventProperties(user, eventID, { privacy: privacy });
   }
 
   public ngOnDestroy() {
@@ -338,7 +416,70 @@ export class AppEventService implements OnDestroy {
    * @param streamTypes
    * @private
    */
-  public attachStreamsToEventWithActivities(user: User, event: EventInterface, streamTypes?: string[]): Observable<EventInterface> {
+  public attachStreamsToEventWithActivities(user: User, event: AppEventInterface, streamTypes?: string[], merge: boolean = true, skipEnrichment: boolean = false): Observable<EventInterface> {
+    // Check if we have an original file to parse instead of fetching from Firestore
+    this.logger.log(`[AppEventService] attachStreams for ${event.getID()}. originalFile: ${!!event.originalFile}, originalFiles: ${!!event.originalFiles}`);
+
+    if (event.originalFiles && event.originalFiles.length > 0) {
+      this.logger.log('[AppEventService] Using client-side parsing for (Multiple)', event.getID());
+      return from(this.calculateStreamsFromWithOrchestration(event, skipEnrichment)).pipe(
+        map((fullEvent) => {
+          if (!fullEvent) return event;
+
+          if (merge === false) {
+            // Return fresh event (disposable)
+            // We need to ensure it has an ID matching the requested one for consistency, though export might not care.
+            fullEvent.setID(event.getID());
+            if (event.startDate) {
+              // Try to preserve start date if needed
+              // fullEvent.startDate = event.startDate; // EventInterface might not have setter, but let's assume it's fine
+            }
+            return fullEvent;
+          }
+
+          const existingID = event.getID();
+          event.clearActivities();
+          event.addActivities(fullEvent.getActivities());
+          return event;
+        }),
+        catchError((e) => {
+          this.logger.error('Failed to parse original files, falling back to legacy streams', e);
+          return this.attachStreamsLegacy(user, event, streamTypes);
+        })
+      );
+    }
+
+    if (event.originalFile && event.originalFile.path) {
+      this.logger.log('[AppEventService] Using client-side parsing for (Single)', event.getID());
+      return from(this.calculateStreamsFromWithOrchestration(event, skipEnrichment)).pipe(
+        map((fullEvent) => {
+          if (!fullEvent) return event;
+
+          if (merge === false) {
+            fullEvent.setID(event.getID());
+            return fullEvent;
+          }
+
+          // Merge logic: Copy activities/streams from fullEvent to event
+          // We assume the file is the source of truth.
+          const existingID = event.getID();
+          // Keep the ID and other metadata from Firestore, but replace activities
+          event.clearActivities();
+          event.addActivities(fullEvent.getActivities());
+          return event;
+        }),
+        catchError((e) => {
+          this.logger.error('Failed to parse original file, falling back to legacy streams', e);
+          return this.attachStreamsLegacy(user, event, streamTypes);
+        })
+      );
+    }
+
+    this.logger.log('[AppEventService] Fallback to legacy streams for', event.getID());
+    return this.attachStreamsLegacy(user, event, streamTypes);
+  }
+
+  private attachStreamsLegacy(user: User, event: EventInterface, streamTypes?: string[]): Observable<EventInterface> {
     // Get all the streams for all activities and subscribe to them with latest emition for all streams
     return combineLatest(
       event.getActivities().map((activity) => {
@@ -348,13 +489,120 @@ export class AppEventService implements OnDestroy {
             // debugger;
             // This time we dont want to just get the streams but we want to attach them to the parent obj
             activity.clearStreams();
-            activity.addStreams(streams);
+            try {
+              activity.addStreams(streams);
+            } catch (e) {
+              if (e.message && e.message.indexOf('Duplicate type of stream') > -1) {
+                this.logger.warn('[attachStreamsLegacy] Duplicate stream warning:', e);
+              } else {
+                throw e;
+              }
+            }
             // Return what we actually want to return not the streams
             return event;
           }));
       })).pipe(map(([newEvent]) => {
+        return newEvent;
+      }));
+  }
+
+  private async calculateStreamsFromWithOrchestration(event: AppEventInterface, skipEnrichment: boolean = false): Promise<EventInterface> {
+    this.logger.log('Calculating streams orchestration for event', event.getID());
+
+    // 1. Array Strategy
+    if (event.originalFiles && event.originalFiles.length > 0) {
+      this.logger.log(`Orchestrating fetch and merge for ${event.originalFiles.length} files`);
+      const promises = event.originalFiles.map(fileMeta => this.fetchAndParseOneFile(fileMeta, skipEnrichment));
+      const parsedEvents = await Promise.all(promises);
+
+      // remove nulls if any failure
+      const validEvents = parsedEvents.filter(e => !!e);
+      if (validEvents.length === 0) return null;
+
+      if (validEvents.length === 1) return validEvents[0];
+
+      const merged = EventUtilities.mergeEvents(validEvents);
+      const activityIDs = new Set<string>();
+      merged.getActivities().forEach((activity, index) => {
+        const currentID = activity.getID();
+        if (activityIDs.has(currentID)) {
+          // Only append if collision detected
+          activity.setID(`${currentID}_${index}`);
+        }
+        activityIDs.add(activity.getID());
+      });
+      return merged;
+    }
+
+    // 2. Legacy Single Strategy
+    const originalFile = event.originalFile;
+    if (!originalFile || !originalFile.path) {
+      this.logger.warn('Original file path missing', originalFile);
+      return null;
+    }
+    return this.fetchAndParseOneFile(originalFile, skipEnrichment);
+  }
+
+  public async downloadFile(path: string): Promise<ArrayBuffer> {
+    const fileRef = ref(this.storage, path);
+    return getBytes(fileRef);
+  }
+
+  private async fetchAndParseOneFile(fileMeta: { path: string, bucket?: string }, skipEnrichment: boolean = false): Promise<EventInterface> {
+    try {
+      const fileRef = ref(this.storage, fileMeta.path);
+      const arrayBuffer = await getBytes(fileRef);
+
+      const parts = fileMeta.path.split('.');
+      const extension = parts[parts.length - 1].toLowerCase();
+
+      let newEvent: EventInterface;
+
+      if (extension === 'fit') {
+        newEvent = await EventImporterFIT.getFromArrayBuffer(arrayBuffer);
+      } else if (extension === 'gpx') {
+        const text = new TextDecoder().decode(arrayBuffer);
+        newEvent = await EventImporterGPX.getFromString(text);
+      } else if (extension === 'tcx') {
+        const text = new TextDecoder().decode(arrayBuffer);
+        newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(text, 'application/xml'));
+      } else if (extension === 'json') {
+        const text = new TextDecoder().decode(arrayBuffer);
+        const json = JSON.parse(text);
+        const { sanitizedJson } = EventJSONSanitizer.sanitize(json);
+        newEvent = await EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(sanitizedJson));
+      } else if (extension === 'sml') {
+        const text = new TextDecoder().decode(arrayBuffer);
+        newEvent = await EventImporterSuuntoSML.getFromXML(text);
+      } else {
+        throw new Error(`Unsupported original file extension: ${extension}`);
+      }
+
+      // Polyfill Time stream if missing
+      if (newEvent) {
+        if (!skipEnrichment) {
+          newEvent.getActivities().forEach(activity => {
+            try {
+              AppEventUtilities.enrich(activity, ['Time', 'Duration']);
+            } catch (e) {
+              // Ignore duplicate stream errors as it means the stream already exists (possibly due to caching)
+              if (e.message && e.message.indexOf('Duplicate type of stream') > -1) {
+                this.logger.warn('Duplicate stream warning during enrichment:', e);
+              } else {
+                throw e;
+              }
+            }
+          });
+        }
+      }
       return newEvent;
-    }));
+    } catch (e) {
+      this.logger.error('Error in fetchAndParseOneFile', e);
+      // throw e; // Don't throw to allow partial success in array? 
+      // Actually if one fails in array, what do we do? 
+      // For now, let's return null and filter it out, logging error
+      return null;
+    }
   }
 
   private _getEventActivitiesAndAllOrSomeStreams(user: User, eventID, streamTypes?: string[]) {
@@ -367,154 +615,188 @@ export class AppEventService implements OnDestroy {
     }))
   }
 
-  private getEventsStartingAfterOrEndingBefore(user: User, getActivities: boolean, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
-    const observables: Observable<firestore.DocumentSnapshot>[] = [];
-    if (startAfter) {
-      observables.push(this.afs
-        .collection('users')
-        .doc(user.uid)
-        .collection('events')
-        .doc(startAfter.getID()).get() // @todo fix it wont work it fires once
-        .pipe(take(1)))
+  private getEventsStartingAfterOrEndingBefore(user: User, getActivities: boolean, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc: EventInterface, endBeforeDoc?: EventInterface): Observable<EventInterface[]> {
+    const observables: Observable<DocumentSnapshot>[] = [];
+    if (startAfterDoc) {
+      observables.push(
+        from(runInInjectionContext(this.injector, () => getDoc(doc(this.firestore, 'users', user.uid, 'events', startAfterDoc.getID()))))
+      )
     }
-    if (endBefore) {
-      observables.push(this.afs
-        .collection('users')
-        .doc(user.uid)
-        .collection('events')
-        .doc(endBefore.getID()).get() // @todo fix it wont work it fires once
-        .pipe(take(1)))
+    if (endBeforeDoc) {
+      observables.push(
+        from(runInInjectionContext(this.injector, () => getDoc(doc(this.firestore, 'users', user.uid, 'events', endBeforeDoc.getID()))))
+      )
     }
     return zip(...observables).pipe(switchMap(([resultA, resultB]) => {
-      if (startAfter && endBefore) {
-        return getActivities ? this._getEventsAndActivities(user, where, orderBy, asc, limit, resultA, resultB) : this._getEvents(user, where, orderBy, asc, limit, resultA, resultB);
+      // resultA is startAfter snapshot, resultB is endBefore snapshot (if both exist) or resultA if only one exists
+      // Wait, zip emits inputs in order.
+      const startAfterSnap = startAfterDoc ? resultA : null;
+      const endBeforeSnap = endBeforeDoc ? (startAfterDoc ? resultB : resultA) : null;
+
+      if (startAfterDoc && endBeforeDoc) {
+        return getActivities ? this._getEventsAndActivities(user, whereClauses, orderByField, asc, limitCount, startAfterSnap, endBeforeSnap) : this._getEvents(user, whereClauses, orderByField, asc, limitCount, startAfterSnap, endBeforeSnap);
       }
       // If only start after
-      if (startAfter) {
-        return getActivities ? this._getEventsAndActivities(user, where, orderBy, asc, limit, resultA) : this._getEvents(user, where, orderBy, asc, limit, resultA);
+      if (startAfterDoc) {
+        return getActivities ? this._getEventsAndActivities(user, whereClauses, orderByField, asc, limitCount, startAfterSnap) : this._getEvents(user, whereClauses, orderByField, asc, limitCount, startAfterSnap);
       }
       // If only endAt
-      return getActivities ? this._getEventsAndActivities(user, where, orderBy, asc, limit, null, resultA) : this._getEvents(user, where, orderBy, asc, limit, null, resultA);
+      return getActivities ? this._getEventsAndActivities(user, whereClauses, orderByField, asc, limitCount, null, endBeforeSnap) : this._getEvents(user, whereClauses, orderByField, asc, limitCount, null, endBeforeSnap);
     }));
   }
 
-  private _getEvents(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot): Observable<EventInterface[]> {
-    return this.getEventCollectionForUser(user, where, orderBy, asc, limit, startAfter, endBefore)
-      .valueChanges({ idField: 'id' }).pipe(map((eventSnapshots) => {
-        return eventSnapshots.map((eventSnapshot) => {
-          return EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot).setID(eventSnapshot.id);
-        })
-      }))
-  }
+  private _getEvents(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any): Observable<EventInterface[]> {
+    const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount, startAfterDoc, endBeforeDoc);
 
-  /**
-   * @param user
-   * @param where
-   * @param orderBy
-   * @param asc
-   * @param limit
-   * @param startAfter
-   * @param endBefore
-   * @private
-   */
-  private _getEventsAndActivities(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot): Observable<EventInterface[]> {
-    return this.getEventCollectionForUser(user, where, orderBy, asc, limit, startAfter, endBefore)
-      .valueChanges({ idField: 'id' }).pipe(map((eventSnapshots) => {
-        return eventSnapshots.reduce((events, eventSnapshot) => {
-          events.push(EventImporterJSON.getEventFromJSON(<EventJSONInterface>eventSnapshot).setID(eventSnapshot.payload.id));
-          return events;
-        }, []);
-      })).pipe(switchMap((events) => {
-        if (!events.length) {
-          return of([]);
-        }
-        return combineLatest(events.map((event) => {
-          return this.getActivities(user, event.getID()).pipe(map((activities) => {
-            event.addActivities(activities)
-            return event;
-          }));
-        }))
-      }));
-  }
-
-  private getEventCollectionForUser(user: User, where: { fieldPath: string | firestore.FieldPath, opStr: firestore.WhereFilterOp, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: firestore.DocumentSnapshot, endBefore?: firestore.DocumentSnapshot) {
-    return this.afs.collection('users')
-      .doc(user.uid)
-      .collection('events', ((ref) => {
-        let query;
-        if (where.length) {
-          where.forEach(whereClause => {
-            if (whereClause.fieldPath === 'startDate' && (orderBy !== 'startDate')) {
-              query = ref.orderBy('startDate', 'asc')
-            }
-          });
-          if (!query) {
-            query = ref.orderBy(orderBy, asc ? 'asc' : 'desc');
-          } else {
-            query = query.orderBy(orderBy, asc ? 'asc' : 'desc');
+    return runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })).pipe(map((eventSnapshots: any[]) => {
+      return eventSnapshots.map((eventSnapshot) => {
+        const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
+        if (unknownTypes.length > 0) {
+          const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
+          if (newUnknownTypes.length > 0) {
+            newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
+            this.logger.captureMessage('Unknown Data Types in _getEvents', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
           }
-          where.forEach(whereClause => {
-            query = query.where(whereClause.fieldPath, whereClause.opStr, whereClause.value);
-          });
-        } else {
-          query = ref.orderBy(orderBy, asc ? 'asc' : 'desc');
+        }
+        const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id) as AppEventInterface;
+
+        // Hydrate with original file(s) info if present
+        const rawData = eventSnapshot as any;
+
+        if (rawData.originalFiles) {
+          event.originalFiles = rawData.originalFiles;
+        }
+        if (rawData.originalFile) {
+          event.originalFile = rawData.originalFile;
         }
 
-        if (limit > 0) {
-          query = query.limit(limit)
+        return event;
+      })
+    }));
+  }
+
+  private _getEventsAndActivities(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any): Observable<EventInterface[]> {
+    const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount, startAfterDoc, endBeforeDoc);
+
+    return runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })).pipe(map((eventSnapshots: any[]) => {
+      return eventSnapshots.reduce((events: EventInterface[], eventSnapshot) => {
+        const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
+        if (unknownTypes.length > 0) {
+          const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
+          if (newUnknownTypes.length > 0) {
+            newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
+            this.logger.captureMessage('Unknown Data Types in _getEventsAndActivities', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
+          }
         }
-        if (startAfter) {
-          // debugger;
-          query = query.startAfter(startAfter);
+        const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id) as AppEventInterface;
+
+        // Hydrate with original file(s) info if present
+        const rawData = eventSnapshot as any;
+
+        if (rawData.originalFiles) {
+          event.originalFiles = rawData.originalFiles;
         }
-        if (endBefore) {
-          // debugger;
-          query = query.endBefore(endBefore);
+        if (rawData.originalFile) {
+          event.originalFile = rawData.originalFile;
         }
-        return query;
+
+        events.push(event);
+        return events;
+      }, []);
+    })).pipe(switchMap((events: EventInterface[]) => {
+      if (events.length === 0) {
+        return of([]);
+      }
+      return combineLatest(events.map((event) => {
+        return this.getActivities(user, event.getID()).pipe(map((activities) => {
+          event.addActivities(activities)
+          return event;
+        }));
       }))
+    }));
   }
 
-  private processStreamDocumentSnapshot(streamSnapshot: DocumentData): StreamInterface {
+  private getEventQueryForUser(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any) {
+    const eventsRef = collection(this.firestore, `users/${user.uid}/events`);
+    const constraints: any[] = [];
 
-    return EventImporterJSON.getStreamFromJSON(StreamEncoder.decompressStream(streamSnapshot.data()));
+    // Replicate legacy logic for startDate ordering when filtering
+    if (whereClauses.length) {
+      whereClauses.forEach(clause => {
+        if (clause.fieldPath === 'startDate' && (orderByField !== 'startDate')) {
+          constraints.push(orderBy('startDate', 'asc'));
+        }
+      });
+    }
+
+    // Main Sort
+    constraints.push(orderBy(orderByField, asc ? 'asc' : 'desc'));
+
+    // Filters
+    whereClauses.forEach(clause => {
+      constraints.push(where(clause.fieldPath, clause.opStr, clause.value));
+    });
+
+    if (limitCount > 0) {
+      constraints.push(limit(limitCount));
+    }
+    if (startAfterDoc) {
+      constraints.push(startAfter(startAfterDoc));
+    }
+    if (endBeforeDoc) {
+      constraints.push(endBefore(endBeforeDoc));
+    }
+
+    return query(eventsRef, ...constraints);
   }
 
-  private processStreamQueryDocumentSnapshot(queryDocumentSnapshot: firestore.QueryDocumentSnapshot): StreamInterface {
+  // Legacy method kept for other consumers if any (though _getEvents was main one)
+  // DEPRECATED and likely broken in original but ported best-effort
+  /*
+  private getEventCollectionForUser(user: User, where: { fieldPath: string | any, opStr: any, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: any, endBefore?: any) {
+    // ... logic was mixed with query building in Compat.
+    // In modular, we just return Query.
+    return this.getEventQueryForUser(user, where, orderBy, asc, limit, startAfter, endBefore);
+  }
+  */
 
-    return EventImporterJSON.getStreamFromJSON(StreamEncoder.decompressStream(<CompressedJSONStreamInterface>queryDocumentSnapshot.data()));
+  private processStreamDocumentSnapshot(streamSnapshot: DocumentSnapshot): StreamInterface {
+    return EventImporterJSON.getStreamFromJSON(<any>streamSnapshot.data());
+  }
+
+  private processStreamQueryDocumentSnapshot(queryDocumentSnapshot: QueryDocumentSnapshot): StreamInterface {
+    return EventImporterJSON.getStreamFromJSON(<any>queryDocumentSnapshot.data());
   }
 
   // From https://github.com/angular/angularfire2/issues/1400
-  private async deleteAllDocsFromCollections(collections: AngularFirestoreCollection[]) {
+  private async deleteAllDocsFromCollections(collections: CollectionReference[]) {
     let totalDeleteCount = 0;
     const batchSize = 500;
-    return new Promise<number>((resolve, reject) =>
-      from(collections)
-        .pipe(concatMap(collection => from(collection.ref.get())))
-        .pipe(concatMap(q => from(q.docs)))
-        .pipe(bufferCount(batchSize))
-        .pipe(concatMap((docs) => Observable.create((o: Observer<number>) => {
-          const batch = this.afs.firestore.batch();
-          docs.forEach(doc => batch.delete(doc.ref));
-          batch.commit()
-            .then(() => {
-              o.next(docs.length);
-              o.complete()
-            })
-            .catch(e => o.error(e))
-        })))
-        .subscribe(
-          (batchDeleteCount: number) => totalDeleteCount += batchDeleteCount,
-          e => reject(e),
-          () => resolve(totalDeleteCount),
-        ))
+    // Iterate collections
+    for (const coll of collections) {
+      const snaps = await runInInjectionContext(this.injector, () => getDocs(coll)); // Read all
+      // Batch delete
+      const chunks = this.chunkArray(snaps.docs, batchSize);
+      for (const chunk of chunks) {
+        const batch = runInInjectionContext(this.injector, () => writeBatch(this.firestore));
+        chunk.forEach(doc => batch.delete(doc.ref));
+        await batch.commit();
+        totalDeleteCount += chunk.length;
+      }
+    }
+    return totalDeleteCount;
   }
 
-  // private getBlobFromStreamData(streamData: any[]): firestore.Blob {
-  //   return firestore.Blob.fromBase64String(btoa(Pako.gzip(JSON.stringify(streamData), {to: 'string'})))
-  // }
-
-
+  private chunkArray(myArray, chunk_size) {
+    const results = [];
+    while (myArray.length) {
+      results.push(myArray.splice(0, chunk_size));
+    }
+    return results;
+  }
+  public async getEventCount(user: User): Promise<number> {
+    const eventsRef = collection(this.firestore, `users/${user.uid}/events`);
+    const snapshot = await runInInjectionContext(this.injector, () => getCountFromServer(query(eventsRef)));
+    return snapshot.data().count;
+  }
 }
-

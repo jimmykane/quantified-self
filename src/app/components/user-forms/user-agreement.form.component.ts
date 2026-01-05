@@ -1,16 +1,16 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit} from '@angular/core';
-import {FormBuilder, FormControl, FormGroup, FormGroupDirective, NgForm, Validators} from '@angular/forms';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Inject, Input, OnInit, inject } from '@angular/core';
+import { FormBuilder, UntypedFormControl, UntypedFormGroup, FormGroupDirective, NgForm, Validators } from '@angular/forms';
 import { ErrorStateMatcher } from '@angular/material/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import * as Sentry from '@sentry/browser';
-import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {AppUserService} from '../../services/app.user.service';
-import {AppAuthService} from '../../authentication/app.auth.service';
-import {Router} from '@angular/router';
-import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
-import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/service-tokens/oauth2-service-token.interface';
+import { LoggerService } from '../../services/logger.service';
+import { Privacy } from '@sports-alliance/sports-lib';
+import { AppUserInterface } from '../../models/app-user.interface';
+import { AppUserService } from '../../services/app.user.service';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { Router } from '@angular/router';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 
 
 @Component({
@@ -18,19 +18,21 @@ import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib/lib/serv
   templateUrl: './user-agreement.form.component.html',
   styleUrls: ['./user-agreement.form.component.css'],
   providers: [],
+  standalone: false
 })
 
 
 export class UserAgreementFormComponent implements OnInit {
 
   public privacy = Privacy;
-  public user: User;
+  public user: AppUserInterface;
   public originalValues: {
     displayName: string;
   };
 
-  public userFormGroup: FormGroup;
+  public userFormGroup: UntypedFormGroup;
   private readonly signInMethod: string;
+  private analyticsService = inject(AppAnalyticsService);
 
   constructor(
     public dialogRef: MatDialogRef<UserAgreementFormComponent>,
@@ -39,7 +41,7 @@ export class UserAgreementFormComponent implements OnInit {
     private authService: AppAuthService,
     private snackBar: MatSnackBar,
     private router: Router,
-    private afa: AngularFireAnalytics,
+    private logger: LoggerService,
   ) {
     this.user = data.user; // Perhaps move to service?
     this.signInMethod = data.signInMethod;
@@ -49,22 +51,20 @@ export class UserAgreementFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    this.userFormGroup = new FormGroup({
-      acceptPrivacyPolicy: new FormControl(this.user.acceptedPrivacyPolicy, [
+    this.userFormGroup = new UntypedFormGroup({
+      acceptPrivacyPolicy: new UntypedFormControl(this.user.acceptedPrivacyPolicy, [
         Validators.requiredTrue,
         // Validators.minLength(4),
       ]),
-      acceptDataPolicy: new FormControl(this.user.acceptedDataPolicy, [
+      acceptDataPolicy: new UntypedFormControl(this.user.acceptedDataPolicy, [
         Validators.requiredTrue,
         // Validators.minLength(4),
       ]),
-      acceptTrackingPolicy: new FormControl(this.user.acceptedTrackingPolicy, [
+      acceptTrackingPolicy: new UntypedFormControl(this.user.acceptedTrackingPolicy, [
         Validators.requiredTrue,
         // Validators.minLength(4),
       ]),
-      acceptDiagnosticsPolicy: new FormControl(this.user.acceptedDiagnosticsPolicy, [
-        Validators.requiredTrue,
-        // Validators.minLength(4),
+      acceptMarketingPolicy: new UntypedFormControl(this.user.acceptedMarketingPolicy || false, [
       ]),
 
       // 'alterEgo': new FormControl(this.hero.alterEgo),
@@ -83,17 +83,17 @@ export class UserAgreementFormComponent implements OnInit {
       return;
     }
     try {
-      this.user.acceptedDataPolicy = true;
       this.user.acceptedPrivacyPolicy = true;
       this.user.acceptedTrackingPolicy = true;
+      this.user.acceptedMarketingPolicy = this.userFormGroup.get('acceptMarketingPolicy').value;
       this.user.acceptedDiagnosticsPolicy = true;
-      const dbUser = await this.userService.createOrUpdateUser(this.user);
+      await this.userService.createOrUpdateUser(this.user);
       this.snackBar.open('User updated', null, {
         duration: 2000,
       });
-      this.afa.logEvent('sign_up', {method: this.signInMethod});
+      this.analyticsService.logEvent('sign_up', { method: this.signInMethod });
       await this.router.navigate(['dashboard']);
-      this.snackBar.open(`Thanks for signing in ${dbUser.displayName || 'guest'}!`, null, {
+      this.snackBar.open(`Thanks for signing in ${this.user.displayName || 'guest'}!`, null, {
         duration: 2000,
       });
     } catch (e) {
@@ -101,18 +101,18 @@ export class UserAgreementFormComponent implements OnInit {
       this.snackBar.open('Could not update user', null, {
         duration: 2000,
       });
-      Sentry.captureException(e);
+      this.logger.error(e);
     } finally {
       this.dialogRef.close()
     }
   }
 
-  validateAllFormFields(formGroup: FormGroup) {
+  validateAllFormFields(formGroup: UntypedFormGroup) {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
-      if (control instanceof FormControl) {
-        control.markAsTouched({onlySelf: true});
-      } else if (control instanceof FormGroup) {
+      if (control instanceof UntypedFormControl) {
+        control.markAsTouched({ onlySelf: true });
+      } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }
     });

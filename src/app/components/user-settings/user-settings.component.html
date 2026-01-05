@@ -1,478 +1,403 @@
-<mat-card class="mat-elevation-z0" style="position: relative">
-  <form [formGroup]="userSettingsFormGroup" (submit)="onSubmit($event)">
-    <mat-tab-group
-      [dynamicHeight]="true">
+<div class="settings-container">
 
-      <mat-tab label="App settings">
-        <app-shade [isActive]="isSaving" [hasError]="errorSaving" [errorMessage]="errorSaving"></app-shade>
-        <ng-template matTabLabel>
-          <mat-icon matTooltip="General Settings">change_history</mat-icon>
-        </ng-template>
-        <mat-card class="mat-elevation-z0">
-          <mat-card-header>
-            <mat-card-subtitle>
-              App settings
-            </mat-card-subtitle>
-          </mat-card-header>
-          <mat-divider></mat-divider>
-          <mat-form-field>
-            <mat-select placeholder="Theme that the app should use" formControlName="appTheme">
-              <mat-option *ngFor="let appTheme of appThemes | keyvalue" [value]="appTheme.value">
+  <!-- Global Profile Header -->
+  <div style="padding: 32px 40px 0 40px; margin: 0 auto;">
+    <div class="user-profile-header app-header-card">
+      <div class="header-content">
+        <div class="header-avatar"
+          [style.backgroundImage]="'url('+ (user.photoURL ? user.photoURL :  'https://ui-avatars.com/api/?name=' + (this.user.displayName || 'Guest') ) +')'">
+        </div>
+        <div class="header-info">
+          <div class="name-row">
+            <app-privacy-icon [privacy]="user.privacy"></app-privacy-icon>
+            <h2>{{ user.displayName || 'Guest' }}</h2>
+          </div>
+          <p class="user-id">ID: {{ user.uid }}</p>
+          @if (user.description) {
+          <p class="user-bio">{{ user.description }}</p>
+          }
+        </div>
+      </div>
+      <div class="header-actions">
+        <app-user-actions [user]="user"></app-user-actions>
+      </div>
+    </div>
+  </div>
+
+  <!-- Horizontal Navigation -->
+  <nav class="settings-nav">
+    <ul class="nav-list">
+      <li class="nav-item" [class.active]="activeSection === 'profile'" (click)="activeSection = 'profile'">
+        <mat-icon>person</mat-icon> Profile
+      </li>
+      <li class="nav-item" [class.active]="activeSection === 'app'" (click)="activeSection = 'app'">
+        <mat-icon>settings</mat-icon> General
+      </li>
+      <li class="nav-item" [class.active]="activeSection === 'dashboard'" (click)="activeSection = 'dashboard'">
+        <mat-icon>dashboard</mat-icon> Dashboard
+      </li>
+      <li class="nav-item" [class.active]="activeSection === 'map'" (click)="activeSection = 'map'">
+        <mat-icon>map</mat-icon> Maps
+      </li>
+      <li class="nav-item" [class.active]="activeSection === 'charts'" (click)="activeSection = 'charts'">
+        <mat-icon>show_chart</mat-icon> Charts
+      </li>
+      <li class="nav-item" [class.active]="activeSection === 'units'" (click)="activeSection = 'units'">
+        <mat-icon>straighten</mat-icon> Units
+      </li>
+    </ul>
+  </nav>
+
+  <!-- Main Content Area -->
+  <main class="settings-content">
+    <form [formGroup]="userSettingsFormGroup" (submit)="onSubmit($event)" class="qs-form">
+
+      <!-- Profile Section -->
+      @if (activeSection === 'profile') {
+      <mat-card class="settings-card glass-card">
+        <div style="padding: 24px; padding-bottom: 0;">
+          <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Profile Settings</h1>
+          <p style="margin: 0; opacity: 0.7; font-size: 1rem;">Manage your public persona and account visibility.</p>
+        </div>
+        <div class="card-content">
+          <mat-form-field appearance="outline">
+            <mat-label>Public Name</mat-label>
+            <input matInput formControlName="displayName">
+            <mat-hint>The name other users will see on your profile.</mat-hint>
+            @if (hasError('displayName')) {
+            <mat-error>Public name is required</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Profile Visibility</mat-label>
+            <mat-select formControlName="privacy">
+              <mat-option [value]="privacy.Public">Public</mat-option>
+              <mat-option [value]="privacy.Private">Private</mat-option>
+            </mat-select>
+            <mat-hint>Choose who can see your activities and profile stats.</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>About You</mat-label>
+            <textarea matInput rows="3" formControlName="description"
+              placeholder="Tell the community about your sporting journey..."></textarea>
+            <mat-hint>A brief description for your public profile.</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Custom Branding</mat-label>
+            <input matInput formControlName="brandText">
+            <mat-hint>Personalize your public exported content (Pro feature).</mat-hint>
+          </mat-form-field>
+        </div>
+      </mat-card>
+
+      <!-- Danger Zone -->
+      <mat-card class="settings-card danger-card">
+        <div class="card-content">
+          <div class="danger-title">
+            <mat-icon>warning</mat-icon>
+            <span>Danger Zone</span>
+          </div>
+          <p>
+            Deleting your account will permanently remove all your activities, settings, connected services,
+            and any other associated data. If you have an active subscription, it will also be cancelled.
+            This action cannot be undone.
+          </p>
+
+          <div style="margin-top: 16px;">
+            <button mat-stroked-button color="warn" (click)="deleteUser($event)">
+              <mat-icon>delete_forever</mat-icon>
+              Delete My Account
+            </button>
+          </div>
+        </div>
+      </mat-card>
+      }
+
+      <!-- General App Settings -->
+      @if (activeSection === 'app') {
+      <mat-card class="settings-card glass-card">
+        <div style="padding: 24px; padding-bottom: 0;">
+          <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">General Settings</h1>
+          <p style="margin: 0; opacity: 0.7; font-size: 1rem;">Customize your application experience.</p>
+        </div>
+        <div class="card-content">
+          <mat-form-field appearance="outline">
+            <mat-label>Interface Theme</mat-label>
+            <mat-select formControlName="appTheme">
+              @for (appTheme of appThemes | keyvalue; track appTheme) {
+              <mat-option [value]="appTheme.value">
                 {{appTheme.key}}
               </mat-option>
+              }
             </mat-select>
-            <mat-hint><b>Tip:</b> select according to you device's theme</mat-hint>
-          </mat-form-field>
-        </mat-card>
-      </mat-tab>
-
-      <mat-tab label="Dashboard Settings">
-        <app-shade [isActive]="isSaving" [hasError]="errorSaving" [errorMessage]="errorSaving"></app-shade>
-        <ng-template matTabLabel>
-          <mat-icon matTooltip="Dashboard settings">dashboard</mat-icon>
-        </ng-template>
-
-        <mat-card class="mat-elevation-z0">
-
-          <mat-card-header>
-            <mat-card-subtitle>
-              Dashboard settings
-            </mat-card-subtitle>
-          </mat-card-header>
-          <mat-divider></mat-divider>
-
-          <mat-form-field>
-
-            <mat-select placeholder="Start of the week" formControlName="startOfTheWeek">
-              <mat-option [value]="0">
-                Sunday
-              </mat-option>
-              <mat-option [value]="1">
-                Monday
-              </mat-option>
-              <mat-option [value]="2">
-                Tuesday
-              </mat-option>
-              <mat-option [value]="3">
-                Wednesday
-              </mat-option>
-              <mat-option [value]="4">
-                Thursday
-              </mat-option>
-              <mat-option [value]="5">
-                Friday
-              </mat-option>
-              <mat-option [value]="6">
-                Saturday
-              </mat-option>
-            </mat-select>
-            <mat-hint><b>Tip:</b> on this day the dashboard adjusts to</mat-hint>
+            <mat-hint>Customize the visual look of the entire platform.</mat-hint>
           </mat-form-field>
 
-          <mat-form-field>
-            <mat-select placeholder="Events per page" formControlName="eventsPerPage">
-              <mat-option *ngFor="let eventsPerPageOption of eventsPerPage " [value]="eventsPerPageOption">
-                {{eventsPerPageOption}}
-              </mat-option>
-            </mat-select>
-            <mat-hint><b>Tip:</b> the more selected the slower the app will load on the dashboard view</mat-hint>
-          </mat-form-field>
-
-          <mat-form-field>
-            <mat-select placeholder="Hide ascent for activity types" formControlName="removeAscentForActivitiesSummaries" multiple >
-              <mat-option>None</mat-option>
-              <mat-option *ngFor="let activityType of activityTypes" [value]="activityType">
-                {{activityType}}
-              </mat-option>
-            </mat-select>
-          </mat-form-field>
-
-        </mat-card>
-      </mat-tab>
-
-
-      <mat-tab label="Map Settings">
-        <app-shade [isActive]="isSaving" [hasError]="errorSaving" [errorMessage]="errorSaving"></app-shade>
-        <ng-template matTabLabel>
-          <mat-icon matTooltip="Map settings">map</mat-icon>
-        </ng-template>
-
-        <mat-card class="mat-elevation-z0">
-
-          <mat-card-header>
-            <mat-card-subtitle>
-              Map settings
-            </mat-card-subtitle>
-          </mat-card-header>
-          <mat-divider></mat-divider>
-
-          <mat-form-field>
-            <mat-select placeholder="Theme that the map should use" formControlName="mapTheme">
-              <mat-option *ngFor="let mapTheme of mapThemes | keyvalue" [value]="mapTheme.value">
-                {{mapTheme.key}}
-              </mat-option>
-            </mat-select>
-            <mat-hint><b>Tip:</b> select according to you device's theme</mat-hint>
-          </mat-form-field>
-
-          <mat-form-field>
-            <mat-select placeholder="Map type that you prefer to use" formControlName="mapType">
-              <mat-option *ngFor="let mapType of mapTypes | keyvalue" [value]="mapType.value">
-                {{mapType.key}}
-              </mat-option>
-            </mat-select>
-            <mat-hint><b>Tip:</b> prefer satellite for non urban areas</mat-hint>
-          </mat-form-field>
-
-          <mat-form-field>
-            <mat-select placeholder="Lap types to show on the map" formControlName="mapLapTypes" multiple>
-              <mat-option *ngFor="let lapType of lapTypes" [value]="lapType">
-                {{lapType}}
-              </mat-option>
-            </mat-select>
-            <mat-hint><b>Tip</b>: select <b>distance</b> or <b>auto</b> for the <b>most common cases</b></mat-hint>
-          </mat-form-field>
-
-          <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="showMapLaps">
-              <span matTooltip="Show laps on map?">Show laps</span>
+          <div style="margin-top: 16px;">
+            <mat-slide-toggle formControlName="acceptedTrackingPolicy">
+              Allow Anonymous Usage Statistics
             </mat-slide-toggle>
-            <mat-hint><b>Tip:</b> laps can help in the track analysis</mat-hint>
-          </section>
-          <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="showMapArrows">
-              <span matTooltip="Show directional arrows on map?">Show directional arrows</span>
-            </mat-slide-toggle>
-            <mat-hint><b>Tip:</b> arrows can help for understanding a complex track</mat-hint>
-          </section>
+            <p style="margin: 8px 0 0 0; opacity: 0.7; font-size: 0.8rem;">
+              Help us improve by sharing anonymous usage data. Disabling this will stop all analytics tracking.
+            </p>
+          </div>
 
-          <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="showMapPoints">
-              <span matTooltip="Show points on map?">Show points</span>
+          <div style="margin-top: 16px;">
+            <mat-slide-toggle formControlName="acceptedMarketingPolicy">
+              Allow Marketing & Update Emails (Optional)
             </mat-slide-toggle>
-            <mat-hint><b>Tip:</b> laps can help in the track analysis</mat-hint>
-          </section>
+            <p style="margin: 8px 0 0 0; opacity: 0.7; font-size: 0.8rem;">
+              Receive occasional updates about new features, promotions, and special offers. You can manage this setting
+              here at any time.
+            </p>
+          </div>
+        </div>
+      </mat-card>
+      }
 
-          <section>
-            <mat-hint matTooltip="How thick the map lines will be">
-              Stroke width
-            </mat-hint>
-            <mat-slider
-              [max]="10"
-              [min]="0.05"
-              [step]="0.05"
-              [thumbLabel]="true"
-              formControlName="mapStrokeWidth">
+      <!-- Dashboard Settings -->
+      @if (activeSection === 'dashboard') {
+      <mat-card class="settings-card glass-card">
+        <div style="padding: 24px; padding-bottom: 0;">
+          <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Dashboard Settings</h1>
+          <p style="margin: 0; opacity: 0.7; font-size: 1rem;">Fine-tune your main activity views.</p>
+        </div>
+        <div class="card-content">
+          <mat-form-field appearance="outline">
+            <mat-label>Start of the Week</mat-label>
+            <mat-select formControlName="startOfTheWeek">
+              <mat-option [value]="0">Sunday</mat-option>
+              <mat-option [value]="1">Monday</mat-option>
+              <mat-option [value]="2">Tuesday</mat-option>
+              <mat-option [value]="3">Wednesday</mat-option>
+              <mat-option [value]="4">Thursday</mat-option>
+              <mat-option [value]="5">Friday</mat-option>
+              <mat-option [value]="6">Saturday</mat-option>
+            </mat-select>
+            <mat-hint>Week starts on this day in your calendars</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Activities per Page</mat-label>
+            <mat-select formControlName="eventsPerPage">
+              @for (option of eventsPerPage; track option) {
+              <mat-option [value]="option">{{option}}</mat-option>
+              }
+            </mat-select>
+            <mat-hint>Adjust how many records are loaded at once for better performance.</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Exclude Elevation for Sport Types</mat-label>
+            <mat-select formControlName="removeAscentForActivitiesSummaries" multiple>
+              @for (type of activityTypes; track type) {
+              <mat-option [value]="type">{{type}}</mat-option>
+              }
+            </mat-select>
+            <mat-hint>Elevation data will be hidden for these activities in summaries.</mat-hint>
+          </mat-form-field>
+        </div>
+      </mat-card>
+      }
+
+      <!-- Map Settings -->
+      @if (activeSection === 'map') {
+      <mat-card class="settings-card glass-card">
+        <div style="padding: 24px; padding-bottom: 0;">
+          <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Map Settings</h1>
+          <p style="margin: 0; opacity: 0.7; font-size: 1rem;">Configure how your activities are drawn.</p>
+        </div>
+        <div class="card-content">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <mat-form-field appearance="outline">
+              <mat-label>Map Appearance</mat-label>
+              <mat-select formControlName="mapTheme">
+                @for (theme of mapThemes | keyvalue; track theme) {
+                <mat-option [value]="theme.value">{{theme.key}}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Map Layer (Default)</mat-label>
+              <mat-select formControlName="mapType">
+                @for (type of mapTypes | keyvalue; track type) {
+                <mat-option [value]="type.value">{{type.key}}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          </div>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Lap Markers</mat-label>
+            <mat-select formControlName="mapLapTypes" multiple>
+              @for (lapType of lapTypes; track lapType) {
+              <mat-option [value]="lapType">{{lapType}}</mat-option>
+              }
+            </mat-select>
+            <mat-hint>Select which markers to display on your activity routes.</mat-hint>
+          </mat-form-field>
+
+          <div style="display: flex; flex-direction: column; gap: 16px; margin: 8px 0;">
+            <mat-slide-toggle formControlName="showMapLaps">Enable Auto-Laps</mat-slide-toggle>
+            <mat-slide-toggle formControlName="showMapArrows">Show Directional Arrows</mat-slide-toggle>
+            <mat-slide-toggle formControlName="showMapPoints">Show GPS Data Points</mat-slide-toggle>
+          </div>
+
+          <div style="margin-top: 16px;">
+            <p style="margin: 0 0 8px 0; font-size: 0.9rem; font-weight: 500;">Route Line Width</p>
+            <mat-slider [max]="10" [min]="0.5" [step]="0.5" discrete style="width: 100%;">
+              <input matSliderThumb formControlName="mapStrokeWidth">
             </mat-slider>
-          </section>
+          </div>
+        </div>
+      </mat-card>
+      }
 
-        </mat-card>
-      </mat-tab>
+      <!-- Chart Settings -->
+      @if (activeSection === 'charts') {
+      <mat-card class="settings-card glass-card">
+        <div style="padding: 24px; padding-bottom: 0;">
+          <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Chart Settings</h1>
+          <p style="margin: 0; opacity: 0.7; font-size: 1rem;">Customize data visualization and analysis.</p>
+        </div>
+        <div class="card-content">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+            <mat-form-field appearance="outline">
+              <mat-label>Data Scaling (X-Axis)</mat-label>
+              <mat-select formControlName="xAxisType">
+                @for (x of xAxisTypes | keyvalue; track x) {
+                <mat-option [value]="x.value">{{x.key}}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
 
-      <mat-tab label="Chart Settings">
-        <app-shade [isActive]="isSaving" [hasError]="errorSaving" [errorMessage]="errorSaving"></app-shade>
-        <ng-template matTabLabel>
-          <mat-icon matTooltip="Chart settings">show_chart</mat-icon>
-        </ng-template>
+            <mat-form-field appearance="outline">
+              <mat-label>Chart Aesthetics</mat-label>
+              <mat-select formControlName="chartTheme">
+                @for (t of chartThemes | keyvalue; track t) {
+                <mat-option [value]="t.value">{{t.key}}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          </div>
 
-        <mat-card class="mat-elevation-z0">
-
-          <mat-card-header>
-            <mat-card-subtitle>
-              Chart settings
-            </mat-card-subtitle>
-          </mat-card-header>
-          <mat-divider></mat-divider>
-
-          <mat-form-field>
-            <mat-select placeholder="XAxis chart type" formControlName="xAxisType">
-              <mat-option *ngFor="let xAxisType of xAxisTypes | keyvalue" [value]="xAxisType.value">
-                {{xAxisType.key}}
-              </mat-option>
-            </mat-select>
-            <mat-hint><b>Tip:</b> duration is the one that is most preferred</mat-hint>
-          </mat-form-field>
-
-          <mat-form-field>
-            <mat-select placeholder="Theme that the charts should use" formControlName="chartTheme">
-              <mat-option *ngFor="let chartTheme of chartThemes | keyvalue" [value]="chartTheme.value">
-                {{chartTheme.key}}
-              </mat-option>
-            </mat-select>
-            <mat-hint><b>Tip:</b> material and kelly are one of the best 😉</mat-hint>
-          </mat-form-field>
-
-          <mat-form-field>
-            <mat-select placeholder="" formControlName="dataTypesToUse" multiple>
-              <mat-optgroup *ngFor="let dataGroup of dataGroups" [label]="dataGroup.name"
-                            [disabled]="dataGroup.disabled">
-                <mat-option *ngFor="let data of dataGroup.data" [value]="data">
-                  {{data}}
-                </mat-option>
+          <mat-form-field appearance="outline">
+            <mat-label>Visible Metrics</mat-label>
+            <mat-select formControlName="dataTypesToUse" multiple>
+              @for (group of dataGroups; track group.name) {
+              <mat-optgroup [label]="group.name">
+                @for (data of group.data; track data) {
+                <mat-option [value]="data">{{data}}</mat-option>
+                }
               </mat-optgroup>
+              }
             </mat-select>
-            <mat-hint><b>Tip</b>: select the ones that you use <b>often</b></mat-hint>
+            <mat-hint>Select which data series are plotted by default.</mat-hint>
           </mat-form-field>
 
-          <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="showAllData">
-              <span matTooltip="Show all data?">Show all data</span>
-            </mat-slide-toggle>
-            <mat-hint><b>Tip:</b> turn this on if you don't need any filtering or want to see all activity data
-            </mat-hint>
-          </section>
-          <section>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 8px 0;">
+            <mat-slide-toggle formControlName="showAllData">Show All Data Points</mat-slide-toggle>
+            <mat-slide-toggle formControlName="chartCursorBehaviour">Selection Tool by Default</mat-slide-toggle>
+            <mat-slide-toggle formControlName="useAnimations">Enable Animations</mat-slide-toggle>
+            <mat-slide-toggle formControlName="stackYAxes">Stack Multi-Charts</mat-slide-toggle>
+          </div>
 
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="chartCursorBehaviour">
-              <span matTooltip="Cursor selection by default?">Cursor selection</span>
-            </mat-slide-toggle>
-            <mat-hint><b>Tip:</b> turn this on if you want the default behaviour of the cursor to be select (default is
-              zoom)
-            </mat-hint>
-          </section>
-          <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="useAnimations">
-              <span matTooltip="Use animations or no">Animations</span>
-            </mat-slide-toggle>
-            <mat-hint><b>Tip:</b> this is experimental and might affect <b>performance</b></mat-hint>
-          </section>
-          <section>
-            <mat-hint matTooltip="How thick the chart lines will be">
-              Stroke width
-            </mat-hint>
-            <mat-slider
-              [max]="10"
-              [min]="0.05"
-              [step]="0.05"
-              [thumbLabel]="true"
-              formControlName="chartStrokeWidth">
-            </mat-slider>
-          </section>
-          <section>
-            <mat-hint matTooltip="How vibrant the chart lines will be">
-              Stroke opacity
-            </mat-hint>
-            <mat-slider
-              [max]="1"
-              [min]="0.05"
-              [step]="0.05"
-              [thumbLabel]="true"
-              formControlName="chartStrokeOpacity">
-            </mat-slider>
-          </section>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px;">
+            <div>
+              <p style="margin: 0 0 8px 0; font-size: 0.9rem; font-weight: 500;">Line Width</p>
+              <mat-slider [max]="10" [min]="0.5" [step]="0.5" discrete style="width: 100%;">
+                <input matSliderThumb formControlName="chartStrokeWidth">
+              </mat-slider>
+            </div>
+            <div>
+              <p style="margin: 0 0 8px 0; font-size: 0.9rem; font-weight: 500;">Fill Intensity</p>
+              <mat-slider [max]="1" [min]="0" [step]="0.1" discrete style="width: 100%;">
+                <input matSliderThumb formControlName="chartFillOpacity">
+              </mat-slider>
+            </div>
+          </div>
+        </div>
+      </mat-card>
+      }
 
-          <section>
-            <mat-hint matTooltip="How strong the fill color should be">
-              Fill opacity
-            </mat-hint>
-            <mat-slider
-              [max]="1"
-              [min]="0.00"
-              [step]="0.05"
-              [thumbLabel]="true"
-              formControlName="chartFillOpacity">
-            </mat-slider>
-          </section>
-
-          <mat-form-field>
-            <mat-select placeholder="Lap types to show on the chart" formControlName="chartLapTypes" multiple>
-              <mat-option *ngFor="let lapType of lapTypes" [value]="lapType">
-                {{lapType}}
-              </mat-option>
+      <!-- Unit Settings -->
+      @if (activeSection === 'units') {
+      <mat-card class="settings-card glass-card">
+        <div style="padding: 24px; padding-bottom: 0;">
+          <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Measurement Units</h1>
+          <p style="margin: 0; opacity: 0.7; font-size: 1rem;">Choose your preferred units for sporting data.</p>
+        </div>
+        <div class="card-content">
+          <mat-form-field appearance="outline">
+            <mat-label>Preferred Speed Units</mat-label>
+            <mat-select formControlName="speedUnitsToUse" multiple>
+              @for (unit of speedUnits | keyvalue; track unit.key) {
+              <mat-option [value]="unit.value">{{unit.value}}</mat-option>
+              }
             </mat-select>
-            <mat-hint><b>Tip</b>: select <b>distance</b> or <b>auto</b> for the <b>most common cases</b></mat-hint>
+            <mat-hint>Metrics used for running, cycling, etc.</mat-hint>
           </mat-form-field>
 
-          <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="showChartLaps">
-              <span matTooltip="Show laps on chart?">Show laps</span>
-            </mat-slide-toggle>
-            <mat-hint><b>Tip:</b> laps can help with the data analysis</mat-hint>
-          </section>
-
-          <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="showChartGrid">
-              <span matTooltip="Show grid on the chart?">Show grid</span>
-            </mat-slide-toggle>
-            <mat-hint><b>Tip:</b> showing the grid can help with the data analysis</mat-hint>
-          </section>
-
-          <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="stackYAxes">
-              <span matTooltip="Stack Y axes?">Stack Y Axes</span>
-            </mat-slide-toggle>
-            <mat-hint><b>Tip:</b> this will stack the charts on top of each other</mat-hint>
-          </section>
-
-          <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="chartHideAllSeriesOnInit">
-              <span matTooltip="Hide all series on chart initialization?">Hide all sereis on initialization</span>
-            </mat-slide-toggle>
-            <mat-hint><b>Tip:</b> this will create an empty chart</mat-hint>
-          </section>
-
-          <section>
-            <mat-hint matTooltip="Improves the scalability for power analysis">
-              Extra max for Power
-            </mat-hint>
-            <mat-slider
-              [max]="0.9"
-              [min]="-0.9"
-              [step]="0.05"
-              [thumbLabel]="true"
-              formControlName="chartExtraMaxForPower">
-            </mat-slider>
-            <br/>
-            <mat-hint><b>Tip:</b> this will compress/decompress the power chart</mat-hint>
-          </section>
-
-          <section>
-            <mat-hint matTooltip="Improves the scalability for pace analysis">
-              Extra max for Pace
-            </mat-hint>
-            <mat-slider
-              [max]="0.9"
-              [min]="-0.9"
-              [step]="0.05"
-              [thumbLabel]="true"
-              formControlName="chartExtraMaxForPace">
-            </mat-slider>
-            <br/>
-            <mat-hint><b>Tip:</b> this will compress/decompress the pace chart</mat-hint>
-          </section>
-
-          <section>
-            <mat-hint matTooltip="How easy it is to calculate gain or loss">
-              Gain and loss threshold
-            </mat-hint>
-            <mat-slider
-              [max]="10"
-              [min]="0.05"
-              [step]="0.05"
-              [thumbLabel]="true"
-              formControlName="chartGainAndLossThreshold">
-            </mat-slider>
-            <br/>
-            <mat-hint><b>Tip:</b> use 5 (5m) if you are interested in a consistent filtering across data</mat-hint>
-          </section>
-
-          <section>
-            <mat-slide-toggle
-              [color]="'accent'"
-              formControlName="chartDisableGrouping">
-              <span matTooltip="Disable grouping of data?">Disable grouping</span>
-            </mat-slide-toggle>
-            <mat-hint><b>Grouping</b> "groups" the data to fit at the available screen pixel size.<br/>
-              This creates a more readable chart and improves performance by not calculating "those extra pixels"<br/>
-              The more you zoom on the chart, the more data is unfold on the chart.<br/>
-              However, if you use QS to mainly compare activities <b>at full zoomed out view</b>, eg heart rate or power
-              from more than once device, you might want to experiment with this setting.<br/>
-              Disabling grouping it will load on the screen all available data and will impact performance.
-            </mat-hint>
-          </section>
-
-          <section>
-            <mat-hint matTooltip="How much downsampling will happen for activities that are over 6h">
-              Down-sampling level
-            </mat-hint>
-            <mat-slider
-              [max]="20"
-              [min]="2"
-              [step]="1"
-              [thumbLabel]="true"
-              formControlName="chartDownSamplingLevel">
-            </mat-slider>
-            <mat-hint>
-              <br/>
-              <b>Down-sampling</b> keeps data every nth second according to what you've chosen for activities that are
-              over 6 hours.<br/>
-              For example the default is 4 and that will keep the data from second 4,8,12 etc if the activity is
-              6hours.<br/>
-              Raising this value can dramatically improve performance or lowering it improve details.
-            </mat-hint>
-          </section>
-        </mat-card>
-      </mat-tab>
-
-      <mat-tab label="Unit Settings">
-        <app-shade [isActive]="isSaving" [hasError]="errorSaving" [errorMessage]="errorSaving"></app-shade>
-        <ng-template matTabLabel>
-          <mat-icon matTooltip="Unit settings">multiline_chart</mat-icon>
-        </ng-template>
-
-        <mat-card class="mat-elevation-z0">
-
-          <mat-card-header>
-            <mat-card-subtitle>
-              Unit settings
-            </mat-card-subtitle>
-          </mat-card-header>
-          <mat-divider></mat-divider>
-
-          <mat-form-field>
-            <mat-select placeholder="Units for speed" formControlName="speedUnitsToUse" multiple>
-              <mat-option *ngFor="let speedUnit of speedUnits | keyvalue" [value]="speedUnit.value">
-                {{speedUnit.value}}
-              </mat-option>
+          <mat-form-field appearance="outline">
+            <mat-label>Preferred Pace Units</mat-label>
+            <mat-select formControlName="paceUnitsToUse" multiple>
+              @for (unit of paceUnits | keyvalue; track unit.key) {
+              <mat-option [value]="unit.value">{{unit.value}}</mat-option>
+              }
             </mat-select>
-            <mat-hint><b>Tip:</b> you can select more than one</mat-hint>
+            <mat-hint>Time per kilometer or mile calculations.</mat-hint>
           </mat-form-field>
 
-          <mat-form-field>
-            <mat-select placeholder="Units for pace" formControlName="paceUnitsToUse" multiple>
-              <mat-option *ngFor="let paceUnit of paceUnits | keyvalue" [value]="paceUnit.value">
-                {{paceUnit.value}}
-              </mat-option>
+          <mat-form-field appearance="outline">
+            <mat-label>Swim Pace Preference</mat-label>
+            <mat-select formControlName="swimPaceUnitsToUse" multiple>
+              @for (unit of swimPaceUnits | keyvalue; track unit.key) {
+              <mat-option [value]="unit.value">{{unit.value}}</mat-option>
+              }
             </mat-select>
-            <mat-hint><b>Tip:</b> you can select more than one</mat-hint>
+            <mat-hint>Specific units for swimming segments.</mat-hint>
           </mat-form-field>
 
-          <mat-form-field>
-            <mat-select placeholder="Units for swim pace" formControlName="swimPaceUnitsToUse" multiple>
-              <mat-option *ngFor="let swimPaceUnit of swimPaceUnits | keyvalue" [value]="swimPaceUnit.value">
-                {{swimPaceUnit.value}}
-              </mat-option>
+          <mat-form-field appearance="outline">
+            <mat-label>Vertical Speed Preference</mat-label>
+            <mat-select formControlName="verticalSpeedUnitsToUse" multiple>
+              @for (unit of verticalSpeedUnits | keyvalue; track unit.key) {
+              <mat-option [value]="unit.value">{{unit.value}}</mat-option>
+              }
             </mat-select>
-            <mat-hint><b>Tip:</b> you can select more than one</mat-hint>
+            <mat-hint>Climbing and descent rate indicators.</mat-hint>
           </mat-form-field>
+        </div>
+      </mat-card>
+      }
 
-          <mat-form-field>
-            <mat-select placeholder="Units for vertical speed" formControlName="verticalSpeedUnitsToUse"
-                        multiple>
-              <mat-option *ngFor="let verticalSpeedUnit of verticalSpeedUnits | keyvalue"
-                          [value]="verticalSpeedUnit.value">
-                {{verticalSpeedUnit.value}}
-              </mat-option>
-            </mat-select>
-            <mat-hint><b>Tip:</b> you can select more than one</mat-hint>
-          </mat-form-field>
-        </mat-card>
+      <!-- Floating Action Button for Save (Desktop Only) -->
+      @if (!hasError()) {
+      <div class="qs-form-actions-floating">
+        <button mat-fab color="primary" [disabled]="isSaving || !userSettingsFormGroup.dirty" matTooltip="Save Changes"
+          (click)="onSubmit($event)">
+          <mat-icon>save</mat-icon>
+        </button>
+      </div>
+      }
 
-      </mat-tab>
-    </mat-tab-group>
+      <!-- Sticky Save for Mobile -->
+      @if (!hasError()) {
+      <div class="mobile-save-bar">
+        <button mat-flat-button color="primary" [disabled]="isSaving || !userSettingsFormGroup.dirty"
+          (click)="onSubmit($event)">
+          Save Settings
+        </button>
+      </div>
+      }
 
-    <button mat-flat-button *ngIf="!hasError()" [disabled]="isSaving" color="primary" (click)="onSubmit($event)">
-      Save
-    </button>
-  </form>
-</mat-card>
+    </form>
+
+    <app-shade [isActive]="isSaving || isDeleting" [hasError]="errorSaving || errorDeleting"
+      [errorMessage]="errorSaving || errorDeleting"></app-shade>
+  </main>
+</div>

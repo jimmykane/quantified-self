@@ -1,100 +1,121 @@
-<mat-card class="mat-elevation-z0">
-  <section class="container">
-    <section>
-      <mat-form-field appearance="standard">
-        <mat-label>Search</mat-label>
-        <input matInput (keyup)="onKeyUp($event)" placeholder="Date, name, type, etc..." autocomplete="off">
-      </mat-form-field>
-    </section>
-    <section class="buttons" *ngIf="selection.selected.length">
-      <button
-        mat-icon-button
-        matTooltip="Merge {{selection.selected.length}} events"
-        *ngIf="this.selection.selected.length > 1"
-        (click)="$event.preventDefault(); $event.stopPropagation();mergeSelection($event)">
-        <mat-icon matBadge="{{selection.selected.length}}" matBadgeColor="primary">compare_arrows</mat-icon>
-      </button>
-      <button
-        mat-icon-button
-        matTooltip="Download as csv {{selection.selected.length}} events"
-        (click)="$event.preventDefault(); $event.stopPropagation(); downloadAsCSV($event)">
-        <mat-icon matBadge="{{selection.selected.length}}" matBadgeColor="accent" svgIcon="file-csv"></mat-icon>
-      </button>
-      <button
-        mat-icon-button
-        matTooltip="Delete {{selection.selected.length}} events"
-        (click)="$event.preventDefault(); $event.stopPropagation();deleteSelection()">
-        <mat-icon matBadge="{{selection.selected.length}}" matBadgeColor="warn">delete</mat-icon>
-      </button>
-    </section>
-  </section>
+<!-- Search Section -->
+<div class="glass-card qs-filter-container">
+  <mat-form-field appearance="outline" class="qs-search-field">
+    <mat-label>Search events</mat-label>
+    <input matInput [value]="searchTerm" (input)="onSearchInput($event)" placeholder="Date, name, type, etc..."
+      autocomplete="off">
+    <mat-icon matSuffix *ngIf="!searchTerm">search</mat-icon>
+    <button mat-icon-button matSuffix *ngIf="searchTerm" (click)="clearSearch()" aria-label="Clear">
+      <mat-icon>close</mat-icon>
+    </button>
+  </mat-form-field>
 
-  <mat-divider [inset]="true"></mat-divider>
+  @if (selection.selected.length) {
+  <div class="buttons">
+    @if (this.selection.selected.length > 1) {
+    <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="primary" matBadgeSize="small"
+      matTooltip="Merge {{selection.selected.length}} events"
+      (click)="$event.preventDefault(); $event.stopPropagation();mergeSelection($event)">
+      <mat-icon>compare_arrows</mat-icon>
+    </button>
+    }
+    <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="accent" matBadgeSize="small"
+      matTooltip="Download as csv {{selection.selected.length}} events"
+      (click)="$event.preventDefault(); $event.stopPropagation(); downloadAsCSV($event)">
+      <mat-icon svgIcon="file-csv"></mat-icon>
+    </button>
+    <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="primary" matBadgeSize="small"
+      matTooltip="Download original files"
+      (click)="$event.preventDefault(); $event.stopPropagation(); downloadOriginals()">
+      <mat-icon>folder_zip</mat-icon>
+    </button>
+    <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="warn" matBadgeSize="small"
+      matTooltip="Delete {{selection.selected.length}} events"
+      (click)="$event.preventDefault(); $event.stopPropagation();deleteSelection()">
+      <mat-icon>delete</mat-icon>
+    </button>
+  </div>
+  }
+</div>
 
-  <section class="table-container">
+<!-- Table Section -->
+<div class="glass-card table-container">
+  <div class="table-wrapper qs-scrollbar">
     <table mat-table [dataSource]="data" matSort [matSortActive]="user.settings.dashboardSettings.tableSettings.active"
-           [matSortDirection]="user.settings.dashboardSettings.tableSettings.direction" matSortDisableClear>
-      <ng-container
-        *ngFor="let column of getColumnsToDisplay(); first as isFirst; last as isLast; index as i;"
-        [matColumnDef]="column" [sticky]="isSticky(column)" [stickyEnd]="isStickyEnd(column)">
-        <ng-container *ngIf="isFirst && showActions">
-          <th mat-header-cell *matHeaderCellDef>
-            <mat-checkbox
-              (change)="$event ? masterToggle() : null"
-              [checked]="selection.hasValue() && isAllSelected()"
-              [indeterminate]="selection.hasValue() && !isAllSelected()">
-            </mat-checkbox>
-          </th>
-        </ng-container>
-        <ng-container *ngIf="isLast && showActions">
-          <th mat-header-cell *matHeaderCellDef>
-            <app-event-table-actions
-              [selectedDataTypes]="selectedColumns"
-              (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
-          </th>
-        </ng-container>
-        <ng-container *ngIf="(!(isFirst && showActions) && !(isLast && showActions))">
-          <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">
-            <app-data-type-icon [dataType]="column"></app-data-type-icon>
-          </th>
-        </ng-container>
-        <td mat-cell matRipple *matCellDef="let row" (click)="(column === 'Checkbox' ? ($event.preventDefault() || $event.stopPropagation() || checkBoxClick(row)) : false)">
-          <mat-checkbox *ngIf="column === 'Checkbox'" (click)="$event.preventDefault();$event.stopPropagation();checkBoxClick(row);"
-                        (change)="$event ? checkBoxClick(row) : null"
-                        [ngStyle]="{'background-color': row['Color']}"
-                        [checked]="selection.isSelected(row)">
+      [matSortDirection]="user.settings.dashboardSettings.tableSettings.direction" matSortDisableClear>
+      @for (column of getColumnsToDisplay(); track column; let isFirst = $first; let isLast = $last; let i = $index) {
+      <ng-container [matColumnDef]="column" [sticky]="isSticky(column)" [stickyEnd]="isStickyEnd(column)">
+        @if (isFirst && showActions) {
+        <th mat-header-cell *matHeaderCellDef>
+          <mat-checkbox (change)="$event ? masterToggle() : null" [checked]="selection.hasValue() && isAllSelected()"
+            [indeterminate]="selection.hasValue() && !isAllSelected()">
           </mat-checkbox>
-          <span *ngIf="column === 'Actions'">
-          <app-event-actions *ngIf="user" [user]="user" [event]="row.Event"
-                             [showDownloadOriginal]="true"></app-event-actions>
-        </span>
-          <span *ngIf="column === 'Activity Types'">
-          <span *ngIf="row['Merged Event']"><mat-icon>compare_arrows</mat-icon></span>
+        </th>
+        }
+        @if (isLast && showActions) {
+        <th mat-header-cell *matHeaderCellDef>
+          <app-event-table-actions [selectedDataTypes]="selectedColumns"
+            (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
+        </th>
+        }
+        @if ((!(isFirst && showActions) && !(isLast && showActions))) {
+        <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">
+          <app-data-type-icon [dataType]="column"></app-data-type-icon>
+        </th>
+        }
+        <td mat-cell matRipple *matCellDef="let row"
+          (click)="(column === 'Checkbox' ? ($event.preventDefault() || $event.stopPropagation() || checkBoxClick(row)) : false)">
+          @if (column === 'Checkbox') {
+          <mat-checkbox (click)="$event.stopPropagation()" (change)="$event ? checkBoxClick(row) : null"
+            [checked]="selection.isSelected(row)">
+          </mat-checkbox>
+          }
+          @if (column === 'Actions') {
+          <span>
+            @if (user) {
+            <app-event-actions [user]="user" [event]="row.Event" [showDownloadOriginal]="true"></app-event-actions>
+            }
+          </span>
+          }
+          @if (column === 'Activity Types') {
+          <span class="activity-type-cell">
+            @if (row['Merged Event']) {
+            <span><mat-icon>compare_arrows</mat-icon></span>
+            }
+            <app-activity-type-icon [activityType]="row[column]" size="18px" vAlign="middle"></app-activity-type-icon>
             {{ row[column] }}
-        </span>
-          <span
-            *ngIf="column !== 'Checkbox' && column !== 'Actions' && column !== 'Activity Types' && column!=='Privacy'">
-          {{ row[column] }}
-        </span>
+          </span>
+          }
+          @if (column !== 'Checkbox' && column !== 'Actions' && column !== 'Activity Types' && column!=='Privacy') {
+          <span>
+            {{ row[column] }}
+          </span>
+          }
         </td>
       </ng-container>
+      }
 
 
-      <tr mat-header-row
-          *matHeaderRowDef="getColumnsToDisplay(); sticky: true"></tr>
+      <tr mat-header-row *matHeaderRowDef="getColumnsToDisplay(); sticky: true"></tr>
       <tr mat-row *matRowDef="let row; columns: getColumnsToDisplay();" [@rowsAnimation]=""
-          [routerLink]="['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
-          [class.merged]="row['Merged Event']"
-          class="normal-row">
+        [routerLink]="['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
+        [class.merged]="row['Merged Event']" [style.--row-gradient]="row['Gradient']" class="normal-row activity-row">
+      </tr>
+
+      <!-- Row shown when there is no matching data. -->
+      <tr class="mat-row" *matNoDataRow>
+        <td class="mat-cell" [attr.colspan]="getColumnsToDisplay().length">
+          <span *ngIf="searchTerm">No events found matching "{{searchTerm}}"</span>
+          <span *ngIf="!searchTerm && !isLoading">No events found</span>
+        </td>
       </tr>
     </table>
-
-  </section>
+  </div>
 
   <mat-paginator (page)="pageChanges($event)" [length]="data ? data.data.length : 0"
-                 [pageSize]="user.settings.dashboardSettings.tableSettings.eventsPerPage" [showFirstLastButtons]="true"
-                 [pageSizeOptions]="[10, 25, 50, 100, 250]"></mat-paginator>
+    [pageSize]="user.settings.dashboardSettings.tableSettings.eventsPerPage" [showFirstLastButtons]="true"
+    [pageSizeOptions]="[10, 25, 50, 100, 250]"></mat-paginator>
 
   <app-shade [isActive]="isLoading" [hasError]="this.events && this.events.length === 0"
-             [errorMessage]="'Nothing to show'"></app-shade>
-</mat-card>
+    [errorMessage]="'Nothing to show'"></app-shade>
+</div>

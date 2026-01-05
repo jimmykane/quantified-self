@@ -1,37 +1,38 @@
-import {ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit} from '@angular/core';
-import {Router} from '@angular/router';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
-import {AppEventService} from '../../services/app.event.service';
-import {AppFileService} from '../../services/app.file.service';
-import {EventFormComponent} from '../event-form/event.form.component';
-import {EventExporterJSON} from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.json';
-import {Privacy} from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
-import {AppSharingService} from '../../services/app.sharing.service';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {DeleteConfirmationComponent} from '../delete-confirmation/delete-confirmation.component';
-import {AngularFireAnalytics} from '@angular/fire/compat/analytics';
-import {ActivityFormComponent} from '../activity-form/activity.form.component';
-import {take} from 'rxjs/operators';
-import {EventUtilities} from '@sports-alliance/sports-lib/lib/events/utilities/event.utilities';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit, inject, Output, EventEmitter } from '@angular/core';
+import { Router } from '@angular/router';
+import { EventInterface } from '@sports-alliance/sports-lib';
+import { AppEventService } from '../../services/app.event.service';
+import { AppFileService } from '../../services/app.file.service';
+import { EventFormComponent } from '../event-form/event.form.component';
+import { EventExporterJSON } from '@sports-alliance/sports-lib';
+import { Privacy } from '@sports-alliance/sports-lib';
+import { AppSharingService } from '../../services/app.sharing.service';
+import { User } from '@sports-alliance/sports-lib';
+import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
+import { ActivityFormComponent } from '../activity-form/activity.form.component';
+import { take } from 'rxjs/operators';
+import { Subscription } from 'rxjs';
+import { EventUtilities } from '@sports-alliance/sports-lib';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { Clipboard } from '@angular/cdk/clipboard';
-import { ActivityCropFormComponent } from '../activity-crop-form/activity.crop.form.component';
-import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
+import { MatIconModule } from '@angular/material/icon';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
+
+import { DataDistance } from '@sports-alliance/sports-lib';
 import { environment } from '../../../environments/environment';
-import * as Sentry from '@sentry/browser';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { AngularFireAuth } from '@angular/fire/compat/auth';
+import { Auth, getIdToken } from '@angular/fire/auth';
 import {
-  COROSAPIEventMetaDataInterface, GarminHealthAPIEventMetaDataInterface,
+  GarminHealthAPIEventMetaDataInterface,
   ServiceNames,
-  SuuntoAppEventMetaDataInterface
-} from '@sports-alliance/sports-lib/lib/meta-data/event-meta-data.interface';
-import { EventExporterGPX } from '@sports-alliance/sports-lib/lib/events/adapters/exporters/exporter.gpx';
-import { DataStartPosition } from '@sports-alliance/sports-lib/lib/data/data.start-position';
-import { ActivityUtilities } from '@sports-alliance/sports-lib/lib/events/utilities/activity.utilities';
+} from '@sports-alliance/sports-lib';
+import { EventExporterGPX } from '@sports-alliance/sports-lib';
+import { DataStartPosition } from '@sports-alliance/sports-lib';
+import { ActivityUtilities } from '@sports-alliance/sports-lib';
 import { AppWindowService } from '../../services/app.window.service';
+import { LoggerService } from '../../services/logger.service';
 
 @Component({
   selector: 'app-event-actions',
@@ -39,17 +40,22 @@ import { AppWindowService } from '../../services/app.window.service';
   styleUrls: ['./event.actions.component.css'],
   providers: [],
   changeDetection: ChangeDetectionStrategy.OnPush,
-
+  standalone: false
 })
 export class EventActionsComponent implements OnInit, OnDestroy {
-  @Input() event: EventInterface;
-  @Input() user: User;
+  @Input() event!: EventInterface;
+  @Input() user!: User;
   @Input() showDownloadOriginal = false;
 
-  public suuntoAppServiceMetaData: SuuntoAppEventMetaDataInterface;
-  public corosAPIServiceMetaData: COROSAPIEventMetaDataInterface;
-  public garminHealthAPIServiceMetaData: GarminHealthAPIEventMetaDataInterface;
-  private deleteConfirmationSubscription;
+
+
+  public garminHealthAPIServiceMetaData!: GarminHealthAPIEventMetaDataInterface;
+  private deleteConfirmationSubscription!: Subscription;
+
+  private auth = inject(Auth);
+  private analyticsService = inject(AppAnalyticsService);
+  private logger = inject(LoggerService);
+
 
   constructor(
     private eventService: AppEventService,
@@ -60,9 +66,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     private sharingService: AppSharingService,
     private fileService: AppFileService,
     private deleteConfirmationBottomSheet: MatBottomSheet,
-    private afa: AngularFireAnalytics,
     private http: HttpClient,
-    private afAuth: AngularFireAuth,
     private windowService: AppWindowService,
     private dialog: MatDialog) {
   }
@@ -78,13 +82,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     if (!this.showDownloadOriginal) {
       return;
     }
-    if (this.suuntoAppServiceMetaData) {
-      return;
-    }
-    this.suuntoAppServiceMetaData = <SuuntoAppEventMetaDataInterface>(await this.eventService.getEventMetaData(this.user, this.event.getID(), ServiceNames.SuuntoApp)
-      .pipe(take(1)).toPromise());
-    this.corosAPIServiceMetaData = <COROSAPIEventMetaDataInterface>(await this.eventService.getEventMetaData(this.user, this.event.getID(), ServiceNames.COROSAPI)
-      .pipe(take(1)).toPromise());
+
+
     this.garminHealthAPIServiceMetaData = <GarminHealthAPIEventMetaDataInterface>(await this.eventService.getEventMetaData(this.user, this.event.getID(), ServiceNames.GarminHealthAPI)
       .pipe(take(1)).toPromise());
     this.changeDetectorRef.detectChanges();
@@ -95,8 +94,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       await this.eventService.setEventPrivacy(this.user, this.event.getID(), Privacy.Public);
     }
     this.clipboardService.copy(this.sharingService.getShareURLForEvent(this.user.uid, this.event.getID()));
-    this.afa.logEvent('share', {method: 'event_actions', content_type: 'event'});
-    this.snackBar.open('Privacy is changed to public and link copied to your clipboard', null, {
+    this.analyticsService.logEvent('share', { method: 'event_actions', content_type: 'event', item_id: this.event.getID() });
+    this.snackBar.open('Privacy is changed to public and link copied to your clipboard', undefined, {
       duration: 20000,
     })
   }
@@ -113,20 +112,16 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     });
   }
 
-  cropEventActivity() {
-    const dialogRef = this.dialog.open(ActivityCropFormComponent, {
-      width: '75vw',
-      disableClose: false,
-      data: {
-        event: this.event,
-        activity: this.event.getFirstActivity(),
-        user: this.user
-      },
-    });
+
+
+  isHydrated() {
+    const activities = this.event.getActivities();
+    return activities.length > 0 && activities[0].getAllStreams().length > 0;
   }
 
   hasDistance() {
-    return this.event.getFirstActivity().hasStreamData(DataDistance.type);
+    const activities = this.event.getActivities();
+    return activities.length > 0 && activities[0].hasStreamData(DataDistance.type);
   }
 
   hasPositionalData() {
@@ -145,19 +140,24 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   async reGenerateStatistics() {
-    this.snackBar.open('Re-calculating activity statistics', null, {
+    this.snackBar.open('Re-calculating activity statistics', undefined, {
       duration: 2000,
     });
     // To use this component we need the full hydrated object and we might not have it
-    this.event.getFirstActivity().clearStreams();
-    this.event.getFirstActivity().addStreams(await this.eventService.getAllStreams(this.user, this.event.getID(), this.event.getFirstActivity().getID()).pipe(take(1)).toPromise());
-    this.event.getFirstActivity().clearStats();
-    ActivityUtilities.generateMissingStreamsAndStatsForActivity(this.event.getFirstActivity());
+    // We attach streams from the original file (if exists) instead of Firestore
+    await this.eventService.attachStreamsToEventWithActivities(this.user, this.event as any).pipe(take(1)).toPromise();
+
+    this.event.getActivities().forEach(activity => {
+      activity.clearStats();
+      ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity);
+    });
+
     EventUtilities.reGenerateStatsForEvent(this.event);
     await this.eventService.writeAllEventData(this.user, this.event);
-    this.snackBar.open('Activity and event statistics have been recalculated', null, {
+    this.snackBar.open('Activity and event statistics have been recalculated', undefined, {
       duration: 2000,
     });
+    this.changeDetectorRef.detectChanges();
   }
 
   // downloadEventAsTCX(event: EventInterface) {
@@ -174,70 +174,81 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   // }
 
   async downloadJSON() {
-    const blob = await this.eventService.getEventAsJSONBloB(this.user, this.event.getID());
+    const blob = await this.eventService.getEventAsJSONBloB(this.user, this.event as any);
     this.fileService.downloadFile(
       blob,
       this.getFileName(this.event),
       new EventExporterJSON().fileExtension,
     );
-    this.snackBar.open('JSON file served', null, {
+    this.snackBar.open('JSON file served', undefined, {
       duration: 2000,
     });
   }
 
   async downloadGPX() {
-    const blob = await this.eventService.getEventAsGPXBloB(this.user, this.event.getID());
+    const blob = await this.eventService.getEventAsGPXBloB(this.user, this.event as any);
     this.fileService.downloadFile(
       blob,
       this.getFileName(this.event),
       new EventExporterGPX().fileExtension,
     );
-    this.afa.logEvent('downloaded_gpx_file');
-    this.snackBar.open('GPX file served', null, {
+    this.analyticsService.logEvent('downloaded_gpx_file');
+    this.snackBar.open('GPX file served', undefined, {
       duration: 2000,
     });
   }
 
-  async downloadSuuntoFIT() {
+
+
+  async downloadOriginals() {
+    this.snackBar.open('Preparing download...', undefined, { duration: 2000 });
     try {
-      const result = await this.http.post(
-        environment.functions.getSuuntoFITFile,
-        {
-          firebaseAuthToken: await (await this.afAuth.currentUser).getIdToken(true),
-          workoutID: this.suuntoAppServiceMetaData.serviceWorkoutID,
-          userName: this.suuntoAppServiceMetaData.serviceUserName,
-        },
-        {
-          headers:
-            new HttpHeaders({
-              'Authorization': await (await this.afAuth.currentUser).getIdToken(true)
-            }),
-          responseType: 'arraybuffer',
-        }).toPromise();
-        this.fileService.downloadFile(new Blob([new Uint8Array(result)], {type: 'application/octet-stream'}), `${this.getFileName(this.event)}#${this.suuntoAppServiceMetaData.serviceWorkoutID}`, 'fit');
-        this.snackBar.open('Download started', null, {
-          duration: 2000,
-        });
-        this.afa.logEvent('downloaded_fit_file', {method: ServiceNames.SuuntoApp});
-    } catch (e) {
-      this.snackBar.open(`Could not download original fit file due to ${e.message}`, null, {
-        duration: 5000,
-      });
-      Sentry.captureException(e);
+      const eventAny = this.event as any;
+      const eventDate = this.fileService.toDate(this.event.startDate);
+      const eventId = this.event.getID ? this.event.getID() : undefined;
+
+      if (eventAny.originalFiles && eventAny.originalFiles.length > 0) {
+        // Multiple files -> ZIP
+        const filesToZip: { data: ArrayBuffer, fileName: string }[] = [];
+        const totalFiles = eventAny.originalFiles.length;
+
+        for (let i = 0; i < totalFiles; i++) {
+          const fileMeta = eventAny.originalFiles[i];
+          const arrayBuffer = await this.eventService.downloadFile(fileMeta.path);
+          const extension = this.fileService.getExtensionFromPath(fileMeta.path);
+          // Use fileMeta.startDate if available, fallback to eventDate
+          const fileDate = this.fileService.toDate(fileMeta.startDate) || eventDate;
+          const fileName = this.fileService.generateDateBasedFilename(
+            fileDate, extension, i + 1, totalFiles, eventId
+          );
+          filesToZip.push({ data: arrayBuffer, fileName });
+        }
+
+        const zipFileName = this.fileService.generateDateRangeZipFilename(eventDate, eventDate);
+        await this.fileService.downloadAsZip(filesToZip, zipFileName);
+        this.analyticsService.logEvent('downloaded_original_files_zip');
+
+      } else if (eventAny.originalFile && eventAny.originalFile.path) {
+        // Single file -> Direct download
+        const arrayBuffer = await this.eventService.downloadFile(eventAny.originalFile.path);
+        const extension = this.fileService.getExtensionFromPath(eventAny.originalFile.path);
+        const fileName = this.fileService.generateDateBasedFilename(eventDate, extension, undefined, undefined, eventId);
+        const blob = new Blob([arrayBuffer]);
+        // Download with basename (without extension) and extension separately
+        const baseNameWithoutExt = fileName.replace(`.${extension}`, '');
+        this.fileService.downloadFile(blob, baseNameWithoutExt, extension);
+        this.analyticsService.logEvent('downloaded_original_file');
+      } else {
+        this.snackBar.open('No original files found.', undefined, { duration: 3000 });
+      }
+    } catch (error: any) {
+      this.logger.error('Download failed', error);
+      this.snackBar.open('Failed to download original files.', undefined, { duration: 3000 });
+      this.logger.error(error);
     }
   }
 
-  async downloadCOROSFIT() {
-    try {
-      this.windowService.windowRef.open(this.corosAPIServiceMetaData.serviceFITFileURI, )
-      this.afa.logEvent('downloaded_fit_file', {method: ServiceNames.COROSAPI});
-    } catch (e) {
-      this.snackBar.open(`Could not download original fit file due to ${e.message}`, null, {
-        duration: 5000,
-      });
-      Sentry.captureException(e);
-    }
-  }
+
 
   async delete() {
     const deleteConfirmationBottomSheet = this.deleteConfirmationBottomSheet.open(DeleteConfirmationComponent, {
@@ -248,7 +259,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       }
       await this.eventService.deleteAllEventData(this.user, this.event.getID());
       await this.router.navigate(['/dashboard']);
-      this.snackBar.open('Event deleted', null, {
+      this.snackBar.open('Event deleted', undefined, {
         duration: 2000,
       });
     });
@@ -260,8 +271,10 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     }
   }
 
-  private getFileName(event): string {
-    return `${this.event.startDate.toISOString()}#${this.event.getActivityTypesAsString()}`
+  private getFileName(event: EventInterface): string {
+    const eventDate = this.fileService.toDate(event.startDate);
+    const dateStr = eventDate ? eventDate.toISOString() : 'unknown';
+    return `${dateStr}#${event.getActivityTypesAsString()}`
   }
 
 }

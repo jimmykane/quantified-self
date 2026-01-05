@@ -1,0 +1,94 @@
+// Global Form Styles
+// Usage: Wrap your form in a container with class .qs-form-container if you want centering on the page.
+// Add class .qs-form to the <form> element itself.
+
+.qs-form-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    padding: 2rem 1rem;
+    box-sizing: border-box;
+}
+
+.qs-form {
+    width: 100%;
+    max-width: 600px; // Constrain width for better readability
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem; // consistent vertical spacing (24px)
+
+    // Standardize form fields width within our forms
+    mat-form-field {
+        width: 100%;
+
+        mat-label {
+            font-weight: 400;
+            letter-spacing: 0.02em;
+        }
+
+        mat-hint {
+            font-size: 0.75rem;
+            opacity: 0.7;
+            font-style: italic;
+            margin-top: 4px;
+            margin-bottom: 8px;
+            display: block;
+        }
+    }
+
+    // Section grouping
+    .qs-form-section {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        margin-bottom: 2rem;
+
+        // Optional section title
+        h3 {
+            margin: 0;
+            font-weight: 400;
+            font-size: 1.1rem;
+            opacity: 0.8;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+            padding-bottom: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        // Description text useful for settings
+        p.qs-section-description {
+            margin: -0.5rem 0 1rem 0;
+            opacity: 0.6;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+    }
+
+    // Action buttons area
+    .qs-form-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+        margin-top: 1rem;
+
+        // If we want buttons to be full width on mobile but auto on desktop
+        @media (max-width: 600px) {
+            flex-direction: column;
+
+            button {
+                width: 100%;
+            }
+        }
+    }
+}
+
+// Dark theme adjustments
+.dark-theme {
+    .qs-form {
+        .qs-form-section {
+            h3 {
+                border-bottom-color: rgba(255, 255, 255, 0.12);
+            }
+        }
+    }
+}

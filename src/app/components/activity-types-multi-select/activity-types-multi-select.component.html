@@ -1,16 +1,23 @@
 <mat-form-field>
-  <input type="text" placeholder="Filter by activities" aria-label="Filter by activities" matInput [matAutocomplete]="auto" [formControl]="activityTypesControl">
-  <button mat-button *ngIf="selectedActivityTypes.length" matSuffix mat-icon-button aria-label="Clear" (click)="clearSelection()">
+  <mat-label>Filter by activities</mat-label>
+  <input type="text" placeholder="Filter by activities" aria-label="Filter by activities" matInput
+    [matAutocomplete]="auto" [formControl]="activityTypesControl">
+  @if (selectedActivityTypes.length) {
+  <button mat-button matSuffix mat-icon-button aria-label="Clear" (click)="clearSelection()">
     <mat-icon>close</mat-icon>
   </button>
+  }
 </mat-form-field>
 
 <mat-autocomplete #auto="matAutocomplete" [displayWith]="displayFn">
-  <mat-option *ngFor="let activityType of filteredActivityTypes | async" [value]="selectedActivityTypesSelectionModel">
+  @for (activityType of filteredActivityTypes | async; track activityType) {
+  <mat-option [value]="selectedActivityTypesSelectionModel">
     <div (click)="optionClicked($event, activityType)">
-      <mat-checkbox [checked]="activityType.selected" (change)="toggleSelection(activityType)" (click)="$event.stopPropagation()">
+      <mat-checkbox [checked]="activityType.selected" (change)="toggleSelection(activityType)"
+        (click)="$event.stopPropagation()">
         {{ activityType.activityType }}
       </mat-checkbox>
     </div>
   </mat-option>
+  }
 </mat-autocomplete>

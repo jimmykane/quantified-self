@@ -1,25 +1,25 @@
 import { ChangeDetectorRef, Directive, } from '@angular/core';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
-import { DataRPE, RPEBorgCR10SCale } from '@sports-alliance/sports-lib/lib/data/data.rpe';
-import { DataFeeling, Feelings } from '@sports-alliance/sports-lib/lib/data/data.feeling';
-import { Privacy } from '@sports-alliance/sports-lib/lib/privacy/privacy.class.interface';
-import { DataInterface } from '@sports-alliance/sports-lib/lib/data/data.interface';
-import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
-import { DataDescent } from '@sports-alliance/sports-lib/lib/data/data.descent';
-import { DataEnergy } from '@sports-alliance/sports-lib/lib/data/data.energy';
-import { DataPowerAvg } from '@sports-alliance/sports-lib/lib/data/data.power-avg';
-import { DataSpeedAvg } from '@sports-alliance/sports-lib/lib/data/data.speed-avg';
-import { DataHeartRateAvg } from '@sports-alliance/sports-lib/lib/data/data.heart-rate-avg';
-import { DataDistance } from '@sports-alliance/sports-lib/lib/data/data.distance';
-import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib/lib/data/data.store';
-import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import { DataDuration } from '@sports-alliance/sports-lib/lib/data/data.duration';
-import { DataVO2Max } from '@sports-alliance/sports-lib/lib/data/data.vo2-max';
-import { DataPowerMax } from '@sports-alliance/sports-lib/lib/data/data.power-max';
-import { DataPeakEPOC } from '@sports-alliance/sports-lib/lib/data/data.peak-epoc';
-import { DataTotalTrainingEffect } from '@sports-alliance/sports-lib/lib/data/data.total-training-effect';
-import { DataRecoveryTime } from '@sports-alliance/sports-lib/lib/data/data.recovery-time';
+import { EventInterface } from '@sports-alliance/sports-lib';
+import { DataRPE, RPEBorgCR10SCale } from '@sports-alliance/sports-lib';
+import { DataFeeling, Feelings } from '@sports-alliance/sports-lib';
+import { Privacy } from '@sports-alliance/sports-lib';
+import { DataInterface } from '@sports-alliance/sports-lib';
+import { DataAscent } from '@sports-alliance/sports-lib';
+import { DataDescent } from '@sports-alliance/sports-lib';
+import { DataEnergy } from '@sports-alliance/sports-lib';
+import { DataPowerAvg } from '@sports-alliance/sports-lib';
+import { DataSpeedAvg } from '@sports-alliance/sports-lib';
+import { DataHeartRateAvg } from '@sports-alliance/sports-lib';
+import { DataDistance } from '@sports-alliance/sports-lib';
+import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { DataDuration } from '@sports-alliance/sports-lib';
+import { DataVO2Max } from '@sports-alliance/sports-lib';
+import { DataPowerMax } from '@sports-alliance/sports-lib';
+import { DataPeakEPOC } from '@sports-alliance/sports-lib';
+import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
+import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 
 @Directive()
@@ -48,11 +48,11 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
       'Device Names',
       DataPeakEPOC.type,
       DataRecoveryTime.type,
-      DataTotalTrainingEffect.type,
+      DataAerobicTrainingEffect.type,
     ].indexOf(columnName) !== -1;
   }
 
-  getStatsRowElement(stats: DataInterface[], activityTypes: string[], unitSettings?: UserUnitSettingsInterface): StatRowElement {
+  getStatsRowElement(stats: DataInterface[], activityTypes: string[], unitSettings?: UserUnitSettingsInterface, isMerge: boolean = false): StatRowElement {
     const statRowElement: StatRowElement = <StatRowElement>{};
 
     const distance = stats.find(stat => stat.getType() === DataDistance.type);
@@ -67,7 +67,7 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
     const rpe = stats.find(stat => stat.getType() === DataRPE.type);
     const feeling = stats.find(stat => stat.getType() === DataFeeling.type);
     const vO2Max = stats.find(stat => stat.getType() === DataVO2Max.type);
-    const TTE = stats.find(stat => stat.getType() === DataTotalTrainingEffect.type);
+    const TTE = stats.find(stat => stat.getType() === DataAerobicTrainingEffect.type);
     const EPOC = stats.find(stat => stat.getType() === DataPeakEPOC.type);
     const recoveryTime = stats.find(stat => stat.getType() === DataRecoveryTime.type);
 
@@ -77,7 +77,7 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
     statRowElement[DataDescent.type] = descent ? `${descent.getDisplayValue()} ${descent.getDisplayUnit()}` : '';
     statRowElement[DataEnergy.type] = energy ? `${energy.getDisplayValue()} ${energy.getDisplayUnit()}` : '';
     statRowElement[DataVO2Max.type] = vO2Max ? `${vO2Max.getDisplayValue()} ${vO2Max.getDisplayUnit()}` : '';
-    statRowElement[DataTotalTrainingEffect.type] = TTE ? `${TTE.getDisplayValue()} ${TTE.getDisplayUnit()}` : '';
+    statRowElement[DataAerobicTrainingEffect.type] = TTE ? `${TTE.getDisplayValue()} ${TTE.getDisplayUnit()}` : '';
     statRowElement[DataPeakEPOC.type] = EPOC ? `${EPOC.getDisplayValue()} ${EPOC.getDisplayUnit()}` : '';
     statRowElement[DataRecoveryTime.type] = recoveryTime ? `${recoveryTime.getDisplayValue()} ${recoveryTime.getDisplayUnit()}` : '';
     statRowElement[DataPowerAvg.type] = avgPower ? `${avgPower.getDisplayValue()} ${avgPower.getDisplayUnit()}` : '';
@@ -85,17 +85,24 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
     statRowElement[DataHeartRateAvg.type] = heartRateAverage ? `${heartRateAverage.getDisplayValue()} ${heartRateAverage.getDisplayUnit()}` : '';
     statRowElement[DataRPE.type] = rpe ? <RPEBorgCR10SCale>rpe.getValue() : undefined;
     statRowElement[DataFeeling.type] = feeling ? <Feelings>feeling.getValue() : undefined;
-    statRowElement[DataSpeedAvg.type] = activityTypes.reduce((accu, activityType) => {
-      return [...accu, ...ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(ActivityTypes[activityType])]
-    }, []).reduce((accu, dataType) => {
-      const stat = stats.find(iStat => iStat.getType() === dataType);
-      return stat ?
-        [...accu, ...DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, unitSettings)]
-        : accu
-    }, []).reduce((avs, data) => {
-      avs.push(`${data.getDisplayValue()}${data.getDisplayUnit()}`);
-      return avs;
-    }, []).join(', ');
+
+    if (isMerge && avgSpeed) {
+      statRowElement[DataSpeedAvg.type] = DynamicDataLoader.getUnitBasedDataFromDataInstance(avgSpeed, unitSettings)
+        .map(data => `${data.getDisplayValue()}${data.getDisplayUnit()}`)
+        .join(', ');
+    } else {
+      statRowElement[DataSpeedAvg.type] = activityTypes.reduce((accu, activityType) => {
+        return [...accu, ...ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(ActivityTypes[activityType])]
+      }, []).reduce((accu, dataType) => {
+        const stat = stats.find(iStat => iStat.getType() === dataType);
+        return stat ?
+          [...accu, ...DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, unitSettings)]
+          : accu
+      }, []).reduce((avs, data) => {
+        avs.push(`${data.getDisplayValue()}${data.getDisplayUnit()}`);
+        return avs;
+      }, []).join(', ');
+    }
 
     // Add the sorts
     statRowElement[`sort.${DataDistance.type}`] = distance ? <number>distance.getValue() : 0;
@@ -106,7 +113,7 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
     statRowElement[`sort.${DataVO2Max.type}`] = vO2Max ? <number>vO2Max.getValue() : 0;
     statRowElement[`sort.${DataPeakEPOC.type}`] = EPOC ? <number>EPOC.getValue() : 0;
     statRowElement[`sort.${DataRecoveryTime.type}`] = recoveryTime ? <number>recoveryTime.getValue() : 0;
-    statRowElement[`sort.${DataTotalTrainingEffect.type}`] = TTE ? <number>TTE.getValue() : 0;
+    statRowElement[`sort.${DataAerobicTrainingEffect.type}`] = TTE ? <number>TTE.getValue() : 0;
     statRowElement[`sort.${DataSpeedAvg.type}`] = avgSpeed ? <number>avgSpeed.getValue() : 0;
     statRowElement[`sort.${DataPowerAvg.type}`] = avgPower ? <number>avgPower.getValue() : 0;
     statRowElement[`sort.${DataPowerMax.type}`] = avgPower ? <number>avgPower.getValue() : 0;
@@ -154,4 +161,6 @@ export interface StatRowElement {
   'sort.Duration': number,
   'sort.Device Names'?: string,
   'sort.Description'?: string,
+  Gradient?: string,
+  Color?: string,
 }

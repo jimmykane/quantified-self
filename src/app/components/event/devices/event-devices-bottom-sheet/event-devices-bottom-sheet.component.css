@@ -1,0 +1,35 @@
+:host {
+    display: block;
+    height: 100%;
+    /* Important: Fill the 80vh container */
+}
+
+.bottom-sheet-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    /* Important: Fill the host */
+    /* Remove max-height: 80vh; as it's now handled by the parent container */
+}
+
+.bottom-sheet-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--mat-app-outline-variant);
+    flex-shrink: 0;
+    /* Important: Don't shrink header */
+}
+
+.bottom-sheet-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 400;
+}
+
+.bottom-sheet-content {
+    padding: 16px;
+    overflow-y: auto;
+    flex: 1;
+}

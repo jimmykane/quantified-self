@@ -13,24 +13,23 @@ import { UploadActivitiesToServiceComponent } from '../components/upload/upload-
 
 
 @NgModule({
-  imports: [
-    CommonModule,
-    SharedModule,
-    MaterialModule,
-    ServicesRoutingModule
-  ],
-  exports: [],
-  declarations: [
-    ServicesComponent,
-    ServicesSuuntoComponent,
-    ServicesGarminComponent,
-    ServicesCorosComponent,
-    HistoryImportFormComponent,
-    UploadRoutesToServiceComponent,
-    UploadActivitiesToServiceComponent
-  ],
-  entryComponents: [],
-  providers: []
+    imports: [
+        CommonModule,
+        SharedModule,
+        MaterialModule,
+        ServicesRoutingModule
+    ],
+    exports: [],
+    declarations: [
+        ServicesComponent,
+        ServicesSuuntoComponent,
+        ServicesGarminComponent,
+        ServicesCorosComponent,
+        HistoryImportFormComponent,
+        UploadRoutesToServiceComponent,
+        UploadActivitiesToServiceComponent
+    ],
+    providers: []
 })
 
 

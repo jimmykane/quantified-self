@@ -1,72 +1,185 @@
-form {
-  /*width: 100%;*/
+/* Compact History Import Form Styles */
+
+.status-section {
+  padding: 0.5rem 0;
 }
 
-mat-form-field {
-  margin: 2%;
+.status-section h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.9rem;
+  opacity: 0.7;
 }
 
-mat-form-field {
-  width: 100%;
+.status-section p {
+  margin: 0.25rem 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
 }
 
-.radio-container {
-  margin-bottom: 1em;
+.status-section strong {
+  opacity: 0.8;
 }
 
-.mat-radio-button {
-  margin-top: 1em;
-  margin-right: 1em;
+.history-import-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
-button {
-  width: 100%;
-  margin-top: 1em;
+.date-fields {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
-.generic-form-error {
-  margin-top: 1.5em;
+.date-fields mat-form-field {
+  flex: 1;
+  min-width: 120px;
 }
 
-::ng-deep .mat-checkbox-layout {
-  white-space: normal !important;
+.confirmation-section {
+  margin: 0.5rem 0;
 }
 
-mat-error {
-  margin-top: 0.5em;
+.checkbox-label {
+  font-size: 0.85rem;
+  opacity: 0.9;
+  white-space: normal;
+  line-height: 1.4;
 }
 
-section{
+.pro-required {
   text-align: center;
+  padding: 1rem;
 }
 
-mat-icon{
-  vertical-align: middle;
-  font-size: 1.6em;
+.pro-required p {
+  margin-bottom: 1rem;
+  opacity: 0.8;
 }
 
-.smaller{
-  font-size: 0.90em;
-  line-height: 0.90em;
+.qs-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
 }
 
+/* Robust fix for Material Checkbox visibility and clickability */
+mat-checkbox {
+  display: inline-flex !important;
+  align-items: center;
+  /* Use app theme primary color */
+  --mdc-checkbox-selected-icon-color: var(--mat-app-primary, #3f51b5) !important;
+  --mdc-checkbox-unselected-outline-color: var(--mat-app-primary, #3f51b5) !important;
+  --mat-checkbox-selected-container-color: var(--mat-app-primary, #3f51b5) !important;
+}
 
-.no-margin{
+/* Ensure the box itself has a clear border in all states */
+::ng-deep .mdc-checkbox__background {
+  border: 2px solid var(--mat-app-primary, #3f51b5) !important;
+  border-radius: 4px !important;
+  transition: background-color 0.2s, border-color 0.2s !important;
+}
+
+/* Filled background when checked */
+::ng-deep .mat-mdc-checkbox-checked .mdc-checkbox__background {
+  background-color: var(--mat-app-primary, #3f51b5) !important;
+  border-color: var(--mat-app-primary, #3f51b5) !important;
+}
+
+/* Clear background when NOT checked */
+::ng-deep .mat-mdc-checkbox:not(.mat-mdc-checkbox-checked) .mdc-checkbox__background {
+  background-color: transparent !important;
+}
+
+/* Force the checkmark to be white and definitely visible ONLY when checked */
+::ng-deep .mat-mdc-checkbox-checked .mdc-checkbox__checkmark {
+  color: white !important;
+  stroke: white !important;
+  stroke-width: 3px !important;
+  opacity: 1 !important;
+}
+
+::ng-deep .mat-mdc-checkbox-checked .mdc-checkbox__checkmark-path {
+  stroke: white !important;
+  stroke-dashoffset: 0 !important;
+}
+
+/* Hide checkmark when NOT checked */
+::ng-deep .mat-mdc-checkbox:not(.mat-mdc-checkbox-checked) .mdc-checkbox__checkmark {
+  opacity: 0 !important;
+}
+
+/* Ensure the label doesn't block clicks and is properly aligned */
+.checkbox-label {
+  font-size: 0.85rem;
+  opacity: 0.9;
+  white-space: normal;
+  line-height: 1.4;
+  cursor: pointer;
+  padding-left: 8px;
+}
+
+/* Dark theme specific adjustments if needed */
+:host-context(.dark-theme) mat-checkbox {
+  --mdc-checkbox-unselected-outline-color: rgba(255, 255, 255, 0.7) !important;
+}
+
+:host-context(.dark-theme) ::ng-deep .mdc-checkbox__background {
+  border-color: rgba(255, 255, 255, 0.7) !important;
+}
+
+:host-context(.dark-theme) ::ng-deep .mat-mdc-checkbox-checked .mdc-checkbox__background {
+  border-color: var(--mat-app-primary, #90caf9) !important;
+  background-color: var(--mat-app-primary, #90caf9) !important;
+}
+
+.limit-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 8px;
+  background: rgba(63, 81, 181, 0.08);
+  border: 1px solid rgba(63, 81, 181, 0.2);
+  margin-bottom: 1.5rem;
+  box-sizing: border-box;
+}
+
+:host-context(.dark-theme) .limit-info {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.limit-info mat-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: var(--mat-sys-primary, #3f51b5);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible !important;
+}
+
+.limit-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.limit-title {
+  font-weight: 500;
+  font-size: 0.85rem;
+  color: var(--mat-sys-primary, #3f51b5);
+}
+
+.limit-description {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  line-height: 1.4;
   margin: 0;
-}
-
-form{
-  height: 100%;
-}
-
-p{
-  font-size: 0.9em;
-}
-
-mat-hint{
-  font-size: 0.9em;
-}
-
-:host ::ng-deep .mat-horizontal-content-container {
-  padding:0 !important;
 }

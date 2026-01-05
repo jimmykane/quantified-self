@@ -6,17 +6,16 @@ import { CoachingRoutingModule } from '../coaching.routing.module';
 import { AthletesComponent } from '../components/athletes/athletes.component';
 
 @NgModule({
-  imports: [
-    CommonModule,
-    SharedModule,
-    MaterialModule,
-    CoachingRoutingModule,
-  ],
-  exports: [],
-  declarations: [
-    AthletesComponent
-  ],
-  entryComponents: [],
+    imports: [
+        CommonModule,
+        SharedModule,
+        MaterialModule,
+        CoachingRoutingModule,
+    ],
+    exports: [],
+    declarations: [
+        AthletesComponent
+    ]
 })
 
 

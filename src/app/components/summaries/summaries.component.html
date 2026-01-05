@@ -1,40 +1,24 @@
-<section class="pie" *ngIf="tiles.length">
+@if (tiles.length) {
+<section class="pie">
   <mat-grid-list [cols]="numberOfCols" [rowHeight]="rowHeight" [gutterSize]="'1em'">
-    <mat-grid-tile
-      *ngFor="let tile of tiles; trackBy: trackByTile"
-      [colspan]="tile.size.columns > numberOfCols ? numberOfCols : tile.size.columns"
+    @for (tile of tiles; track trackByTile($index, tile)) {
+    <mat-grid-tile [colspan]="tile.size.columns > numberOfCols ? numberOfCols : tile.size.columns"
       [rowspan]="tile.size.rows">
-<!--      [rowspan]="(tile.size.rows >= tiles.length/numberOfCols) ? tiles.length/numberOfCols : tile.size.rows">-->
-      <app-tile-chart
-        *ngIf="tile.type === tileTypes.Chart"
-        [user]="user"
-        [type]="tile.type"
-        [chartType]="tile.chartType"
-        [isLoading]="isLoading"
-        [data]="tile.data"
-        [showActions]="showActions"
-        [chartTheme]="chartTheme"
-        [dataType]="tile.dataType"
-        [dataValueType]="tile.dataValueType"
-        [dataCategoryType]="tile.dataCategoryType"
-        [dataTimeInterval]="tile.timeInterval"
-        [size]="tile.size"
-        [order]="tile.order"
-      ></app-tile-chart>
-      <app-tile-map
-        *ngIf="tile.type === tileTypes.Map"
-        [user]="user"
-        [type]="tile.type"
-        [isLoading]="isLoading"
-        [showActions]="showActions"
-        [events]="tile.events"
-        [mapTheme]="tile.mapTheme"
-        [mapType]="tile.mapType"
-        [showHeatMap]="tile.showHeatMap"
-        [clusterMarkers]="tile.clusterMarkers"
-        [size]="tile.size"
-        [order]="tile.order"
-      ></app-tile-map>
+      <!--      [rowspan]="(tile.size.rows >= tiles.length/numberOfCols) ? tiles.length/numberOfCols : tile.size.rows">-->
+      @if (tile.type === tileTypes.Chart) {
+      <app-tile-chart class="glass-card" [user]="user" [type]="tile.type" [chartType]="tile.chartType"
+        [isLoading]="isLoading" [data]="tile.data" [showActions]="showActions" [chartTheme]="chartTheme"
+        [dataType]="tile.dataType" [dataValueType]="tile.dataValueType" [dataCategoryType]="tile.dataCategoryType"
+        [dataTimeInterval]="tile.timeInterval" [size]="tile.size" [order]="tile.order"></app-tile-chart>
+      }
+      @if (tile.type === tileTypes.Map) {
+      <app-tile-map class="glass-card" [user]="user" [type]="tile.type" [isLoading]="isLoading"
+        [showActions]="showActions" [events]="tile.events" [mapTheme]="tile.mapTheme" [mapType]="tile.mapType"
+        [showHeatMap]="tile.showHeatMap" [clusterMarkers]="tile.clusterMarkers" [size]="tile.size"
+        [order]="tile.order"></app-tile-map>
+      }
     </mat-grid-tile>
+    }
   </mat-grid-list>
 </section>
+}

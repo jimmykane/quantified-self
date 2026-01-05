@@ -1,14 +1,15 @@
 import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
-import {DataDistance} from '@sports-alliance/sports-lib/lib/data/data.distance';
-import { DataAscent } from '@sports-alliance/sports-lib/lib/data/data.ascent';
-import { LapTypes } from '@sports-alliance/sports-lib/lib/laps/lap.types';
+import {DataDistance} from '@sports-alliance/sports-lib';
+import { DataAscent } from '@sports-alliance/sports-lib';
+import { LapTypes } from '@sports-alliance/sports-lib';
 
 
 @Component({
-  selector: 'app-lap-type-icon',
-  templateUrl: './lap-type-icon.component.html',
-  styleUrls: ['./lap-type-icon.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush,
+    selector: 'app-lap-type-icon',
+    templateUrl: './lap-type-icon.component.html',
+    styleUrls: ['./lap-type-icon.component.css'],
+    changeDetection: ChangeDetectionStrategy.OnPush,
+    standalone: false
 })
 
 export class LapTypeIconComponent {

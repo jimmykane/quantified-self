@@ -9,21 +9,22 @@ import {
   Output,
   SimpleChanges
 } from '@angular/core';
-import { FormControl, FormGroup, ValidationErrors, ValidatorFn } from '@angular/forms';
-import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
-import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { UntypedFormControl, UntypedFormGroup, ValidationErrors, ValidatorFn } from '@angular/forms';
+import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
+import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import { MatButtonToggleChange } from '@angular/material/button-toggle';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
-import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
+import { DateRanges } from '@sports-alliance/sports-lib';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { MatDatepickerInputEvent } from '@angular/material/datepicker';
-import * as moment from 'moment';
+import dayjs from 'dayjs';
 
 @Component({
   selector: 'app-event-search',
   templateUrl: './event-search.component.html',
   styleUrls: ['./event-search.component.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 
 export class EventSearchComponent extends LoadingAbstractDirective implements OnChanges, OnInit {
@@ -32,7 +33,6 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   @Input() selectedEndDate: Date;
   @Input() startOfTheWeek: DaysOfTheWeek;
   @Input() selectedActivityTypes: ActivityTypes[];
-  @Input() isLoading: boolean;
   @Input() showDatePicker = true;
   @Input() showActivityTypePicker = true;
   @Input() dateRangesToShow: DateRanges[] = [
@@ -50,7 +50,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
 
   @Output() searchChange: EventEmitter<Search> = new EventEmitter<Search>();
 
-  public searchFormGroup: FormGroup;
+  public searchFormGroup: UntypedFormGroup;
   public dateRanges = DateRanges;
   public currentYear = new Date().getFullYear();
   public activityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray();
@@ -61,15 +61,15 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 
   ngOnInit(): void {
-    this.searchFormGroup = new FormGroup({
-      search: new FormControl(null, [
+    this.searchFormGroup = new UntypedFormGroup({
+      search: new UntypedFormControl(null, [
         // Validators.required,
         // Validators.minLength(4),
       ]),
-      startDate: new FormControl(this.selectedDateRange === DateRanges.custom ? this.selectedStartDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).startDate, [
+      startDate: new UntypedFormControl(this.selectedDateRange === DateRanges.custom ? this.selectedStartDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).startDate, [
         // Validators.required,
       ]),
-      endDate: new FormControl(this.selectedDateRange === DateRanges.custom ? this.selectedEndDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).endDate, [
+      endDate: new UntypedFormControl(this.selectedDateRange === DateRanges.custom ? this.selectedEndDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).endDate, [
         // Validators.required,
       ])
     });
@@ -101,11 +101,11 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
 
     let startDate: Date = this.searchFormGroup.get('startDate').value;
     let endDate: Date = this.searchFormGroup.get('endDate').value;
-    if (this.searchFormGroup.get('startDate').value instanceof moment) {
+    if (dayjs.isDayjs(this.searchFormGroup.get('startDate').value)) {
       startDate = this.searchFormGroup.get('startDate').value.toDate();
     }
 
-    if (this.searchFormGroup.get('endDate').value instanceof moment) {
+    if (dayjs.isDayjs(this.searchFormGroup.get('endDate').value)) {
       endDate = this.searchFormGroup.get('endDate').value.toDate();
     }
 
@@ -135,7 +135,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     return this.search();
   }
 
-  async onDateChange(event: MatDatepickerInputEvent<any>, isStartDate: Boolean) {
+  async onDateChange(event: MatDatepickerInputEvent<any>, isStartDate: boolean) {
     if (!event.value) {
       return;
     }
@@ -157,19 +157,19 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     return this.search();
   }
 
-  validateAllFormFields(formGroup: FormGroup) {
+  validateAllFormFields(formGroup: UntypedFormGroup) {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
-      if (control instanceof FormControl) {
+      if (control instanceof UntypedFormControl) {
         control.markAsTouched({ onlySelf: true });
-      } else if (control instanceof FormGroup) {
+      } else if (control instanceof UntypedFormGroup) {
         this.validateAllFormFields(control);
       }
     });
   }
 }
 
-export const startDateToEndDateValidator: ValidatorFn = (control: FormGroup): ValidationErrors | null => {
+export const startDateToEndDateValidator: ValidatorFn = (control: UntypedFormGroup): ValidationErrors | null => {
   const startDate = control.get('startDate');
   const endDate = control.get('endDate');
   if (endDate.value < startDate.value) {
@@ -178,7 +178,7 @@ export const startDateToEndDateValidator: ValidatorFn = (control: FormGroup): Va
   return null;
 };
 
-export const maxDateDistanceValidator: ValidatorFn = (control: FormGroup): ValidationErrors | null => {
+export const maxDateDistanceValidator: ValidatorFn = (control: UntypedFormGroup): ValidationErrors | null => {
   const startDate = control.get('startDate');
   const endDate = control.get('endDate');
   if (endDate.value - startDate.value > new Date(365 * 5 * 24 * 3600 * 1000).getTime()) { // @todo improve this

@@ -1,37 +1,38 @@
+/* mat-grid-list rule removed */
 
-mat-grid-list{
-}
-mat-grid-tile{
-
-}
-
-section{
-  margin-bottom: 1em;
-  margin-top: 1em;
+mat-grid-tile {
+  /* Transition for hover effects if we want to animate the tile wrapper */
+  transition: transform 0.3s ease, z-index 0.3s;
+  border-radius: 20px;
+  /* Material grid tiles clip content by default, so we need to be careful with shadows */
+  overflow: visible !important;
 }
 
-app-tile-map{
+/* Hover effect for tiles */
+mat-grid-tile:hover {
+  transform: translateY(-4px);
+  z-index: 2;
+  /* Bring above others */
+}
+
+/* Common style for the tile content components */
+app-tile-chart,
+app-tile-map {
   width: 100%;
   height: 100%;
   padding: 0;
+  box-sizing: border-box;
+
+  /* Glass styles moved to .glass-card */
+
+  display: flex;
+  /* Ensure they control their internal layout */
+  flex-direction: column;
+  overflow: hidden;
+  /* Ensure border-radius clips internal content */
 }
 
-app-tile-chart{
-  width: 100%;
-  height: 100%;
-  padding: 0;
+section {
+  margin-bottom: 2rem;
+  margin-top: 1rem;
 }
-
-/*app-chart-actions{*/
-/*  position: absolute;*/
-/*  top: -10px;*/
-/*  right: 0px;*/
-/*  z-index: 2;*/
-/*  overflow: visible;*/
-/*}*/
-
-/*@media only screen and (min-width: 800px)  {*/
-/*  mat-grid-list {*/
-/*    max-height: 30vh;*/
-/*  }*/
-/*}*/

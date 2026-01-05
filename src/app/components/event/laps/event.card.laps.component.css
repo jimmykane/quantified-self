@@ -1,14 +1,5 @@
-.table-container{
+.table-container {
   overflow: auto;
   width: 100%;
   max-width: 100%
-}
-
-table {
-  width: 100%;
-}
-
-mat-cell, .mat-header-cell {
-  overflow: visible;
-  min-width: 68px;
 }

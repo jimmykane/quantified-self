@@ -1,7 +1,13 @@
-<div class="loading-shade"
-     *ngIf="isActive || hasError">
-  <mat-progress-bar *ngIf="isActive" [mode]="mode"></mat-progress-bar>
-  <div class="error" *ngIf="hasError && !isActive">
-    {{ errorMessage }}
+@if (isActive || hasError) {
+  <div class="loading-shade"
+    >
+    @if (isActive) {
+      <mat-progress-bar [mode]="mode"></mat-progress-bar>
+    }
+    @if (hasError && !isActive) {
+      <div class="error">
+        {{ errorMessage }}
+      </div>
+    }
   </div>
-</div>
+}

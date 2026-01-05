@@ -1,26 +1,29 @@
-mat-icon{
+mat-icon {
   vertical-align: middle;
 }
-mat-form-field.big{
-  width: calc(50% - 0.8em);
+
+.big {
+  width: auto;
+  /* Fallback */
+  flex: 1 1 calc(50% - 0.5em);
 }
 
-form{
+form {
   position: relative;
   height: 100%;
 }
 
-.search-button{
+.search-button {
   min-height: 48px;
   border: 0;
 }
 
-mat-button-toggle-group{
+mat-button-toggle-group {
   margin-top: 0.5em;
   margin-right: 0.5em;
 }
 
-.button-groups{
+.button-groups {
   height: 100%;
   display: flex;
   align-items: center;
@@ -29,3 +32,23 @@ mat-button-toggle-group{
 }
 
 /*::ng-deep .mat-option:first-child .mat-pseudo-checkbox{ display: none; }*/
+
+.filters-row {
+  align-items: baseline;
+  gap: 1em;
+}
+
+/* Mobile: Ensure filters stay on one row */
+@media (max-width: 599.98px) {
+  .filters-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5em;
+  }
+
+  .big {
+    width: 100%;
+    min-width: 100%;
+    flex: 1 1 100%;
+  }
+}

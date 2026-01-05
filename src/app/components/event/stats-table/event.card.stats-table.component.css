@@ -12,15 +12,21 @@ mat-icon.tooltip {
 /*}*/
 
 mat-form-field {
-  padding: 0 1em;
-  width: 100%
+  width: 100%;
+  /* Removed padding: 0 1em; to prevents horizontal overflow */
 }
 
-mat-table{
-  overflow: scroll;
-  height: 60vh;
+
+mat-table {
+  padding-bottom: 1em;
+  background: transparent;
 }
 
-.mat-header-cell{
+.mat-header-cell {
   font-size: unset;
+}
+
+.table-container {
+  overflow-x: auto;
+  width: 100%;
 }

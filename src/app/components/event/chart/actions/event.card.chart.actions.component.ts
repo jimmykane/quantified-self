@@ -1,9 +1,9 @@
-import {ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output} from '@angular/core';
-import {XAxisTypes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {AppUserService} from '../../../../services/app.user.service';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output, inject } from '@angular/core';
+import { XAxisTypes } from '@sports-alliance/sports-lib';
+import { User } from '@sports-alliance/sports-lib';
+import { AppUserService } from '../../../../services/app.user.service';
+import { AppAnalyticsService } from '../../../../services/app.analytics.service';
+import { EventInterface } from '@sports-alliance/sports-lib';
 
 @Component({
   selector: 'app-event-card-chart-actions',
@@ -11,6 +11,7 @@ import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.int
   styleUrls: ['./event.card.chart.actions.component.css'],
   providers: [],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 
 export class EventCardChartActionsComponent implements OnChanges {
@@ -26,24 +27,25 @@ export class EventCardChartActionsComponent implements OnChanges {
   @Output() xAxisTypeChange: EventEmitter<XAxisTypes> = new EventEmitter<XAxisTypes>();
 
   public xAxisTypes = XAxisTypes;
+  private analyticsService = inject(AppAnalyticsService);
 
   constructor(
-      private userService: AppUserService, private afa: AngularFireAnalytics) {
+    private userService: AppUserService) {
   }
 
   async somethingChanged(event) {
+    this.xAxisTypeChange.emit(this.xAxisType);
+    this.showAllDataChange.emit(this.showAllData);
+    this.showLapsChange.emit(this.showLaps);
+    this.stackYAxesChange.emit(this.stackYAxes);
     if (this.user) {
       this.user.settings.chartSettings.xAxisType = this.xAxisType;
       this.user.settings.chartSettings.showAllData = this.showAllData;
       this.user.settings.chartSettings.showLaps = this.showLaps;
       this.user.settings.chartSettings.stackYAxes = this.stackYAxes;
-      await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+      await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
     }
-    this.xAxisTypeChange.emit(this.xAxisType);
-    this.showAllDataChange.emit(this.showAllData);
-    this.showLapsChange.emit(this.showLaps);
-    this.stackYAxesChange.emit(this.stackYAxes);
-    return this.afa.logEvent('event_chart_settings_change');
+    this.analyticsService.logEvent('event_chart_settings_change');
   }
 
   formatLabel(value: number | null) {

@@ -1,28 +1,28 @@
-import { ChangeDetectorRef, Component, OnChanges, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnChanges, OnDestroy, OnInit, inject } from '@angular/core';
 import { AppEventService } from '../../services/app.event.service';
 import { asyncScheduler, of, Subscription } from 'rxjs';
-import { EventInterface } from '@sports-alliance/sports-lib/lib/events/event.interface';
+import { EventInterface } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { User } from '@sports-alliance/sports-lib/lib/users/user';
-import { DateRanges } from '@sports-alliance/sports-lib/lib/users/settings/dashboard/user.dashboard.settings.interface';
+import { User } from '@sports-alliance/sports-lib';
+import { DateRanges } from '@sports-alliance/sports-lib';
 import { Search } from '../event-search/event-search.component';
 import { AppUserService } from '../../services/app.user.service';
-import { DaysOfTheWeek } from '@sports-alliance/sports-lib/lib/users/settings/user.unit.settings.interface';
+import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { map, switchMap, take, throttleTime } from 'rxjs/operators';
-import { AngularFireAnalytics } from '@angular/fire/compat/analytics';
-import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
-import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { PromoDialogComponent } from '../promo-dialog/promo-dialog.component';
-import { getDatesForDateRange } from 'app/helpers/date-range-helper';
-import firebase from 'firebase/compat/app';
-import WhereFilterOp = firebase.firestore.WhereFilterOp;
+import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+
+import { getDatesForDateRange } from '../../helpers/date-range-helper';
+import { WhereFilterOp } from 'firebase/firestore';
+
 
 @Component({
   selector: 'app-dashboard',
   templateUrl: './dashboard.component.html',
-  styleUrls: ['./dashboard.component.css'],
+  styleUrls: ['./dashboard.component.scss'],
+  standalone: false
 })
 
 export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
@@ -39,28 +39,46 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public isInitialized = false;
 
   private shouldSearch: boolean;
-  private promoDialogRef: MatDialogRef<PromoDialogComponent>
-
-
+  private analyticsService = inject(AppAnalyticsService);
 
 
   constructor(public authService: AppAuthService,
-              private router: Router,
-              private eventService: AppEventService,
-              private userService: AppUserService,
-              private changeDetector: ChangeDetectorRef,
-              private route: ActivatedRoute,
-              private dialog: MatDialog,
-              private afa: AngularFireAnalytics,
-              private snackBar: MatSnackBar) {
+    private router: Router,
+    private eventService: AppEventService,
+    private userService: AppUserService,
+    private route: ActivatedRoute,
+    private snackBar: MatSnackBar) {
   }
 
   async ngOnInit() {
 
-    this.shouldSearch = true;
+    const resolvedData = this.route.snapshot.data['dashboardData'];
+    if (resolvedData) {
+      this.events = resolvedData.events || [];
+      this.user = resolvedData.user;
+      this.targetUser = resolvedData.targetUser;
+      this.isLoading = false;
+      this.isInitialized = true;
+
+
+      if (this.user) {
+        if (this.user.settings.dashboardSettings.dateRange === DateRanges.custom && this.user.settings.dashboardSettings.startDate && this.user.settings.dashboardSettings.endDate) {
+          this.searchStartDate = new Date(this.user.settings.dashboardSettings.startDate);
+          this.searchEndDate = new Date(this.user.settings.dashboardSettings.endDate);
+        } else if (this.user.settings.unitSettings?.startOfTheWeek !== undefined) {
+          const range = getDatesForDateRange(this.user.settings.dashboardSettings.dateRange, this.user.settings.unitSettings.startOfTheWeek);
+          this.searchStartDate = range.startDate;
+          this.searchEndDate = range.endDate;
+        }
+        this.startOfTheWeek = this.user.settings.unitSettings?.startOfTheWeek;
+      }
+    }
+
+    this.shouldSearch = false;
+
     // @todo make this an obsrvbl
     const userID = this.route.snapshot.paramMap.get('userID');
-    if (userID) {
+    if (userID && !this.targetUser) { // Only fetch if not resolved
       try {
         this.targetUser = await this.userService.getUserByID(userID).pipe(take(1)).toPromise();
       } catch (e) {
@@ -69,15 +87,18 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         });
       }
     }
-    this.dataSubscription = this.authService.user.pipe(switchMap((user) => {
+    this.dataSubscription = this.authService.user$.pipe(switchMap((user: User | null) => {
 
-      this.isLoading = true;
+      if (this.shouldSearch || !this.isInitialized) {
+        this.isLoading = true;
+      }
+
       // Get the user
       if (!user) {
         this.router.navigate(['login']).then(() => {
           this.snackBar.open('You were signed out out')
         });
-        return of({user: null, events: null});
+        return of({ user: null, events: null });
       }
 
       // this.showUpload = this.authService.isGuest();
@@ -113,8 +134,11 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       }
 
       if ((!this.searchStartDate || !this.searchEndDate) && user.settings.dashboardSettings.dateRange === DateRanges.custom) {
-        return of({events: [], user: user})
+        return of({ events: [], user: user })
       }
+
+
+
       if (user.settings.dashboardSettings.dateRange !== DateRanges.all) {
         // this.searchStartDate.setHours(0, 0, 0, 0); // @todo this should be moved to the search component
         where.push({
@@ -131,13 +155,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       }
 
       // Get what is needed
-      const returnObservable = this.shouldSearch ?
-        this.eventService
-          .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit)
-        : this.events.length ? of(this.events) : this.eventService
-          .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit);
+      const returnObservable = this.eventService
+        .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit);
       return returnObservable
-        .pipe(throttleTime(2000, asyncScheduler, {leading: true, trailing: true}))
         .pipe(map((eventsArray) => {
           const t0 = performance.now();
           if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
@@ -151,7 +171,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
           return result;
         }))
         .pipe(map((events) => {
-          return {events: events, user: user}
+          return { events: events, user: user }
         }))
     })).subscribe((eventsAndUser) => {
 
@@ -160,11 +180,12 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       this.user = eventsAndUser.user;
       this.isLoading = false;
       this.isInitialized = true;
-      this.showPromoForUserOrDoNothing(this.user);
+
     });
   }
 
   async search(search: Search) {
+    this.isLoading = true;
     this.shouldSearch = true;
     this.searchTerm = search.searchTerm;
     this.searchStartDate = search.startDate;
@@ -173,30 +194,15 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     this.user.settings.dashboardSettings.startDate = search.startDate && search.startDate.getTime();
     this.user.settings.dashboardSettings.endDate = search.endDate && search.endDate.getTime();
     this.user.settings.dashboardSettings.activityTypes = search.activityTypes;
-    this.afa.logEvent('dashboard_search', {method: DateRanges[search.dateRange]});
-    await this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    this.analyticsService.logEvent('dashboard_search', { method: DateRanges[search.dateRange] });
+    await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
   }
 
   ngOnChanges() {
 
   }
 
-  async showPromoForUserOrDoNothing(user: User) {
-    if (!this.userService.shouldShowPromo(user)) {
-      return
-    }
-    // Show the modal
-    if (this.promoDialogRef) {
-      return;
-    }
-    this.promoDialogRef = this.dialog.open(PromoDialogComponent, {
-      // width: '75vw',
-      disableClose: true,
-      data: {
-        user: user
-      },
-    })
-  }
+
 
   ngOnDestroy(): void {
     if (this.dataSubscription) {

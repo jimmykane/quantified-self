@@ -1,22 +1,19 @@
 <mat-card class="mat-elevation-z0">
-  <app-event-search *ngIf="user"
-                    [startOfTheWeek]="user.settings.unitSettings.startOfTheWeek"
-                    [showDatePicker]="false"
-                    [showActivityTypePicker]="false"
-                    [dateRangesToShow]="dateRangesToShow"
-                    [selectedDateRange]="user.settings.myTracksSettings.dateRange"
-                    (searchChange)="search($event)"
-                    >
+  @if (user) {
+  <app-event-search [startOfTheWeek]="user.settings.unitSettings.startOfTheWeek" [showDatePicker]="false"
+    [showActivityTypePicker]="false" [dateRangesToShow]="dateRangesToShow"
+    [selectedDateRange]="user.settings.myTracksSettings?.dateRange" (searchChange)="search($event)">
   </app-event-search>
+  }
 
-<!--  <app-event-search-->
-<!--    [isLoading]="totalProgress !== 100"-->
-<!--    [selectedDateRange]="user.settings.dashboardSettings.dateRange"-->
-<!--    [selectedStartDate]="searchStartDate"-->
-<!--    [selectedEndDate]="searchEndDate"-->
-<!--    [startOfTheWeek]="startOfTheWeek"-->
-<!--    [selectedActivityTypes]="user.settings.dashboardSettings.activityTypes"-->
-<!--    (searchChange)="search($event)">-->
-<!--  </app-event-search>-->
+  <!--  <app-event-search-->
+  <!--    [isLoading]="totalProgress !== 100"-->
+  <!--    [selectedDateRange]="user.settings.dashboardSettings.dateRange"-->
+  <!--    [selectedStartDate]="searchStartDate"-->
+  <!--    [selectedEndDate]="searchEndDate"-->
+  <!--    [startOfTheWeek]="startOfTheWeek"-->
+  <!--    [selectedActivityTypes]="user.settings.dashboardSettings.activityTypes"-->
+  <!--    (searchChange)="search($event)">-->
+  <!--  </app-event-search>-->
   <div #mapDiv id="map"></div>
 </mat-card>

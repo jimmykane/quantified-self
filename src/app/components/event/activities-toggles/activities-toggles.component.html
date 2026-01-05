@@ -1,12 +1,19 @@
-<mat-card class="mat-elevation-z0" style="padding-top: 0; padding-bottom: 0;">
-  <section [class.flex]="event.getActivities().length > 3">
-    <app-activity-toggle  [class.flex-header]="event.getActivities().length > 3"
-      *ngFor="let activity of event.getActivities()"
-      [event]="event"
-      [user]="user"
-      [isOwner]="isOwner"
-      [showActions]="true"
-      [activity]="activity">
-    </app-activity-toggle>
-  </section>
-</mat-card>
+<mat-chip-listbox class="activity-chips" [multiple]="true" [hideSingleSelectionIndicator]="true"
+  aria-label="Activity selection">
+  @for (activity of activities(); track trackByActivityId($index, activity)) {
+  <mat-chip-option [selected]="isSelected(activity)"
+    [style.--chip-accent-color]="activityColors().get(activity.getID())" (click)="toggleActivity(activity)"
+    class="activity-chip">
+    <div class="chip-content">
+      <span class="chip-type">{{ activity.type }}</span>
+      <span class="chip-stats">
+        {{ activity.getDuration().getDisplayValue() }} • {{ activity.getDistance().getDisplayValue() }}{{
+        activity.getDistance().getDisplayUnit() }}
+      </span>
+      @if (shouldShowDeviceNames()) {
+      <span class="chip-device">{{ getDeviceName(activity) }}</span>
+      }
+    </div>
+  </mat-chip-option>
+  }
+</mat-chip-listbox>

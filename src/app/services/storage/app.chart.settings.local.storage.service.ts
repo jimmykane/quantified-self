@@ -1,6 +1,6 @@
 import {Injectable} from '@angular/core';
 import {LocalStorageService} from './app.local.storage.service';
-import {EventInterface} from '@sports-alliance/sports-lib/lib/events/event.interface';
+import {EventInterface} from '@sports-alliance/sports-lib';
 
 
 @Injectable({

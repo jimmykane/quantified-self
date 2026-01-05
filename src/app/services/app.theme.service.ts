@@ -1,10 +1,10 @@
 import { Injectable, OnDestroy } from '@angular/core';
-import {AppThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.app.settings.interface';
-import {AppUserService} from './app.user.service';
-import {User} from '@sports-alliance/sports-lib/lib/users/user';
-import {ChartThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.chart.settings.interface';
+import { AppThemes } from '@sports-alliance/sports-lib';
+import { AppUserService } from './app.user.service';
+import { User } from '@sports-alliance/sports-lib';
+import { ChartThemes } from '@sports-alliance/sports-lib';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
-import {MapThemes} from '@sports-alliance/sports-lib/lib/users/settings/user.map.settings.interface';
+import { MapThemes } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../authentication/app.auth.service';
 
 
@@ -25,10 +25,10 @@ export class AppThemeService implements OnDestroy {
     private userService: AppUserService,
     private authService: AppAuthService,
   ) {
-    this.appTheme.next(this.getAppThemeFromStorage());
-    this.chartTheme.next(this.getChartThemeFromStorage());
-    this.mapTheme.next(this.getMapThemeFromStorage());
-    this.userSubscription = this.authService.user.subscribe(user => {
+    this.setAppTheme(this.getAppThemeFromStorage());
+    this.setChartTheme(this.getChartThemeFromStorage());
+    this.setMapTheme(this.getMapThemeFromStorage());
+    this.userSubscription = this.authService.user$.subscribe(user => {
       this.user = user;
       if (this.user) {
         this.setAppTheme(this.user.settings.appSettings.theme)
@@ -58,7 +58,11 @@ export class AppThemeService implements OnDestroy {
   }
 
   public setAppTheme(appTheme: AppThemes) {
-    appTheme === AppThemes.Normal ? document.body.classList.remove('dark-theme') : document.body.classList.add('dark-theme');
+    if (appTheme === AppThemes.Normal) {
+      document.body.classList.remove('dark-theme');
+    } else {
+      document.body.classList.add('dark-theme');
+    }
     localStorage.setItem('appTheme', appTheme);
     this.appTheme.next(appTheme);
   }
@@ -90,11 +94,11 @@ export class AppThemeService implements OnDestroy {
   }
 
   private getAppThemeFromStorage(): AppThemes {
-    return localStorage.getItem('appThemes') !== null ? AppThemes[this.getEnumKeyByEnumValue(AppThemes, localStorage.getItem('appThemes'))] : AppUserService.getDefaultAppTheme();
+    return localStorage.getItem('appTheme') !== null ? AppThemes[this.getEnumKeyByEnumValue(AppThemes, localStorage.getItem('appTheme'))] : AppUserService.getDefaultAppTheme();
   }
 
   private getMapThemeFromStorage(): MapThemes {
-    return localStorage.getItem('mapThemes') !== null ? MapThemes[this.getEnumKeyByEnumValue(MapThemes, localStorage.getItem('mapThemes'))] : AppUserService.getDefaultMapTheme();
+    return localStorage.getItem('mapTheme') !== null ? MapThemes[this.getEnumKeyByEnumValue(MapThemes, localStorage.getItem('mapTheme'))] : AppUserService.getDefaultMapTheme();
   }
 
   private getChartThemeFromStorage(): ChartThemes {

@@ -1,9 +1,84 @@
-.flex{
+.activity-chips {
   display: flex;
   flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
 }
 
-.flex-header{
-  max-width: 50%;
-  width: 50%;
+.activity-chip {
+  --mdc-chip-elevated-container-color: var(--mat-app-surface-container);
+  --mdc-chip-label-text-color: var(--mat-app-on-surface);
+  --mdc-chip-with-icon-icon-size: 0;
+  --mdc-chip-graphic-selected-width: 0;
+  border-radius: 10px !important;
+  height: auto !important;
+  padding: 4px 12px !important;
+  min-width: 140px;
+  flex: 0 0 auto;
+}
+
+.activity-chip.mat-mdc-chip-selected {
+  --mdc-chip-elevated-container-color: color-mix(in srgb, var(--chip-accent-color, var(--mat-app-primary)) 15%, var(--mat-app-surface-container));
+  --mdc-chip-label-text-color: var(--mat-app-on-surface);
+  border: 2px solid var(--chip-accent-color, var(--mat-app-primary)) !important;
+}
+
+/* Remove checkmark graphic completely */
+::ng-deep .activity-chip .mat-mdc-chip-graphic {
+  display: none !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+::ng-deep .activity-chip .mdc-evolution-chip__graphic {
+  display: none !important;
+  width: 0 !important;
+}
+
+::ng-deep .activity-chip .mat-mdc-chip-action-label {
+  padding-left: 0 !important;
+}
+
+.activity-chip:not(.mat-mdc-chip-selected) {
+  border: 1px solid var(--mat-app-outline-variant) !important;
+  opacity: 0.7;
+}
+
+.chip-content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 4px 0;
+}
+
+.chip-type {
+  font-weight: 400;
+  font-size: 0.95rem;
+  line-height: 1.2;
+}
+
+.chip-stats {
+  font-size: 0.8rem;
+  color: var(--mat-app-on-surface-variant);
+  font-weight: 400;
+}
+
+.chip-device {
+  font-size: 0.7rem;
+  color: var(--mat-app-on-surface-variant);
+  opacity: 0.8;
+  font-style: italic;
+  margin-top: 2px;
+}
+
+/* Responsive: stack on very small screens */
+@media (max-width: 360px) {
+  .activity-chip {
+    flex: 1 1 100%;
+  }
 }

@@ -1,0 +1,311 @@
+:host {
+    // Removed local vars that override global theme
+    --section-spacing: 24px;
+}
+
+// Override global form limit for settings page
+::ng-deep .qs-form {
+    max-width: 100% !important;
+}
+
+/* User Profile Header container inherits from global .app-header-card */
+
+.user-profile-header .name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+@media (max-width: 600px) {
+    .user-profile-header .header-content {
+        flex-direction: column;
+        text-align: center;
+        gap: 16px;
+    }
+
+    .user-profile-header .name-row {
+        justify-content: center;
+    }
+
+    .user-profile-header .actions {
+        margin-left: 0;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+    }
+}
+
+.settings-container {
+    display: block;
+    min-height: calc(100vh - 64px);
+    // background-color: #f4f7f6; /* REMOVED: Managed by global theme */
+
+    position: relative;
+}
+
+/* Horizontal Chip Navigation */
+.settings-nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    // background-color: rgba(244, 247, 246, 0.95); /* REMOVED */
+    background: inherit;
+    /* Allow clear background or global surface */
+    backdrop-filter: blur(10px);
+    padding: 16px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    /* Consider theme var for border? */
+    margin-bottom: 0;
+}
+
+// Dark theme adjustment for nav border
+:host-context(.dark-theme) .settings-nav {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.nav-list {
+    display: flex;
+    gap: 12px;
+    list-style: none;
+    padding: 12px 40px;
+    /* Aligns with content padding */
+    margin: 0 auto;
+    margin: 0 auto;
+    overflow-x: auto;
+    scrollbar-width: none;
+    /* Firefox */
+    -ms-overflow-style: none;
+    /* IE/Edge */
+}
+
+.nav-list::-webkit-scrollbar {
+    display: none;
+    /* Chrome/Safari */
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-weight: 400;
+    font-size: 0.95rem;
+    // color: var(--text-secondary); /* REMOVED */
+    opacity: 0.7;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    // background-color: white; /* REMOVED */
+    background-color: rgba(0, 0, 0, 0.05);
+    /* Safe mild grey */
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    /* REMOVED or adapted */
+    white-space: nowrap;
+}
+
+:host-context(.dark-theme) .nav-item {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.nav-item mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    margin-right: 4px;
+}
+
+.nav-item:hover {
+    // background-color: #f0f0f0;
+    background-color: rgba(0, 0, 0, 0.1);
+    // color: var(--text-primary);
+    opacity: 1;
+    transform: translateY(-1px);
+}
+
+:host-context(.dark-theme) .nav-item:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.nav-item.active {
+    // background-color: var(--accent-color);
+    background-color: var(--mat-sys-primary, #3f51b5); // Use material primary
+    color: var(--mat-sys-on-primary, white);
+    border-color: transparent;
+    // box-shadow: 0 4px 12px rgba(63, 81, 181, 0.2);
+    opacity: 1;
+}
+
+.nav-item.active mat-icon {
+    color: var(--mat-sys-on-primary, white);
+}
+
+/* Mobile Responsive Adjustments */
+@media (max-width: 600px) {
+    .nav-list {
+        padding: 0 16px;
+    }
+
+    .settings-content {
+        padding: 24px 16px;
+    }
+}
+
+/* Main Content Area */
+.settings-content {
+    flex: 1;
+    padding: 24px 40px;
+    max-width: 100%;
+    margin: 0 auto;
+}
+
+.section-header {
+    margin-bottom: 32px;
+}
+
+.section-header h1 {
+    margin: 0 0 8px 0;
+    font-size: 1.8rem;
+    font-weight: 400;
+    // color: var(--text-primary); /* REMOVED */
+}
+
+.section-header p {
+    margin: 0;
+    // color: var(--text-secondary); /* REMOVED */
+    opacity: 0.7;
+    font-size: 1rem;
+}
+
+/* Redesigned Card Styling */
+.settings-card {
+    // background: var(--card-bg); /* REMOVED */
+    // Use mat-card mixin or global card style if applying to div, otherwise assume standard mat-card usage
+    // The HTML uses mat-card, so we just let it be.
+    // Exception: if it's a div acting as card.
+    // Assuming mat-card is used based on "settings-card" name potentially being applied to mat-card?
+    // If it's a class on mat-card, global styles handle it.
+
+    margin-bottom: var(--section-spacing);
+    overflow: hidden;
+}
+
+.card-content {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.danger-card {
+    // border: 1px solid #ffccd2; /* Red-ish border */
+    border: 1px solid rgba(255, 0, 0, 0.2);
+    // background-color: #fffafb; /* REMOVED */
+    background-color: rgba(255, 0, 0, 0.02);
+    /* Slight red tint safe for both modes */
+}
+
+.danger-title {
+    color: #d32f2f;
+    /* Error red usually fine, or var(--mat-sys-error) */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 400;
+    margin-bottom: 12px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .settings-container {
+        flex-direction: column;
+    }
+
+    .settings-sidebar {
+        width: 100%;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        position: relative;
+        padding: 12px 0;
+    }
+
+    :host-context(.dark-theme) .settings-sidebar {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .nav-list {
+        display: flex;
+        overflow-x: auto;
+        padding: 0 16px;
+    }
+
+    .nav-item {
+        padding: 12px 16px;
+        white-space: nowrap;
+        border-right: none;
+    }
+
+    .nav-item.active {
+        border-right: none;
+        border-bottom: 3px solid var(--mat-sys-primary, #3f51b5);
+    }
+
+    .settings-content {
+        padding: 24px 16px;
+    }
+}
+
+/* Save Button Styles */
+.qs-form-actions-floating {
+    position: fixed;
+    bottom: 40px;
+    right: 40px;
+    z-index: 100;
+}
+
+.mobile-save-bar {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 16px;
+    background: var(--mat-sys-surface, white);
+    /* Use surface color */
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+}
+
+:host-context(.dark-theme) .mobile-save-bar {
+    background: #1e1e1e; // fallback
+    background: var(--mat-app-surface, #1e1e1e);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.mobile-save-bar button {
+    width: 100%;
+}
+
+@media (max-width: 768px) {
+    .qs-form-actions-floating {
+        display: none;
+    }
+
+    .mobile-save-bar {
+        display: block;
+    }
+
+    /* Add padding to bottom of content to avoid overlap with sticky bar */
+    .settings-content {
+        padding-bottom: 80px;
+    }
+}
+
+.qs-form-actions-floating button[disabled],
+.mobile-save-bar button[disabled] {
+    opacity: 0.5;
+    filter: grayscale(1);
+    pointer-events: none;
+}

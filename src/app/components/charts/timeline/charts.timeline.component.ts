@@ -11,49 +11,58 @@ import {
   ViewChild,
 } from '@angular/core';
 
-import * as am4core from '@amcharts/amcharts4/core';
-import * as am4charts from '@amcharts/amcharts4/charts';
-import * as am4plugins_timeline from '@amcharts/amcharts4/plugins/timeline';
+import { AmChartsService } from '../../../services/am-charts.service';
 
-import {DynamicDataLoader} from '@sports-alliance/sports-lib/lib/data/data.store';
-import {DashboardChartAbstractDirective} from '../dashboard-chart-abstract-component.directive';
-import {SummariesChartDataInterface} from '../../summaries/summaries.component';
-import {ChartHelper} from '../../event/chart/chart-helper';
+// Type-only imports
+import type * as am4core from '@amcharts/amcharts4/core';
+import type * as am4charts from '@amcharts/amcharts4/charts';
+import type * as am4plugins_timeline from '@amcharts/amcharts4/plugins/timeline';
+
+
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-component.directive';
+import { SummariesChartDataInterface } from '../../summaries/summaries.component';
+import { ChartHelper } from '../../event/chart/chart-helper';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { ActivityTypes } from '@sports-alliance/sports-lib/lib/activities/activity.types';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { LoggerService } from '../../../services/logger.service';
 
 @Component({
   selector: 'app-timeline-chart',
   templateUrl: './charts.timeline.component.html',
   styleUrls: ['./charts.timeline.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 export class ChartsTimelineComponent extends DashboardChartAbstractDirective implements OnChanges, OnDestroy {
 
 
 
-  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, private eventColorService: AppEventColorService) {
-    super(zone, changeDetector);
+  constructor(protected zone: NgZone, changeDetector: ChangeDetectorRef, private eventColorService: AppEventColorService, protected amChartsService: AmChartsService, protected logger: LoggerService) {
+    super(zone, changeDetector, amChartsService, logger);
   }
 
+  protected async createChart(): Promise<am4charts.XYChart> {
+    const { core, charts } = await this.amChartsService.load();
+    const timeline = await import('@amcharts/amcharts4/plugins/timeline');
 
-  protected createChart(): am4charts.XYChart {
-    const chart = <am4plugins_timeline.SpiralChart>super.createChart(am4plugins_timeline.SpiralChart);
+    const chart = await super.createChart(timeline.SpiralChart) as am4plugins_timeline.SpiralChart;
     chart.levelCount = 2;
     chart.inversed = true;
     chart.endAngle = -90;
-    chart.yAxisInnerRadius = am4core.percent(15);
-    chart.yAxisRadius = am4core.percent(120);
-    chart.innerRadius = am4core.percent(60);
+    chart.yAxisInnerRadius = core.percent(15);
+    chart.yAxisRadius = core.percent(120);
+    chart.innerRadius = core.percent(60);
+
     chart.paddingTop = 0;
     chart.paddingBottom = 0;
     chart.fontSize = '0.8em';
 
-    const categoryAxis = chart.yAxes.push(<am4charts.Axis<am4plugins_timeline.AxisRendererCurveY>>this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval));
+    const categoryAxis = chart.yAxes.push(<am4charts.Axis<am4plugins_timeline.AxisRendererCurveY>>this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval, charts));
     // categoryAxis.dataFields.category = 'time';
-    if (categoryAxis instanceof am4charts.CategoryAxis) {
+    if (categoryAxis instanceof charts.CategoryAxis) {
       categoryAxis.dataFields.category = 'type';
-    } else if (categoryAxis instanceof am4charts.DateAxis) {
+    } else if (categoryAxis instanceof charts.DateAxis) {
       categoryAxis.dataFields.date = 'time';
       chart.dateFormatter.dateFormat = categoryAxis.dateFormatter.dateFormat;
     }
@@ -72,9 +81,9 @@ export class ChartsTimelineComponent extends DashboardChartAbstractDirective imp
     });
     categoryAxisLabelTemplate.adapter.add('text', (text, target, key) => {
       let chartDataItem;
-      if (target.dataItem instanceof am4charts.DateAxisDataItem && target.axis) {
+      if (target.dataItem instanceof charts.DateAxisDataItem && target.axis) {
         chartDataItem = target.axis.chart.data.find((chartData: SummariesChartDataInterface) => chartData.time === (<am4charts.DateAxisDataItem>target.dataItem).value);
-      } else if (target.dataItem instanceof am4charts.CategoryAxisDataItem) {
+      } else if (target.dataItem instanceof charts.CategoryAxisDataItem) {
         chartDataItem = <SummariesChartDataInterface>target.dataItem.dataContext;
       }
       if (!chartDataItem) {
@@ -84,7 +93,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstractDirective imp
       return `[bold font-size: 0.8em]${text} ${data.getDisplayValue()} ${data.getDisplayUnit()}[/]`;
     });
 
-    const valueAxis = chart.xAxes.push(<am4charts.ValueAxis<am4plugins_timeline.AxisRendererCurveX>>new am4charts.ValueAxis());
+    const valueAxis = chart.xAxes.push(<am4charts.ValueAxis<am4plugins_timeline.AxisRendererCurveX>>new charts.ValueAxis());
     valueAxis.renderer.minGridDistance = 100;
 
     // valueAxis.renderer.line.strokeDasharray = '1,0';
@@ -97,7 +106,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstractDirective imp
     valueAxis.min = 0;
 
 
-    valueAxis.numberFormatter = new am4core.NumberFormatter();
+    valueAxis.numberFormatter = new core.NumberFormatter();
     valueAxis.numberFormatter.numberFormat = `#`;
     // valueAxis.renderer.labels.template.adapter.add('text', (text, target) => {
     //   const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(text));
@@ -108,18 +117,18 @@ export class ChartsTimelineComponent extends DashboardChartAbstractDirective imp
     labelTemplate.verticalCenter = 'middle';
     labelTemplate.fillOpacity = this.getFillOpacity();
 
-    const series = chart.series.push(new am4plugins_timeline.CurveColumnSeries());
-    if (categoryAxis instanceof am4charts.CategoryAxis) {
+    const series = chart.series.push(new timeline.CurveColumnSeries());
+    if (categoryAxis instanceof charts.CategoryAxis) {
       series.dataFields.categoryY = 'type';
-    } else if (categoryAxis instanceof am4charts.DateAxis) {
+    } else if (categoryAxis instanceof charts.DateAxis) {
       series.dataFields.dateY = 'time';
     }
     series.dataFields.valueX = this.chartDataValueType;
 
 
     series.columns.template.adapter.add('fill', (fill, target) => {
-      if (categoryAxis instanceof am4charts.CategoryAxis) {
-        return am4core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext['type']]));
+      if (categoryAxis instanceof charts.CategoryAxis) {
+        return core.color(this.eventColorService.getColorForActivityTypeByActivityTypeGroup(ActivityTypes[target.dataItem.dataContext['type']]));
       }
       return this.getFillColor(chart, target.dataItem.index);
     });
@@ -135,7 +144,7 @@ export class ChartsTimelineComponent extends DashboardChartAbstractDirective imp
 
     // series.columns.template.filters.push(ChartHelper.getShadowFilter());
 
-    const label = series.createChild(am4core.Label);
+    const label = series.createChild(core.Label);
     label.horizontalCenter = 'middle';
     label.paddingLeft = 20;
     label.verticalCenter = 'middle';

@@ -1,16 +1,15 @@
-import * as functions from 'firebase-functions'
-import { addToQueueForCOROS, parseQueueItems } from '../queue';
-import { SERVICE_NAME } from './constants';
+import * as functions from 'firebase-functions/v1';
+import * as logger from 'firebase-functions/logger';
+import { addToQueueForCOROS } from '../queue';
+
 import { COROSAPIWorkoutQueueItemInterface } from '../queue/queue-item.interface';
 import { generateIDFromParts } from '../utils';
+import { config } from '../config';
 
-
-const TIMEOUT_IN_SECONDS = 300;
-const MEMORY = "2GB";
 const SUCCESS_RESPONSE = {
-  "message":"ok",
-  "result":"0000"
-}
+  'message': 'ok',
+  'result': '0000',
+};
 
 /**
  * We return 200 with no body if there is no sportList
@@ -18,91 +17,76 @@ const SUCCESS_RESPONSE = {
  */
 export const insertCOROSAPIWorkoutDataToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,
-  memory: '256MB'
+  memory: '256MB',
 }).https.onRequest(async (req, res) => {
-  if (!req.get('Client') || !req.get('Secret')){
-    console.info(`No client or secret ${req.method}`);
+  if (!req.get('Client') || !req.get('Secret')) {
+    logger.info(`No client or secret ${req.method}`);
     res.status(200).send(SUCCESS_RESPONSE);
     return;
   }
   //
-  if (!(req.get('Client') === functions.config().corosapi.client_id
-    && req.get('Secret') === functions.config().corosapi.client_secret)){
-    console.info(`Client Cred error return just 200`); // as status check
+  if (!(req.get('Client') === config.corosapi.client_id &&
+    req.get('Secret') === config.corosapi.client_secret)) {
+    logger.info('Client Cred error return just 200'); // as status check
     res.status(200).send(SUCCESS_RESPONSE);
     return;
   }
 
-  const body = JSON.parse(JSON.stringify(req.body))
+  const body = JSON.parse(JSON.stringify(req.body));
 
-  console.log(JSON.stringify(req.body));
+  logger.info(JSON.stringify(req.body));
 
-  if (!body.sportDataList || !body.sportDataList.length){
-    console.error('No sport data list')
+  if (!body.sportDataList || !body.sportDataList.length) {
+    logger.error('No sport data list');
     res.status(200).send(SUCCESS_RESPONSE);
-    return
+    return;
   }
 
-  for (const workout of convertCOROSWorkoutsToQueueItems(body.sportDataList)) {
+  for (const workout of await convertCOROSWorkoutsToQueueItems(body.sportDataList)) {
     try {
       await addToQueueForCOROS(workout);
-    }catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      logger.error(e);
       res.status(500).send();
-      return
+      return;
     }
   }
   // All ok
-  console.info('Insert to Queue for COROS success responding with ok')
-  res.status(200).send(SUCCESS_RESPONSE)
-})
-
-export const parseCOROSAPIWorkoutQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_IN_SECONDS,
-  memory: MEMORY,
-  maxInstances: 1,
-}).pubsub.schedule('every 20 minutes').onRun(async (context) => {
-  await parseQueueItems(SERVICE_NAME);
+  logger.info('Insert to Queue for COROS success responding with ok');
+  res.status(200).send(SUCCESS_RESPONSE);
 });
 
-export const parseCOROSAPIHistoryImportWorkoutQueue = functions.region('europe-west2').runWith({
-  timeoutSeconds: TIMEOUT_IN_SECONDS,
-  memory: MEMORY,
-  maxInstances: 1,
-}).pubsub.schedule('every 20 minutes').onRun(async (context) => {
-  await parseQueueItems(SERVICE_NAME, true);
-});
 
-export function convertCOROSWorkoutsToQueueItems(workouts: any[], openId?: string): COROSAPIWorkoutQueueItemInterface[] {
+
+export async function convertCOROSWorkoutsToQueueItems(workouts: any[], openId?: string): Promise<COROSAPIWorkoutQueueItemInterface[]> {
   // find the triathlon
-  const triathlon = workouts
-    .filter(((workoutData: any) => workoutData.triathlonItemList))
-    .reduce((accu: COROSAPIWorkoutQueueItemInterface[], triathlonWorkout: any) => {
-      triathlonWorkout.triathlonItemList.forEach((triathlonWorkoutItem: any) => {
-        accu.push(getCOROSQueueItemFromWorkout(openId || triathlonWorkout.openId, triathlonWorkout.labelId, triathlonWorkoutItem.fitUrl))
-      })
-      return accu
-    }, [])
+  const triathlonItems: COROSAPIWorkoutQueueItemInterface[] = [];
+  for (const triathlonWorkout of workouts.filter(((workoutData: any) => workoutData.triathlonItemList))) {
+    for (const triathlonWorkoutItem of triathlonWorkout.triathlonItemList) {
+      triathlonItems.push(await getCOROSQueueItemFromWorkout(openId || triathlonWorkout.openId, triathlonWorkout.labelId, triathlonWorkoutItem.fitUrl));
+    }
+  }
 
-  const nonTriathlon = workouts
-    .filter(((workoutData: any) => !workoutData.triathlonItemList)).map((workout: any) =>  getCOROSQueueItemFromWorkout(openId || workout.openId, workout.labelId, workout.fitUrl))
-  return [...triathlon, ...nonTriathlon].filter((workout) => {
-    if (!workout.FITFileURI){
-      console.error(`No fit url skipping workout for user ${workout.openId}, id ${workout.workoutID}`)
+  const nonTriathlon = await Promise.all(workouts
+    .filter(((workoutData: any) => !workoutData.triathlonItemList)).map((workout: any) => getCOROSQueueItemFromWorkout(openId || workout.openId, workout.labelId, workout.fitUrl)));
+
+  return [...triathlonItems, ...nonTriathlon].filter((workout) => {
+    if (!workout.FITFileURI) {
+      logger.error(`No fit url skipping workout for user ${workout.openId}, id ${workout.workoutID}`);
       return false;
     }
     return true;
-  })
+  });
 }
 
-export function getCOROSQueueItemFromWorkout(openId: string, labelId: string, fitUrl: string): COROSAPIWorkoutQueueItemInterface{
+export async function getCOROSQueueItemFromWorkout(openId: string, labelId: string, fitUrl: string): Promise<COROSAPIWorkoutQueueItemInterface> {
   return {
-    id: generateIDFromParts([openId, labelId, fitUrl]),
+    id: await generateIDFromParts([openId, labelId, fitUrl]),
     dateCreated: new Date().getTime(),
     openId: openId,
     workoutID: labelId,
     FITFileURI: fitUrl,
     retryCount: 0, // So it can be re-processed
-    processed: false, //So it can be re-processed
-  }
+    processed: false, // So it can be re-processed
+  };
 }
