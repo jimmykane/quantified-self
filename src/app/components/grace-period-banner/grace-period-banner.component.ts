@@ -1,6 +1,7 @@
 import { Component, OnInit, Output, EventEmitter, ViewChild, ElementRef, AfterViewInit, OnDestroy } from '@angular/core';
 import { Observable, Subscription } from 'rxjs';
 import { AppUserService } from '../../services/app.user.service';
+import { LoggerService } from '../../services/logger.service';
 
 @Component({
     selector: 'app-grace-period-banner',
@@ -17,10 +18,10 @@ export class GracePeriodBannerComponent implements OnInit, AfterViewInit, OnDest
     set bannerElement(element: ElementRef<HTMLDivElement> | undefined) {
         this._bannerElement = element;
         if (element) {
-            console.log('[GracePeriodBanner] ViewChild setter called - Element present');
+            this.logger.info('[GracePeriodBanner] ViewChild setter called - Element present');
             this.updateHeight();
         } else {
-            console.log('[GracePeriodBanner] ViewChild setter called - Element undefined');
+            this.logger.info('[GracePeriodBanner] ViewChild setter called - Element undefined');
         }
     }
 
@@ -33,10 +34,10 @@ export class GracePeriodBannerComponent implements OnInit, AfterViewInit, OnDest
     private subscription: Subscription | null = null;
     private resizeObserver: ResizeObserver | null = null;
 
-    constructor(private userService: AppUserService) { }
+    constructor(private userService: AppUserService, private logger: LoggerService) { }
 
     ngOnInit(): void {
-        console.log('[GracePeriodBanner] ngOnInit - Getting grace period observable');
+        this.logger.info('[GracePeriodBanner] ngOnInit - Getting grace period observable');
         this.gracePeriodUntil$ = this.userService.getGracePeriodUntil();
     }
 
@@ -76,10 +77,10 @@ export class GracePeriodBannerComponent implements OnInit, AfterViewInit, OnDest
     private updateHeight(): void {
         if (this._bannerElement && !this.isDismissed) {
             const height = this._bannerElement.nativeElement.offsetHeight;
-            console.log('[GracePeriodBanner] updateHeight - emitting height:', height);
+            this.logger.info('[GracePeriodBanner] updateHeight - emitting height:', height);
             this.heightChanged.emit(height);
         } else {
-            console.log('[GracePeriodBanner] updateHeight - emitting 0');
+            this.logger.info('[GracePeriodBanner] updateHeight - emitting 0');
             this.heightChanged.emit(0);
         }
     }

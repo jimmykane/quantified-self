@@ -403,9 +403,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     });
     // On select
     chart.cursor.events.on('selectended', (ev) => {
-      console.log('EventCardChartComponent: selectended triggered');
+      this.logger.info('EventCardChartComponent: selectended triggered');
       if (!ev.target.xRange) {
-        console.warn('EventCardChartComponent: No xRange in event target');
+        this.logger.warn('EventCardChartComponent: No xRange in event target');
         return;
       }
       this.disposeRangeLabelsContainer(ev.target.chart);
@@ -433,11 +433,11 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
       // alert('Selected start ' + start + ' end ' + end);
       // Now since we know the actual start end we need end iterate over the visible series and calculate AVG, Max,Min, Gain and loss not an easy job I suppose
-      console.log('EventCardChartComponent: Iterating series to create labels');
+      this.logger.info('EventCardChartComponent: Iterating series to create labels');
       this.chart.series.values.forEach(series => {
         try {
           if (!series.dummyData || !series.dummyData.stream) {
-            console.warn(`EventCardChartComponent: Series ${series.name || series.id} missing dummyData or stream`);
+            this.logger.warn(`EventCardChartComponent: Series ${series.name || series.id} missing dummyData or stream`);
             return;
           }
 
@@ -512,10 +512,10 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           }
           // Todo should group pace and derived units
           // Should use dynamic data loader
-          console.log(`EventCardChartComponent: Creating label for series ${series.name || series.id}`);
+          this.logger.info(`EventCardChartComponent: Creating label for series ${series.name || series.id}`);
           this.createLabel(rangeLabelsContainer, series, labelData, series.hidden);
         } catch (error) {
-          console.error(`EventCardChartComponent: Error processing series ${series.name || series.id}`, error);
+          this.logger.error(`EventCardChartComponent: Error processing series ${series.name || series.id}`, error);
         }
       });
 
