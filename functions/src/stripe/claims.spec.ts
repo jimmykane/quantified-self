@@ -18,13 +18,21 @@ const mockCollection = vi.fn().mockReturnValue({
     doc: mockDoc
 });
 const mockFirestore = {
-    collection: mockCollection
+    collection: mockCollection,
+    doc: mockDoc
 };
 
-vi.mock('firebase-admin', () => ({
-    auth: () => mockAuth,
-    firestore: () => mockFirestore,
-}));
+vi.mock('firebase-admin', () => {
+    const firestoreFn = () => mockFirestore;
+    // @ts-ignore
+    firestoreFn.FieldValue = {
+        serverTimestamp: vi.fn().mockReturnValue('SERVER_TIMESTAMP')
+    };
+    return {
+        auth: () => mockAuth,
+        firestore: firestoreFn,
+    };
+});
 
 vi.mock('firebase-functions/v2/https', () => ({
     onCall: vi.fn(),
