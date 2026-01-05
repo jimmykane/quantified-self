@@ -62,7 +62,13 @@ export class SideNavComponent implements OnInit, OnDestroy {
   get isProUser(): boolean {
     if (!this.user) return false;
     const stripeRole = (this.user as any).stripeRole;
-    return stripeRole === 'pro' || stripeRole === 'basic' || (this.user as any).isPro === true;
+    return stripeRole === 'pro' || this.isAdminUser || (this.user as any).isPro === true;
+  }
+
+  get hasPaidAccess(): boolean {
+    if (!this.user) return false;
+    const stripeRole = (this.user as any).stripeRole;
+    return this.isProUser || stripeRole === 'basic';
   }
 
   async donate() {
