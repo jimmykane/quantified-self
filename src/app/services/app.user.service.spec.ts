@@ -180,4 +180,91 @@ describe('AppUserService', () => {
             );
         });
     });
+
+    describe('static user role checks', () => {
+        const mockUser = { uid: 'u1' } as any;
+
+        describe('isProUser', () => {
+            it('should return false for null user', () => {
+                expect(AppUserService.isProUser(null)).toBe(false);
+            });
+
+            it('should return true if stripeRole is pro', () => {
+                const user = { ...mockUser, stripeRole: 'pro' };
+                expect(AppUserService.isProUser(user)).toBe(true);
+            });
+
+            it('should return true if isAdmin is true', () => {
+                const user = { ...mockUser, stripeRole: 'basic' };
+                expect(AppUserService.isProUser(user, true)).toBe(true);
+            });
+
+            it('should return true if user.isPro is true', () => {
+                const user = { ...mockUser, isPro: true };
+                expect(AppUserService.isProUser(user)).toBe(true);
+            });
+
+            it('should return false for basic user without admin/isPro', () => {
+                const user = { ...mockUser, stripeRole: 'basic' };
+                expect(AppUserService.isProUser(user)).toBe(false);
+            });
+
+            it('should return false for free user', () => {
+                const user = { ...mockUser, stripeRole: 'free' };
+                expect(AppUserService.isProUser(user)).toBe(false);
+            });
+        });
+
+        describe('isBasicUser', () => {
+            it('should return false for null user', () => {
+                expect(AppUserService.isBasicUser(null)).toBe(false);
+            });
+
+            it('should return true if stripeRole is basic', () => {
+                const user = { ...mockUser, stripeRole: 'basic' };
+                expect(AppUserService.isBasicUser(user)).toBe(true);
+            });
+
+            it('should return false if stripeRole is pro', () => {
+                const user = { ...mockUser, stripeRole: 'pro' };
+                expect(AppUserService.isBasicUser(user)).toBe(false);
+            });
+
+            it('should return false if stripeRole is free', () => {
+                const user = { ...mockUser, stripeRole: 'free' };
+                expect(AppUserService.isBasicUser(user)).toBe(false);
+            });
+        });
+
+        describe('hasPaidAccessUser', () => {
+            it('should return false for null user', () => {
+                expect(AppUserService.hasPaidAccessUser(null)).toBe(false);
+            });
+
+            it('should return true for basic user', () => {
+                const user = { ...mockUser, stripeRole: 'basic' };
+                expect(AppUserService.hasPaidAccessUser(user)).toBe(true);
+            });
+
+            it('should return true for pro user', () => {
+                const user = { ...mockUser, stripeRole: 'pro' };
+                expect(AppUserService.hasPaidAccessUser(user)).toBe(true);
+            });
+
+            it('should return true if isAdmin is true', () => {
+                const user = { ...mockUser, stripeRole: 'free' };
+                expect(AppUserService.hasPaidAccessUser(user, true)).toBe(true);
+            });
+
+            it('should return true if user.isPro is true', () => {
+                const user = { ...mockUser, isPro: true };
+                expect(AppUserService.hasPaidAccessUser(user)).toBe(true);
+            });
+
+            it('should return false for free user', () => {
+                const user = { ...mockUser, stripeRole: 'free' };
+                expect(AppUserService.hasPaidAccessUser(user)).toBe(false);
+            });
+        });
+    });
 });
