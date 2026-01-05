@@ -88,6 +88,12 @@ export class UserSettingsComponent implements OnChanges {
 
 
 
+  get isProUser(): boolean {
+    if (!this.user) return false;
+    const stripeRole = (this.user as any).stripeRole;
+    return stripeRole === 'pro' || stripeRole === 'basic' || (this.user as any).isPro === true;
+  }
+
   constructor(private authService: AppAuthService,
     private route: ActivatedRoute,
     private userService: AppUserService,

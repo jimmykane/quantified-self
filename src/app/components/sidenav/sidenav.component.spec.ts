@@ -54,6 +54,11 @@ describe('SideNavComponent', () => {
         expect(component.isProUser).toBe(false);
     });
 
+    it('isBasicUser should be true for basic role', () => {
+        component.user = { stripeRole: 'basic' } as any;
+        expect(component.isBasicUser).toBe(true);
+    });
+
     it('isProUser should be true for pro role', () => {
         component.user = { stripeRole: 'pro' } as any;
         expect(component.isProUser).toBe(true);
