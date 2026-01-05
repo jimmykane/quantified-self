@@ -32,6 +32,7 @@
 
 ### General
 - **Strictness**: The project has `strict` mode potentially off or loose (based on `tsconfig` analysis). Ensure null checks are handled gracefully.
+- **Bailout First**: Always use "bailout first" / "return early" patterns. Avoid deep nesting of `if/else` statements. Handle validation, error checks, and edge cases at the very beginning of functions and return immediately.
 - **Directory Structure**:
   - `src/app/modules`: Feature modules.
   - `src/app/services`: Singleton services.
