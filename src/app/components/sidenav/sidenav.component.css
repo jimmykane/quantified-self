@@ -188,9 +188,18 @@ mat-list-item:hover {
   border-left: 3px solid #3f51b5 !important;
 }
 
+/* Ensure active state styles persist on hover */
+mat-list-item.active:hover {
+  background: linear-gradient(90deg, rgba(63, 81, 181, 0.15), rgba(63, 81, 181, 0.07)) !important;
+}
+
 :host-context(.dark-theme) .active {
   background: linear-gradient(90deg, rgba(144, 202, 249, 0.15), rgba(144, 202, 249, 0.05)) !important;
   border-left: 3px solid #90caf9 !important;
+}
+
+:host-context(.dark-theme) mat-list-item.active:hover {
+  background: linear-gradient(90deg, rgba(144, 202, 249, 0.18), rgba(144, 202, 249, 0.08)) !important;
 }
 
 /* Icon Styling */
@@ -326,65 +335,8 @@ mat-divider {
    Animations
    ========================================================================== */
 
-@keyframes slideInFromLeft {
-  from {
-    opacity: 0;
-    transform: translateX(-10px);
-  }
+/* Animations removed to prevent flickering */
 
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
+/* Stagger animation removed */
 
-mat-list-item {
-  animation: slideInFromLeft 0.3s ease forwards;
-}
-
-/* Stagger animation for items */
-mat-list-item:nth-child(1) {
-  animation-delay: 0.02s;
-}
-
-mat-list-item:nth-child(2) {
-  animation-delay: 0.04s;
-}
-
-mat-list-item:nth-child(3) {
-  animation-delay: 0.06s;
-}
-
-mat-list-item:nth-child(4) {
-  animation-delay: 0.08s;
-}
-
-mat-list-item:nth-child(5) {
-  animation-delay: 0.10s;
-}
-
-mat-list-item:nth-child(6) {
-  animation-delay: 0.12s;
-}
-
-mat-list-item:nth-child(7) {
-  animation-delay: 0.14s;
-}
-
-mat-list-item:nth-child(8) {
-  animation-delay: 0.16s;
-}
-
-mat-list-item:nth-child(9) {
-  animation-delay: 0.18s;
-}
-
-mat-list-item:nth-child(10) {
-  animation-delay: 0.20s;
-}
-
-.sidenav-profile {
-  animation: slideInFromLeft 0.3s ease forwards;
-  animation-delay: 0.1s;
-  opacity: 0;
-}
+/* .sidenav-profile animation removed */
