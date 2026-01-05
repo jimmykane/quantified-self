@@ -405,7 +405,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         }
         completed++;
         const progress = 20 + Math.round((completed / filesToDownload.length) * 60); // 20% to 80%
-        this.processingService.updateJob(jobId, { progress });
+        this.processingService.updateJob(jobId, {
+          progress,
+          details: `Downloaded ${completed} of ${filesToDownload.length}`
+        });
       }
 
       if (downloadedFiles.length === 0) {

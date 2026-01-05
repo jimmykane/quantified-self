@@ -7,7 +7,7 @@ import { AppUserService } from '../../../services/app.user.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { LoggerService } from '../../../services/logger.service';
 import { environment } from '../../../../environments/environment';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpEventType } from '@angular/common/http';
 import { Auth, getIdToken } from '@angular/fire/auth';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { FileInterface } from '../file.interface';
@@ -29,7 +29,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   private userService = inject(AppUserService);
   private analyticsService = inject(AppAnalyticsService);
   private http = inject(HttpClient);
-  private serviceName: ServiceNames;
+  private serviceName: ServiceNames = ServiceNames.SuuntoApp;
 
   constructor(
     protected snackBar: MatSnackBar,
@@ -52,11 +52,15 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
    */
   async processAndUploadFile(file: FileInterface) {
     this.analyticsService.logEvent('upload_activity_to_service', { service: ServiceNames.SuuntoApp });
-    return new Promise((resolve, reject) => {
-      const fileReader = new FileReader;
+    return new Promise<boolean>((resolve, reject) => {
+      const fileReader = new FileReader();
       fileReader.onload = async () => {
         if (!(fileReader.result instanceof ArrayBuffer) || file.extension !== 'fit') {
-          reject('Not a valid file')
+          reject('Not a valid file');
+          return;
+        }
+        if (!this.auth.currentUser) {
+          reject('User not logged in');
           return;
         }
         const idToken = await getIdToken(this.auth.currentUser, true);
@@ -64,23 +68,40 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
           if (getSize(fileReader.result) > 10485760) {
             throw new Error(`Cannot upload route because the size is greater than 10MB`);
           }
-          // Send the raw binary content directly
-          await this.http.post(environment.functions.uploadActivity,
-            fileReader.result, // Send the ArrayBuffer directly
+
+          this.http.post(environment.functions.uploadActivity,
+            fileReader.result,
             {
-              headers:
-                new HttpHeaders({
-                  'Authorization': `Bearer ${idToken} `,
-                  'Content-Type': 'application/octet-stream'
-                })
-            }).toPromise();
-        } catch (e) {
+              headers: new HttpHeaders({
+                'Authorization': `Bearer ${idToken} `,
+                'Content-Type': 'application/octet-stream'
+              }),
+              reportProgress: true,
+              observe: 'events'
+            }).subscribe({
+              next: (event: any) => {
+                if (event.type === HttpEventType.UploadProgress) {
+                  const percentDone = Math.round((100 * event.loaded) / event.total);
+                  if (file.jobId) {
+                    this.processingService.updateJob(file.jobId, { progress: percentDone });
+                  }
+                } else if (event.type === HttpEventType.Response) {
+                  resolve(true);
+                }
+              },
+              error: (e: any) => {
+                this.logger.error(e);
+                this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message} `, 'OK', { duration: 10000 });
+                reject(e);
+              }
+            });
+
+        } catch (e: any) {
           this.logger.error(e);
           this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message} `, 'OK', { duration: 10000 });
           reject(e);
           return;
         }
-        resolve(true);
       };
 
       // Read it depending on the extension
