@@ -6,7 +6,7 @@ export const environment = {
   production: true,
   beta: false,
   localhost: false,
-  forceAnalyticsCollection: false,
+  forceAnalyticsCollection: true,
   useAuthEmulator: false,
   firebase: {
     apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
