@@ -134,7 +134,11 @@ describe('reconcileClaims', () => {
 
         // Should update customer metadata to trigger extension sync
         expect(mockStripeInstance.customers.update).toHaveBeenCalledWith('cus_123', {
-            metadata: { firebaseUID: 'user1' }
+            metadata: {
+                firebaseUID: 'user1',
+                linkedToUid: 'user1',
+                linkedAt: expect.any(String)
+            }
         });
 
         // Should update subscription metadata to new UID
