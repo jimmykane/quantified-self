@@ -167,7 +167,7 @@ mat-paginator {
   height: 16px !important;
   line-height: 16px !important;
   font-size: 10px !important;
-  font-family: 'QSFont', sans-serif !important;
+  /* font-family: 'QSFont', sans-serif !important; REMOVED */
   font-weight: 400 !important;
 }
 
