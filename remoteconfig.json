@@ -2,13 +2,37 @@
     "parameters": {
         "maintenance_mode": {
             "defaultValue": {
-                "value": "false"
+                "value": "true"
             },
             "valueType": "BOOLEAN"
         },
         "maintenance_message": {
             "defaultValue": {
-                "value": "We're currently upgrading the app to give you a better experience.\nWe'll be back in 2026."
+                "value": "We're currently upgrading the app to give you a better experience. We'll be back in 2026. Thank you for your understanding and happy new year! "
+            },
+            "valueType": "STRING"
+        },
+        "maintenance_mode_beta": {
+            "defaultValue": {
+                "value": "false"
+            },
+            "valueType": "BOOLEAN"
+        },
+        "maintenance_message_beta": {
+            "defaultValue": {
+                "value": "We're currently upgrading the app to give you a better experience. We'll be back in 2026. Thank you for your understanding and happy new year! "
+            },
+            "valueType": "STRING"
+        },
+        "maintenance_mode_dev": {
+            "defaultValue": {
+                "value": "false"
+            },
+            "valueType": "BOOLEAN"
+        },
+        "maintenance_message_dev": {
+            "defaultValue": {
+                "value": ""
             },
             "valueType": "STRING"
         }
