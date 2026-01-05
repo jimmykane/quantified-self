@@ -6,6 +6,10 @@ import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';
 import { environment } from './environments/environment';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import * as Sentry from '@sentry/angular';
+import { registerAppLocales } from './app/shared/adapters/date-locale.config';
+
+// Register locales immediately
+registerAppLocales();
 
 
 // Only initialize Sentry in non-localhost environments
