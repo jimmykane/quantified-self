@@ -129,4 +129,61 @@ describe('AppAuthService', () => {
         expect(user.privacy).toBe(Privacy.Private);
         expect(user.acceptedPrivacyPolicy).toBe(false);
     });
+
+
+    it('should refresh token if claimsUpdatedAt is newer than auth_time', async () => {
+        const authTime = new Date();
+        const newerTime = new Date(authTime.getTime() + 50000); // 50 seconds later
+
+        const mockFirebaseUser = {
+            uid: 'existing-uid',
+            getIdTokenResult: vi.fn(),
+            getIdToken: vi.fn(),
+        };
+
+        // First call return old token
+        mockFirebaseUser.getIdTokenResult.mockResolvedValueOnce({
+            claims: {
+                auth_time: (authTime.getTime() / 1000).toString(),
+                stripeRole: 'basic'
+            }
+        });
+
+        // Second call (after refresh) returns new token with updated role
+        mockFirebaseUser.getIdTokenResult.mockResolvedValueOnce({
+            claims: {
+                auth_time: (newerTime.getTime() / 1000).toString(), // conceptually newer
+                stripeRole: 'pro'
+            }
+        });
+
+        const mockDbUser = {
+            uid: 'existing-uid',
+            claimsUpdatedAt: {
+                // Firestore Timestamp-like object
+                seconds: newerTime.getTime() / 1000,
+                nanoseconds: 0,
+                toDate: () => newerTime
+            },
+            stripeRole: 'basic' // DB has old role initially on object, but logic should update it
+        };
+
+        (mockUserService.getUserByID as Mock).mockReturnValue(of(mockDbUser));
+
+        const userPromise = new Promise<any>((resolve) => {
+            const sub = service.user$.subscribe((u) => {
+                if (u && u.uid === 'existing-uid' && u.stripeRole === 'pro') {
+                    sub.unsubscribe();
+                    resolve(u);
+                }
+            });
+        });
+
+        userSubject.next(mockFirebaseUser);
+
+        const updatedUser = await userPromise;
+
+        expect(mockFirebaseUser.getIdToken).toHaveBeenCalledWith(true);
+        expect(updatedUser.stripeRole).toBe('pro');
+    });
 });

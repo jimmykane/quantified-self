@@ -48,6 +48,38 @@ export class AppAuthService {
                 dbUser.uid = firebaseUser.uid;
                 // Merge the stripe role from the token claims
                 (dbUser as any).stripeRole = stripeRole;
+
+                // Check if we need to force refresh the token
+                // We do this if the DB says claims were updated AFTER our token was issued
+                if ((dbUser as any).claimsUpdatedAt) {
+                  const claimsUpdatedAtUnformatted = (dbUser as any).claimsUpdatedAt;
+                  // Handle Firestore Timestamp or Date
+                  const claimsUpdatedAt = claimsUpdatedAtUnformatted.toDate ? claimsUpdatedAtUnformatted.toDate() : new Date(claimsUpdatedAtUnformatted.seconds * 1000);
+
+                  // authTime is in seconds string
+                  const authTimeStr = tokenResult.claims['auth_time'] as string;
+                  const authTime_ms = parseInt(authTimeStr, 10) * 1000;
+
+                  // We need a buffer to prevent infinite loops if clocks are slightly off
+                  // If DB update is > authTime + 5 seconds buffer, we refresh.
+                  // Actually, just strictly newer is usually enough, but let's be safe.
+                  if (claimsUpdatedAt.getTime() > authTime_ms + 2000) {
+                    this.logger.log(`[AppAuthService] Claims updated at ${claimsUpdatedAt.toISOString()} vs Token at ${new Date(authTime_ms).toISOString()}. Refreshing token...`);
+                    // Force refresh
+                    await firebaseUser.getIdToken(true);
+                    // The user$ observable will re-emit because the token change triggers auth state change eventually?
+                    // Actually, getIdToken(true) does NOT trigger onAuthStateChanged by itself usually unless the user object reference changes.
+                    // But we are inside switchMap of user(this.auth).
+                    // If we just refreshed, the next emission might not happen automatically solely from this call
+                    // unless we manually trigger something or if the SDK internals do it.
+                    // However, we want to return the user with the NEW role.
+                    // So we should re-fetch the token result immediately to get the new role for *this* emission.
+
+                    const newTokenResult = await firebaseUser.getIdTokenResult();
+                    (dbUser as any).stripeRole = newTokenResult.claims['stripeRole'] as string || null;
+                    this.logger.log(`[AppAuthService] Token refreshed. New Role: ${(dbUser as any).stripeRole}`);
+                  }
+                }
                 return dbUser;
               } else {
                 // Synthetic user for new accounts
@@ -65,6 +97,7 @@ export class AppAuthService {
                   privacy: Privacy.Private,
                   isAnonymous: firebaseUser.isAnonymous,
                   stripeRole: stripeRole,
+                  claimsUpdatedAt: (dbUser as any)?.claimsUpdatedAt, // Pass it through if it exists on synthetic user (unlikely but good for types)
                   creationDate: new Date(firebaseUser.metadata.creationTime!),
                   lastSignInDate: new Date(firebaseUser.metadata.lastSignInTime!)
                 } as unknown as User;
