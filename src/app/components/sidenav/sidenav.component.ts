@@ -51,8 +51,11 @@ export class SideNavComponent implements OnInit, OnDestroy {
     })
     this.userSubscription = this.authService.user$.subscribe(async (user) => {
       this.user = user;
+      console.log('SideNavComponent: User update', user);
       if (user) {
         this.isAdminUser = await this.userService.isAdmin();
+        console.log('SideNavComponent: stripeRole', (user as any).stripeRole);
+        console.log('SideNavComponent: isAdminUser', this.isAdminUser);
       } else {
         this.isAdminUser = false;
       }
@@ -60,19 +63,15 @@ export class SideNavComponent implements OnInit, OnDestroy {
   }
 
   get isProUser(): boolean {
-    if (!this.user) return false;
-    const stripeRole = (this.user as any).stripeRole;
-    return stripeRole === 'pro' || this.isAdminUser || (this.user as any).isPro === true;
+    return AppUserService.isProUser(this.user, this.isAdminUser);
   }
 
   get isBasicUser(): boolean {
-    if (!this.user) return false;
-    const stripeRole = (this.user as any).stripeRole;
-    return stripeRole === 'basic';
+    return AppUserService.isBasicUser(this.user);
   }
 
   get hasPaidAccess(): boolean {
-    return this.isProUser || this.isBasicUser;
+    return AppUserService.hasPaidAccessUser(this.user, this.isAdminUser);
   }
 
   async donate() {
@@ -82,10 +81,7 @@ export class SideNavComponent implements OnInit, OnDestroy {
 
 
 
-  async gitHubSponsor() {
-    this.analyticsService.logEvent('github_sponsor');
-    window.open('https://github.com/sponsors/jimmykane?utm_source=qs');
-  }
+
 
   async gitHubStar() {
     this.analyticsService.logEvent('github_star');
