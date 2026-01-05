@@ -11,6 +11,8 @@ import { of } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib';
 import { Analytics } from '@angular/fire/analytics';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { BehaviorSubject } from 'rxjs';
+import { EventInterface } from '@sports-alliance/sports-lib';
 
 describe('DashboardComponent', () => {
     let component: DashboardComponent;
@@ -102,9 +104,30 @@ describe('DashboardComponent', () => {
         fixture.detectChanges(); // Trigger ngOnInit
         await fixture.whenStable(); // Wait for async operations to complete
 
-        expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+        expect(mockEventService.getEventsBy).toHaveBeenCalled();
         expect(component.events.length).toBe(1);
         expect(component.isLoading).toBe(false);
+    });
+
+    it('should update events when service emits new data', async () => {
+        const eventsSubject = new BehaviorSubject([{ id: 'event1' }]);
+        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        // Initial state
+        expect(component.events.length).toBe(1);
+        expect((component.events[0] as any).id).toBe('event1');
+
+        // Emit new data
+        eventsSubject.next([{ id: 'event1' }, { id: 'event2' }]);
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        // Should update
+        expect(component.events.length).toBe(2);
+        expect((component.events[1] as any).id).toBe('event2');
     });
 
     it('should not have throttle delay on data loading', async () => {
