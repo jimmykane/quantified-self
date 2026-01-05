@@ -206,4 +206,28 @@ describe('OnboardingComponent', () => {
 
         expect(mockUserService.createOrUpdateUser).not.toHaveBeenCalled();
     });
+
+    it('should preserve the same FormGroup instance when user input changes', () => {
+        const initialFormGroup = component.termsFormGroup;
+
+        // Simulate user update (e.g., triggered by parent component or service)
+        // We create a NEW object reference to simulate what happens with immutable state/observable streams
+        component.user = { ...mockUser, acceptedPrivacyPolicy: true };
+        component.ngOnChanges({
+            user: {
+                currentValue: component.user,
+                previousValue: mockUser,
+                firstChange: false,
+                isFirstChange: () => false
+            }
+        });
+
+        // The form group instance should stay the same
+        expect(component.termsFormGroup).toBe(initialFormGroup);
+
+        // And the value should verify it was patched (optional but good sanity check)
+        // However, our current logic MIGHT overwrite the value if we just re-init. 
+        // The fix will use patchValue, so this confirms the fix behaves as expected 
+        // regarding the instance identity.
+    });
 });

@@ -64,54 +64,52 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
             this.authService.user$.subscribe(user => {
                 if (user) {
                     this.user = user;
-                    this.initForm();
+                    this.updateForm();
                     this.checkAndAdvance();
                 }
             });
         }
 
-        this.initForm();
+        this.updateForm();
         this.checkProStatus();
     }
 
-    private initForm() {
+    private updateForm() {
         const user = this.user || {} as User;
-        const group: any = {};
 
-        this.policies.forEach(policy => {
-            if (policy.formControlName) {
-                // Determine initial value from user object dynamically if possible, or default to false.
-                // Since user properties match formControlName map (e.g. acceptPrivacyPolicy -> acceptedPrivacyPolicy),
-                // mapping is: acceptX -> acceptedX.
-                // Let's rely on manual mapping or just use the known keys if we want to be safe, 
-                // OR just loop. For now, let's look at the property mapping:
-                // formControlName: 'acceptPrivacyPolicy' -> user.acceptedPrivacyPolicy
-                // So replacing 'accept' with 'accepted' seems to be the pattern.
-                // But honestly, explicit is safer given the small number.
-                // However, for strict reusability, let's try to find the key.
-
-                // Let's stick to the previous hardcoded initial values logic BUT loop for creation if we want dynamic,
-                // or just leave initForm hardcoded if we don't assume the keys change often.
-                // User asked for text reusability.
-                // But if I loop in HTML, I must have controls in FormGroup.
-                // Creating controls dynamically ensures they exist.
-
-                let initialValue = false;
-                if (policy.formControlName === 'acceptPrivacyPolicy') initialValue = user.acceptedPrivacyPolicy;
-                else if (policy.formControlName === 'acceptDataPolicy') initialValue = user.acceptedDataPolicy;
-                else if (policy.formControlName === 'acceptTrackingPolicy') initialValue = user.acceptedTrackingPolicy;
-                else if (policy.formControlName === 'acceptTos') initialValue = (user as any).acceptedTos;
-                else if (policy.formControlName === 'acceptMarketingPolicy') initialValue = (user as any).acceptedMarketingPolicy;
-
-                if (policy.isOptional) {
-                    group[policy.formControlName] = [initialValue || false];
-                } else {
-                    group[policy.formControlName] = [initialValue || false, Validators.requiredTrue];
+        if (!this.termsFormGroup) {
+            const group: any = {};
+            this.policies.forEach(policy => {
+                if (policy.formControlName) {
+                    const initialValue = this.getPolicyValue(policy, user);
+                    if (policy.isOptional) {
+                        group[policy.formControlName] = [initialValue || false];
+                    } else {
+                        group[policy.formControlName] = [initialValue || false, Validators.requiredTrue];
+                    }
                 }
-            }
-        });
+            });
+            this.termsFormGroup = this._formBuilder.group(group);
+        } else {
+            this.policies.forEach(policy => {
+                if (policy.formControlName) {
+                    const newValue = this.getPolicyValue(policy, user);
+                    const control = this.termsFormGroup.get(policy.formControlName);
+                    if (control && control.value !== newValue) {
+                        control.setValue(newValue, { emitEvent: false });
+                    }
+                }
+            });
+        }
+    }
 
-        this.termsFormGroup = this._formBuilder.group(group);
+    private getPolicyValue(policy: PolicyItem, user: User): boolean {
+        if (policy.formControlName === 'acceptPrivacyPolicy') return user.acceptedPrivacyPolicy;
+        else if (policy.formControlName === 'acceptDataPolicy') return user.acceptedDataPolicy;
+        else if (policy.formControlName === 'acceptTrackingPolicy') return user.acceptedTrackingPolicy;
+        else if (policy.formControlName === 'acceptTos') return (user as any).acceptedTos;
+        else if (policy.formControlName === 'acceptMarketingPolicy') return (user as any).acceptedMarketingPolicy;
+        return false;
     }
 
     ngAfterViewInit() {
