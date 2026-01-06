@@ -2,6 +2,8 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { ALLOWED_CORS_ORIGINS } from '../utils';
+import { getStripe } from '../stripe/client';
+import { CloudBillingClient } from '@google-cloud/billing';
 
 /**
  * Normalizes error messages by replacing dynamic values (numbers, IDs) with placeholders.
@@ -710,6 +712,136 @@ export const impersonateUser = onCall({
     } catch (error: unknown) {
         logger.error('Error creating impersonation token:', error);
         const errorMessage = error instanceof Error ? error.message : 'Failed to create token';
+        throw new HttpsError('internal', errorMessage);
+    }
+});
+
+/**
+ * Gets financial statistics for the current month.
+ * - Revenue: Calculated from Stripe Invoices (Total - Tax)
+ * - Cost: Links to GCP Cloud Billing Report (since API doesn't provide live spend safely)
+ */
+export const getFinancialStats = onCall({
+    region: 'europe-west2',
+    cors: ALLOWED_CORS_ORIGINS,
+    memory: '256MiB',
+    secrets: ['STRIPE_SECRET_KEY'], // Ensure we have access to the key
+}, async (request) => {
+    // 1. Check authentication
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    }
+
+    // 2. Check for admin claim
+    if (request.auth.token.admin !== true) {
+        throw new HttpsError('permission-denied', 'Only admins can call this function.');
+    }
+
+    try {
+        const stats = {
+            revenue: {
+                total: 0,
+                currency: 'usd',
+                invoiceCount: 0
+            },
+            cost: {
+                billingAccountId: null as string | null,
+                projectId: process.env.GCLOUD_PROJECT || '',
+                reportUrl: null as string | null
+            }
+        };
+
+        // --- 1. Get Valid Products from Firestore ---
+        // We only count revenue if the product ID exists in the `products` collection.
+        const productsSnapshot = await admin.firestore().collection('products').get();
+        const validProductIds = new Set(productsSnapshot.docs.map(doc => doc.id));
+
+        // --- 2. Calculate Revenue (Stripe) ---
+        // Sum of PAID invoice line items where product is in validProductIds
+        const stripe = await getStripe();
+        const now = new Date();
+        const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        const startTimestamp = Math.floor(startOfMonth.getTime() / 1000);
+
+        // Fetch paid invoices
+        let hasMore = true;
+        let lastId: string | undefined;
+        let totalCents = 0;
+        let currency = 'usd';
+        let count = 0;
+
+        while (hasMore) {
+            const invoices = await stripe.invoices.list({
+                limit: 100,
+                starting_after: lastId,
+                created: { gte: startTimestamp },
+                status: 'paid',
+            });
+
+            for (const invoice of invoices.data) {
+                if (count === 0 && invoice.currency) currency = invoice.currency;
+
+                const amountPaid = invoice.amount_paid || 0;
+                // Use any type to access potentially missing/complex Stripe fields
+                const taxAmount = (invoice as any).tax || 0;
+                const netAmount = amountPaid - taxAmount;
+
+                // Check if the invoice contains valid products
+                let hasValidProduct = false;
+                const lineItems = invoice.lines?.data || [];
+                for (const line of lineItems) {
+                    const price = (line as any).price;
+                    const productId = typeof price?.product === 'string' ? price.product : price?.product?.id;
+
+                    if (productId && validProductIds.has(productId)) {
+                        hasValidProduct = true;
+                        break;
+                    }
+                }
+
+                if (hasValidProduct) {
+                    totalCents += netAmount;
+                    count++;
+                }
+            }
+
+            hasMore = invoices.has_more;
+            if (hasMore && invoices.data.length > 0) {
+                lastId = invoices.data[invoices.data.length - 1].id;
+            }
+        }
+
+        stats.revenue.total = totalCents;
+        stats.revenue.currency = currency;
+        stats.revenue.invoiceCount = count;
+
+        // --- 3. Get GCP Billing Info ---
+        const billingClient = new CloudBillingClient();
+        const projectIdForBilling = process.env.GCLOUD_PROJECT;
+        const projectName = `projects/${projectIdForBilling}`;
+
+        try {
+            const [info] = await billingClient.getProjectBillingInfo({ name: projectName });
+
+            if (info.billingAccountName) {
+                // billingAccountName format: "billingAccounts/XXXXXX-XXXXXX-XXXXXX"
+                const id = info.billingAccountName.split('/').pop();
+                stats.cost.billingAccountId = id || null;
+
+                if (id) {
+                    // Generate direct link to reports
+                    stats.cost.reportUrl = `https://console.cloud.google.com/billing/${id}/reports;project=${projectIdForBilling}`;
+                }
+            }
+        } catch (e: any) {
+            logger.warn('Failed to fetch project billing info (likely permission denied):', e.message);
+        }
+
+        return stats;
+
+    } catch (error: any) {
+        logger.error('Error getting financial stats:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to get financial stats';
         throw new HttpsError('internal', errorMessage);
     }
 });

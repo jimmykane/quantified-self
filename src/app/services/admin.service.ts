@@ -74,6 +74,19 @@ export interface QueueStats {
     };
 }
 
+export interface FinancialStats {
+    revenue: {
+        total: number; // in cents
+        currency: string;
+        invoiceCount: number;
+    };
+    cost: {
+        billingAccountId: string | null;
+        projectId: string;
+        reportUrl: string | null;
+    };
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -96,6 +109,11 @@ export class AdminService {
     private getUserCountFn = httpsCallableFromURL<void, { count: number; total: number; pro: number; basic: number; free: number; providers: Record<string, number> }>(
         this.functions,
         environment.functions.getUserCount
+    );
+
+    private getFinancialStatsFn = httpsCallableFromURL<void, FinancialStats>(
+        this.functions,
+        environment.functions.getFinancialStats
     );
 
     getUsers(params: ListUsersParams = {}): Observable<ListUsersResponse> {
@@ -134,6 +152,12 @@ export class AdminService {
                 free: result.data.free ?? 0,
                 providers: result.data.providers || {}
             }))
+        );
+    }
+
+    getFinancialStats(): Observable<FinancialStats> {
+        return from(this.getFinancialStatsFn()).pipe(
+            map(result => result.data)
         );
     }
 

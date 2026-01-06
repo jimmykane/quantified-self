@@ -1,5 +1,5 @@
 import { Component, OnInit, ViewChild, AfterViewInit, OnDestroy } from '@angular/core';
-import { AdminService, AdminUser, ListUsersParams, QueueStats } from '../../../services/admin.service';
+import { AdminService, AdminUser, ListUsersParams, QueueStats, FinancialStats } from '../../../services/admin.service';
 
 import { ActivatedRoute, Router } from '@angular/router';
 import { AppAuthService } from '../../../authentication/app.auth.service';
@@ -83,6 +83,10 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     queueStats: QueueStats | null = null;
     isLoadingStats = true;
     userStats: { total: number; pro: number; basic: number; free: number; providers: Record<string, number> } | null = null;
+
+    // Financial stats
+    financialStats: FinancialStats | null = null;
+    isLoadingFinancials = true;
 
     // Auth Chart
     public authPieChartData: ChartConfiguration<'pie'>['data'] = {
@@ -187,6 +191,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         // For now, let's keep them async or we could have added them to resolver.
         // Given "Resolvers for Layout", the user list is the layout. Queue stats are a widget.
         this.fetchQueueStats();
+        this.fetchFinancialStats();
         this.fetchMaintenanceStatus();
     }
 
@@ -245,6 +250,20 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
                 this.logger.error('Failed to load queue stats (direct):', err);
                 // Fallback to function if direct fails or retry
                 this.isLoadingStats = false;
+            }
+        });
+    }
+
+    fetchFinancialStats(): void {
+        this.isLoadingFinancials = true;
+        this.adminService.getFinancialStats().pipe(takeUntil(this.destroy$)).subscribe({
+            next: (stats) => {
+                this.financialStats = stats;
+                this.isLoadingFinancials = false;
+            },
+            error: (err) => {
+                this.logger.error('Failed to load financial stats:', err);
+                this.isLoadingFinancials = false;
             }
         });
     }
@@ -366,6 +385,19 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         if (hours > 0) return `${hours}h ${minutes % 60}m`;
         if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
         return `${seconds}s`;
+    }
+
+    formatCurrency(amountCents: number, currency: string): string {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: currency.toUpperCase()
+        }).format(amountCents / 100);
+    }
+
+    openExternalLink(url: string | null): void {
+        if (url) {
+            window.open(url, '_blank');
+        }
     }
 
     // Maintenance mode methods

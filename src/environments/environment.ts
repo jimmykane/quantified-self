@@ -53,5 +53,6 @@ export const environment = {
     setMaintenanceMode: 'https://europe-west2-quantified-self-io.cloudfunctions.net/setMaintenanceMode',
     getMaintenanceStatus: 'https://europe-west2-quantified-self-io.cloudfunctions.net/getMaintenanceStatus',
     impersonateUser: 'https://europe-west2-quantified-self-io.cloudfunctions.net/impersonateUser',
+    getFinancialStats: 'https://europe-west2-quantified-self-io.cloudfunctions.net/getFinancialStats',
   }
 };
