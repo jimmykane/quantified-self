@@ -62,8 +62,8 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
   // Map options
   public mapOptions: google.maps.MapOptions = {
-    gestureHandling: 'none',
-    scrollwheel: false,
+    gestureHandling: 'cooperative',
+    scrollwheel: true,
     tilt: 45,
     controlSize: 32,
     disableDefaultUI: true,

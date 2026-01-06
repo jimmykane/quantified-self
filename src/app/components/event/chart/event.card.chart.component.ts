@@ -148,7 +148,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   private rangeLabelsContainer: am4core.Container | undefined;
   private clearSelectionButton: am4core.Button | undefined;
-  public interactionsEnabled: boolean = false;
 
   constructor(changeDetector: ChangeDetectorRef,
     protected zone: NgZone,
@@ -284,18 +283,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     }
   }
 
-  public enableInteractions() {
-    if (this.interactionsEnabled || !this.chart) {
-      return;
-    }
-    this.logger.info('EventCardChartComponent: Enabling chart interactions');
-    this.interactionsEnabled = true;
-    this.chart.seriesContainer.interactionsEnabled = true;
-    if (this.chart.cursor) {
-      this.chart.cursor.interactionsEnabled = true;
-    }
-    this.changeDetector.detectChanges();
-  }
 
   ngOnDestroy() {
     this.unSubscribeFromAll();
@@ -381,17 +368,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
 
     chart.cursor.events.on('cursorpositionchanged', (event) => {
-      if (!this.interactionsEnabled) {
-        return;
-      }
       this.cursorPositionSubject.next(event);
     });
 
-    // Disable interactions initially
-    chart.seriesContainer.interactionsEnabled = false;
-    if (chart.cursor) {
-      chart.cursor.interactionsEnabled = false;
-    }
 
     // On select
     chart.cursor.events.on('selectended', (ev) => {
@@ -958,17 +937,27 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         return;
       }
 
-      // Calculate total max distance for explicit zoom if in Distance mode
+      // Calculate total max distance and duration for explicit zoom
       let totalMaxDistance = 0;
-      if (this.xAxisType === XAxisTypes.Distance) {
-        this.selectedActivities.forEach(a => {
+      let totalMaxDuration = 0;
+      const durationStart = 0;
+
+      this.selectedActivities.forEach(a => {
+        if (this.xAxisType === XAxisTypes.Distance) {
           const distanceResult: any = a.getDistance ? a.getDistance() : 0;
           const distance = typeof distanceResult === 'number' ? distanceResult : (distanceResult?.value || 0);
           if (distance > totalMaxDistance) {
             totalMaxDistance = distance;
           }
-        });
-      }
+        }
+        if (this.xAxisType === XAxisTypes.Duration) {
+          const durationResult: any = a.getDuration();
+          const duration = typeof durationResult === 'number' ? durationResult : (durationResult?.value || 0);
+          if (duration > totalMaxDuration) {
+            totalMaxDuration = duration;
+          }
+        }
+      });
 
       this.chart.invalidateData(); // One last re-eval of all series data
 
@@ -989,6 +978,17 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           if ((axis as any).zoomToValues) {
             (axis as any).zoomToValues(0, totalMaxDistance, false, true);
           }
+        } else if (this.xAxisType === XAxisTypes.Duration && totalMaxDuration > 0 && axis instanceof this.charts.DateAxis) {
+          // Reset first to force clean state
+          axis.min = undefined;
+          axis.max = undefined;
+          axis.strictMinMax = false;
+
+          axis.min = durationStart;
+          axis.max = durationStart + (totalMaxDuration + 2) * 1000; // Add 2s buffer
+          // axis.strictMinMax = true; // Relax to allow amCharts some flexibility
+
+          axis.zoom({ start: 0, end: 1 }, false, true);
         } else {
           axis.start = 0;
           axis.end = 1;
@@ -1011,10 +1011,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         }
       }
 
-      // Final fallback
-      if ((this.chart as any).zoomOut) {
-        (this.chart as any).zoomOut();
-      }
 
       this.changeDetector.detectChanges();
     }, 2000); // Increased delay to 2s to be absolutely sure
@@ -1395,7 +1391,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         }) // @todo if needed sort here by distance
       });
     } else {
-      data = this.xAxisType === XAxisTypes.Time ? stream.getStreamDataByTime(activity.startDate, true, true) : stream.getStreamDataByDuration((new Date(0)).getTimezoneOffset() * 60000, true, true); // Default unix timestamp is at 1 hours its kinda hacky but easy
+      data = this.xAxisType === XAxisTypes.Time ? stream.getStreamDataByTime(activity.startDate, true, true) : stream.getStreamDataByDuration(0, true, true); // Keep zero base for duration
     }
 
     // filter if needed (this operation costs)
@@ -1483,7 +1479,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
                   range.value = lap.endDate.getTime();
                 } else if (xAxisType === XAxisTypes.Duration) {
                   range = xAxis.axisRanges.create();
-                  range.value = (new Date(0).getTimezoneOffset() * 60000) + +lap.endDate - +activity.startDate;
+                  range.value = +lap.endDate - +activity.startDate;
                 } else if (xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID())) {
                   const data = this.distanceAxesForActivitiesMap
                     .get(activity.getID())
@@ -1666,6 +1662,10 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       case XAxisTypes.Duration:
       case XAxisTypes.Time:
         xAxis = chart.xAxes.push(new this.charts.DateAxis());
+        if (xAxisType === XAxisTypes.Duration) {
+          xAxis.baseInterval = { timeUnit: 'second', count: 1 };
+          xAxis.extraMax = 0.01; // Give a tiny bit of breathing room
+        }
 
         if (!this.disableGrouping) {
           // this is true pixels
@@ -1777,7 +1777,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           if (date) {
             this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
               activityID: activity.getID(),
-              time: date.getTime() + activity.startDate.getTime() - (new Date(0).getTimezoneOffset() * 60000),
+              time: date.getTime() + activity.startDate.getTime(),
               byChart: true,
             }));
           }
