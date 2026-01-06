@@ -958,8 +958,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         return;
       }
 
-      this.logger.info('EventCardChartComponent: Executing final robust zoom reset');
-
       // Calculate total max distance for explicit zoom if in Distance mode
       let totalMaxDistance = 0;
       if (this.xAxisType === XAxisTypes.Distance) {
