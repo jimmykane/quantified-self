@@ -152,6 +152,11 @@ export class AdminService {
         }
     >(this.functions, environment.functions.getMaintenanceStatus);
 
+    private impersonateUserFn = httpsCallableFromURL<
+        { uid: string },
+        { token: string }
+    >(this.functions, environment.functions.impersonateUser);
+
     setMaintenanceMode(enabled: boolean, message: string, env: 'prod' | 'beta' | 'dev'): Observable<{ success: boolean; enabled: boolean; message: string; env: 'prod' | 'beta' | 'dev' }> {
         return from(this.setMaintenanceModeFn({ enabled, message, env })).pipe(
             map(result => result.data)
@@ -164,6 +169,12 @@ export class AdminService {
         dev: { enabled: boolean; message: string; updatedAt?: unknown; updatedBy?: string };
     }> {
         return from(this.getMaintenanceStatusFn()).pipe(
+            map(result => result.data)
+        );
+    }
+
+    impersonateUser(uid: string): Observable<{ token: string }> {
+        return from(this.impersonateUserFn({ uid })).pipe(
             map(result => result.data)
         );
     }

@@ -14,6 +14,7 @@ vi.mock('@angular/fire/auth', async () => {
         user: mockUserFunction,
         signInWithPopup: vi.fn(),
         signInWithRedirect: vi.fn(),
+        signInWithCustomToken: vi.fn(),
         getRedirectResult: vi.fn(),
         signOut: vi.fn(),
     };
@@ -210,6 +211,17 @@ describe('AppAuthService', () => {
             // We need to re-mock or use a different approach since vitest mocks are module-wide
             // For simplicity in this environment, I'll just verify the existing implementation 
             // respects the environment variable which is already used in the code.
+        });
+    });
+
+    describe('loginWithCustomToken', () => {
+        it('should call signInWithCustomToken with correct params', async () => {
+            const { signInWithCustomToken } = await import('@angular/fire/auth');
+            const token = 'test-token-123';
+
+            await service.loginWithCustomToken(token);
+
+            expect(signInWithCustomToken).toHaveBeenCalled();
         });
     });
 });

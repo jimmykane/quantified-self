@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AdminDashboardComponent } from './admin-dashboard.component';
 import { AdminService, AdminUser, ListUsersResponse } from '../../../services/admin.service';
+import { AppAuthService } from '../../../authentication/app.auth.service';
 import { of, throwError } from 'rxjs';
 import { MatTableModule } from '@angular/material/table';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
@@ -14,7 +15,7 @@ import { FormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { provideCharts, withDefaultRegisterables, BaseChartDirective } from 'ng2-charts';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
 import { ChangeDetectorRef, NO_ERRORS_SCHEMA, Component, Input, Directive } from '@angular/core';
 
@@ -75,7 +76,10 @@ describe('AdminDashboardComponent', () => {
         getTotalUserCount: ReturnType<typeof vi.fn>;
         getMaintenanceStatus: ReturnType<typeof vi.fn>;
         setMaintenanceMode: ReturnType<typeof vi.fn>;
+        impersonateUser: ReturnType<typeof vi.fn>;
     };
+    let authServiceSpy: { loginWithCustomToken: ReturnType<typeof vi.fn> };
+    let routerSpy: { navigate: ReturnType<typeof vi.fn> };
     let matDialogSpy: { open: ReturnType<typeof vi.fn> };
 
     const mockUsers: AdminUser[] = [
@@ -112,7 +116,16 @@ describe('AdminDashboardComponent', () => {
             getQueueStatsDirect: vi.fn().mockReturnValue(of({ pending: 0, succeeded: 0, stuck: 0, providers: [] })),
             getTotalUserCount: vi.fn().mockReturnValue(of({ total: 100, pro: 30, basic: 70, free: 0 })),
             getMaintenanceStatus: vi.fn().mockReturnValue(of({ enabled: false, message: 'Test' })),
-            setMaintenanceMode: vi.fn().mockReturnValue(of({ success: true, enabled: true, message: 'Test' }))
+            setMaintenanceMode: vi.fn().mockReturnValue(of({ success: true, enabled: true, message: 'Test' })),
+            impersonateUser: vi.fn().mockReturnValue(of({ token: 'test-token' }))
+        };
+
+        authServiceSpy = {
+            loginWithCustomToken: vi.fn().mockResolvedValue({})
+        };
+
+        routerSpy = {
+            navigate: vi.fn()
         };
 
         matDialogSpy = {
@@ -136,6 +149,8 @@ describe('AdminDashboardComponent', () => {
             ],
             providers: [
                 { provide: AdminService, useValue: adminServiceSpy },
+                { provide: AppAuthService, useValue: authServiceSpy },
+                { provide: Router, useValue: routerSpy },
                 { provide: MatDialog, useValue: matDialogSpy },
                 provideCharts(withDefaultRegisterables()),
                 {

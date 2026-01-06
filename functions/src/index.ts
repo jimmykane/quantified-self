@@ -127,7 +127,7 @@ export { enforceSubscriptionLimits } from './schedule/enforce-subscription-limit
 export { checkSubscriptionNotifications } from './schedule/notifications';
 export { cleanupUserAccounts } from './users/cleanup';
 export { deleteSelf } from './user/user';
-export { listUsers, getQueueStats, getUserCount, setMaintenanceMode, getMaintenanceStatus } from './users/admin';
+export { listUsers, getQueueStats, getUserCount, setMaintenanceMode, getMaintenanceStatus, impersonateUser } from './users/admin';
 
 // Tasks
 export { processWorkoutTask } from './tasks/workout-processor';

@@ -51,5 +51,6 @@ export const environment = {
     getUserCount: 'https://europe-west2-quantified-self-io.cloudfunctions.net/getUserCount',
     setMaintenanceMode: 'https://europe-west2-quantified-self-io.cloudfunctions.net/setMaintenanceMode',
     getMaintenanceStatus: 'https://europe-west2-quantified-self-io.cloudfunctions.net/getMaintenanceStatus',
+    impersonateUser: 'https://europe-west2-quantified-self-io.cloudfunctions.net/impersonateUser',
   }
 };

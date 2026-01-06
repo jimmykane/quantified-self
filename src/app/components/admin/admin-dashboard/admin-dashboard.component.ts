@@ -1,7 +1,10 @@
 import { Component, OnInit, ViewChild, AfterViewInit, OnDestroy } from '@angular/core';
 import { AdminService, AdminUser, ListUsersParams, QueueStats } from '../../../services/admin.service';
-import { ActivatedRoute } from '@angular/router';
+
+import { ActivatedRoute, Router } from '@angular/router';
+import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AdminResolverData } from '../../../resolvers/admin.resolver';
+
 import { MatSort, Sort } from '@angular/material/sort';
 import { MatPaginator, PageEvent } from '@angular/material/paginator';
 import { Subject } from 'rxjs';
@@ -11,6 +14,7 @@ import { CommonModule } from '@angular/common';
 import { MatTableModule } from '@angular/material/table';
 import { MatPaginatorModule } from '@angular/material/paginator';
 import { MatSortModule } from '@angular/material/sort';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -52,7 +56,7 @@ import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
 export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy {
     displayedColumns: string[] = [
         'photoURL', 'email', 'providerIds', 'displayName', 'role', 'subscription',
-        'services', 'created', 'lastLogin', 'status'
+        'services', 'created', 'lastLogin', 'status', 'actions'
     ];
 
     // Data
@@ -140,6 +144,9 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
 
     constructor(
         private adminService: AdminService,
+        private authService: AppAuthService,
+        private router: Router,
+        private snackBar: MatSnackBar,
         private logger: LoggerService,
         private dialog: MatDialog,
         private route: ActivatedRoute
@@ -470,6 +477,50 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
                     event.source.checked = !isEnable;
                 }
             });
+        });
+    }
+
+    onImpersonate(user: AdminUser): void {
+        const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+            width: '400px',
+            data: {
+                title: 'Impersonate User?',
+                message: `Are you sure you want to impersonate ${user.email}? You will be logged out of your admin account and logged in as this user.`,
+                confirmText: 'Impersonate',
+                cancelText: 'Cancel',
+                isDangerous: true
+            }
+        });
+
+        dialogRef.afterClosed().subscribe(confirmed => {
+            if (confirmed) {
+                this.isLoading = true;
+                this.adminService.impersonateUser(user.uid).subscribe({
+                    next: async (res) => {
+                        this.logger.log('Impersonation token received. Switching user...', res);
+                        await this.authService.loginWithCustomToken(res.token);
+                        this.router.navigate(['/']);
+                    },
+                    error: (err) => {
+                        this.logger.error('Impersonation failed', err);
+                        this.isLoading = false;
+
+                        let errorMessage = 'Impersonation failed. ';
+                        if (err.message && err.message.includes('CORS')) {
+                            errorMessage += 'This usually happens if the backend function is not deployed or accessible.';
+                        } else if (err.status === 0 || (err.name && err.name === 'FirebaseError' && err.code === 'internal')) {
+                            errorMessage += 'Network or Server Error. Please ensure the backend is deployed.';
+                        } else {
+                            errorMessage += err.message || 'Unknown error';
+                        }
+
+                        this.snackBar.open(errorMessage, 'Close', {
+                            duration: 5000,
+                            panelClass: ['error-snackbar']
+                        });
+                    }
+                });
+            }
         });
     }
 }

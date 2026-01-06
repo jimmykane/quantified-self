@@ -1,5 +1,6 @@
 const {
     mockListUsers,
+    mockCreateCustomToken,
     mockAuth,
     mockOnCall,
     mockCollection,
@@ -7,7 +8,8 @@ const {
     mockRemoteConfig
 } = vi.hoisted(() => {
     const mockListUsers = vi.fn();
-    const mockAuth = { listUsers: mockListUsers };
+    const mockCreateCustomToken = vi.fn();
+    const mockAuth = { listUsers: mockListUsers, createCustomToken: mockCreateCustomToken };
     const mockOnCall = vi.fn((_options: unknown, handler: unknown) => handler);
 
     const mockCollection = vi.fn();
@@ -24,6 +26,7 @@ const {
 
     return {
         mockListUsers,
+        mockCreateCustomToken,
         mockAuth,
         mockOnCall,
         mockCollection,
@@ -33,6 +36,7 @@ const {
 });
 
 mockAuth.listUsers = mockListUsers;
+mockAuth.createCustomToken = mockCreateCustomToken;
 
 vi.mock('firebase-admin', () => {
     const firestoreMock: any = mockFirestore;
@@ -64,7 +68,7 @@ vi.mock('../utils', () => ({
     ALLOWED_CORS_ORIGINS: ['*']
 }));
 
-import { listUsers, getQueueStats, getUserCount, getMaintenanceStatus, setMaintenanceMode } from './admin';
+import { listUsers, getQueueStats, getUserCount, getMaintenanceStatus, setMaintenanceMode, impersonateUser } from './admin';
 
 describe('listUsers Cloud Function', () => {
     beforeEach(() => {
@@ -216,6 +220,48 @@ describe('listUsers Cloud Function', () => {
 
         expect(mockListUsers).toHaveBeenCalledTimes(2);
         expect(result.totalCount).toBe(2);
+    });
+});
+
+describe('impersonateUser Cloud Function', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreateCustomToken.mockResolvedValue('mock-custom-token');
+    });
+
+    it('should throw "unauthenticated" if called without auth', async () => {
+        const request = { auth: null } as unknown as CallableRequest<any>;
+        await expect((impersonateUser as any)(request)).rejects.toThrow('The function must be called while authenticated.');
+    });
+
+    it('should throw "permission-denied" if user is not an admin', async () => {
+        const request = {
+            auth: { uid: 'user1', token: { admin: false } }
+        } as unknown as CallableRequest<any>;
+        await expect((impersonateUser as any)(request)).rejects.toThrow('Only admins can call this function.');
+    });
+
+    it('should create a custom token with impersonatedBy claim', async () => {
+        const targetUid = 'target-user-uid';
+        const adminUid = 'admin-uid';
+        const request = {
+            data: { uid: targetUid },
+            auth: { uid: adminUid, token: { admin: true } }
+        } as unknown as CallableRequest<any>;
+
+        const result: any = await (impersonateUser as any)(request);
+
+        expect(result.token).toBe('mock-custom-token');
+        expect(mockCreateCustomToken).toHaveBeenCalledWith(targetUid, { impersonatedBy: adminUid });
+    });
+
+    it('should throw if target uid is missing', async () => {
+        const request = {
+            data: {},
+            auth: { uid: 'admin-uid', token: { admin: true } }
+        } as unknown as CallableRequest<any>;
+
+        await expect((impersonateUser as any)(request)).rejects.toThrow();
     });
 });
 

@@ -665,3 +665,51 @@ export const getMaintenanceStatus = onCall({
         throw new HttpsError('internal', errorMessage);
     }
 });
+
+/**
+ * Impersonates a user by generating a custom token.
+ * This allows an admin to sign in as the target user.
+ * 
+ * SECURITY: Critical function. Only strictly verified admins can call this.
+ */
+export const impersonateUser = onCall({
+    region: 'europe-west2',
+    cors: ALLOWED_CORS_ORIGINS,
+    memory: '256MiB',
+}, async (request) => {
+    // 1. Check authentication
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    }
+
+    // 2. Check for admin claim
+    if (request.auth.token.admin !== true) {
+        throw new HttpsError('permission-denied', 'Only admins can call this function.');
+    }
+
+    const targetUid = request.data.uid;
+    if (!targetUid || typeof targetUid !== 'string') {
+        throw new HttpsError('invalid-argument', 'The function must be called with a valid user UID.');
+    }
+
+    try {
+        // 3. Generate Custom Token
+        // detailed claims are optional but good for future security rules
+        const additionalClaims = {
+            impersonatedBy: request.auth.uid
+        };
+
+        const customToken = await admin.auth().createCustomToken(targetUid, additionalClaims);
+
+        logger.info(`Admin ${request.auth.uid} is impersonating user ${targetUid}`);
+
+        return {
+            token: customToken
+        };
+
+    } catch (error: unknown) {
+        logger.error('Error creating impersonation token:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to create token';
+        throw new HttpsError('internal', errorMessage);
+    }
+});
