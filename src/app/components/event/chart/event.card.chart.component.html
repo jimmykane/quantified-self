@@ -8,11 +8,15 @@
     </app-event-card-chart-actions>
   </mat-card-subtitle>
 </mat-card-header>
-<mat-card-content>
+<mat-card-content style="position: relative; min-height: 90vh;" (click)="enableInteractions()">
+
+  <app-skeleton *ngIf="isLoading" width="100%" height="90vh" borderRadius="4px"
+    style="position: absolute; top:0; left:0; z-index: 20;"></app-skeleton>
 
   <app-shade [isActive]="isLoading"></app-shade>
   <!-- @todo should be different per orientation etc -->
-  <div #chartDiv style="min-width: 280px; width: 100%; min-height: 90vh; height: 90vh"></div>
+  <div #chartDiv [style.opacity]="isLoading ? 0 : 1"
+    style="min-width: 280px; width: 100%; min-height: 90vh; height: 90vh"></div>
   <div #legendDiv style="min-width: 280px; width: 100%; height: 10vh; min-height: 10vh;"></div>
 
 </mat-card-content>

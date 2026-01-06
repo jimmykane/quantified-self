@@ -48,6 +48,7 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
       // chart.padding(0,0,0,0)
       // chart.dataSource.updateCurrentData = true
       chart.exporting.useRetina = true; // access exporting via chart instance usually
+      core.options.minPolylineStep = 2;
       return chart;
     });
   }

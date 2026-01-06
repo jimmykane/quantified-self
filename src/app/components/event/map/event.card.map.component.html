@@ -8,7 +8,7 @@
       </app-map-actions>
     </div>
   </div>
-  <section class="container">
+  <section class="container" (click)="enableInteractions()">
     @if (googleMap && event.getActivities().length > 1) {
     <mat-card class="map-legend mat-elevation-z0">
       @for (activity of event.getActivities(); track activity) {

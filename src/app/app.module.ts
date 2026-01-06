@@ -44,6 +44,8 @@ import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/da
 
 
 
+import { AppSkeletonComponent } from './components/loading/skeleton/app.skeleton.component';
+
 @NgModule({
   declarations: [
     AppComponent,
@@ -52,6 +54,7 @@ import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/da
     ProcessingIndicatorComponent,
     GracePeriodBannerComponent,
     RouteLoaderComponent,
+    AppSkeletonComponent
   ],
   bootstrap: [AppComponent],
   imports: [

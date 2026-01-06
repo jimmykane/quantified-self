@@ -7,10 +7,10 @@ import type * as am4charts from '@amcharts/amcharts4/charts';
 import type { AxisRendererY, XYSeries } from '@amcharts/amcharts4/charts';
 import { AmChartsService } from '../../../services/am-charts.service';
 
-import { Subscription } from 'rxjs';
+import { Subscription, Subject, asyncScheduler } from 'rxjs';
 import { AppEventService } from '../../../services/app.event.service';
 import { DataAltitude } from '@sports-alliance/sports-lib';
-import { debounceTime, take } from 'rxjs/operators';
+import { debounceTime, take, throttleTime } from 'rxjs/operators';
 import { StreamInterface } from '@sports-alliance/sports-lib';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { DataPace, DataPaceMinutesPerMile } from '@sports-alliance/sports-lib';
@@ -140,12 +140,15 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   private streamsSubscription: Subscription;
   private activitiesCursorSubscription: Subscription;
+  private cursorPositionSubject = new Subject<any>();
+  private cursorPositionSubscription: Subscription;
 
   private activitiesWithAllStreamsFetched = new Set<string>();
   private processSequence = 0;
 
   private rangeLabelsContainer: am4core.Container | undefined;
   private clearSelectionButton: am4core.Button | undefined;
+  public interactionsEnabled: boolean = false;
 
   constructor(changeDetector: ChangeDetectorRef,
     protected zone: NgZone,
@@ -183,14 +186,22 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     if (!this.targetUserID || !this.event) {
       throw new Error('Component needs events and users');
     }
+
+    // Subscribe to cursor position changes with throttling
+    this.cursorPositionSubscription = this.cursorPositionSubject.pipe(
+      throttleTime(1000, asyncScheduler, { leading: true, trailing: true })
+    ).subscribe((event) => {
+      this.handleCursorPositionChange(event);
+    });
   }
 
   async ngOnChanges(simpleChanges: SimpleChanges) {
+    if (!this.chart) {
+      return; // Chart not yet initialized
+    }
 
-    // If the chart is already initialized, we simply destroy it to ensure a clean slate.
-    // This resolves issues where modifying the X-Axis or other deep properties leaves amCharts in an inconsistent state.
-    // It is safer to re-build the chart than to attempt partial updates (clearing series/axes) which often fail to reset zoom/bounds correctly.
-    if (this.chart && (
+    // #1: Identify changes that REQUIRE full rebuild vs. partial updates
+    const requiresFullRebuild =
       simpleChanges.chartTheme
       || simpleChanges.xAxisType
       || simpleChanges.stackYAxes
@@ -199,9 +210,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       || simpleChanges.event
       || simpleChanges.selectedActivities
       || simpleChanges.showAllData
-      || simpleChanges.showLaps
       || simpleChanges.lapTypes
-      || simpleChanges.showGrid
       || simpleChanges.extraMaxForPower
       || simpleChanges.extraMaxForPace
       || simpleChanges.hideAllSeriesOnInit
@@ -209,29 +218,90 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       || simpleChanges.fillOpacity
       || simpleChanges.dataTypesToUse
       || simpleChanges.downSamplingLevel
-      || simpleChanges.gainAndLossThreshold
-    )) {
+      || simpleChanges.gainAndLossThreshold;
 
-      this.destroyChart();
-      this.activityCursorService.clear();
-      this.eventColorService.clearCache();
+    // Changes that can be handled with partial updates
+    const canPartialUpdate =
+      (simpleChanges.showLaps || simpleChanges.showGrid)
+      && !requiresFullRebuild;
 
-      // Re-create the empty chart shell
-      this.chart = await this.createChart();
-
-      // Proceed to populate data
-      const seq = ++this.processSequence;
-      if (!this.event || !this.selectedActivities?.length) {
-
-        this.loaded();
-        return;
+    if (canPartialUpdate) {
+      // #1: Handle showLaps toggle without rebuild
+      if (simpleChanges.showLaps) {
+        this.removeLapGuides(this.chart);
+        if (this.showLaps) {
+          this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
+        }
       }
-      await this.processChanges(seq);
+
+      // #1: Handle showGrid toggle without rebuild
+      if (simpleChanges.showGrid) {
+        if (this.showGrid) {
+          this.addGrid();
+        } else {
+          this.removeGrid();
+        }
+      }
+      return; // Exit early - no full rebuild needed
     }
+
+    if (requiresFullRebuild || simpleChanges.showLaps || simpleChanges.showGrid) {
+      // Show loading immediately so the user sees feedback
+      this.loading();
+      this.changeDetector.detectChanges();
+
+      // #8: Only clear distance cache when activities actually change
+      if (simpleChanges.event || simpleChanges.selectedActivities) {
+        this.distanceAxesForActivitiesMap.clear();
+      }
+
+      // #2: Temporarily disable animations during rebuild for better performance
+      const originalAnimationSetting = this.useAnimations;
+      this.useAnimations = false;
+
+      // Use requestAnimationFrame to ensure paint happens before heavy work
+      requestAnimationFrame(() => {
+        setTimeout(async () => {
+          this.destroyChart();
+          this.activityCursorService.clear();
+          this.eventColorService.clearCache();
+
+          // Re-create the empty chart shell
+          this.chart = await this.createChart();
+
+          // Restore animation setting after chart is created
+          this.useAnimations = originalAnimationSetting;
+
+          // Proceed to populate data
+          const seq = ++this.processSequence;
+          if (!this.event || !this.selectedActivities?.length) {
+            this.loaded();
+            return;
+          }
+          await this.processChanges(seq);
+        }, 0);
+      });
+    }
+  }
+
+  public enableInteractions() {
+    if (this.interactionsEnabled || !this.chart) {
+      return;
+    }
+    this.logger.info('EventCardChartComponent: Enabling chart interactions');
+    this.interactionsEnabled = true;
+    this.chart.seriesContainer.interactionsEnabled = true;
+    if (this.chart.cursor) {
+      this.chart.cursor.interactionsEnabled = true;
+    }
+    this.changeDetector.detectChanges();
   }
 
   ngOnDestroy() {
     this.unSubscribeFromAll();
+    if (this.cursorPositionSubscription) {
+      this.cursorPositionSubscription.unsubscribe();
+    }
     super.ngOnDestroy();
   }
 
@@ -311,96 +381,18 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
 
     chart.cursor.events.on('cursorpositionchanged', (event) => {
-
-      // Avoid rewriting cursor change if it's triggered from this component
-      if (event.target['_stick'] === 'hard') {
-        event.target.triggerMove(event.target.point, 'soft');
+      if (!this.interactionsEnabled) {
         return;
       }
-
-      event.target.triggerMove(event.target.point, 'soft');
-      let xAxis;
-      switch (this.xAxisType) {
-        case XAxisTypes.Time:
-          xAxis = <am4charts.DateAxis>event.target.chart.xAxes.getIndex(0);
-          if (xAxis.positionToDate) {
-            this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
-              activityID: activity.getID(),
-              time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime(),
-              byChart: true,
-            }));
-          }
-          break;
-        case XAxisTypes.Duration:
-          xAxis = <am4charts.DateAxis>event.target.chart.xAxes.getIndex(0);
-          if (xAxis.positionToDate) {
-            this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
-              activityID: activity.getID(),
-              time: xAxis.positionToDate(xAxis.pointToPosition(event.target.point)).getTime() + activity.startDate.getTime() - (new Date(0).getTimezoneOffset() * 60000),
-              byChart: true,
-            }));
-          }
-          break;
-        case XAxisTypes.Distance:
-          xAxis = <am4charts.ValueAxis>event.target.chart.xAxes.getIndex(0);
-          if (xAxis.positionToValue) {
-            const distance = xAxis.positionToValue(xAxis.pointToPosition(event.target.point));
-            this.selectedActivities.forEach(activity => {
-              const distanceStream = activity.getStream(DataDistance.type);
-              if (distanceStream) {
-                const distances = distanceStream.getData();
-                if (!distances || distances.length === 0) {
-                  return;
-                }
-
-                // Binary search for closest index
-                let low = 0, high = distances.length - 1;
-                let index = -1;
-                while (low <= high) {
-                  const mid = Math.floor((low + high) / 2);
-                  if (distances[mid] === distance) {
-                    index = mid;
-                    break;
-                  } else if (distances[mid] < distance) {
-                    low = mid + 1;
-                  } else {
-                    high = mid - 1;
-                  }
-                }
-
-                // If pure binary search didn't Hit, find closest
-                if (index === -1) {
-                  if (high < 0) index = 0;
-                  else if (low >= distances.length) index = distances.length - 1;
-                  else index = (Math.abs(distance - distances[high]) < Math.abs(distances[low] - distance)) ? high : low;
-                }
-
-                if (index !== -1) {
-                  let timeStream;
-                  // check for Time stream first
-                  // Time stream is guaranteed by AppEventService enrichment
-                  timeStream = activity.getStream(XAxisTypes.Time);
-
-                  const timeData = timeStream.getData();
-                  if (timeData && timeData[index] !== undefined && timeData[index] !== null) {
-                    const timeOffset = timeData[index];
-                    // Assuming timeOffset is in seconds (standard for Duration/Time streams in this app)
-                    this.activityCursorService.setCursor({
-                      activityID: activity.getID(),
-                      time: activity.startDate.getTime() + (timeOffset * 1000),
-                      byChart: true,
-                    });
-                  }
-                }
-              }
-            });
-          }
-          break;
-      }
-
-      // Sticky
-      // chart.cursor.triggerMove(event.target.point, 'soft');
+      this.cursorPositionSubject.next(event);
     });
+
+    // Disable interactions initially
+    chart.seriesContainer.interactionsEnabled = false;
+    if (chart.cursor) {
+      chart.cursor.interactionsEnabled = false;
+    }
+
     // On select
     chart.cursor.events.on('selectended', (ev) => {
       this.logger.info('EventCardChartComponent: selectended triggered');
@@ -832,112 +824,108 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     this.loading();
 
-    const appEvent = this.event as AppEventInterface;
-
-
-    // Listen to cursor changes
-    this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
-      debounceTime(250)
-    ).subscribe((cursors) => {
-
-      if (!cursors || !cursors.length || !this.chart) {
-        return;
-      }
-
-      // @todo fix scrollbar for cursor
-      cursors.filter(cursor => cursor.byMap === true).forEach((cursor) => {
-
-        this.chart.xAxes.values.forEach(xAxis => {
-          switch (this.xAxisType) {
-            case XAxisTypes.Time:
-              this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date(cursor.time)), 'hard');
-              break;
-            case XAxisTypes.Duration:
-              const cursorActivity = this.event.getActivities().find(activity => cursor.activityID === activity.getID());
-              if (cursorActivity) {
-                this.chart.cursor.triggerMove((<am4charts.DateAxis>xAxis).dateToPoint(new Date((new Date(0).getTimezoneOffset() * 60000) + (cursor.time - cursorActivity.startDate.getTime()))), 'hard');
-              }
-              break;
-          }
-        })
-      });
-    });
-
-
-    // Important for performance / or not?
-    // This is / will be needed when more performance needs to be achieved
-    // Leaving this here for the future. For now the groups of data do suffice and do it better
-    if (this.xAxisType === XAxisTypes.Distance) {
-      for (const selectedActivity of this.selectedActivities) {
-        if (!selectedActivity.hasStreamData(DataDistance.type)) {
-          this.snackBar.open(
-            `No distance data found for activity with type ${selectedActivity.type}. You might want to change axis type`,
-            'Got it',
-            { duration: 5000 });
-          continue;
-        }
-        this.distanceAxesForActivitiesMap.set(
-          selectedActivity.getID(),
-          selectedActivity.getStream(DataDistance.type)
-        );
-      }
-    }
+    // Prepare data for series creation
+    const streamsToProcess: { activity: ActivityInterface, stream: StreamInterface }[] = [];
 
     // Lazy load additional streams is no longer supported from Firestore as streams are not stored there anymore
     // If "Show All Data" is enabled, streams should have been hydrated from the original file already
     // via attachStreamsToEventWithActivities in the event service.
 
-    const series = this.selectedActivities.reduce((seriesArray, activity) => {
-      const streams = activity.getAllStreams();
-      if (!streams.length) {
-        return seriesArray;
+    if (this.selectedActivities && this.selectedActivities.length > 0) {
+      this.selectedActivities.forEach(activity => {
+        const streams = activity.getAllStreams();
+        if (!streams.length) {
+          return;
+        }
+
+        // #8: Populate distance map for distance axis mode
+        if (this.xAxisType === XAxisTypes.Distance) {
+          const distanceStream = streams.find(s => s.type === DataDistance.type) || streams.find(s => s.type === DataStrydDistance.type);
+          if (distanceStream) {
+            this.distanceAxesForActivitiesMap.set(activity.getID(), distanceStream);
+          }
+        }
+
+        // Determine which data types to show based on showAllData toggle
+        const allowedDataTypes = this.showAllData
+          ? null // null means show all
+          : [...DynamicDataLoader.basicDataTypes, ...this.dataTypesToUse];
+
+        // These need to be unit based and activity based?
+        const shouldRemoveSpeed = DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataSpeed.type, this.userUnitSettings).indexOf(DataSpeed.type) === -1
+        const shouldRemoveGradeAdjustedSpeed = DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataGradeAdjustedSpeed.type, this.userUnitSettings).indexOf(DataGradeAdjustedSpeed.type) === -1
+        const shouldRemoveDistance = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataDistance.type) === -1;
+
+        // @todo should do the same with distance (miles) and vertical speed
+        [...new Set(ActivityUtilities.createUnitStreamsFromStreams(streams, activity.type, DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings)).concat(streams))]
+          .filter((stream) => {
+            // First, filter by showAllData toggle
+            if (allowedDataTypes !== null && !allowedDataTypes.includes(stream.type)) {
+              return false;
+            }
+
+            switch (stream.type) {
+              case DataDistance.type:
+                return !shouldRemoveDistance;
+              case DataSpeed.type:
+                return !shouldRemoveSpeed;
+              case DataGradeAdjustedSpeed.type:
+                return !shouldRemoveGradeAdjustedSpeed;
+              case DataLatitudeDegrees.type:
+              case DataLongitudeDegrees.type:
+                return false;
+              default:
+                return true;
+            }
+          }).sort((left, right) => {
+            if (left.type < right.type) {
+              return -1;
+            }
+            if (left.type > right.type) {
+              return 1;
+            }
+            return 0;
+          }).forEach((stream) => {
+            streamsToProcess.push({ activity, stream });
+          });
+      });
+    }
+
+    // Process streams in chunks
+    const processChunk = (index: number) => {
+      // Check for cancellation
+      if (seq !== this.processSequence) {
+        return;
       }
 
-      // Determine which data types to show based on showAllData toggle
-      const allowedDataTypes = this.showAllData
-        ? null // null means show all
-        : [...DynamicDataLoader.basicDataTypes, ...this.dataTypesToUse];
+      const chunkSize = 2; // Adjust chunk size as needed
+      const endIndex = Math.min(index + chunkSize, streamsToProcess.length);
 
-      // These need to be unit based and activity based?
-      const shouldRemoveSpeed = DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataSpeed.type, this.userUnitSettings).indexOf(DataSpeed.type) === -1
-      const shouldRemoveGradeAdjustedSpeed = DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataGradeAdjustedSpeed.type, this.userUnitSettings).indexOf(DataGradeAdjustedSpeed.type) === -1
-      const shouldRemoveDistance = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataDistance.type) === -1;
+      for (let i = index; i < endIndex; i++) {
+        const item = streamsToProcess[i];
+        this.createOrUpdateChartSeries(item.activity, item.stream);
+      }
 
-      // @todo should do the same with distance (miles) and vertical speed
-      [...new Set(ActivityUtilities.createUnitStreamsFromStreams(streams, activity.type, DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings)).concat(streams))]
-        .filter((stream) => {
-          // First, filter by showAllData toggle
-          if (allowedDataTypes !== null && !allowedDataTypes.includes(stream.type)) {
-            return false;
-          }
+      if (endIndex < streamsToProcess.length) {
+        requestAnimationFrame(() => processChunk(endIndex));
+      } else {
+        // All done
+        this.finalizeChartSetup(seq);
+      }
+    };
 
-          switch (stream.type) {
-            case DataDistance.type:
-              return !shouldRemoveDistance;
-            case DataSpeed.type:
-              return !shouldRemoveSpeed;
-            case DataGradeAdjustedSpeed.type:
-              return !shouldRemoveGradeAdjustedSpeed;
-            case DataLatitudeDegrees.type:
-            case DataLongitudeDegrees.type:
-              return false;
-            default:
-              return true;
-          }
-        }).sort((left, right) => {
-          if (left.type < right.type) {
-            return -1;
-          }
-          if (left.type > right.type) {
-            return 1;
-          }
-          return 0;
-        }).forEach((stream) => {
-          seriesArray.push(this.createOrUpdateChartSeries(activity, stream));
-        });
-      return seriesArray;
-    }, [])
+    // Start processing
+    if (streamsToProcess.length > 0) {
+      processChunk(0);
+    } else {
+      this.finalizeChartSetup(seq);
+    }
+  }
 
+  private finalizeChartSetup(seq: number) {
+    if (seq !== this.processSequence) {
+      return;
+    }
 
     if (this.showGrid) {
       this.addGrid();
@@ -947,6 +935,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     if (this.showLaps) {
       this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
     }
+
+    // Since we created series, we can get them from chart
+    const series = this.chart.series.values;
 
     // Show if needed
     series.forEach(s => this.shouldHideSeries(s) ? s.hide() : s.show());
@@ -962,8 +953,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       this.addStartPauseTimeAxisRanges(<am4charts.DateAxis>this.chart.xAxes.getIndex(0));
     }
 
+    this.chart.zoomOut();
     this.loaded();
-
     this.changeDetector.detectChanges();
   }
 
@@ -1015,11 +1006,15 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // series.defaultState.transitionDuration = 0;
 
     series.dataFields.valueY = 'value';
-    series.dataFields.dateX = 'time';
-    series.dataFields.valueX = 'axisValue';
+    if (this.xAxisType === XAxisTypes.Distance) {
+      series.dataFields.valueX = 'axisValue';
+    } else {
+      series.dataFields.dateX = 'time';
+      series.dataFields.valueX = 'axisValue'; // Fallback / Duration mode
+    }
     // series.dataFields.categoryX = 'distance';
 
-    series.interactionsEnabled = false;
+    // series.interactionsEnabled = false; // Container handles this
 
 
     // Attach events
@@ -1681,5 +1676,103 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         this.chart.legend.parent.dispose();
       }
     });
+  }
+
+  private handleCursorPositionChange(event: any) {
+    if (!event || !event.target || !event.target.chart) {
+      return;
+    }
+
+    // Avoid rewriting cursor change if it's triggered from this component
+    if (event.target['_stick'] === 'hard') {
+      event.target.triggerMove(event.target.point, 'soft');
+      return;
+    }
+
+    event.target.triggerMove(event.target.point, 'soft');
+    let xAxis;
+    switch (this.xAxisType) {
+      case XAxisTypes.Time:
+        xAxis = <am4charts.DateAxis>event.target.chart.xAxes.getIndex(0);
+        if (xAxis.positionToDate) {
+          const date = xAxis.positionToDate(xAxis.pointToPosition(event.target.point));
+          if (date) {
+            this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
+              activityID: activity.getID(),
+              time: date.getTime(),
+              byChart: true,
+            }));
+          }
+        }
+        break;
+      case XAxisTypes.Duration:
+        xAxis = <am4charts.DateAxis>event.target.chart.xAxes.getIndex(0);
+        if (xAxis.positionToDate) {
+          const date = xAxis.positionToDate(xAxis.pointToPosition(event.target.point));
+          if (date) {
+            this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
+              activityID: activity.getID(),
+              time: date.getTime() + activity.startDate.getTime() - (new Date(0).getTimezoneOffset() * 60000),
+              byChart: true,
+            }));
+          }
+        }
+        break;
+      case XAxisTypes.Distance:
+        xAxis = <am4charts.ValueAxis>event.target.chart.xAxes.getIndex(0);
+        if (xAxis.positionToValue) {
+          const distance = xAxis.positionToValue(xAxis.pointToPosition(event.target.point));
+          this.selectedActivities.forEach(activity => {
+            const distanceStream = activity.getStream(DataDistance.type);
+            if (distanceStream) {
+              const distances = distanceStream.getData();
+              if (!distances || distances.length === 0) {
+                return;
+              }
+
+              // Binary search for closest index
+              let low = 0, high = distances.length - 1;
+              let index = -1;
+              while (low <= high) {
+                const mid = Math.floor((low + high) / 2);
+                if (distances[mid] === distance) {
+                  index = mid;
+                  break;
+                } else if (distances[mid] < distance) {
+                  low = mid + 1;
+                } else {
+                  high = mid - 1;
+                }
+              }
+
+              // If pure binary search didn't Hit, find closest
+              if (index === -1) {
+                if (high < 0) index = 0;
+                else if (low >= distances.length) index = distances.length - 1;
+                else index = (Math.abs(distance - distances[high]) < Math.abs(distances[low] - distance)) ? high : low;
+              }
+
+              if (index !== -1) {
+                let timeStream;
+                // check for Time stream first
+                // Time stream is guaranteed by AppEventService enrichment
+                timeStream = activity.getStream(XAxisTypes.Time);
+
+                const timeData = timeStream.getData();
+                if (timeData && timeData[index] !== undefined && timeData[index] !== null) {
+                  const timeOffset = timeData[index];
+                  // Assuming timeOffset is in seconds (standard for Duration/Time streams in this app)
+                  this.activityCursorService.setCursor({
+                    activityID: activity.getID(),
+                    time: activity.startDate.getTime() + (timeOffset * 1000),
+                    byChart: true,
+                  });
+                }
+              }
+            }
+          });
+        }
+        break;
+    }
   }
 }
