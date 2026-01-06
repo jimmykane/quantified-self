@@ -71,7 +71,8 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
             }).toPromise();
         } catch (e) {
           this.logger.error(e);
-          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message} `, 'OK', { duration: 10000 });
+          const errorMessage = typeof e.error === 'string' ? e.error : e.message;
+          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${errorMessage} `, 'OK', { duration: 10000 });
           reject(e);
           return;
         }

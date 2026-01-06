@@ -5,7 +5,7 @@ import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import * as requestPromise from '../request-helper';
 import { getTokenData } from '../tokens';
-import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse } from '../utils';
+import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
 import * as Pako from 'pako';
 import { SERVICE_NAME } from './constants';
 import { config } from '../config';
@@ -34,6 +34,12 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
   const userID = await getUserIDFromFirebaseToken(req);
   if (!userID) {
     res.status(403).send('Unauthorized');
+    return;
+  }
+
+  if (!(await isProUser(userID))) {
+    logger.warn(`Blocking route upload for non-pro user ${userID}`);
+    res.status(403).send(PRO_REQUIRED_MESSAGE);
     return;
   }
 

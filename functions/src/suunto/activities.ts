@@ -6,7 +6,7 @@ import { config } from '../config';
 import * as admin from 'firebase-admin';
 import * as requestPromise from '../request-helper';
 import { getTokenData } from '../tokens';
-import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse } from '../utils';
+import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
 import { SERVICE_NAME } from './constants';
 
 
@@ -34,6 +34,12 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
   const userID = await getUserIDFromFirebaseToken(req);
   if (!userID) {
     res.status(403).send('Unauthorized');
+    return;
+  }
+
+  if (!(await isProUser(userID))) {
+    logger.warn(`Blocking activity upload for non-pro user ${userID}`);
+    res.status(403).send(PRO_REQUIRED_MESSAGE);
     return;
   }
 
