@@ -2,7 +2,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AdminDashboardComponent } from './admin-dashboard.component';
 import { AdminService, AdminUser, ListUsersResponse } from '../../../services/admin.service';
 import { AppAuthService } from '../../../authentication/app.auth.service';
-import { of, throwError } from 'rxjs';
+import { AppThemeService } from '../../../services/app.theme.service';
+import { AppThemes } from '@sports-alliance/sports-lib';
+import { of, throwError, BehaviorSubject } from 'rxjs';
 import { MatTableModule } from '@angular/material/table';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatSortModule, Sort } from '@angular/material/sort';
@@ -77,10 +79,13 @@ describe('AdminDashboardComponent', () => {
         getMaintenanceStatus: ReturnType<typeof vi.fn>;
         setMaintenanceMode: ReturnType<typeof vi.fn>;
         impersonateUser: ReturnType<typeof vi.fn>;
+        getFinancialStats: ReturnType<typeof vi.fn>;
     };
     let authServiceSpy: { loginWithCustomToken: ReturnType<typeof vi.fn> };
     let routerSpy: { navigate: ReturnType<typeof vi.fn> };
     let matDialogSpy: { open: ReturnType<typeof vi.fn> };
+    let appThemeServiceMock: { getAppTheme: ReturnType<typeof vi.fn> };
+    let themeSubject: BehaviorSubject<AppThemes>;
 
     const mockUsers: AdminUser[] = [
         {
@@ -117,7 +122,8 @@ describe('AdminDashboardComponent', () => {
             getTotalUserCount: vi.fn().mockReturnValue(of({ total: 100, pro: 30, basic: 70, free: 0 })),
             getMaintenanceStatus: vi.fn().mockReturnValue(of({ enabled: false, message: 'Test' })),
             setMaintenanceMode: vi.fn().mockReturnValue(of({ success: true, enabled: true, message: 'Test' })),
-            impersonateUser: vi.fn().mockReturnValue(of({ token: 'test-token' }))
+            impersonateUser: vi.fn().mockReturnValue(of({ token: 'test-token' })),
+            getFinancialStats: vi.fn().mockReturnValue(of({ revenue: { total: 0, currency: 'USD', invoiceCount: 0 }, cost: { reportUrl: 'http://test.com' } })),
         };
 
         authServiceSpy = {
@@ -132,6 +138,11 @@ describe('AdminDashboardComponent', () => {
             open: vi.fn().mockReturnValue({
                 afterClosed: () => of(true) // Default to confirmed
             })
+        };
+
+        themeSubject = new BehaviorSubject<AppThemes>(AppThemes.Dark);
+        appThemeServiceMock = {
+            getAppTheme: vi.fn().mockReturnValue(themeSubject.asObservable())
         };
 
         await TestBed.configureTestingModule({
@@ -150,6 +161,7 @@ describe('AdminDashboardComponent', () => {
             providers: [
                 { provide: AdminService, useValue: adminServiceSpy },
                 { provide: AppAuthService, useValue: authServiceSpy },
+                { provide: AppThemeService, useValue: appThemeServiceMock },
                 { provide: Router, useValue: routerSpy },
                 { provide: MatDialog, useValue: matDialogSpy },
                 provideCharts(withDefaultRegisterables()),
@@ -322,6 +334,29 @@ describe('AdminDashboardComponent', () => {
             // Should revert the checked state of the source
             expect(mockSource.checked).toBe(false);
             expect(component.prodMaintenance.enabled).toBe(false);
+        });
+    });
+
+    describe('Theme Support', () => {
+        it('should update chart options when theme changes to light', () => {
+            // Initial state should be dark (from our mock setup)
+            expect(component.authPieChartOptions!.plugins!.legend!.labels!.color).toBe('rgba(255, 255, 255, 0.8)');
+
+            // Toggle to light theme
+            themeSubject.next(AppThemes.Normal);
+            fixture.detectChanges();
+
+            // Check updated colors
+            expect(component.authPieChartOptions!.plugins!.legend!.labels!.color).toBe('rgba(0, 0, 0, 0.8)');
+            expect(component.barChartOptions!.scales!['x']!.ticks!.color).toBe('rgba(0, 0, 0, 0.8)');
+        });
+
+        it('should update chart options when theme changes back to dark', () => {
+            themeSubject.next(AppThemes.Normal); // Start with light
+            themeSubject.next(AppThemes.Dark);   // Back to dark
+            fixture.detectChanges();
+
+            expect(component.authPieChartOptions!.plugins!.legend!.labels!.color).toBe('rgba(255, 255, 255, 0.8)');
         });
     });
 });

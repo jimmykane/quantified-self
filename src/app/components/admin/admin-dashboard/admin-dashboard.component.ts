@@ -3,7 +3,9 @@ import { AdminService, AdminUser, ListUsersParams, QueueStats, FinancialStats } 
 
 import { ActivatedRoute, Router } from '@angular/router';
 import { AppAuthService } from '../../../authentication/app.auth.service';
+import { AppThemeService } from '../../../services/app.theme.service';
 import { AdminResolverData } from '../../../resolvers/admin.resolver';
+import { AppThemes } from '@sports-alliance/sports-lib';
 
 import { MatSort, Sort } from '@angular/material/sort';
 import { MatPaginator, PageEvent } from '@angular/material/paginator';
@@ -120,6 +122,12 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         maintainAspectRatio: false
     };
 
+    // Color constants for theme switching
+    private readonly CHART_TEXT_DARK = 'rgba(255, 255, 255, 0.8)';
+    private readonly CHART_TEXT_LIGHT = 'rgba(0, 0, 0, 0.8)';
+    private readonly CHART_GRID_DARK = 'rgba(255, 255, 255, 0.1)';
+    private readonly CHART_GRID_LIGHT = 'rgba(0, 0, 0, 0.1)';
+
     // Charts
     public barChartLegend = true;
     public barChartPlugins = [];
@@ -149,6 +157,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     constructor(
         private adminService: AdminService,
         private authService: AppAuthService,
+        private appThemeService: AppThemeService,
         private router: Router,
         private snackBar: MatSnackBar,
         private logger: LoggerService,
@@ -166,6 +175,43 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
             this.searchTerm = term;
             this.currentPage = 0; // Reset to first page on search
             this.fetchUsers();
+        });
+
+        // Handle theme changes for charts
+        this.appThemeService.getAppTheme().pipe(takeUntil(this.destroy$)).subscribe(theme => {
+            const isDark = theme === AppThemes.Dark;
+            const textColor = isDark ? this.CHART_TEXT_DARK : this.CHART_TEXT_LIGHT;
+            const gridColor = isDark ? this.CHART_GRID_DARK : this.CHART_GRID_LIGHT;
+
+            // Update Pie Chart Options
+            this.authPieChartOptions = {
+                ...this.authPieChartOptions,
+                plugins: {
+                    ...this.authPieChartOptions!.plugins,
+                    legend: {
+                        ...this.authPieChartOptions!.plugins!.legend,
+                        labels: {
+                            ...this.authPieChartOptions!.plugins!.legend!.labels,
+                            color: textColor
+                        }
+                    }
+                }
+            };
+
+            // Update Bar Chart Options
+            this.barChartOptions = {
+                ...this.barChartOptions,
+                scales: {
+                    x: {
+                        ticks: { color: textColor },
+                        grid: { color: gridColor }
+                    },
+                    y: {
+                        ticks: { color: textColor },
+                        grid: { color: gridColor }
+                    }
+                }
+            };
         });
 
         // Use resolved data
