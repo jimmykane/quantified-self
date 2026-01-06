@@ -65,9 +65,9 @@ mat-button-toggle:hover:not(.mat-button-toggle-checked) {
 
 /* Premium Active State */
 mat-button-toggle.mat-button-toggle-checked {
-  background: var(--mat-sys-primary) !important;
-  color: var(--mat-sys-on-primary) !important;
-  box-shadow: 0 4px 12px rgba(var(--mat-sys-primary-rgb), 0.3) !important;
+  background: #2196F3 !important;
+  color: #fff !important;
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3) !important;
   transform: scale(1.02);
   /* Subtle pop for the active item */
 }
