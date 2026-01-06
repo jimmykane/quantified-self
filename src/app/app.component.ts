@@ -12,19 +12,15 @@ import { MatSidenav } from '@angular/material/sidenav';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Observable, Subscription } from 'rxjs';
 import {
-  NavigationCancel,
   NavigationEnd,
-  NavigationError,
-  NavigationStart,
-  Router, RouterEvent,
+  Router,
   RouterOutlet,
-  RoutesRecognized
 } from '@angular/router';
 import { AppAuthService } from './authentication/app.auth.service';
 import { AppUserService } from './services/app.user.service';
 import { AppSideNavService } from './services/side-nav/app-side-nav.service';
 import { AppRemoteConfigService } from './services/app.remote-config.service';
-import { DomSanitizer, Title } from '@angular/platform-browser';
+import { DomSanitizer } from '@angular/platform-browser';
 import { slideInAnimation } from './animations/animations';
 
 import * as firebase from 'firebase/app'
@@ -55,7 +51,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
   public bannerHeight = 0;
   public hasBanner = false;
-  public title!: string;
   private actionButtonsSubscription!: Subscription;
   private routerEventSubscription!: Subscription;
   public authState: boolean | null = null;
@@ -105,16 +100,20 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     this.routerEventSubscription = this.router.events.subscribe((event) => {
       if (event instanceof NavigationEnd) {
         this.updateOnboardingState();
-        let route = this.router.routerState.root;
-        while (route.firstChild) {
-          route = route.firstChild;
-        }
-        if (route.snapshot.data['title']) {
-          this.title = route.snapshot.data['title'];
-        }
       }
-      // RoutesRecognized logic removed - handled by SeoService
     });
+  }
+
+  get isDashboardRoute(): boolean {
+    return this.router.url.includes('/dashboard');
+  }
+
+  get isLoginRoute(): boolean {
+    return this.router.url.includes('/login');
+  }
+
+  get isAdminRoute(): boolean {
+    return this.router.url.includes('/admin');
   }
 
   private updateOnboardingState() {

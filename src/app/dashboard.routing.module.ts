@@ -10,8 +10,7 @@ const routes: Routes = [
     component: DashboardComponent,
     resolve: {
       dashboardData: dashboardResolver
-    },
-    data: { title: 'Dashboard' }
+    }
   }
 ];
 

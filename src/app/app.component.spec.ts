@@ -151,4 +151,19 @@ describe('AppComponent', () => {
         const bannerComponent = fixture.nativeElement.querySelector('app-grace-period-banner');
         expect(bannerComponent).toBeTruthy();
     });
+
+    it('should return true for isDashboardRoute when url includes dashboard', () => {
+        mockRouter.url = '/dashboard';
+        expect(component.isDashboardRoute).toBe(true);
+    });
+
+    it('should return true for isLoginRoute when url includes login', () => {
+        mockRouter.url = '/login';
+        expect(component.isLoginRoute).toBe(true);
+    });
+
+    it('should return true for isAdminRoute when url includes admin', () => {
+        mockRouter.url = '/admin';
+        expect(component.isAdminRoute).toBe(true);
+    });
 });
