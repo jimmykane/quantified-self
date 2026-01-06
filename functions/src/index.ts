@@ -18,7 +18,7 @@ if (process.env.FIREBASE_CONFIG) {
 
 if (admin.apps.length === 0) {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const serviceAccount = require('../service-account.json');
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),

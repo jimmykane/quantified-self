@@ -21,7 +21,7 @@
     "xmldom": "^0.6.0"
   },
   "scripts": {
-    "lint": "eslint 'src/**/*.{js,ts}'",
+    "lint": "eslint . --fix",
     "build": "tsc",
     "serve": "npm run build && firebase serve --only functions",
     "shell": "npm run build && firebase functions:shell",
