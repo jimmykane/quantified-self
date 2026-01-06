@@ -359,6 +359,13 @@ export class AppEventService implements OnDestroy {
     return runInInjectionContext(this.injector, () => updateDoc(doc(this.firestore, 'users', user.uid, 'events', eventID), propertiesToUpdate));
   }
 
+  /**
+   * Deletes an event document from Firestore.
+   * 
+   * Note: Storage cleanup (original files) and linked activity deletion
+   * are handled by the `cleanupEventFile` Cloud Function which triggers
+   * on document deletion. See: functions/src/events/cleanup.ts
+   */
   public async deleteAllEventData(user: User, eventID: string): Promise<boolean> {
     await runInInjectionContext(this.injector, () => deleteDoc(doc(this.firestore, 'users', user.uid, 'events', eventID)));
     return true;
