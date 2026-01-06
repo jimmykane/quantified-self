@@ -7,7 +7,7 @@ import { AppUserService } from './services/app.user.service';
 import { AppRemoteConfigService } from './services/app.remote-config.service';
 import { AppAnalyticsService } from './services/app.analytics.service';
 import { SeoService } from './services/seo.service';
-import { MatIconRegistry } from '@angular/material/icon';
+import { AppIconService } from './services/app.icon.service';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { Router, RouterModule, ActivatedRoute } from '@angular/router';
 import { DomSanitizer } from '@angular/platform-browser';
@@ -43,8 +43,8 @@ describe('AppComponent', () => {
         setSidenav: vi.fn()
     };
 
-    const mockMatIconRegistry = {
-        addSvgIcon: vi.fn()
+    const mockAppIconService = {
+        registerIcons: vi.fn()
     };
 
     const mockDomSanitizer = {
@@ -82,7 +82,7 @@ describe('AppComponent', () => {
                 { provide: Router, useValue: mockRouter },
                 { provide: ActivatedRoute, useValue: mockActivatedRoute },
                 { provide: AppSideNavService, useValue: mockAppSideNavService },
-                { provide: MatIconRegistry, useValue: mockMatIconRegistry },
+                { provide: AppIconService, useValue: mockAppIconService },
                 { provide: DomSanitizer, useValue: mockDomSanitizer },
                 // { provide: Title, useValue: mockTitleService }, // Removed
                 { provide: AppRemoteConfigService, useValue: mockRemoteConfigService },
