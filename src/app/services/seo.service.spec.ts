@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 
 import { SeoService } from './seo.service';
 import { Title, Meta } from '@angular/platform-browser';
-import { Router, NavigationEnd, ActivatedRoute, Data } from '@angular/router';
+import { Router, NavigationEnd, ActivatedRoute } from '@angular/router';
 import { Subject, of } from 'rxjs';
 import { DOCUMENT } from '@angular/common';
 import { PLATFORM_ID } from '@angular/core';

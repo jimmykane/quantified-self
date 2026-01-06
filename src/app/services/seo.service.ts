@@ -1,6 +1,6 @@
 import { Injectable, Inject, PLATFORM_ID } from '@angular/core';
 import { Title, Meta } from '@angular/platform-browser';
-import { Router, NavigationEnd, ActivatedRoute, RoutesRecognized } from '@angular/router';
+import { Router, NavigationEnd, ActivatedRoute } from '@angular/router';
 import { filter, map, mergeMap } from 'rxjs/operators';
 import { DOCUMENT, isPlatformBrowser } from '@angular/common';
 
@@ -15,7 +15,7 @@ export class SeoService {
         private router: Router,
         private activatedRoute: ActivatedRoute,
         @Inject(DOCUMENT) private doc: Document,
-        @Inject(PLATFORM_ID) private platformId: Object
+        @Inject(PLATFORM_ID) private platformId: object
     ) { }
 
     public init() {
@@ -33,7 +33,7 @@ export class SeoService {
         ).subscribe(data => {
             this.updateTitle(data['title']);
             this.updateMetaTags(data);
-            this.updateJsonLd(data);
+            this.updateJsonLd();
         });
 
         // Also handle RoutesRecognized for immediate title updates if needed, though NavigationEnd is safer for data
@@ -74,7 +74,7 @@ export class SeoService {
         }
     }
 
-    private updateJsonLd(data: any) {
+    private updateJsonLd() {
         if (this.router.url === '/') {
             this.setJsonLd({
                 "@context": "https://schema.org",
