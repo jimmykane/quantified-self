@@ -35,6 +35,7 @@ declare function require(moduleName: string): any;
 
 import { LoggerService } from './services/logger.service';
 import { AppAnalyticsService } from './services/app.analytics.service';
+import { SeoService } from './services/seo.service';
 
 @Component({
   selector: 'app-root',
@@ -74,9 +75,9 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     private remoteConfigService: AppRemoteConfigService,
     private matIconRegistry: MatIconRegistry,
     private domSanitizer: DomSanitizer,
-    private titleService: Title,
     private logger: LoggerService,
-    private analyticsService: AppAnalyticsService) {
+    private analyticsService: AppAnalyticsService,
+    private seoService: SeoService) {
     // this.afa.setAnalyticsCollectionEnabled(true)
     this.addIconsToRegistry();
   }
@@ -84,6 +85,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   async ngOnInit() {
     this.maintenanceMode$ = this.remoteConfigService.getMaintenanceMode();
     this.maintenanceMessage$ = this.remoteConfigService.getMaintenanceMessage();
+    this.seoService.init(); // Initialize SEO service
+
     this.authService.user$.subscribe(async user => {
       this.authState = !!user;
       this.currentUser = user;
@@ -103,19 +106,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       if (event instanceof NavigationEnd) {
         this.updateOnboardingState();
       }
-      switch (true) {
-        case event instanceof RoutesRecognized: {
-          const firstChild = (<RoutesRecognized>event).state.root.firstChild;
-          if (firstChild) {
-            this.title = firstChild.data['title'];
-            this.titleService.setTitle(`${this.title} - Quantified Self`);
-          }
-          break;
-        }
-        default: {
-          break;
-        }
-      }
+      // RoutesRecognized logic removed - handled by SeoService
     });
   }
 

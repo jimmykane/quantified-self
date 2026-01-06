@@ -9,7 +9,12 @@ const routes: Routes = [
   {
     path: 'login',
     loadChildren: () => import('./modules/login.module').then(module => module.LoginModule),
-    data: { title: 'Login', animation: 'Login' },
+    data: {
+      title: 'Login',
+      animation: 'Login',
+      description: 'Login to your Quantified Self account to access your dashboard and activity data.',
+      keywords: 'quantified self, login, dashboard, activity tracker, fitness data'
+    },
   },
   {
     path: 'onboarding',
@@ -27,7 +32,11 @@ const routes: Routes = [
     path: 'pricing',
     loadComponent: () => import('./components/pricing/pricing.component').then(m => m.PricingComponent),
     // Public route
-    data: { title: 'Pricing' }
+    data: {
+      title: 'Pricing',
+      description: 'Choose the right plan for your fitness data analysis needs. Free, Basic, and Pro tiers available.',
+      keywords: 'pricing, subscription, fitness analytics, strava alternative, garmin connect alternative'
+    }
   },
   {
     path: 'payment/success',
@@ -91,7 +100,12 @@ const routes: Routes = [
   {
     path: '',
     loadChildren: () => import('./modules/home.module').then(module => module.HomeModule),
-    data: { title: 'Home', animation: 'Home' },
+    data: {
+      title: 'Home',
+      animation: 'Home',
+      description: 'Quantified Self is a premium analytical tool for your activity data. aggregatde data from Garmin, Suunto, Coros and more.',
+      keywords: 'quantified self, fitness tracker, activity analysis, garmin, suunto, coros, strava'
+    },
     canMatch: [onboardingGuard],
     pathMatch: 'full'
   },

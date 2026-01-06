@@ -6,10 +6,11 @@ import { AppSideNavService } from './services/side-nav/app-side-nav.service';
 import { AppUserService } from './services/app.user.service';
 import { AppRemoteConfigService } from './services/app.remote-config.service';
 import { AppAnalyticsService } from './services/app.analytics.service';
+import { SeoService } from './services/seo.service';
 import { MatIconRegistry } from '@angular/material/icon';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { Router, RouterModule, ActivatedRoute } from '@angular/router';
-import { DomSanitizer, Title } from '@angular/platform-browser';
+import { DomSanitizer } from '@angular/platform-browser';
 import { of, Subject } from 'rxjs';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatSidenavModule } from '@angular/material/sidenav';
@@ -59,8 +60,12 @@ describe('AppComponent', () => {
         getMaintenanceMessage: vi.fn().mockReturnValue(of(''))
     };
 
+    const mockSeoService = {
+        init: vi.fn()
+    };
+
     const mockAnalyticsService = {
-        logEvent: vi.fn()
+        setAnalyticsCollectionEnabled: vi.fn()
     };
 
     beforeEach(async () => {
@@ -79,9 +84,10 @@ describe('AppComponent', () => {
                 { provide: AppSideNavService, useValue: mockAppSideNavService },
                 { provide: MatIconRegistry, useValue: mockMatIconRegistry },
                 { provide: DomSanitizer, useValue: mockDomSanitizer },
-                { provide: Title, useValue: mockTitleService },
+                // { provide: Title, useValue: mockTitleService }, // Removed
                 { provide: AppRemoteConfigService, useValue: mockRemoteConfigService },
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
+                { provide: SeoService, useValue: mockSeoService },
                 {
                     provide: AppUserService, useValue: {
                         updateUserProperties: vi.fn().mockReturnValue(Promise.resolve()),
