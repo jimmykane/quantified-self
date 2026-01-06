@@ -21,7 +21,6 @@ section.component-container {
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 2rem;
 }
 
 /* Ensure child components take full width and handle their own internal layout */

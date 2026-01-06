@@ -2,6 +2,16 @@
 // Usage: Wrap your form in a container with class .qs-form-container if you want centering on the page.
 // Add class .qs-form to the <form> element itself.
 
+@mixin qs-hide-subscript {
+    .mat-mdc-form-field-subscript-wrapper {
+        display: none !important;
+    }
+}
+
+.qs-subscript-hidden {
+    @include qs-hide-subscript;
+}
+
 .qs-form-container {
     display: flex;
     flex-direction: column;

@@ -3,7 +3,7 @@
   <app-shade [isActive]="isLoading"></app-shade>
   <section class="filters-row" [ngStyle]="{display: showDatePicker || showActivityTypePicker ? 'flex' : 'none' }">
     @if (searchFormGroup) {
-    <mat-form-field [style.display]="showDatePicker ? null : 'none'" class="big">
+    <mat-form-field [style.display]="showDatePicker ? null : 'none'" class="big qs-subscript-hidden">
       <mat-label>Select date range</mat-label>
       <mat-date-range-input [formGroup]="searchFormGroup" [rangePicker]="picker"
         (click)="setCustomDateRange($event); picker.open()">
@@ -36,7 +36,7 @@
     <!--    </mat-error>-->
   </section>
   <section class="button-groups">
-    <mat-button-toggle-group hideSingleSelectionIndicator [value]="selectedDateRange"
+    <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator [value]="selectedDateRange"
       (change)="dateToggleChange($event)">
       @if (dateRangesToShow.indexOf(dateRanges.thisWeek) !== -1) {
       <mat-button-toggle [value]="dateRanges.thisWeek" aria-label="This week">
@@ -54,7 +54,7 @@
       </mat-button-toggle>
       }
     </mat-button-toggle-group>
-    <mat-button-toggle-group hideSingleSelectionIndicator [value]="selectedDateRange"
+    <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator [value]="selectedDateRange"
       (change)="dateToggleChange($event)">
       @if (dateRangesToShow.indexOf(dateRanges.thisMonth) !== -1) {
       <mat-button-toggle [value]="dateRanges.thisMonth" aria-label="This month">
@@ -72,7 +72,7 @@
       </mat-button-toggle>
       }
     </mat-button-toggle-group>
-    <mat-button-toggle-group hideSingleSelectionIndicator [value]="selectedDateRange"
+    <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator [value]="selectedDateRange"
       (change)="dateToggleChange($event)">
       @if (dateRangesToShow.indexOf(dateRanges.thisYear) !== -1) {
       <mat-button-toggle [value]="dateRanges.thisYear" aria-label="This year">
@@ -85,7 +85,7 @@
       </mat-button-toggle>
       }
     </mat-button-toggle-group>
-    <mat-button-toggle-group hideSingleSelectionIndicator [value]="selectedDateRange"
+    <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator [value]="selectedDateRange"
       (change)="dateToggleChange($event)">
       @if (dateRangesToShow.indexOf(dateRanges.all) !== -1) {
       <mat-button-toggle [value]="dateRanges.all" aria-label="All">
