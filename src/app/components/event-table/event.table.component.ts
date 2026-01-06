@@ -25,7 +25,7 @@ import { MatTableDataSource } from '@angular/material/table';
 import { SelectionModel } from '@angular/cdk/collections';
 import { DatePipe } from '@angular/common';
 import { EventInterface } from '@sports-alliance/sports-lib';
-import { EventUtilities, User } from '@sports-alliance/sports-lib';
+import { User } from '@sports-alliance/sports-lib';
 import { debounceTime, take, map } from 'rxjs/operators';
 import { firstValueFrom, Subject, Subscription } from 'rxjs';
 import { rowsAnimation } from '../../animations/animations';
@@ -43,6 +43,8 @@ import { OrderByDirection } from 'firebase/firestore';
 import { AppFileService } from '../../services/app.file.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppProcessingService } from '../../services/app.processing.service';
+import { AppEventUtilities } from '../../utils/app.event.utilities';
+import { Firestore, doc, collection } from '@angular/fire/firestore';
 
 @Component({
   selector: 'app-event-table',
@@ -80,6 +82,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   private searchSubject: Subject<string> = new Subject();
   private analyticsService = inject(AppAnalyticsService);
+  private firestore = inject(Firestore);
 
   constructor(private snackBar: MatSnackBar,
     private eventService: AppEventService,
@@ -262,7 +265,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
     });
 
-    const mergedEvent = EventUtilities.mergeEvents(events) as AppEventInterface; // Use AppEventInterface
+    const mergedEvent = AppEventUtilities.mergeEventsWithId(
+      events,
+      () => doc(collection(this.firestore, 'users')).id
+    ) as AppEventInterface;
 
     try {
       // Pass the collected files to the writer

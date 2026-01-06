@@ -13,10 +13,12 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { DatePipe } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of, Subject, delay } from 'rxjs';
-import { User, EventInterface, EventUtilities } from '@sports-alliance/sports-lib';
+import { User, EventInterface } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Analytics } from '@angular/fire/analytics';
+import { Firestore } from '@angular/fire/firestore';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { AppEventUtilities } from '../../utils/app.event.utilities';
 
 // Mock MatTableDataSource
 vi.mock('@angular/material/table', () => ({
@@ -184,6 +186,7 @@ describe('EventTableComponent', () => {
                 { provide: AppEventColorService, useValue: mockColorService },
                 { provide: AppFileService, useValue: mockFileService },
                 { provide: AppProcessingService, useValue: mockProcessingService },
+                { provide: Firestore, useValue: {} },
                 DatePipe
             ],
             schemas: [NO_ERRORS_SCHEMA]
@@ -217,8 +220,8 @@ describe('EventTableComponent', () => {
 
         fixture.detectChanges();
 
-        // Spy on EventUtilities.mergeEvents
-        vi.spyOn(EventUtilities, 'mergeEvents').mockReturnValue(new MockEvent('merged_event') as any);
+        // Spy on AppEventUtilities.mergeEventsWithId
+        vi.spyOn(AppEventUtilities, 'mergeEventsWithId').mockReturnValue(new MockEvent('merged_event') as any);
     });
 
     it('should create', () => {
