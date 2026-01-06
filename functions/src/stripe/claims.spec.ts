@@ -24,7 +24,7 @@ const mockFirestore = {
 
 vi.mock('firebase-admin', () => {
     const firestoreFn = () => mockFirestore;
-    // @ts-ignore
+
     firestoreFn.FieldValue = {
         serverTimestamp: vi.fn().mockReturnValue('SERVER_TIMESTAMP')
     };
