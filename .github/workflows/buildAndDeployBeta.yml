@@ -29,6 +29,7 @@ jobs:
         run: |
           cd functions
           npm ci
+          npm run lint
           npm run test
           npm run build
           cd ..
@@ -44,6 +45,7 @@ jobs:
       - name: Install, test and build
         run: |
           npm ci
+          npm run lint
           npm run test:rules
           npm run test
           npm run build-beta

@@ -24,6 +24,7 @@ jobs:
         run: |
           cd functions
           npm ci
+          npm run lint
           npm run test
           npm run build
           cd ..
