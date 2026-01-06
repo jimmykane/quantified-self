@@ -60,7 +60,7 @@ import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/da
     AppRoutingModule,
     ClipboardModule,
     MaterialModule,
-    ServiceWorkerModule.register('ngsw-worker.js', { enabled: environment.production }),
+    ServiceWorkerModule.register('ngsw-worker.js', { enabled: environment.production || environment.beta }),
     OnboardingComponent,
     MaintenanceComponent
   ],

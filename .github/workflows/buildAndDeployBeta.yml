@@ -42,6 +42,11 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
+      - name: Patch Manifest for Beta
+        run: |
+          sed -i 's/"name": "Quantified Self"/"name": "Quantified Self Beta"/g' src/manifest.json
+          sed -i 's/"short_name": "Quantified Self"/"short_name": "QS Beta"/g' src/manifest.json
+
       - name: Install, test and build
         run: |
           npm ci

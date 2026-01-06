@@ -21,7 +21,7 @@
             "assets": [
               "src/assets",
               "src/favicon.ico",
-              "src/manifest.webmanifest",
+              "src/manifest.json",
               "src/robots.txt",
               "src/sitemap.xml"
             ],
@@ -81,7 +81,8 @@
                   "replace": "src/environments/environment.ts",
                   "with": "src/environments/environment.beta.ts"
                 }
-              ]
+              ],
+              "serviceWorker": "ngsw-config.json"
             }
           },
           "defaultConfiguration": ""
