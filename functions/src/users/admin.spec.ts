@@ -10,7 +10,9 @@ const {
     mockFirestore,
     mockRemoteConfig,
     mockStripeClient,
-    mockGetProjectBillingInfo
+    mockGetProjectBillingInfo,
+    mockGetBillingAccount,
+    mockListBudgets
 } = vi.hoisted(() => {
     const mockListUsers = vi.fn();
     const mockCreateCustomToken = vi.fn();
@@ -36,6 +38,8 @@ const {
     };
 
     const mockGetProjectBillingInfo = vi.fn();
+    const mockGetBillingAccount = vi.fn();
+    const mockListBudgets = vi.fn();
 
     return {
         mockListUsers,
@@ -46,7 +50,9 @@ const {
         mockFirestore,
         mockRemoteConfig,
         mockStripeClient,
-        mockGetProjectBillingInfo
+        mockGetProjectBillingInfo,
+        mockGetBillingAccount,
+        mockListBudgets
     };
 });
 
@@ -59,7 +65,14 @@ vi.mock('../stripe/client', () => ({
 
 vi.mock('@google-cloud/billing', () => ({
     CloudBillingClient: vi.fn(() => ({
-        getProjectBillingInfo: mockGetProjectBillingInfo
+        getProjectBillingInfo: mockGetProjectBillingInfo,
+        getBillingAccount: mockGetBillingAccount
+    }))
+}));
+
+vi.mock('@google-cloud/billing-budgets', () => ({
+    BudgetServiceClient: vi.fn(() => ({
+        listBudgets: mockListBudgets
     }))
 }));
 
@@ -678,6 +691,19 @@ describe('getFinancialStats Cloud Function', () => {
         mockGetProjectBillingInfo.mockResolvedValue([{
             billingAccountName: 'billingAccounts/000000-000000-000000'
         }]);
+        mockGetBillingAccount.mockResolvedValue([{
+            currencyCode: 'EUR'
+        }]);
+        mockListBudgets.mockResolvedValue([[
+            {
+                amount: {
+                    specifiedAmount: {
+                        units: '100',
+                        currencyCode: 'EUR'
+                    }
+                }
+            }
+        ]]);
 
         const result: any = await (getFinancialStats as any)(request);
 
@@ -685,6 +711,10 @@ describe('getFinancialStats Cloud Function', () => {
         expect(result.revenue.total).toBe(4800); // 1800 + 3000
         expect(result.revenue.invoiceCount).toBe(2);
         expect(result.revenue.currency).toBe('usd');
+
+        // Verify GCP Cost Details
+        expect(result.cost.currency).toBe('eur');
+        expect(result.cost.budget).toEqual({ amount: 10000, currency: 'eur' });
 
         // Verify Cost Link
         expect(result.cost.billingAccountId).toBe('000000-000000-000000');

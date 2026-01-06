@@ -4,6 +4,7 @@ import * as admin from 'firebase-admin';
 import { onAdminCall } from '../shared/auth';
 import { getStripe } from '../stripe/client';
 import { CloudBillingClient } from '@google-cloud/billing';
+import { BudgetServiceClient } from '@google-cloud/billing-budgets';
 
 /**
  * Normalizes error messages by replacing dynamic values (numbers, IDs) with placeholders.
@@ -672,7 +673,11 @@ export const getFinancialStats = onAdminCall<void, any>({
             cost: {
                 billingAccountId: null as string | null,
                 projectId: process.env.GCLOUD_PROJECT || '',
-                reportUrl: null as string | null
+                reportUrl: null as string | null,
+                currency: (process.env.GCP_BILLING_CURRENCY || 'usd').toLowerCase(),
+                budget: process.env.GCP_BILLING_BUDGET
+                    ? { amount: Number(process.env.GCP_BILLING_BUDGET), currency: (process.env.GCP_BILLING_CURRENCY || 'usd').toLowerCase() }
+                    : null as { amount: number; currency: string } | null
             }
         };
 
@@ -742,6 +747,7 @@ export const getFinancialStats = onAdminCall<void, any>({
 
         // --- 3. Get GCP Billing Info ---
         const billingClient = new CloudBillingClient();
+        const budgetClient = new BudgetServiceClient();
         const projectIdForBilling = process.env.GCLOUD_PROJECT;
         const projectName = `projects/${projectIdForBilling}`;
 
@@ -756,6 +762,40 @@ export const getFinancialStats = onAdminCall<void, any>({
                 if (id) {
                     // Generate direct link to reports
                     stats.cost.reportUrl = `https://console.cloud.google.com/billing/${id}/reports;project=${projectIdForBilling}`;
+
+                    // Fetch Billing Account details for currency
+                    try {
+                        const [billingAccount] = await billingClient.getBillingAccount({ name: info.billingAccountName });
+                        if (billingAccount.currencyCode) {
+                            stats.cost.currency = billingAccount.currencyCode.toLowerCase();
+                        }
+                    } catch (e: any) {
+                        logger.warn(`Failed to fetch billing account details (permission required for service account):`, {
+                            error: e.message,
+                            billingAccount: info.billingAccountName,
+                            suggestion: 'Grant "Billing Account Viewer" to the Cloud Functions service account.'
+                        });
+                    }
+
+                    // Fetch Budgets (only if not manually overridden)
+                    if (!process.env.GCP_BILLING_BUDGET) {
+                        try {
+                            const [budgets] = await budgetClient.listBudgets({ parent: info.billingAccountName });
+                            if (budgets && budgets.length > 0) {
+                                // Find the first budget with a specified amount
+                                const budgetWithAmount = budgets.find(b => b.amount?.specifiedAmount);
+                                if (budgetWithAmount && budgetWithAmount.amount?.specifiedAmount) {
+                                    stats.cost.budget = {
+                                        amount: Number(budgetWithAmount.amount.specifiedAmount.units || 0) * 100 +
+                                            Math.floor((budgetWithAmount.amount.specifiedAmount.nanos || 0) / 10000000),
+                                        currency: (budgetWithAmount.amount.specifiedAmount.currencyCode || 'usd').toLowerCase()
+                                    };
+                                }
+                            }
+                        } catch (e: any) {
+                            logger.warn('Failed to fetch budgets:', e.message);
+                        }
+                    }
                 }
             }
         } catch (e: any) {
