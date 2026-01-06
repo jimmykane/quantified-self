@@ -1,7 +1,7 @@
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
-import { ALLOWED_CORS_ORIGINS } from '../utils';
+import { onAdminCall } from '../shared/auth';
 import { getStripe } from '../stripe/client';
 import { CloudBillingClient } from '@google-cloud/billing';
 
@@ -122,24 +122,13 @@ async function enrichUsers(
  * - Enrich current page only: ~4 reads per user (subscription, garmin, suunto, coros)
  * - For pageSize=10: ~40 Firestore reads total
  */
-export const listUsers = onCall({
+export const listUsers = onAdminCall<ListUsersRequest, any>({
     region: 'europe-west2',
-    cors: ALLOWED_CORS_ORIGINS,
     memory: '256MiB',
     timeoutSeconds: 120,
 }, async (request) => {
-    // 1. Check authentication
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
-    }
-
-    // 2. Check for admin claim
-    if (request.auth.token.admin !== true) {
-        throw new HttpsError('permission-denied', 'Only admins can call this function.');
-    }
-
     try {
-        const data = request.data as ListUsersRequest || {};
+        const data = request.data || {};
         const pageSize = data.pageSize ? parseInt(String(data.pageSize)) : 10;
         const page = data.page ? parseInt(String(data.page)) : 0;
         const searchTerm = (data.searchTerm || '').toLowerCase().trim();
@@ -286,18 +275,10 @@ export const listUsers = onCall({
  * Gets the total number of users in the system, broken down by subscription status.
  * Uses optimized Aggregation Queries.
  */
-export const getUserCount = onCall({
+export const getUserCount = onAdminCall<void, any>({
     region: 'europe-west2',
-    cors: ALLOWED_CORS_ORIGINS,
     memory: '256MiB',
-}, async (request) => {
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
-    }
-    if (request.auth.token.admin !== true) {
-        throw new HttpsError('permission-denied', 'Only admins can call this function.');
-    }
-
+}, async () => {
     try {
         const db = admin.firestore();
 
@@ -365,21 +346,10 @@ export const getUserCount = onCall({
  * Gets aggregated statistics for all workout queues.
  * Uses efficient Firestore count() queries.
  */
-export const getQueueStats = onCall({
+export const getQueueStats = onAdminCall<void, any>({
     region: 'europe-west2',
-    cors: ALLOWED_CORS_ORIGINS,
     memory: '256MiB',
-}, async (request) => {
-    // 1. Check authentication
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
-    }
-
-    // 2. Check for admin claim
-    if (request.auth.token.admin !== true) {
-        throw new HttpsError('permission-denied', 'Only admins can call this function.');
-    }
-
+}, async () => {
     const PROVIDER_QUEUES: Record<string, string[]> = {
         'Suunto': ['suuntoAppWorkoutQueue'],
         'COROS': ['COROSAPIWorkoutQueue'],
@@ -535,23 +505,12 @@ interface SetMaintenanceModeRequest {
  * Sets the maintenance mode status using a Firestore document.
  * This is used instead of Remote Config to allow admin-controlled updates.
  */
-export const setMaintenanceMode = onCall({
+export const setMaintenanceMode = onAdminCall<SetMaintenanceModeRequest, any>({
     region: 'europe-west2',
-    cors: ALLOWED_CORS_ORIGINS,
     memory: '256MiB',
 }, async (request) => {
-    // 1. Check authentication
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
-    }
-
-    // 2. Check for admin claim
-    if (request.auth.token.admin !== true) {
-        throw new HttpsError('permission-denied', 'Only admins can call this function.');
-    }
-
     try {
-        const data = request.data as SetMaintenanceModeRequest;
+        const data = request.data;
         const env = data.env || 'prod'; // Default to prod for safety/legacy
         const msg = data.message || "";
         const db = admin.firestore();
@@ -564,7 +523,7 @@ export const setMaintenanceMode = onCall({
             enabled: data.enabled,
             message: msg,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            updatedBy: request.auth.uid,
+            updatedBy: request.auth!.uid,
         });
 
         // 2. Update Firebase Remote Config (for client source of truth)
@@ -602,7 +561,7 @@ export const setMaintenanceMode = onCall({
         await rc.validateTemplate(template);
         await rc.publishTemplate(template);
 
-        logger.info(`Maintenance mode [${env}] ${data.enabled ? 'ENABLED' : 'DISABLED'} by ${request.auth.uid} (Synced to Remote Config)`);
+        logger.info(`Maintenance mode [${env}] ${data.enabled ? 'ENABLED' : 'DISABLED'} by ${request.auth!.uid} (Synced to Remote Config)`);
 
         return {
             success: true,
@@ -620,21 +579,10 @@ export const setMaintenanceMode = onCall({
 /**
  * Gets the current maintenance mode status from Firestore.
  */
-export const getMaintenanceStatus = onCall({
+export const getMaintenanceStatus = onAdminCall<void, any>({
     region: 'europe-west2',
-    cors: ALLOWED_CORS_ORIGINS,
     memory: '256MiB',
-}, async (request) => {
-    // 1. Check authentication
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
-    }
-
-    // 2. Check for admin claim
-    if (request.auth.token.admin !== true) {
-        throw new HttpsError('permission-denied', 'Only admins can call this function.');
-    }
-
+}, async () => {
     try {
         const db = admin.firestore();
         const [prodDoc, betaDoc, devDoc, legacyDoc] = await Promise.all([
@@ -674,21 +622,10 @@ export const getMaintenanceStatus = onCall({
  * 
  * SECURITY: Critical function. Only strictly verified admins can call this.
  */
-export const impersonateUser = onCall({
+export const impersonateUser = onAdminCall<{ uid: string }, { token: string }>({
     region: 'europe-west2',
-    cors: ALLOWED_CORS_ORIGINS,
     memory: '256MiB',
 }, async (request) => {
-    // 1. Check authentication
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
-    }
-
-    // 2. Check for admin claim
-    if (request.auth.token.admin !== true) {
-        throw new HttpsError('permission-denied', 'Only admins can call this function.');
-    }
-
     const targetUid = request.data.uid;
     if (!targetUid || typeof targetUid !== 'string') {
         throw new HttpsError('invalid-argument', 'The function must be called with a valid user UID.');
@@ -698,12 +635,12 @@ export const impersonateUser = onCall({
         // 3. Generate Custom Token
         // detailed claims are optional but good for future security rules
         const additionalClaims = {
-            impersonatedBy: request.auth.uid
+            impersonatedBy: request.auth!.uid
         };
 
         const customToken = await admin.auth().createCustomToken(targetUid, additionalClaims);
 
-        logger.info(`Admin ${request.auth.uid} is impersonating user ${targetUid}`);
+        logger.info(`Admin ${request.auth!.uid} is impersonating user ${targetUid}`);
 
         return {
             token: customToken
@@ -721,22 +658,10 @@ export const impersonateUser = onCall({
  * - Revenue: Calculated from Stripe Invoices (Total - Tax)
  * - Cost: Links to GCP Cloud Billing Report (since API doesn't provide live spend safely)
  */
-export const getFinancialStats = onCall({
+export const getFinancialStats = onAdminCall<void, any>({
     region: 'europe-west2',
-    cors: ALLOWED_CORS_ORIGINS,
     memory: '256MiB',
-    secrets: ['STRIPE_SECRET_KEY'], // Ensure we have access to the key
-}, async (request) => {
-    // 1. Check authentication
-    if (!request.auth) {
-        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
-    }
-
-    // 2. Check for admin claim
-    if (request.auth.token.admin !== true) {
-        throw new HttpsError('permission-denied', 'Only admins can call this function.');
-    }
-
+}, async () => {
     try {
         const stats = {
             revenue: {
