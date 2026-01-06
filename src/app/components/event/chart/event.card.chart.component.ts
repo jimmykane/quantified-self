@@ -357,7 +357,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     chart.cursor.interactions.hitOptions.hitTolerance = 20;
     chart.cursor.interactions.hitOptions.noFocus = true;
 
-    chart.cursor.behavior = this.chartCursorBehaviour;
+    chart.cursor.behavior = 'none'; // Disable initially to prevent auto-zooms
     chart.cursor.zIndex = 10;
     chart.cursor.hideSeriesTooltipsOnSelection = true;
 
@@ -939,21 +939,88 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // Since we created series, we can get them from chart
     const series = this.chart.series.values;
 
-    // Show if needed
-    series.forEach(s => this.shouldHideSeries(s) ? s.hide() : s.show());
+    // Show if needed without animations to prevent unwanted auto-zooms
+    series.forEach(s => this.shouldHideSeries(s) ? s.hide(0) : s.show(0));
     // Store at local storage the visible / non visible series
     series.forEach(s => s.hidden ? this.chartSettingsLocalStorageService.hideSeriesID(this.event, s.id) : this.chartSettingsLocalStorageService.showSeriesID(this.event, s.id));
-    // Snap to series if distance axis
-    if (this.xAxisType === XAxisTypes.Distance) {
-      this.chart.cursor.snapToSeries = series;
-    }
+    // Snap to series will be set after zoom reset to avoid interference
 
     if (this.xAxisType === XAxisTypes.Time) {
       // this.addStartPauseSeriesRanges(this.chart, this.xAxisType, series);
       this.addStartPauseTimeAxisRanges(<am4charts.DateAxis>this.chart.xAxes.getIndex(0));
     }
 
-    this.chart.zoomOut();
+    // #5: Robust Zoom Reset for Multi-Activity charts
+    // Wrapped in a longer timeout to ensure ALL chunks are processed and amCharts has stable ranges.
+    // Multi-activity charts often conflict with amCharts automatic mini-validation cycles.
+    setTimeout(() => {
+      if (!this.chart || !this.chart.xAxes) {
+        return;
+      }
+
+      this.logger.info('EventCardChartComponent: Executing final robust zoom reset');
+
+      // Calculate total max distance for explicit zoom if in Distance mode
+      let totalMaxDistance = 0;
+      if (this.xAxisType === XAxisTypes.Distance) {
+        this.selectedActivities.forEach(a => {
+          const distanceResult: any = a.getDistance ? a.getDistance() : 0;
+          const distance = typeof distanceResult === 'number' ? distanceResult : (distanceResult?.value || 0);
+          if (distance > totalMaxDistance) {
+            totalMaxDistance = distance;
+          }
+        });
+      }
+
+      this.chart.invalidateData(); // One last re-eval of all series data
+
+      this.chart.xAxes.each(axis => {
+        // Disable any persistent selection and force recalculation
+        (axis as any).keepSelection = false;
+
+        if (this.xAxisType === XAxisTypes.Distance && totalMaxDistance > 0 && axis instanceof this.charts.ValueAxis) {
+          // Reset first to force clean state
+          axis.min = undefined;
+          axis.max = undefined;
+          axis.strictMinMax = false;
+
+          axis.min = 0;
+          axis.max = totalMaxDistance;
+          axis.strictMinMax = true; // Lock to the full range
+
+          if ((axis as any).zoomToValues) {
+            (axis as any).zoomToValues(0, totalMaxDistance, false, true);
+          }
+        } else {
+          axis.start = 0;
+          axis.end = 1;
+          axis.zoom({ start: 0, end: 1 }, false, true);
+        }
+      });
+
+      if (this.chart.scrollbarX) {
+        this.chart.scrollbarX.start = 0;
+        this.chart.scrollbarX.end = 1;
+        (this.chart.scrollbarX as any).zoom({ start: 0, end: 1 }, false, true);
+      }
+
+      // Re-enable cursor behavior after zoom is stable
+      if (this.chart.cursor) {
+        this.chart.cursor.behavior = this.chartCursorBehaviour;
+        // Re-enable snapping after zoom is stable
+        if (this.xAxisType === XAxisTypes.Distance) {
+          this.chart.cursor.snapToSeries = this.chart.series.values;
+        }
+      }
+
+      // Final fallback
+      if ((this.chart as any).zoomOut) {
+        (this.chart as any).zoomOut();
+      }
+
+      this.changeDetector.detectChanges();
+    }, 2000); // Increased delay to 2s to be absolutely sure
+
     this.loaded();
     this.changeDetector.detectChanges();
   }
@@ -1574,10 +1641,10 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     switch (xAxisType) {
       case XAxisTypes.Distance:
         xAxis = chart.xAxes.push(new this.charts.ValueAxis());
-        // xAxis.extraMax = 0.01;
+        xAxis.extraMax = 0.05; // Give more breathing room
 
         xAxis.renderer.minGridDistance = 40;
-        xAxis.strictMinMax = true;
+        // xAxis.strictMinMax = true; // Can prevent auto-scaling with incremental data
 
         xAxis.numberFormatter = new this.core.NumberFormatter();
         xAxis.numberFormatter.numberFormat = `#`;
