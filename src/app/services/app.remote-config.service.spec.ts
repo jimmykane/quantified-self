@@ -168,6 +168,82 @@ describe('AppRemoteConfigService', () => {
         });
     });
 
+    describe('getOrCreateInstanceId', () => {
+        it('should use crypto.randomUUID when available', () => {
+            // This is already mocked in beforeEach
+            // crypto.randomUUID: () => 'test-uuid'
+
+            // Re-inject service to ensure it hits getOrCreateInstanceId with fresh state
+            TestBed.resetTestingModule();
+            const localStorageMock = {
+                getItem: vi.fn().mockReturnValue(null),
+                setItem: vi.fn()
+            };
+            Object.defineProperty(global, 'localStorage', { value: localStorageMock, writable: true });
+
+            TestBed.configureTestingModule({
+                providers: [
+                    AppRemoteConfigService,
+                    { provide: AppWindowService, useValue: mockWindowService },
+                    { provide: AppUserService, useValue: mockUserService }
+                ]
+            });
+            service = TestBed.inject(AppRemoteConfigService);
+
+            expect(localStorageMock.setItem).toHaveBeenCalledWith('rc_instance_id', 'test-uuid');
+        });
+
+        it('should use fallback when crypto.randomUUID is not available', () => {
+            // Mock crypto.randomUUID to be undefined
+            Object.defineProperty(global, 'crypto', {
+                value: { randomUUID: undefined },
+                writable: true
+            });
+
+            // Mock localStorage
+            const localStorageMock = {
+                getItem: vi.fn().mockReturnValue(null),
+                setItem: vi.fn()
+            };
+            Object.defineProperty(global, 'localStorage', { value: localStorageMock, writable: true });
+
+            TestBed.resetTestingModule();
+            TestBed.configureTestingModule({
+                providers: [
+                    AppRemoteConfigService,
+                    { provide: AppWindowService, useValue: mockWindowService },
+                    { provide: AppUserService, useValue: mockUserService }
+                ]
+            });
+            service = TestBed.inject(AppRemoteConfigService);
+
+            // Verify a UUID-like string was set
+            const call = localStorageMock.setItem.mock.calls[0];
+            expect(call[0]).toBe('rc_instance_id');
+            expect(call[1]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+        });
+
+        it('should return existing id from localStorage if available', () => {
+            const localStorageMock = {
+                getItem: vi.fn().mockReturnValue('existing-id'),
+                setItem: vi.fn()
+            };
+            Object.defineProperty(global, 'localStorage', { value: localStorageMock, writable: true });
+
+            TestBed.resetTestingModule();
+            TestBed.configureTestingModule({
+                providers: [
+                    AppRemoteConfigService,
+                    { provide: AppWindowService, useValue: mockWindowService },
+                    { provide: AppUserService, useValue: mockUserService }
+                ]
+            });
+            service = TestBed.inject(AppRemoteConfigService);
+
+            expect(localStorageMock.setItem).not.toHaveBeenCalled();
+        });
+    });
+
     describe('Environment-specific keys', () => {
         it('should use maintenance_mode_dev when localhost is true', async () => {
             // We need to mock environment for this test specifically
