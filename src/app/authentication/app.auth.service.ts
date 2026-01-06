@@ -2,7 +2,7 @@ import { inject, Injectable, EnvironmentInjector, runInInjectionContext, NgZone 
 import { Observable, of } from 'rxjs';
 import { map, shareReplay, switchMap, take } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Auth, user, signInWithPopup, getRedirectResult, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, sendPasswordResetEmail, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, OAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, fetchSignInMethodsForEmail, linkWithCredential, AuthCredential, linkWithPopup, AuthProvider } from '@angular/fire/auth';
+import { Auth, user, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, sendPasswordResetEmail, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, OAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, fetchSignInMethodsForEmail, linkWithCredential, AuthCredential, linkWithPopup, AuthProvider } from '@angular/fire/auth';
 import { Firestore, doc, onSnapshot, terminate, clearIndexedDbPersistence } from '@angular/fire/firestore';
 import { Privacy, User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../services/app.user.service';
@@ -140,15 +140,8 @@ export class AppAuthService {
         this.logger.log('[Auth] Popup succeeded:', result);
         return result;
       } else {
-        // Redirect is deprecated/removed in this refactor favor of simple popup or different flow if needed, 
-        // OR if we want to keep it for Google:
-        this.logger.log('[Auth] Using popup (redirect removed for consistency in refactor, or restore if needed)...');
-        // Actually, let's keep popup for consistency as redirect caused issues before or just use popup everywhere.
-        // But original code had logic. Let's stick to popup for now to be safe with removed imports unless requested.
-        // Wait, I strictly removed signInWithRedirect import. So I must use popup or re-import.
-        // Re-reading error: "signInWithRedirect" was removed.
-        // Let's us signInWithPopup for everything for now.
-        return await signInWithPopup(this.auth, provider);
+        this.logger.log('[Auth] Using redirect...');
+        return await signInWithRedirect(this.auth, provider);
       }
     } catch (error: any) {
       this.logger.error('[Auth] signInWithProvider error:', error);
@@ -166,6 +159,10 @@ export class AppAuthService {
   async githubLogin() {
     const provider = new GithubAuthProvider();
     return this.signInWithProvider(provider);
+  }
+
+  async getRedirectResult() {
+    return getRedirectResult(this.auth);
   }
 
 

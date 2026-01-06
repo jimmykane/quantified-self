@@ -40,6 +40,7 @@ describe('LoginComponent', () => {
         linkCredential: vi.fn().mockResolvedValue({}),
         sendEmailLink: vi.fn().mockResolvedValue(true),
         linkWithPopup: vi.fn().mockResolvedValue({}),
+        getRedirectResult: vi.fn().mockResolvedValue(null),
         localStorageService: {
             getItem: vi.fn().mockReturnValue(null),
             setItem: vi.fn(),
@@ -48,7 +49,7 @@ describe('LoginComponent', () => {
     };
 
     const mockUserService = {
-        getUserByID: () => of({ displayName: 'Test User' })
+        getUserByID: vi.fn().mockReturnValue(of({ displayName: 'Test User' }))
     };
 
     const mockRouter = {
@@ -312,5 +313,55 @@ describe('LoginComponent', () => {
                 message: expect.stringContaining('Link error')
             })
         }));
+    });
+
+    it('should handle successful redirect result on init', async () => {
+        const mockRedirectResult = { user: { uid: 'redirect-user' }, credential: { signInMethod: 'google.com' } };
+        (mockAuthService.getRedirectResult as any).mockResolvedValue(mockRedirectResult);
+        (mockUserService.getUserByID as any).mockReturnValue(of({ displayName: 'Redirect User' }));
+
+        await component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockAuthService.getRedirectResult).toHaveBeenCalled();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
+        expect(mockSnackBar.open).toHaveBeenCalledWith(expect.stringContaining('Welcome back Redirect User'), undefined, expect.anything());
+    });
+
+    it('should handle failed redirect result on init', async () => {
+        const redirectError = { code: 'auth/network-request-failed', message: 'Network error' };
+        (mockAuthService.getRedirectResult as any).mockRejectedValue(redirectError);
+        (mockDialog as any).open = vi.fn();
+
+        await component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockAuthService.getRedirectResult).toHaveBeenCalled();
+        expect((mockDialog as any).open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            data: expect.objectContaining({
+                title: 'Login Failed',
+                message: expect.stringContaining('Network connection failed')
+            })
+        }));
+    });
+
+    it('should handle account collision from redirect result', async () => {
+        const collisionError = {
+            code: 'auth/account-exists-with-different-credential',
+            customData: { email: 'conflict@example.com' }
+        };
+        (mockAuthService.getRedirectResult as any).mockRejectedValue(collisionError);
+        (mockAuthService.fetchSignInMethods as any).mockResolvedValue(['google.com']);
+
+        const mockDialogRef = {
+            afterClosed: () => of(null) // Cancel linking for this test
+        };
+        (mockDialog as any).open = vi.fn().mockReturnValue(mockDialogRef);
+
+        await component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 10)); // Allow more time for nested promises
+
+        expect(mockAuthService.fetchSignInMethods).toHaveBeenCalledWith('conflict@example.com');
+        expect((mockDialog as any).open).toHaveBeenCalled();
     });
 });
