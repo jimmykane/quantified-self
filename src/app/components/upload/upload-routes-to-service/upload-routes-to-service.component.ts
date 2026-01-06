@@ -1,4 +1,4 @@
-import { Component, inject, Inject } from '@angular/core';
+import { Component, inject, Inject, Optional } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatDialog, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -32,11 +32,11 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
     protected processingService: AppProcessingService,
     private http: HttpClient,
     protected router: Router,
-    @Inject(MAT_DIALOG_DATA) public data: any,
-    public dialogRef: MatDialogRef<UploadRoutesToServiceComponent>,
+    @Optional() @Inject(MAT_DIALOG_DATA) public data: any,
+    @Optional() public dialogRef: MatDialogRef<UploadRoutesToServiceComponent>,
     logger: LoggerService) {
     super(snackBar, dialog, processingService, router, logger);
-    if (data.serviceName) {
+    if (data?.serviceName) {
       this.serviceName = data.serviceName;
     }
   }
