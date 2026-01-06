@@ -105,6 +105,13 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     this.routerEventSubscription = this.router.events.subscribe((event) => {
       if (event instanceof NavigationEnd) {
         this.updateOnboardingState();
+        let route = this.router.routerState.root;
+        while (route.firstChild) {
+          route = route.firstChild;
+        }
+        if (route.snapshot.data['title']) {
+          this.title = route.snapshot.data['title'];
+        }
       }
       // RoutesRecognized logic removed - handled by SeoService
     });
