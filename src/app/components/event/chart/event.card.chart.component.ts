@@ -942,6 +942,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       let totalMaxDuration = 0;
       const durationStart = 0;
 
+      let minTime = Infinity;
+      let maxTime = -Infinity;
+
       this.selectedActivities.forEach(a => {
         if (this.xAxisType === XAxisTypes.Distance) {
           const distanceResult: any = a.getDistance ? a.getDistance() : 0;
@@ -955,6 +958,16 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           const duration = typeof durationResult === 'number' ? durationResult : (durationResult?.value || 0);
           if (duration > totalMaxDuration) {
             totalMaxDuration = duration;
+          }
+        }
+        if (this.xAxisType === XAxisTypes.Time) {
+          const startTime = a.startDate.getTime();
+          const endTime = a.endDate.getTime();
+          if (startTime < minTime) {
+            minTime = startTime;
+          }
+          if (endTime > maxTime) {
+            maxTime = endTime;
           }
         }
       });
@@ -987,6 +1000,16 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           axis.min = durationStart;
           axis.max = durationStart + (totalMaxDuration + 2) * 1000; // Add 2s buffer
           // axis.strictMinMax = true; // Relax to allow amCharts some flexibility
+
+          axis.zoom({ start: 0, end: 1 }, false, true);
+        } else if (this.xAxisType === XAxisTypes.Time && minTime !== Infinity && axis instanceof this.charts.DateAxis) {
+          // Reset first to force clean state
+          axis.min = undefined;
+          axis.max = undefined;
+          axis.strictMinMax = false;
+
+          axis.min = minTime;
+          axis.max = maxTime;
 
           axis.zoom({ start: 0, end: 1 }, false, true);
         } else {
@@ -1662,8 +1685,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       case XAxisTypes.Duration:
       case XAxisTypes.Time:
         xAxis = chart.xAxes.push(new this.charts.DateAxis());
+        xAxis.baseInterval = { timeUnit: 'second', count: 1 };
         if (xAxisType === XAxisTypes.Duration) {
-          xAxis.baseInterval = { timeUnit: 'second', count: 1 };
           xAxis.extraMax = 0.01; // Give a tiny bit of breathing room
         }
 
