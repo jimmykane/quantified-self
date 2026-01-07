@@ -315,23 +315,6 @@
                     </canvas>
                 </div>
             </div>
-
-            <!-- Auth Provider Breakdown Chart -->
-            <div class="glass-card" style="margin-bottom: 0;">
-                <h3 class="chart-header">
-                    <mat-icon style="margin-right: 8px; vertical-align: middle;">security</mat-icon>
-                    Auth Provider Breakdown
-                </h3>
-
-                <div class="chart-wrapper" style="height: 220px; padding: 16px;">
-                    <canvas baseChart [data]="authPieChartData" [options]="authPieChartOptions" [type]="'pie'">
-                    </canvas>
-                </div>
-
-                <div *ngIf="!userStats?.providers" class="empty-state" style="padding: 0 24px 24px;">
-                    No provider data available
-                </div>
-            </div>
         </div>
 
         <!-- DLQ Stats -->
@@ -513,6 +496,23 @@
                 <div class="app-spinner-mini" *ngIf="!userStats">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
+            </div>
+        </div>
+
+        <!-- Auth Provider Breakdown Chart -->
+        <div class="glass-card" style="margin-bottom: 24px;">
+            <h3 class="chart-header">
+                <mat-icon style="margin-right: 8px; vertical-align: middle;">security</mat-icon>
+                Auth Provider Breakdown
+            </h3>
+
+            <div class="chart-wrapper" style="height: 220px; padding: 16px;">
+                <canvas baseChart [data]="authPieChartData" [options]="authPieChartOptions" [type]="'pie'">
+                </canvas>
+            </div>
+
+            <div *ngIf="!userStats?.providers" class="empty-state" style="padding: 0 24px 24px;">
+                No provider data available
             </div>
         </div>
 
