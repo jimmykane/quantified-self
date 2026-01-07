@@ -88,13 +88,13 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* SSR Hydration: Hide SVG icons until Angular hydrates to prevent broken icon flash */
-mat-icon[svgIcon] {
+/* SSR Hydration: Hide ALL icons (font & SVG) until Angular hydrates to prevent FOUT/Flash */
+mat-icon {
   opacity: 0;
   transition: opacity 0.2s ease-in;
 }
 
-body.app-hydrated mat-icon[svgIcon] {
+body.app-hydrated mat-icon {
   opacity: 1;
 }
 

@@ -57,6 +57,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   private routerEventSubscription!: Subscription;
   public authState: boolean | null = null;
   public isOnboardingRoute = false;
+  private isFirstLoad = true;
   public onboardingCompleted = true; // Default to true to avoid hiding chrome of non-authenticated users prematurely
   public maintenanceMode$!: Observable<boolean>;
   public maintenanceMessage$!: Observable<string>;
@@ -81,6 +82,8 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     // Mark app as hydrated after Angular takes over (reveals SVG icons)
     afterNextRender(() => {
       document.body.classList.add('app-hydrated');
+      // Allow animations after initial render
+      setTimeout(() => this.isFirstLoad = false, 100);
     });
   }
 
@@ -197,6 +200,9 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
 
   prepareRoute(outlet: RouterOutlet) {
+    if (this.isFirstLoad) {
+      return null;
+    }
     return outlet && outlet.activatedRouteData && outlet.activatedRouteData['animation'];
   }
 
