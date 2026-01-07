@@ -36,7 +36,6 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DataTableAbstractDirective, StatRowElement } from '../data-table/data-table-abstract.directive';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { EventsExportFormComponent } from '../events-export-form/events-export.form.component';
 import { MatDialog } from '@angular/material/dialog';
 import { OrderByDirection } from 'firebase/firestore';
@@ -86,7 +85,6 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   constructor(private snackBar: MatSnackBar,
     private eventService: AppEventService,
-    private deleteConfirmationBottomSheet: MatBottomSheet,
     private userService: AppUserService,
     changeDetector: ChangeDetectorRef,
     private eventColorService: AppEventColorService,
@@ -298,8 +296,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   async deleteSelection() {
     this.loading();
-    const deleteConfirmationBottomSheet = this.deleteConfirmationBottomSheet.open(DeleteConfirmationComponent);
-    this.deleteConfirmationSubscription = deleteConfirmationBottomSheet.afterDismissed().subscribe(async (result) => {
+    const dialogRef = this.dialog.open(DeleteConfirmationComponent);
+    this.deleteConfirmationSubscription = dialogRef.afterClosed().subscribe(async (result) => {
       if (!result) {
         this.loaded();
         return;

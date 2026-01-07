@@ -10,7 +10,6 @@ import { User } from '@sports-alliance/sports-lib';
 import { EventUtilities } from '@sports-alliance/sports-lib';
 import { take } from 'rxjs/operators';
 import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { DataDistance } from '@sports-alliance/sports-lib';
 import { ActivityUtilities } from '@sports-alliance/sports-lib';
 
@@ -34,7 +33,6 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
     private changeDetectorRef: ChangeDetectorRef,
     private router: Router,
     private snackBar: MatSnackBar,
-    private deleteConfirmationBottomSheet: MatBottomSheet,
     public dialog: MatDialog) {
   }
 
@@ -86,8 +84,8 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
   }
 
   async deleteActivity() {
-    const deleteConfirmationBottomSheet = this.deleteConfirmationBottomSheet.open(DeleteConfirmationComponent);
-    this.deleteConfirmationSubscription = deleteConfirmationBottomSheet.afterDismissed().subscribe(async (result) => {
+    const dialogRef = this.dialog.open(DeleteConfirmationComponent);
+    this.deleteConfirmationSubscription = dialogRef.afterClosed().subscribe(async (result) => {
       if (!result) {
         return;
       }

@@ -14,7 +14,6 @@ import { take } from 'rxjs/operators';
 import { Subscription } from 'rxjs';
 import { EventUtilities } from '@sports-alliance/sports-lib';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { MatIconModule } from '@angular/material/icon';
@@ -65,7 +64,6 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     private clipboardService: Clipboard,
     private sharingService: AppSharingService,
     private fileService: AppFileService,
-    private deleteConfirmationBottomSheet: MatBottomSheet,
     private http: HttpClient,
     private windowService: AppWindowService,
     private dialog: MatDialog) {
@@ -251,9 +249,8 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
 
   async delete() {
-    const deleteConfirmationBottomSheet = this.deleteConfirmationBottomSheet.open(DeleteConfirmationComponent, {
-    });
-    this.deleteConfirmationSubscription = deleteConfirmationBottomSheet.afterDismissed().subscribe(async (result) => {
+    const dialogRef = this.dialog.open(DeleteConfirmationComponent);
+    this.deleteConfirmationSubscription = dialogRef.afterClosed().subscribe(async (result) => {
       if (!result) {
         return;
       }
