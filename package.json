@@ -40,7 +40,7 @@
     "@angular/ssr": "^20.3.13",
     "@googlemaps/markerclustererplus": "^1.1.0",
     "@sentry/angular": "^10.29.0",
-    "@sports-alliance/sports-lib": "^6.1.5",
+    "@sports-alliance/sports-lib": "^6.1.6",
     "@types/file-saver": "^2.0.7",
     "@types/pako": "^1.0.7",
     "buffer": "^6.0.3",
