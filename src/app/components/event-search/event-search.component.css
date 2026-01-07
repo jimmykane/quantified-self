@@ -26,6 +26,7 @@ form {
 .button-groups {
   display: flex;
   align-items: center;
+  justify-content: center;
   flex-wrap: wrap;
   gap: 20px;
   margin-top: 16px;
@@ -91,6 +92,18 @@ mat-button-toggle:active {
   align-items: center;
   flex-wrap: wrap;
   gap: 16px;
+}
+
+/* Tablet: Reduce gap and padding to prevent overflow */
+@media (max-width: 959px) {
+  .button-groups {
+    gap: 12px;
+  }
+
+  mat-button-toggle-group {
+    padding: 3px !important;
+    gap: 3px;
+  }
 }
 
 /* Mobile: Ensure filters stay on one row or wrap gracefully */
