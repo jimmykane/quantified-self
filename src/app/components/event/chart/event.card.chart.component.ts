@@ -1019,11 +1019,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         }
       });
 
-      if (this.chart.scrollbarX) {
-        this.chart.scrollbarX.start = 0;
-        this.chart.scrollbarX.end = 1;
-        (this.chart.scrollbarX as any).zoom({ start: 0, end: 1 }, false, true);
-      }
 
       // Re-enable cursor behavior after zoom is stable
       if (this.chart.cursor) {
