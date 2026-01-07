@@ -31,7 +31,7 @@ export class AppRemoteConfigService {
         private userService: AppUserService,
         private logger: LoggerService,
         @Inject(APP_STORAGE) private storage: Storage,
-        @Inject(PLATFORM_ID) private platformId: Object
+        @Inject(PLATFORM_ID) private platformId: object
     ) {
         // Check admin status initially
         this.checkAdminStatus();

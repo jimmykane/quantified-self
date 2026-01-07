@@ -68,7 +68,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     private overlay: Overlay,
     private userService: AppUserService,
     private snackBar: MatSnackBar,
-    @Inject(PLATFORM_ID) private platformId: Object
+    @Inject(PLATFORM_ID) private platformId: object
   ) {
   }
 
