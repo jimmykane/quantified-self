@@ -24,7 +24,11 @@ export class AppFileService {
       zip.file(file.fileName, file.data);
     });
 
-    const content = await zip.generateAsync({ type: 'blob' });
+    const content = await zip.generateAsync({
+      type: 'blob',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 6 } // Good balance between speed and compression
+    });
     saveAs(content, zipFileName);
   }
 

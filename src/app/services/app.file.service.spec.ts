@@ -79,7 +79,11 @@ describe('AppFileService', () => {
             expect(mockZipFile).toHaveBeenCalledTimes(2);
             expect(mockZipFile).toHaveBeenCalledWith('file1.txt', files[0].data);
             expect(mockZipFile).toHaveBeenCalledWith('file2.txt', files[1].data);
-            expect(mockZipGenerateAsync).toHaveBeenCalledWith({ type: 'blob' });
+            expect(mockZipGenerateAsync).toHaveBeenCalledWith({
+                type: 'blob',
+                compression: 'DEFLATE',
+                compressionOptions: { level: 6 }
+            });
             expect(FileSaver.saveAs).toHaveBeenCalledWith(mockZipBlob, zipName);
         });
 
