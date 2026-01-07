@@ -88,6 +88,16 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* SSR Hydration: Hide SVG icons until Angular hydrates to prevent broken icon flash */
+mat-icon[svgIcon] {
+  opacity: 0;
+  transition: opacity 0.2s ease-in;
+}
+
+body.app-hydrated mat-icon[svgIcon] {
+  opacity: 1;
+}
+
 .dark-theme {
   $dark-bg: map.get($app-dark-theme, background);
   $dark-fg: map.get($app-dark-theme, foreground);

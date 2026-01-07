@@ -6,6 +6,7 @@ import {
   OnDestroy,
   OnInit,
   ViewChild,
+  afterNextRender,
 } from '@angular/core';
 import { MatIconRegistry } from '@angular/material/icon';
 import { MatSidenav } from '@angular/material/sidenav';
@@ -76,6 +77,11 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   ) {
     // this.afa.setAnalyticsCollectionEnabled(true)
     this.iconService.registerIcons();
+
+    // Mark app as hydrated after Angular takes over (reveals SVG icons)
+    afterNextRender(() => {
+      document.body.classList.add('app-hydrated');
+    });
   }
 
   async ngOnInit() {
