@@ -5,6 +5,7 @@ import { onAdminCall } from '../shared/auth';
 import { getStripe } from '../stripe/client';
 import { CloudBillingClient } from '@google-cloud/billing';
 import { BudgetServiceClient } from '@google-cloud/billing-budgets';
+import { BigQuery } from '@google-cloud/bigquery';
 
 /**
  * Normalizes error messages by replacing dynamic values (numbers, IDs) with placeholders.
@@ -667,7 +668,7 @@ export const getFinancialStats = onAdminCall<void, any>({
         const stats = {
             revenue: {
                 total: 0,
-                currency: 'usd',
+                currency: (process.env.GCP_BILLING_CURRENCY || 'usd').toLowerCase(),
                 invoiceCount: 0
             },
             cost: {
@@ -675,9 +676,11 @@ export const getFinancialStats = onAdminCall<void, any>({
                 projectId: process.env.GCLOUD_PROJECT || '',
                 reportUrl: null as string | null,
                 currency: (process.env.GCP_BILLING_CURRENCY || 'usd').toLowerCase(),
+                total: process.env.GCP_BILLING_SPEND ? Number(process.env.GCP_BILLING_SPEND) : null as number | null,
                 budget: process.env.GCP_BILLING_BUDGET
                     ? { amount: Number(process.env.GCP_BILLING_BUDGET), currency: (process.env.GCP_BILLING_CURRENCY || 'usd').toLowerCase() }
-                    : null as { amount: number; currency: string } | null
+                    : null as { amount: number; currency: string } | null,
+                advice: 'To automate cost tracking, enable "Billing Export to BigQuery" in the GCP Console.'
             }
         };
 
@@ -745,6 +748,15 @@ export const getFinancialStats = onAdminCall<void, any>({
         stats.revenue.currency = currency;
         stats.revenue.invoiceCount = count;
 
+        // If GCP cost currency is still the default 'usd' and hasn't been overridden, 
+        // use the revenue currency as a more likely fallback.
+        if (!process.env.GCP_BILLING_CURRENCY && stats.cost.currency === 'usd') {
+            stats.cost.currency = currency;
+            if (stats.cost.budget) {
+                stats.cost.budget.currency = currency;
+            }
+        }
+
         // --- 3. Get GCP Billing Info ---
         const billingClient = new CloudBillingClient();
         const budgetClient = new BudgetServiceClient();
@@ -768,6 +780,8 @@ export const getFinancialStats = onAdminCall<void, any>({
                         const [billingAccount] = await billingClient.getBillingAccount({ name: info.billingAccountName });
                         if (billingAccount.currencyCode) {
                             stats.cost.currency = billingAccount.currencyCode.toLowerCase();
+                            // Update budget and spend currency if they were defaulted
+                            if (stats.cost.budget) stats.cost.budget.currency = stats.cost.currency;
                         }
                     } catch (e: any) {
                         logger.warn(`Failed to fetch billing account details (permission required for service account):`, {
@@ -795,6 +809,63 @@ export const getFinancialStats = onAdminCall<void, any>({
                         } catch (e: any) {
                             logger.warn('Failed to fetch budgets:', e.message);
                         }
+                    }
+
+                    // --- 4. Fetch Actual Spend via BigQuery ---
+                    // User provided: Project: billing-administration-gr, Dataset: all_billing_data
+                    const bqProjectId = 'billing-administration-gr';
+                    const bqDatasetId = 'all_billing_data';
+
+                    try {
+                        const bigquery = new BigQuery({ projectId: bqProjectId });
+
+                        // 1. Find the table name dynamically (it changes based on export config)
+                        const [tables] = await bigquery.dataset(bqDatasetId).getTables();
+                        const exportTable = tables.find(t => t.id && t.id.startsWith('gcp_billing_export_v1_'));
+
+                        if (exportTable) {
+                            const tableName = exportTable.id;
+                            logger.info(`Found BigQuery export table: ${tableName}`);
+                            const fullTableName = `\`${bqProjectId}.${bqDatasetId}.${tableName}\``;
+
+                            // 2. Query for current month's cost
+                            // invoice.month is in YYYYMM format
+                            const query = `
+                                SELECT 
+                                    SUM(cost) + SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as total_cost,
+                                    currency 
+                                FROM ${fullTableName} 
+                                WHERE invoice.month = FORMAT_DATE('%Y%m', CURRENT_DATE())
+                                AND project.id = @projectId
+                                GROUP BY currency
+                                LIMIT 1
+                            `;
+
+                            const options = {
+                                query,
+                                location: 'EU',
+                                params: { projectId: projectIdForBilling }
+                            };
+
+                            const [rows] = await bigquery.query(options);
+
+                            // Successfully connected to BigQuery export - clear the advice message
+                            (stats.cost as any).advice = undefined;
+
+                            if (rows && rows.length > 0) {
+                                const row = rows[0];
+                                // Convert to cents for frontend compatibility
+                                stats.cost.total = (row.total_cost || 0) * 100;
+                                logger.info(`Calculated total cost: ${stats.cost.total} ${row.currency}`);
+                                if (row.currency) {
+                                    stats.cost.currency = row.currency.toLowerCase();
+                                }
+                            }
+                        } else {
+                            logger.warn(`No table found starting with 'gcp_billing_export_v1_' in dataset ${bqDatasetId}`);
+                        }
+                    } catch (bqError: any) {
+                        logger.warn('Failed to query BigQuery for billing stats:', bqError.message);
                     }
                 }
             }

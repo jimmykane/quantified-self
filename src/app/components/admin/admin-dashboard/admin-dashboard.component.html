@@ -189,17 +189,33 @@
                     <mat-icon>cloud</mat-icon>
                     <span>GCP Estimated Cost</span>
                 </div>
-                <!-- Since we don't have the number, we show 'View Report' -->
-                <div class="app-stat-value" style="font-size: 1.5rem; display: flex; align-items: center; gap: 8px;">
+                <!-- If we have a numerical total (from override or later BigQuery export), show it -->
+                <div class="app-stat-value" *ngIf="!isLoadingFinancials && financialStats?.cost?.total !== null">
+                    {{ formatCurrency(financialStats?.cost?.total || 0, financialStats?.cost?.currency || 'eur') }}
+                </div>
+
+                <!-- Fallback to "View Report" if no numerical total is available -->
+                <div class="app-stat-value" *ngIf="!isLoadingFinancials && financialStats?.cost?.total === null"
+                    style="font-size: 1.5rem; display: flex; align-items: center; gap: 8px;">
                     View Report <mat-icon
                         style="font-size: 1.5rem; width: 1.5rem; height: 1.5rem;">open_in_new</mat-icon>
                 </div>
                 <div class="app-spinner-mini" *ngIf="isLoadingFinancials">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
-                <span class="stat-subtitle" *ngIf="financialStats" style="font-size: 0.75rem; opacity: 0.8;">
-                    Billing ID: {{ financialStats.cost.billingAccountId || 'N/A' }}
-                </span>
+                <div class="stat-subtitle" *ngIf="financialStats"
+                    style="font-size: 0.75rem; opacity: 0.8; display: flex; flex-direction: column; gap: 4px;">
+                    <span>Billing ID: {{ financialStats.cost.billingAccountId || 'N/A' }} ({{
+                        financialStats.cost.currency | uppercase }})</span>
+                    <span *ngIf="financialStats.cost.budget" style="font-weight: 500;">
+                        Budget: {{ formatCurrency(financialStats.cost.budget.amount,
+                        financialStats.cost.budget.currency) }}
+                    </span>
+                    <span *ngIf="financialStats.cost.advice"
+                        style="font-size: 0.65rem; color: var(--mat-sys-primary); margin-top: 4px; font-style: italic;">
+                        {{ financialStats.cost.advice }}
+                    </span>
+                </div>
             </div>
             <!-- Fallback if no report URL -->
             <div class="glass-card app-stat-card status-error"

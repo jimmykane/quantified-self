@@ -744,6 +744,30 @@ describe('getFinancialStats Cloud Function', () => {
         expect(mockStripeClient.invoices.list).toHaveBeenCalledTimes(2);
     });
 
+    it('should handle missing GCP permissions gracefully and fallback to revenue currency', async () => {
+        // Mock Firestore products
+        productsDocs.push({ id: 'prod_valid_1' });
+
+        // Mock Stripe response in EUR
+        mockStripeClient.invoices.list.mockResolvedValue({
+            has_more: false,
+            data: [
+                { id: 'inv_1', currency: 'eur', amount_paid: 2000, tax: 0, lines: { data: [{ amount: 2000, price: { product: 'prod_valid_1' } }] } }
+            ]
+        });
+
+        // Mock GCP Billing failing (Permission Denied)
+        mockGetProjectBillingInfo.mockRejectedValue(new Error('Permission Denied'));
+
+        const result: any = await (getFinancialStats as any)(request);
+
+        // Verify Revenue is in EUR
+        expect(result.revenue.currency).toBe('eur');
+        expect(result.revenue.total).toBe(2000);
+
+        // Verify Cost fallback to EUR
+        expect(result.cost.currency).toBe('eur');
+    });
     it('should handle missing GCP permissions gracefully', async () => {
         mockStripeClient.invoices.list.mockResolvedValue({ has_more: false, data: [] });
 
@@ -758,3 +782,4 @@ describe('getFinancialStats Cloud Function', () => {
         expect(result.cost.reportUrl).toBeNull();
     });
 });
+

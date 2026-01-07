@@ -85,7 +85,9 @@ export interface FinancialStats {
         projectId: string;
         reportUrl: string | null;
         currency: string;
+        total: number | null;
         budget: { amount: number; currency: string } | null;
+        advice?: string;
     };
 }
 
