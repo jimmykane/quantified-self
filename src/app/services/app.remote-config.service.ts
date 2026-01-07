@@ -1,4 +1,6 @@
-import { Injectable } from '@angular/core';
+import { APP_STORAGE } from './storage/app.storage.token';
+import { Inject, PLATFORM_ID, Injectable } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { Observable, BehaviorSubject, combineLatest } from 'rxjs';
 import { map, filter, shareReplay } from 'rxjs/operators';
 import { AppWindowService } from './app.window.service';
@@ -27,7 +29,9 @@ export class AppRemoteConfigService {
     constructor(
         private windowService: AppWindowService,
         private userService: AppUserService,
-        private logger: LoggerService
+        private logger: LoggerService,
+        @Inject(APP_STORAGE) private storage: Storage,
+        @Inject(PLATFORM_ID) private platformId: Object
     ) {
         // Check admin status initially
         this.checkAdminStatus();
