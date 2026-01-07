@@ -63,6 +63,8 @@
     max-width: 1400px;
     margin: 0 auto;
     width: 100%;
+    flex-wrap: wrap;
+    gap: 1rem;
 }
 
 /* Left Side: Hero content */
@@ -149,6 +151,8 @@
 
 /* Last card spans full width */
 .feature-card.full-width {
+    width: 100%;
+    margin: 0 1rem;
     grid-column: span 2;
     flex-direction: row;
     align-items: center;

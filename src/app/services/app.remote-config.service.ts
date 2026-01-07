@@ -5,6 +5,9 @@ import { AppWindowService } from './app.window.service';
 import { AppUserService } from './app.user.service';
 import { environment } from '../../environments/environment';
 import { LoggerService } from './logger.service';
+import { APP_STORAGE } from './storage/app.storage.token';
+import { Inject, PLATFORM_ID } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 
 /**
  * Remote Config Service - Bypasses Firebase SDK completely due to persistent bugs.
@@ -27,7 +30,9 @@ export class AppRemoteConfigService {
     constructor(
         private windowService: AppWindowService,
         private userService: AppUserService,
-        private logger: LoggerService
+        private logger: LoggerService,
+        @Inject(APP_STORAGE) private storage: Storage,
+        @Inject(PLATFORM_ID) private platformId: Object
     ) {
         // Check admin status initially
         this.checkAdminStatus();
@@ -155,7 +160,7 @@ export class AppRemoteConfigService {
 
     private getOrCreateInstanceId(): string {
         const key = 'rc_instance_id';
-        let id = localStorage.getItem(key);
+        let id = this.storage.getItem(key);
         if (!id) {
             // crypto.randomUUID() is only available in secure contexts (HTTPS/localhost)
             if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -168,21 +173,24 @@ export class AppRemoteConfigService {
                     return v.toString(16);
                 });
             }
-            localStorage.setItem(key, id);
+            this.storage.setItem(key, id);
         }
         return id;
     }
 
     private isBypassEnabled(): boolean {
         const STORAGE_KEY = 'bypass_maintenance';
-        const hasQueryParam = this.windowService.windowRef.location.search.includes('bypass_maintenance=true');
 
-        if (hasQueryParam) {
-            localStorage.setItem(STORAGE_KEY, 'true');
-            return true;
+        if (isPlatformBrowser(this.platformId)) {
+            const hasQueryParam = this.windowService.windowRef.location.search.includes('bypass_maintenance=true');
+
+            if (hasQueryParam) {
+                this.storage.setItem(STORAGE_KEY, 'true');
+                return true;
+            }
         }
 
-        return localStorage.getItem(STORAGE_KEY) === 'true';
+        return this.storage.getItem(STORAGE_KEY) === 'true';
     }
 
     getMaintenanceMode(): Observable<boolean> {

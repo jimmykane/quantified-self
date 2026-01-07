@@ -24,6 +24,7 @@ export class AppIconService {
         { name: 'facebook_logo', path: 'assets/logos/facebook_logo.svg' },
         { name: 'twitter_logo', path: 'assets/logos/twitter_logo.svg' },
         { name: 'github_logo', path: 'assets/logos/github_logo.svg' },
+        { name: 'antigravity', path: 'assets/logos/antigravity.svg' },
         { name: 'jetbrains_logo', path: 'assets/logos/jetbrains.svg' },
         { name: 'heart_rate', path: 'assets/icons/heart-rate.svg' },
         { name: 'heart_pulse', path: 'assets/icons/heart-pulse.svg' },
