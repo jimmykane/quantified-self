@@ -37,6 +37,7 @@ import { USAGE_LIMITS } from '../../../functions/src/shared/limits';
 import { AppEventInterface } from '../../../functions/src/shared/app-event.interface'; // Import Shared Interface
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import { LoggerService } from './logger.service';
+import { AppFileService } from './app.file.service';
 
 @Injectable({
   providedIn: 'root',
@@ -46,11 +47,12 @@ export class AppEventService implements OnDestroy {
   private firestore = inject(Firestore);
   private storage = inject(Storage);
   private injector = inject(Injector);
+  private fileService = inject(AppFileService);
+  private logger = inject(LoggerService);
   private static reportedUnknownTypes = new Set<string>();
 
   constructor(
-    private windowService: AppWindowService,
-    private logger: LoggerService) {
+    private windowService: AppWindowService) {
   }
 
   public getEventAndActivities(user: User, eventID: string): Observable<AppEventInterface> {
@@ -303,13 +305,41 @@ export class AppEventService implements OnDestroy {
       }
     }
 
+    // 3. Process and Compress Original Files if needed
+    if (originalFiles) {
+      const files = Array.isArray(originalFiles) ? originalFiles : [originalFiles];
+      const textExtensions = ['gpx', 'tcx', 'json'];
+      for (const file of files) {
+        // Normalize extension: strip .gz if present to check if it's a text-based file
+        const extension = file.extension.toLowerCase();
+        const baseExtension = extension.endsWith('.gz') ? extension.slice(0, -3) : (extension === 'gz' ? '' : extension);
+
+        if (textExtensions.includes(baseExtension)) {
+          try {
+            // Check if already compressed to avoid double compression
+            const isBinary = file.data instanceof ArrayBuffer || file.data instanceof Uint8Array || file.data instanceof Blob;
+            let isAlreadyCompressed = false;
+            if (isBinary) {
+              const buffer = file.data instanceof Blob ? await file.data.arrayBuffer() : (file.data instanceof Uint8Array ? file.data.buffer : file.data);
+              const bytes = new Uint8Array(buffer as ArrayBuffer);
+              isAlreadyCompressed = bytes.length > 2 && bytes[0] === 0x1F && bytes[1] === 0x8B;
+            }
+
+            if (!isAlreadyCompressed) {
+              this.logger.log(`[AppEventService] Compressing ${baseExtension} file`);
+              const stream = new Response(file.data as any).body.pipeThrough(new CompressionStream('gzip'));
+              file.data = await new Response(stream).arrayBuffer();
+            }
+            file.extension = `${baseExtension}.gz`; // Ensure it always ends with .gz
+          } catch (e) {
+            this.logger.error(`[AppEventService] Compression failed for file, uploading uncompressed`, e);
+          }
+        }
+      }
+    }
+
     const adapter: FirestoreAdapter = {
       setDoc: (path: string[], data: any) => {
-        // Construct the full path from the array parts
-        // The first part is 'users', then uid, etc.
-        // path example: ['users', userID, 'events', eventID]
-        // collection(firestore, path[0], path[1], ...) seems wrong if it mixes coll/doc
-        // doc() takes (firestore, path...)
         return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, ...path as [string, ...string[]]), data));
       },
       createBlob: (data: Uint8Array) => {
@@ -325,18 +355,7 @@ export class AppEventService implements OnDestroy {
         const fileRef = ref(this.storage, path);
         // data can be Blob, Uint8Array or ArrayBuffer. If string, convert to Blob.
         let payload = data;
-        const extension = path.split('.').pop()?.toLowerCase();
-        const textExtensions = ['gpx', 'tcx', 'json'];
-
-        if (textExtensions.includes(extension)) {
-          try {
-            this.logger.log(`[AppEventService] Compressing ${extension} file: ${path}`);
-            const stream = new Response(data).body.pipeThrough(new CompressionStream('gzip'));
-            payload = await new Response(stream).arrayBuffer();
-          } catch (e) {
-            this.logger.error(`[AppEventService] Compression failed for ${path}, uploading uncompressed`, e);
-          }
-        } else if (typeof data === 'string') {
+        if (typeof data === 'string') {
           payload = new Blob([data], { type: 'text/plain' });
         }
         await uploadBytes(fileRef, payload);
@@ -564,31 +583,12 @@ export class AppEventService implements OnDestroy {
   public async downloadFile(path: string): Promise<ArrayBuffer> {
     const fileRef = ref(this.storage, path);
     const buffer = await getBytes(fileRef);
-    return this.decompressIfNeeded(buffer, path);
+    return this.fileService.decompressIfNeeded(buffer, path);
   }
 
   private async decompressIfNeeded(buffer: ArrayBuffer, path: string): Promise<ArrayBuffer> {
-    const extension = path.split('.').pop()?.toLowerCase();
-    const textExtensions = ['gpx', 'tcx', 'json'];
-
-    // Optimization: only check text extensions for Gzip magic bytes
-    if (!textExtensions.includes(extension)) {
-      return buffer;
-    }
-
-    const bytes = new Uint8Array(buffer);
-    // Gzip magic number: 0x1F 0x8B
-    if (bytes.length > 2 && bytes[0] === 0x1F && bytes[1] === 0x8B) {
-      try {
-        this.logger.log(`[AppEventService] Decompressing file: ${path}`);
-        const stream = new Response(buffer).body.pipeThrough(new DecompressionStream('gzip'));
-        return await new Response(stream).arrayBuffer();
-      } catch (e) {
-        this.logger.error(`[AppEventService] Decompression failed for ${path}`, e);
-        return buffer;
-      }
-    }
-    return buffer;
+    // Deprecated in favor of fileService.decompressIfNeeded, but kept for internal service stability if any call remains
+    return this.fileService.decompressIfNeeded(buffer, path);
   }
 
   private async fetchAndParseOneFile(fileMeta: { path: string, bucket?: string }, skipEnrichment: boolean = false): Promise<EventInterface> {
@@ -596,7 +596,10 @@ export class AppEventService implements OnDestroy {
       const arrayBuffer = await this.downloadFile(fileMeta.path);
 
       const parts = fileMeta.path.split('.');
-      const extension = parts[parts.length - 1].toLowerCase();
+      let extension = parts.pop()?.toLowerCase();
+      if (extension === 'gz') {
+        extension = parts.pop()?.toLowerCase();
+      }
 
       let newEvent: EventInterface;
 

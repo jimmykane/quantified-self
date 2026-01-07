@@ -222,9 +222,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
           fileFetchPromises.push((async () => {
             try {
               const buffer = await this.eventService.downloadFile(fileMeta.path);
-              // Extract extension from path
-              const parts = fileMeta.path.split('.');
-              const ext = parts[parts.length - 1];
+              const ext = this.fileService.getExtensionFromPath(fileMeta.path);
               const eventStartDate = this.fileService.toDate(evt.startDate);
               validOriginalFiles.push({ data: buffer, extension: ext, startDate: fileMeta.startDate || eventStartDate || new Date() });
             } catch (e) {
@@ -238,8 +236,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         fileFetchPromises.push((async () => {
           try {
             const buffer = await this.eventService.downloadFile(evt.originalFile.path);
-            const parts = evt.originalFile.path.split('.');
-            const ext = parts[parts.length - 1];
+            const ext = this.fileService.getExtensionFromPath(evt.originalFile.path);
             const eventStartDate = this.fileService.toDate(evt.startDate);
             validOriginalFiles.push({ data: buffer, extension: ext, startDate: evt.originalFile.startDate || eventStartDate || new Date() });
           } catch (e) {

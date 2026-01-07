@@ -97,6 +97,30 @@ export class AppFileService {
    */
   public getExtensionFromPath(path: string, defaultExt: string = 'fit'): string {
     const parts = path.split('.');
-    return parts.length > 1 ? parts[parts.length - 1] : defaultExt;
+    let extension = parts.pop()?.toLowerCase();
+    if (extension === 'gz' && parts.length > 1) {
+      extension = parts.pop()?.toLowerCase();
+    }
+    return extension || defaultExt;
+  }
+
+  public async decompressIfNeeded(buffer: ArrayBuffer, path?: string): Promise<ArrayBuffer> {
+    const bytes = new Uint8Array(buffer);
+    // Gzip magic number: 0x1F 0x8B
+    // We skip .fit files as a safeguard, as requested by the user, even if they somehow start with these bytes
+    const isFit = path?.toLowerCase().endsWith('.fit');
+    if (!isFit && bytes.length > 2 && bytes[0] === 0x1F && bytes[1] === 0x8B) {
+      try {
+        if (path) {
+          console.log(`[AppFileService] Decompressing file: ${path}`);
+        }
+        const stream = new Response(buffer).body.pipeThrough(new DecompressionStream('gzip'));
+        return await new Response(stream).arrayBuffer();
+      } catch (e) {
+        console.error(`[AppFileService] Decompression failed`, e);
+        return buffer;
+      }
+    }
+    return buffer;
   }
 }

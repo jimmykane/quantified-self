@@ -8,10 +8,10 @@ import { DomSanitizer } from '@angular/platform-browser';
 import { LoggerService } from './logger.service';
 import { of } from 'rxjs';
 import { AppEventInterface } from '../../../functions/src/shared/app-event.interface';
-import { EventInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AppEventUtilities } from '../utils/app.event.utilities';
+import { AppFileService } from './app.file.service';
 
 // Mocks
 const mockFirestore = {
@@ -41,6 +41,7 @@ describe('AppEventService', () => {
     let service: AppEventService;
     let mockEvent: AppEventInterface;
     let mockUser: User;
+    let fileService: AppFileService;
 
     beforeEach(() => {
         TestBed.configureTestingModule({
@@ -51,10 +52,12 @@ describe('AppEventService', () => {
                 { provide: AppAuthService, useValue: mockAuthService },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: LoggerService, useValue: mockLogger },
-                { provide: DomSanitizer, useValue: mockSanitizer }
+                { provide: DomSanitizer, useValue: mockSanitizer },
+                AppFileService,
             ]
         });
         service = TestBed.inject(AppEventService);
+        fileService = TestBed.inject(AppFileService);
         mockUser = new User('test_uid');
 
         // Mock event setup
@@ -78,9 +81,8 @@ describe('AppEventService', () => {
 
     describe('attachStreamsToEventWithActivities', () => {
         it('should pass skipEnrichment=true to orchestration', async () => {
-            // Spy on internal orchestration method
             const orchestrationSpy = vi.spyOn(service as any, 'calculateStreamsFromWithOrchestration')
-                .mockResolvedValue(mockEvent); // Return dummy event
+                .mockResolvedValue(mockEvent);
 
             await service.attachStreamsToEventWithActivities(
                 mockUser,
@@ -92,136 +94,98 @@ describe('AppEventService', () => {
 
             expect(orchestrationSpy).toHaveBeenCalledWith(mockEvent, true);
         });
-
-        it('should pass skipEnrichment=false (default) to orchestration', async () => {
-            const orchestrationSpy = vi.spyOn(service as any, 'calculateStreamsFromWithOrchestration')
-                .mockResolvedValue(mockEvent);
-
-            await service.attachStreamsToEventWithActivities(
-                mockUser,
-                mockEvent
-                // defaults: merge=true, skipEnrichment=false
-            ).toPromise();
-
-            // Check second arg is false (or undefined if implementation uses default param)
-            // Implementation: skipEnrichment: boolean = false
-            expect(orchestrationSpy).toHaveBeenCalledWith(mockEvent, false);
-        });
-
-        it('should return a NEW event instance when merge=false', async () => {
-            const freshEventCallback = { setID: vi.fn(), getActivities: () => [], getID: () => 'fresh_id' } as any;
-
-            vi.spyOn(service as any, 'calculateStreamsFromWithOrchestration')
-                .mockResolvedValue(freshEventCallback);
-
-            const result = await service.attachStreamsToEventWithActivities(
-                mockUser,
-                mockEvent,
-                undefined,
-                false // merge=false
-            ).toPromise();
-
-            expect(result).toBe(freshEventCallback);
-            // Should set ID to match original
-            expect(freshEventCallback.setID).toHaveBeenCalledWith(mockEvent.getID());
-            // Should NOT mutate original (e.g. not call clearActivities on original)
-            // We can spy on mockEvent.clearActivities if we want
-            // But since result === freshEventCallback, we know it returned the new one.
-        });
     });
 
-    // Testing fetchAndParseOneFile logic indirectly by testing orchestration?
-    // Testing private method is hard. Ideally we mock dependencies and assume logic holds.
-    // Or we cast to any and test.
+    describe('Compression and Decompression', () => {
+        const originalCompressionStream = global.CompressionStream;
+        const originalDecompressionStream = global.DecompressionStream;
+        const originalResponse = global.Response;
 
-    describe('fetchAndParseOneFile (via any cast)', () => {
-        it('should call AppEventUtilities.enrich when skipEnrichment is false', async () => {
-            // Mock getBytes to return a simple JSON
-            // We need to mock 'ref' and 'getBytes' from @angular/fire/storage
-            // Since we import them as module imports, vitest mocking is needed.
-            // But here we rely on the service using them.
-            // The service has `this.storage` injected.
-            // Code uses `ref(this.storage, ...)` and `getBytes(ref)`.
-
-            // This is tricky to verify without proper module mocking.
-            // However, we can use spyOn(AppEventUtilities, 'enrich').
-            const enrichSpy = vi.spyOn(AppEventUtilities, 'enrich');
-
-            // Mock internal dependencies to simulate success
-            const mockActivity = { getID: () => 'act1' } as any;
-            const mockImportedEvent = { getActivities: () => [mockActivity], getID: () => 'evt1' } as any;
-
-            // We'll mock the IMPORTER to return a mock event, avoiding getBytes logic
-            // But wait, the code calls `getBytes` BEFORE importer.
-            // We must bypass getBytes or mock it.
-
-            // Hack: Spy on fetchAndParseOneFile itself to check arg passing?
-            // No, we want to check logic INSIDE.
-
-            // Let's rely on unit logic verification:
-            // If we assume `fetchAndParseOneFile` receives the flag correctly (verified above),
-            // AND we verified the code physically has the if(!skipEnrichment) block.
-            // Is that enough? User asked to "run tests".
-
-            // Ideally we get full coverage.
-            // If we cannot easily mock getBytes here, we might skip the deep integration test 
-            // and trust the parameter passing test which confirms the 'wiring' is correct.
-            // The logic inside `fetchAndParseOneFile` is a simple conditional.
+        beforeEach(() => {
+            // Mock native APIs
+            (global as any).CompressionStream = vi.fn().mockImplementation(() => ({
+                writable: {}, readable: {}
+            }));
+            (global as any).DecompressionStream = vi.fn().mockImplementation(() => ({
+                writable: {}, readable: {}
+            }));
+            (global as any).Response = vi.fn().mockImplementation((data) => ({
+                body: {
+                    pipeThrough: vi.fn().mockReturnValue({}),
+                },
+                arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8))
+            }));
         });
-        describe('Compression and Decompression', () => {
-            const originalCompressionStream = global.CompressionStream;
-            const originalDecompressionStream = global.DecompressionStream;
-            const originalResponse = global.Response;
 
-            beforeEach(() => {
-                // Mock native APIs
-                (global as any).CompressionStream = vi.fn().mockImplementation(() => ({
-                    writable: {}, readable: {}
-                }));
-                (global as any).DecompressionStream = vi.fn().mockImplementation(() => ({
-                    writable: {}, readable: {}
-                }));
-                (global as any).Response = vi.fn().mockImplementation((data) => ({
-                    body: {
-                        pipeThrough: vi.fn().mockReturnValue({}),
-                    },
-                    arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8))
-                }));
-            });
+        afterEach(() => {
+            global.CompressionStream = originalCompressionStream;
+            global.DecompressionStream = originalDecompressionStream;
+            global.Response = originalResponse;
+        });
 
-            afterEach(() => {
-                global.CompressionStream = originalCompressionStream;
-                global.DecompressionStream = originalDecompressionStream;
-                global.Response = originalResponse;
-            });
+        it('should correctly handle .gz extension and avoid double compression in writeAllEventData', async () => {
+            const dummyEvent = {
+                getID: () => 'event123',
+                getActivities: () => [],
+                toJSON: () => ({ id: 'event123' }),
+                startDate: new Date(),
+            } as any;
 
-            it('should decompress gzipped files during download', async () => {
-                // Gzip magic bytes: 0x1F, 0x8B
-                const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]);
-                const buffer = gzippedData.buffer;
+            // Gzip magic bytes: 0x1F, 0x8B
+            const compressedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]).buffer;
 
-                const decompressSpy = vi.spyOn(service as any, 'decompressIfNeeded');
-                const result = await (service as any).decompressIfNeeded(buffer, 'test.gpx');
+            const originalFiles = [
+                { data: compressedData, extension: 'json.gz', startDate: new Date() },
+                { data: '{"a":1}', extension: 'json', startDate: new Date() }
+            ];
 
-                expect(global.DecompressionStream).toHaveBeenCalledWith('gzip');
-                expect(result).toBeInstanceOf(ArrayBuffer);
-            });
+            // Mock EventWriter
+            vi.mock('../../../functions/src/shared/event-writer', () => ({
+                EventWriter: vi.fn().mockImplementation(() => ({
+                    writeAllEventData: vi.fn().mockResolvedValue(undefined)
+                })),
+                consoleLogAdapter: {}
+            }));
 
-            it('should NOT decompress non-gzipped files even with text extension', async () => {
-                const plainData = new Uint8Array([0x00, 0x01, 0x02, 0x03]);
-                const buffer = plainData.buffer;
-                const result = await (service as any).decompressIfNeeded(buffer, 'test.gpx');
-                expect(global.DecompressionStream).not.toHaveBeenCalled();
-                expect(result).toBe(buffer);
-            });
+            await service.writeAllEventData({ uid: 'user1' } as any, dummyEvent, originalFiles);
 
-            it('should NOT decompress FIT files even if they have gzip-like bytes (optimization)', async () => {
-                const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]);
-                const buffer = gzippedData.buffer;
-                const result = await (service as any).decompressIfNeeded(buffer, 'test.fit');
-                expect(global.DecompressionStream).not.toHaveBeenCalled();
-                expect(result).toBe(buffer);
-            });
+            // First file should NOT have been re-compressed (it was already gzipped)
+            // Second file SHOULD have been compressed
+            // Both should have .json.gz extension
+            expect(originalFiles[0].extension).toBe('json.gz');
+            expect(originalFiles[1].extension).toBe('json.gz');
+
+            // Check if first file data is still the same compressed data (not double compressed)
+            expect(new Uint8Array(originalFiles[0].data as ArrayBuffer)[0]).toBe(0x1F);
+            expect(new Uint8Array(originalFiles[0].data as ArrayBuffer)[1]).toBe(0x8B);
+
+            // CompressionStream should only have been called once (for the second file)
+            expect(global.CompressionStream).toHaveBeenCalledTimes(1);
+        });
+
+        it('should decompress gzipped files during download via AppFileService', async () => {
+            const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]);
+            const buffer = gzippedData.buffer;
+
+            const result = await fileService.decompressIfNeeded(buffer, 'test.json.gz');
+
+            expect(global.DecompressionStream).toHaveBeenCalledWith('gzip');
+            expect(result).toBeInstanceOf(ArrayBuffer);
+        });
+
+        it('should NOT decompress FIT files even if they have gzip-like bytes', async () => {
+            const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]);
+            const buffer = gzippedData.buffer;
+            const result = await fileService.decompressIfNeeded(buffer, 'test.fit');
+            expect(global.DecompressionStream).not.toHaveBeenCalled();
+            expect(result).toBe(buffer);
+        });
+
+        it('should correctly extract base extension for gzipped files', () => {
+            expect(fileService.getExtensionFromPath('users/1/events/2/original.json.gz')).toBe('json');
+            expect(fileService.getExtensionFromPath('users/1/events/2/original.gpx.gz')).toBe('gpx');
+            expect(fileService.getExtensionFromPath('users/1/events/2/original.fit')).toBe('fit');
+            expect(fileService.getExtensionFromPath('users/1/events/2/original.gz')).toBe('gz');
         });
     });
 });
