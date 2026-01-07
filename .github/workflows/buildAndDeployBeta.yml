@@ -6,7 +6,11 @@ on:
       - develop
 
 jobs:
-  build:
+  test:
+    uses: ./.github/workflows/_run-tests.yml
+
+  deploy:
+    needs: test
     runs-on: ubuntu-latest
 
     steps:
@@ -25,37 +29,22 @@ jobs:
         run: |
           curl "https://firebasestorage.googleapis.com/v0/b/quantified-self-io.appspot.com/o/assets%2Flicenses.json?alt=media&token=470a21d4-571d-432d-a6f6-95df7a24de33" --create-dirs -o licenses.json
 
-      - name: Install and test functions
+      - name: Build functions
         run: |
           cd functions
           npm ci
-          npm run lint
-          npm run test
           npm run build
           cd ..
-
-
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
 
       - name: Patch Manifest for Beta
         run: |
           sed -i 's/"name": "Quantified Self"/"name": "Quantified Self Beta"/g' src/manifest.json
           sed -i 's/"short_name": "Quantified Self"/"short_name": "QS Beta"/g' src/manifest.json
 
-      - name: Install, test and build
+      - name: Install and build
         run: |
           npm ci
-          npm run lint
-          npm run test:rules
-          npm run test
           npm run build-beta
-
-
 
       - name: Create SA key
         run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "${{ runner.temp }}/firebase_service_account.json"
