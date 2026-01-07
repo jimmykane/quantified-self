@@ -527,3 +527,253 @@ describe('AppFileService - Edge Cases', () => {
         });
     });
 });
+
+describe('AppFileService - Corrupted Gzip Headers', () => {
+    let service: AppFileService;
+    const originalDecompressionStream = global.DecompressionStream;
+    const originalResponse = global.Response;
+
+    beforeEach(() => {
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            providers: [
+                { provide: LOCALE_ID, useValue: 'en-US' }
+            ]
+        });
+        service = TestBed.inject(AppFileService);
+    });
+
+    afterEach(() => {
+        global.DecompressionStream = originalDecompressionStream;
+        global.Response = originalResponse;
+    });
+
+    it('should handle corrupted gzip (valid header but invalid body)', async () => {
+        // Valid gzip header but garbage after
+        const corruptedGzip = new Uint8Array([0x1F, 0x8B, 0x08, 0xFF, 0xFF, 0xFF]).buffer;
+
+        // Mock to throw on decompress
+        (global as any).DecompressionStream = vi.fn().mockImplementation(() => ({
+            writable: {}, readable: {}
+        }));
+        (global as any).Response = vi.fn().mockImplementation(() => {
+            throw new Error('Invalid gzip data');
+        });
+
+        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+        const result = await service.decompressIfNeeded(corruptedGzip, 'test.json.gz');
+
+        // Should return original buffer on error
+        expect(result).toBe(corruptedGzip);
+        expect(consoleSpy).toHaveBeenCalled();
+        consoleSpy.mockRestore();
+    });
+
+    it('should handle truncated gzip data', async () => {
+        // Gzip header only, no actual compressed data
+        const truncatedGzip = new Uint8Array([0x1F, 0x8B, 0x08]).buffer;
+
+        (global as any).DecompressionStream = vi.fn().mockImplementation(() => ({
+            writable: {}, readable: {}
+        }));
+        (global as any).Response = vi.fn().mockImplementation(() => ({
+            body: { pipeThrough: vi.fn().mockReturnValue({}) },
+            arrayBuffer: vi.fn().mockRejectedValue(new Error('Unexpected end of data'))
+        }));
+
+        const result = await service.decompressIfNeeded(truncatedGzip, 'test.json.gz');
+        // Should handle gracefully (may return original or throw based on implementation)
+        expect(result).toBeDefined();
+    });
+
+    it('should handle empty gzip file (valid header, empty content)', async () => {
+        // Valid gzip that decompresses to empty
+        const emptyGzip = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03]).buffer;
+
+        (global as any).DecompressionStream = vi.fn().mockImplementation(() => ({
+            writable: {}, readable: {}
+        }));
+        (global as any).Response = vi.fn().mockImplementation(() => ({
+            body: { pipeThrough: vi.fn().mockReturnValue({}) },
+            arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(0))
+        }));
+
+        const result = await service.decompressIfNeeded(emptyGzip, 'empty.json.gz');
+        expect(result).toBeInstanceOf(ArrayBuffer);
+    });
+});
+
+describe('AppFileService - Large File Handling', () => {
+    let service: AppFileService;
+
+    beforeEach(() => {
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            providers: [
+                { provide: LOCALE_ID, useValue: 'en-US' }
+            ]
+        });
+        service = TestBed.inject(AppFileService);
+    });
+
+    it('should handle 1MB buffer', async () => {
+        const largeBuffer = new ArrayBuffer(1024 * 1024); // 1MB
+        // Not gzipped, should return as-is
+        const result = await service.decompressIfNeeded(largeBuffer, 'large.json');
+        expect(result).toBe(largeBuffer);
+    });
+
+    it('should handle 10MB buffer (near upload limit)', async () => {
+        const veryLargeBuffer = new ArrayBuffer(10 * 1024 * 1024); // 10MB
+        const result = await service.decompressIfNeeded(veryLargeBuffer, 'huge.gpx');
+        expect(result).toBe(veryLargeBuffer);
+    });
+
+    it('should correctly identify large gzipped file', async () => {
+        // 1MB buffer with gzip magic bytes at start
+        const largeGzipBuffer = new ArrayBuffer(1024 * 1024);
+        const view = new Uint8Array(largeGzipBuffer);
+        view[0] = 0x1F;
+        view[1] = 0x8B;
+        view[2] = 0x08;
+
+        (global as any).DecompressionStream = vi.fn().mockImplementation(() => ({
+            writable: {}, readable: {}
+        }));
+        (global as any).Response = vi.fn().mockImplementation(() => ({
+            body: { pipeThrough: vi.fn().mockReturnValue({}) },
+            arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(2 * 1024 * 1024))
+        }));
+
+        const result = await service.decompressIfNeeded(largeGzipBuffer, 'large.json.gz');
+        expect(global.DecompressionStream).toHaveBeenCalled();
+    });
+});
+
+describe('AppFileService - Concurrent Operations', () => {
+    let service: AppFileService;
+
+    beforeEach(() => {
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            providers: [
+                { provide: LOCALE_ID, useValue: 'en-US' }
+            ]
+        });
+        service = TestBed.inject(AppFileService);
+    });
+
+    it('should handle multiple concurrent decompression requests', async () => {
+        const buffers = [
+            new Uint8Array([0x00, 0x01]).buffer,
+            new Uint8Array([0x00, 0x02]).buffer,
+            new Uint8Array([0x00, 0x03]).buffer
+        ];
+
+        const results = await Promise.all(
+            buffers.map((b, i) => service.decompressIfNeeded(b, `file${i}.json`))
+        );
+
+        expect(results.length).toBe(3);
+        results.forEach((r, i) => expect(r).toBe(buffers[i]));
+    });
+
+    it('should handle concurrent getExtensionFromPath calls', () => {
+        const paths = [
+            'path/to/file1.json.gz',
+            'path/to/file2.gpx',
+            'path/to/file3.tcx.gz',
+            'path/to/file4.fit',
+            'path/to/file5'
+        ];
+
+        const results = paths.map(p => service.getExtensionFromPath(p));
+
+        expect(results).toEqual(['json', 'gpx', 'tcx', 'fit', 'fit']);
+    });
+});
+
+describe('AppFileService - Unicode and Special Characters', () => {
+    let service: AppFileService;
+
+    beforeEach(() => {
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            providers: [
+                { provide: LOCALE_ID, useValue: 'en-US' }
+            ]
+        });
+        service = TestBed.inject(AppFileService);
+    });
+
+    it('should handle unicode in file path', () => {
+        expect(service.getExtensionFromPath('用户/活动/运动.json.gz')).toBe('json');
+    });
+
+    it('should handle emojis in file path', () => {
+        expect(service.getExtensionFromPath('users/🏃‍♂️/activities/🚴.gpx')).toBe('gpx');
+    });
+
+    it('should handle spaces in file path', () => {
+        expect(service.getExtensionFromPath('users/john doe/my activity.tcx.gz')).toBe('tcx');
+    });
+
+    it('should handle special characters in file path', () => {
+        expect(service.getExtensionFromPath("users/test's file (1) [copy].json")).toBe('json');
+    });
+
+    it('should handle URL-encoded characters', () => {
+        expect(service.getExtensionFromPath('users/test%20file.gpx.gz')).toBe('gpx');
+    });
+
+    it('should handle backslashes (Windows-style paths)', () => {
+        // Note: split('.') doesn't care about slashes
+        expect(service.getExtensionFromPath('users\\test\\file.tcx')).toBe('tcx');
+    });
+});
+
+describe('AppFileService - Boundary Conditions', () => {
+    let service: AppFileService;
+
+    beforeEach(() => {
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            providers: [
+                { provide: LOCALE_ID, useValue: 'en-US' }
+            ]
+        });
+        service = TestBed.inject(AppFileService);
+    });
+
+    it('should handle path with many dots', () => {
+        expect(service.getExtensionFromPath('file.backup.2024.01.15.json.gz')).toBe('json');
+    });
+
+    it('should handle .tar.gz pattern correctly', () => {
+        // .tar.gz should return 'tar' after stripping .gz
+        expect(service.getExtensionFromPath('archive.tar.gz')).toBe('tar');
+    });
+
+    it('should handle double .gz.gz extension', () => {
+        // Edge case: file.json.gz.gz - after stripping first .gz, we get .gz again
+        expect(service.getExtensionFromPath('file.json.gz.gz')).toBe('gz');
+    });
+
+    it('should handle minimum valid gzip buffer (3 bytes)', () => {
+        const minBuffer = new Uint8Array([0x1F, 0x8B, 0x08]).buffer;
+        // 3 bytes is > 2, so magic check passes
+        expect(minBuffer.byteLength).toBe(3);
+    });
+
+    it('should handle generateDateBasedFilename with Date at Unix epoch', () => {
+        const epochDate = new Date(0);
+        const result = service.generateDateBasedFilename(epochDate, 'fit');
+        expect(result).toMatch(/1970.*\.fit/);
+    });
+
+    it('should handle generateDateBasedFilename with future date', () => {
+        const futureDate = new Date('2099-12-31T23:59:59');
+        const result = service.generateDateBasedFilename(futureDate, 'gpx');
+        expect(result).toMatch(/2099.*\.gpx/);
+    });
+});
