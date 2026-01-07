@@ -19,7 +19,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Install Firebase Tools
         run: npm install -g firebase-tools
@@ -35,9 +34,10 @@ jobs:
           npm run build
           cd ..
 
-      - name: Install and build
+      - name: Install, clean and build
         run: |
           npm ci
+          npm run clean
           npm run build-production
 
       - name: Create SA key

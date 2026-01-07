@@ -20,7 +20,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Install Firebase Tools
         run: npm install -g firebase-tools
@@ -41,9 +40,10 @@ jobs:
           sed -i 's/"name": "Quantified Self"/"name": "Quantified Self Beta"/g' src/manifest.json
           sed -i 's/"short_name": "Quantified Self"/"short_name": "QS Beta"/g' src/manifest.json
 
-      - name: Install and build
+      - name: Install, clean and build
         run: |
           npm ci
+          npm run clean
           npm run build-beta
 
       - name: Create SA key
