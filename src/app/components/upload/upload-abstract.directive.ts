@@ -56,7 +56,16 @@ export abstract class UploadAbstractDirective implements OnInit {
 
     const rawFiles = [...(event.target.files || event.dataTransfer.files)];
     // Add as local to show totals
-    const filesToProcess = rawFiles.map(file => {
+    const filesToProcess = rawFiles.filter(file => {
+      // 10MB limit
+      if (file.size > 10 * 1024 * 1024) {
+        this.snackBar.open(`File ${file.name} is too large. Maximum size is 10MB.`, 'OK', {
+          duration: 5000,
+        });
+        return false;
+      }
+      return true;
+    }).map(file => {
       const name = file.name;
       const extension = name.split('.').pop().toLowerCase();
       const filename = name.split('.').shift();
@@ -71,6 +80,13 @@ export abstract class UploadAbstractDirective implements OnInit {
         status: UPLOAD_STATUS.PROCESSING
       }
     });
+
+    if (filesToProcess.length === 0 && rawFiles.length > 0) {
+      this.isUploading = false;
+      // Clear the target
+      event.target.value = '';
+      return;
+    }
 
     // Then actually start processing them
     this.isUploading = true;

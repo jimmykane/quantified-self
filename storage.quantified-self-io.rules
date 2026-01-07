@@ -2,7 +2,7 @@ rules_version = '2';
 service firebase.storage {
   match /b/quantified-self-io/o {
     match /users/{userId}/{allPaths=**} {
-      allow read, write: if request.auth.uid == userId;
+      allow read, write: if request.auth.uid == userId && (request.method != 'create' || request.resource.size < 10 * 1024 * 1024);
     }
   }
 }
