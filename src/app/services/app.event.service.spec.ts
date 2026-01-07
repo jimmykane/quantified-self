@@ -168,5 +168,60 @@ describe('AppEventService', () => {
             // and trust the parameter passing test which confirms the 'wiring' is correct.
             // The logic inside `fetchAndParseOneFile` is a simple conditional.
         });
+        describe('Compression and Decompression', () => {
+            const originalCompressionStream = global.CompressionStream;
+            const originalDecompressionStream = global.DecompressionStream;
+            const originalResponse = global.Response;
+
+            beforeEach(() => {
+                // Mock native APIs
+                (global as any).CompressionStream = vi.fn().mockImplementation(() => ({
+                    writable: {}, readable: {}
+                }));
+                (global as any).DecompressionStream = vi.fn().mockImplementation(() => ({
+                    writable: {}, readable: {}
+                }));
+                (global as any).Response = vi.fn().mockImplementation((data) => ({
+                    body: {
+                        pipeThrough: vi.fn().mockReturnValue({}),
+                    },
+                    arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8))
+                }));
+            });
+
+            afterEach(() => {
+                global.CompressionStream = originalCompressionStream;
+                global.DecompressionStream = originalDecompressionStream;
+                global.Response = originalResponse;
+            });
+
+            it('should decompress gzipped files during download', async () => {
+                // Gzip magic bytes: 0x1F, 0x8B
+                const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]);
+                const buffer = gzippedData.buffer;
+
+                const decompressSpy = vi.spyOn(service as any, 'decompressIfNeeded');
+                const result = await (service as any).decompressIfNeeded(buffer, 'test.gpx');
+
+                expect(global.DecompressionStream).toHaveBeenCalledWith('gzip');
+                expect(result).toBeInstanceOf(ArrayBuffer);
+            });
+
+            it('should NOT decompress non-gzipped files even with text extension', async () => {
+                const plainData = new Uint8Array([0x00, 0x01, 0x02, 0x03]);
+                const buffer = plainData.buffer;
+                const result = await (service as any).decompressIfNeeded(buffer, 'test.gpx');
+                expect(global.DecompressionStream).not.toHaveBeenCalled();
+                expect(result).toBe(buffer);
+            });
+
+            it('should NOT decompress FIT files even if they have gzip-like bytes (optimization)', async () => {
+                const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]);
+                const buffer = gzippedData.buffer;
+                const result = await (service as any).decompressIfNeeded(buffer, 'test.fit');
+                expect(global.DecompressionStream).not.toHaveBeenCalled();
+                expect(result).toBe(buffer);
+            });
+        });
     });
 });

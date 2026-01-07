@@ -325,7 +325,18 @@ export class AppEventService implements OnDestroy {
         const fileRef = ref(this.storage, path);
         // data can be Blob, Uint8Array or ArrayBuffer. If string, convert to Blob.
         let payload = data;
-        if (typeof data === 'string') {
+        const extension = path.split('.').pop()?.toLowerCase();
+        const textExtensions = ['gpx', 'tcx', 'json'];
+
+        if (textExtensions.includes(extension)) {
+          try {
+            this.logger.log(`[AppEventService] Compressing ${extension} file: ${path}`);
+            const stream = new Response(data).body.pipeThrough(new CompressionStream('gzip'));
+            payload = await new Response(stream).arrayBuffer();
+          } catch (e) {
+            this.logger.error(`[AppEventService] Compression failed for ${path}, uploading uncompressed`, e);
+          }
+        } else if (typeof data === 'string') {
           payload = new Blob([data], { type: 'text/plain' });
         }
         await uploadBytes(fileRef, payload);
@@ -552,13 +563,37 @@ export class AppEventService implements OnDestroy {
 
   public async downloadFile(path: string): Promise<ArrayBuffer> {
     const fileRef = ref(this.storage, path);
-    return getBytes(fileRef);
+    const buffer = await getBytes(fileRef);
+    return this.decompressIfNeeded(buffer, path);
+  }
+
+  private async decompressIfNeeded(buffer: ArrayBuffer, path: string): Promise<ArrayBuffer> {
+    const extension = path.split('.').pop()?.toLowerCase();
+    const textExtensions = ['gpx', 'tcx', 'json'];
+
+    // Optimization: only check text extensions for Gzip magic bytes
+    if (!textExtensions.includes(extension)) {
+      return buffer;
+    }
+
+    const bytes = new Uint8Array(buffer);
+    // Gzip magic number: 0x1F 0x8B
+    if (bytes.length > 2 && bytes[0] === 0x1F && bytes[1] === 0x8B) {
+      try {
+        this.logger.log(`[AppEventService] Decompressing file: ${path}`);
+        const stream = new Response(buffer).body.pipeThrough(new DecompressionStream('gzip'));
+        return await new Response(stream).arrayBuffer();
+      } catch (e) {
+        this.logger.error(`[AppEventService] Decompression failed for ${path}`, e);
+        return buffer;
+      }
+    }
+    return buffer;
   }
 
   private async fetchAndParseOneFile(fileMeta: { path: string, bucket?: string }, skipEnrichment: boolean = false): Promise<EventInterface> {
     try {
-      const fileRef = ref(this.storage, fileMeta.path);
-      const arrayBuffer = await getBytes(fileRef);
+      const arrayBuffer = await this.downloadFile(fileMeta.path);
 
       const parts = fileMeta.path.split('.');
       const extension = parts[parts.length - 1].toLowerCase();
