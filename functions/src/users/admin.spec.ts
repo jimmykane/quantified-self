@@ -12,7 +12,9 @@ const {
     mockStripeClient,
     mockGetProjectBillingInfo,
     mockGetBillingAccount,
-    mockListBudgets
+    mockListBudgets,
+    mockGetTables,
+    mockBigQueryQuery
 } = vi.hoisted(() => {
     const mockListUsers = vi.fn();
     const mockCreateCustomToken = vi.fn();
@@ -40,6 +42,8 @@ const {
     const mockGetProjectBillingInfo = vi.fn();
     const mockGetBillingAccount = vi.fn();
     const mockListBudgets = vi.fn();
+    const mockGetTables = vi.fn();
+    const mockBigQueryQuery = vi.fn();
 
     return {
         mockListUsers,
@@ -52,7 +56,9 @@ const {
         mockStripeClient,
         mockGetProjectBillingInfo,
         mockGetBillingAccount,
-        mockListBudgets
+        mockListBudgets,
+        mockGetTables,
+        mockBigQueryQuery
     };
 });
 
@@ -73,6 +79,15 @@ vi.mock('@google-cloud/billing', () => ({
 vi.mock('@google-cloud/billing-budgets', () => ({
     BudgetServiceClient: vi.fn(() => ({
         listBudgets: mockListBudgets
+    }))
+}));
+
+vi.mock('@google-cloud/bigquery', () => ({
+    BigQuery: vi.fn(() => ({
+        dataset: vi.fn(() => ({
+            getTables: mockGetTables
+        })),
+        query: mockBigQueryQuery
     }))
 }));
 
@@ -111,6 +126,10 @@ import { listUsers, getQueueStats, getUserCount, getMaintenanceStatus, setMainte
 describe('listUsers Cloud Function', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+
+        // Default BigQuery mocks
+        mockGetTables.mockResolvedValue([[]]);
+        mockBigQueryQuery.mockResolvedValue([[]]);
 
         // Default: Return empty user list (single page)
         mockListUsers.mockResolvedValue({ users: [], pageToken: undefined });
@@ -631,6 +650,10 @@ describe('getFinancialStats Cloud Function', () => {
         vi.clearAllMocks();
         mockCollection.mockReset();
 
+        // Reset BigQuery mocks
+        mockGetTables.mockResolvedValue([[]]);
+        mockBigQueryQuery.mockResolvedValue([[]]);
+
         request = {
             data: { env: 'prod' },
             auth: {
@@ -765,7 +788,7 @@ describe('getFinancialStats Cloud Function', () => {
         expect(result.revenue.currency).toBe('eur');
         expect(result.revenue.total).toBe(2000);
 
-        // Verify Cost fallback to EUR
+        // Verify Cost fallback to EUR (project default)
         expect(result.cost.currency).toBe('eur');
     });
     it('should handle missing GCP permissions gracefully', async () => {

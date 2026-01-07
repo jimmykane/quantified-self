@@ -665,20 +665,22 @@ export const getFinancialStats = onAdminCall<void, any>({
     memory: '256MiB',
 }, async () => {
     try {
+        const envCurrency = process.env.GCP_BILLING_CURRENCY?.toLowerCase();
+        // Initialize with undefined/null so we know it's not detected yet
         const stats = {
             revenue: {
                 total: 0,
-                currency: (process.env.GCP_BILLING_CURRENCY || 'usd').toLowerCase(),
+                currency: envCurrency as string,
                 invoiceCount: 0
             },
             cost: {
                 billingAccountId: null as string | null,
                 projectId: process.env.GCLOUD_PROJECT || '',
                 reportUrl: null as string | null,
-                currency: (process.env.GCP_BILLING_CURRENCY || 'usd').toLowerCase(),
+                currency: envCurrency as string,
                 total: process.env.GCP_BILLING_SPEND ? Number(process.env.GCP_BILLING_SPEND) : null as number | null,
                 budget: process.env.GCP_BILLING_BUDGET
-                    ? { amount: Number(process.env.GCP_BILLING_BUDGET), currency: (process.env.GCP_BILLING_CURRENCY || 'usd').toLowerCase() }
+                    ? { amount: Number(process.env.GCP_BILLING_BUDGET), currency: envCurrency as string }
                     : null as { amount: number; currency: string } | null,
                 advice: 'To automate cost tracking, enable "Billing Export to BigQuery" in the GCP Console.'
             }
@@ -700,7 +702,7 @@ export const getFinancialStats = onAdminCall<void, any>({
         let hasMore = true;
         let lastId: string | undefined;
         let totalCents = 0;
-        let currency = 'usd';
+        let detectedCurrency: string | undefined = envCurrency;
         let count = 0;
 
         while (hasMore) {
@@ -712,7 +714,7 @@ export const getFinancialStats = onAdminCall<void, any>({
             });
 
             for (const invoice of invoices.data) {
-                if (count === 0 && invoice.currency) currency = invoice.currency;
+                if (!detectedCurrency && invoice.currency) detectedCurrency = invoice.currency.toLowerCase();
 
                 const amountPaid = invoice.amount_paid || 0;
                 // Use any type to access potentially missing/complex Stripe fields
@@ -745,15 +747,15 @@ export const getFinancialStats = onAdminCall<void, any>({
         }
 
         stats.revenue.total = totalCents;
-        stats.revenue.currency = currency;
+        // Final fallback for revenue if nothing detected: eur (local project default) > usd
+        stats.revenue.currency = detectedCurrency || 'eur';
         stats.revenue.invoiceCount = count;
 
-        // If GCP cost currency is still the default 'usd' and hasn't been overridden, 
-        // use the revenue currency as a more likely fallback.
-        if (!process.env.GCP_BILLING_CURRENCY && stats.cost.currency === 'usd') {
-            stats.cost.currency = currency;
+        // If GCP cost currency is still not detected, inherit from revenue
+        if (!stats.cost.currency) {
+            stats.cost.currency = stats.revenue.currency;
             if (stats.cost.budget) {
-                stats.cost.budget.currency = currency;
+                stats.cost.budget.currency = stats.revenue.currency;
             }
         }
 
@@ -802,7 +804,7 @@ export const getFinancialStats = onAdminCall<void, any>({
                                     stats.cost.budget = {
                                         amount: Number(budgetWithAmount.amount.specifiedAmount.units || 0) * 100 +
                                             Math.floor((budgetWithAmount.amount.specifiedAmount.nanos || 0) / 10000000),
-                                        currency: (budgetWithAmount.amount.specifiedAmount.currencyCode || 'usd').toLowerCase()
+                                        currency: (budgetWithAmount.amount.specifiedAmount.currencyCode || stats.cost.currency).toLowerCase()
                                     };
                                 }
                             }
