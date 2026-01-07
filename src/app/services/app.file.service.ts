@@ -97,7 +97,15 @@ export class AppFileService {
    */
   public getExtensionFromPath(path: string, defaultExt: string = 'fit'): string {
     const parts = path.split('.');
+    // If only one part, there's no extension
+    if (parts.length <= 1) {
+      return defaultExt;
+    }
     let extension = parts.pop()?.toLowerCase();
+    // If extension contains a slash, it's actually a path segment, not an extension
+    if (extension?.includes('/')) {
+      return defaultExt;
+    }
     if (extension === 'gz' && parts.length > 1) {
       extension = parts.pop()?.toLowerCase();
     }

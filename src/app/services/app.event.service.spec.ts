@@ -12,6 +12,7 @@ import { User } from '@sports-alliance/sports-lib';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import { AppFileService } from './app.file.service';
+import { LOCALE_ID } from '@angular/core';
 
 // Mocks
 const mockFirestore = {
@@ -47,13 +48,14 @@ describe('AppEventService', () => {
         TestBed.configureTestingModule({
             providers: [
                 AppEventService,
+                AppFileService,
                 { provide: Firestore, useValue: mockFirestore },
                 { provide: Storage, useValue: mockStorage },
                 { provide: AppAuthService, useValue: mockAuthService },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: LoggerService, useValue: mockLogger },
                 { provide: DomSanitizer, useValue: mockSanitizer },
-                AppFileService,
+                { provide: LOCALE_ID, useValue: 'en-US' },
             ]
         });
         service = TestBed.inject(AppEventService);
@@ -94,6 +96,35 @@ describe('AppEventService', () => {
 
             expect(orchestrationSpy).toHaveBeenCalledWith(mockEvent, true);
         });
+
+        it('should pass skipEnrichment=false (default) to orchestration', async () => {
+            const orchestrationSpy = vi.spyOn(service as any, 'calculateStreamsFromWithOrchestration')
+                .mockResolvedValue(mockEvent);
+
+            await service.attachStreamsToEventWithActivities(
+                mockUser,
+                mockEvent
+            ).toPromise();
+
+            expect(orchestrationSpy).toHaveBeenCalledWith(mockEvent, false);
+        });
+
+        it('should return a NEW event instance when merge=false', async () => {
+            const freshEventCallback = { setID: vi.fn(), getActivities: () => [], getID: () => 'fresh_id' } as any;
+
+            vi.spyOn(service as any, 'calculateStreamsFromWithOrchestration')
+                .mockResolvedValue(freshEventCallback);
+
+            const result = await service.attachStreamsToEventWithActivities(
+                mockUser,
+                mockEvent,
+                undefined,
+                false // merge=false
+            ).toPromise();
+
+            expect(result).toBe(freshEventCallback);
+            expect(freshEventCallback.setID).toHaveBeenCalledWith(mockEvent.getID());
+        });
     });
 
     describe('Compression and Decompression', () => {
@@ -102,6 +133,7 @@ describe('AppEventService', () => {
         const originalResponse = global.Response;
 
         beforeEach(() => {
+            vi.clearAllMocks();
             // Mock native APIs
             (global as any).CompressionStream = vi.fn().mockImplementation(() => ({
                 writable: {}, readable: {}
@@ -123,7 +155,227 @@ describe('AppEventService', () => {
             global.Response = originalResponse;
         });
 
-        it('should correctly handle .gz extension and avoid double compression in writeAllEventData', async () => {
+        describe('writeAllEventData compression', () => {
+            it('should correctly handle .gz extension and avoid double compression', async () => {
+                const dummyEvent = {
+                    getID: () => 'event123',
+                    getActivities: () => [],
+                    toJSON: () => ({ id: 'event123' }),
+                    startDate: new Date(),
+                } as any;
+
+                // Gzip magic bytes: 0x1F, 0x8B
+                const compressedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]).buffer;
+
+                const originalFiles = [
+                    { data: compressedData, extension: 'json.gz', startDate: new Date() },
+                    { data: '{"a":1}', extension: 'json', startDate: new Date() }
+                ];
+
+                // Mock EventWriter
+                vi.mock('../../../functions/src/shared/event-writer', () => ({
+                    EventWriter: vi.fn().mockImplementation(() => ({
+                        writeAllEventData: vi.fn().mockResolvedValue(undefined)
+                    })),
+                    consoleLogAdapter: {}
+                }));
+
+                await service.writeAllEventData({ uid: 'user1' } as any, dummyEvent, originalFiles);
+
+                // Both should have .json.gz extension
+                expect(originalFiles[0].extension).toBe('json.gz');
+                expect(originalFiles[1].extension).toBe('json.gz');
+
+                // Check if first file data is still the same compressed data (not double compressed)
+                expect(new Uint8Array(originalFiles[0].data as ArrayBuffer)[0]).toBe(0x1F);
+                expect(new Uint8Array(originalFiles[0].data as ArrayBuffer)[1]).toBe(0x8B);
+
+                // CompressionStream should only have been called once (for the second file)
+                expect(global.CompressionStream).toHaveBeenCalledTimes(1);
+            });
+
+            it('should compress GPX files', async () => {
+                const dummyEvent = {
+                    getID: () => 'event123',
+                    getActivities: () => [],
+                    toJSON: () => ({ id: 'event123' }),
+                    startDate: new Date(),
+                } as any;
+
+                const originalFiles = [
+                    { data: '<?xml version="1.0"?><gpx></gpx>', extension: 'gpx', startDate: new Date() }
+                ];
+
+                vi.mock('../../../functions/src/shared/event-writer', () => ({
+                    EventWriter: vi.fn().mockImplementation(() => ({
+                        writeAllEventData: vi.fn().mockResolvedValue(undefined)
+                    })),
+                    consoleLogAdapter: {}
+                }));
+
+                await service.writeAllEventData({ uid: 'user1' } as any, dummyEvent, originalFiles);
+
+                expect(originalFiles[0].extension).toBe('gpx.gz');
+                expect(global.CompressionStream).toHaveBeenCalledTimes(1);
+            });
+
+            it('should compress TCX files', async () => {
+                const dummyEvent = {
+                    getID: () => 'event123',
+                    getActivities: () => [],
+                    toJSON: () => ({ id: 'event123' }),
+                    startDate: new Date(),
+                } as any;
+
+                const originalFiles = [
+                    { data: '<?xml version="1.0"?><tcx></tcx>', extension: 'tcx', startDate: new Date() }
+                ];
+
+                vi.mock('../../../functions/src/shared/event-writer', () => ({
+                    EventWriter: vi.fn().mockImplementation(() => ({
+                        writeAllEventData: vi.fn().mockResolvedValue(undefined)
+                    })),
+                    consoleLogAdapter: {}
+                }));
+
+                await service.writeAllEventData({ uid: 'user1' } as any, dummyEvent, originalFiles);
+
+                expect(originalFiles[0].extension).toBe('tcx.gz');
+                expect(global.CompressionStream).toHaveBeenCalledTimes(1);
+            });
+
+            it('should NOT compress FIT files', async () => {
+                const dummyEvent = {
+                    getID: () => 'event123',
+                    getActivities: () => [],
+                    toJSON: () => ({ id: 'event123' }),
+                    startDate: new Date(),
+                } as any;
+
+                const originalFiles = [
+                    { data: new ArrayBuffer(100), extension: 'fit', startDate: new Date() }
+                ];
+
+                vi.mock('../../../functions/src/shared/event-writer', () => ({
+                    EventWriter: vi.fn().mockImplementation(() => ({
+                        writeAllEventData: vi.fn().mockResolvedValue(undefined)
+                    })),
+                    consoleLogAdapter: {}
+                }));
+
+                await service.writeAllEventData({ uid: 'user1' } as any, dummyEvent, originalFiles);
+
+                expect(originalFiles[0].extension).toBe('fit');
+                expect(global.CompressionStream).not.toHaveBeenCalled();
+            });
+
+            it('should handle mixed file types correctly', async () => {
+                const dummyEvent = {
+                    getID: () => 'event123',
+                    getActivities: () => [],
+                    toJSON: () => ({ id: 'event123' }),
+                    startDate: new Date(),
+                } as any;
+
+                const originalFiles = [
+                    { data: '{"a":1}', extension: 'json', startDate: new Date() },
+                    { data: new ArrayBuffer(100), extension: 'fit', startDate: new Date() },
+                    { data: '<?xml?><gpx></gpx>', extension: 'gpx', startDate: new Date() }
+                ];
+
+                vi.mock('../../../functions/src/shared/event-writer', () => ({
+                    EventWriter: vi.fn().mockImplementation(() => ({
+                        writeAllEventData: vi.fn().mockResolvedValue(undefined)
+                    })),
+                    consoleLogAdapter: {}
+                }));
+
+                await service.writeAllEventData({ uid: 'user1' } as any, dummyEvent, originalFiles);
+
+                expect(originalFiles[0].extension).toBe('json.gz');
+                expect(originalFiles[1].extension).toBe('fit'); // NOT compressed
+                expect(originalFiles[2].extension).toBe('gpx.gz');
+                expect(global.CompressionStream).toHaveBeenCalledTimes(2);
+            });
+
+            it('should handle uppercase extensions', async () => {
+                const dummyEvent = {
+                    getID: () => 'event123',
+                    getActivities: () => [],
+                    toJSON: () => ({ id: 'event123' }),
+                    startDate: new Date(),
+                } as any;
+
+                const originalFiles = [
+                    { data: '{"a":1}', extension: 'JSON', startDate: new Date() }
+                ];
+
+                vi.mock('../../../functions/src/shared/event-writer', () => ({
+                    EventWriter: vi.fn().mockImplementation(() => ({
+                        writeAllEventData: vi.fn().mockResolvedValue(undefined)
+                    })),
+                    consoleLogAdapter: {}
+                }));
+
+                await service.writeAllEventData({ uid: 'user1' } as any, dummyEvent, originalFiles);
+
+                expect(originalFiles[0].extension).toBe('json.gz');
+            });
+        });
+
+        describe('decompressIfNeeded via fileService', () => {
+            it('should decompress gzipped files during download', async () => {
+                const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]);
+                const buffer = gzippedData.buffer;
+
+                const result = await fileService.decompressIfNeeded(buffer, 'test.json.gz');
+
+                expect(global.DecompressionStream).toHaveBeenCalledWith('gzip');
+                expect(result).toBeInstanceOf(ArrayBuffer);
+            });
+
+            it('should NOT decompress FIT files even if they have gzip-like bytes', async () => {
+                const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]);
+                const buffer = gzippedData.buffer;
+                const result = await fileService.decompressIfNeeded(buffer, 'test.fit');
+                expect(global.DecompressionStream).not.toHaveBeenCalled();
+                expect(result).toBe(buffer);
+            });
+
+            it('should NOT decompress non-gzipped data', async () => {
+                const plainData = new Uint8Array([0x00, 0x01, 0x02, 0x03]);
+                const buffer = plainData.buffer;
+                const result = await fileService.decompressIfNeeded(buffer, 'test.json');
+                expect(global.DecompressionStream).not.toHaveBeenCalled();
+                expect(result).toBe(buffer);
+            });
+        });
+
+        describe('getExtensionFromPath', () => {
+            it('should correctly extract base extension for gzipped files', () => {
+                expect(fileService.getExtensionFromPath('users/1/events/2/original.json.gz')).toBe('json');
+                expect(fileService.getExtensionFromPath('users/1/events/2/original.gpx.gz')).toBe('gpx');
+                expect(fileService.getExtensionFromPath('users/1/events/2/original.tcx.gz')).toBe('tcx');
+                expect(fileService.getExtensionFromPath('users/1/events/2/original.fit')).toBe('fit');
+            });
+
+            it('should handle edge case of just .gz extension', () => {
+                expect(fileService.getExtensionFromPath('users/1/events/2/original.gz')).toBe('gz');
+            });
+
+            it('should handle files with no extension', () => {
+                expect(fileService.getExtensionFromPath('users/1/events/2/original')).toBe('fit');
+            });
+
+            it('should handle uppercase extensions', () => {
+                expect(fileService.getExtensionFromPath('path/to/file.JSON.GZ')).toBe('json');
+                expect(fileService.getExtensionFromPath('path/to/file.GPX')).toBe('gpx');
+            });
+        });
+    });
+
+    describe('Edge cases', () => {
+        it('should handle empty originalFiles array', async () => {
             const dummyEvent = {
                 getID: () => 'event123',
                 getActivities: () => [],
@@ -131,15 +383,6 @@ describe('AppEventService', () => {
                 startDate: new Date(),
             } as any;
 
-            // Gzip magic bytes: 0x1F, 0x8B
-            const compressedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]).buffer;
-
-            const originalFiles = [
-                { data: compressedData, extension: 'json.gz', startDate: new Date() },
-                { data: '{"a":1}', extension: 'json', startDate: new Date() }
-            ];
-
-            // Mock EventWriter
             vi.mock('../../../functions/src/shared/event-writer', () => ({
                 EventWriter: vi.fn().mockImplementation(() => ({
                     writeAllEventData: vi.fn().mockResolvedValue(undefined)
@@ -147,45 +390,27 @@ describe('AppEventService', () => {
                 consoleLogAdapter: {}
             }));
 
-            await service.writeAllEventData({ uid: 'user1' } as any, dummyEvent, originalFiles);
-
-            // First file should NOT have been re-compressed (it was already gzipped)
-            // Second file SHOULD have been compressed
-            // Both should have .json.gz extension
-            expect(originalFiles[0].extension).toBe('json.gz');
-            expect(originalFiles[1].extension).toBe('json.gz');
-
-            // Check if first file data is still the same compressed data (not double compressed)
-            expect(new Uint8Array(originalFiles[0].data as ArrayBuffer)[0]).toBe(0x1F);
-            expect(new Uint8Array(originalFiles[0].data as ArrayBuffer)[1]).toBe(0x8B);
-
-            // CompressionStream should only have been called once (for the second file)
-            expect(global.CompressionStream).toHaveBeenCalledTimes(1);
+            // Should not throw
+            await expect(service.writeAllEventData({ uid: 'user1' } as any, dummyEvent, [])).resolves.not.toThrow();
         });
 
-        it('should decompress gzipped files during download via AppFileService', async () => {
-            const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]);
-            const buffer = gzippedData.buffer;
+        it('should handle undefined originalFiles', async () => {
+            const dummyEvent = {
+                getID: () => 'event123',
+                getActivities: () => [],
+                toJSON: () => ({ id: 'event123' }),
+                startDate: new Date(),
+            } as any;
 
-            const result = await fileService.decompressIfNeeded(buffer, 'test.json.gz');
+            vi.mock('../../../functions/src/shared/event-writer', () => ({
+                EventWriter: vi.fn().mockImplementation(() => ({
+                    writeAllEventData: vi.fn().mockResolvedValue(undefined)
+                })),
+                consoleLogAdapter: {}
+            }));
 
-            expect(global.DecompressionStream).toHaveBeenCalledWith('gzip');
-            expect(result).toBeInstanceOf(ArrayBuffer);
-        });
-
-        it('should NOT decompress FIT files even if they have gzip-like bytes', async () => {
-            const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]);
-            const buffer = gzippedData.buffer;
-            const result = await fileService.decompressIfNeeded(buffer, 'test.fit');
-            expect(global.DecompressionStream).not.toHaveBeenCalled();
-            expect(result).toBe(buffer);
-        });
-
-        it('should correctly extract base extension for gzipped files', () => {
-            expect(fileService.getExtensionFromPath('users/1/events/2/original.json.gz')).toBe('json');
-            expect(fileService.getExtensionFromPath('users/1/events/2/original.gpx.gz')).toBe('gpx');
-            expect(fileService.getExtensionFromPath('users/1/events/2/original.fit')).toBe('fit');
-            expect(fileService.getExtensionFromPath('users/1/events/2/original.gz')).toBe('gz');
+            // Should not throw
+            await expect(service.writeAllEventData({ uid: 'user1' } as any, dummyEvent, undefined)).resolves.not.toThrow();
         });
     });
 });

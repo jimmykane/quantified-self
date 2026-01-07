@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { LOCALE_ID } from '@angular/core';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AppFileService } from './app.file.service';
 import * as FileSaver from 'file-saver';
 import JSZip from 'jszip';
@@ -188,3 +188,342 @@ describe('AppFileService with different locales', () => {
     });
 });
 
+describe('AppFileService - getExtensionFromPath', () => {
+    let service: AppFileService;
+
+    beforeEach(() => {
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            providers: [
+                { provide: LOCALE_ID, useValue: 'en-US' }
+            ]
+        });
+        service = TestBed.inject(AppFileService);
+    });
+
+    it('should extract simple extension', () => {
+        expect(service.getExtensionFromPath('path/to/file.json')).toBe('json');
+        expect(service.getExtensionFromPath('path/to/file.gpx')).toBe('gpx');
+        expect(service.getExtensionFromPath('path/to/file.tcx')).toBe('tcx');
+        expect(service.getExtensionFromPath('path/to/file.fit')).toBe('fit');
+    });
+
+    it('should handle .gz extension and return base extension', () => {
+        expect(service.getExtensionFromPath('path/to/file.json.gz')).toBe('json');
+        expect(service.getExtensionFromPath('path/to/file.gpx.gz')).toBe('gpx');
+        expect(service.getExtensionFromPath('path/to/file.tcx.gz')).toBe('tcx');
+    });
+
+    it('should handle uppercase extensions', () => {
+        expect(service.getExtensionFromPath('path/to/file.JSON')).toBe('json');
+        expect(service.getExtensionFromPath('path/to/file.GPX.GZ')).toBe('gpx');
+    });
+
+    it('should return default extension when no extension found', () => {
+        expect(service.getExtensionFromPath('path/to/file')).toBe('fit');
+        expect(service.getExtensionFromPath('path/to/file', 'json')).toBe('json');
+    });
+
+    it('should handle edge case of just .gz extension', () => {
+        expect(service.getExtensionFromPath('path/to/file.gz')).toBe('gz');
+    });
+
+    it('should handle complex paths with multiple dots', () => {
+        expect(service.getExtensionFromPath('users/uid/events/id/original.2024-01-01.json.gz')).toBe('json');
+        expect(service.getExtensionFromPath('users/uid/events/id/my.activity.fit')).toBe('fit');
+    });
+
+    it('should handle empty path', () => {
+        expect(service.getExtensionFromPath('')).toBe('fit');
+    });
+
+    it('should handle path with only extension', () => {
+        expect(service.getExtensionFromPath('.json')).toBe('json');
+    });
+
+    it('should handle Firebase Storage paths', () => {
+        expect(service.getExtensionFromPath('users/abc123/events/xyz456/original_0.json.gz')).toBe('json');
+        expect(service.getExtensionFromPath('users/abc123/events/xyz456/original_1.gpx.gz')).toBe('gpx');
+        expect(service.getExtensionFromPath('users/abc123/events/xyz456/original_2.fit')).toBe('fit');
+    });
+});
+
+describe('AppFileService - decompressIfNeeded', () => {
+    let service: AppFileService;
+    const originalDecompressionStream = global.DecompressionStream;
+    const originalResponse = global.Response;
+
+    beforeEach(() => {
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            providers: [
+                { provide: LOCALE_ID, useValue: 'en-US' }
+            ]
+        });
+        service = TestBed.inject(AppFileService);
+
+        // Mock native APIs
+        (global as any).DecompressionStream = vi.fn().mockImplementation(() => ({
+            writable: {}, readable: {}
+        }));
+        (global as any).Response = vi.fn().mockImplementation((data) => ({
+            body: {
+                pipeThrough: vi.fn().mockReturnValue({}),
+            },
+            arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8))
+        }));
+    });
+
+    afterEach(() => {
+        global.DecompressionStream = originalDecompressionStream;
+        global.Response = originalResponse;
+    });
+
+    it('should decompress gzipped data with magic bytes', async () => {
+        const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]).buffer;
+        await service.decompressIfNeeded(gzippedData, 'test.json.gz');
+        expect(global.DecompressionStream).toHaveBeenCalledWith('gzip');
+    });
+
+    it('should NOT decompress non-gzipped data', async () => {
+        const plainData = new Uint8Array([0x00, 0x01, 0x02, 0x03]).buffer;
+        const result = await service.decompressIfNeeded(plainData, 'test.json');
+        expect(global.DecompressionStream).not.toHaveBeenCalled();
+        expect(result).toBe(plainData);
+    });
+
+    it('should NOT decompress .fit files even with gzip magic bytes', async () => {
+        const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]).buffer;
+        const result = await service.decompressIfNeeded(gzippedData, 'test.fit');
+        expect(global.DecompressionStream).not.toHaveBeenCalled();
+        expect(result).toBe(gzippedData);
+    });
+
+    it('should NOT decompress .FIT files (case insensitive)', async () => {
+        const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]).buffer;
+        const result = await service.decompressIfNeeded(gzippedData, 'test.FIT');
+        expect(global.DecompressionStream).not.toHaveBeenCalled();
+        expect(result).toBe(gzippedData);
+    });
+
+    it('should handle empty buffer', async () => {
+        const emptyBuffer = new ArrayBuffer(0);
+        const result = await service.decompressIfNeeded(emptyBuffer, 'test.json');
+        expect(global.DecompressionStream).not.toHaveBeenCalled();
+        expect(result).toBe(emptyBuffer);
+    });
+
+    it('should handle buffer with only 1 byte', async () => {
+        const tinyBuffer = new Uint8Array([0x1F]).buffer;
+        const result = await service.decompressIfNeeded(tinyBuffer, 'test.json');
+        expect(global.DecompressionStream).not.toHaveBeenCalled();
+        expect(result).toBe(tinyBuffer);
+    });
+
+    it('should handle buffer with only 2 bytes (not enough for magic check)', async () => {
+        const tinyBuffer = new Uint8Array([0x1F, 0x8B]).buffer;
+        const result = await service.decompressIfNeeded(tinyBuffer, 'test.json');
+        expect(global.DecompressionStream).not.toHaveBeenCalled();
+        expect(result).toBe(tinyBuffer);
+    });
+
+    it('should work without path parameter', async () => {
+        const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]).buffer;
+        await service.decompressIfNeeded(gzippedData);
+        expect(global.DecompressionStream).toHaveBeenCalledWith('gzip');
+    });
+
+    it('should return original buffer if decompression fails', async () => {
+        const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]).buffer;
+        // Make Response throw an error
+        (global as any).Response = vi.fn().mockImplementation(() => {
+            throw new Error('Decompression failed');
+        });
+        const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => { });
+        const result = await service.decompressIfNeeded(gzippedData, 'test.json.gz');
+        expect(result).toBe(gzippedData);
+        expect(consoleSpy).toHaveBeenCalled();
+        consoleSpy.mockRestore();
+    });
+
+    it('should handle data that starts with 0x1F but not 0x8B (not gzip)', async () => {
+        const notGzipData = new Uint8Array([0x1F, 0x00, 0x08, 0x00]).buffer;
+        const result = await service.decompressIfNeeded(notGzipData, 'test.json');
+        expect(global.DecompressionStream).not.toHaveBeenCalled();
+        expect(result).toBe(notGzipData);
+    });
+
+    it('should handle GPX files with gzip magic bytes', async () => {
+        const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]).buffer;
+        await service.decompressIfNeeded(gzippedData, 'activity.gpx.gz');
+        expect(global.DecompressionStream).toHaveBeenCalledWith('gzip');
+    });
+
+    it('should handle TCX files with gzip magic bytes', async () => {
+        const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]).buffer;
+        await service.decompressIfNeeded(gzippedData, 'activity.tcx.gz');
+        expect(global.DecompressionStream).toHaveBeenCalledWith('gzip');
+    });
+
+    it('should handle JSON files with gzip magic bytes', async () => {
+        const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]).buffer;
+        await service.decompressIfNeeded(gzippedData, 'activity.json.gz');
+        expect(global.DecompressionStream).toHaveBeenCalledWith('gzip');
+    });
+
+    it('should handle paths without extensions', async () => {
+        const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00]).buffer;
+        await service.decompressIfNeeded(gzippedData, 'some/path/without/extension');
+        expect(global.DecompressionStream).toHaveBeenCalledWith('gzip');
+    });
+});
+
+describe('AppFileService - toDate', () => {
+    let service: AppFileService;
+
+    beforeEach(() => {
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            providers: [
+                { provide: LOCALE_ID, useValue: 'en-US' }
+            ]
+        });
+        service = TestBed.inject(AppFileService);
+    });
+
+    it('should return null for null input', () => {
+        expect(service.toDate(null)).toBeNull();
+    });
+
+    it('should return null for undefined input', () => {
+        expect(service.toDate(undefined)).toBeNull();
+    });
+
+    it('should return Date object as-is', () => {
+        const date = new Date('2024-01-01');
+        expect(service.toDate(date)).toBe(date);
+    });
+
+    it('should convert Firestore Timestamp with toDate method', () => {
+        const mockTimestamp = {
+            toDate: () => new Date('2024-01-01T12:00:00Z')
+        };
+        const result = service.toDate(mockTimestamp);
+        expect(result).toEqual(new Date('2024-01-01T12:00:00Z'));
+    });
+
+    it('should convert Firestore Timestamp POJO', () => {
+        const mockPojo = {
+            seconds: 1704067200, // 2024-01-01T00:00:00Z
+            nanoseconds: 0
+        };
+        const result = service.toDate(mockPojo);
+        expect(result).toBeInstanceOf(Date);
+        expect(result?.getUTCFullYear()).toBe(2024);
+        expect(result?.getUTCMonth()).toBe(0); // January
+        expect(result?.getUTCDate()).toBe(1);
+    });
+
+    it('should convert Firestore Timestamp POJO with nanoseconds', () => {
+        const mockPojo = {
+            seconds: 1704067200,
+            nanoseconds: 500000000 // 0.5 seconds
+        };
+        const result = service.toDate(mockPojo);
+        expect(result).toBeInstanceOf(Date);
+        // The milliseconds should be approximately 500
+        expect(result?.getUTCMilliseconds()).toBeCloseTo(500, -2);
+    });
+
+    it('should convert number (timestamp in milliseconds)', () => {
+        const timestamp = 1704067200000; // 2024-01-01T00:00:00Z
+        const result = service.toDate(timestamp);
+        expect(result).toBeInstanceOf(Date);
+        expect(result?.getUTCFullYear()).toBe(2024);
+    });
+
+    it('should convert ISO string date', () => {
+        const result = service.toDate('2024-01-01T00:00:00Z');
+        expect(result).toBeInstanceOf(Date);
+        expect(result?.getUTCFullYear()).toBe(2024);
+    });
+
+    it('should convert simple date string', () => {
+        const result = service.toDate('2024-01-01');
+        expect(result).toBeInstanceOf(Date);
+    });
+
+    it('should return null for empty string', () => {
+        expect(service.toDate('')).toBeNull();
+    });
+
+    it('should return null for 0', () => {
+        // 0 is falsy in JS, so this should return null based on the implementation
+        expect(service.toDate(0)).toBeNull();
+    });
+
+    it('should handle object without recognized date properties', () => {
+        const result = service.toDate({ foo: 'bar' });
+        expect(result).toBeNull();
+    });
+});
+
+describe('AppFileService - Edge Cases', () => {
+    let service: AppFileService;
+
+    beforeEach(() => {
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            providers: [
+                { provide: LOCALE_ID, useValue: 'en-US' }
+            ]
+        });
+        service = TestBed.inject(AppFileService);
+    });
+
+    describe('generateDateBasedFilename edge cases', () => {
+        it('should handle midnight time', () => {
+            const date = new Date('2024-01-15T00:00:00');
+            const result = service.generateDateBasedFilename(date, 'fit');
+            expect(result).toMatch(/2024-01-15_00-00\.fit/);
+        });
+
+        it('should handle end of day time', () => {
+            const date = new Date('2024-01-15T23:59:59');
+            const result = service.generateDateBasedFilename(date, 'fit');
+            expect(result).toMatch(/2024-01-15_23-59\.fit/);
+        });
+
+        it('should handle index 0', () => {
+            const date = new Date('2024-01-15T08:30:00');
+            const result = service.generateDateBasedFilename(date, 'gpx', 0, 3);
+            expect(result).toMatch(/2024-01-15_08-30_0\.gpx/);
+        });
+
+        it('should handle very large index', () => {
+            const date = new Date('2024-01-15T08:30:00');
+            const result = service.generateDateBasedFilename(date, 'gpx', 999, 1000);
+            expect(result).toMatch(/2024-01-15_08-30_999\.gpx/);
+        });
+    });
+
+    describe('generateDateRangeZipFilename edge cases', () => {
+        it('should handle only minDate null', () => {
+            const maxDate = new Date('2024-01-31');
+            const result = service.generateDateRangeZipFilename(null, maxDate);
+            expect(result).toBe('unknown_to_2024-01-31_originals.zip');
+        });
+
+        it('should handle only maxDate null', () => {
+            const minDate = new Date('2024-01-01');
+            const result = service.generateDateRangeZipFilename(minDate, null);
+            expect(result).toBe('2024-01-01_to_unknown_originals.zip');
+        });
+
+        it('should handle empty suffix', () => {
+            const date = new Date('2024-01-15');
+            const result = service.generateDateRangeZipFilename(date, date, '');
+            expect(result).toBe('2024-01-15_.zip');
+        });
+    });
+});
