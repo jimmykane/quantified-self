@@ -1,6 +1,6 @@
 import { StorageServiceInterface } from './app.storage.service.interface';
-import { Injectable } from '@angular/core';
-
+import { Injectable, Inject } from '@angular/core';
+import { APP_STORAGE } from './app.storage.token';
 
 @Injectable({
   providedIn: 'root',
@@ -9,9 +9,7 @@ export abstract class LocalStorageService implements StorageServiceInterface {
 
   protected abstract nameSpace: string;
 
-  private localStorage = localStorage;
-
-  constructor() {
+  constructor(@Inject(APP_STORAGE) private storage: Storage) {
   }
 
   getNameSpace(): string {
@@ -19,37 +17,38 @@ export abstract class LocalStorageService implements StorageServiceInterface {
   }
 
   setItem(key: string, data: string) {
-    localStorage.setItem(
+    this.storage.setItem(
       this.nameSpace + key,
       data,
     );
   }
 
   getItem(key: string): string {
-    return localStorage.getItem(this.nameSpace + key)
+    return this.storage.getItem(this.nameSpace + key) || '';
   }
 
   removeItem(key: string): void {
-    return localStorage.removeItem(this.nameSpace + key)
+    this.storage.removeItem(this.nameSpace + key)
   }
 
   getAllItems(): string[] {
-    const items = [];
+    const items: string[] = [];
     this.getAllKeys().map((localStorageKey) => {
-      items.push(localStorage.getItem(localStorageKey));
+      const item = this.storage.getItem(this.nameSpace + localStorageKey);
+      if (item) items.push(item);
     });
     return items;
   }
 
   getAllKeys(): string[] {
-    const localStorageKeys = [];
-    Object.keys(localStorage).map((localStorageKey) => {
-      // If not in the correct namespace move on
-      if (localStorageKey.startsWith(this.nameSpace)) {
-        localStorageKeys.push(localStorageKey.slice(this.nameSpace.length));
+    const keys: string[] = [];
+    for (let i = 0; i < this.storage.length; i++) {
+      const key = this.storage.key(i);
+      if (key && key.startsWith(this.nameSpace)) {
+        keys.push(key.slice(this.nameSpace.length));
       }
-    });
-    return localStorageKeys;
+    }
+    return keys;
   }
 
   removeAllItems() {
@@ -59,6 +58,6 @@ export abstract class LocalStorageService implements StorageServiceInterface {
   }
 
   clearAllStorage() {
-    this.localStorage.clear();
+    this.storage.clear();
   }
 }

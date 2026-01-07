@@ -14,6 +14,12 @@
             "outputPath": "dist",
             "index": "src/index.html",
             "browser": "src/main.ts",
+            "server": "src/main.server.ts",
+            "prerender": {
+              "routesFile": "src/routes.txt",
+              "discoverRoutes": false
+            },
+            "ssr": false,
             "tsConfig": "src/tsconfig.app.json",
             "polyfills": [
               "zone.js"

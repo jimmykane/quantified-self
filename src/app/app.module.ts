@@ -37,6 +37,7 @@ export function initializeRemoteConfig(remoteConfigService: AppRemoteConfigServi
 }
 
 import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/date-locale.config';
+import { APP_STORAGE } from './services/storage/app.storage.token';
 
 
 
@@ -108,7 +109,11 @@ import { AppSkeletonComponent } from './components/loading/skeleton/app.skeleton
     provideRemoteConfig(() => getRemoteConfig()),
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
     MAT_DATE_LOCALE_PROVIDER,
-    { provide: LOCALE_ID, useFactory: getBrowserLocale }
+    { provide: LOCALE_ID, useFactory: getBrowserLocale },
+    {
+      provide: APP_STORAGE,
+      useFactory: () => localStorage
+    }
   ]
 })
 export class AppModule {

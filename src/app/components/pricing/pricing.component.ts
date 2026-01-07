@@ -1,5 +1,5 @@
-import { Component, OnInit, OnDestroy, inject, Output, EventEmitter } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, OnInit, OnDestroy, inject, Output, EventEmitter, PLATFORM_ID } from '@angular/core';
+import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -37,6 +37,7 @@ export class PricingComponent implements OnInit, OnDestroy {
     isLoading = false;
     loadingPriceId: string | null = null;
 
+    private platformId = inject(PLATFORM_ID);
     private authService = inject(AppAuthService);
     private auth = inject(Auth);
     private userService = inject(AppUserService);
@@ -94,15 +95,19 @@ export class PricingComponent implements OnInit, OnDestroy {
         );
 
         // Reset loading state if user returns to the tab (e.g. from Stripe Checkout via back button)
-        document.addEventListener('visibilitychange', this.handleVisibilityChange);
+        if (isPlatformBrowser(this.platformId)) {
+            document.addEventListener('visibilitychange', this.handleVisibilityChange);
+        }
     }
 
     ngOnDestroy() {
-        document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+        if (isPlatformBrowser(this.platformId)) {
+            document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+        }
     }
 
     private handleVisibilityChange = () => {
-        if (!document.hidden) {
+        if (isPlatformBrowser(this.platformId) && !document.hidden) {
             this.logger.log('Page became visible, resetting loading state');
             this.isLoading = false;
             this.loadingPriceId = null;
