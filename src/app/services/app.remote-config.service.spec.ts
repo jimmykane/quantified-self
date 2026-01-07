@@ -4,6 +4,8 @@ import { AppWindowService } from './app.window.service';
 import { AppUserService } from './app.user.service';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { firstValueFrom } from 'rxjs';
+import { APP_STORAGE } from './storage/app.storage.token';
+import { PLATFORM_ID } from '@angular/core';
 
 describe('AppRemoteConfigService', () => {
     let service: AppRemoteConfigService;
@@ -36,16 +38,20 @@ describe('AppRemoteConfigService', () => {
             })
         });
 
-        // Mock localStorage
-        const localStorageMock = {
+        // Mock storage instead of global localStorage
+        const storageMock = {
             getItem: vi.fn().mockReturnValue('test-instance-id'),
-            setItem: vi.fn()
+            setItem: vi.fn(),
+            removeItem: vi.fn(),
+            clear: vi.fn(),
+            key: vi.fn(),
+            length: 0
         };
-        Object.defineProperty(global, 'localStorage', { value: localStorageMock, writable: true });
 
         // Mock crypto.randomUUID
         Object.defineProperty(global, 'crypto', {
             value: { randomUUID: () => 'test-uuid' },
+            configurable: true,
             writable: true
         });
 
@@ -53,7 +59,9 @@ describe('AppRemoteConfigService', () => {
             providers: [
                 AppRemoteConfigService,
                 { provide: AppWindowService, useValue: mockWindowService },
-                { provide: AppUserService, useValue: mockUserService }
+                { provide: AppUserService, useValue: mockUserService },
+                { provide: APP_STORAGE, useValue: storageMock },
+                { provide: PLATFORM_ID, useValue: 'browser' }
             ]
         });
 
@@ -85,12 +93,15 @@ describe('AppRemoteConfigService', () => {
                 })
             });
 
+            const storageMock = { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn() };
             TestBed.resetTestingModule();
             TestBed.configureTestingModule({
                 providers: [
                     AppRemoteConfigService,
                     { provide: AppWindowService, useValue: mockWindowService },
-                    { provide: AppUserService, useValue: mockUserService }
+                    { provide: AppUserService, useValue: mockUserService },
+                    { provide: APP_STORAGE, useValue: storageMock },
+                    { provide: PLATFORM_ID, useValue: 'browser' }
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
@@ -116,7 +127,9 @@ describe('AppRemoteConfigService', () => {
                 providers: [
                     AppRemoteConfigService,
                     { provide: AppWindowService, useValue: mockWindowService },
-                    { provide: AppUserService, useValue: mockUserService }
+                    { provide: AppUserService, useValue: mockUserService },
+                    { provide: APP_STORAGE, useValue: { getItem: vi.fn(), setItem: vi.fn() } },
+                    { provide: PLATFORM_ID, useValue: 'browser' }
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
@@ -133,7 +146,9 @@ describe('AppRemoteConfigService', () => {
                 providers: [
                     AppRemoteConfigService,
                     { provide: AppWindowService, useValue: mockWindowService },
-                    { provide: AppUserService, useValue: mockUserService }
+                    { provide: AppUserService, useValue: mockUserService },
+                    { provide: APP_STORAGE, useValue: { getItem: vi.fn(), setItem: vi.fn() } },
+                    { provide: PLATFORM_ID, useValue: 'browser' }
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
@@ -158,7 +173,9 @@ describe('AppRemoteConfigService', () => {
                 providers: [
                     AppRemoteConfigService,
                     { provide: AppWindowService, useValue: mockWindowService },
-                    { provide: AppUserService, useValue: mockUserService }
+                    { provide: AppUserService, useValue: mockUserService },
+                    { provide: APP_STORAGE, useValue: { getItem: vi.fn(), setItem: vi.fn() } },
+                    { provide: PLATFORM_ID, useValue: 'browser' }
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
@@ -175,22 +192,23 @@ describe('AppRemoteConfigService', () => {
 
             // Re-inject service to ensure it hits getOrCreateInstanceId with fresh state
             TestBed.resetTestingModule();
-            const localStorageMock = {
+            const storageMock = {
                 getItem: vi.fn().mockReturnValue(null),
                 setItem: vi.fn()
             };
-            Object.defineProperty(global, 'localStorage', { value: localStorageMock, writable: true });
 
             TestBed.configureTestingModule({
                 providers: [
                     AppRemoteConfigService,
                     { provide: AppWindowService, useValue: mockWindowService },
-                    { provide: AppUserService, useValue: mockUserService }
+                    { provide: AppUserService, useValue: mockUserService },
+                    { provide: APP_STORAGE, useValue: storageMock },
+                    { provide: PLATFORM_ID, useValue: 'browser' }
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
 
-            expect(localStorageMock.setItem).toHaveBeenCalledWith('rc_instance_id', 'test-uuid');
+            expect(storageMock.setItem).toHaveBeenCalledWith('rc_instance_id', 'test-uuid');
         });
 
         it('should use fallback when crypto.randomUUID is not available', () => {
@@ -200,47 +218,49 @@ describe('AppRemoteConfigService', () => {
                 writable: true
             });
 
-            // Mock localStorage
-            const localStorageMock = {
+            // Mock storage
+            const storageMock = {
                 getItem: vi.fn().mockReturnValue(null),
                 setItem: vi.fn()
             };
-            Object.defineProperty(global, 'localStorage', { value: localStorageMock, writable: true });
 
             TestBed.resetTestingModule();
             TestBed.configureTestingModule({
                 providers: [
                     AppRemoteConfigService,
                     { provide: AppWindowService, useValue: mockWindowService },
-                    { provide: AppUserService, useValue: mockUserService }
+                    { provide: AppUserService, useValue: mockUserService },
+                    { provide: APP_STORAGE, useValue: storageMock },
+                    { provide: PLATFORM_ID, useValue: 'browser' }
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
 
             // Verify a UUID-like string was set
-            const call = localStorageMock.setItem.mock.calls[0];
+            const call = storageMock.setItem.mock.calls[0];
             expect(call[0]).toBe('rc_instance_id');
             expect(call[1]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
         });
 
         it('should return existing id from localStorage if available', () => {
-            const localStorageMock = {
+            const storageMock = {
                 getItem: vi.fn().mockReturnValue('existing-id'),
                 setItem: vi.fn()
             };
-            Object.defineProperty(global, 'localStorage', { value: localStorageMock, writable: true });
 
             TestBed.resetTestingModule();
             TestBed.configureTestingModule({
                 providers: [
                     AppRemoteConfigService,
                     { provide: AppWindowService, useValue: mockWindowService },
-                    { provide: AppUserService, useValue: mockUserService }
+                    { provide: AppUserService, useValue: mockUserService },
+                    { provide: APP_STORAGE, useValue: storageMock },
+                    { provide: PLATFORM_ID, useValue: 'browser' }
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
 
-            expect(localStorageMock.setItem).not.toHaveBeenCalled();
+            expect(storageMock.setItem).not.toHaveBeenCalled();
         });
     });
 
@@ -269,7 +289,9 @@ describe('AppRemoteConfigService', () => {
                 providers: [
                     AppRemoteConfigService,
                     { provide: AppWindowService, useValue: mockWindowService },
-                    { provide: AppUserService, useValue: mockUserService }
+                    { provide: AppUserService, useValue: mockUserService },
+                    { provide: APP_STORAGE, useValue: { getItem: vi.fn(), setItem: vi.fn() } },
+                    { provide: PLATFORM_ID, useValue: 'browser' }
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
@@ -301,7 +323,9 @@ describe('AppRemoteConfigService', () => {
                 providers: [
                     AppRemoteConfigService,
                     { provide: AppWindowService, useValue: mockWindowService },
-                    { provide: AppUserService, useValue: mockUserService }
+                    { provide: AppUserService, useValue: mockUserService },
+                    { provide: APP_STORAGE, useValue: { getItem: vi.fn(), setItem: vi.fn() } },
+                    { provide: PLATFORM_ID, useValue: 'browser' }
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
