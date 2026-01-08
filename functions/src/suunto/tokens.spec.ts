@@ -33,17 +33,31 @@ describe('Suunto Token Refresh Scheduler', () => {
         // Mock chain for where filters
         const getMock = vi.fn().mockResolvedValue(mockSnapshot);
         const limitMock = vi.fn().mockReturnValue({ get: getMock });
-        const whereMock = vi.fn().mockReturnValue({ limit: limitMock });
+
+        // Setup recursive mock for chaining .where().where()
+        const whereMock = vi.fn();
+        const queryObj = {
+            where: whereMock,
+            limit: limitMock
+        };
+        whereMock.mockReturnValue(queryObj);
+
         (firestore.collectionGroup as any).mockReturnValue({ where: whereMock });
 
         await (refreshSuuntoAppRefreshTokens as any)({});
 
         expect(firestore.collectionGroup).toHaveBeenCalledWith('tokens');
-        // Should have been called twice (once for <= 90 days, once for == null)
-        expect(whereMock).toHaveBeenCalledTimes(2);
-        // The first where call for Query 1
+
+        // Should be called 4 times now (2 filters per query * 2 queries)
+        // Query 1: serviceName AND dateRefreshed <= 90 days
+        // Query 2: serviceName AND dateRefreshed == null
+        expect(whereMock).toHaveBeenCalledTimes(4);
+
+        // Verify Service Name filter is applied
+        expect(whereMock).toHaveBeenCalledWith('serviceName', '==', SERVICE_NAME);
+
+        // Verify specific date filters
         expect(whereMock).toHaveBeenCalledWith('dateRefreshed', '<=', expect.any(Number));
-        // The first where call for Query 2
         expect(whereMock).toHaveBeenCalledWith('dateRefreshed', '==', null);
 
         // tokens.refreshTokens should be called twice

@@ -11,6 +11,7 @@ export const refreshSuuntoAppRefreshTokens = functions.region('europe-west2').ru
 
   // Query 1: Tokens that need refresh based on dateRefreshed
   const querySnapshot = await admin.firestore().collectionGroup('tokens')
+    .where('serviceName', '==', SERVICE_NAME)
     .where('dateRefreshed', '<=', ninetyDaysAgo)
     .limit(50).get();
 
@@ -21,6 +22,7 @@ export const refreshSuuntoAppRefreshTokens = functions.region('europe-west2').ru
   // Since we can't query "not exists", we can query for ones where dateCreated is old but dateRefreshed is missing
   // or just attempt to refresh tokens that have no dateRefreshed at all.
   const querySnapshotNoDate = await admin.firestore().collectionGroup('tokens')
+    .where('serviceName', '==', SERVICE_NAME)
     .where('dateRefreshed', '==', null) // Some might have it as null
     .limit(50).get();
 
