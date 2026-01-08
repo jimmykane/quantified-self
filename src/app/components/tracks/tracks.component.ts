@@ -78,7 +78,8 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
 
     // Load Leaflet and plugins dynamically in browser only
-    const L = await import('leaflet');
+    const leafletModule = await import('leaflet');
+    const L = leafletModule.default || leafletModule;
     await import('leaflet-providers');
     await import('leaflet-easybutton');
     await import('leaflet-fullscreen');
@@ -96,7 +97,8 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   public async search(event) {
     if (!isPlatformBrowser(this.platformId)) return;
-    const L = await import('leaflet'); // Need L for search too if it uses it directly
+    const leafletModule = await import('leaflet');
+    const L = leafletModule.default || leafletModule;
     this.unsubscribeFromAll();
     this.user.settings.myTracksSettings.dateRange = event.dateRange;
     await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
@@ -238,7 +240,8 @@ export class TracksComponent implements OnInit, OnDestroy {
     // we can import L dynamically here again (it's cached) OR pass it.
     // Let's pass it or assume global L if the library exposes it, but dynamic import is safer.
     // Actually, panToLines uses L.featureGroup.
-    import('leaflet').then(L => {
+    import('leaflet').then(leafletModule => {
+      const L = leafletModule.default || leafletModule;
       this.zone.runOutsideAngular(() => {
         // Perhaps use panto with the lat,lng
         map.fitBounds((L.featureGroup(lines)).getBounds(), {
