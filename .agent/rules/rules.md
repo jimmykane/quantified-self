@@ -35,6 +35,7 @@ trigger: always_on
 - interactive maps use **Leaflet**.
 
 ### General
+- **Browser Compatibility**: Use `BrowserCompatibilityService` to check for modern API support (e.g., `CompressionStream`, `DecompressionStream`) before using them. If unsupported, the service handles showing an upgrade dialog.
 - **Strictness**: The project has `strict` mode potentially off or loose (based on `tsconfig` analysis). Ensure null checks are handled gracefully.
 - **Bailout First**: Always use "bailout first" / "return early" patterns. Avoid deep nesting of `if/else` statements. Handle validation, error checks, and edge cases at the very beginning of functions and return immediately.
 - **Directory Structure**:
