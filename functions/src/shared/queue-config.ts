@@ -9,7 +9,7 @@
 export const MAX_RETRY_COUNT = 10;
 
 /** Cron schedule for background processing (every 15 minutes) */
-export const QUEUE_SCHEDULE = '*/5 * * * *';
+export const QUEUE_SCHEDULE = '*/10 * * * *';
 
 /** Cloud Tasks retry configuration for immediate processing */
 export const CLOUD_TASK_RETRY_CONFIG = {
