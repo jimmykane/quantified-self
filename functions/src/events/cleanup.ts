@@ -15,8 +15,6 @@ export const cleanupEventFile = onDocumentDeleted({
         return;
     }
 
-
-
     logger.info(`[Cleanup] Event ${eventId} for user ${userId} deleted. Checking for original file.`);
 
     // Delete linked activities (Flat structure)
