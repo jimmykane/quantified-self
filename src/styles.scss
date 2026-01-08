@@ -666,6 +666,55 @@ mat-table {
 }
 
 /* ==========================================================================
+   Global Dialog Styles
+   Standardized Material Dialog overrides for glassmorphism consistency.
+   Applied via MAT_DIALOG_DEFAULT_OPTIONS in app.module.ts.
+   ========================================================================== */
+.qs-dialog-container {
+
+  .mat-mdc-dialog-container,
+  .mat-mdc-dialog-surface {
+    background: var(--mat-sys-surface) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 16px !important;
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.12),
+      0 2px 8px rgba(0, 0, 0, 0.08) !important;
+  }
+
+  .mat-mdc-dialog-title {
+    font: var(--mat-sys-headline-small) !important;
+    color: var(--mat-sys-on-surface) !important;
+    padding: 24px 24px 8px !important;
+    margin: 0 !important;
+  }
+
+  .mat-mdc-dialog-content {
+    color: var(--mat-sys-on-surface) !important;
+    padding: 8px 24px !important;
+  }
+
+  .mat-mdc-dialog-actions {
+    padding: 16px 24px 24px !important;
+    gap: 8px;
+  }
+}
+
+/* Dark Theme Dialog Overrides */
+.dark-theme .qs-dialog-container {
+
+  .mat-mdc-dialog-container,
+  .mat-mdc-dialog-surface {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.4),
+      0 2px 8px rgba(0, 0, 0, 0.2) !important;
+  }
+}
+
+/* ==========================================================================
    Global Table Styles
    Standardized Material table overrides for glassmorphism.
    ========================================================================== */
