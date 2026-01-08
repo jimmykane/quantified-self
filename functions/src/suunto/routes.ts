@@ -6,7 +6,7 @@ import * as admin from 'firebase-admin';
 import * as requestPromise from '../request-helper';
 import { getTokenData } from '../tokens';
 import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
-import * as Pako from 'pako';
+import * as zlib from 'zlib';
 import { SERVICE_NAME } from './constants';
 import { config } from '../config';
 
@@ -72,7 +72,7 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
           'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
           // json: true,
         },
-        body: Pako.ungzip(Buffer.from(req.body, 'base64'), { to: 'string' }),
+        body: zlib.gunzipSync(Buffer.from(req.body, 'base64')).toString(),
         url: 'https://cloudapi.suunto.com/v2/route/import',
       });
       result = JSON.parse(result);

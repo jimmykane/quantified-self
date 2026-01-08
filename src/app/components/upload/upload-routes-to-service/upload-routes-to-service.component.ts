@@ -11,8 +11,8 @@ import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { FileInterface } from '../file.interface';
 import { AppProcessingService } from '../../../services/app.processing.service';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import * as Pako from 'pako';
 import { getSize } from '@sports-alliance/sports-lib';
+
 
 @Component({
   selector: 'app-upload-route-to-service',
@@ -55,9 +55,20 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
           reject(`Not a GPX file`)
           return;
         }
+
         const idToken = await getIdToken(this.auth.currentUser, true)
         try {
-          const compressed = btoa(Pako.gzip(fileReader.result as string, { to: 'string' }));
+          // Check for native support
+          if (typeof CompressionStream === 'undefined') {
+            throw new Error('Your browser does not support compression. Please update to a modern browser.');
+          }
+
+          const stream = new Blob([fileReader.result as string]).stream();
+          const compressedStream = stream.pipeThrough(new CompressionStream('gzip'));
+          const compressedBuffer = await new Response(compressedStream).arrayBuffer();
+          // Convert ArrayBuffer to Base64
+          const compressed = btoa(String.fromCharCode(...new Uint8Array(compressedBuffer)));
+
           if (getSize(compressed) > 10485760) {
             throw new Error(`Cannot upload route because the size is greater than 10MB`);
           }

@@ -2,7 +2,7 @@
 import { describe, it, vi, expect, beforeEach } from 'vitest';
 import * as functions from 'firebase-functions-test';
 import * as admin from 'firebase-admin';
-import * as Pako from 'pako';
+import * as zlib from 'zlib';
 import { PRO_REQUIRED_MESSAGE } from '../utils';
 
 // Mock Dependencies
@@ -126,7 +126,7 @@ describe('importRouteToSuuntoApp', () => {
         const req = {
             method: 'POST',
             // body containing base64 encoded gZIP
-            body: Buffer.from(Pako.gzip(gpxContent)).toString('base64'),
+            body: Buffer.from(zlib.gzipSync(gpxContent)).toString('base64'),
             get: (h: string) => h === 'origin' ? 'http://localhost' : undefined
         } as any;
 
@@ -217,7 +217,7 @@ describe('importRouteToSuuntoApp', () => {
 
         const req = {
             method: 'POST',
-            body: Buffer.from(Pako.gzip(gpxContent)).toString('base64'),
+            body: Buffer.from(zlib.gzipSync(gpxContent)).toString('base64'),
             get: vi.fn(),
         } as any;
         const res = {
@@ -241,7 +241,7 @@ describe('importRouteToSuuntoApp', () => {
 
         const req = {
             method: 'POST',
-            body: Buffer.from(Pako.gzip(gpxContent)).toString('base64'),
+            body: Buffer.from(zlib.gzipSync(gpxContent)).toString('base64'),
             get: vi.fn(),
         } as any;
         const res = {
