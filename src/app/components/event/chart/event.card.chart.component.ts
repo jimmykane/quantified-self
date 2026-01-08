@@ -836,10 +836,49 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         const shouldRemoveDistance = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataDistance.type) === -1;
 
         // @todo should do the same with distance (miles) and vertical speed
-        [...new Set(ActivityUtilities.createUnitStreamsFromStreams(streams, activity.type, DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(streams.map(st => st.type), this.userUnitSettings)).concat(streams))]
+        // When Show All Data is enabled, we want to prevent the "explosion" of derived types (e.g. Pace from Speed).
+        // derivedTypes are "sister" types. unitVariants are "formats" (km/h vs mph).
+        const includeDerivedTypes = !this.showAllData;
+
+        // DEBUG: Check what units are actually configured
+        if (this.showAllData) {
+          console.log('[EventCardChart] userUnitSettings:', this.userUnitSettings);
+        }
+
+        const whitelistedUnitTypes = DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(
+          streams.map(st => st.type),
+          this.userUnitSettings,
+          { includeDerivedTypes }
+        );
+
+        if (this.showAllData) {
+          console.log('[EventCardChart] whitelistedUnitTypes:', whitelistedUnitTypes);
+        }
+
+        // Gather all "known" unit variants to identify what we should potentially hide
+        // Using dataTypeUnitGroups which maps BaseType -> { Variant1, Variant2... }
+        const allKnownUnitVariants = Object.values(DynamicDataLoader.dataTypeUnitGroups)
+          .flatMap(group => Object.keys(group));
+
+        [...new Set(ActivityUtilities.createUnitStreamsFromStreams(
+          streams,
+          activity.type,
+          whitelistedUnitTypes,
+          { includeDerivedTypes, includeUnitVariants: true }
+        ).concat(streams))]
           .filter((stream) => {
             // First, filter by showAllData toggle
             if (allowedDataTypes !== null && !allowedDataTypes.includes(stream.type)) {
+              return false;
+            }
+
+            // CRITICAL FIX: Even if showAllData is TRUE, we must hide "sister" unit variants
+            // that are not in our whitelist.
+            // If this stream describes a known unit variant (e.g. 'Speed in miles per hour')
+            // AND
+            // It is NOT in our allowed whitelist (e.g. we only want 'Speed in km/h')
+            // THEN hide it.
+            if (allKnownUnitVariants.includes(stream.type) && !whitelistedUnitTypes.includes(stream.type)) {
               return false;
             }
 
