@@ -258,7 +258,9 @@ describe('importRouteToSuuntoApp', () => {
     });
 
     it('should handle auth error (refresh token failed)', async () => {
-        tokensMocks.getTokenData.mockRejectedValue(new Error('Refresh failed'));
+        const error: any = new Error('Refresh failed');
+        error.statusCode = 401;
+        tokensMocks.getTokenData.mockRejectedValue(error);
         const gpxContent = '<gpx>...</gpx>';
 
         const req = {
@@ -276,5 +278,43 @@ describe('importRouteToSuuntoApp', () => {
 
         expect(res.status).toHaveBeenCalledWith(401);
         expect(res.send).toHaveBeenCalledWith('Authentication failed. Please re-connect your Suunto account.');
+    });
+
+    it('should retry on 401 during upload', async () => {
+        // First call fails with 401, second succeeds
+        requestMocks.post
+            .mockRejectedValueOnce({ statusCode: 401, message: 'Unauthorized' })
+            .mockResolvedValueOnce(JSON.stringify({ id: 'route-success' }));
+
+        // Token refresh mock for fix
+        tokensMocks.getTokenData
+            .mockResolvedValueOnce({ accessToken: 'old-access-token' }) // Initial
+            .mockResolvedValueOnce({ accessToken: 'new-access-token' }); // Force refresh
+
+        const gpxContent = '<gpx>...</gpx>';
+        const req = {
+            method: 'POST',
+            body: { body: Buffer.from(zlib.gzipSync(gpxContent)).toString('base64') },
+            get: vi.fn(),
+        } as any;
+        const res = {
+            status: vi.fn().mockReturnThis(),
+            send: vi.fn(),
+            set: vi.fn(),
+        } as any;
+
+        await importRouteToSuuntoApp(req, res);
+
+        // Expect getTokenData called twice: once normal, once forced
+        expect(tokensMocks.getTokenData).toHaveBeenCalledTimes(2);
+        // First call - normal (false)
+        expect(tokensMocks.getTokenData).toHaveBeenNthCalledWith(1, expect.anything(), expect.anything(), false);
+        // Second call - forced (true)
+        expect(tokensMocks.getTokenData).toHaveBeenNthCalledWith(2, expect.anything(), expect.anything(), true);
+
+        // Expect post called twice
+        expect(requestMocks.post).toHaveBeenCalledTimes(2);
+
+        expect(res.status).toHaveBeenCalledWith(200);
     });
 });

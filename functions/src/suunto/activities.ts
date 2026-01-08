@@ -5,7 +5,7 @@ import * as logger from 'firebase-functions/logger';
 import { config } from '../config';
 import * as admin from 'firebase-admin';
 import * as requestPromise from '../request-helper';
-import { getTokenData } from '../tokens';
+import { executeWithTokenRetry } from './retry-helper';
 import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
 import { SERVICE_NAME } from './constants';
 
@@ -65,102 +65,110 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
   logger.info(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
-    let serviceToken;
     try {
-      serviceToken = await getTokenData(tokenQueryDocumentSnapshot, SERVICE_NAME, false);
-    } catch (e: any) {
-      logger.error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
-      res.status(500);
-      res.send(e.name);
-      return;
-    }
+      await executeWithTokenRetry(
+        tokenQueryDocumentSnapshot,
+        async (accessToken) => {
+          // Initialize the upload
+          let result: any;
+          try {
+            result = await requestPromise.post({
+              headers: {
+                'Authorization': accessToken,
+                'Content-Type': 'application/json',
+                'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
+                'json': true,
+              },
+              body: JSON.stringify({
+                // description: "#qs",
+                // comment: "",
+                notifyUser: true,
+              }),
+              url: 'https://cloudapi.suunto.com/v2/upload/',
+            });
+            result = JSON.parse(result);
+          } catch (e: any) {
+            // Start logging and rethrowing for retry-helper to catch matching 401s
+            logger.error(`Could not init activity upload for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
+            throw e;
+          }
 
-    // Initialize the upload
-    let result: any;
-    try {
-      result = await requestPromise.post({
-        headers: {
-          'Authorization': serviceToken.accessToken,
-          'Content-Type': 'application/json',
-          'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-          'json': true,
+          const url = result.url;
+          const uploadId = result.id;
+          logger.info(`Init response for user ${userID}: url=${url}, id=${uploadId}, headers=${JSON.stringify(result.headers)}`);
+
+          try {
+            // Perform the binary upload to the Azure Blob Storage URL provided by Suunto
+            // We must use the headers provided by the init-upload response to match the signed URL signature
+            result = await requestPromise.put({
+              headers: result.headers || {},
+              json: false,
+              url,
+              body: req.rawBody,
+            });
+            logger.info(`PUT response for user ${userID}: ${JSON.stringify(result)}`);
+          } catch (e: any) {
+            logger.error(`Could not upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
+            throw e;
+          }
+
+          // Check the upload status with polling
+          let status = 'NEW';
+          let attempts = 0;
+          const maxAttempts = 10; // 20 seconds total wait
+
+          while ((status === 'NEW' || status === 'ACCEPTED') && attempts < maxAttempts) {
+            attempts++;
+            // Wait 2 seconds before checking
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            try {
+              const statusResponse = await requestPromise.get({
+                headers: {
+                  'Authorization': accessToken,
+                  'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
+                },
+                url: `https://cloudapi.suunto.com/v2/upload/${uploadId}`,
+              });
+
+              const statusJson = JSON.parse(statusResponse);
+              status = statusJson.status;
+              logger.info(`Upload status (attempt ${attempts}/${maxAttempts}) for user ${userID}, id ${uploadId}: ${status}`, statusJson);
+
+              if (status === 'PROCESSED') {
+                logger.info(`Successfully processed activity for user ${userID}. WorkoutKey: ${statusJson.workoutKey}`);
+                return; // Success
+              } else if (status === 'ERROR') {
+                throw new Error(`Suunto processing failed: ${statusJson.message}`);
+              }
+            } catch (e: any) {
+              logger.error(`Could not check upload status for ${uploadId} for user ${userID} (attempt ${attempts})`, e);
+              // If it's a 401 during polling, throwing allows retry-helper to refresh and restart the WHOLE process.
+              // If it's unrelated, we might want to continue polling?
+              // But requestPromise throws on error status.
+              // If we throw here, the while loop exits and retry-helper catches it.
+              throw e;
+            }
+          }
+
+          if (status !== 'PROCESSED') {
+            throw new Error(`Upload timed out or failed with status ${status}`);
+          }
         },
-        body: JSON.stringify({
-          // description: "#qs",
-          // comment: "",
-          notifyUser: true,
-        }),
-        url: 'https://cloudapi.suunto.com/v2/upload/',
-      });
-      result = JSON.parse(result);
-    } catch (e: any) {
-      logger.error(`Could not init activity upload for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
+        `Upload activity for user ${userID}`
+      );
+    } catch (e: unknown) {
+      // Final catch after retries failed
+      logger.error(`Failed to handle activity upload for token ${tokenQueryDocumentSnapshot.id}`, e);
+      // Continue to next token, but maybe return 500 if all fail? 
+      // Original code returned 500 immediately on error. 
+      // We should probably accumulate errors or return 500 if ALL fail.
+      // Original code: `return` immediately on error.
+      // Let's stick to original behavior: if one token fails completely, return 500.
+      // Wait, original: loop continues if `getTokenData` fails. But if `requestPromise` fails, it does `res.status(500); return;`.
+      // So it stops on first API failure.
       res.status(500);
-      res.send(e.name);
-      return;
-    }
-
-    const url = result.url;
-    const uploadId = result.id;
-    logger.info(`Init response for user ${userID}: url=${url}, id=${uploadId}, headers=${JSON.stringify(result.headers)}`);
-
-    try {
-      // Perform the binary upload to the Azure Blob Storage URL provided by Suunto
-      // We must use the headers provided by the init-upload response to match the signed URL signature
-      result = await requestPromise.put({
-        headers: result.headers || {},
-        json: false,
-        url,
-        body: req.rawBody,
-      });
-      logger.info(`PUT response for user ${userID}: ${JSON.stringify(result)}`);
-    } catch (e: any) {
-      logger.error(`Could not upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
-      res.status(500);
-      res.send(e.message);
-      return;
-    }
-
-    // Check the upload status
-    // Check the upload status with polling
-    let status = 'NEW';
-    let attempts = 0;
-    const maxAttempts = 10; // 20 seconds total wait
-
-    while ((status === 'NEW' || status === 'ACCEPTED') && attempts < maxAttempts) {
-      attempts++;
-      // Wait 2 seconds before checking (skip wait on first attempt if you prefer, but usually good to wait after upload)
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      try {
-        const statusResponse = await requestPromise.get({
-          headers: {
-            'Authorization': serviceToken.accessToken,
-            'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-          },
-          url: `https://cloudapi.suunto.com/v2/upload/${uploadId}`,
-        });
-
-        const statusJson = JSON.parse(statusResponse);
-        status = statusJson.status;
-        logger.info(`Upload status (attempt ${attempts}/${maxAttempts}) for user ${userID}, id ${uploadId}: ${status}`, statusJson);
-
-        if (status === 'PROCESSED') {
-          logger.info(`Successfully processed activity for user ${userID}. WorkoutKey: ${statusJson.workoutKey}`);
-          break;
-        } else if (status === 'ERROR') {
-          logger.error(`Suunto processing failed for user ${userID}: ${statusJson.message}`);
-          // We might want to throw here or just log and exit
-        }
-      } catch (e: any) {
-        logger.error(`Could not check upload status for ${uploadId} for user ${userID} (attempt ${attempts})`, e);
-      }
-    }
-
-    if (result && result.error) {
-      logger.error(`Could not upload activity for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error`, result.error);
-      res.status(500);
-      res.send(result.error);
+      res.send((e as Error).message);
       return;
     }
   }

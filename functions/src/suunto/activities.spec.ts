@@ -301,7 +301,7 @@ describe('importActivityToSuuntoApp', () => {
         await importActivityToSuuntoApp(req, res);
 
         expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.send).toHaveBeenCalledWith('Error'); // e.name for Error('Init failed') is 'Error'
+        expect(res.send).toHaveBeenCalledWith('Init failed'); // Updated expectation
     });
 
     it('should handle upload failure', async () => {
@@ -332,5 +332,51 @@ describe('importActivityToSuuntoApp', () => {
 
         expect(res.status).toHaveBeenCalledWith(500);
         expect(res.send).toHaveBeenCalledWith('Upload failed');
+    });
+
+    it('should retry on 401 during initialization', async () => {
+        // Setup Mocks
+        tokensMocks.getTokenData
+            .mockResolvedValueOnce({ accessToken: 'old-token' }) // 1st attempt
+            .mockResolvedValueOnce({ accessToken: 'new-token' }); // 2nd attempt (force refresh)
+
+        // Mock init upload (POST)
+        // 1. Fail with 401
+        // 2. Succeed
+        requestMocks.post
+            .mockRejectedValueOnce({ statusCode: 401, message: 'Unauthorized' })
+            .mockResolvedValueOnce(JSON.stringify({
+                id: 'test-upload-id-retry',
+                url: 'https://storage.suunto.com/upload-url-retry',
+                headers: {}
+            }));
+
+        // Mock binary upload (PUT) & Status (GET) for the successful retry
+        requestMocks.put.mockResolvedValue({});
+        requestMocks.get.mockResolvedValue(JSON.stringify({ status: 'PROCESSED', workoutKey: 'retry-key' }));
+
+        const req = {
+            method: 'POST',
+            body: { some: 'data' },
+            rawBody: Buffer.from('data'),
+            headers: { origin: 'http://localhost' },
+            get: vi.fn(),
+        } as any;
+
+        const res = {
+            status: vi.fn().mockReturnThis(),
+            send: vi.fn(),
+            set: vi.fn(),
+        } as any;
+
+        await importActivityToSuuntoApp(req, res);
+
+        // Verify Retry Logic
+        expect(tokensMocks.getTokenData).toHaveBeenCalledTimes(2);
+        expect(tokensMocks.getTokenData).toHaveBeenNthCalledWith(1, expect.anything(), expect.anything(), false);
+        expect(tokensMocks.getTokenData).toHaveBeenNthCalledWith(2, expect.anything(), expect.anything(), true);
+
+        expect(requestMocks.post).toHaveBeenCalledTimes(2); // Initial + Retry
+        expect(res.status).toHaveBeenCalledWith(200);
     });
 });

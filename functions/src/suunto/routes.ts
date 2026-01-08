@@ -4,7 +4,7 @@ import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import * as requestPromise from '../request-helper';
-import { getTokenData } from '../tokens';
+import { executeWithTokenRetry } from './retry-helper';
 import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
 import * as zlib from 'zlib';
 import { SERVICE_NAME } from './constants';
@@ -67,27 +67,26 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
   }
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
-    let serviceToken;
-    try {
-      serviceToken = await getTokenData(tokenQueryDocumentSnapshot, SERVICE_NAME, false);
-    } catch (e: unknown) {
-      const error = e as Error;
-      logger.warn(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`, error);
-      authFailures++;
-      continue;
-    }
     let result: any;
     try {
-      result = await requestPromise.post({
-        headers: {
-          'Authorization': serviceToken.accessToken,
-          'Content-Type': 'application/gpx+xml',
-          'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-          // json: true,
+      result = await executeWithTokenRetry(
+        tokenQueryDocumentSnapshot,
+        async (accessToken) => {
+          const postResult = await requestPromise.post({
+            headers: {
+              'Authorization': accessToken,
+              'Content-Type': 'application/gpx+xml',
+              'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
+              // json: true,
+            },
+            body: zlib.gunzipSync(compressedData).toString(),
+            url: 'https://cloudapi.suunto.com/v2/route/import',
+          });
+          return postResult;
         },
-        body: zlib.gunzipSync(compressedData).toString(),
-        url: 'https://cloudapi.suunto.com/v2/route/import',
-      });
+        `Upload route for user ${userID}`
+      );
+
       logger.info('Suunto API raw response:', result);
       if (typeof result === 'string') {
         try {
@@ -98,7 +97,12 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
       }
     } catch (e: unknown) {
       const error = e as Error;
-      logger.error(`Could upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, error);
+      // Logging handled in helper mostly, but we log high level failure
+      logger.error(`Could not upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, error);
+      // We count auth failures if "Unauthorized" / 401 bubbles up (meaning retry failed)
+      if ((error as any).statusCode === 401) {
+        authFailures++;
+      }
       continue;
     }
 
