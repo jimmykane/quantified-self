@@ -1,7 +1,8 @@
-import { Inject, Injectable, LOCALE_ID } from '@angular/core';
+import { Inject, Injectable, LOCALE_ID, inject } from '@angular/core';
 import { saveAs } from 'file-saver';
 import JSZip from 'jszip';
 import { DatePipe } from '@angular/common';
+import { BrowserCompatibilityService } from './browser.compatibility.service';
 
 
 @Injectable({
@@ -9,6 +10,7 @@ import { DatePipe } from '@angular/common';
 })
 export class AppFileService {
   private datePipe: DatePipe;
+  private compatibilityService = inject(BrowserCompatibilityService);
 
   constructor(@Inject(LOCALE_ID) private locale: string) {
     this.datePipe = new DatePipe(this.locale);
@@ -125,6 +127,10 @@ export class AppFileService {
       try {
         if (path) {
           console.log(`[AppFileService] Decompressing file: ${path}`);
+        }
+        if (!this.compatibilityService.checkCompressionSupport()) {
+          console.warn(`[AppFileService] Decompression skipped: unsupported browser`);
+          return buffer;
         }
         const stream = new Response(buffer).body.pipeThrough(new DecompressionStream('gzip'));
         return await new Response(stream).arrayBuffer();

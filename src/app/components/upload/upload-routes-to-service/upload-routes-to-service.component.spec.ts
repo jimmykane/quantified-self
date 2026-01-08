@@ -13,6 +13,8 @@ import { environment } from '../../../../environments/environment';
 import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
+
 
 class MockCompressionStream {
     readable: ReadableStream;
@@ -47,6 +49,7 @@ describe('UploadRoutesToServiceComponent', () => {
     const mockLogger = { error: vi.fn() };
     const mockAnalytics = { logEvent: vi.fn() };
     const mockAuth = { currentUser: { getIdToken: () => Promise.resolve('token') } };
+    const mockCompatibility = { checkCompressionSupport: vi.fn().mockReturnValue(true) };
 
     beforeAll(() => {
         // Mock global CompressionStream if missing (likely in test env)
@@ -70,6 +73,7 @@ describe('UploadRoutesToServiceComponent', () => {
                 { provide: LoggerService, useValue: mockLogger },
                 { provide: AppAnalyticsService, useValue: mockAnalytics },
                 { provide: Auth, useValue: mockAuth },
+                { provide: BrowserCompatibilityService, useValue: mockCompatibility },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();

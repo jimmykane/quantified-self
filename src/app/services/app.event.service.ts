@@ -38,6 +38,8 @@ import { AppEventInterface } from '../../../functions/src/shared/app-event.inter
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import { LoggerService } from './logger.service';
 import { AppFileService } from './app.file.service';
+import { BrowserCompatibilityService } from './browser.compatibility.service';
+
 
 @Injectable({
   providedIn: 'root',
@@ -327,6 +329,10 @@ export class AppEventService implements OnDestroy {
 
             if (!isAlreadyCompressed) {
               this.logger.log(`[AppEventService] Compressing ${baseExtension} file`);
+              if (!this.injector.get(BrowserCompatibilityService).checkCompressionSupport()) {
+                this.logger.warn(`[AppEventService] Compression skipped: unsupported browser`);
+                continue;
+              }
               const stream = new Response(file.data as any).body.pipeThrough(new CompressionStream('gzip'));
               file.data = await new Response(stream).arrayBuffer();
             }

@@ -12,6 +12,8 @@ import { FileInterface } from '../file.interface';
 import { AppProcessingService } from '../../../services/app.processing.service';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getSize } from '@sports-alliance/sports-lib';
+import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
+
 
 
 @Component({
@@ -24,6 +26,8 @@ import { getSize } from '@sports-alliance/sports-lib';
 export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
   private analyticsService = inject(AppAnalyticsService);
   private auth = inject(Auth);
+  private compatibilityService = inject(BrowserCompatibilityService);
+
   private serviceName: ServiceNames; // Added this line
 
   constructor(
@@ -59,8 +63,9 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
         const idToken = await getIdToken(this.auth.currentUser, true)
         try {
           // Check for native support
-          if (typeof CompressionStream === 'undefined') {
-            throw new Error('Your browser does not support compression. Please update to a modern browser.');
+          if (!this.compatibilityService.checkCompressionSupport()) {
+            reject('Unsupported browser');
+            return;
           }
 
           const stream = new Blob([fileReader.result as string]).stream();
