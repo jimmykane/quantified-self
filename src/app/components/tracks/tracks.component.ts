@@ -37,7 +37,6 @@ export class TracksComponent implements OnInit, OnDestroy {
     DateRanges.thisMonth,
     DateRanges.lastThirtyDays,
     DateRanges.thisYear,
-    DateRanges.all,
   ]
   bufferProgress = new Subject<number>();
   totalProgress = new Subject<number>();
@@ -87,11 +86,10 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.map = this.initMap(L)
     this.centerMapToStartingLocation(this.map);
     this.user = await this.authService.user$.pipe(take(1)).toPromise();
-    if (!this.user.settings.myTracksSettings) {
-      this.user.settings.myTracksSettings = {
-        dateRange: DateRanges.thisWeek
-      };
-    }
+    // Force default to This Week for performance/UX
+    this.user.settings.myTracksSettings = {
+      dateRange: DateRanges.thisWeek
+    };
     await this.loadTracksMapForUserByDateRange(L, this.user, this.map, this.user.settings.myTracksSettings.dateRange)
   }
 

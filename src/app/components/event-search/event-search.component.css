@@ -12,8 +12,22 @@ mat-icon {
 form {
   position: relative;
   /* height: 100%;  -- Removed to let content dictate height naturally */
-  padding: 8px 0;
-  /* Add subtle breathing room */
+  /* padding: 8px 0; -- Removed to reduce vertical height, parent handles spacing */
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Ensure shade doesn't participate in flex flow */
+app-shade {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  pointer-events: none;
+  /* Let clicks pass through if inactive, or handle in component */
 }
 
 /* Ensure Search Button aligns well */
@@ -29,7 +43,7 @@ form {
   justify-content: center;
   flex-wrap: wrap;
   gap: 20px;
-  margin-top: 16px;
+  margin-top: 0;
 }
 
 /* Premium Segmented Buttons Style */

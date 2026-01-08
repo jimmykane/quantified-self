@@ -85,6 +85,7 @@
       </mat-button-toggle>
       }
     </mat-button-toggle-group>
+    @if (dateRangesToShow.indexOf(dateRanges.all) !== -1 || dateRangesToShow.indexOf(dateRanges.custom) !== -1) {
     <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator [value]="selectedDateRange"
       (change)="dateToggleChange($event)">
       @if (dateRangesToShow.indexOf(dateRanges.all) !== -1) {
@@ -98,6 +99,7 @@
       </mat-button-toggle>
       }
     </mat-button-toggle-group>
+    }
   </section>
 </form>
 }
