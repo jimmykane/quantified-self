@@ -10,12 +10,8 @@
       ],
       "rewrites": [
         {
-          "regex": "^/(index\\.html)?$",
-          "destination": "/index.html"
-        },
-        {
           "source": "**",
-          "destination": "/index.original.html"
+          "destination": "/index.html"
         }
       ]
     },

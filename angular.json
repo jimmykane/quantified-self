@@ -14,9 +14,8 @@
             "outputPath": "dist",
             "index": "src/index.html",
             "browser": "src/main.ts",
-            "server": "src/main.server.ts",
-            "prerender": true,
-            "ssr": true,
+            "prerender": false,
+            "ssr": false,
             "tsConfig": "src/tsconfig.app.json",
             "polyfills": [
               "zone.js"
@@ -53,10 +52,7 @@
           },
           "configurations": {
             "production": {
-              "prerender": {
-                "routesFile": "src/routes.txt",
-                "discoverRoutes": false
-              },
+              "prerender": false,
               "budgets": [
                 {
                   "type": "anyComponentStyle",
@@ -77,10 +73,7 @@
               "serviceWorker": "ngsw-config.json"
             },
             "beta": {
-              "prerender": {
-                "routesFile": "src/routes.txt",
-                "discoverRoutes": false
-              },
+              "prerender": false,
               "budgets": [
                 {
                   "type": "anyComponentStyle",

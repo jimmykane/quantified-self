@@ -1,6 +1,6 @@
 import { APP_INITIALIZER, ErrorHandler, LOCALE_ID, NgModule } from '@angular/core';
 import { LoggerService, GlobalErrorHandler } from './services/logger.service';
-import { BrowserModule, provideClientHydration } from '@angular/platform-browser';
+import { BrowserModule } from '@angular/platform-browser';
 import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app.routing.module';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
@@ -107,8 +107,7 @@ import { AppSkeletonComponent } from './components/loading/skeleton/app.skeleton
     {
       provide: APP_STORAGE,
       useFactory: () => localStorage
-    },
-    provideClientHydration()
+    }
   ]
 })
 export class AppModule {

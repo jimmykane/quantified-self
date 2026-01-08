@@ -11,7 +11,6 @@
     "preserveWhitespaces": false
   },
   "files": [
-    "main.ts",
-    "main.server.ts"
+    "main.ts"
   ]
 }
