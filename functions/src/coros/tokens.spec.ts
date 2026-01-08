@@ -1,24 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as admin from 'firebase-admin';
 import * as tokens from '../tokens';
 import { refreshCOROSAPIRefreshTokens } from './tokens';
 import { SERVICE_NAME } from './constants';
 
-vi.mock('firebase-admin', () => {
-    const getMock = vi.fn();
-    const limitMock = vi.fn().mockReturnValue({ get: getMock });
-    const whereMock = vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ limit: limitMock }) });
-    const collectionGroupMock = vi.fn().mockReturnValue({ where: whereMock });
-
-    return {
-        firestore: () => ({
-            collectionGroup: collectionGroupMock
-        })
-    };
-});
+// firebase-admin mock removed as it is not used in this test
 
 vi.mock('../tokens', () => ({
-    refreshTokens: vi.fn().mockResolvedValue({})
+    refreshTokens: vi.fn().mockResolvedValue({}),
+    refreshStaleTokens: vi.fn().mockResolvedValue({})
 }));
 
 describe('COROS Token Refresh Scheduler', () => {
@@ -26,40 +15,16 @@ describe('COROS Token Refresh Scheduler', () => {
         vi.clearAllMocks();
     });
 
-    it('should query and refresh COROS tokens', async () => {
-        const firestore = admin.firestore();
-        const mockSnapshot = { size: 3, docs: [] };
-
-        // Mock chain for where filters
-        const getMock = vi.fn().mockResolvedValue(mockSnapshot);
-        const limitMock = vi.fn().mockReturnValue({ get: getMock });
-
-        // Setup recursive mock for chaining .where().where()
-        const whereMock = vi.fn();
-        const queryObj = {
-            where: whereMock,
-            limit: limitMock
-        };
-        whereMock.mockReturnValue(queryObj);
-
-        (firestore.collectionGroup as any).mockReturnValue({ where: whereMock });
-
+    it('should delegate to refreshStaleTokens', async () => {
         await (refreshCOROSAPIRefreshTokens as any)({});
 
-        expect(firestore.collectionGroup).toHaveBeenCalledWith('tokens');
+        expect(tokens.refreshStaleTokens).toHaveBeenCalledTimes(1);
 
-        // Should be called 4 times (2 filters per query * 2 queries)
-        expect(whereMock).toHaveBeenCalledTimes(4);
-
-        // Verify Service Name filter is applied
-        expect(whereMock).toHaveBeenCalledWith('serviceName', '==', SERVICE_NAME);
-
-        // Verify specific date filters
-        expect(whereMock).toHaveBeenCalledWith('dateRefreshed', '<=', expect.any(Number));
-        expect(whereMock).toHaveBeenCalledWith('dateRefreshed', '==', null);
-
-        // tokens.refreshTokens should be called twice
-        expect(tokens.refreshTokens).toHaveBeenCalledTimes(2);
-        expect(tokens.refreshTokens).toHaveBeenCalledWith(mockSnapshot, SERVICE_NAME);
+        const expected20DaysAgo = Date.now() - 20 * 24 * 60 * 60 * 1000;
+        // Verify precision
+        const callArgs = (tokens.refreshStaleTokens as any).mock.calls[0];
+        expect(callArgs[0]).toBe(SERVICE_NAME);
+        expect(callArgs[1]).toBeGreaterThan(expected20DaysAgo - 2000);
+        expect(callArgs[1]).toBeLessThan(expected20DaysAgo + 2000);
     });
 });
