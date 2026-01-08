@@ -14,6 +14,7 @@
             "outputPath": "dist",
             "index": "src/index.html",
             "browser": "src/main.ts",
+            "server": "src/main.server.ts",
             "prerender": false,
             "ssr": false,
             "tsConfig": "src/tsconfig.app.json",
@@ -52,6 +53,10 @@
           },
           "configurations": {
             "production": {
+              "prerender": {
+                "routesFile": "src/routes.txt",
+                "discoverRoutes": false
+              },
               "budgets": [
                 {
                   "type": "anyComponentStyle",
@@ -78,6 +83,10 @@
                   "maximumWarning": "6kb"
                 }
               ],
+              "prerender": {
+                "routesFile": "src/routes.txt",
+                "discoverRoutes": false
+              },
               "fileReplacements": [
                 {
                   "replace": "src/environments/environment.ts",
