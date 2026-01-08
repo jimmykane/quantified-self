@@ -284,7 +284,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     }
 
     private startQueueStatsPolling(): void {
-        // Poll every 15 seconds (slightly increased from 10s) with analysis=false
+        // Poll every 1 minute with analysis=false
         this.adminService.getQueueStatsDirect(false).pipe(takeUntil(this.destroy$)).subscribe({
             next: (stats) => {
                 this.updateQueueStatsUI(stats, true);

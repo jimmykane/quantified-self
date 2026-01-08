@@ -139,8 +139,8 @@ export class AdminService {
     }
 
     getQueueStatsDirect(includeAnalysis = false): Observable<QueueStats> {
-        // Poll every 10 seconds for "hot" updates
-        return timer(0, 10000).pipe(
+        // Poll every 1 minute for "hot" updates
+        return timer(0, 60000).pipe(
             switchMap(() => from(this.getQueueStatsFn({ includeAnalysis }))),
             map(result => result.data)
         );
