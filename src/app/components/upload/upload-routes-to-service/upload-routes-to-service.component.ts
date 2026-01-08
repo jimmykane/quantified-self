@@ -71,14 +71,18 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
           const stream = new Blob([fileReader.result as string]).stream();
           const compressedStream = stream.pipeThrough(new CompressionStream('gzip'));
           const compressedBuffer = await new Response(compressedStream).arrayBuffer();
-          // Convert ArrayBuffer to Base64
-          const compressed = btoa(String.fromCharCode(...new Uint8Array(compressedBuffer)));
+          // Convert ArrayBuffer to Base64 safely using FileReader to avoid stack overflow for large files
+          const compressed = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve((reader.result as string).split(',')[1]);
+            reader.readAsDataURL(new Blob([compressedBuffer]));
+          });
 
           if (getSize(compressed) > 10485760) {
             throw new Error(`Cannot upload route because the size is greater than 10MB`);
           }
           await this.http.post(environment.functions.uploadRoute,
-            compressed,
+            { body: compressed },
             {
               headers:
                 new HttpHeaders({
