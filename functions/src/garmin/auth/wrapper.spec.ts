@@ -19,17 +19,26 @@ const mockDocInstance = {
 const mockCollectionInstance = {
     doc: mockDoc,
     where: vi.fn().mockReturnThis(),
+    get: mockGet, // Added get for query results
 };
 
 mockDoc.mockReturnValue(mockDocInstance);
 mockCollection.mockReturnValue(mockCollectionInstance);
 
-// Mock dependencies
-vi.mock('firebase-admin', () => ({
-    firestore: vi.fn(() => ({
-        collection: mockCollection,
-    })),
-}));
+// Mock firebase-admin
+vi.mock('firebase-admin', () => {
+    const batchCommit = vi.fn().mockResolvedValue({});
+    const batch = () => ({
+        delete: mockDelete, // Use the shared mockDelete
+        commit: batchCommit,
+    });
+    return {
+        firestore: vi.fn(() => ({
+            collection: mockCollection,
+            batch,
+        })),
+    };
+});
 
 vi.mock('firebase-functions/v1', () => ({
     region: () => ({
@@ -161,6 +170,44 @@ describe('Garmin Auth Wrapper', () => {
 
             expect(res.status).toHaveBeenCalledWith(403);
             expect(res.send).toHaveBeenCalledWith('Unauthorized');
+        });
+
+        it('should remove duplicate connections if another user has the same Garmin ID', async () => {
+            req.body = { state: 'mockState', oauthVerifier: 'verifier' };
+            (requestHelper.post as any).mockResolvedValue('oauth_token=accessToken&oauth_token_secret=accessSecret');
+            (requestHelper.get as any).mockResolvedValue(JSON.stringify({ userId: 'duplicateGarminUID' }));
+
+            // Setup duplicate check mock
+            const otherUserDoc = {
+                id: 'otherUserID',
+                ref: { delete: mockDelete },
+                data: () => ({ userID: 'duplicateGarminUID' })
+            };
+
+            mockGet
+                .mockResolvedValueOnce({ // doc(userID).get()
+                    exists: true,
+                    data: () => ({
+                        accessToken: 'mock-token',
+                        accessTokenSecret: 'mock-secret',
+                        state: 'mockState',
+                        oauthToken: 'token',
+                        oauthTokenSecret: 'secret'
+                    }),
+                })
+                .mockResolvedValueOnce({ // where().get()
+                    empty: false,
+                    size: 1,
+                    docs: [otherUserDoc]
+                });
+
+            await requestAndSetGarminHealthAPIAccessToken(req, res);
+
+            // Verify duplicate deletion
+            expect(mockDelete).toHaveBeenCalled();
+            expect(mockSet).toHaveBeenCalledWith(expect.objectContaining({
+                userID: 'duplicateGarminUID'
+            }));
         });
     });
 

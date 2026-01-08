@@ -45,10 +45,25 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
 
   let compressedData: Buffer;
 
-  if (Buffer.isBuffer(req.rawBody)) {
-    compressedData = req.rawBody;
-  } else if (req.body && req.body.body) {
+  // Check if it's a JSON body with a 'body' field
+  if (req.body && req.body.body) {
     compressedData = Buffer.from(req.body.body, 'base64');
+  } else if (req.rawBody && Buffer.isBuffer(req.rawBody) && req.rawBody.length > 0) {
+    // If it's a JSON string in rawBody (case where body-parser didn't run or we want to be safe)
+    if (req.rawBody[0] === 0x7b) { // '{' character
+      try {
+        const parsed = JSON.parse(req.rawBody.toString());
+        if (parsed.body) {
+          compressedData = Buffer.from(parsed.body, 'base64');
+        } else {
+          compressedData = req.rawBody; // Fallback to raw if JSON but no 'body'
+        }
+      } catch (e) {
+        compressedData = req.rawBody; // Not JSON, use raw
+      }
+    } else {
+      compressedData = req.rawBody;
+    }
   } else {
     logger.error('No compressed body found (checked rawBody and body.body)');
     res.status(400).send('No compressed body found');
