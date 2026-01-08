@@ -126,7 +126,7 @@ describe('importRouteToSuuntoApp', () => {
         const req = {
             method: 'POST',
             // body containing base64 encoded gZIP
-            body: Buffer.from(zlib.gzipSync(gpxContent)).toString('base64'),
+            body: { body: Buffer.from(zlib.gzipSync(gpxContent)).toString('base64') },
             get: (h: string) => h === 'origin' ? 'http://localhost' : undefined
         } as any;
 
@@ -217,7 +217,7 @@ describe('importRouteToSuuntoApp', () => {
 
         const req = {
             method: 'POST',
-            body: Buffer.from(zlib.gzipSync(gpxContent)).toString('base64'),
+            body: { body: Buffer.from(zlib.gzipSync(gpxContent)).toString('base64') },
             get: vi.fn(),
         } as any;
         const res = {
@@ -241,7 +241,7 @@ describe('importRouteToSuuntoApp', () => {
 
         const req = {
             method: 'POST',
-            body: Buffer.from(zlib.gzipSync(gpxContent)).toString('base64'),
+            body: { body: Buffer.from(zlib.gzipSync(gpxContent)).toString('base64') },
             get: vi.fn(),
         } as any;
         const res = {
