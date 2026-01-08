@@ -3,6 +3,7 @@ import { UploadRoutesToServiceComponent } from './upload-routes-to-service.compo
 import { MatDialog, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
+import { UPLOAD_STATUS } from '../upload-status/upload.status';
 import { Router } from '@angular/router';
 import { Auth } from '@angular/fire/auth';
 import { LoggerService } from '../../../services/logger.service';
@@ -52,10 +53,49 @@ describe('UploadRoutesToServiceComponent', () => {
     const mockCompatibility = { checkCompressionSupport: vi.fn().mockReturnValue(true) };
 
     beforeAll(() => {
+        // Mock ReadableStream if missing
+        if (typeof ReadableStream === 'undefined') {
+            (global as any).ReadableStream = class MockReadableStream {
+                constructor(underlyingSource: any) {
+                    this.source = underlyingSource;
+                }
+                source: any;
+                // Add pipeThrough if used directly, but here it's used on the result of Blob.stream keys?
+                // actually pipeThrough is on the stream instance.
+            };
+        }
+
+        if (typeof WritableStream === 'undefined') {
+            (global as any).WritableStream = class MockWritableStream {
+                constructor(underlyingSink: any) {
+                }
+            };
+        }
+
+        // Mock Blob.stream via prototype
+        if (!Blob.prototype.stream) {
+            Blob.prototype.stream = function () {
+                // Return a simple empty stream or one with dummy data
+                const stream = new (global as any).ReadableStream({
+                    start(controller: any) {
+                        controller.enqueue(new Uint8Array([1, 2, 3]));
+                        controller.close();
+                    }
+                });
+                // We need pipeThrough for the chain
+                stream.pipeThrough = (transform: any) => {
+                    return transform.readable; // Return the readable side of the transform stream (MockCompressionStream has readable)
+                };
+                return stream;
+            };
+        }
+
         // Mock global CompressionStream if missing (likely in test env)
-        if (typeof Global === 'undefined' ? typeof window !== 'undefined' : true) {
+        if (typeof window !== 'undefined' && !(window as any).CompressionStream) {
             (window as any).CompressionStream = MockCompressionStream;
-            // Blob stream mock might also be needed if JSDOM implementation is partial
+        }
+        if (typeof global !== 'undefined' && !(global as any).CompressionStream) {
+            (global as any).CompressionStream = MockCompressionStream;
         }
     });
 
@@ -90,8 +130,46 @@ describe('UploadRoutesToServiceComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('should upload compressed binary for valid gpx file', async () => {
+        const file = {
+            file: new File(['<gpx></gpx>'], 'route.gpx', { type: 'application/gpx+xml' }),
+            filename: 'route',
+            extension: 'gpx',
+            data: null,
+            id: '1',
+            name: 'route.gpx',
+            status: UPLOAD_STATUS.PROCESSING,
+            jobId: '1'
+        };
+
+        const promise = component.processAndUploadFile(file);
+
+        // Wait for async file reading and compression
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        const req = httpMock.expectOne(environment.functions.uploadRoute);
+        expect(req.request.method).toBe('POST');
+        expect(req.request.headers.get('Content-Type')).toBe('application/octet-stream');
+        expect(req.request.body).toBeTruthy();
+        expect(req.request.body.byteLength).toBeGreaterThan(0);
+
+        // Respond with success
+        req.flush({ status: 'OK' });
+
+        await promise;
+    });
+
     it('should reject non-gpx files', async () => {
-        const file = { file: new File(['content'], 'test.txt'), filename: 'test', extension: 'txt', data: null, id: '1' };
+        const file = {
+            file: new File(['content'], 'test.txt'),
+            filename: 'test',
+            extension: 'txt',
+            data: null,
+            id: '1',
+            name: 'test.txt',
+            status: UPLOAD_STATUS.PROCESSING,
+            jobId: '1'
+        };
         try {
             await component.processAndUploadFile(file);
             expect.unreachable('Should have rejected');

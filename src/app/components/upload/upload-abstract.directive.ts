@@ -96,24 +96,28 @@ export abstract class UploadAbstractDirective implements OnInit {
 
     // Then actually start processing them
     this.isUploading = true;
+    let successfulUploads = 0;
+    let failedUploads = 0;
     try {
       for (const fileItem of filesToProcess) {
         this.processingService.updateJob(fileItem.jobId, { status: 'processing', progress: 0 });
         try {
           await this.processAndUploadFile(fileItem);
           this.processingService.completeJob(fileItem.jobId);
+          successfulUploads++;
         } catch (e: any) {
           this.logger.error(e);
           this.processingService.failJob(fileItem.jobId, e.message || 'Upload failed');
+          failedUploads++;
         }
       }
     } finally {
       this.isUploading = false;
     }
 
-    // this.isUploadActive = false;
-    this.snackBar.open('Processed ' + filesToProcess.length + ' files', undefined, {
-      duration: 2000,
+    const message = `Processed ${filesToProcess.length} files: ${successfulUploads} successful, ${failedUploads} failed`;
+    this.snackBar.open(message, 'OK', {
+      duration: 5000,
     });
 
     // Pass event to removeDragData for cleanup

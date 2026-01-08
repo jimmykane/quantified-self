@@ -81,7 +81,8 @@ vi.mock('firebase-admin', () => {
     getMock.mockResolvedValue({
         size: 1, // Token query snapshot size
         docs: [{ id: 'token1', data: () => ({}) }],
-        data: () => ({ uploadedRoutesCount: 5 }) // Meta doc data
+        data: () => ({ uploadedRoutesCount: 5 }), // Meta doc data
+        ref: { update: updateMock }, // Reference for update
     });
 
     const firestoreMock = {
@@ -207,7 +208,7 @@ describe('importRouteToSuuntoApp', () => {
 
         await importRouteToSuuntoApp(req, res);
 
-        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.status).toHaveBeenCalledWith(400);
     });
 
     it('should handle service error', async () => {
@@ -229,7 +230,7 @@ describe('importRouteToSuuntoApp', () => {
         await importRouteToSuuntoApp(req, res);
 
         expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.send).toHaveBeenCalledWith('Error');
+        expect(res.send).toHaveBeenCalledWith('Upload failed due to service errors.');
     });
 
     it('should handle service logic error (200 OK but error in JSON)', async () => {
@@ -253,6 +254,27 @@ describe('importRouteToSuuntoApp', () => {
         await importRouteToSuuntoApp(req, res);
 
         expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.send).toHaveBeenCalledWith('Duplicate route');
+        expect(res.send).toHaveBeenCalledWith('Upload failed due to service errors.');
+    });
+
+    it('should handle auth error (refresh token failed)', async () => {
+        tokensMocks.getTokenData.mockRejectedValue(new Error('Refresh failed'));
+        const gpxContent = '<gpx>...</gpx>';
+
+        const req = {
+            method: 'POST',
+            body: { body: Buffer.from(zlib.gzipSync(gpxContent)).toString('base64') },
+            get: vi.fn(),
+        } as any;
+        const res = {
+            status: vi.fn().mockReturnThis(),
+            send: vi.fn(),
+            set: vi.fn(),
+        } as any;
+
+        await importRouteToSuuntoApp(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(401);
+        expect(res.send).toHaveBeenCalledWith('Authentication failed. Please re-connect your Suunto account.');
     });
 });

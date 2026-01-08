@@ -43,25 +43,38 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
     return;
   }
 
-  if (!req.body) {
-    logger.error('No file provided\'');
-    res.status(500);
-    res.send();
+  let compressedData: Buffer;
+
+  if (Buffer.isBuffer(req.rawBody)) {
+    compressedData = req.rawBody;
+  } else if (req.body && req.body.body) {
+    compressedData = Buffer.from(req.body.body, 'base64');
+  } else {
+    logger.error('No compressed body found (checked rawBody and body.body)');
+    res.status(400).send('No compressed body found');
     return;
   }
 
   const tokenQuerySnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(userID).collection('tokens').get();
   logger.info(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
 
+  let successCount = 0;
+  let authFailures = 0;
+
+  if (tokenQuerySnapshots.empty) {
+    res.status(401).send('No connected Suunto account found');
+    return;
+  }
+
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     let serviceToken;
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, SERVICE_NAME, false);
-    } catch (e: any) {
-      logger.error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
-      res.status(500);
-      res.send(e.name);
-      return;
+    } catch (e: unknown) {
+      const error = e as Error;
+      logger.warn(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`, error);
+      authFailures++;
+      continue;
     }
     let result: any;
     try {
@@ -72,23 +85,26 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
           'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
           // json: true,
         },
-        body: zlib.gunzipSync(Buffer.from(req.body.body, 'base64')).toString(),
+        body: zlib.gunzipSync(compressedData).toString(),
         url: 'https://cloudapi.suunto.com/v2/route/import',
       });
-      result = JSON.parse(result);
-      // console.log(`Deauthorized token ${doc.id} for ${decodedIdToken.uid}`)
-    } catch (e: any) {
-      logger.error(`Could upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
-      res.status(500);
-      res.send(e.name);
-      return;
+      logger.info('Suunto API raw response:', result);
+      if (typeof result === 'string') {
+        try {
+          result = JSON.parse(result);
+        } catch (e) {
+          logger.warn('Suunto API response is not JSON:', result);
+        }
+      }
+    } catch (e: unknown) {
+      const error = e as Error;
+      logger.error(`Could upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, error);
+      continue;
     }
 
     if (result.error) {
       logger.error(`Could upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error`, result.error);
-      res.status(500);
-      res.send(result.error);
-      return;
+      continue;
     }
     try {
       const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(userID).collection('meta').doc(SERVICE_NAME).get();
@@ -100,10 +116,17 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
       await userServiceMetaDocumentSnapshot.ref.update({
         uploadedRoutesCount: uploadedRoutesCount + 1,
       });
-    } catch (e: any) {
+      successCount++;
+    } catch (e: unknown) {
       logger.error('Could not update uploadedRoutes count');
     }
   }
-  res.status(200);
-  res.send();
+
+  if (successCount > 0) {
+    res.status(200).send();
+  } else if (authFailures > 0) {
+    res.status(401).send('Authentication failed. Please re-connect your Suunto account.');
+  } else {
+    res.status(500).send('Upload failed due to service errors.');
+  }
 });
