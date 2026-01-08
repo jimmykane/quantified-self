@@ -9,12 +9,15 @@ section {
   display: flex;
   align-items: center;
   justify-content: center;
-  clip-path: polygon(
-    calc(0% + 5px) calc(0% + 5px), /* top left */
-    calc(100% - 5px) calc(0% + 5px), /* top right */
-    calc(100% - 5px) calc(100% - 5px), /* bottom right */
-    calc(0% + 5px) calc(100% - 5px) /* bottom left */
-  );
+  clip-path: polygon(calc(0% + 5px) calc(0% + 5px),
+      /* top left */
+      calc(100% - 5px) calc(0% + 5px),
+      /* top right */
+      calc(100% - 5px) calc(100% - 5px),
+      /* bottom right */
+      calc(0% + 5px) calc(100% - 5px)
+      /* bottom left */
+    );
   transition: clip-path 0.6s linear;
 }
 
@@ -23,6 +26,6 @@ button {
   vertical-align: middle;
 }
 
-.full{
+.full {
   width: 100%;
 }

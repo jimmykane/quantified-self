@@ -156,11 +156,10 @@
       </div>
     </mat-card>
 
-    <!-- FIT Upload Card -->
-    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
-      (click)="!hasProAccess && triggerUpsell()">
+    <!-- FIT Upload Card - No (click) handler to allow file input interaction -->
+    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess">
       @if (!hasProAccess) {
-      <div class="lock-overlay">
+      <div class="lock-overlay" (click)="triggerUpsell()">
         <mat-icon class="lock-icon-large">lock</mat-icon>
         <span class="pro-badge">PRO</span>
       </div>
@@ -179,11 +178,10 @@
       </div>
     </mat-card>
 
-    <!-- GPX Upload Card -->
-    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
-      (click)="!hasProAccess && triggerUpsell()">
+    <!-- GPX Upload Card - No (click) handler to allow file input interaction -->
+    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess">
       @if (!hasProAccess) {
-      <div class="lock-overlay">
+      <div class="lock-overlay" (click)="triggerUpsell()">
         <mat-icon class="lock-icon-large">lock</mat-icon>
         <span class="pro-badge">PRO</span>
       </div>
