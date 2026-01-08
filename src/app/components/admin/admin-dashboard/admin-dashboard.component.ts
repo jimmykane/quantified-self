@@ -266,38 +266,75 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
 
     fetchQueueStats(): void {
         this.isLoadingStats = true;
-        this.adminService.getQueueStatsDirect().pipe(takeUntil(this.destroy$)).subscribe({
+        // Fetch full stats (with analysis) once
+        this.adminService.getQueueStats(true).pipe(takeUntil(this.destroy$)).subscribe({
             next: (stats) => {
-                this.queueStats = stats;
+                this.updateQueueStatsUI(stats);
                 this.isLoadingStats = false;
-
-                if (stats.advanced?.retryHistogram) {
-                    this.barChartData = {
-                        labels: ['0-3 Retries', '4-7 Retries', '8-9 Retries'],
-                        datasets: [
-                            {
-                                data: [
-                                    stats.advanced.retryHistogram['0-3'],
-                                    stats.advanced.retryHistogram['4-7'],
-                                    stats.advanced.retryHistogram['8-9']
-                                ],
-                                label: 'Pending Items',
-                                backgroundColor: [
-                                    'rgba(75, 192, 192, 0.6)', // Greenish
-                                    'rgba(255, 206, 86, 0.6)', // Yellowish
-                                    'rgba(255, 99, 132, 0.6)'  // Reddish
-                                ]
-                            }
-                        ]
-                    };
-                }
+                // After initial full fetch, start polling only basic counts (no analysis)
+                this.startQueueStatsPolling();
             },
             error: (err) => {
-                this.logger.error('Failed to load queue stats (direct):', err);
-                // Fallback to function if direct fails or retry
+                this.logger.error('Failed to load initial queue stats:', err);
                 this.isLoadingStats = false;
+                // Still try to poll basic stats even if initial full fetch fails
+                this.startQueueStatsPolling();
             }
         });
+    }
+
+    private startQueueStatsPolling(): void {
+        // Poll every 15 seconds (slightly increased from 10s) with analysis=false
+        this.adminService.getQueueStatsDirect(false).pipe(takeUntil(this.destroy$)).subscribe({
+            next: (stats) => {
+                this.updateQueueStatsUI(stats, true);
+            },
+            error: (err) => {
+                this.logger.error('Failed to poll queue stats:', err);
+            }
+        });
+    }
+
+    private updateQueueStatsUI(stats: QueueStats, isPartial = false): void {
+        if (isPartial && this.queueStats) {
+            // Merge basic stats into existing stats to preserve analysis data (dlq, topErrors, etc.)
+            this.queueStats = {
+                ...this.queueStats,
+                pending: stats.pending,
+                succeeded: stats.succeeded,
+                stuck: stats.stuck,
+                providers: stats.providers,
+                advanced: this.queueStats.advanced ? {
+                    ...this.queueStats.advanced,
+                    throughput: stats.advanced?.throughput ?? this.queueStats.advanced.throughput,
+                    maxLagMs: stats.advanced?.maxLagMs ?? this.queueStats.advanced.maxLagMs,
+                    retryHistogram: stats.advanced?.retryHistogram ?? this.queueStats.advanced.retryHistogram
+                } : stats.advanced
+            };
+        } else {
+            this.queueStats = stats;
+        }
+
+        if (this.queueStats.advanced?.retryHistogram) {
+            this.barChartData = {
+                labels: ['0-3 Retries', '4-7 Retries', '8-9 Retries'],
+                datasets: [
+                    {
+                        data: [
+                            this.queueStats.advanced.retryHistogram['0-3'],
+                            this.queueStats.advanced.retryHistogram['4-7'],
+                            this.queueStats.advanced.retryHistogram['8-9']
+                        ],
+                        label: 'Pending Items',
+                        backgroundColor: [
+                            'rgba(75, 192, 192, 0.6)', // Greenish
+                            'rgba(255, 206, 86, 0.6)', // Yellowish
+                            'rgba(255, 99, 132, 0.6)'  // Reddish
+                        ]
+                    }
+                ]
+            };
+        }
     }
 
     fetchFinancialStats(): void {

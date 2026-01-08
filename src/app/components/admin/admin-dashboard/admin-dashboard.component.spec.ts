@@ -74,6 +74,7 @@ describe('AdminDashboardComponent', () => {
     let fixture: ComponentFixture<AdminDashboardComponent>;
     let adminServiceSpy: {
         getUsers: ReturnType<typeof vi.fn>;
+        getQueueStats: ReturnType<typeof vi.fn>;
         getQueueStatsDirect: ReturnType<typeof vi.fn>;
         getTotalUserCount: ReturnType<typeof vi.fn>;
         getMaintenanceStatus: ReturnType<typeof vi.fn>;
@@ -115,10 +116,13 @@ describe('AdminDashboardComponent', () => {
         pageSize: 25
     };
 
+    const mockQueueStats = { pending: 0, succeeded: 0, stuck: 0, providers: [], advanced: { throughput: 0, maxLagMs: 0, retryHistogram: { '0-3': 0, '4-7': 0, '8-9': 0 }, topErrors: [] } };
+
     beforeEach(async () => {
         adminServiceSpy = {
             getUsers: vi.fn().mockReturnValue(of(mockResponse)),
-            getQueueStatsDirect: vi.fn().mockReturnValue(of({ pending: 0, succeeded: 0, stuck: 0, providers: [] })),
+            getQueueStats: vi.fn().mockReturnValue(of(mockQueueStats)),
+            getQueueStatsDirect: vi.fn().mockReturnValue(of(mockQueueStats)),
             getTotalUserCount: vi.fn().mockReturnValue(of({ total: 100, pro: 30, basic: 70, free: 0 })),
             getMaintenanceStatus: vi.fn().mockReturnValue(of({ enabled: false, message: 'Test' })),
             setMaintenanceMode: vi.fn().mockReturnValue(of({ success: true, enabled: true, message: 'Test' })),

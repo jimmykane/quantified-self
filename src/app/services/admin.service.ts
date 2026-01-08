@@ -103,7 +103,7 @@ export class AdminService {
         environment.functions.listUsers
     );
 
-    private getQueueStatsFn = httpsCallableFromURL<void, QueueStats>(
+    private getQueueStatsFn = httpsCallableFromURL<{ includeAnalysis?: boolean }, QueueStats>(
         this.functions,
         environment.functions.getQueueStats
     );
@@ -132,16 +132,16 @@ export class AdminService {
         );
     }
 
-    getQueueStats(): Observable<QueueStats> {
-        return from(this.getQueueStatsFn()).pipe(
+    getQueueStats(includeAnalysis = true): Observable<QueueStats> {
+        return from(this.getQueueStatsFn({ includeAnalysis })).pipe(
             map(result => result.data)
         );
     }
 
-    getQueueStatsDirect(): Observable<QueueStats> {
+    getQueueStatsDirect(includeAnalysis = false): Observable<QueueStats> {
         // Poll every 10 seconds for "hot" updates
         return timer(0, 10000).pipe(
-            switchMap(() => from(this.getQueueStatsFn())),
+            switchMap(() => from(this.getQueueStatsFn({ includeAnalysis }))),
             map(result => result.data)
         );
     }

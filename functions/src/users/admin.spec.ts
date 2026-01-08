@@ -391,6 +391,7 @@ describe('getQueueStats Cloud Function', () => {
             return mockQuery;
         });
 
+        request.data = { includeAnalysis: true };
         const result = await (getQueueStats as any)(request);
 
         // Validation of Advanced Stats
@@ -417,6 +418,15 @@ describe('getQueueStats Cloud Function', () => {
             { provider: 'suuntoAppWorkoutQueue', count: 1 },
             { provider: 'COROSAPIWorkoutQueue', count: 1 }
         ]));
+    });
+
+    it('should return only basic statistics when includeAnalysis is false', async () => {
+        request.data = { includeAnalysis: false };
+        const result = await (getQueueStats as any)(request);
+
+        expect(result.pending).toBeDefined();
+        expect(result.dlq).toBeUndefined(); // Should be skipped
+        expect(result.advanced.topErrors).toHaveLength(0); // Should be empty
     });
 
     it('should require authentication', async () => {

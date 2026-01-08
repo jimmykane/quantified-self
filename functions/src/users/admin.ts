@@ -348,10 +348,11 @@ export const getUserCount = onAdminCall<void, any>({
  * Gets aggregated statistics for all workout queues.
  * Uses efficient Firestore count() queries.
  */
-export const getQueueStats = onAdminCall<void, any>({
+export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
     region: 'europe-west2',
     memory: '256MiB',
-}, async () => {
+}, async (request) => {
+    const includeAnalysis = request.data?.includeAnalysis ?? false;
     const PROVIDER_QUEUES: Record<string, string[]> = {
         'Suunto': ['suuntoAppWorkoutQueue'],
         'COROS': ['COROSAPIWorkoutQueue'],
@@ -442,40 +443,45 @@ export const getQueueStats = onAdminCall<void, any>({
             });
         }
 
-        // Dead Letter Queue stats & Error Clustering
-        const dlqCol = db.collection('failed_jobs');
+        // Dead Letter Queue stats & Error Clustering (Expensive)
+        let dlq: any = undefined;
+        let topErrors: any[] = [];
 
-        // Use limited query for clustering to save reads
-        const [dlqCountSnap, dlqRecentSnap] = await Promise.all([
-            dlqCol.count().get(),
-            dlqCol.orderBy('failedAt', 'desc').limit(50).get()
-        ]);
+        if (includeAnalysis) {
+            const dlqCol = db.collection('failed_jobs');
 
-        const dlqByContext: Record<string, number> = {};
-        const dlqByProvider: Record<string, number> = {};
-        const errorCounts: Record<string, number> = {};
+            // Use limited query for clustering to save reads
+            const [dlqCountSnap, dlqRecentSnap] = await Promise.all([
+                dlqCol.count().get(),
+                dlqCol.orderBy('failedAt', 'desc').limit(50).get()
+            ]);
 
-        dlqRecentSnap.docs.forEach(doc => {
-            const data = doc.data();
-            const context = data.context || 'UNKNOWN';
-            const originalCollection = data.originalCollection || 'unknown';
-            const errorMsg = normalizeError(data.error || 'Unknown Error');
+            const dlqByContext: Record<string, number> = {};
+            const dlqByProvider: Record<string, number> = {};
+            const errorCounts: Record<string, number> = {};
 
-            dlqByContext[context] = (dlqByContext[context] || 0) + 1;
-            dlqByProvider[originalCollection] = (dlqByProvider[originalCollection] || 0) + 1;
-            errorCounts[errorMsg] = (errorCounts[errorMsg] || 0) + 1;
-        });
+            dlqRecentSnap.docs.forEach(doc => {
+                const data = doc.data();
+                const context = data.context || 'UNKNOWN';
+                const originalCollection = data.originalCollection || 'unknown';
+                const errorMsg = normalizeError(data.error || 'Unknown Error');
 
-        const dlq = {
-            total: dlqCountSnap.data().count,
-            byContext: Object.entries(dlqByContext).map(([context, count]) => ({ context, count })),
-            byProvider: Object.entries(dlqByProvider).map(([provider, count]) => ({ provider, count }))
-        };
+                dlqByContext[context] = (dlqByContext[context] || 0) + 1;
+                dlqByProvider[originalCollection] = (dlqByProvider[originalCollection] || 0) + 1;
+                errorCounts[errorMsg] = (errorCounts[errorMsg] || 0) + 1;
+            });
 
-        const topErrors = Object.entries(errorCounts)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5)
-            .map(([error, count]) => ({ error, count }));
+            dlq = {
+                total: dlqCountSnap.data().count,
+                byContext: Object.entries(dlqByContext).map(([context, count]) => ({ context, count })),
+                byProvider: Object.entries(dlqByProvider).map(([provider, count]) => ({ provider, count }))
+            };
+
+            topErrors = Object.entries(errorCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(([error, count]) => ({ error, count }));
+        }
 
         return {
             pending: totalPending,
