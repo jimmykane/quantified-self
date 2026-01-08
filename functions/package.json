@@ -8,7 +8,7 @@
     "@google-cloud/billing": "^5.1.1",
     "@google-cloud/billing-budgets": "^6.1.1",
     "@google-cloud/tasks": "^6.2.1",
-    "@sports-alliance/sports-lib": "^6.1.6",
+    "@sports-alliance/sports-lib": "^6.1.7",
     "blob": "^0.1.0",
     "bs58": "^4.0.1",
     "cors": "^2.8.5",
