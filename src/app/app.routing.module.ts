@@ -4,6 +4,7 @@ import { authGuard } from './authentication/app.auth.guard';
 import { proGuard } from './authentication/pro.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { adminGuard } from './authentication/admin.guard';
+import { guestGuard } from './authentication/guest.guard';
 
 const routes: Routes = [
   {
@@ -106,7 +107,7 @@ const routes: Routes = [
       description: 'Quantified Self is a premium analytical tool for your activity data. aggregatde data from Garmin, Suunto, Coros and more.',
       keywords: 'quantified self, fitness tracker, activity analysis, garmin, suunto, coros, strava'
     },
-    canMatch: [onboardingGuard],
+    canMatch: [guestGuard, onboardingGuard],
     pathMatch: 'full'
   },
   { path: '**', redirectTo: '/', pathMatch: 'full' },
