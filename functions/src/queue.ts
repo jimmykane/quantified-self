@@ -41,7 +41,7 @@ export async function parseQueueItems(serviceName: ServiceNames) {
   logger.info('Starting timer: ParseQueueItems');
 
   const bulkWriter = admin.firestore().bulkWriter();
-  const limit = pLimit(20);
+  const limit = pLimit(5);
   const tokenCache = new Map<string, Promise<admin.firestore.QuerySnapshot>>();
   const usageCache = new Map<string, Promise<{ role: string, limit: number, currentCount: number }>>();
   const pendingWrites = new Map<string, number>();
@@ -91,7 +91,7 @@ export async function parseQueueItems(serviceName: ServiceNames) {
 const TIMEOUT_DEFAULT = 300;
 const MEMORY_DEFAULT = '4GB';
 const TIMEOUT_HIGH = 540;
-const MEMORY_HIGH = '8GB';
+const MEMORY_HIGH = '4GB';
 
 export const parseGarminHealthAPIActivityQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_HIGH,
