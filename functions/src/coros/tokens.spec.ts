@@ -28,19 +28,38 @@ describe('COROS Token Refresh Scheduler', () => {
 
     it('should query and refresh COROS tokens', async () => {
         const firestore = admin.firestore();
-        const mockSnapshot = { size: 5, docs: [] };
-        // Chain: collectionGroup('tokens').where('serviceName', '==', ...).where('dateRefreshed', '<=', ...).limit(50).get()
-        // Our mock is a bit simplified but needs to match the call depth
+        const mockSnapshot = { size: 3, docs: [] };
+
+        // Mock chain for where filters
         const getMock = vi.fn().mockResolvedValue(mockSnapshot);
         const limitMock = vi.fn().mockReturnValue({ get: getMock });
-        const where2Mock = vi.fn().mockReturnValue({ limit: limitMock });
-        const where1Mock = vi.fn().mockReturnValue({ where: where2Mock });
-        (firestore.collectionGroup as any).mockReturnValue({ where: where1Mock });
 
-        // Invoke the handler (refreshCOROSAPIRefreshTokens is already the handler due to our global mock)
+        // Setup recursive mock for chaining .where().where()
+        const whereMock = vi.fn();
+        const queryObj = {
+            where: whereMock,
+            limit: limitMock
+        };
+        whereMock.mockReturnValue(queryObj);
+
+        (firestore.collectionGroup as any).mockReturnValue({ where: whereMock });
+
         await (refreshCOROSAPIRefreshTokens as any)({});
 
         expect(firestore.collectionGroup).toHaveBeenCalledWith('tokens');
+
+        // Should be called 4 times (2 filters per query * 2 queries)
+        expect(whereMock).toHaveBeenCalledTimes(4);
+
+        // Verify Service Name filter is applied
+        expect(whereMock).toHaveBeenCalledWith('serviceName', '==', SERVICE_NAME);
+
+        // Verify specific date filters
+        expect(whereMock).toHaveBeenCalledWith('dateRefreshed', '<=', expect.any(Number));
+        expect(whereMock).toHaveBeenCalledWith('dateRefreshed', '==', null);
+
+        // tokens.refreshTokens should be called twice
+        expect(tokens.refreshTokens).toHaveBeenCalledTimes(2);
         expect(tokens.refreshTokens).toHaveBeenCalledWith(mockSnapshot, SERVICE_NAME);
     });
 });
