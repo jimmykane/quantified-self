@@ -254,7 +254,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
         const location = eventStartPositionStat.getValue();
         const marker = new google.maps.Marker({
           position: { lat: location.latitudeDegrees, lng: location.longitudeDegrees },
-          title: `${event.getActivityTypesAsString()} for ${event.getDuration().getDisplayValue(false, false)} and ${event.getDistance().getDisplayValue()}${event.getDistance().getDisplayValue()}`,
+          title: `${event.getActivityTypesAsString()} for ${event.getDuration().getDisplayValue(false, false)} and ${event.getDistance().getDisplayValue()}`,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
             fillOpacity: 1,
@@ -271,23 +271,46 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
         marker.addListener('click', async () => {
           this.loading();
           this.selectedEventPositionsByActivity = [];
-          const activities = await this.eventService.getActivities(this.user, event.getID()).pipe(take(1)).toPromise();
-          if (!activities) return;
+
+          // Use attachStreamsToEventWithActivities to get event with activities + streams
+          // This handles original file parsing on the fly if needed
+          const types = [DataLatitudeDegrees.type, DataLongitudeDegrees.type];
+
+          // We only need one emission
+          const populatedEvent = await this.eventService.attachStreamsToEventWithActivities(
+            this.user,
+            event,
+            types
+          ).pipe(take(1)).toPromise();
+
+          if (!populatedEvent) {
+            this.loaded();
+            return;
+          }
+
+          const activities = populatedEvent.getActivities();
+          if (!activities || activities.length === 0) {
+            this.loaded();
+            return;
+          }
+
           for (const activity of activities) {
-            const streams = await this.eventService.getStreamsByTypes(
-              this.user.uid, event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type]
-            ).pipe(take(1)).toPromise();
-            activity.addStreams(streams || []);
             this.selectedEventPositionsByActivity.push({
               activity: activity,
               color: this.eventColorService.getActivityColor(activities, activity),
               positions: activity.getSquashedPositionData()
             });
           }
-          this.nativeMap.fitBounds(this.getBounds(this.selectedEventPositionsByActivity.reduce((accu, positionByActivity) => {
+
+          const allPositions = this.selectedEventPositionsByActivity.reduce((accu, positionByActivity) => {
             return accu.concat(positionByActivity.positions);
-          }, [])));
-          this.selectedEvent = event;
+          }, []);
+
+          if (allPositions.length > 0) {
+            this.nativeMap.fitBounds(this.getBounds(allPositions));
+          }
+
+          this.selectedEvent = populatedEvent;
           this.loaded();
         });
       }
