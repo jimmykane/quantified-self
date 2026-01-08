@@ -1,20 +1,19 @@
-<mat-card class="mat-elevation-z0">
-  @if (totalProgress < 100 && bufferProgress < 100) {
-    <mat-card-title>
+<div class="progress-container">
+  <div class="progress-header">
+    @if (totalProgress < 100 && bufferProgress < 100) { <div class="mat-title-medium status-text">
       Getting your activities
-    </mat-card-title>
+  </div>
   }
-  @if (totalProgress < 100 && bufferProgress >= 100) {
-    <mat-card-title>
+  @if (totalProgress < 100 && bufferProgress>= 100) {
+    <div class="mat-title-medium status-text">
       Loading your tracks
-    </mat-card-title>
-  }
-  <mat-card-content>
-    <mat-progress-bar
-      [color]="'primary'"
-      [mode]="'buffer'"
-      [value]="totalProgress"
-      [bufferValue]="bufferProgress">
-    </mat-progress-bar>
-  </mat-card-content>
-</mat-card>
+    </div>
+    }
+    <div class="mat-label-large percentage-text">
+      {{ totalProgress | number:'1.0-0' }}%
+    </div>
+</div>
+
+<mat-progress-bar class="custom-progress-bar" mode="buffer" [value]="totalProgress" [bufferValue]="bufferProgress">
+</mat-progress-bar>
+</div>
