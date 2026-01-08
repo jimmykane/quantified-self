@@ -13,7 +13,7 @@ import { TileChartComponent } from '../components/tile/chart/tile.chart.componen
 import { TileMapComponent } from '../components/tile/map/tile.map.component';
 import { TileChartActionsComponent } from '../components/tile/actions/chart/tile.chart.actions.component';
 import { TileMapActionsComponent } from '../components/tile/actions/map/tile.map.actions.component';
-import { ChartsBrianDevineComponent } from '../components/charts/brian-devine/charts.brian-devine.component';
+
 import { ChartsTimelineComponent } from '../components/charts/timeline/charts.timeline.component';
 import { ChartsIntensityZonesComponent } from '../components/charts/intensity-zones/charts.intensity-zones.component';
 import { ChartsXYComponent } from '../components/charts/xy/charts.xy.component';
@@ -47,7 +47,7 @@ import { GoogleMapsModule } from '@angular/google-maps';
         ChartsIntensityZonesComponent,
         ChartsXYComponent,
         ChartsColumnsComponent,
-        ChartsBrianDevineComponent,
+
     ],
     providers: [
         { provide: MatPaginatorIntl, useClass: MatPaginatorIntlFireStore },

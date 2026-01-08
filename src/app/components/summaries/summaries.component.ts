@@ -202,19 +202,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           chartTile.dataTimeInterval = chartTile.dataTimeInterval || TimeIntervals.Auto
           // 2 Different processing here, one generic and one for Brian Devine
           switch (chartTile.chartType) {
-            case ChartTypes.BrianDevine:
-              const data = {
-                daily: this.getChartData(events, chartTile.dataType, chartTile.dataValueType, ChartDataCategoryTypes.DateType, TimeIntervals.Daily),
-                weekly: this.getChartData(events, chartTile.dataType, chartTile.dataValueType, ChartDataCategoryTypes.DateType, TimeIntervals.Weekly),
-                activityTypes: [...new Set(events.map((event) => this.getEventCategoryKey(event, events, ChartDataCategoryTypes.ActivityType, chartTile.dataTimeInterval)))]
-              };
-              chartsAndData.push({
-                ...chartTile, ...{
-                  timeInterval: chartTile.dataTimeInterval === TimeIntervals.Auto ? this.getEventsTimeInterval(events) : chartTile.dataTimeInterval, // Defaults to Auto / Daily
-                  data: data
-                }
-              });
-              break;
+
             case ChartTypes.IntensityZones:
               chartsAndData.push({
                 ...chartTile, ...{
