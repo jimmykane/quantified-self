@@ -38,6 +38,16 @@ export const cleanupEventFile = onDocumentDeleted({
         logger.error(`[Cleanup] Failed to delete linked activities for event ${eventId}`, error);
     }
 
+    // Delete linked metaData (Subcollection)
+    try {
+        const metaDataRef = admin.firestore().collection(`users/${userId}/events/${eventId}/metaData`);
+        // Using recursiveDelete to efficiently remove the entire subcollection
+        await admin.firestore().recursiveDelete(metaDataRef);
+        logger.info(`[Cleanup] Successfully requested recursive delete for metaData of event ${eventId}`);
+    } catch (error) {
+        logger.error(`[Cleanup] Failed to delete metaData for event ${eventId}`, error);
+    }
+
     const prefix = `users/${userId}/events/${eventId}/`;
     logger.info(`[Cleanup] Deleting all files with prefix ${prefix}`);
 

@@ -11,10 +11,12 @@ const { firestoreBuilderMock, adminFirestoreMock, adminStorageMock, batchDeleteM
     const recursiveDeleteMock = vi.fn().mockResolvedValue(undefined); // Keep for potential other use or safety
     // Mock return of collection() needs to permit chaining: .where().get()
     const whereMock = vi.fn();
-    const collectionMock = vi.fn().mockReturnValue({
-        path: 'mock/path',
-        where: whereMock
-    });
+    const getMock = vi.fn();
+    const collectionMock = vi.fn((path) => ({
+        path: path || 'mock/path',
+        where: whereMock,
+        get: getMock
+    }));
 
     // Batch Mocks
     const batchDeleteMock = vi.fn();
@@ -124,9 +126,13 @@ describe('cleanupEventFile', () => {
 
         // Check flat activity delete
         expect(mocks.firestore.collection).toHaveBeenCalledWith('users/testUser/activities');
-        // Simple check for now, can be more specific if needed
+
+        // Expect batch delete to be called 2 times (once per doc) for activities
         expect(mocks.batchDelete).toHaveBeenCalledTimes(2);
         expect(mocks.batchCommit).toHaveBeenCalled();
+
+        // Expect recursiveDelete to be called 1 time (for metaData)
+        expect(mocks.recursiveDelete).toHaveBeenCalledTimes(1);
 
         // Check file delete with prefix
         expect(mocks.deleteFiles).toHaveBeenCalledWith({
@@ -166,5 +172,33 @@ describe('cleanupEventFile', () => {
         expect(mocks.deleteFiles).toHaveBeenCalledWith({
             prefix: 'users/testUser/events/testEvent/'
         });
+    });
+
+    it('should delete metaData documents using recursiveDelete', async () => {
+        const wrapped = cleanupEventFile as any;
+        const snap = testEnv.firestore.makeDocumentSnapshot({}, 'users/testUser/events/testEvent');
+        const event = {
+            data: snap,
+            params: { userId: 'testUser', eventId: 'testEvent' },
+        };
+
+        // Mock activities (empty)
+        (mocks.firestore.collection('users/testUser/activities').where as any).mockReturnValue({
+            get: vi.fn().mockResolvedValue({ empty: true, size: 0, docs: [] })
+        });
+
+        // For recursiveDelete, we don't need to mock the .get() return value of metaDataRef specifically,
+        // because we are just asserting that recursiveDelete is called with the collection ref.
+        // However, we need to ensure recursiveDelete logic inside the function works.
+        // In our mock setup, recursiveDelete is mocked on `adminFirestoreMock` (lines 30 and 46).
+
+        await wrapped(event);
+
+        // Verify recursiveDelete is called with the correct collection reference
+        // We need to capture the argument passed to recursiveDelete
+        expect(mocks.recursiveDelete).toHaveBeenCalledTimes(1);
+        const callArgs = mocks.recursiveDelete.mock.calls[0];
+        const collectionRef = callArgs[0];
+        expect(collectionRef.path).toBe('users/testUser/events/testEvent/metaData');
     });
 });
