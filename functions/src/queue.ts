@@ -29,7 +29,7 @@ import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/
 
 export async function parseQueueItems(serviceName: ServiceNames) {
   const RETRY_COUNT = MAX_RETRY_COUNT;
-  const LIMIT = 500;
+  const LIMIT = 200;
   // @todo add queue item sort date for creation
   const querySnapshot = await admin.firestore()
     .collection(getServiceWorkoutQueueName(serviceName))
