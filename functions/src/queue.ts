@@ -315,7 +315,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
 
     }
     logger.info('Ending timer: DownloadFit');
-    logger.info(`File size: ${result.byteLength || result.length} bytes`);
+    logger.info(`File size: ${result.byteLength || result.length} bytes for queue item ${queueItem.id}`);
     try {
       logger.info('Starting timer: CreateEvent');
       const event = await EventImporterFIT.getFromArrayBuffer(result, new ActivityParsingOptions({ generateUnitStreams: false }));

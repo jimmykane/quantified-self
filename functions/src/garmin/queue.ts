@@ -135,7 +135,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
 
 
   try {
-    logger.info(`File size: ${result.byteLength || result.length} bytes`);
+    logger.info(`File size: ${result.byteLength || result.length} bytes for queue item ${queueItem.id}`);
     let event;
     switch (queueItem.activityFileType) {
       case 'FIT':
@@ -167,7 +167,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
           });
           logger.info('Ending timer: DownloadFile');
           logger.info(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${serviceToken.userID}`);
-          logger.info(`File size: ${result.byteLength || result.length} bytes`);
+          logger.info(`File size: ${result.byteLength || result.length} bytes for queue item ${queueItem.id}`);
           event = await EventImporterFIT.getFromArrayBuffer(result, new ActivityParsingOptions({ generateUnitStreams: false })); // Let it fail here
         }
         break;
