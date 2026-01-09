@@ -12,6 +12,8 @@ if (admin.apps.length === 0) {
 const db = admin.firestore();
 const logger = console;
 
+const STORAGE_BUCKET_NAME = 'quantified-self-io';
+
 async function confirm(message: string): Promise<boolean> {
     const rl = readline.createInterface({
         input: process.stdin,
@@ -95,17 +97,12 @@ async function cleanupUser(uid: string, dryRun: boolean) {
 
     // 3. Delete Storage Files
     try {
-        const storageBucketName = process.env.FIREBASE_STORAGE_BUCKET || admin.app().options.storageBucket;
-        if (storageBucketName) {
-            const storage = admin.storage().bucket(storageBucketName);
-            const prefix = `users/${uid}/`;
-            const [files] = await storage.getFiles({ prefix });
-            if (files.length > 0) {
-                await storage.deleteFiles({ prefix });
-                logger.info(`    - Deleted ${files.length} files from storage (prefix: ${prefix})`);
-            }
-        } else {
-            logger.warn(`    - Skipping storage cleanup for ${uid}: No storage bucket configured (Set FIREBASE_STORAGE_BUCKET env var)`);
+        const storage = admin.storage().bucket(STORAGE_BUCKET_NAME);
+        const prefix = `users/${uid}/`;
+        const [files] = await storage.getFiles({ prefix });
+        if (files.length > 0) {
+            await storage.deleteFiles({ prefix });
+            logger.info(`    - Deleted ${files.length} files from storage (prefix: ${prefix})`);
         }
     } catch (e: unknown) {
         const error = e as Error;
@@ -158,8 +155,6 @@ async function cleanupOrphanedUsers() {
     const args = process.argv.slice(2);
     const dryRun = args.includes('--dry-run');
     const force = args.includes('--force');
-    const includeStorageDiscovery = args.includes('--storage-discovery');
-    const includeDeepDiscovery = args.includes('--deep-discovery');
 
     // Support targeting a specific UID
     const uidIndex = args.indexOf('--uid');
@@ -169,8 +164,8 @@ async function cleanupOrphanedUsers() {
     logger.info(`Orphaned Users Cleanup Script`);
     logger.info(`Mode: ${dryRun ? 'DRY RUN' : 'EXECUTION'}`);
     if (targetUid) logger.info(`Target UID: ${targetUid}`);
-    logger.info(`Storage Discovery: ${includeStorageDiscovery ? 'ENABLED' : 'DISABLED'}`);
-    logger.info(`Deep discovery (Collection Groups): ${includeDeepDiscovery ? 'ENABLED (COST WARNING)' : 'DISABLED'}`);
+    logger.info(`Storage Bucket: ${STORAGE_BUCKET_NAME}`);
+    logger.info(`Discovery: Firestore (Primary) + Storage`);
     logger.info(`=============================================`);
 
     let orphans: string[] = [];
@@ -196,68 +191,29 @@ async function cleanupOrphanedUsers() {
                         potentialOrphanUids.add(doc.id);
                     }
                 });
-            } catch (e: unknown) {
+            } catch {
                 // Ignore missing collections
             }
         }
 
-        // 2. Discovery from Firestore Sub-collections (EXPENSIVE)
-        if (includeDeepDiscovery) {
-            const groupsToScan = ['activities', 'events'];
-            for (const groupName of groupsToScan) {
-                try {
-                    const countSnapshot = await db.collectionGroup(groupName).count().get();
-                    const docCount = countSnapshot.data().count;
-                    logger.info(`Deep discovery: Group '${groupName}' has ${docCount} documents.`);
-
-                    if (docCount > 10000 && !force) {
-                        const proceed = await confirm(`WARNING: Scanning ${docCount} documents in '${groupName}' will cost approximately ${docCount} Firestore reads. Proceed?`);
-                        if (!proceed) {
-                            logger.info(`  Skipping deep scan for '${groupName}'.`);
-                            continue;
-                        }
+        // 2. Discovery from Storage (Relatively Cheap Listing)
+        logger.info('Scanning Storage for user prefixes...');
+        try {
+            const storage = admin.storage().bucket(STORAGE_BUCKET_NAME);
+            // Metadata listing is cheap compared to Firestore reads
+            const [, , apiResponse] = await storage.getFiles({ prefix: 'users/', delimiter: '/', autoPaginate: true }) as any;
+            const prefixes = apiResponse.prefixes || [];
+            prefixes.forEach((prefix: string) => {
+                const parts = prefix.split('/');
+                if (parts.length >= 2 && parts[0] === 'users') {
+                    const uid = parts[1];
+                    if (uid && !authUids.has(uid)) {
+                        potentialOrphanUids.add(uid);
                     }
-
-                    logger.info(`  Scanning collection group: ${groupName}...`);
-                    const snapshot = await db.collectionGroup(groupName).select().get();
-                    snapshot.docs.forEach(doc => {
-                        const parts = doc.ref.path.split('/');
-                        if (parts.length > 1) {
-                            const uid = parts[1]; // users/{uid}/...
-                            if (uid && !authUids.has(uid)) {
-                                potentialOrphanUids.add(uid);
-                            }
-                        }
-                    });
-                } catch (e: unknown) {
-                    logger.warn(`  Warning: Could not deep scan ${groupName}: ${(e as Error).message}`);
                 }
-            }
-        }
-
-        // 3. Discovery from Storage (Relatively Cheap Listing)
-        if (includeStorageDiscovery) {
-            logger.info('Scanning Storage for user prefixes...');
-            try {
-                const storageBucketName = process.env.FIREBASE_STORAGE_BUCKET || admin.app().options.storageBucket;
-                if (storageBucketName) {
-                    const storage = admin.storage().bucket(storageBucketName);
-                    // Metadata listing is cheap compared to Firestore reads
-                    const [, , apiResponse] = await storage.getFiles({ prefix: 'users/', delimiter: '/', autoPaginate: true }) as any;
-                    const prefixes = apiResponse.prefixes || [];
-                    prefixes.forEach((prefix: string) => {
-                        const parts = prefix.split('/');
-                        if (parts.length >= 2 && parts[0] === 'users') {
-                            const uid = parts[1];
-                            if (uid && !authUids.has(uid)) {
-                                potentialOrphanUids.add(uid);
-                            }
-                        }
-                    });
-                }
-            } catch (e: unknown) {
-                logger.error(`  Error scanning storage: ${(e as Error).message}`);
-            }
+            });
+        } catch (e: unknown) {
+            logger.error(`  Error scanning storage: ${(e as Error).message}`);
         }
 
         orphans = Array.from(potentialOrphanUids);
