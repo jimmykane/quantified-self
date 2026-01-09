@@ -99,6 +99,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
   let result;
   const url = `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}&token=${queueItem.token}`;
   try {
+    logger.info(`Downloading Garmin activityID: ${queueItem.activityFileID} for queue item ${queueItem.id}`);
     logger.info('Starting timer: DownloadFile');
     result = await requestPromise.get({
       headers: oAuth.toHeader(oAuth.authorize({

@@ -280,6 +280,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
 
     let result;
     try {
+      logger.info(`Downloading ${serviceName} workoutID: ${(queueItem as any).workoutID} for queue item ${queueItem.id}`);
       logger.info('Starting timer: DownloadFit');
       result = await getWorkoutForService(serviceName, queueItem, serviceToken);
       logger.info(`Downloaded FIT file for ${queueItem.id}`);
