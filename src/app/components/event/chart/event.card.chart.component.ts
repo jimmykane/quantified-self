@@ -828,7 +828,11 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         // Determine which data types to show based on showAllData toggle
         const allowedDataTypes = this.showAllData
           ? null // null means show all
-          : [...DynamicDataLoader.basicDataTypes, ...this.dataTypesToUse];
+          : DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(
+            [...DynamicDataLoader.basicDataTypes, ...this.dataTypesToUse],
+            this.userUnitSettings,
+            { includeDerivedTypes: true }
+          ).concat([...DynamicDataLoader.basicDataTypes, ...this.dataTypesToUse]);
 
         // These need to be unit based and activity based?
         const shouldRemoveSpeed = DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataSpeed.type, this.userUnitSettings).indexOf(DataSpeed.type) === -1
