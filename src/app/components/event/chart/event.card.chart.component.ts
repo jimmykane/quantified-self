@@ -1849,6 +1849,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         if (xAxis.positionToValue) {
           const distance = xAxis.positionToValue(xAxis.pointToPosition(event.target.point));
           this.selectedActivities.forEach(activity => {
+            if (!activity.hasStreamData(DataDistance.type)) {
+              return;
+            }
             const distanceStream = activity.getStream(DataDistance.type);
             if (distanceStream) {
               const distances = distanceStream.getData();
@@ -1882,17 +1885,19 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
                 let timeStream;
                 // check for Time stream first
                 // Time stream is guaranteed by AppEventService enrichment
-                timeStream = activity.getStream(XAxisTypes.Time);
+                if (activity.hasStreamData(XAxisTypes.Time)) {
+                  timeStream = activity.getStream(XAxisTypes.Time);
 
-                const timeData = timeStream.getData();
-                if (timeData && timeData[index] !== undefined && timeData[index] !== null) {
-                  const timeOffset = timeData[index];
-                  // Assuming timeOffset is in seconds (standard for Duration/Time streams in this app)
-                  this.activityCursorService.setCursor({
-                    activityID: activity.getID(),
-                    time: activity.startDate.getTime() + (timeOffset * 1000),
-                    byChart: true,
-                  });
+                  const timeData = timeStream.getData();
+                  if (timeData && timeData[index] !== undefined && timeData[index] !== null) {
+                    const timeOffset = timeData[index];
+                    // Assuming timeOffset is in seconds (standard for Duration/Time streams in this app)
+                    this.activityCursorService.setCursor({
+                      activityID: activity.getID(),
+                      time: activity.startDate.getTime() + (timeOffset * 1000),
+                      byChart: true,
+                    });
+                  }
                 }
               }
             }
