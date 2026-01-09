@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { Firestore } from '@angular/fire/firestore';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc } from '@angular/fire/firestore';
 import { Storage } from '@angular/fire/storage';
 import { Auth } from '@angular/fire/auth';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -8,15 +8,68 @@ import { AppUserService } from './app.user.service';
 import { LoggerService } from './logger.service';
 import { AppFileService } from './app.file.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
-import { vi, describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
-import { Injector } from '@angular/core';
-import { EventWriter } from '../../../functions/src/shared/event-writer';
+import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
+import { of } from 'rxjs';
 
-vi.mock('../../../functions/src/shared/event-writer', () => ({
-    EventWriter: vi.fn().mockImplementation(() => ({
-        writeAllEventData: vi.fn().mockResolvedValue(true)
-    }))
+// Hoist mocks
+const mocks = vi.hoisted(() => {
+    return {
+        writeAllEventData: vi.fn(),
+        getEventFromJSON: vi.fn(),
+        getActivityFromJSON: vi.fn(),
+        sanitize: vi.fn(),
+        getCountFromServer: vi.fn(),
+    };
+});
+
+// Mock @angular/fire/firestore
+vi.mock('@angular/fire/firestore', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@angular/fire/firestore')>();
+    return {
+        ...actual,
+        doc: vi.fn(),
+        docData: vi.fn(),
+        collection: vi.fn(),
+        collectionData: vi.fn(),
+        query: vi.fn(),
+        where: vi.fn(),
+        deleteDoc: vi.fn(),
+        setDoc: vi.fn(),
+        getCountFromServer: mocks.getCountFromServer,
+        runInInjectionContext: vi.fn((injector, fn) => fn()),
+    };
+});
+
+// Mock @sports-alliance/sports-lib
+vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@sports-alliance/sports-lib')>();
+    return {
+        ...actual,
+        EventImporterJSON: {
+            getEventFromJSON: mocks.getEventFromJSON,
+            getActivityFromJSON: mocks.getActivityFromJSON,
+        },
+    };
+});
+
+// Mock EventJSONSanitizer
+vi.mock('../utils/event-json-sanitizer', () => ({
+    EventJSONSanitizer: {
+        sanitize: mocks.sanitize
+    }
 }));
+
+// Mock EventWriter as a class
+vi.mock('../../../functions/src/shared/event-writer', () => {
+    return {
+        EventWriter: class {
+            writeAllEventData = mocks.writeAllEventData;
+        },
+        FirestoreAdapter: {},
+        StorageAdapter: {},
+        OriginalFile: {}
+    };
+});
 
 describe('AppEventService', () => {
     let service: AppEventService;
@@ -24,8 +77,12 @@ describe('AppEventService', () => {
     const mockStorage = { getBucketName: () => 'test-bucket' };
     const mockAuth = {};
     const mockAnalytics = { logEvent: vi.fn() };
-    const mockUser = { isPro: vi.fn().mockResolvedValue(true) };
-    const mockLogger = { log: vi.fn(), error: vi.fn(), warn: vi.fn() };
+    const mockUser = {
+        isPro: vi.fn().mockResolvedValue(true),
+        getSubscriptionRole: vi.fn().mockResolvedValue('pro'),
+        uid: 'test-uid'
+    };
+    const mockLogger = { log: vi.fn(), error: vi.fn(), warn: vi.fn(), captureMessage: vi.fn() };
     const mockFileService = {};
     const mockCompatibility = { checkCompressionSupport: vi.fn().mockReturnValue(true) };
 
@@ -49,6 +106,25 @@ describe('AppEventService', () => {
         service = TestBed.inject(AppEventService);
         vi.clearAllMocks();
 
+        // Default mock implementations
+        mocks.sanitize.mockImplementation((json: any) => ({ sanitizedJson: json, unknownTypes: [] }));
+        mocks.getEventFromJSON.mockReturnValue({
+            setID: vi.fn().mockReturnThis(),
+            clearActivities: vi.fn(),
+            addActivities: vi.fn(),
+            getID: vi.fn().mockReturnValue('event1'),
+            toJSON: vi.fn().mockReturnValue({}),
+            getActivities: vi.fn().mockReturnValue([]),
+            startDate: new Date()
+        });
+        mocks.getActivityFromJSON.mockReturnValue({
+            setID: vi.fn().mockReturnThis(),
+            toJSON: vi.fn().mockReturnValue({})
+        });
+        mocks.getCountFromServer.mockResolvedValue({ data: () => ({ count: 0 }) });
+        mocks.writeAllEventData.mockResolvedValue(true);
+
+        // Polyfills
         // @ts-ignore
         globalThis.CompressionStream = vi.fn().mockImplementation(() => ({
             writable: {}, readable: {}
@@ -67,13 +143,13 @@ describe('AppEventService', () => {
         globalThis.CompressionStream = originalCompressionStream;
         // @ts-ignore
         globalThis.Response = originalResponse;
+        vi.restoreAllMocks();
     });
 
     it('should be created', () => {
         expect(service).toBeTruthy();
     });
 
-    // We focus on the compression logic in writeAllEventData
     it('should skip compression if browser not supported', async () => {
         mockCompatibility.checkCompressionSupport.mockReturnValue(false);
         const mockEvent = {
@@ -82,11 +158,66 @@ describe('AppEventService', () => {
             getActivities: () => [],
             setID: vi.fn()
         } as any;
-        const originalFiles = [{ extension: 'gpx', data: 'content' }] as any;
+        const originalFiles = [{ extension: 'gpx', data: 'content', startDate: new Date() }] as any;
 
         await service.writeAllEventData({ uid: 'user1' } as any, mockEvent, originalFiles);
 
         expect(globalThis.CompressionStream).not.toHaveBeenCalled();
         expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Compression skipped'));
+        expect(mocks.writeAllEventData).toHaveBeenCalled();
+    });
+
+    it('should get event and activities correctly', async () => {
+        const userId = 'user1';
+        const eventId = 'event1';
+        const user = { uid: userId } as any;
+
+        const mockEventData = { id: eventId, name: 'Test Event' };
+        const mockActivityData = { id: 'act1', type: 'Run' };
+
+        (doc as Mock).mockReturnValue({}); // eventDoc
+        (docData as Mock).mockReturnValue(of(mockEventData));
+        (collection as Mock).mockReturnValue({}); // activitiesCollection
+        (collectionData as Mock).mockReturnValue(of([mockActivityData]));
+
+        const result = await service.getEventAndActivities(user, eventId).toPromise();
+
+        expect(doc).toHaveBeenCalledWith(expect.anything(), 'users', userId, 'events', eventId);
+        expect(docData).toHaveBeenCalled();
+        expect(collection).toHaveBeenCalledWith(expect.anything(), 'users', userId, 'activities');
+        expect(collectionData).toHaveBeenCalled();
+
+        expect(mockLogger.error).not.toHaveBeenCalled();
+        expect(result).toBeTruthy();
+        expect(result!.getID()).toBe('event1');
+    });
+
+    it('should delete all event data', async () => {
+        const userId = 'user1';
+        const eventId = 'event1';
+        const user = { uid: userId } as any;
+
+        (doc as Mock).mockReturnValue({});
+        (deleteDoc as Mock).mockResolvedValue(undefined);
+
+        const result = await service.deleteAllEventData(user, eventId);
+
+        expect(doc).toHaveBeenCalledWith(expect.anything(), 'users', userId, 'events', eventId);
+        expect(deleteDoc).toHaveBeenCalled();
+        expect(result).toBe(true);
+    });
+
+    it('should call EventWriter in writeAllEventData', async () => {
+        const mockEvent = {
+            getID: () => '1',
+            startDate: new Date(),
+            getActivities: () => [],
+            setID: vi.fn()
+        } as any;
+        const user = { uid: 'user1' } as any;
+
+        await service.writeAllEventData(user, mockEvent);
+
+        expect(mocks.writeAllEventData).toHaveBeenCalled();
     });
 });
