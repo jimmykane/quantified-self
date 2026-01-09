@@ -1,10 +1,9 @@
-import * as admin from 'firebase-admin';
 import functionsTest from 'firebase-functions-test';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
 
 
 // Use vi.hoisted to ensure mocks are initialized before vi.mock
-const { firestoreBuilderMock, adminFirestoreMock, adminStorageMock, batchDeleteMock, batchCommitMock, deleteFilesMock } = vi.hoisted(() => {
+const { adminFirestoreMock, adminStorageMock, batchDeleteMock, batchCommitMock, deleteFilesMock, recursiveDeleteMock } = vi.hoisted(() => {
     const onDeleteMock = vi.fn((handler) => handler);
     const documentMock = vi.fn(() => ({ onDelete: onDeleteMock }));
 
@@ -30,6 +29,7 @@ const { firestoreBuilderMock, adminFirestoreMock, adminStorageMock, batchDeleteM
         collection: collectionMock,
         recursiveDelete: recursiveDeleteMock,
         batch: batchMock
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
 
     const deleteFilesMock = vi.fn().mockResolvedValue(undefined);
@@ -40,12 +40,14 @@ const { firestoreBuilderMock, adminFirestoreMock, adminStorageMock, batchDeleteM
             }),
             deleteFiles: deleteFilesMock,
         }),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
 
     return {
         firestoreBuilderMock: { document: documentMock },
         adminFirestoreMock: firestoreMock,
         adminStorageMock: storageMock,
+        recursiveDeleteMock,
         batchDeleteMock,
         batchCommitMock,
         deleteFilesMock
@@ -54,7 +56,7 @@ const { firestoreBuilderMock, adminFirestoreMock, adminStorageMock, batchDeleteM
 
 // Mock firebase-functions v2
 vi.mock('firebase-functions/v2/firestore', () => ({
-    onDocumentDeleted: (opts: any, handler: any) => handler,
+    onDocumentDeleted: (_opts: unknown, handler: unknown) => handler,
 }));
 
 vi.mock('firebase-admin', () => ({
@@ -68,6 +70,7 @@ vi.mock('firebase-admin', () => ({
 
 // Import the function AFTER mocking
 import { cleanupEventFile } from './cleanup';
+import { Firestore } from 'firebase-admin/firestore';
 
 const testEnv = functionsTest();
 
@@ -79,7 +82,7 @@ describe('cleanupEventFile', () => {
     const mocks = {
         firestore: adminFirestoreMock,
         storage: adminStorageMock,
-        recursiveDelete: adminFirestoreMock.recursiveDelete,
+        recursiveDelete: recursiveDeleteMock,
         deleteFile: adminStorageMock.bucket().file().delete,
         deleteFiles: deleteFilesMock,
         batchDelete: batchDeleteMock,
@@ -98,7 +101,7 @@ describe('cleanupEventFile', () => {
 
     it('should recursively delete activities and delete the original files by prefix', async () => {
         // Since we mocked the builder to just return the handler, cleanupEventFile IS the handler
-        const wrapped = cleanupEventFile as any;
+        const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
 
         const snap = testEnv.firestore.makeDocumentSnapshot({
             originalFile: { path: 'path/to/file.fit' }
@@ -114,7 +117,7 @@ describe('cleanupEventFile', () => {
 
         // Mock snapshot for flat activities
         const mockDocs = [{ ref: 'docRef1' }, { ref: 'docRef2' }];
-        (mocks.firestore.collection('users/testUser/activities').where as any).mockReturnValue({
+        (mocks.firestore.collection('users/testUser/activities').where as Mock).mockReturnValue({
             get: vi.fn().mockResolvedValue({
                 empty: false,
                 size: 2,
@@ -142,7 +145,7 @@ describe('cleanupEventFile', () => {
 
     it('should delete activities and files even if originalFile metadata is missing', async () => {
         // Mock snapshot for flat activities (EMPTY)
-        (mocks.firestore.collection('users/testUser/activities').where as any).mockReturnValue({
+        (mocks.firestore.collection('users/testUser/activities').where as Mock).mockReturnValue({
             get: vi.fn().mockResolvedValue({
                 empty: true,
                 size: 0,
@@ -150,7 +153,7 @@ describe('cleanupEventFile', () => {
             })
         });
 
-        const wrapped = cleanupEventFile as any;
+        const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
 
         // NO data in snapshot
         const snap = testEnv.firestore.makeDocumentSnapshot({}, 'users/testUser/events/testEvent');
@@ -175,7 +178,7 @@ describe('cleanupEventFile', () => {
     });
 
     it('should delete metaData documents using recursiveDelete', async () => {
-        const wrapped = cleanupEventFile as any;
+        const wrapped = cleanupEventFile as unknown as (event: unknown) => Promise<void>;
         const snap = testEnv.firestore.makeDocumentSnapshot({}, 'users/testUser/events/testEvent');
         const event = {
             data: snap,
@@ -183,7 +186,7 @@ describe('cleanupEventFile', () => {
         };
 
         // Mock activities (empty)
-        (mocks.firestore.collection('users/testUser/activities').where as any).mockReturnValue({
+        (mocks.firestore.collection('users/testUser/activities').where as Mock).mockReturnValue({
             get: vi.fn().mockResolvedValue({ empty: true, size: 0, docs: [] })
         });
 
@@ -198,7 +201,10 @@ describe('cleanupEventFile', () => {
         // We need to capture the argument passed to recursiveDelete
         expect(mocks.recursiveDelete).toHaveBeenCalledTimes(1);
         const callArgs = mocks.recursiveDelete.mock.calls[0];
-        const collectionRef = callArgs[0];
+        const collectionRef = callArgs[0] as unknown as Firestore;
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
         expect(collectionRef.path).toBe('users/testUser/events/testEvent/metaData');
     });
 });
+
