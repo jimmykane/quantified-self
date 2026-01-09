@@ -86,6 +86,7 @@ export interface FinancialStats {
         reportUrl: string | null;
         currency: string;
         total: number | null;
+        lastUpdated?: string;
         budget: { amount: number; currency: string } | null;
         advice?: string;
     };

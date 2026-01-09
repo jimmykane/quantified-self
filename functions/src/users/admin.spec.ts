@@ -754,6 +754,22 @@ describe('getFinancialStats Cloud Function', () => {
         expect(result.cost.reportUrl).toContain('console.cloud.google.com/billing/000000-000000-000000/reports');
     });
 
+    it('should include lastUpdated when BigQuery returns it', async () => {
+        // Mock BigQuery returning a cost and a timestamp
+        const mockTimestamp = '2026-01-09T10:00:00Z';
+        mockGetTables.mockResolvedValue([[{ id: 'gcp_billing_export_v1_123' }]]);
+        mockBigQueryQuery.mockResolvedValue([[{
+            total_cost: 15.5,
+            last_updated: mockTimestamp,
+            currency: 'USD'
+        }]]);
+
+        const result: any = await (getFinancialStats as any)(request);
+
+        expect(result.cost.total).toBe(1550); // 15.5 * 100
+        expect(result.cost.lastUpdated).toBe(mockTimestamp);
+    });
+
     it('should handle pagination for Stripe invoices', async () => {
         productsDocs.push({ id: 'prod_valid_1' });
 

@@ -841,6 +841,7 @@ export const getFinancialStats = onAdminCall<void, any>({
                             const query = `
                                 SELECT 
                                     SUM(cost) + SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as total_cost,
+                                    MAX(usage_end_time) as last_updated,
                                     currency 
                                 FROM ${fullTableName} 
                                 WHERE invoice.month = FORMAT_DATE('%Y%m', CURRENT_DATE())
@@ -864,7 +865,8 @@ export const getFinancialStats = onAdminCall<void, any>({
                                 const row = rows[0];
                                 // Convert to cents for frontend compatibility
                                 stats.cost.total = (row.total_cost || 0) * 100;
-                                logger.info(`Calculated total cost: ${stats.cost.total} ${row.currency}`);
+                                (stats.cost as any).lastUpdated = row.last_updated?.value || row.last_updated;
+                                logger.info(`Calculated total cost: ${stats.cost.total} ${row.currency}, last updated: ${stats.cost as any}.lastUpdated`);
                                 if (row.currency) {
                                     stats.cost.currency = row.currency.toLowerCase();
                                 }

@@ -215,6 +215,10 @@
                         style="font-size: 0.65rem; color: var(--mat-sys-primary); margin-top: 4px; font-style: italic;">
                         {{ financialStats.cost.advice }}
                     </span>
+                    <span *ngIf="financialStats.cost.lastUpdated"
+                        style="font-size: 0.65rem; color: var(--mat-sys-on-surface-variant); margin-top: 4px; opacity: 0.7;">
+                        Last update: {{ financialStats.cost.lastUpdated | date:'short' }}
+                    </span>
                 </div>
             </div>
             <!-- Fallback if no report URL -->
