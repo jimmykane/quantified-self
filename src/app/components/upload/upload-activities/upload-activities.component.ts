@@ -5,7 +5,7 @@ import { AppFileService } from '../../../services/app.file.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { EventInterface } from '@sports-alliance/sports-lib';
+import { EventInterface, ActivityParsingOptions } from '@sports-alliance/sports-lib';
 import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
@@ -81,9 +81,12 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
         if (fileReaderResult instanceof ArrayBuffer) {
           fileReaderResult = await this.fileService.decompressIfNeeded(fileReaderResult as ArrayBuffer);
         }
+        const options = new ActivityParsingOptions({
+          generateUnitStreams: false
+        });
         try {
           if ((fileReaderResult instanceof ArrayBuffer) && file.extension === 'fit') {
-            newEvent = await EventImporterFIT.getFromArrayBuffer(fileReaderResult);
+            newEvent = await EventImporterFIT.getFromArrayBuffer(fileReaderResult, options);
           } else if (fileReaderResult instanceof ArrayBuffer) {
             // Deciding based on normalized extension
             const text = new TextDecoder().decode(fileReaderResult);
@@ -95,16 +98,16 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
                   this.logger.captureMessage('Unknown Data Types in Upload', { extra: { types: unknownTypes, file: file.filename } });
                   this.snackBar.open(`Warning: Unknown data types removed: ${unknownTypes.join(', ')}`, 'OK', { duration: 5000 });
                 }
-                newEvent = await EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(sanitizedJson));
+                newEvent = await EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(sanitizedJson), options);
               } catch (e) {
-                newEvent = await EventImporterSuuntoSML.getFromJSONString(text);
+                newEvent = await EventImporterSuuntoSML.getFromJSONString(text, options);
               }
             } else if (file.extension === 'sml') {
-              newEvent = await EventImporterSuuntoSML.getFromXML(text);
+              newEvent = await EventImporterSuuntoSML.getFromXML(text, options);
             } else if (file.extension === 'tcx') {
-              newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(text, 'application/xml'));
+              newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(text, 'application/xml'), options);
             } else if (file.extension === 'gpx') {
-              newEvent = await EventImporterGPX.getFromString(text);
+              newEvent = await EventImporterGPX.getFromString(text, options);
             } else {
               reject(new Error('No compatible parser found'));
               return;

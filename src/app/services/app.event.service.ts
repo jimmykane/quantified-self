@@ -1,5 +1,6 @@
 import { inject, Injectable, Injector, OnDestroy, runInInjectionContext } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityParsingOptions } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, of, zip } from 'rxjs';
 import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, doc, docData, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, CollectionReference, getCountFromServer } from '@angular/fire/firestore';
@@ -609,14 +610,18 @@ export class AppEventService implements OnDestroy {
 
       let newEvent: EventInterface;
 
+      const options = new ActivityParsingOptions({
+        generateUnitStreams: false
+      });
+
       if (extension === 'fit') {
-        newEvent = await EventImporterFIT.getFromArrayBuffer(arrayBuffer);
+        newEvent = await EventImporterFIT.getFromArrayBuffer(arrayBuffer, options);
       } else if (extension === 'gpx') {
         const text = new TextDecoder().decode(arrayBuffer);
-        newEvent = await EventImporterGPX.getFromString(text);
+        newEvent = await EventImporterGPX.getFromString(text, options);
       } else if (extension === 'tcx') {
         const text = new TextDecoder().decode(arrayBuffer);
-        newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(text, 'application/xml'));
+        newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(text, 'application/xml'), options);
       } else if (extension === 'json') {
         const text = new TextDecoder().decode(arrayBuffer);
         const json = JSON.parse(text);
