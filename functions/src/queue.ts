@@ -41,7 +41,7 @@ export async function parseQueueItems(serviceName: ServiceNames) {
   logger.info('Starting timer: ParseQueueItems');
 
   const bulkWriter = admin.firestore().bulkWriter();
-  const limit = pLimit(10);
+  const limit = pLimit(20);
   const tokenCache = new Map<string, Promise<admin.firestore.QuerySnapshot>>();
   const usageCache = new Map<string, Promise<{ role: string, limit: number, currentCount: number }>>();
   const pendingWrites = new Map<string, number>();
