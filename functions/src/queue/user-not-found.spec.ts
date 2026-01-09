@@ -1,6 +1,6 @@
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { QueueItemInterface } from './queue/queue-item.interface';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
 // Mock Modules
@@ -101,7 +101,6 @@ import * as admin from 'firebase-admin';
 import { getUserRole, UserNotFoundError } from '../utils';
 import { parseWorkoutQueueItemForServiceName } from '../queue';
 import { processGarminHealthAPIActivityQueueItem } from '../garmin/queue';
-import { moveToDeadLetterQueue } from '../queue-utils';
 
 // We need to mock some internals to force flow
 vi.mock('../tokens', () => ({
@@ -114,7 +113,7 @@ vi.mock('../request-helper', () => ({
 }));
 
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
-    const mod = await importOriginal();
+    const mod = await importOriginal<any>();
     return {
         ...mod,
         EventImporterFIT: {
@@ -225,7 +224,6 @@ describe('User Not Found Scenarios', () => {
 
             // Mock network error during download (request-helper) to trigger generic error catch
             const requestHelper = await import('../request-helper');
-            // @ts-ignore
             requestHelper.default.get.mockRejectedValueOnce(new Error('Network Error'));
 
             const bulkWriter = (admin.firestore() as any).bulkWriter();
@@ -293,7 +291,7 @@ describe('User Not Found Scenarios', () => {
 
             // Mock firestore to return 2 tokens
             const firestoreMock = admin.firestore();
-            // @ts-ignore
+            // @ts-expect-error Mocking complex firestore chain
             firestoreMock.collection().where().get.mockResolvedValue(twoTokensSnapshot);
 
 
