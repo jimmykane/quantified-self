@@ -23,7 +23,7 @@ import * as requestPromise from './request-helper';
 import { config } from './config';
 import { getTokenData } from './tokens';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
-import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
+import { COROSAPIEventMetaData, SuuntoAppEventMetaData, ActivityParsingOptions } from '@sports-alliance/sports-lib';
 
 
 
@@ -317,7 +317,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     logger.info('Ending timer: DownloadFit');
     try {
       logger.info('Starting timer: CreateEvent');
-      const event = await EventImporterFIT.getFromArrayBuffer(result);
+      const event = await EventImporterFIT.getFromArrayBuffer(result, new ActivityParsingOptions({ generateUnitStreams: false }));
       logger.info('Ending timer: CreateEvent');
       event.name = event.startDate.toJSON(); // @todo improve
       logger.info(`Created Event from FIT file of ${queueItem.id}`);

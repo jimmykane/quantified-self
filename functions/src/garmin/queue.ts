@@ -17,6 +17,7 @@ import { EventImporterTCX } from '@sports-alliance/sports-lib';
 import * as xmldom from 'xmldom';
 import {
   GarminHealthAPIEventMetaData,
+  ActivityParsingOptions,
 } from '@sports-alliance/sports-lib';
 interface RequestError extends Error {
   statusCode?: number;
@@ -137,11 +138,11 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
     let event;
     switch (queueItem.activityFileType) {
       case 'FIT':
-        event = await EventImporterFIT.getFromArrayBuffer(result);
+        event = await EventImporterFIT.getFromArrayBuffer(result, new ActivityParsingOptions({ generateUnitStreams: false }));
         break;
       case 'GPX':
         try {
-          event = await EventImporterGPX.getFromString(result, xmldom.DOMParser);
+          event = await EventImporterGPX.getFromString(result, xmldom.DOMParser, new ActivityParsingOptions({ generateUnitStreams: false }));
         } catch {
           logger.error('Could not decode as GPX trying as FIT');
         }
@@ -165,11 +166,11 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
           });
           logger.info('Ending timer: DownloadFile');
           logger.info(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${serviceToken.userID}`);
-          event = await EventImporterFIT.getFromArrayBuffer(result); // Let it fail here
+          event = await EventImporterFIT.getFromArrayBuffer(result, new ActivityParsingOptions({ generateUnitStreams: false })); // Let it fail here
         }
         break;
       case 'TCX':
-        event = await EventImporterTCX.getFromXML(new xmldom.DOMParser().parseFromString(result, 'application/xml'));
+        event = await EventImporterTCX.getFromXML(new xmldom.DOMParser().parseFromString(result, 'application/xml'), new ActivityParsingOptions({ generateUnitStreams: false }));
         break;
     }
     event.name = event.startDate.toJSON(); // @todo improve
