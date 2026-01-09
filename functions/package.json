@@ -37,7 +37,8 @@
     "test-emails": "ts-node src/scripts/test-all-emails.ts",
     "cleanup-queue": "ts-node src/scripts/cleanup-queue.ts",
     "export-users": "ts-node src/scripts/export-users.ts",
-    "cleanup-firestore": "ts-node -r dotenv/config src/scripts/cleanup-firestore.ts"
+    "cleanup-firestore": "ts-node -r dotenv/config src/scripts/cleanup-firestore.ts",
+    "cleanup-orphaned-users": "ts-node -r dotenv/config src/scripts/cleanup-orphaned-users.ts"
   },
   "engines": {
     "node": "20"
