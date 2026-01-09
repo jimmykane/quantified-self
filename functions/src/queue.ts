@@ -12,7 +12,7 @@ import {
   GarminHealthAPIActivityQueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface,
 } from './queue/queue-item.interface';
-import { generateIDFromParts, setEvent, UsageLimitExceededError, enqueueWorkoutTask } from './utils';
+import { generateIDFromParts, setEvent, UsageLimitExceededError, enqueueWorkoutTask, UserNotFoundError } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getServiceWorkoutQueueName } from './shared/queue-names';
 import {
@@ -351,6 +351,10 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         retryIncrement = 20;
         lastError = e;
         break; // Stop checking other tokens if usage limit exceeded
+      } else if (e instanceof UserNotFoundError) {
+        logger.error(new Error(`User for queue item ${queueItem.id} not found. Aborting retries. ${e.message}`));
+        await moveToDeadLetterQueue(queueItem, e, bulkWriter, 'USER_NOT_FOUND');
+        return QueueResult.MovedToDLQ;
       }
 
       logger.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.openId || serviceToken.userName} to ${queueItem.retryCount + 1} due to ${e.message}`));

@@ -6,7 +6,7 @@ import { addToQueueForGarmin } from '../queue';
 import { increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue, QueueResult } from '../queue-utils';
 
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
-import { generateIDFromParts, setEvent, UsageLimitExceededError } from '../utils';
+import { generateIDFromParts, setEvent, UsageLimitExceededError, UserNotFoundError } from '../utils';
 import { GarminHealthAPIAuth } from './auth/auth';
 import * as requestPromise from '../request-helper';
 import {
@@ -186,12 +186,15 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
     // For each ended so we can set it to processed
     return updateToProcessed(queueItem, bulkWriter);
   } catch (e: unknown) {
-    // @todo should delete meta etc
     logger.error(e);
     if (e instanceof UsageLimitExceededError) {
       logger.error(new Error(`Usage limit exceeded for ${queueItem.id}. Aborting retries. ${e.message}`));
       await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
       return QueueResult.RetryIncremented;
+    } else if (e instanceof UserNotFoundError) {
+      logger.error(new Error(`User for queue item ${queueItem.id} not found. Aborting retries. ${e.message}`));
+      await moveToDeadLetterQueue(queueItem, e, bulkWriter, 'USER_NOT_FOUND');
+      return QueueResult.MovedToDLQ;
     }
 
     const err = e instanceof Error ? e : new Error(String(e));

@@ -217,11 +217,13 @@ export async function getUserRole(userID: string): Promise<string> {
   try {
     const userRecord = await admin.auth().getUser(userID);
     const role = userRecord.customClaims?.['stripeRole'] as string;
-    // Default to 'free' if no role or role is null
     return role || 'free';
-  } catch (e) {
+  } catch (e: any) {
+    if (e.code === 'auth/user-not-found') {
+      throw new UserNotFoundError(`User ${userID} not found in Auth`);
+    }
     logger.error(`Error fetching user role for ${userID}:`, e);
-    return 'free'; // Safe default
+    return 'free'; // Safe default for other errors
   }
 }
 
@@ -237,6 +239,13 @@ export class TokenNotFoundError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'TokenNotFoundError';
+  }
+}
+
+export class UserNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UserNotFoundError';
   }
 }
 
