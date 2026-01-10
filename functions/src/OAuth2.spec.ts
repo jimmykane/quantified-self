@@ -371,11 +371,17 @@ describe('OAuth2', () => {
             const token1 = { id: 'token-1', ref: { delete: mockDelete }, data: () => ({ accessToken: 't1' }) };
             const token2 = { id: 'token-2', ref: { delete: mockDelete }, data: () => ({ accessToken: 't2' }) };
 
-            mockGet.mockResolvedValue({
-                empty: false,
-                size: 2,
-                docs: [token1, token2],
-            });
+            mockGet
+                .mockResolvedValueOnce({
+                    empty: false,
+                    size: 2,
+                    docs: [token1, token2],
+                })
+                .mockResolvedValueOnce({
+                    empty: true,
+                    size: 0,
+                    docs: [],
+                });
 
             (getTokenData as any).mockResolvedValue({ accessToken: 'valid' });
             (requestPromise.get as any).mockResolvedValue({});
