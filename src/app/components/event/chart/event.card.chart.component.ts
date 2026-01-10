@@ -1156,7 +1156,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // Attach events
     series.events.on('validated', (ev) => {
       //
-      ev.target.chart.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px';
+      if (this.chart && this.chart.legend && ev.target.chart.legend && ev.target.chart.legend.svgContainer && ev.target.chart.legend.svgContainer.htmlElement) {
+        ev.target.chart.legend.svgContainer.htmlElement.style.height = this.chart.legend.contentHeight + 'px';
+      }
       // this.loaded();
     });
 
