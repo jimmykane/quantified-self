@@ -30,3 +30,76 @@ mat-table {
   overflow-x: auto;
   width: 100%;
 }
+
+.selected-row {
+  /* Use a visible, distinct color. Using a semi-transparent primary-like color */
+  background-color: rgba(var(--mat-sys-primary-rgb, 103, 58, 183), 0.12) !important;
+  /* Add a border or outline indicator for better visibility */
+  position: relative;
+}
+
+.selected-row::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: var(--mat-sys-primary);
+}
+
+.selected-row:hover {
+  background-color: rgba(var(--mat-sys-primary-rgb, 103, 58, 183), 0.16) !important;
+}
+
+mat-row {
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+mat-row:hover:not(.selected-row) {
+  background-color: var(--mat-sys-surface-container-low);
+}
+
+.table-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.table-actions mat-form-field {
+  flex: 1;
+  min-width: 200px;
+}
+
+.selection-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  /* Allow height to be determined by contents, but align with input */
+  height: auto;
+}
+
+.selection-actions button {
+  /* Match the standard height of a dense or regular form field. 
+     If the field is 56px (default), keeping this is fine, but we ensure content centering. */
+  height: 56px;
+  width: 56px;
+  /* Make strictly square */
+  min-width: 56px;
+  border-radius: 4px;
+  padding: 0;
+  /* Remove padding to perfectly center the icon */
+
+  /* Ensure icon is centered */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.selection-actions button mat-icon {
+  margin: 0;
+  /* Reset any global margins */
+}

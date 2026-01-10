@@ -13,6 +13,8 @@ import { DataSwimPace } from '@sports-alliance/sports-lib';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib';
+import { SelectionModel } from '@angular/cdk/collections';
+import { DataExportService } from '../../../services/data-export.service';
 
 @Component({
   selector: 'app-event-stats-table',
@@ -30,13 +32,18 @@ export class EventCardStatsTableComponent implements OnChanges {
   data: MatTableDataSource<any> = new MatTableDataSource<any>();
   columns!: string[];
   appColors = AppColors;
+  selection = new SelectionModel<any>(true, []);
 
-  constructor(private eventColorService: AppEventColorService) {
+  constructor(
+    private eventColorService: AppEventColorService,
+    private dataExportService: DataExportService
+  ) {
   }
 
   ngOnChanges(simpleChanges: any) {
     this.data = new MatTableDataSource<object>();
     this.columns = [];
+    this.selection.clear();
     if (!this.selectedActivities.length || !this.userUnitSettings) {
       return;
     }
@@ -165,10 +172,37 @@ export class EventCardStatsTableComponent implements OnChanges {
   }
 
   getColumnHeaderName(columnHeader: string): string {
-    return columnHeader.slice(0, -7);
+    return this.dataExportService.getColumnHeaderName(columnHeader);
   }
 
   getColumnHeaderColor(columnHeader: string): string {
+    if (columnHeader === 'Name' || columnHeader === 'Difference') {
+      return 'inherit';
+    }
     return columnHeader.slice(-7);
+  }
+
+  toggleRow(row: any) {
+    this.selection.toggle(row);
+  }
+
+  clearSelection() {
+    this.selection.clear();
+  }
+
+  isSelectionEmpty(): boolean {
+    return this.selection.isEmpty();
+  }
+
+  copyToClipboard(): void {
+    const selectedRows = this.selection.selected;
+    if (selectedRows.length === 0) return;
+    this.dataExportService.copyToMarkdown(selectedRows, this.columns);
+  }
+
+  copyToSheets(): void {
+    const selectedRows = this.selection.selected;
+    if (selectedRows.length === 0) return;
+    this.dataExportService.copyToSheets(selectedRows, this.columns);
   }
 }
