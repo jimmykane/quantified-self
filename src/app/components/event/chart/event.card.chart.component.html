@@ -1,13 +1,13 @@
-<mat-card-header>
-  <div mat-card-avatar>
+<div class="chart-header">
+  <div class="chart-header-avatar">
     <mat-icon>show_chart</mat-icon>
   </div>
-  <mat-card-subtitle>
+  <div class="chart-header-actions">
     <app-event-card-chart-actions [(xAxisType)]="xAxisType" [(showAllData)]="showAllData" [(showLaps)]="showLaps"
       [(stackYAxes)]="stackYAxes" [event]="event" [user]="user">
     </app-event-card-chart-actions>
-  </mat-card-subtitle>
-</mat-card-header>
+  </div>
+</div>
 <mat-card-content style="position: relative; min-height: 90vh;">
 
   <app-skeleton *ngIf="isLoading" width="100%" height="90vh" borderRadius="4px"

@@ -3,7 +3,3 @@ section {
   align-items: center;
   gap: 8px;
 }
-
-mat-chip-option {
-  font-size: 0.85rem;
-}

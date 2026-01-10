@@ -1,0 +1,23 @@
+.chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+    gap: 16px;
+}
+
+.chart-header-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.chart-header-actions {
+    flex: 1;
+}
+
+/* Ensure the component inside expands to fill the flex space */
+app-event-card-chart-actions {
+    display: block;
+    width: 100%;
+}
