@@ -140,8 +140,29 @@ export class AdminService {
     }
 
     getQueueStatsDirect(includeAnalysis = false): Observable<QueueStats> {
-        // Poll every 1 minute for "hot" updates
-        return timer(0, 60000).pipe(
+        const now = new Date();
+        const currentMinutes = now.getMinutes();
+
+        // Target: 11th minute of the hour
+        const targetMinute = 11;
+
+        const nextTarget = new Date(now);
+        nextTarget.setSeconds(0);
+        nextTarget.setMilliseconds(0);
+
+        if (currentMinutes < targetMinute) {
+            // Example: It's 10:05. Target 10:11.
+            nextTarget.setMinutes(targetMinute);
+        } else {
+            // Example: It's 10:15. Target 11:11.
+            nextTarget.setHours(now.getHours() + 1);
+            nextTarget.setMinutes(targetMinute);
+        }
+
+        const initialDelay = nextTarget.getTime() - now.getTime();
+        const period = 3600000; // 1 hour
+
+        return timer(initialDelay, period).pipe(
             switchMap(() => from(this.getQueueStatsFn({ includeAnalysis }))),
             map(result => result.data)
         );
