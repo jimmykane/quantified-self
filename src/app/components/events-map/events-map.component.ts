@@ -17,7 +17,7 @@ import { DataPositionInterface } from '@sports-alliance/sports-lib';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
 import { MapAbstractDirective } from '../map/map-abstract.directive';
 import { LoggerService } from '../../services/logger.service';
-import MarkerClusterer from '@googlemaps/markerclustererplus';
+import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DatePipe } from '@angular/common';
@@ -143,18 +143,26 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
 
       if (this.clusterMarkers) {
         if (!this.markerClusterer) {
-          this.markerClusterer = new MarkerClusterer(this.nativeMap,
-            this.markers,
-            {
-              imagePath: '/assets/icons/heatmap/m',
-              enableRetinaIcons: true,
-              averageCenter: true,
-              maxZoom: 18,
-              minimumClusterSize: 15,
-            });
+          this.markerClusterer = new MarkerClusterer({
+            map: this.nativeMap,
+            markers: this.markers,
+            renderer: {
+              render: ({ count, position }) => {
+                return new google.maps.Marker({
+                  label: { text: String(count), color: "white" },
+                  position,
+                  icon: {
+                    url: '/assets/icons/heatmap/m1.png', // Fallback or logic to choose distinct icons
+                  },
+                  // adjust options as needed for match existing style
+                  zIndex: Number(google.maps.Marker.MAX_ZINDEX) + count,
+                });
+              }
+            }
+          });
         } else {
           this.markerClusterer.addMarkers(this.markers);
-          this.markerClusterer.repaint();
+
         }
       }
 

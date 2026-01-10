@@ -18,6 +18,16 @@ import {
     DataLongitudeDegrees,
     ActivityTypes
 } from '@sports-alliance/sports-lib';
+import { MarkerClusterer } from '@googlemaps/markerclusterer';
+
+vi.mock('@googlemaps/markerclusterer', () => {
+    return {
+        MarkerClusterer: vi.fn().mockImplementation(() => ({
+            addMarkers: vi.fn(),
+            clearMarkers: vi.fn()
+        }))
+    };
+});
 
 describe('EventsMapComponent', () => {
     let component: EventsMapComponent;
@@ -164,6 +174,34 @@ describe('EventsMapComponent', () => {
             expect((window as any).google.maps.Marker).toHaveBeenCalledWith(expect.objectContaining({
                 // map: mockMap, // Map is not passed to constructor, it's set via setMap later
                 title: 'Running for 1h and 10km'
+            }));
+        });
+
+        it('should initialize MarkerClusterer when clusterMarkers is true', () => {
+            const mockStat = { getValue: () => ({ latitudeDegrees: 10, longitudeDegrees: 20 }) } as DataStartPosition;
+            mockEvent.getStat.mockReturnValue(mockStat);
+            // Mock display values - add defaults to avoid errors if referenced
+            mockEvent.getDuration.mockReturnValue({ getDisplayValue: () => '1h' });
+            mockEvent.getDistance.mockReturnValue({ getDisplayValue: () => '10km' });
+            mockEvent.getActivityTypesAsArray.mockReturnValue([ActivityTypes.Running]);
+            mockEvent.getActivityTypesAsString.mockReturnValue('Running');
+            mockEvent.getID.mockReturnValue('evt1');
+
+            component.events = [mockEvent];
+            component.clusterMarkers = true;
+            component.apiLoaded = true;
+
+            const mockMap = new (window as any).google.maps.Map();
+            component['nativeMap'] = mockMap;
+
+            component['initMapData']();
+
+            expect(MarkerClusterer).toHaveBeenCalled();
+            // Verify constructor arguments if possible, though checking call is a good start
+            // The new API expects an object { map, markers, renderer }
+            expect(MarkerClusterer).toHaveBeenCalledWith(expect.objectContaining({
+                map: mockMap,
+                markers: expect.any(Array)
             }));
         });
     });
