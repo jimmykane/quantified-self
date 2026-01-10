@@ -8,7 +8,7 @@ import { EventInterface } from '@sports-alliance/sports-lib';
 @Component({
   selector: 'app-event-card-chart-actions',
   templateUrl: './event.card.chart.actions.component.html',
-  styleUrls: ['./event.card.chart.actions.component.css'],
+  styleUrls: ['./event.card.chart.actions.component.scss'],
   providers: [],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false

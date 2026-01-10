@@ -1,9 +1,17 @@
+@use '../../../../styles/breakpoints' as *;
+
 .chart-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 16px;
     gap: 16px;
+    flex-wrap: wrap;
+
+    @include xsmall {
+        padding: 8px;
+        gap: 8px;
+    }
 }
 
 .chart-header-avatar {
@@ -14,6 +22,11 @@
 
 .chart-header-actions {
     flex: 1;
+
+    @include xsmall {
+        width: 100%;
+        flex: none;
+    }
 }
 
 /* Ensure the component inside expands to fill the flex space */
