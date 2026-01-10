@@ -5,6 +5,11 @@ on:
     branches:
       - develop
 
+# Cancel in-progress deployments when a new commit is pushed
+concurrency:
+  group: beta-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     uses: ./.github/workflows/_run-tests.yml
