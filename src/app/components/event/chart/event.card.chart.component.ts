@@ -313,6 +313,11 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // am4core options handled in service
     const chart = await super.createChart(this.charts.XYChart) as am4charts.XYChart;
 
+    // #Fix: Ensure Duration axis starts at 00:00:00 by forcing UTC, preventing local timezone offsets (e.g. +2h)
+    if (this.xAxisType === XAxisTypes.Duration) {
+      chart.dateFormatter.utc = true;
+    }
+
     chart.fontSize = '1em';
     chart.padding(0, 10, 0, 0);
     // chart.resizable = false;
