@@ -91,7 +91,7 @@ export async function parseQueueItems(serviceName: ServiceNames) {
 const TIMEOUT_DEFAULT = 300;
 const MEMORY_DEFAULT = '4GB';
 const TIMEOUT_HIGH = 540;
-const MEMORY_HIGH = '8GB';
+const MEMORY_HIGH = '4GB';
 
 export const parseGarminHealthAPIActivityQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_HIGH,
