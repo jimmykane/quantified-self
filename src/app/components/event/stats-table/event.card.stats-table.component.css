@@ -67,6 +67,7 @@ mat-row:hover:not(.selected-row) {
   gap: 16px;
   flex-wrap: wrap;
   margin-bottom: 8px;
+  padding-top: 8px;
 }
 
 .table-actions mat-form-field {

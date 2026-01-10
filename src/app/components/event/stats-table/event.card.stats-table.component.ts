@@ -167,6 +167,15 @@ export class EventCardStatsTableComponent implements OnChanges {
 
     // Set the data
     this.data = new MatTableDataSource<any>(data);
+
+    // Custom filter predicate for multi-term search (comma-separated, OR logic)
+    this.data.filterPredicate = (row: any, filter: string) => {
+      const terms = filter.split(',').map(t => t.trim()).filter(t => t.length > 0);
+      if (terms.length === 0) return true;
+
+      const rowString = Object.values(row).join(' ').toLowerCase();
+      return terms.some(term => rowString.includes(term));
+    };
   }
 
   applyFilter(event: any) {

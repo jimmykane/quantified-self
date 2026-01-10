@@ -20,9 +20,9 @@
 
 <ng-template #tableContent>
   <div class="table-actions">
-    <mat-form-field subscriptSizing="dynamic">
+    <mat-form-field appearance="outline" subscriptSizing="dynamic">
       <mat-label>Filter</mat-label>
-      <input matInput (keyup)="applyFilter($event)" placeholder="Type or value">
+      <input matInput (keyup)="applyFilter($event)" placeholder="e.g. heart, cadence, power">
     </mat-form-field>
 
     @if (selection.hasValue()) {
