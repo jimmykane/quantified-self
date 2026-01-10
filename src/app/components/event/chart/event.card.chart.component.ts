@@ -97,7 +97,7 @@ const DOWNSAMPLE_FACTOR_PER_HOUR = 1.5;
 @Component({
   selector: 'app-event-card-chart',
   templateUrl: './event.card.chart.component.html',
-  styleUrls: ['./event.card.chart.component.css'],
+  styleUrls: ['./event.card.chart.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })
@@ -943,7 +943,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     // Start processing
     if (streamsToProcess.length > 0) {
-      processChunk(0);
+      this.zone.runOutsideAngular(() => processChunk(0));
     } else {
       this.finalizeChartSetup(seq);
     }
@@ -954,135 +954,137 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       return;
     }
 
-    if (this.showGrid) {
-      this.addGrid();
-    } else {
-      this.removeGrid();
-    }
-    if (this.showLaps) {
-      this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
-    }
-
-    // Since we created series, we can get them from chart
-    const series = this.chart.series.values;
-
-    // Show if needed without animations to prevent unwanted auto-zooms
-    series.forEach(s => this.shouldHideSeries(s) ? s.hide(0) : s.show(0));
-    // Store at local storage the visible / non visible series
-    series.forEach(s => s.hidden ? this.chartSettingsLocalStorageService.hideSeriesID(this.event, s.id) : this.chartSettingsLocalStorageService.showSeriesID(this.event, s.id));
-    // Snap to series will be set after zoom reset to avoid interference
-
-    if (this.xAxisType === XAxisTypes.Time) {
-      // this.addStartPauseSeriesRanges(this.chart, this.xAxisType, series);
-      this.addStartPauseTimeAxisRanges(<am4charts.DateAxis>this.chart.xAxes.getIndex(0));
-    }
-
-    // #5: Robust Zoom Reset for Multi-Activity charts
-    // Wrapped in a longer timeout to ensure ALL chunks are processed and amCharts has stable ranges.
-    // Multi-activity charts often conflict with amCharts automatic mini-validation cycles.
-    setTimeout(() => {
-      if (!this.chart || !this.chart.xAxes) {
-        return;
+    this.zone.run(() => {
+      if (this.showGrid) {
+        this.addGrid();
+      } else {
+        this.removeGrid();
+      }
+      if (this.showLaps) {
+        this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
       }
 
-      // Calculate total max distance and duration for explicit zoom
-      let totalMaxDistance = 0;
-      let totalMaxDuration = 0;
-      const durationStart = 0;
+      // Since we created series, we can get them from chart
+      const series = this.chart.series.values;
 
-      let minTime = Infinity;
-      let maxTime = -Infinity;
+      // Show if needed without animations to prevent unwanted auto-zooms
+      series.forEach(s => this.shouldHideSeries(s) ? s.hide(0) : s.show(0));
+      // Store at local storage the visible / non visible series
+      series.forEach(s => s.hidden ? this.chartSettingsLocalStorageService.hideSeriesID(this.event, s.id) : this.chartSettingsLocalStorageService.showSeriesID(this.event, s.id));
+      // Snap to series will be set after zoom reset to avoid interference
 
-      this.selectedActivities.forEach(a => {
-        if (this.xAxisType === XAxisTypes.Distance) {
-          const distanceResult: any = a.getDistance ? a.getDistance() : 0;
-          const distance = typeof distanceResult === 'number' ? distanceResult : (distanceResult?.value || 0);
-          if (distance > totalMaxDistance) {
-            totalMaxDistance = distance;
-          }
-        }
-        if (this.xAxisType === XAxisTypes.Duration) {
-          const durationResult: any = a.getDuration();
-          const duration = typeof durationResult === 'number' ? durationResult : (durationResult?.value || 0);
-          if (duration > totalMaxDuration) {
-            totalMaxDuration = duration;
-          }
-        }
-        if (this.xAxisType === XAxisTypes.Time) {
-          const startTime = a.startDate.getTime();
-          const endTime = a.endDate.getTime();
-          if (startTime < minTime) {
-            minTime = startTime;
-          }
-          if (endTime > maxTime) {
-            maxTime = endTime;
-          }
-        }
-      });
-
-      this.chart.invalidateData(); // One last re-eval of all series data
-
-      this.chart.xAxes.each(axis => {
-        // Disable any persistent selection and force recalculation
-        (axis as any).keepSelection = false;
-
-        if (this.xAxisType === XAxisTypes.Distance && totalMaxDistance > 0 && axis instanceof this.charts.ValueAxis) {
-          // Reset first to force clean state
-          axis.min = undefined;
-          axis.max = undefined;
-          axis.strictMinMax = false;
-
-          axis.min = 0;
-          axis.max = totalMaxDistance;
-          axis.strictMinMax = true; // Lock to the full range
-
-          if ((axis as any).zoomToValues) {
-            (axis as any).zoomToValues(0, totalMaxDistance, false, true);
-          }
-        } else if (this.xAxisType === XAxisTypes.Duration && totalMaxDuration > 0 && axis instanceof this.charts.DateAxis) {
-          // Reset first to force clean state
-          axis.min = undefined;
-          axis.max = undefined;
-          axis.strictMinMax = false;
-
-          axis.min = durationStart;
-          axis.max = durationStart + (totalMaxDuration + 2) * 1000; // Add 2s buffer
-          // axis.strictMinMax = true; // Relax to allow amCharts some flexibility
-
-          axis.zoom({ start: 0, end: 1 }, false, true);
-        } else if (this.xAxisType === XAxisTypes.Time && minTime !== Infinity && axis instanceof this.charts.DateAxis) {
-          // Reset first to force clean state
-          axis.min = undefined;
-          axis.max = undefined;
-          axis.strictMinMax = false;
-
-          axis.min = minTime;
-          axis.max = maxTime;
-
-          axis.zoom({ start: 0, end: 1 }, false, true);
-        } else {
-          axis.start = 0;
-          axis.end = 1;
-          axis.zoom({ start: 0, end: 1 }, false, true);
-        }
-      });
-
-
-      // Re-enable cursor behavior after zoom is stable
-      if (this.chart.cursor) {
-        this.chart.cursor.behavior = this.chartCursorBehaviour;
-        // Re-enable snapping after zoom is stable
-        if (this.xAxisType === XAxisTypes.Distance) {
-          this.chart.cursor.snapToSeries = this.chart.series.values;
-        }
+      if (this.xAxisType === XAxisTypes.Time) {
+        // this.addStartPauseSeriesRanges(this.chart, this.xAxisType, series);
+        this.addStartPauseTimeAxisRanges(<am4charts.DateAxis>this.chart.xAxes.getIndex(0));
       }
 
+      // #5: Robust Zoom Reset for Multi-Activity charts
+      // Wrapped in a longer timeout to ensure ALL chunks are processed and amCharts has stable ranges.
+      // Multi-activity charts often conflict with amCharts automatic mini-validation cycles.
+      setTimeout(() => {
+        if (!this.chart || !this.chart.xAxes) {
+          return;
+        }
 
+        // Calculate total max distance and duration for explicit zoom
+        let totalMaxDistance = 0;
+        let totalMaxDuration = 0;
+        const durationStart = 0;
+
+        let minTime = Infinity;
+        let maxTime = -Infinity;
+
+        this.selectedActivities.forEach(a => {
+          if (this.xAxisType === XAxisTypes.Distance) {
+            const distanceResult: any = a.getDistance ? a.getDistance() : 0;
+            const distance = typeof distanceResult === 'number' ? distanceResult : (distanceResult?.value || 0);
+            if (distance > totalMaxDistance) {
+              totalMaxDistance = distance;
+            }
+          }
+          if (this.xAxisType === XAxisTypes.Duration) {
+            const durationResult: any = a.getDuration();
+            const duration = typeof durationResult === 'number' ? durationResult : (durationResult?.value || 0);
+            if (duration > totalMaxDuration) {
+              totalMaxDuration = duration;
+            }
+          }
+          if (this.xAxisType === XAxisTypes.Time) {
+            const startTime = a.startDate.getTime();
+            const endTime = a.endDate.getTime();
+            if (startTime < minTime) {
+              minTime = startTime;
+            }
+            if (endTime > maxTime) {
+              maxTime = endTime;
+            }
+          }
+        });
+
+        this.chart.invalidateData(); // One last re-eval of all series data
+
+        this.chart.xAxes.each(axis => {
+          // Disable any persistent selection and force recalculation
+          (axis as any).keepSelection = false;
+
+          if (this.xAxisType === XAxisTypes.Distance && totalMaxDistance > 0 && axis instanceof this.charts.ValueAxis) {
+            // Reset first to force clean state
+            axis.min = undefined;
+            axis.max = undefined;
+            axis.strictMinMax = false;
+
+            axis.min = 0;
+            axis.max = totalMaxDistance;
+            axis.strictMinMax = true; // Lock to the full range
+
+            if ((axis as any).zoomToValues) {
+              (axis as any).zoomToValues(0, totalMaxDistance, false, true);
+            }
+          } else if (this.xAxisType === XAxisTypes.Duration && totalMaxDuration > 0 && axis instanceof this.charts.DateAxis) {
+            // Reset first to force clean state
+            axis.min = undefined;
+            axis.max = undefined;
+            axis.strictMinMax = false;
+
+            axis.min = durationStart;
+            axis.max = durationStart + (totalMaxDuration + 2) * 1000; // Add 2s buffer
+            axis.strictMinMax = true;
+
+            axis.zoom({ start: 0, end: 1 }, false, true);
+          } else if (this.xAxisType === XAxisTypes.Time && minTime !== Infinity && axis instanceof this.charts.DateAxis) {
+            // Reset first to force clean state
+            axis.min = undefined;
+            axis.max = undefined;
+            axis.strictMinMax = false;
+
+            axis.min = minTime;
+            axis.max = maxTime;
+
+            axis.zoom({ start: 0, end: 1 }, false, true);
+          } else {
+            axis.start = 0;
+            axis.end = 1;
+            axis.zoom({ start: 0, end: 1 }, false, true);
+          }
+        });
+
+
+        // Re-enable cursor behavior after zoom is stable
+        if (this.chart.cursor) {
+          this.chart.cursor.behavior = this.chartCursorBehaviour;
+          // Re-enable snapping after zoom is stable
+          if (this.xAxisType === XAxisTypes.Distance) {
+            this.chart.cursor.snapToSeries = this.chart.series.values;
+          }
+        }
+
+
+        this.changeDetector.detectChanges();
+      }, 2000); // Increased delay to 2s to be absolutely sure
+
+      this.loaded();
       this.changeDetector.detectChanges();
-    }, 2000); // Increased delay to 2s to be absolutely sure
-
-    this.loaded();
-    this.changeDetector.detectChanges();
+    });
   }
 
   private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface): am4charts.XYSeries {
@@ -1437,35 +1439,52 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   // @todo
 
-  // @todo take a good look at getStreamDataTypesBasedOnDataType on utilities for an already existing implementation
+  /* Optimized for performance */
   private convertStreamDataToSeriesData(activity: ActivityInterface, stream: StreamInterface): any {
-
-    let data = [];
-    //
-    if (this.xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID())) {
-      const distanceStream = this.distanceAxesForActivitiesMap.get(activity.getID());
-      distanceStream.getData().reduce((dataMap, distanceStreamDataItem, index) => { // Can use a data array but needs deduplex after
-        if (isNumber(stream.getData()[index]) && stream.getData()[index] !== Infinity && isNumber(distanceStreamDataItem)) {
-          // debugger;
-          dataMap.set(distanceStreamDataItem, stream.getData()[index]) // Here it could be improved with finding the nearby perhaps but not sure
-        }
-        return dataMap;
-      }, new Map<number, number>()).forEach((value, distance) => {
-        data.push({
-          axisValue: distance,
-          value: value
-        }) // @todo if needed sort here by distance
-      });
-    } else {
-      data = this.xAxisType === XAxisTypes.Time ? stream.getStreamDataByTime(activity.startDate, true, true) : stream.getStreamDataByDuration(0, true, true); // Keep zero base for duration
+    const streamData = stream.getData();
+    if (!streamData) {
+      return [];
     }
 
-    // filter if needed (this operation costs)
+    let data = [];
+
+    // Distance Axis: Use performant loop instead of map/reduce
+    if (this.xAxisType === XAxisTypes.Distance) {
+      const distanceStream = this.distanceAxesForActivitiesMap.get(activity.getID());
+      if (distanceStream) {
+        const distanceData = distanceStream.getData();
+        const len = Math.min(streamData.length, distanceData.length);
+
+        // Pre-allocate if possible or just push
+        for (let i = 0; i < len; i++) {
+          const val = streamData[i];
+          const dist = distanceData[i];
+          // Simple number check
+          if (typeof val === 'number' && val !== Infinity && typeof dist === 'number') {
+            data.push({
+              axisValue: dist,
+              value: val
+            });
+          }
+        }
+      }
+    } else {
+      // Time/Duration Axis
+      // This helper is already relatively optimized in the library, but ensure we don't re-fetch
+      data = this.xAxisType === XAxisTypes.Time
+        ? stream.getStreamDataByTime(activity.startDate, true, true)
+        : stream.getStreamDataByDuration(0, true, true);
+    }
+
+    // Downsampling
     const samplingRate = this.getSamplingRateInSeconds(this.selectedActivities);
-
-
-    if (samplingRate !== 1) {
-      data = data.filter((streamData, index) => (index % samplingRate) === 0);
+    if (samplingRate > 1) {
+      // Faster filter loop
+      const downsampled = [];
+      for (let i = 0; i < data.length; i += samplingRate) {
+        downsampled.push(data[i]);
+      }
+      return downsampled;
     }
 
     return data;

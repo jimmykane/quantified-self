@@ -1,6 +1,7 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ShadeComponent } from '../components/loading/shade.component';
+import { AppSkeletonComponent } from '../components/loading/skeleton/app.skeleton.component';
 import { MaterialModule } from './material.module';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { PrivacyIconComponent } from '../components/privacy-icon/privacy-icon.component';
@@ -35,6 +36,7 @@ import { ActivityTypeIconComponent } from '../components/activity-type-icon/acti
         EventSearchComponent,
         ActivityTypesMultiSelectComponent,
         ActivityTypeIconComponent,
+        AppSkeletonComponent,
     ],
     providers: [],
     exports: [
@@ -42,6 +44,7 @@ import { ActivityTypeIconComponent } from '../components/activity-type-icon/acti
         MaterialModule,
         RouterModule,
         ShadeComponent,
+        AppSkeletonComponent,
         PrivacyIconComponent,
         EventActionsComponent,
         EventFormComponent,

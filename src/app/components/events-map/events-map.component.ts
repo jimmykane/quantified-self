@@ -58,7 +58,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   };
   public mapCenter: google.maps.LatLngLiteral = { lat: 0, lng: 0 };
   public mapZoom = 3;
-  public mapTypeId: string = 'roadmap';
+  public mapTypeId: google.maps.MapTypeId = 'roadmap' as any as google.maps.MapTypeId;
   public apiLoaded = false;
 
   private nativeMap: google.maps.Map;
@@ -93,7 +93,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
 
       // Set map type
       if (this.type) {
-        this.mapTypeId = this.type as string;
+        this.mapTypeId = this.type as any as google.maps.MapTypeId;
       }
 
       if (this.apiLoaded) {

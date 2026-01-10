@@ -25,6 +25,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatSlideToggleModule, MatSlideToggleChange } from '@angular/material/slide-toggle';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { FormsModule } from '@angular/forms';
 import { LoggerService } from '../../../services/logger.service';
 import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
@@ -51,6 +52,7 @@ import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
         MatSlideToggleModule,
         MatExpansionModule,
         MatDialogModule,
+        MatTooltipModule,
         BaseChartDirective
     ],
     providers: [provideCharts(withDefaultRegisterables())]

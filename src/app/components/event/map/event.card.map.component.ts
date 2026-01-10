@@ -57,7 +57,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   public noMapData = false;
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
-  public mapTypeId: google.maps.MapTypeId | string = 'roadmap';
+  public mapTypeId: google.maps.MapTypeId = 'roadmap' as any as google.maps.MapTypeId;
   public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
 
   // Map options
@@ -366,8 +366,8 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
   }
 
-  @HostListener('window:resize', ['$event.target.innerWidth'])
-  onResize(width) {
+  @HostListener('window:resize')
+  onResize() {
     this.fitBoundsToActivities();
   }
 

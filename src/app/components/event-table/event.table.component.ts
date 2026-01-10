@@ -58,13 +58,13 @@ import { Firestore, doc, collection } from '@angular/fire/firestore';
 })
 
 export class EventTableComponent extends DataTableAbstractDirective implements OnChanges, OnInit, OnDestroy, AfterViewInit {
-  @Input() user: User;
-  @Input() events: EventInterface[];
-  @Input() targetUser: User;
-  @Input() showActions: boolean;
-  @ViewChild(MatSort, { static: true }) sort: MatSort;
-  @ViewChild(MatPaginator, { static: true }) paginator: MatPaginator;
-  @ViewChild(MatCard, { static: true }) table: MatCard;
+  @Input() user!: User;
+  @Input() events!: EventInterface[];
+  @Input() targetUser!: User;
+  @Input() showActions!: boolean;
+  @ViewChild(MatSort, { static: true }) sort!: MatSort;
+  @ViewChild(MatPaginator, { static: true }) paginator!: MatPaginator;
+  @ViewChild(MatCard, { static: true }) table!: MatCard;
 
   data: MatTableDataSource<any> = new MatTableDataSource<StatRowElement>();
   selection = new SelectionModel(true, []);
@@ -73,9 +73,9 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   public show = true
 
-  private deleteConfirmationSubscription: Subscription;
-  private sortSubscription: Subscription;
-  private breakpointSubscription: Subscription;
+  private deleteConfirmationSubscription!: Subscription;
+  private sortSubscription!: Subscription;
+  private breakpointSubscription!: Subscription;
   private isHandset = false;
 
 
@@ -138,7 +138,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.data.paginator = this.paginator;
     this.data.sort = this.sort;
     this.data.sortingDataAccessor = (statRowElement: StatRowElement, header) => {
-      return statRowElement[`sort.${header}`];
+      return (statRowElement as any)[`sort.${header}`];
     };
     this.sortSubscription = this.sort.sortChange.subscribe(async (sort) => {
       if (this.user.settings.dashboardSettings.tableSettings.active !== sort.active || this.user.settings.dashboardSettings.tableSettings.direction !== sort.direction) {
@@ -157,6 +157,17 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   /** Whether the number of selected elements matches the total number of rows. */
+  /**
+   * Helper to handle cell clicks safely for strict templates
+   */
+  public onCellClick(event: Event, row: any, column: string): void {
+    if (column === 'Checkbox') {
+      event.preventDefault();
+      event.stopPropagation();
+      this.checkBoxClick(row);
+    }
+  }
+
   isAllSelected() {
     const numSelected = this.selection.selected.length;
     const numRows = this.data.data.length;
@@ -274,7 +285,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
       this.analyticsService.logEvent('merge_events');
       await this.router.navigate(['/user', this.user.uid, 'event', mergedEvent.getID()], {});
-      this.snackBar.open('Events merged', null, {
+      this.snackBar.open('Events merged', undefined, {
         duration: 2000,
       });
     } catch (e) {
@@ -285,7 +296,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         }
       });
       this.loaded();
-      this.snackBar.open('Could not merge events', null, {
+      this.snackBar.open('Could not merge events', undefined, {
         duration: 5000,
       });
     }
@@ -314,7 +325,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
 
       this.analyticsService.logEvent('delete_events');
-      this.snackBar.open('Events deleted', null, {
+      this.snackBar.open('Events deleted', undefined, {
         duration: 2000,
       });
       this.loaded();
@@ -339,7 +350,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     try {
       const selectedEvents = this.selection.selected.map(s => s.Event) as EventInterface[];
       if (selectedEvents.length === 0) {
-        this.snackBar.open('No events selected', null, { duration: 2000 });
+        this.snackBar.open('No events selected', undefined, { duration: 2000 });
         this.processingService.removeJob(jobId);
         return;
       }
@@ -386,7 +397,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
 
       if (filesToDownload.length === 0) {
-        this.snackBar.open('No original files available for selected events', null, { duration: 3000 });
+        this.snackBar.open('No original files available for selected events', undefined, { duration: 3000 });
         this.processingService.removeJob(jobId);
         return;
       }
@@ -413,7 +424,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
 
       if (downloadedFiles.length === 0) {
-        this.snackBar.open('Failed to download any files', null, { duration: 3000 });
+        this.snackBar.open('Failed to download any files', undefined, { duration: 3000 });
         this.processingService.failJob(jobId, 'No files downloaded');
         return;
       }
@@ -431,7 +442,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     } catch (e) {
       this.logger.error('Error downloading originals:', e);
       this.processingService.failJob(jobId, 'Download failed');
-      this.snackBar.open('Error downloading files', null, { duration: 3000 });
+      this.snackBar.open('Error downloading files', undefined, { duration: 3000 });
     }
   }
 
@@ -461,7 +472,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   async saveEventDescription(description: string, event: EventInterface) {
     event.description = description;
     await this.eventService.writeAllEventData(this.user, event);
-    this.snackBar.open('Event saved', null, {
+    this.snackBar.open('Event saved', undefined, {
       duration: 2000,
     });
   }
@@ -469,7 +480,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   async saveEventName(name: string, event: EventInterface) {
     event.name = name;
     await this.eventService.writeAllEventData(this.user, event);
-    this.snackBar.open('Event saved', null, {
+    this.snackBar.open('Event saved', undefined, {
       duration: 2000,
     });
   }
@@ -477,8 +488,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   // Noop due to bugs
   async pageChanges(pageEvent: PageEvent) {
     // @important This is nasty because it's called if anything almost changes
-    // this.user.settings.dashboardSettings.tableSettings.eventsPerPage = pageEvent.pageSize;
-    // return this.userService.updateUserProperties(this.user, {settings: this.user.settings})
+    if (this.user.settings?.dashboardSettings?.tableSettings) {
+      this.user.settings.dashboardSettings.tableSettings.eventsPerPage = pageEvent.pageSize;
+      return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
+    }
   }
 
   searchTerm: string = '';
@@ -547,10 +560,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       statRowElement['Description'] = event.description;
       statRowElement['Device Names'] = event.getDeviceNamesAsString();
       statRowElement['Color'] = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(
-        event.getActivityTypesAsArray().length > 1 ? ActivityTypes.Multisport : ActivityTypes[event.getActivityTypesAsArray()[0]]
+        event.getActivityTypesAsArray().length > 1 ? ActivityTypes.Multisport : ActivityTypes[event.getActivityTypesAsArray()[0] as keyof typeof ActivityTypes]
       );
       statRowElement['Gradient'] = this.eventColorService.getGradientForActivityTypeGroup(
-        event.getActivityTypesAsArray().length > 1 ? ActivityTypes.Multisport : ActivityTypes[event.getActivityTypesAsArray()[0]]
+        event.getActivityTypesAsArray().length > 1 ? ActivityTypes.Multisport : ActivityTypes[event.getActivityTypesAsArray()[0] as keyof typeof ActivityTypes]
       );
       statRowElement['Event'] = event;
 

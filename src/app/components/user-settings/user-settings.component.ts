@@ -402,13 +402,13 @@ export class UserSettingsComponent implements OnChanges {
           exportToCSVSettings: this.user.settings.exportToCSVSettings
         }
       });
-      this.snackBar.open('User updated', null, {
+      this.snackBar.open('User updated', undefined, {
         duration: 2000,
       });
       this.analyticsService.logEvent('user_settings_update');
     } catch (e) {
 
-      this.snackBar.open('Could not update user', null, {
+      this.snackBar.open('Could not update user', undefined, {
         duration: 2000,
       });
       this.logger.error(e);
@@ -454,7 +454,7 @@ export class UserSettingsComponent implements OnChanges {
         this.analyticsService.logEvent('user_delete', {});
         await this.authService.signOut();
         await this.router.navigate(['/']);
-        this.snackBar.open('Account deleted! You are now logged out.', null, {
+        this.snackBar.open('Account deleted! You are now logged out.', undefined, {
           duration: 5000,
         });
         localStorage.clear();

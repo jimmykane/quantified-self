@@ -21,7 +21,7 @@
         <mat-form-field appearance="outline">
             <mat-label>Description</mat-label>
             <textarea matInput rows="6" [placeholder]="'Add a description'" (change)="saveEventDescription()"
-                (keydown.enter)='$event.target.blur()' [(ngModel)]='event.description'>
+                (keydown.enter)='$any($event.target).blur()' [(ngModel)]='event.description'>
         </textarea>
         </mat-form-field>
     </mat-card-subtitle>

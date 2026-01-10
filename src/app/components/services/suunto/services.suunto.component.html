@@ -34,7 +34,7 @@
           @for (serviceToken of serviceTokens; track $index; let i = $index) {
           <mat-list-item style="height: auto; padding: 8px 0;">
             <mat-icon matListItemIcon (click)="clicks = clicks+1" style="margin-right: 8px;">account_circle</mat-icon>
-            <div matListItemTitle style="font-size: 0.9rem;">{{ serviceToken.userName }} </div>
+            <div matListItemTitle style="font-size: 0.9rem;">{{ getSuuntoUserName(serviceToken) }} </div>
             <div matListItemLine style="font-size: 0.8rem; opacity: 0.7;">Connected: {{serviceToken.dateCreated |
               date:'short'}}</div>
           </mat-list-item>
@@ -48,11 +48,15 @@
             [disabled]="!user || this.isGuest || isLoading || isConnecting || !hasProAccess"
             (click)="connectWithService($event)">
             @if (isConnecting) {
-            <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
-              color="accent"></mat-spinner>
-            Connecting...
+            <ng-container>
+              <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
+                color="accent"></mat-spinner>
+              Connecting...
+            </ng-container>
             } @else {
-            <mat-icon>link</mat-icon> Connect
+            <ng-container>
+              <mat-icon>link</mat-icon> Connect
+            </ng-container>
             }
           </button>
           }
@@ -61,11 +65,15 @@
           <button mat-stroked-button color="warn" style="width: 100%" [disabled]="isLoading || isDisconnecting"
             (click)="deauthorizeService($event)">
             @if (isDisconnecting) {
-            <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
-              color="warn"></mat-spinner>
-            Disconnecting...
+            <ng-container>
+              <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
+                color="warn"></mat-spinner>
+              Disconnecting...
+            </ng-container>
             } @else {
-            <mat-icon>link_off</mat-icon> Disconnect
+            <ng-container>
+              <mat-icon>link_off</mat-icon> Disconnect
+            </ng-container>
             }
           </button>
           }

@@ -1,31 +1,31 @@
 <section class="container">
-  <mat-chip-listbox multiple>
+  <!-- Toggles for boolean flags -->
+  <mat-button-toggle-group multiple class="qs-segmented-button-group" appearance="standard">
     <!-- Stack Y Axes -->
-    <mat-chip-option [selected]="stackYAxes" (selectionChange)="stackYAxes = $event.selected; somethingChanged($event)"
-      [color]="'accent'" [disabled]="!user"
-      [matTooltip]="user ? 'Show charts on top of each other' : 'Sign in to use this'">
+    <mat-button-toggle [checked]="stackYAxes" (change)="stackYAxes = $event.source.checked; somethingChanged($event)"
+      [disabled]="!user" [matTooltip]="user ? 'Show charts on top of each other' : 'Sign in to use this'">
       Stack Y Axes
-    </mat-chip-option>
+    </mat-button-toggle>
 
     <!-- Show Laps -->
-    <mat-chip-option [selected]="showLaps" (selectionChange)="showLaps = $event.selected; somethingChanged($event)"
-      [color]="'accent'" [disabled]="!user" [matTooltip]="user ? 'Show lap markers on chart' : 'Sign in to use this'">
+    <mat-button-toggle [checked]="showLaps" (change)="showLaps = $event.source.checked; somethingChanged($event)"
+      [disabled]="!user" [matTooltip]="user ? 'Show lap markers on chart' : 'Sign in to use this'">
       Show Laps
-    </mat-chip-option>
+    </mat-button-toggle>
 
     <!-- Show All Data -->
-    <mat-chip-option [selected]="showAllData"
-      (selectionChange)="showAllData = $event.selected; somethingChanged($event)" [color]="'accent'" [disabled]="!user"
-      [matTooltip]="user ? 'Show all available data from file' : 'Sign in to use this'">
+    <mat-button-toggle [checked]="showAllData" (change)="showAllData = $event.source.checked; somethingChanged($event)"
+      [disabled]="!user" [matTooltip]="user ? 'Show all available data from file' : 'Sign in to use this'">
       Show All Data
-    </mat-chip-option>
-  </mat-chip-listbox>
+    </mat-button-toggle>
+  </mat-button-toggle-group>
 
   <span class="spacer"></span>
 
+  <!-- Axis Selection Group -->
   <section class="item">
-    <mat-button-toggle-group [disabled]="!user || event.isMultiSport()" [value]="xAxisType"
-      (change)="xAxisType = $event.value; somethingChanged($event)" appearance="standard">
+    <mat-button-toggle-group class="qs-segmented-button-group" [disabled]="!user || event.isMultiSport()"
+      [value]="xAxisType" (change)="xAxisType = $event.value; somethingChanged($event)" appearance="standard">
       @for (xAxisType of xAxisTypes | keyvalue; track xAxisType) {
       <mat-button-toggle [value]="xAxisType.value">
         {{xAxisType.key}}

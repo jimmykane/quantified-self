@@ -81,7 +81,7 @@ describe('AdminService', () => {
         const mockStats = { pending: 5, succeeded: 10, failed: 2, providers: [] };
         mockGetQueueStats.mockReturnValue(Promise.resolve({ data: mockStats }));
 
-        const stats$ = service.getQueueStatsDirect();
+        const stats$ = service.getQueueStats();
         const stats = await firstValueFrom(stats$);
 
         expect(mockGetQueueStats).toHaveBeenCalled();

@@ -7,19 +7,19 @@
       <mat-label>Select date range</mat-label>
       <mat-date-range-input [formGroup]="searchFormGroup" [rangePicker]="picker"
         (click)="setCustomDateRange($event); picker.open()">
-        <input matStartDate [formControl]="searchFormGroup.controls.startDate" placeholder="Start date"
+        <input matStartDate [formControl]="startDateControl" placeholder="Start date"
           (dateChange)="onDateChange($event, true)">
-        <input matEndDate [formControl]="searchFormGroup.controls.endDate" placeholder="End date"
+        <input matEndDate [formControl]="endDateControl" placeholder="End date"
           (dateChange)="onDateChange($event, false)">
       </mat-date-range-input>
       <mat-datepicker-toggle [disabled]='false' matSuffix [for]="picker"></mat-datepicker-toggle>
       <mat-date-range-picker #picker></mat-date-range-picker>
-      @if (!searchFormGroup.controls.startDate.hasError('matStartDateInvalid') &&
-      !searchFormGroup.controls.endDate.hasError('matEndDateInvalid') && selectedDateRange === dateRanges.custom) {
+      @if (!startDateControl.hasError('matStartDateInvalid') &&
+      !endDateControl.hasError('matStartDateInvalid') && selectedDateRange === dateRanges.custom) {
       <mat-hint>Select a date range</mat-hint>
       }
-      @if (searchFormGroup.controls.startDate.hasError('matStartDateInvalid') ||
-      searchFormGroup.controls.endDate.hasError('matEndDateInvalid')) {
+      @if (startDateControl.hasError('matStartDateInvalid') ||
+      endDateControl.hasError('matStartDateInvalid')) {
       <mat-error>Invalid date range</mat-error>
       }
     </mat-form-field>

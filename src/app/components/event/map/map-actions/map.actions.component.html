@@ -1,13 +1,12 @@
 <section>
-  <mat-chip-listbox multiple>
-    <mat-chip-option [selected]="showLaps" (selectionChange)="showLaps = $event.selected; checkBoxChanged($event)"
-      [color]="'accent'" [disabled]="!user" [matTooltip]="user ? 'Show lap markers on map' : 'Sign in to use this'">
+  <mat-button-toggle-group multiple class="qs-segmented-button-group" appearance="standard">
+    <mat-button-toggle [checked]="showLaps" (change)="showLaps = $event.source.checked; checkBoxChanged($event)"
+      [disabled]="!user" [matTooltip]="user ? 'Show lap markers on map' : 'Sign in to use this'">
       Show Laps
-    </mat-chip-option>
-    <mat-chip-option [selected]="showArrows" (selectionChange)="showArrows = $event.selected; checkBoxChanged($event)"
-      [color]="'accent'" [disabled]="!user"
-      [matTooltip]="user ? 'Show direction arrows on route' : 'Sign in to use this'">
+    </mat-button-toggle>
+    <mat-button-toggle [checked]="showArrows" (change)="showArrows = $event.source.checked; checkBoxChanged($event)"
+      [disabled]="!user" [matTooltip]="user ? 'Show direction arrows on route' : 'Sign in to use this'">
       Show Arrows
-    </mat-chip-option>
-  </mat-chip-listbox>
+    </mat-button-toggle>
+  </mat-button-toggle-group>
 </section>
