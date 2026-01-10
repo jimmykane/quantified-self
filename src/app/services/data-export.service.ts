@@ -48,7 +48,11 @@ export class DataExportService {
 
         data.forEach(row => {
             const rowValues = this.processRowValues(row, columns);
-            const escapedValues = rowValues.map(v => v.replace(/\|/g, '\\|')); // Escape pipes for Markdown
+            const escapedValues = rowValues.map(v => {
+                const s = v === null || v === undefined ? '' : String(v);
+                // First escape backslashes, then escape pipes for Markdown tables
+                return s.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+            });
             markdown += '| ' + escapedValues.join(' | ') + ' |\n';
         });
 
