@@ -98,17 +98,11 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         this.isLoading = false;
         return;
       }
-      if (!shouldConnect || this.isConnecting) {
+      if (!shouldConnect) {
         this.isLoading = false;
-        if (this.route.snapshot.queryParamMap.get('connect')) {
-          this.logger.log(`[ServicesAbstractComponent] connect param found for ${this.serviceName}, showing success`);
-          this.analyticsService.logEvent('service_connected', { service_name: this.serviceName });
-          // If we just connected, triggering sync automatically might be nice
-          // But usually we just show connected state.
-          this.snackBar.open(`Successfully connected to ${this.serviceName}`, undefined, {
-            duration: 10000,
-          });
-        }
+        return;
+      }
+      if (this.isConnecting) {
         return;
       }
       this.isConnecting = true;
