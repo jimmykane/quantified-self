@@ -32,12 +32,14 @@
 
         @if (isConnectedToService()) {
         <mat-list style="width: 100%; padding: 0;">
+          @for (serviceToken of serviceTokens; track $index) {
           <mat-list-item style="height: auto; padding: 8px 0;">
             <mat-icon matListItemIcon style="margin-right: 8px;">account_circle</mat-icon>
-            <div matListItemTitle style="font-size: 0.9rem;">{{ corosOpenId }} </div>
-            <div matListItemLine style="font-size: 0.8rem; opacity: 0.7;">Connected: {{serviceTokens[0].dateCreated
+            <div matListItemTitle style="font-size: 0.9rem;">{{ getCorosOpenId(serviceToken) }} </div>
+            <div matListItemLine style="font-size: 0.8rem; opacity: 0.7;">Connected: {{serviceToken.dateCreated
               | date:'short'}}</div>
           </mat-list-item>
+          }
         </mat-list>
         }
 

@@ -34,7 +34,7 @@
           <mat-list-item style="height: auto; padding: 8px 0;">
             <mat-icon matListItemIcon style="margin-right: 8px;">account_circle</mat-icon>
             <div matListItemTitle style="font-size: 0.9rem;">{{ garminUserID }} </div>
-            <div matListItemLine style="font-size: 0.8rem; opacity: 0.7;">Connected: {{serviceTokens[0].dateCreated
+            <div matListItemLine style="font-size: 0.8rem; opacity: 0.7;">Connected: {{serviceTokens?.[0]?.dateCreated
               | date:'short'}}</div>
           </mat-list-item>
         </mat-list>
