@@ -182,6 +182,10 @@ export class EventCardStatsTableComponent implements OnChanges {
     return columnHeader.slice(-7);
   }
 
+  getDifferenceColor(percent: number): string {
+    return this.eventColorService.getDifferenceColor(percent);
+  }
+
   toggleRow(row: any) {
     this.selection.toggle(row);
   }

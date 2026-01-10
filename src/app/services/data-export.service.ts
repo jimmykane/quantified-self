@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppEventColorService } from './color/app.event.color.service';
 
 @Injectable({
     providedIn: 'root'
@@ -9,7 +10,8 @@ export class DataExportService {
 
     constructor(
         private clipboard: Clipboard,
-        private snackBar: MatSnackBar
+        private snackBar: MatSnackBar,
+        private appEventColorService: AppEventColorService
     ) { }
 
     /**
@@ -83,8 +85,28 @@ export class DataExportService {
 
         let html = '<table border="1"><thead><tr>' + headers.map(h => `<th>${escapeHtml(h)}</th>`).join('') + '</tr></thead><tbody>';
         data.forEach(row => {
-            const rowValues = this.processRowValues(row, columns);
-            html += '<tr>' + rowValues.map(v => `<td>${escapeHtml(v)}</td>`).join('') + '</tr>';
+            html += '<tr>';
+            columns.forEach(col => {
+                const val = row[col];
+                let cellContent = '';
+                let cellStyle = '';
+
+                if (col === 'Difference' && val && typeof val === 'object') {
+                    // Difference specific logic
+                    cellContent = escapeHtml(`${val.display} (${val.percent.toFixed(1)}%)`);
+                    cellStyle = `color: ${this.appEventColorService.getDifferenceColor(val.percent)}`;
+                } else {
+                    // Standard processing
+                    cellContent = escapeHtml(val === null || val === undefined ? '' : String(val));
+                }
+
+                if (cellStyle) {
+                    html += `<td style="${cellStyle}">${cellContent}</td>`;
+                } else {
+                    html += `<td>${cellContent}</td>`;
+                }
+            });
+            html += '</tr>';
         });
         html += '</tbody></table>';
 

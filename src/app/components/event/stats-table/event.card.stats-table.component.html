@@ -61,24 +61,14 @@
           @if (column === 'Difference' && row[column]) {
           <span>
             {{ row[column].display }}
-            @if (row[column].percent <= 2) { <span [ngStyle]="{'color': appColors.Green}">
+            <span [ngStyle]="{'color': getDifferenceColor(row[column].percent)}">
               {{ row[column].percent.toFixed(1) }}%
+            </span>
           </span>
           }
-          @if (row[column].percent > 2 && row[column].percent <= 5) { <span [ngStyle]="{'color': appColors.Orange}">
-            {{ row[column].percent.toFixed(1) }}%
-            </span>
-            }
-            @if (row[column].percent > 5) {
-            <span [ngStyle]="{'color': appColors.Red}">
-              {{ row[column].percent.toFixed(1) }}%
-            </span>
-            }
-            </span>
-            }
-            @if (column !== 'Difference') {
-            <span>{{ row[column] }}</span>
-            }
+          @if (column !== 'Difference') {
+          <span>{{ row[column] }}</span>
+          }
         </mat-cell>
       </ng-container>
       }

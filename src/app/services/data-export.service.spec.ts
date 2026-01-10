@@ -2,12 +2,15 @@ import { TestBed } from '@angular/core/testing';
 import { DataExportService } from './data-export.service';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppEventColorService } from './color/app.event.color.service';
+import { AppColors } from './color/app.colors';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 describe('DataExportService', () => {
     let service: DataExportService;
     let mockClipboard: any;
     let mockSnackBar: any;
+    let mockAppEventColorService: any;
 
     beforeEach(() => {
         mockClipboard = {
@@ -16,12 +19,20 @@ describe('DataExportService', () => {
         mockSnackBar = {
             open: vi.fn(),
         };
+        mockAppEventColorService = {
+            getDifferenceColor: vi.fn().mockImplementation((p) => {
+                if (p <= 2) return AppColors.Green;
+                if (p <= 5) return AppColors.Orange;
+                return AppColors.Red;
+            })
+        };
 
         TestBed.configureTestingModule({
             providers: [
                 DataExportService,
                 { provide: Clipboard, useValue: mockClipboard },
                 { provide: MatSnackBar, useValue: mockSnackBar },
+                { provide: AppEventColorService, useValue: mockAppEventColorService }
             ],
         });
         service = TestBed.inject(DataExportService);
@@ -184,6 +195,48 @@ describe('DataExportService', () => {
             // Ideally we'd use a Blob reader helper but that's async.
             // For now, let's verify that the call succeeded without error.
             expect(ClipboardItem).toHaveBeenCalled();
+        });
+
+        it('should include color styles for Difference column in HTML export', async () => {
+            const writeMock = vi.fn().mockResolvedValue(undefined);
+            Object.assign(navigator, {
+                clipboard: { write: writeMock }
+            });
+            global.ClipboardItem = vi.fn() as any;
+
+            // Spy on Blob to capture content
+            const blobSpy = vi.spyOn(global, 'Blob').mockImplementation((content) => {
+                return { size: (content as any)[0].length, type: '' } as Blob;
+            });
+
+            // Test all 3 thresholds
+            const data = [
+                { Difference: { display: 'Good', percent: 1.5 } },   // Green
+                { Difference: { display: 'Warn', percent: 3.5 } },   // Orange
+                { Difference: { display: 'Bad', percent: 6.0 } }     // Red
+            ];
+            const columns = ['Difference'];
+
+            await service.copyToSheets(data, columns);
+
+            // Find the HTML blob call
+            const htmlCall = blobSpy.mock.calls.find(call => call[1]?.type === 'text/html');
+            expect(htmlCall).toBeDefined();
+            if (htmlCall) {
+                const htmlContent = htmlCall[0]![0] as string;
+                // Check for color styles
+                // Note: We need to know the exact hex codes from AppColors or just check distinct styles
+                // AppColors are imported, but let's check generic structure or mapped values if we can't import AppColors in test easily (we can).
+                // Actually, we can just check if style="color: is present 3 times with different values.
+
+                // #2ecc71 (Green), #e67e22 (Orange), #e74c3c (Red) are common, but let's just check for style attribute presence
+                expect(htmlContent).toContain('style="color:');
+                // We expect 3 distinct rows with styles
+                const matches = htmlContent.match(/style="color:/g);
+                expect(matches?.length).toBe(3);
+            }
+
+            blobSpy.mockRestore();
         });
     });
 });

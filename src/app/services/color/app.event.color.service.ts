@@ -18,6 +18,16 @@ export class AppEventColorService {
 
   constructor(private amChartsService: AmChartsService, private logger: LoggerService) { }
 
+  public getDifferenceColor(percent: number): string {
+    if (percent <= 2) {
+      return AppColors.Green;
+    } else if (percent <= 5) {
+      return AppColors.Orange;
+    } else {
+      return AppColors.Red;
+    }
+  }
+
   /**
    * Clears the color cache. Should be called when activities change context (e.g. new event load)
    */
