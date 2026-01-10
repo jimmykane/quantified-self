@@ -231,9 +231,9 @@ describe('DataExportService', () => {
 
                 // #2ecc71 (Green), #e67e22 (Orange), #e74c3c (Red) are common, but let's just check for style attribute presence
                 expect(htmlContent).toContain('style="color:');
-                // We expect 3 distinct rows with styles
+                // We expect 4 style="color:" occurrences: 1 header + 3 data rows
                 const matches = htmlContent.match(/style="color:/g);
-                expect(matches?.length).toBe(3);
+                expect(matches?.length).toBe(4);
             }
 
             blobSpy.mockRestore();
