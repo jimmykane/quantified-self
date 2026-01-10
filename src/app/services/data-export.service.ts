@@ -87,28 +87,44 @@ export class DataExportService {
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#039;");
 
-        let html = '<table border="1"><thead><tr>' + headers.map(h => `<th>${escapeHtml(h)}</th>`).join('') + '</tr></thead><tbody>';
+        // Extract activity colors from column headers (format: "Creator Name #xxxxxx")
+        const getColumnColor = (col: string): string | null => {
+            if (col === 'Name' || col === 'Difference') {
+                return null;
+            }
+            // Last 7 chars contain the color code (#xxxxxx)
+            return col.slice(-7);
+        };
+
+        // Build header row with activity colors
+        const headerCells = columns.map(col => {
+            const displayName = this.getColumnHeaderName(col);
+            const color = getColumnColor(col);
+            // Use font tag for better spreadsheet compatibility
+            const coloredContent = color
+                ? `<font color="${color}">${escapeHtml(displayName)}</font>`
+                : escapeHtml(displayName);
+            return `<th style="color: white; border: 1px solid white;">${coloredContent}</th>`;
+        }).join('');
+
+        let html = `<table style="border-collapse: collapse; border: 1px solid white;"><thead><tr>${headerCells}</tr></thead><tbody>`;
         data.forEach(row => {
             html += '<tr>';
             columns.forEach(col => {
                 const val = row[col];
                 let cellContent = '';
-                let cellStyle = '';
+                let cellStyle = 'color: white; border: 1px solid white;';
 
                 if (col === 'Difference' && val && typeof val === 'object') {
-                    // Difference specific logic
+                    // Difference specific logic - use difference color
                     cellContent = escapeHtml(`${val.display} (${val.percent.toFixed(1)}%)`);
-                    cellStyle = `color: ${this.appEventColorService.getDifferenceColor(val.percent)}`;
+                    cellStyle = `color: ${this.appEventColorService.getDifferenceColor(val.percent)}; border: 1px solid white;`;
                 } else {
-                    // Standard processing
+                    // Standard processing with white text
                     cellContent = escapeHtml(val === null || val === undefined ? '' : String(val));
                 }
 
-                if (cellStyle) {
-                    html += `<td style="${cellStyle}">${cellContent}</td>`;
-                } else {
-                    html += `<td>${cellContent}</td>`;
-                }
+                html += `<td style="${cellStyle}">${cellContent}</td>`;
             });
             html += '</tr>';
         });
