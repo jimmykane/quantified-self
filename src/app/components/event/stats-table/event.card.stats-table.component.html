@@ -19,10 +19,26 @@
 
 
 <ng-template #tableContent>
-  <mat-form-field>
-    <mat-label>Filter</mat-label>
-    <input matInput (keyup)="applyFilter($event)" placeholder="Type or value">
-  </mat-form-field>
+  <div class="table-actions">
+    <mat-form-field subscriptSizing="dynamic">
+      <mat-label>Filter</mat-label>
+      <input matInput (keyup)="applyFilter($event)" placeholder="Type or value">
+    </mat-form-field>
+
+    @if (selection.hasValue()) {
+    <div class="selection-actions">
+      <button mat-flat-button color="primary" (click)="copyToClipboard()" matTooltip="Copy Selected to Markdown">
+        <mat-icon>integration_instructions</mat-icon>
+      </button>
+      <button mat-flat-button color="primary" (click)="copyToSheets()" matTooltip="Copy Selected to Sheets">
+        <mat-icon>table_view</mat-icon>
+      </button>
+      <button mat-stroked-button (click)="clearSelection()" matTooltip="Clear Selection">
+        <mat-icon>clear_all</mat-icon>
+      </button>
+    </div>
+    }
+  </div>
   <div class="table-container">
     <mat-table [dataSource]="data">
       @for (column of columns; track column) {
@@ -45,29 +61,20 @@
           @if (column === 'Difference' && row[column]) {
           <span>
             {{ row[column].display }}
-            @if (row[column].percent <= 2) { <span [ngStyle]="{'color': appColors.Green}">
+            <span [ngStyle]="{'color': getDifferenceColor(row[column].percent)}">
               {{ row[column].percent.toFixed(1) }}%
+            </span>
           </span>
           }
-          @if (row[column].percent > 2 && row[column].percent <= 5) { <span [ngStyle]="{'color': appColors.Orange}">
-            {{ row[column].percent.toFixed(1) }}%
-            </span>
-            }
-            @if (row[column].percent > 5) {
-            <span [ngStyle]="{'color': appColors.Red}">
-              {{ row[column].percent.toFixed(1) }}%
-            </span>
-            }
-            </span>
-            }
-            @if (column !== 'Difference') {
-            <span>{{ row[column] }}</span>
-            }
+          @if (column !== 'Difference') {
+          <span>{{ row[column] }}</span>
+          }
         </mat-cell>
       </ng-container>
       }
       <mat-header-row *matHeaderRowDef="columns; sticky: true;"></mat-header-row>
-      <mat-row *matRowDef="let row; columns: columns;">
+      <mat-row *matRowDef="let row; columns: columns;" (click)="toggleRow(row)"
+        [class.selected-row]="selection.isSelected(row)">
       </mat-row>
     </mat-table>
   </div>
