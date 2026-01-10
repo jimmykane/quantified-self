@@ -2,5 +2,11 @@ User-agent: *
 Disallow: /user
 Disallow: /user/
 Disallow: /settings
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /mytracks
+Disallow: /coaching
+Disallow: /onboarding
+Disallow: /payment
 
 Sitemap: https://quantified-self.io/sitemap.xml

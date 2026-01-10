@@ -17,7 +17,7 @@ import { DataPositionInterface } from '@sports-alliance/sports-lib';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
 import { MapAbstractDirective } from '../map/map-abstract.directive';
 import { LoggerService } from '../../services/logger.service';
-import MarkerClusterer from '@googlemaps/markerclustererplus';
+import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DatePipe } from '@angular/common';
@@ -58,7 +58,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   };
   public mapCenter: google.maps.LatLngLiteral = { lat: 0, lng: 0 };
   public mapZoom = 3;
-  public mapTypeId: string = 'roadmap';
+  public mapTypeId: google.maps.MapTypeId = 'roadmap' as any as google.maps.MapTypeId;
   public apiLoaded = false;
 
   private nativeMap: google.maps.Map;
@@ -93,7 +93,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
 
       // Set map type
       if (this.type) {
-        this.mapTypeId = this.type as string;
+        this.mapTypeId = this.type as any as google.maps.MapTypeId;
       }
 
       if (this.apiLoaded) {
@@ -143,18 +143,26 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
 
       if (this.clusterMarkers) {
         if (!this.markerClusterer) {
-          this.markerClusterer = new MarkerClusterer(this.nativeMap,
-            this.markers,
-            {
-              imagePath: '/assets/icons/heatmap/m',
-              enableRetinaIcons: true,
-              averageCenter: true,
-              maxZoom: 18,
-              minimumClusterSize: 15,
-            });
+          this.markerClusterer = new MarkerClusterer({
+            map: this.nativeMap,
+            markers: this.markers,
+            renderer: {
+              render: ({ count, position }) => {
+                return new google.maps.Marker({
+                  label: { text: String(count), color: "white" },
+                  position,
+                  icon: {
+                    url: '/assets/icons/heatmap/m1.png', // Fallback or logic to choose distinct icons
+                  },
+                  // adjust options as needed for match existing style
+                  zIndex: Number(google.maps.Marker.MAX_ZINDEX) + count,
+                });
+              }
+            }
+          });
         } else {
           this.markerClusterer.addMarkers(this.markers);
-          this.markerClusterer.repaint();
+
         }
       }
 
@@ -254,7 +262,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
         const location = eventStartPositionStat.getValue();
         const marker = new google.maps.Marker({
           position: { lat: location.latitudeDegrees, lng: location.longitudeDegrees },
-          title: `${event.getActivityTypesAsString()} for ${event.getDuration().getDisplayValue(false, false)} and ${event.getDistance().getDisplayValue()}${event.getDistance().getDisplayValue()}`,
+          title: `${event.getActivityTypesAsString()} for ${event.getDuration().getDisplayValue(false, false)} and ${event.getDistance().getDisplayValue()}`,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
             fillOpacity: 1,
@@ -271,23 +279,46 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
         marker.addListener('click', async () => {
           this.loading();
           this.selectedEventPositionsByActivity = [];
-          const activities = await this.eventService.getActivities(this.user, event.getID()).pipe(take(1)).toPromise();
-          if (!activities) return;
+
+          // Use attachStreamsToEventWithActivities to get event with activities + streams
+          // This handles original file parsing on the fly if needed
+          const types = [DataLatitudeDegrees.type, DataLongitudeDegrees.type];
+
+          // We only need one emission
+          const populatedEvent = await this.eventService.attachStreamsToEventWithActivities(
+            this.user,
+            event,
+            types
+          ).pipe(take(1)).toPromise();
+
+          if (!populatedEvent) {
+            this.loaded();
+            return;
+          }
+
+          const activities = populatedEvent.getActivities();
+          if (!activities || activities.length === 0) {
+            this.loaded();
+            return;
+          }
+
           for (const activity of activities) {
-            const streams = await this.eventService.getStreamsByTypes(
-              this.user.uid, event.getID(), activity.getID(), [DataLatitudeDegrees.type, DataLongitudeDegrees.type]
-            ).pipe(take(1)).toPromise();
-            activity.addStreams(streams || []);
             this.selectedEventPositionsByActivity.push({
               activity: activity,
               color: this.eventColorService.getActivityColor(activities, activity),
               positions: activity.getSquashedPositionData()
             });
           }
-          this.nativeMap.fitBounds(this.getBounds(this.selectedEventPositionsByActivity.reduce((accu, positionByActivity) => {
+
+          const allPositions = this.selectedEventPositionsByActivity.reduce((accu, positionByActivity) => {
             return accu.concat(positionByActivity.positions);
-          }, [])));
-          this.selectedEvent = event;
+          }, []);
+
+          if (allPositions.length > 0) {
+            this.nativeMap.fitBounds(this.getBounds(allPositions));
+          }
+
+          this.selectedEvent = populatedEvent;
           this.loaded();
         });
       }

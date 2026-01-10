@@ -62,7 +62,8 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
 
 
   private chartThemeSubscription: Subscription;
-  private chartTheme: ChartThemes;
+  public chartTheme: ChartThemes;
+  private logger: LoggerService;
 
   private getChartDataCache: { string: SummariesChartDataInterface[] }[] = []
 
@@ -73,9 +74,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     private snackBar: MatSnackBar,
     private dialog: MatDialog,
     changeDetector: ChangeDetectorRef,
-    private logger: LoggerService,
+    logger: LoggerService,
   ) {
     super(changeDetector);
+    this.logger = logger;
     this.rowHeight = this.getRowHeight();
     this.numberOfCols = this.getNumberOfColumns();
   }
@@ -137,13 +139,17 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
   }
 
-  public trackByTile(index: number, item: (SummariesChartTileInterface | SummariesMapTileInterface)) {
+  public trackByTile(index: number, item: (SummariesChartTileInterface | SummariesMapTileInterface | TileSettingsInterface)) {
     if (!item) {
       return null;
     }
-    return isSummariesChartTile(item) ?
-      `${item.chartType}${item.dataCategoryType}${item.dataValueType}${item.name}${item.order}${item.timeInterval}`
-      : `${item.clusterMarkers}${item.mapTheme}${item.mapType}${item.name}${item.order}${item.showHeatMap}`
+    if (isSummariesChartTile(item)) {
+      return `${item.chartType}${item.dataCategoryType}${item.dataValueType}${item.name}${item.order}${item.timeInterval}`;
+    } else if ('clusterMarkers' in item) {
+      const mapItem = item as SummariesMapTileInterface;
+      return `${mapItem.clusterMarkers}${mapItem.mapTheme}${mapItem.mapType}${mapItem.name}${mapItem.order}${mapItem.showHeatMap}`;
+    }
+    return `${item.name}${item.order}`;
   }
 
   private async unsubscribeAndCreateCharts() {
@@ -202,19 +208,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           chartTile.dataTimeInterval = chartTile.dataTimeInterval || TimeIntervals.Auto
           // 2 Different processing here, one generic and one for Brian Devine
           switch (chartTile.chartType) {
-            case ChartTypes.BrianDevine:
-              const data = {
-                daily: this.getChartData(events, chartTile.dataType, chartTile.dataValueType, ChartDataCategoryTypes.DateType, TimeIntervals.Daily),
-                weekly: this.getChartData(events, chartTile.dataType, chartTile.dataValueType, ChartDataCategoryTypes.DateType, TimeIntervals.Weekly),
-                activityTypes: [...new Set(events.map((event) => this.getEventCategoryKey(event, events, ChartDataCategoryTypes.ActivityType, chartTile.dataTimeInterval)))]
-              };
-              chartsAndData.push({
-                ...chartTile, ...{
-                  timeInterval: chartTile.dataTimeInterval === TimeIntervals.Auto ? this.getEventsTimeInterval(events) : chartTile.dataTimeInterval, // Defaults to Auto / Daily
-                  data: data
-                }
-              });
-              break;
+
             case ChartTypes.IntensityZones:
               chartsAndData.push({
                 ...chartTile, ...{
@@ -462,6 +456,15 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return 2;
     }
     return 4;
+  }
+
+
+  getChartTile(tile: SummariesChartTileInterface | SummariesMapTileInterface | TileSettingsInterface): SummariesChartTileInterface {
+    return tile as SummariesChartTileInterface;
+  }
+
+  getMapTile(tile: SummariesChartTileInterface | SummariesMapTileInterface | TileSettingsInterface): SummariesMapTileInterface {
+    return tile as SummariesMapTileInterface;
   }
 }
 

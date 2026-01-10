@@ -1,5 +1,6 @@
 import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { AppProcessingService, BackgroundJob } from '../../../services/app.processing.service';
+import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 @Component({
@@ -10,10 +11,10 @@ import { map } from 'rxjs/operators';
     standalone: false
 })
 export class ProcessingIndicatorComponent {
-    jobs$;
-    activeJobs$;
-    hasActiveJobs$;
-    activeJobsProgress$;
+    jobs$: Observable<BackgroundJob[]>;
+    activeJobs$: Observable<BackgroundJob[]>;
+    hasActiveJobs$: Observable<boolean>;
+    activeJobsProgress$: Observable<number>;
 
     constructor(public processingService: AppProcessingService) {
         this.jobs$ = this.processingService.jobs$;

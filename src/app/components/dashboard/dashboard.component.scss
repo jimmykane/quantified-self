@@ -21,7 +21,6 @@ section.component-container {
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 2rem;
 }
 
 /* Ensure child components take full width and handle their own internal layout */
@@ -30,6 +29,10 @@ app-summaries,
 app-event-table {
     width: 100%;
     display: block;
+}
+
+app-event-search {
+    margin-top: 16px;
 }
 
 /* Fade in animation */

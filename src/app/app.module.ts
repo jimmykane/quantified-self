@@ -1,5 +1,6 @@
 import { APP_INITIALIZER, ErrorHandler, LOCALE_ID, NgModule } from '@angular/core';
-import { LoggerService, GlobalErrorHandler } from './services/logger.service';
+import { LoggerService } from './services/logger.service';
+import { GlobalErrorHandler } from './services/global-error-handler.service';
 import { BrowserModule } from '@angular/platform-browser';
 import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app.routing.module';
@@ -17,8 +18,10 @@ import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingServ
 import { provideRemoteConfig, getRemoteConfig } from '@angular/fire/remote-config';
 import { provideStorage, getStorage } from '@angular/fire/storage';
 import { MaterialModule } from './modules/material.module';
+import { SharedModule } from './modules/shared.module';
 import { ClipboardModule } from '@angular/cdk/clipboard';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
+import { MAT_DIALOG_DEFAULT_OPTIONS } from '@angular/material/dialog';
 import { ServiceWorkerModule } from '@angular/service-worker';
 import { UploadActivitiesComponent } from './components/upload/upload-activities/upload-activities.component';
 
@@ -37,11 +40,7 @@ export function initializeRemoteConfig(remoteConfigService: AppRemoteConfigServi
 }
 
 import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/date-locale.config';
-
-
-
-// ... (existing imports)
-
+import { APP_STORAGE } from './services/storage/app.storage.token';
 
 
 @NgModule({
@@ -57,10 +56,11 @@ import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/da
   imports: [
     BrowserModule,
     BrowserAnimationsModule,
+    SharedModule,
     AppRoutingModule,
     ClipboardModule,
     MaterialModule,
-    ServiceWorkerModule.register('ngsw-worker.js', { enabled: environment.production }),
+    ServiceWorkerModule.register('ngsw-worker.js', { enabled: environment.production || environment.beta }),
     OnboardingComponent,
     MaintenanceComponent
   ],
@@ -104,8 +104,13 @@ import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/da
     }),
     provideRemoteConfig(() => getRemoteConfig()),
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
+    { provide: MAT_DIALOG_DEFAULT_OPTIONS, useValue: { panelClass: 'qs-dialog-container', hasBackdrop: true } },
     MAT_DATE_LOCALE_PROVIDER,
-    { provide: LOCALE_ID, useFactory: getBrowserLocale }
+    { provide: LOCALE_ID, useFactory: getBrowserLocale },
+    {
+      provide: APP_STORAGE,
+      useFactory: () => localStorage
+    }
   ]
 })
 export class AppModule {

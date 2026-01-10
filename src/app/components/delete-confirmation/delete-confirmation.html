@@ -1,12 +1,8 @@
-<h3>Are you sure you want to delete?</h3>
-<mat-nav-list>
-  <a mat-list-item (click)="shouldDelete(true, $event)">
-    <span mat-line>Yes</span>
-    <span mat-line>All data will be deleted</span>
-  </a>
-
-  <a mat-list-item (click)="shouldDelete(false, $event)">
-    <span mat-line>No</span>
-    <span mat-line>Cancel the operation</span>
-  </a>
-</mat-nav-list>
+<h2 mat-dialog-title>Are you sure you want to delete?</h2>
+<mat-dialog-content>
+  <p>All data will be permanently deleted. This operation cannot be undone.</p>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button (click)="shouldDelete(false, $event)">Cancel</button>
+  <button mat-flat-button color="warn" (click)="shouldDelete(true, $event)">Delete</button>
+</mat-dialog-actions>

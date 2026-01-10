@@ -2,7 +2,7 @@ import { inject, Injectable, EnvironmentInjector, runInInjectionContext, NgZone 
 import { Observable, of } from 'rxjs';
 import { map, shareReplay, switchMap, take } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Auth, user, signInWithPopup, getRedirectResult, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, sendPasswordResetEmail, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, OAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, fetchSignInMethodsForEmail, linkWithCredential, AuthCredential, linkWithPopup, AuthProvider } from '@angular/fire/auth';
+import { Auth, user, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, sendSignInLinkToEmail, isSignInWithEmailLink, signInWithEmailLink, sendPasswordResetEmail, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, TwitterAuthProvider, OAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword, fetchSignInMethodsForEmail, linkWithCredential, AuthCredential, linkWithPopup, AuthProvider, signInWithCustomToken } from '@angular/fire/auth';
 import { Firestore, doc, onSnapshot, terminate, clearIndexedDbPersistence } from '@angular/fire/firestore';
 import { Privacy, User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../services/app.user.service';
@@ -48,6 +48,38 @@ export class AppAuthService {
                 dbUser.uid = firebaseUser.uid;
                 // Merge the stripe role from the token claims
                 (dbUser as any).stripeRole = stripeRole;
+
+                // Check if we need to force refresh the token
+                // We do this if the DB says claims were updated AFTER our token was issued
+                if ((dbUser as any).claimsUpdatedAt) {
+                  const claimsUpdatedAtUnformatted = (dbUser as any).claimsUpdatedAt;
+                  // Handle Firestore Timestamp or Date
+                  const claimsUpdatedAt = claimsUpdatedAtUnformatted.toDate ? claimsUpdatedAtUnformatted.toDate() : new Date(claimsUpdatedAtUnformatted.seconds * 1000);
+
+                  // authTime is in seconds string
+                  const authTimeStr = tokenResult.claims['auth_time'] as string;
+                  const authTime_ms = parseInt(authTimeStr, 10) * 1000;
+
+                  // We need a buffer to prevent infinite loops if clocks are slightly off
+                  // If DB update is > authTime + 5 seconds buffer, we refresh.
+                  // Actually, just strictly newer is usually enough, but let's be safe.
+                  if (claimsUpdatedAt.getTime() > authTime_ms + 2000) {
+                    this.logger.log(`[AppAuthService] Claims updated at ${claimsUpdatedAt.toISOString()} vs Token at ${new Date(authTime_ms).toISOString()}. Refreshing token...`);
+                    // Force refresh
+                    await firebaseUser.getIdToken(true);
+                    // The user$ observable will re-emit because the token change triggers auth state change eventually?
+                    // Actually, getIdToken(true) does NOT trigger onAuthStateChanged by itself usually unless the user object reference changes.
+                    // But we are inside switchMap of user(this.auth).
+                    // If we just refreshed, the next emission might not happen automatically solely from this call
+                    // unless we manually trigger something or if the SDK internals do it.
+                    // However, we want to return the user with the NEW role.
+                    // So we should re-fetch the token result immediately to get the new role for *this* emission.
+
+                    const newTokenResult = await firebaseUser.getIdTokenResult();
+                    (dbUser as any).stripeRole = newTokenResult.claims['stripeRole'] as string || null;
+                    this.logger.log(`[AppAuthService] Token refreshed. New Role: ${(dbUser as any).stripeRole}`);
+                  }
+                }
                 return dbUser;
               } else {
                 // Synthetic user for new accounts
@@ -65,6 +97,7 @@ export class AppAuthService {
                   privacy: Privacy.Private,
                   isAnonymous: firebaseUser.isAnonymous,
                   stripeRole: stripeRole,
+                  claimsUpdatedAt: (dbUser as any)?.claimsUpdatedAt, // Pass it through if it exists on synthetic user (unlikely but good for types)
                   creationDate: new Date(firebaseUser.metadata.creationTime!),
                   lastSignInDate: new Date(firebaseUser.metadata.lastSignInTime!)
                 } as unknown as User;
@@ -107,15 +140,8 @@ export class AppAuthService {
         this.logger.log('[Auth] Popup succeeded:', result);
         return result;
       } else {
-        // Redirect is deprecated/removed in this refactor favor of simple popup or different flow if needed, 
-        // OR if we want to keep it for Google:
-        this.logger.log('[Auth] Using popup (redirect removed for consistency in refactor, or restore if needed)...');
-        // Actually, let's keep popup for consistency as redirect caused issues before or just use popup everywhere.
-        // But original code had logic. Let's stick to popup for now to be safe with removed imports unless requested.
-        // Wait, I strictly removed signInWithRedirect import. So I must use popup or re-import.
-        // Re-reading error: "signInWithRedirect" was removed.
-        // Let's us signInWithPopup for everything for now.
-        return await signInWithPopup(this.auth, provider);
+        this.logger.log('[Auth] Using redirect...');
+        return await signInWithRedirect(this.auth, provider);
       }
     } catch (error: any) {
       this.logger.error('[Auth] signInWithProvider error:', error);
@@ -133,6 +159,10 @@ export class AppAuthService {
   async githubLogin() {
     const provider = new GithubAuthProvider();
     return this.signInWithProvider(provider);
+  }
+
+  async getRedirectResult() {
+    return getRedirectResult(this.auth);
   }
 
 
@@ -191,6 +221,15 @@ export class AppAuthService {
   async emailLogin(email: string, password: string) {
     try {
       return signInWithEmailAndPassword(this.auth, email, password);
+    } catch (e: any) {
+      this.handleError(e);
+      throw e;
+    }
+  }
+
+  async loginWithCustomToken(token: string) {
+    try {
+      return await signInWithCustomToken(this.auth, token);
     } catch (e: any) {
       this.handleError(e);
       throw e;

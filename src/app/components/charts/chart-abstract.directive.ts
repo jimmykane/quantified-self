@@ -40,6 +40,7 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
     return this.zone.runOutsideAngular(async () => {
       await this.setChartThemes(this.chartTheme, this.useAnimations, core);
       const chart = core.create(this.chartDiv.nativeElement, chartType || charts.XYChart) as am4charts.Chart;
+      chart.fontFamily = "'Barlow Condensed', sans-serif";
       chart.preloader.disabled = true;
 
       // chart.pixelPerfect = true;
@@ -47,6 +48,7 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
       // chart.padding(0,0,0,0)
       // chart.dataSource.updateCurrentData = true
       chart.exporting.useRetina = true; // access exporting via chart instance usually
+      core.options.minPolylineStep = 2;
       return chart;
     });
   }

@@ -4,6 +4,7 @@
 @use 'sass:map';
 @use 'styles/forms';
 @use 'styles/search';
+@use 'styles/segmented-buttons';
 
 // Include the common styles for Angular Material. We include this here so that you only
 // have to load a single css file for Angular Material in your app.
@@ -86,6 +87,16 @@ body {
   font-family: 'Noto Sans', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* SSR Hydration: Hide ALL icons (font & SVG) until Angular hydrates to prevent FOUT/Flash */
+mat-icon {
+  opacity: 0;
+  transition: opacity 0.2s ease-in;
+}
+
+body.app-hydrated mat-icon {
+  opacity: 1;
 }
 
 .dark-theme {
@@ -260,8 +271,8 @@ section.component-container {
   --mat-sys-on-surface: rgba(0, 0, 0, 0.87);
   --mat-sys-on-surface-variant: rgba(0, 0, 0, 0.60);
   --mat-sys-error: #f44336;
-  --mat-sys-primary: #3f51b5;
-  --mat-sys-primary-rgb: 63, 81, 181;
+  --mat-sys-primary: #2196F3;
+  --mat-sys-primary-rgb: 33, 150, 243;
   --mat-sys-secondary: #ff4081;
   --mat-sys-secondary-rgb: 255, 64, 129;
   --mat-app-surface: var(--mat-sys-surface);
@@ -279,8 +290,8 @@ section.component-container {
   --mat-sys-on-surface: rgba(255, 255, 255, 0.87);
   --mat-sys-on-surface-variant: rgba(255, 255, 255, 0.60);
   --mat-sys-error: #ffb4ab;
-  --mat-sys-primary: #90caf9;
-  --mat-sys-primary-rgb: 144, 202, 249;
+  --mat-sys-primary: #b0bec5;
+  --mat-sys-primary-rgb: 176, 190, 197;
   --mat-sys-secondary: #f48fb1;
   --mat-sys-secondary-rgb: 244, 143, 177;
   --mat-app-surface: var(--mat-sys-surface);
@@ -653,6 +664,55 @@ mat-table {
 /* Ensure Overlays (Bottom Sheets, Dialogs) are always on top of App Bars and Banners */
 .cdk-overlay-container {
   z-index: 2000 !important;
+}
+
+/* ==========================================================================
+   Global Dialog Styles
+   Standardized Material Dialog overrides for glassmorphism consistency.
+   Applied via MAT_DIALOG_DEFAULT_OPTIONS in app.module.ts.
+   ========================================================================== */
+.qs-dialog-container {
+
+  .mat-mdc-dialog-container,
+  .mat-mdc-dialog-surface {
+    background: var(--mat-sys-surface) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 16px !important;
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.12),
+      0 2px 8px rgba(0, 0, 0, 0.08) !important;
+  }
+
+  .mat-mdc-dialog-title {
+    font: var(--mat-sys-headline-small) !important;
+    color: var(--mat-sys-on-surface) !important;
+    padding: 24px 24px 8px !important;
+    margin: 0 !important;
+  }
+
+  .mat-mdc-dialog-content {
+    color: var(--mat-sys-on-surface) !important;
+    padding: 8px 24px !important;
+  }
+
+  .mat-mdc-dialog-actions {
+    padding: 16px 24px 24px !important;
+    gap: 8px;
+  }
+}
+
+/* Dark Theme Dialog Overrides */
+.dark-theme .qs-dialog-container {
+
+  .mat-mdc-dialog-container,
+  .mat-mdc-dialog-surface {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.4),
+      0 2px 8px rgba(0, 0, 0, 0.2) !important;
+  }
 }
 
 /* ==========================================================================

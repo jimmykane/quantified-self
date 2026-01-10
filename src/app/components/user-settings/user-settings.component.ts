@@ -88,6 +88,16 @@ export class UserSettingsComponent implements OnChanges {
 
 
 
+  public isAdminUser = false;
+
+  get isProUser(): boolean {
+    return AppUserService.isProUser(this.user, this.isAdminUser);
+  }
+
+  get isBasicUser(): boolean {
+    return AppUserService.isBasicUser(this.user);
+  }
+
   constructor(private authService: AppAuthService,
     private route: ActivatedRoute,
     private userService: AppUserService,
@@ -101,6 +111,9 @@ export class UserSettingsComponent implements OnChanges {
 
 
   ngOnChanges(): void {
+    if (this.user) {
+      this.userService.isAdmin().then(isAdmin => this.isAdminUser = isAdmin);
+    }
     // Initialize the user settings and get the enabled ones
     const dataTypesToUse = Object.keys(this.user.settings.chartSettings.dataTypeSettings).filter((dataTypeSettingKey) => {
       return this.user.settings.chartSettings.dataTypeSettings[dataTypeSettingKey].enabled === true;
@@ -389,13 +402,13 @@ export class UserSettingsComponent implements OnChanges {
           exportToCSVSettings: this.user.settings.exportToCSVSettings
         }
       });
-      this.snackBar.open('User updated', null, {
+      this.snackBar.open('User updated', undefined, {
         duration: 2000,
       });
       this.analyticsService.logEvent('user_settings_update');
     } catch (e) {
 
-      this.snackBar.open('Could not update user', null, {
+      this.snackBar.open('Could not update user', undefined, {
         duration: 2000,
       });
       this.logger.error(e);
@@ -441,7 +454,7 @@ export class UserSettingsComponent implements OnChanges {
         this.analyticsService.logEvent('user_delete', {});
         await this.authService.signOut();
         await this.router.navigate(['/']);
-        this.snackBar.open('Account deleted! You are now logged out.', null, {
+        this.snackBar.open('Account deleted! You are now logged out.', undefined, {
           duration: 5000,
         });
         localStorage.clear();

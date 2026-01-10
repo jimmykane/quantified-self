@@ -9,6 +9,7 @@ import { firstValueFrom } from 'rxjs';
 const mockListUsers = vi.fn();
 const mockGetQueueStats = vi.fn();
 const mockGetUserCount = vi.fn();
+const mockImpersonateUser = vi.fn();
 
 // Mock the Angular Fire Functions
 vi.mock('@angular/fire/functions', () => ({
@@ -17,6 +18,7 @@ vi.mock('@angular/fire/functions', () => ({
         if (name === environment.functions.listUsers) return mockListUsers;
         if (name === environment.functions.getQueueStats) return mockGetQueueStats;
         if (name === environment.functions.getUserCount) return mockGetUserCount;
+        if (name === environment.functions.impersonateUser) return mockImpersonateUser;
         return vi.fn();
     })
 }));
@@ -51,7 +53,10 @@ describe('AdminService', () => {
         // Clear mock calls
         mockListUsers.mockClear();
         mockGetQueueStats.mockClear();
+        mockListUsers.mockClear();
+        mockGetQueueStats.mockClear();
         mockGetUserCount.mockClear();
+        mockImpersonateUser.mockClear();
     });
 
     it('should be created', () => {
@@ -76,7 +81,7 @@ describe('AdminService', () => {
         const mockStats = { pending: 5, succeeded: 10, failed: 2, providers: [] };
         mockGetQueueStats.mockReturnValue(Promise.resolve({ data: mockStats }));
 
-        const stats$ = service.getQueueStatsDirect();
+        const stats$ = service.getQueueStats();
         const stats = await firstValueFrom(stats$);
 
         expect(mockGetQueueStats).toHaveBeenCalled();
@@ -92,5 +97,19 @@ describe('AdminService', () => {
 
         expect(mockGetUserCount).toHaveBeenCalled();
         expect(stats).toEqual(mockData);
+        expect(mockGetUserCount).toHaveBeenCalled();
+        expect(stats).toEqual(mockData);
+    });
+
+    it('should call impersonateUser Cloud Function and return token', async () => {
+        const mockResponse = { token: 'custom-token-123' };
+        mockImpersonateUser.mockReturnValue(Promise.resolve({ data: mockResponse }));
+        const uid = 'target-user-uid';
+
+        const result$ = service.impersonateUser(uid);
+        const result = await firstValueFrom(result$);
+
+        expect(mockImpersonateUser).toHaveBeenCalledWith({ uid });
+        expect(result).toEqual(mockResponse);
     });
 });

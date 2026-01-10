@@ -74,6 +74,24 @@ export interface QueueStats {
     };
 }
 
+export interface FinancialStats {
+    revenue: {
+        total: number; // in cents
+        currency: string;
+        invoiceCount: number;
+    };
+    cost: {
+        billingAccountId: string | null;
+        projectId: string;
+        reportUrl: string | null;
+        currency: string;
+        total: number | null;
+        lastUpdated?: string;
+        budget: { amount: number; currency: string } | null;
+        advice?: string;
+    };
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -86,7 +104,7 @@ export class AdminService {
         environment.functions.listUsers
     );
 
-    private getQueueStatsFn = httpsCallableFromURL<void, QueueStats>(
+    private getQueueStatsFn = httpsCallableFromURL<{ includeAnalysis?: boolean }, QueueStats>(
         this.functions,
         environment.functions.getQueueStats
     );
@@ -96,6 +114,11 @@ export class AdminService {
     private getUserCountFn = httpsCallableFromURL<void, { count: number; total: number; pro: number; basic: number; free: number; providers: Record<string, number> }>(
         this.functions,
         environment.functions.getUserCount
+    );
+
+    private getFinancialStatsFn = httpsCallableFromURL<void, FinancialStats>(
+        this.functions,
+        environment.functions.getFinancialStats
     );
 
     getUsers(params: ListUsersParams = {}): Observable<ListUsersResponse> {
@@ -110,16 +133,37 @@ export class AdminService {
         );
     }
 
-    getQueueStats(): Observable<QueueStats> {
-        return from(this.getQueueStatsFn()).pipe(
+    getQueueStats(includeAnalysis = true): Observable<QueueStats> {
+        return from(this.getQueueStatsFn({ includeAnalysis })).pipe(
             map(result => result.data)
         );
     }
 
-    getQueueStatsDirect(): Observable<QueueStats> {
-        // Poll every 10 seconds for "hot" updates
-        return timer(0, 10000).pipe(
-            switchMap(() => from(this.getQueueStatsFn())),
+    getQueueStatsDirect(includeAnalysis = false): Observable<QueueStats> {
+        const now = new Date();
+        const currentMinutes = now.getMinutes();
+
+        // Target: 11th minute of the hour
+        const targetMinute = 11;
+
+        const nextTarget = new Date(now);
+        nextTarget.setSeconds(0);
+        nextTarget.setMilliseconds(0);
+
+        if (currentMinutes < targetMinute) {
+            // Example: It's 10:05. Target 10:11.
+            nextTarget.setMinutes(targetMinute);
+        } else {
+            // Example: It's 10:15. Target 11:11.
+            nextTarget.setHours(now.getHours() + 1);
+            nextTarget.setMinutes(targetMinute);
+        }
+
+        const initialDelay = nextTarget.getTime() - now.getTime();
+        const period = 3600000; // 1 hour
+
+        return timer(initialDelay, period).pipe(
+            switchMap(() => from(this.getQueueStatsFn({ includeAnalysis }))),
             map(result => result.data)
         );
     }
@@ -134,6 +178,12 @@ export class AdminService {
                 free: result.data.free ?? 0,
                 providers: result.data.providers || {}
             }))
+        );
+    }
+
+    getFinancialStats(): Observable<FinancialStats> {
+        return from(this.getFinancialStatsFn()).pipe(
+            map(result => result.data)
         );
     }
 
@@ -152,6 +202,11 @@ export class AdminService {
         }
     >(this.functions, environment.functions.getMaintenanceStatus);
 
+    private impersonateUserFn = httpsCallableFromURL<
+        { uid: string },
+        { token: string }
+    >(this.functions, environment.functions.impersonateUser);
+
     setMaintenanceMode(enabled: boolean, message: string, env: 'prod' | 'beta' | 'dev'): Observable<{ success: boolean; enabled: boolean; message: string; env: 'prod' | 'beta' | 'dev' }> {
         return from(this.setMaintenanceModeFn({ enabled, message, env })).pipe(
             map(result => result.data)
@@ -164,6 +219,12 @@ export class AdminService {
         dev: { enabled: boolean; message: string; updatedAt?: unknown; updatedBy?: string };
     }> {
         return from(this.getMaintenanceStatusFn()).pipe(
+            map(result => result.data)
+        );
+    }
+
+    impersonateUser(uid: string): Observable<{ token: string }> {
+        return from(this.impersonateUserFn({ uid })).pipe(
             map(result => result.data)
         );
     }

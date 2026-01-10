@@ -10,7 +10,6 @@ import { User } from '@sports-alliance/sports-lib';
 import { EventUtilities } from '@sports-alliance/sports-lib';
 import { take } from 'rxjs/operators';
 import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { DataDistance } from '@sports-alliance/sports-lib';
 import { ActivityUtilities } from '@sports-alliance/sports-lib';
 
@@ -34,7 +33,6 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
     private changeDetectorRef: ChangeDetectorRef,
     private router: Router,
     private snackBar: MatSnackBar,
-    private deleteConfirmationBottomSheet: MatBottomSheet,
     public dialog: MatDialog) {
   }
 
@@ -64,7 +62,7 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
   }
 
   async reGenerateStatistics() {
-    this.snackBar.open('Re-calculating activity statistics', null, {
+    this.snackBar.open('Re-calculating activity statistics', undefined, {
       duration: 2000,
     });
     // To use this component we need the full hydrated object and we might not have it
@@ -79,15 +77,15 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
     ActivityUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
     EventUtilities.reGenerateStatsForEvent(this.event);
     await this.eventService.writeAllEventData(this.user, this.event);
-    this.snackBar.open('Activity and event statistics have been recalculated', null, {
+    this.snackBar.open('Activity and event statistics have been recalculated', undefined, {
       duration: 2000,
     });
     this.changeDetectorRef.detectChanges();
   }
 
   async deleteActivity() {
-    const deleteConfirmationBottomSheet = this.deleteConfirmationBottomSheet.open(DeleteConfirmationComponent);
-    this.deleteConfirmationSubscription = deleteConfirmationBottomSheet.afterDismissed().subscribe(async (result) => {
+    const dialogRef = this.dialog.open(DeleteConfirmationComponent);
+    this.deleteConfirmationSubscription = dialogRef.afterClosed().subscribe(async (result) => {
       if (!result) {
         return;
       }
@@ -95,10 +93,14 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
       await this.eventService.deleteAllActivityData(this.user, this.event.getID(), this.activity.getID());
       EventUtilities.reGenerateStatsForEvent(this.event);
       await this.eventService.writeAllEventData(this.user, this.event);
-      this.snackBar.open('Activity deleted', null, {
+      this.snackBar.open('Activity deleted', undefined, {
         duration: 2000,
       });
     });
+  }
+
+  cropActivity() {
+    // @todo: Implement crop activity
   }
 
   ngOnDestroy(): void {

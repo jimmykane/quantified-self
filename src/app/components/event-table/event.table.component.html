@@ -63,8 +63,7 @@
           <app-data-type-icon [dataType]="column"></app-data-type-icon>
         </th>
         }
-        <td mat-cell matRipple *matCellDef="let row"
-          (click)="(column === 'Checkbox' ? ($event.preventDefault() || $event.stopPropagation() || checkBoxClick(row)) : false)">
+        <td mat-cell matRipple *matCellDef="let row" (click)="onCellClick($event, row, column)">
           @if (column === 'Checkbox') {
           <mat-checkbox (click)="$event.stopPropagation()" (change)="$event ? checkBoxClick(row) : null"
             [checked]="selection.isSelected(row)">
@@ -73,7 +72,8 @@
           @if (column === 'Actions') {
           <span>
             @if (user) {
-            <app-event-actions [user]="user" [event]="row.Event" [showDownloadOriginal]="true"></app-event-actions>
+            <app-event-actions [user]="user" [event]="$any(row.Event)"
+              [showDownloadOriginal]="true"></app-event-actions>
             }
           </span>
           }

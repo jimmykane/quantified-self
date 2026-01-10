@@ -1,5 +1,6 @@
 import { inject, Injectable, Injector, OnDestroy, runInInjectionContext } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib';
+import { ActivityParsingOptions } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, of, zip } from 'rxjs';
 import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, doc, docData, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, CollectionReference, getCountFromServer } from '@angular/fire/firestore';
@@ -37,6 +38,9 @@ import { USAGE_LIMITS } from '../../../functions/src/shared/limits';
 import { AppEventInterface } from '../../../functions/src/shared/app-event.interface'; // Import Shared Interface
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import { LoggerService } from './logger.service';
+import { AppFileService } from './app.file.service';
+import { BrowserCompatibilityService } from './browser.compatibility.service';
+
 
 @Injectable({
   providedIn: 'root',
@@ -46,11 +50,12 @@ export class AppEventService implements OnDestroy {
   private firestore = inject(Firestore);
   private storage = inject(Storage);
   private injector = inject(Injector);
+  private fileService = inject(AppFileService);
+  private logger = inject(LoggerService);
   private static reportedUnknownTypes = new Set<string>();
 
   constructor(
-    private windowService: AppWindowService,
-    private logger: LoggerService) {
+    private windowService: AppWindowService) {
   }
 
   public getEventAndActivities(user: User, eventID: string): Observable<AppEventInterface> {
@@ -303,13 +308,45 @@ export class AppEventService implements OnDestroy {
       }
     }
 
+    // 3. Process and Compress Original Files if needed
+    if (originalFiles) {
+      const files = Array.isArray(originalFiles) ? originalFiles : [originalFiles];
+      const textExtensions = ['gpx', 'tcx', 'json'];
+      for (const file of files) {
+        // Normalize extension: strip .gz if present to check if it's a text-based file
+        const extension = file.extension.toLowerCase();
+        const baseExtension = extension.endsWith('.gz') ? extension.slice(0, -3) : (extension === 'gz' ? '' : extension);
+
+        if (textExtensions.includes(baseExtension)) {
+          try {
+            // Check if already compressed to avoid double compression
+            const isBinary = file.data instanceof ArrayBuffer || file.data instanceof Uint8Array || file.data instanceof Blob;
+            let isAlreadyCompressed = false;
+            if (isBinary) {
+              const buffer = file.data instanceof Blob ? await file.data.arrayBuffer() : (file.data instanceof Uint8Array ? file.data.buffer : file.data);
+              const bytes = new Uint8Array(buffer as ArrayBuffer);
+              isAlreadyCompressed = bytes.length > 2 && bytes[0] === 0x1F && bytes[1] === 0x8B;
+            }
+
+            if (!isAlreadyCompressed) {
+              this.logger.log(`[AppEventService] Compressing ${baseExtension} file`);
+              if (!this.injector.get(BrowserCompatibilityService).checkCompressionSupport()) {
+                this.logger.warn(`[AppEventService] Compression skipped: unsupported browser`);
+                continue;
+              }
+              const stream = new Response(file.data as any).body.pipeThrough(new CompressionStream('gzip'));
+              file.data = await new Response(stream).arrayBuffer();
+            }
+            file.extension = `${baseExtension}.gz`; // Ensure it always ends with .gz
+          } catch (e) {
+            this.logger.error(`[AppEventService] Compression failed for file, uploading uncompressed`, e);
+          }
+        }
+      }
+    }
+
     const adapter: FirestoreAdapter = {
       setDoc: (path: string[], data: any) => {
-        // Construct the full path from the array parts
-        // The first part is 'users', then uid, etc.
-        // path example: ['users', userID, 'events', eventID]
-        // collection(firestore, path[0], path[1], ...) seems wrong if it mixes coll/doc
-        // doc() takes (firestore, path...)
         return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, ...path as [string, ...string[]]), data));
       },
       createBlob: (data: Uint8Array) => {
@@ -359,6 +396,13 @@ export class AppEventService implements OnDestroy {
     return runInInjectionContext(this.injector, () => updateDoc(doc(this.firestore, 'users', user.uid, 'events', eventID), propertiesToUpdate));
   }
 
+  /**
+   * Deletes an event document from Firestore.
+   * 
+   * Note: Storage cleanup (original files) and linked activity deletion
+   * are handled by the `cleanupEventFile` Cloud Function which triggers
+   * on document deletion. See: functions/src/events/cleanup.ts
+   */
   public async deleteAllEventData(user: User, eventID: string): Promise<boolean> {
     await runInInjectionContext(this.injector, () => deleteDoc(doc(this.firestore, 'users', user.uid, 'events', eventID)));
     return true;
@@ -545,27 +589,39 @@ export class AppEventService implements OnDestroy {
 
   public async downloadFile(path: string): Promise<ArrayBuffer> {
     const fileRef = ref(this.storage, path);
-    return getBytes(fileRef);
+    const buffer = await getBytes(fileRef);
+    return this.fileService.decompressIfNeeded(buffer, path);
+  }
+
+  private async decompressIfNeeded(buffer: ArrayBuffer, path: string): Promise<ArrayBuffer> {
+    // Deprecated in favor of fileService.decompressIfNeeded, but kept for internal service stability if any call remains
+    return this.fileService.decompressIfNeeded(buffer, path);
   }
 
   private async fetchAndParseOneFile(fileMeta: { path: string, bucket?: string }, skipEnrichment: boolean = false): Promise<EventInterface> {
     try {
-      const fileRef = ref(this.storage, fileMeta.path);
-      const arrayBuffer = await getBytes(fileRef);
+      const arrayBuffer = await this.downloadFile(fileMeta.path);
 
       const parts = fileMeta.path.split('.');
-      const extension = parts[parts.length - 1].toLowerCase();
+      let extension = parts.pop()?.toLowerCase();
+      if (extension === 'gz') {
+        extension = parts.pop()?.toLowerCase();
+      }
 
       let newEvent: EventInterface;
 
+      const options = new ActivityParsingOptions({
+        generateUnitStreams: false
+      });
+
       if (extension === 'fit') {
-        newEvent = await EventImporterFIT.getFromArrayBuffer(arrayBuffer);
+        newEvent = await EventImporterFIT.getFromArrayBuffer(arrayBuffer, options);
       } else if (extension === 'gpx') {
         const text = new TextDecoder().decode(arrayBuffer);
-        newEvent = await EventImporterGPX.getFromString(text);
+        newEvent = await EventImporterGPX.getFromString(text, options);
       } else if (extension === 'tcx') {
         const text = new TextDecoder().decode(arrayBuffer);
-        newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(text, 'application/xml'));
+        newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(text, 'application/xml'), options);
       } else if (extension === 'json') {
         const text = new TextDecoder().decode(arrayBuffer);
         const json = JSON.parse(text);

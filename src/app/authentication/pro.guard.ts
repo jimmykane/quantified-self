@@ -33,7 +33,7 @@ class PermissionsService {
 
             const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
             const stripeRole = (user as any).stripeRole;
-            const hasPaidAccess = stripeRole === 'pro' || stripeRole === 'basic' || (user as any).isPro === true;
+            const hasPaidAccess = AppUserService.hasPaidAccessUser(user, false);
 
             this.logger.log('[ProGuard] Status:', { termsAccepted, hasSubscribedOnce, stripeRole, hasPaidAccess });
 

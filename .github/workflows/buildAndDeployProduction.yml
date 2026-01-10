@@ -5,7 +5,11 @@ on:
     types: [published]
 
 jobs:
-  build:
+  test:
+    uses: ./.github/workflows/_run-tests.yml
+
+  deploy:
+    needs: test
     runs-on: ubuntu-latest
 
     steps:
@@ -15,7 +19,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Install Firebase Tools
         run: npm install -g firebase-tools
@@ -24,27 +27,17 @@ jobs:
         run: |
           curl "https://firebasestorage.googleapis.com/v0/b/quantified-self-io.appspot.com/o/assets%2Flicenses.json?alt=media&token=470a21d4-571d-432d-a6f6-95df7a24de33" --create-dirs -o licenses.json
 
-      - name: Install and test functions
+      - name: Build functions
         run: |
           cd functions
           npm ci
-          npm run test
           npm run build
           cd ..
 
-
-
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-
-      - name: Install, test and build
+      - name: Install, clean and build
         run: |
           npm ci
-          npm run test:rules
-          npm run test
+          npm run clean
           npm run build-production
 
       - name: Create SA key
@@ -64,4 +57,4 @@ jobs:
       - name: Deploy to Firebase
         run: |
           export GOOGLE_APPLICATION_CREDENTIALS="${{ runner.temp }}/firebase_service_account.json"
-          firebase deploy --only hosting:production,functions,firestore,storage,remoteconfig
+          firebase deploy --only hosting:production,functions,firestore,storage

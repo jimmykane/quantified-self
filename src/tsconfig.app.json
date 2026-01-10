@@ -4,11 +4,12 @@
     "outDir": "../out-tsc/app",
     "baseUrl": "",
     "types": [
-      "googlemaps"
+      "google.maps"
     ]
   },
   "angularCompilerOptions": {
-    "preserveWhitespaces": false
+    "preserveWhitespaces": false,
+    "strictTemplates": true
   },
   "files": [
     "main.ts"

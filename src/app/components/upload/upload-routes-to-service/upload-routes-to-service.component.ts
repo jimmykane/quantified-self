@@ -1,18 +1,20 @@
-import { Component, inject, Inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatDialog, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { LoggerService } from '../../../services/logger.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { environment } from '../../../../environments/environment';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpEventType } from '@angular/common/http';
 import { Auth, getIdToken } from '@angular/fire/auth';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { FileInterface } from '../file.interface';
 import { AppProcessingService } from '../../../services/app.processing.service';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import * as Pako from 'pako';
 import { getSize } from '@sports-alliance/sports-lib';
+import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
+
+
 
 @Component({
   selector: 'app-upload-route-to-service',
@@ -24,7 +26,12 @@ import { getSize } from '@sports-alliance/sports-lib';
 export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
   private analyticsService = inject(AppAnalyticsService);
   private auth = inject(Auth);
-  private serviceName: ServiceNames; // Added this line
+  private compatibilityService = inject(BrowserCompatibilityService);
+
+  public data: any = inject(MAT_DIALOG_DATA, { optional: true });
+  public dialogRef = inject(MatDialogRef<UploadRoutesToServiceComponent>, { optional: true });
+
+  private serviceName: ServiceNames = ServiceNames.SuuntoApp;
 
   constructor(
     protected snackBar: MatSnackBar,
@@ -32,12 +39,11 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
     protected processingService: AppProcessingService,
     private http: HttpClient,
     protected router: Router,
-    @Inject(MAT_DIALOG_DATA) public data: any,
-    public dialogRef: MatDialogRef<UploadRoutesToServiceComponent>,
-    logger: LoggerService) {
+    logger: LoggerService
+  ) {
     super(snackBar, dialog, processingService, router, logger);
-    if (data.serviceName) {
-      this.serviceName = data.serviceName;
+    if (this.data?.serviceName) {
+      this.serviceName = this.data.serviceName;
     }
   }
 
@@ -49,33 +55,71 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
   async processAndUploadFile(file: FileInterface) {
     this.analyticsService.logEvent('upload_route_to_service', { service: ServiceNames.SuuntoApp });
     return new Promise((resolve, reject) => {
-      const fileReader = new FileReader;
+      const fileReader = new FileReader();
       fileReader.onload = async () => {
         if (!(typeof fileReader.result === 'string')) {
           reject(`Not a GPX file`)
           return;
         }
-        const idToken = await getIdToken(this.auth.currentUser, true)
+
+        if (!this.auth.currentUser) {
+          reject('User not logged in');
+          return;
+        }
+
+        const idToken = await getIdToken(this.auth.currentUser, true);
+        let compressedBuffer: ArrayBuffer;
+
         try {
-          const compressed = btoa(Pako.gzip(fileReader.result as string, { to: 'string' }));
-          if (getSize(compressed) > 10485760) {
+          // Check for native support
+          if (!this.compatibilityService.checkCompressionSupport()) {
+            reject('Unsupported browser');
+            return;
+          }
+
+          const stream = new Blob([fileReader.result as string]).stream();
+          const compressedStream = stream.pipeThrough(new CompressionStream('gzip'));
+          compressedBuffer = await new Response(compressedStream).arrayBuffer();
+
+          if (compressedBuffer.byteLength > 10485760) {
             throw new Error(`Cannot upload route because the size is greater than 10MB`);
           }
-          await this.http.post(environment.functions.uploadRoute,
-            compressed,
-            {
-              headers:
-                new HttpHeaders({
-                  'Authorization': `Bearer ${idToken} `
-                })
-            }).toPromise();
-        } catch (e) {
+        } catch (e: any) {
           this.logger.error(e);
-          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message} `, 'OK', { duration: 10000 });
+          const errorMessage = e.message || 'Compression failed';
+          this.snackBar.open(`Could not process ${file.filename}.${file.extension}, reason: ${errorMessage} `, 'OK', { duration: 10000 });
           reject(e);
           return;
         }
-        resolve(true);
+
+        this.http.post(environment.functions.uploadRoute,
+          compressedBuffer,
+          {
+            headers:
+              new HttpHeaders({
+                'Authorization': `Bearer ${idToken} `,
+                'Content-Type': 'application/octet-stream'
+              }),
+            reportProgress: true,
+            observe: 'events'
+          }).subscribe({
+            next: (event: any) => {
+              if (event.type === HttpEventType.UploadProgress) {
+                const percentDone = Math.round((100 * event.loaded) / event.total);
+                if (file.jobId) {
+                  this.processingService.updateJob(file.jobId, { progress: percentDone });
+                }
+              } else if (event.type === HttpEventType.Response) {
+                resolve(true);
+              }
+            },
+            error: (e: any) => {
+              this.logger.error(e);
+              const errorMessage = e.error?.message || e.error || e.message;
+              this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${errorMessage} `, 'OK', { duration: 10000 });
+              reject(e);
+            }
+          });
       }
 
       // Read it depending on the extension

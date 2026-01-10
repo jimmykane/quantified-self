@@ -2,6 +2,7 @@ mat-icon {
   vertical-align: middle;
 }
 
+
 .big {
   width: auto;
   /* Fallback */
@@ -10,40 +11,134 @@ mat-icon {
 
 form {
   position: relative;
-  height: 100%;
+  /* height: 100%;  -- Removed to let content dictate height naturally */
+  /* padding: 8px 0; -- Removed to reduce vertical height, parent handles spacing */
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
+/* Ensure shade doesn't participate in flex flow */
+app-shade {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  pointer-events: none;
+  /* Let clicks pass through if inactive, or handle in component */
+}
+
+/* Ensure Search Button aligns well */
 .search-button {
   min-height: 48px;
-  border: 0;
+  /* border: 0; -- Default material button has no border usually, keeping safety if needed but prefer standard */
 }
 
-mat-button-toggle-group {
-  margin-top: 0.5em;
-  margin-right: 0.5em;
-}
-
+/* Container for the date range toggles */
 .button-groups {
-  height: 100%;
   display: flex;
   align-items: center;
-  vertical-align: middle;
+  justify-content: center;
   flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 0;
 }
 
-/*::ng-deep .mat-option:first-child .mat-pseudo-checkbox{ display: none; }*/
+/* Premium Segmented Buttons Style */
+mat-button-toggle-group {
+  border: 1px solid var(--mat-app-outline-variant) !important;
+  background: var(--mat-app-surface-container-low) !important;
+  border-radius: 16px !important;
+  padding: 4px !important;
+  overflow: hidden;
+  height: auto !important;
+  gap: 4px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+mat-button-toggle {
+  border: none !important;
+  border-radius: 12px !important;
+  background: transparent !important;
+  color: var(--mat-app-on-surface-variant) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  min-width: 80px;
+}
+
+/* Hide the native Material selection indicator focus ring */
+::ng-deep .mat-button-toggle-focus-overlay {
+  display: none !important;
+}
+
+/* Reactive Hover State */
+mat-button-toggle:hover:not(.mat-button-toggle-checked) {
+  background: rgba(var(--mat-sys-primary-rgb), 0.08) !important;
+  color: var(--mat-sys-primary) !important;
+}
+
+/* Premium Active State */
+mat-button-toggle.mat-button-toggle-checked {
+  background: var(--mat-sys-primary) !important;
+  color: var(--mat-sys-on-primary) !important;
+  box-shadow: 0 4px 12px rgba(var(--mat-sys-primary-rgb), 0.3) !important;
+  transform: scale(1.02);
+  /* Subtle pop for the active item */
+}
+
+/* Haptic-like Reactive Click */
+mat-button-toggle:active {
+  transform: scale(0.95) !important;
+  transition: transform 0.1s ease !important;
+}
+
+/* Ensure label content is centered and clean */
+::ng-deep .mat-button-toggle-label-content {
+  line-height: 36px !important;
+  padding: 0 16px !important;
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+}
 
 .filters-row {
-  align-items: baseline;
-  gap: 1em;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
-/* Mobile: Ensure filters stay on one row */
+/* Tablet: Reduce gap and padding to prevent overflow */
+@media (max-width: 959px) {
+  .button-groups {
+    gap: 12px;
+  }
+
+  mat-button-toggle-group {
+    padding: 3px !important;
+    gap: 3px;
+  }
+}
+
+/* Mobile: Ensure filters stay on one row or wrap gracefully */
 @media (max-width: 599.98px) {
   .filters-row {
     flex-direction: column;
     align-items: stretch;
-    gap: 0.5em;
+  }
+
+  .button-groups {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  mat-button-toggle-group {
+    display: flex;
+  }
+
+  mat-button-toggle {
+    flex: 1;
   }
 
   .big {

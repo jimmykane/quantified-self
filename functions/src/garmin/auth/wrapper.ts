@@ -179,11 +179,39 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
     return;
   }
 
+  const garminData = JSON.parse(result);
+  const garminUserID = garminData.userId;
+
+  // Check for duplicates (Other users connected to this same Garmin ID)
+  try {
+    const duplicateQuery = await admin.firestore().collection(GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME)
+      .where('userID', '==', garminUserID)
+      .get();
+
+    const batch = admin.firestore().batch();
+    let duplicatesFound = false;
+
+    duplicateQuery.docs.forEach(doc => {
+      if (doc.id !== userID) {
+        logger.warn(`Found duplicate Garmin account ${garminUserID} linked to user ${doc.id}. Deleting it.`);
+        batch.delete(doc.ref);
+        duplicatesFound = true;
+      }
+    });
+
+    if (duplicatesFound) {
+      await batch.commit();
+      logger.info(`Removed duplicate connections for Garmin ID ${garminUserID}`);
+    }
+  } catch (e: any) {
+    logger.error('Failed to clean up duplicate Garmin connections', e);
+  }
+
   await admin.firestore().collection(GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME).doc(userID).set({
     accessToken: urlParams.get('oauth_token'),
     accessTokenSecret: urlParams.get('oauth_token_secret'),
     dateCreated: (new Date()).getTime(),
-    userID: JSON.parse(result).userId,
+    userID: garminUserID,
   });
 
   logger.info(`User ${userID} successfully connected to Garmin API`);

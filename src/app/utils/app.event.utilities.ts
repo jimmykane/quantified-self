@@ -1,7 +1,22 @@
 
-import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface, EventInterface, EventUtilities } from '@sports-alliance/sports-lib';
 
 export class AppEventUtilities {
+
+    /**
+     * Merges multiple events into one with a guaranteed unique ID.
+     * This prevents collision with source events when the deterministic ID generator
+     * would produce the same ID (based on startDate bucket).
+     * 
+     * @param events Array of events to merge
+     * @param idGenerator Function that returns a unique ID (e.g., Firestore doc ID generator)
+     * @returns Merged event with unique ID
+     */
+    static mergeEventsWithId(events: EventInterface[], idGenerator: () => string): EventInterface {
+        const merged = EventUtilities.mergeEvents(events);
+        merged.setID(idGenerator());
+        return merged;
+    }
 
     /**
      * Enriches an activity with missing streams if possible

@@ -1,16 +1,27 @@
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { CallableRequest } from 'firebase-functions/v2/https';
+
 const {
     mockListUsers,
+    mockCreateCustomToken,
     mockAuth,
     mockOnCall,
     mockCollection,
     mockFirestore,
-    mockRemoteConfig
+    mockRemoteConfig,
+    mockStripeClient,
+    mockGetProjectBillingInfo,
+    mockGetBillingAccount,
+    mockListBudgets,
+    mockGetTables,
+    mockBigQueryQuery
 } = vi.hoisted(() => {
     const mockListUsers = vi.fn();
-    const mockAuth = { listUsers: mockListUsers };
+    const mockCreateCustomToken = vi.fn();
+    const mockAuth = { listUsers: mockListUsers, createCustomToken: mockCreateCustomToken };
     const mockOnCall = vi.fn((_options: unknown, handler: unknown) => handler);
 
-    const mockCollection = vi.fn();
+    const mockCollection = vi.fn() as any;
     const mockFirestore = vi.fn(() => ({
         collection: mockCollection,
         collectionGroup: mockCollection
@@ -22,17 +33,63 @@ const {
         publishTemplate: vi.fn()
     }));
 
+    const mockStripeClient = {
+        invoices: {
+            list: vi.fn()
+        }
+    };
+
+    const mockGetProjectBillingInfo = vi.fn();
+    const mockGetBillingAccount = vi.fn();
+    const mockListBudgets = vi.fn();
+    const mockGetTables = vi.fn();
+    const mockBigQueryQuery = vi.fn();
+
     return {
         mockListUsers,
+        mockCreateCustomToken,
         mockAuth,
         mockOnCall,
         mockCollection,
         mockFirestore,
-        mockRemoteConfig
+        mockRemoteConfig,
+        mockStripeClient,
+        mockGetProjectBillingInfo,
+        mockGetBillingAccount,
+        mockListBudgets,
+        mockGetTables,
+        mockBigQueryQuery
     };
 });
 
 mockAuth.listUsers = mockListUsers;
+mockAuth.createCustomToken = mockCreateCustomToken;
+
+vi.mock('../stripe/client', () => ({
+    getStripe: vi.fn().mockResolvedValue(mockStripeClient)
+}));
+
+vi.mock('@google-cloud/billing', () => ({
+    CloudBillingClient: vi.fn(() => ({
+        getProjectBillingInfo: mockGetProjectBillingInfo,
+        getBillingAccount: mockGetBillingAccount
+    }))
+}));
+
+vi.mock('@google-cloud/billing-budgets', () => ({
+    BudgetServiceClient: vi.fn(() => ({
+        listBudgets: mockListBudgets
+    }))
+}));
+
+vi.mock('@google-cloud/bigquery', () => ({
+    BigQuery: vi.fn(() => ({
+        dataset: vi.fn(() => ({
+            getTables: mockGetTables
+        })),
+        query: mockBigQueryQuery
+    }))
+}));
 
 vi.mock('firebase-admin', () => {
     const firestoreMock: any = mockFirestore;
@@ -64,11 +121,15 @@ vi.mock('../utils', () => ({
     ALLOWED_CORS_ORIGINS: ['*']
 }));
 
-import { listUsers, getQueueStats, getUserCount, getMaintenanceStatus, setMaintenanceMode } from './admin';
+import { listUsers, getQueueStats, getUserCount, getMaintenanceStatus, setMaintenanceMode, impersonateUser, getFinancialStats } from './admin';
 
 describe('listUsers Cloud Function', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+
+        // Default BigQuery mocks
+        mockGetTables.mockResolvedValue([[]]);
+        mockBigQueryQuery.mockResolvedValue([[]]);
 
         // Default: Return empty user list (single page)
         mockListUsers.mockResolvedValue({ users: [], pageToken: undefined });
@@ -77,7 +138,8 @@ describe('listUsers Cloud Function', () => {
         const emptyGet = vi.fn().mockResolvedValue({ empty: true, docs: [] });
         const emptyDocGet = vi.fn().mockResolvedValue({ exists: false, data: () => ({}) });
 
-        mockCollection.mockReturnValue({
+        // Use mockImplementation instead of mockReturnValue to avoid "sticky" values
+        mockCollection.mockImplementation(() => ({
             doc: vi.fn().mockReturnValue({
                 get: emptyDocGet,
                 set: vi.fn().mockResolvedValue({}),
@@ -95,7 +157,11 @@ describe('listUsers Cloud Function', () => {
                     limit: vi.fn().mockReturnValue({ get: emptyGet })
                 })
             })
-        });
+        }));
+    });
+
+    afterEach(() => {
+        mockCollection.mockReset();
     });
 
     it('should throw "unauthenticated" if called without auth', async () => {
@@ -219,6 +285,48 @@ describe('listUsers Cloud Function', () => {
     });
 });
 
+describe('impersonateUser Cloud Function', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreateCustomToken.mockResolvedValue('mock-custom-token');
+    });
+
+    it('should throw "unauthenticated" if called without auth', async () => {
+        const request = { auth: null } as unknown as CallableRequest<any>;
+        await expect((impersonateUser as any)(request)).rejects.toThrow('The function must be called while authenticated.');
+    });
+
+    it('should throw "permission-denied" if user is not an admin', async () => {
+        const request = {
+            auth: { uid: 'user1', token: { admin: false } }
+        } as unknown as CallableRequest<any>;
+        await expect((impersonateUser as any)(request)).rejects.toThrow('Only admins can call this function.');
+    });
+
+    it('should create a custom token with impersonatedBy claim', async () => {
+        const targetUid = 'target-user-uid';
+        const adminUid = 'admin-uid';
+        const request = {
+            data: { uid: targetUid },
+            auth: { uid: adminUid, token: { admin: true } }
+        } as unknown as CallableRequest<any>;
+
+        const result: any = await (impersonateUser as any)(request);
+
+        expect(result.token).toBe('mock-custom-token');
+        expect(mockCreateCustomToken).toHaveBeenCalledWith(targetUid, { impersonatedBy: adminUid });
+    });
+
+    it('should throw if target uid is missing', async () => {
+        const request = {
+            data: {},
+            auth: { uid: 'admin-uid', token: { admin: true } }
+        } as unknown as CallableRequest<any>;
+
+        await expect((impersonateUser as any)(request)).rejects.toThrow();
+    });
+});
+
 describe('getQueueStats Cloud Function', () => {
     let request: any;
 
@@ -283,6 +391,7 @@ describe('getQueueStats Cloud Function', () => {
             return mockQuery;
         });
 
+        request.data = { includeAnalysis: true };
         const result = await (getQueueStats as any)(request);
 
         // Validation of Advanced Stats
@@ -309,6 +418,15 @@ describe('getQueueStats Cloud Function', () => {
             { provider: 'suuntoAppWorkoutQueue', count: 1 },
             { provider: 'COROSAPIWorkoutQueue', count: 1 }
         ]));
+    });
+
+    it('should return only basic statistics when includeAnalysis is false', async () => {
+        request.data = { includeAnalysis: false };
+        const result = await (getQueueStats as any)(request);
+
+        expect(result.pending).toBeDefined();
+        expect(result.dlq).toBeUndefined(); // Should be skipped
+        expect(result.advanced.topErrors).toHaveLength(0); // Should be empty
     });
 
     it('should require authentication', async () => {
@@ -533,3 +651,184 @@ describe('setMaintenanceMode Cloud Function', () => {
         expect(template.parameters['maintenance_mode']).toBeUndefined();
     });
 });
+
+describe('getFinancialStats Cloud Function', () => {
+    let request: any;
+    const productsDocs: any[] = [];
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCollection.mockReset();
+
+        // Reset BigQuery mocks
+        mockGetTables.mockResolvedValue([[]]);
+        mockBigQueryQuery.mockResolvedValue([[]]);
+
+        request = {
+            data: { env: 'prod' },
+            auth: {
+                uid: 'admin-uid',
+                token: { admin: true }
+            }
+        };
+        process.env.GCLOUD_PROJECT = 'test-project';
+        productsDocs.length = 0;
+
+        // Base mock for firestore
+        mockCollection.mockImplementation((name) => {
+            if (name === 'products') {
+                return {
+                    get: vi.fn().mockImplementation(async () => ({ docs: [...productsDocs] })),
+                    doc: vi.fn(),
+                    where: vi.fn(),
+                    add: vi.fn()
+                };
+            }
+            return {
+                get: vi.fn().mockResolvedValue({ docs: [] }),
+                doc: vi.fn(),
+                where: vi.fn(),
+                add: vi.fn()
+            };
+        });
+    });
+
+    it('should throw "unauthenticated" if called without auth', async () => {
+        request.auth = null;
+        await expect((getFinancialStats as any)(request)).rejects.toThrow('The function must be called while authenticated.');
+    });
+
+    it('should throw "permission-denied" if user is not an admin', async () => {
+        request.auth = { uid: 'user1', token: { admin: false } };
+        await expect((getFinancialStats as any)(request)).rejects.toThrow('Only admins can call this function.');
+    });
+
+    it('should return combined financial stats (Revenue + GCP Cost Link)', async () => {
+        // Mock Firestore products
+        productsDocs.push(
+            { id: 'prod_valid_1' },
+            { id: 'prod_valid_2' }
+        );
+
+        // Mock Stripe response
+        mockStripeClient.invoices.list.mockResolvedValue({
+            has_more: false,
+            data: [
+                { id: 'inv_1', currency: 'usd', amount_paid: 2000, tax: 200, lines: { data: [{ amount: 1800, price: { product: 'prod_valid_1' } }] } },
+                { id: 'inv_2', currency: 'usd', amount_paid: 3000, tax: null, lines: { data: [{ amount: 3000, price: { product: 'prod_valid_2' } }] } },
+                { id: 'inv_3', currency: 'usd', amount_paid: 5000, tax: null, lines: { data: [{ amount: 5000, price: { product: 'prod_invalid' } }] } }
+            ]
+        });
+
+        // Mock GCP Billing response
+        mockGetProjectBillingInfo.mockResolvedValue([{
+            billingAccountName: 'billingAccounts/000000-000000-000000'
+        }]);
+        mockGetBillingAccount.mockResolvedValue([{
+            currencyCode: 'EUR'
+        }]);
+        mockListBudgets.mockResolvedValue([[
+            {
+                amount: {
+                    specifiedAmount: {
+                        units: '100',
+                        currencyCode: 'EUR'
+                    }
+                }
+            }
+        ]]);
+
+        const result: any = await (getFinancialStats as any)(request);
+
+        // Verify Revenue (only valid products)
+        expect(result.revenue.total).toBe(4800); // 1800 + 3000
+        expect(result.revenue.invoiceCount).toBe(2);
+        expect(result.revenue.currency).toBe('usd');
+
+        // Verify GCP Cost Details
+        expect(result.cost.currency).toBe('eur');
+        expect(result.cost.budget).toEqual({ amount: 10000, currency: 'eur' });
+
+        // Verify Cost Link
+        expect(result.cost.billingAccountId).toBe('000000-000000-000000');
+        expect(result.cost.reportUrl).toContain('console.cloud.google.com/billing/000000-000000-000000/reports');
+    });
+
+    it('should include lastUpdated when BigQuery returns it', async () => {
+        // Mock BigQuery returning a cost and a timestamp
+        const mockTimestamp = '2026-01-09T10:00:00Z';
+        mockGetTables.mockResolvedValue([[{ id: 'gcp_billing_export_v1_123' }]]);
+        mockBigQueryQuery.mockResolvedValue([[{
+            total_cost: 15.5,
+            last_updated: mockTimestamp,
+            currency: 'USD'
+        }]]);
+
+        const result: any = await (getFinancialStats as any)(request);
+
+        expect(result.cost.total).toBe(1550); // 15.5 * 100
+        expect(result.cost.lastUpdated).toBe(mockTimestamp);
+    });
+
+    it('should handle pagination for Stripe invoices', async () => {
+        productsDocs.push({ id: 'prod_valid_1' });
+
+        mockStripeClient.invoices.list
+            .mockResolvedValueOnce({
+                has_more: true,
+                next_page: 'page2',
+                data: [{ id: 'inv_1', currency: 'eur', amount_paid: 1000, tax: 0, lines: { data: [{ amount: 1000, price: { product: 'prod_valid_1' } }] } }]
+            })
+            .mockResolvedValueOnce({
+                has_more: false,
+                data: [{ id: 'inv_2', currency: 'eur', amount_paid: 2000, tax: 0, lines: { data: [{ amount: 2000, price: { product: 'prod_valid_1' } }] } }]
+            });
+
+        mockGetProjectBillingInfo.mockResolvedValue([{}]);
+
+        const result: any = await (getFinancialStats as any)(request);
+
+        expect(result.revenue.total).toBe(3000);
+        expect(result.revenue.invoiceCount).toBe(2);
+        expect(mockStripeClient.invoices.list).toHaveBeenCalledTimes(2);
+    });
+
+    it('should handle missing GCP permissions gracefully and fallback to revenue currency', async () => {
+        // Mock Firestore products
+        productsDocs.push({ id: 'prod_valid_1' });
+
+        // Mock Stripe response in EUR
+        mockStripeClient.invoices.list.mockResolvedValue({
+            has_more: false,
+            data: [
+                { id: 'inv_1', currency: 'eur', amount_paid: 2000, tax: 0, lines: { data: [{ amount: 2000, price: { product: 'prod_valid_1' } }] } }
+            ]
+        });
+
+        // Mock GCP Billing failing (Permission Denied)
+        mockGetProjectBillingInfo.mockRejectedValue(new Error('Permission Denied'));
+
+        const result: any = await (getFinancialStats as any)(request);
+
+        // Verify Revenue is in EUR
+        expect(result.revenue.currency).toBe('eur');
+        expect(result.revenue.total).toBe(2000);
+
+        // Verify Cost fallback to EUR (project default)
+        expect(result.cost.currency).toBe('eur');
+    });
+    it('should handle missing GCP permissions gracefully', async () => {
+        mockStripeClient.invoices.list.mockResolvedValue({ has_more: false, data: [] });
+
+        // Simulate permission error
+        mockGetProjectBillingInfo.mockRejectedValue(new Error('Permission denied'));
+
+        const result: any = await (getFinancialStats as any)(request);
+
+        // Should still return stats, just with empty cost info
+        expect(result.revenue.total).toBe(0);
+        expect(result.cost.billingAccountId).toBeNull();
+        expect(result.cost.reportUrl).toBeNull();
+    });
+});
+

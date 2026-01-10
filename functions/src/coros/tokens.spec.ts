@@ -1,24 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import * as admin from 'firebase-admin';
 import * as tokens from '../tokens';
 import { refreshCOROSAPIRefreshTokens } from './tokens';
 import { SERVICE_NAME } from './constants';
 
-vi.mock('firebase-admin', () => {
-    const getMock = vi.fn();
-    const limitMock = vi.fn().mockReturnValue({ get: getMock });
-    const whereMock = vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ limit: limitMock }) });
-    const collectionGroupMock = vi.fn().mockReturnValue({ where: whereMock });
-
-    return {
-        firestore: () => ({
-            collectionGroup: collectionGroupMock
-        })
-    };
-});
+// firebase-admin mock removed as it is not used in this test
 
 vi.mock('../tokens', () => ({
-    refreshTokens: vi.fn().mockResolvedValue({})
+    refreshTokens: vi.fn().mockResolvedValue({}),
+    refreshStaleTokens: vi.fn().mockResolvedValue({})
 }));
 
 describe('COROS Token Refresh Scheduler', () => {
@@ -26,21 +15,16 @@ describe('COROS Token Refresh Scheduler', () => {
         vi.clearAllMocks();
     });
 
-    it('should query and refresh COROS tokens', async () => {
-        const firestore = admin.firestore();
-        const mockSnapshot = { size: 5, docs: [] };
-        // Chain: collectionGroup('tokens').where('serviceName', '==', ...).where('dateRefreshed', '<=', ...).limit(50).get()
-        // Our mock is a bit simplified but needs to match the call depth
-        const getMock = vi.fn().mockResolvedValue(mockSnapshot);
-        const limitMock = vi.fn().mockReturnValue({ get: getMock });
-        const where2Mock = vi.fn().mockReturnValue({ limit: limitMock });
-        const where1Mock = vi.fn().mockReturnValue({ where: where2Mock });
-        (firestore.collectionGroup as any).mockReturnValue({ where: where1Mock });
-
-        // Invoke the handler (refreshCOROSAPIRefreshTokens is already the handler due to our global mock)
+    it('should delegate to refreshStaleTokens', async () => {
         await (refreshCOROSAPIRefreshTokens as any)({});
 
-        expect(firestore.collectionGroup).toHaveBeenCalledWith('tokens');
-        expect(tokens.refreshTokens).toHaveBeenCalledWith(mockSnapshot, SERVICE_NAME);
+        expect(tokens.refreshStaleTokens).toHaveBeenCalledTimes(1);
+
+        const expected20DaysAgo = Date.now() - 20 * 24 * 60 * 60 * 1000;
+        // Verify precision
+        const callArgs = (tokens.refreshStaleTokens as any).mock.calls[0];
+        expect(callArgs[0]).toBe(SERVICE_NAME);
+        expect(callArgs[1]).toBeGreaterThan(expected20DaysAgo - 2000);
+        expect(callArgs[1]).toBeLessThan(expected20DaysAgo + 2000);
     });
 });

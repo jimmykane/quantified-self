@@ -12,7 +12,7 @@ import { AppProcessingService } from '../../services/app.processing.service';
 @Directive()
 export abstract class UploadAbstractDirective implements OnInit {
 
-  @Input() user: User;
+  @Input() user!: User;
   @Input() hasProAccess: boolean = false;
   @Input() requiresPro: boolean = false;
   public isUploading = false;
@@ -33,13 +33,13 @@ export abstract class UploadAbstractDirective implements OnInit {
     }
   }
 
-  abstract processAndUploadFile(file: FileInterface);
+  abstract processAndUploadFile(file: FileInterface): Promise<any>;
 
   /**
    * This can be called multiple times as the user drops more files etc
    * @param event
    */
-  async getFiles(event) {
+  async getFiles(event: any) {
     event.stopPropagation();
     event.stopPropagation();
     event.preventDefault();
@@ -56,10 +56,25 @@ export abstract class UploadAbstractDirective implements OnInit {
 
     const rawFiles = [...(event.target.files || event.dataTransfer.files)];
     // Add as local to show totals
-    const filesToProcess = rawFiles.map(file => {
+    const filesToProcess = rawFiles.filter(file => {
+      // 10MB limit
+      if (file.size > 10 * 1024 * 1024) {
+        this.snackBar.open(`File ${file.name} is too large. Maximum size is 10MB.`, 'OK', {
+          duration: 5000,
+        });
+        return false;
+      }
+      return true;
+    }).map(file => {
       const name = file.name;
-      const extension = name.split('.').pop().toLowerCase();
-      const filename = name.split('.').shift();
+      let extension = name.split('.').pop().toLowerCase();
+      let filename = name.split('.').shift();
+      if (extension === 'gz') {
+        const parts = name.split('.');
+        parts.pop(); // remove gz
+        extension = parts.pop().toLowerCase();
+        filename = parts.join('.');
+      }
       const jobId = this.processingService.addJob('upload', `Uploading ${name}...`);
 
       return {
@@ -72,26 +87,37 @@ export abstract class UploadAbstractDirective implements OnInit {
       }
     });
 
+    if (filesToProcess.length === 0 && rawFiles.length > 0) {
+      this.isUploading = false;
+      // Clear the target
+      event.target.value = '';
+      return;
+    }
+
     // Then actually start processing them
     this.isUploading = true;
+    let successfulUploads = 0;
+    let failedUploads = 0;
     try {
       for (const fileItem of filesToProcess) {
         this.processingService.updateJob(fileItem.jobId, { status: 'processing', progress: 0 });
         try {
           await this.processAndUploadFile(fileItem);
           this.processingService.completeJob(fileItem.jobId);
-        } catch (e) {
+          successfulUploads++;
+        } catch (e: any) {
           this.logger.error(e);
           this.processingService.failJob(fileItem.jobId, e.message || 'Upload failed');
+          failedUploads++;
         }
       }
     } finally {
       this.isUploading = false;
     }
 
-    // this.isUploadActive = false;
-    this.snackBar.open('Processed ' + filesToProcess.length + ' files', null, {
-      duration: 2000,
+    const message = `Processed ${filesToProcess.length} files: ${successfulUploads} successful, ${failedUploads} failed`;
+    this.snackBar.open(message, 'OK', {
+      duration: 5000,
     });
 
     // Pass event to removeDragData for cleanup

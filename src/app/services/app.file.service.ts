@@ -1,7 +1,8 @@
-import { Inject, Injectable, LOCALE_ID } from '@angular/core';
+import { Inject, Injectable, LOCALE_ID, inject } from '@angular/core';
 import { saveAs } from 'file-saver';
 import JSZip from 'jszip';
 import { DatePipe } from '@angular/common';
+import { BrowserCompatibilityService } from './browser.compatibility.service';
 
 
 @Injectable({
@@ -9,6 +10,7 @@ import { DatePipe } from '@angular/common';
 })
 export class AppFileService {
   private datePipe: DatePipe;
+  private compatibilityService = inject(BrowserCompatibilityService);
 
   constructor(@Inject(LOCALE_ID) private locale: string) {
     this.datePipe = new DatePipe(this.locale);
@@ -24,7 +26,11 @@ export class AppFileService {
       zip.file(file.fileName, file.data);
     });
 
-    const content = await zip.generateAsync({ type: 'blob' });
+    const content = await zip.generateAsync({
+      type: 'blob',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 6 } // Good balance between speed and compression
+    });
     saveAs(content, zipFileName);
   }
 
@@ -97,6 +103,42 @@ export class AppFileService {
    */
   public getExtensionFromPath(path: string, defaultExt: string = 'fit'): string {
     const parts = path.split('.');
-    return parts.length > 1 ? parts[parts.length - 1] : defaultExt;
+    // If only one part, there's no extension
+    if (parts.length <= 1) {
+      return defaultExt;
+    }
+    let extension = parts.pop()?.toLowerCase();
+    // If extension contains a slash, it's actually a path segment, not an extension
+    if (extension?.includes('/')) {
+      return defaultExt;
+    }
+    if (extension === 'gz' && parts.length > 1) {
+      extension = parts.pop()?.toLowerCase();
+    }
+    return extension || defaultExt;
+  }
+
+  public async decompressIfNeeded(buffer: ArrayBuffer, path?: string): Promise<ArrayBuffer> {
+    const bytes = new Uint8Array(buffer);
+    // Gzip magic number: 0x1F 0x8B
+    // We skip .fit files as a safeguard, as requested by the user, even if they somehow start with these bytes
+    const isFit = path?.toLowerCase().endsWith('.fit');
+    if (!isFit && bytes.length > 2 && bytes[0] === 0x1F && bytes[1] === 0x8B) {
+      try {
+        if (path) {
+          console.log(`[AppFileService] Decompressing file: ${path}`);
+        }
+        if (!this.compatibilityService.checkCompressionSupport()) {
+          console.warn(`[AppFileService] Decompression skipped: unsupported browser`);
+          return buffer;
+        }
+        const stream = new Response(buffer).body.pipeThrough(new DecompressionStream('gzip'));
+        return await new Response(stream).arrayBuffer();
+      } catch (e) {
+        console.error(`[AppFileService] Decompression failed`, e);
+        return buffer;
+      }
+    }
+    return buffer;
   }
 }

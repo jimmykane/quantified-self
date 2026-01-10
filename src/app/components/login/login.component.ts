@@ -124,6 +124,24 @@ export class LoginComponent implements OnInit, OnDestroy {
       }
     });
 
+    // Check for redirect result
+    this.authService.getRedirectResult()
+      .then(async (result) => {
+        if (result) {
+          this.logger.log('Login: Got redirect result', result);
+          await this.redirectOrShowDataPrivacyDialog(result);
+        }
+      })
+      .catch((error) => {
+        this.isLoading = false;
+        if (error.code === 'auth/account-exists-with-different-credential' || error.code === 'auth/credential-already-in-use') {
+          this.handleAccountCollision(error);
+          return;
+        }
+        this.logger.error('Error getting redirect result', error);
+        this.showErrorDialog('Login Failed', error);
+      });
+
     this.isLoading = false;
   }
 

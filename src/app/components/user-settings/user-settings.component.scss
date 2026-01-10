@@ -8,31 +8,100 @@
     max-width: 100% !important;
 }
 
-/* User Profile Header container inherits from global .app-header-card */
+/* User Profile Header container */
+.user-profile-header {
+    border-radius: 16px !important;
+    background: linear-gradient(135deg, rgba(63, 81, 181, 0.08), rgba(63, 81, 181, 0.03)) !important;
+    border: 1px solid rgba(63, 81, 181, 0.1) !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+    cursor: default;
 
-.user-profile-header .name-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 4px;
+    &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12) !important;
+    }
+
+    .header-avatar {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        border: 3px solid rgba(255, 255, 255, 0.9);
+        background-size: cover;
+        background-position: center;
+    }
+
+    .name-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 4px;
+
+        h2 {
+            margin: 0;
+            font-weight: 600;
+        }
+    }
+
+    .pro-badge,
+    .basic-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.65rem;
+        font-weight: 600;
+        color: #fff;
+        padding: 2px 8px;
+        border-radius: 10px;
+        margin-left: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+        mat-icon {
+            font-size: 14px;
+            width: 14px;
+            height: 14px;
+        }
+    }
+
+    .pro-badge {
+        background: linear-gradient(135deg, #FFD700, #FFA000);
+    }
+
+    .basic-badge {
+        background: linear-gradient(135deg, #64B5F6, #1976D2);
+    }
+}
+
+:host-context(.dark-theme) .user-profile-header {
+    background: linear-gradient(135deg, rgba(144, 202, 249, 0.1), rgba(144, 202, 249, 0.03)) !important;
+    border-color: rgba(144, 202, 249, 0.15) !important;
+
+    &:hover {
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+    }
+
+    .header-avatar {
+        border-color: rgba(255, 255, 255, 0.15);
+    }
 }
 
 @media (max-width: 600px) {
-    .user-profile-header .header-content {
-        flex-direction: column;
-        text-align: center;
-        gap: 16px;
-    }
+    .user-profile-header {
+        .header-content {
+            flex-direction: column;
+            text-align: center;
+            gap: 16px;
+        }
 
-    .user-profile-header .name-row {
-        justify-content: center;
-    }
+        .name-row {
+            justify-content: center;
+        }
 
-    .user-profile-header .actions {
-        margin-left: 0;
-        width: 100%;
-        display: flex;
-        justify-content: center;
+        .header-actions {
+            margin-left: 0;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }
     }
 }
 

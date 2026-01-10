@@ -1,0 +1,67 @@
+@use 'breakpoints' as *;
+
+/* ==========================================================================
+   Global Segmented Button Group
+   Standardized styling for sets of toggle buttons (like charts, maps).
+   ========================================================================== */
+.qs-segmented-button-group {
+    border: 1px solid var(--mat-app-outline-variant);
+    border-radius: 20px;
+    overflow: hidden;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    background: transparent;
+
+    @include xsmall {
+        height: auto;
+        min-height: 32px;
+        flex-wrap: wrap;
+        border-radius: 12px;
+    }
+
+    mat-button-toggle {
+        font-size: 0.8rem;
+        background-color: transparent;
+        color: var(--mat-app-on-surface-variant);
+        border-left: 1px solid var(--mat-app-outline-variant);
+        height: 100%;
+        display: flex;
+        align-items: center;
+
+        @include xsmall {
+            border-left: none;
+            border-bottom: 1px solid var(--mat-app-outline-variant);
+            flex: 1 1 auto;
+            min-height: 32px;
+
+            &:last-child {
+                border-bottom: none;
+            }
+        }
+
+        &:first-child {
+            border-left: none;
+        }
+
+        &.mat-button-toggle-checked {
+            background-color: var(--mat-app-secondary-container);
+            color: var(--mat-app-on-secondary-container);
+            font-weight: 500;
+        }
+
+        /* Ensure label content is centered and has padding */
+        ::ng-deep .mat-button-toggle-label-content {
+            padding: 0 12px !important;
+            line-height: normal !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            @include xsmall {
+                padding: 0 8px !important;
+                font-size: 0.75rem;
+            }
+        }
+    }
+}

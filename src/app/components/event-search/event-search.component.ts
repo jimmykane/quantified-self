@@ -9,7 +9,7 @@ import {
   Output,
   SimpleChanges
 } from '@angular/core';
-import { UntypedFormControl, UntypedFormGroup, ValidationErrors, ValidatorFn } from '@angular/forms';
+import { AbstractControl, UntypedFormControl, UntypedFormGroup, ValidationErrors, ValidatorFn } from '@angular/forms';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import { MatButtonToggleChange } from '@angular/material/button-toggle';
@@ -28,11 +28,11 @@ import dayjs from 'dayjs';
 })
 
 export class EventSearchComponent extends LoadingAbstractDirective implements OnChanges, OnInit {
-  @Input() selectedDateRange: DateRanges;
-  @Input() selectedStartDate: Date;
-  @Input() selectedEndDate: Date;
-  @Input() startOfTheWeek: DaysOfTheWeek;
-  @Input() selectedActivityTypes: ActivityTypes[];
+  @Input() selectedDateRange!: DateRanges;
+  @Input() selectedStartDate!: Date;
+  @Input() selectedEndDate!: Date;
+  @Input() startOfTheWeek!: DaysOfTheWeek;
+  @Input() selectedActivityTypes!: ActivityTypes[];
   @Input() showDatePicker = true;
   @Input() showActivityTypePicker = true;
   @Input() dateRangesToShow: DateRanges[] = [
@@ -50,7 +50,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
 
   @Output() searchChange: EventEmitter<Search> = new EventEmitter<Search>();
 
-  public searchFormGroup: UntypedFormGroup;
+  public searchFormGroup!: UntypedFormGroup;
   public dateRanges = DateRanges;
   public currentYear = new Date().getFullYear();
   public activityTypes = ActivityTypesHelper.getActivityTypesAsUniqueArray();
@@ -58,6 +58,14 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
 
   constructor(changeDetector: ChangeDetectorRef) {
     super(changeDetector);
+  }
+
+  get startDateControl(): UntypedFormControl {
+    return this.searchFormGroup.get('startDate') as UntypedFormControl;
+  }
+
+  get endDateControl(): UntypedFormControl {
+    return this.searchFormGroup.get('endDate') as UntypedFormControl;
   }
 
   ngOnInit(): void {
@@ -81,8 +89,8 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     }
     const startDate = this.selectedDateRange === DateRanges.custom ? this.selectedStartDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).startDate;
     const endDate = this.selectedDateRange === DateRanges.custom ? this.selectedEndDate : getDatesForDateRange(this.selectedDateRange, this.startOfTheWeek).endDate;
-    this.searchFormGroup.get('startDate').setValue(startDate);
-    this.searchFormGroup.get('endDate').setValue(endDate);
+    this.startDateControl?.setValue(startDate);
+    this.endDateControl?.setValue(endDate);
   }
 
 
@@ -90,7 +98,8 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     if (!field) {
       return !this.searchFormGroup.valid;
     }
-    return (!this.searchFormGroup.get(field).valid && this.searchFormGroup.get(field).touched);
+    const control = this.searchFormGroup.get(field);
+    return !(control?.valid && control?.touched);
   }
 
   async search() {
@@ -99,21 +108,21 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
       return;
     }
 
-    let startDate: Date = this.searchFormGroup.get('startDate').value;
-    let endDate: Date = this.searchFormGroup.get('endDate').value;
-    if (dayjs.isDayjs(this.searchFormGroup.get('startDate').value)) {
-      startDate = this.searchFormGroup.get('startDate').value.toDate();
+    let startDate: Date = this.startDateControl.value;
+    let endDate: Date = this.endDateControl.value;
+    if (dayjs.isDayjs(startDate)) {
+      startDate = (startDate as any).toDate();
     }
 
-    if (dayjs.isDayjs(this.searchFormGroup.get('endDate').value)) {
-      endDate = this.searchFormGroup.get('endDate').value.toDate();
+    if (dayjs.isDayjs(endDate)) {
+      endDate = (endDate as any).toDate();
     }
 
-    this.selectedStartDate = startDate ? new Date(startDate.setHours(0, 0, 0)) : null;
-    this.selectedEndDate = endDate ? new Date(endDate.setHours(23, 59, 59)) : null;
+    this.selectedStartDate = startDate ? new Date(new Date(startDate).setHours(0, 0, 0)) : (null as any);
+    this.selectedEndDate = endDate ? new Date(new Date(endDate).setHours(23, 59, 59)) : (null as any);
 
     this.searchChange.emit({
-      searchTerm: this.searchFormGroup.get('search').value,
+      searchTerm: this.searchFormGroup.get('search')?.value,
       startDate: this.selectedStartDate,
       endDate: this.selectedEndDate,
       activityTypes: this.selectedActivityTypes,
@@ -129,8 +138,8 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 
   dateToggleChange(event: MatButtonToggleChange) {
-    this.searchFormGroup.get('startDate').setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).startDate);
-    this.searchFormGroup.get('endDate').setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).endDate);
+    this.startDateControl?.setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).startDate);
+    this.endDateControl?.setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).endDate);
     this.selectedDateRange = event.source.value;
     return this.search();
   }
@@ -139,7 +148,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     if (!event.value) {
       return;
     }
-    if (!this.searchFormGroup.get('startDate').value || !this.searchFormGroup.get('endDate').value) {
+    if (!this.startDateControl?.value || !this.endDateControl?.value) {
       return;
     }
     this.selectedDateRange = this.dateRanges.custom;
@@ -148,7 +157,7 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     }
   }
 
-  setCustomDateRange(event) {
+  setCustomDateRange(event: any) {
     this.selectedDateRange = this.dateRanges.custom;
   }
 
@@ -169,19 +178,19 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 }
 
-export const startDateToEndDateValidator: ValidatorFn = (control: UntypedFormGroup): ValidationErrors | null => {
+export const startDateToEndDateValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
   const startDate = control.get('startDate');
   const endDate = control.get('endDate');
-  if (endDate.value < startDate.value) {
+  if (endDate && startDate && endDate.value < startDate.value) {
     return { 'endDateSmallerThanStartDate': true };
   }
   return null;
 };
 
-export const maxDateDistanceValidator: ValidatorFn = (control: UntypedFormGroup): ValidationErrors | null => {
+export const maxDateDistanceValidator: ValidatorFn = (control: AbstractControl): ValidationErrors | null => {
   const startDate = control.get('startDate');
   const endDate = control.get('endDate');
-  if (endDate.value - startDate.value > new Date(365 * 5 * 24 * 3600 * 1000).getTime()) { // @todo improve this
+  if (endDate && startDate && (endDate.value - startDate.value > new Date(365 * 5 * 24 * 3600 * 1000).getTime())) { // @todo improve this
     return { 'dateRange': true };
   }
   return null;

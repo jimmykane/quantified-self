@@ -35,6 +35,10 @@ export interface StripePrice {
     interval_count: number | null;
     trial_period_days: number | null;
     metadata?: { [key: string]: string };
+    recurring?: {
+        interval: 'day' | 'month' | 'week' | 'year';
+        interval_count?: number;
+    } | null;
 }
 
 export interface StripeSubscription {

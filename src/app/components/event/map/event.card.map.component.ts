@@ -25,7 +25,8 @@ import { MapThemes } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import { GeoLibAdapter } from '@sports-alliance/sports-lib';
-import { debounceTime } from 'rxjs/operators';
+import { debounceTime, throttleTime } from 'rxjs/operators';
+import { asyncScheduler } from 'rxjs';
 import { MapAbstractDirective } from '../../map/map-abstract.directive';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib';
@@ -56,13 +57,13 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   public noMapData = false;
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
-  public mapTypeId: google.maps.MapTypeId | string = 'roadmap';
+  public mapTypeId: google.maps.MapTypeId = 'roadmap' as any as google.maps.MapTypeId;
   public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
 
   // Map options
   public mapOptions: google.maps.MapOptions = {
     gestureHandling: 'cooperative',
-    scrollwheel: false,
+    scrollwheel: true,
     tilt: 45,
     controlSize: 32,
     disableDefaultUI: true,
@@ -153,11 +154,12 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   ngAfterViewInit(): void {
     // Subscribe to cursor changes from chart
     this.activitiesCursorSubscription = this.activityCursorService.cursors.pipe(
-      debounceTime(250)
+      throttleTime(1000, asyncScheduler, { leading: true, trailing: true })
     ).subscribe((cursors) => {
       cursors.filter(cursor => cursor.byChart === true).forEach(cursor => {
         const cursorActivityMapData = this.activitiesMapData.find(amd => amd.activity.getID() === cursor.activityID);
         if (cursorActivityMapData && cursorActivityMapData.positions.length > 0) {
+          // Use linear scan - more reliable than binary search for edge cases
           const position = cursorActivityMapData.positions.reduce((prev, curr) =>
             Math.abs(curr.time - cursor.time) < Math.abs(prev.time - cursor.time) ? curr : prev);
           if (position) {
@@ -364,8 +366,8 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
   }
 
-  @HostListener('window:resize', ['$event.target.innerWidth'])
-  onResize(width) {
+  @HostListener('window:resize')
+  onResize() {
     this.fitBoundsToActivities();
   }
 

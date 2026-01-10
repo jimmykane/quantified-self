@@ -18,7 +18,7 @@ if (process.env.FIREBASE_CONFIG) {
 
 if (admin.apps.length === 0) {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const serviceAccount = require('../service-account.json');
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount),
@@ -127,7 +127,7 @@ export { enforceSubscriptionLimits } from './schedule/enforce-subscription-limit
 export { checkSubscriptionNotifications } from './schedule/notifications';
 export { cleanupUserAccounts } from './users/cleanup';
 export { deleteSelf } from './user/user';
-export { listUsers, getQueueStats, getUserCount, setMaintenanceMode, getMaintenanceStatus } from './users/admin';
+export { listUsers, getQueueStats, getUserCount, setMaintenanceMode, getMaintenanceStatus, impersonateUser, getFinancialStats } from './users/admin';
 
 // Tasks
 export { processWorkoutTask } from './tasks/workout-processor';

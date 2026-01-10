@@ -6,7 +6,7 @@ import { addToQueueForGarmin } from '../queue';
 import { increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue, QueueResult } from '../queue-utils';
 
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
-import { generateIDFromParts, setEvent, UsageLimitExceededError } from '../utils';
+import { generateIDFromParts, setEvent, UsageLimitExceededError, UserNotFoundError } from '../utils';
 import { GarminHealthAPIAuth } from './auth/auth';
 import * as requestPromise from '../request-helper';
 import {
@@ -17,6 +17,7 @@ import { EventImporterTCX } from '@sports-alliance/sports-lib';
 import * as xmldom from 'xmldom';
 import {
   GarminHealthAPIEventMetaData,
+  ActivityParsingOptions,
 } from '@sports-alliance/sports-lib';
 interface RequestError extends Error {
   statusCode?: number;
@@ -99,6 +100,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
   let result;
   const url = `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}&token=${queueItem.token}`;
   try {
+    logger.info(`Downloading Garmin activityID: ${queueItem.activityFileID} for queue item ${queueItem.id}`);
     logger.info('Starting timer: DownloadFile');
     result = await requestPromise.get({
       headers: oAuth.toHeader(oAuth.authorize({
@@ -133,14 +135,15 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
 
 
   try {
+    logger.info(`File size: ${result.byteLength || result.length} bytes for queue item ${queueItem.id}`);
     let event;
     switch (queueItem.activityFileType) {
       case 'FIT':
-        event = await EventImporterFIT.getFromArrayBuffer(result);
+        event = await EventImporterFIT.getFromArrayBuffer(result, new ActivityParsingOptions({ generateUnitStreams: false }));
         break;
       case 'GPX':
         try {
-          event = await EventImporterGPX.getFromString(result, xmldom.DOMParser);
+          event = await EventImporterGPX.getFromString(result, xmldom.DOMParser, new ActivityParsingOptions({ generateUnitStreams: false }));
         } catch {
           logger.error('Could not decode as GPX trying as FIT');
         }
@@ -164,11 +167,12 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
           });
           logger.info('Ending timer: DownloadFile');
           logger.info(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${serviceToken.userID}`);
-          event = await EventImporterFIT.getFromArrayBuffer(result); // Let it fail here
+          logger.info(`File size: ${result.byteLength || result.length} bytes for queue item ${queueItem.id}`);
+          event = await EventImporterFIT.getFromArrayBuffer(result, new ActivityParsingOptions({ generateUnitStreams: false })); // Let it fail here
         }
         break;
       case 'TCX':
-        event = await EventImporterTCX.getFromXML(new xmldom.DOMParser().parseFromString(result, 'application/xml'));
+        event = await EventImporterTCX.getFromXML(new xmldom.DOMParser().parseFromString(result, 'application/xml'), new ActivityParsingOptions({ generateUnitStreams: false }));
         break;
     }
     event.name = event.startDate.toJSON(); // @todo improve
@@ -186,12 +190,15 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
     // For each ended so we can set it to processed
     return updateToProcessed(queueItem, bulkWriter);
   } catch (e: unknown) {
-    // @todo should delete meta etc
     logger.error(e);
     if (e instanceof UsageLimitExceededError) {
       logger.error(new Error(`Usage limit exceeded for ${queueItem.id}. Aborting retries. ${e.message}`));
       await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
       return QueueResult.RetryIncremented;
+    } else if (e instanceof UserNotFoundError) {
+      logger.error(new Error(`User for queue item ${queueItem.id} not found. Aborting retries. ${e.message}`));
+      await moveToDeadLetterQueue(queueItem, e, bulkWriter, 'USER_NOT_FOUND');
+      return QueueResult.MovedToDLQ;
     }
 
     const err = e instanceof Error ? e : new Error(String(e));

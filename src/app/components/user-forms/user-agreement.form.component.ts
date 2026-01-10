@@ -88,17 +88,17 @@ export class UserAgreementFormComponent implements OnInit {
       this.user.acceptedMarketingPolicy = this.userFormGroup.get('acceptMarketingPolicy').value;
       this.user.acceptedDiagnosticsPolicy = true;
       await this.userService.createOrUpdateUser(this.user);
-      this.snackBar.open('User updated', null, {
+      this.snackBar.open('User updated', undefined, {
         duration: 2000,
       });
       this.analyticsService.logEvent('sign_up', { method: this.signInMethod });
       await this.router.navigate(['dashboard']);
-      this.snackBar.open(`Thanks for signing in ${this.user.displayName || 'guest'}!`, null, {
+      this.snackBar.open(`Thanks for signing in ${this.user.displayName || 'guest'}!`, undefined, {
         duration: 2000,
       });
     } catch (e) {
       // debugger;
-      this.snackBar.open('Could not update user', null, {
+      this.snackBar.open('Could not update user', undefined, {
         duration: 2000,
       });
       this.logger.error(e);

@@ -136,14 +136,14 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         dayjs(this.formGroup.get('endDate')?.value).toDate()
       );
       this.importInitiated.emit();
-      this.snackBar.open('History import has been queued', null, {
+      this.snackBar.open('History import has been queued', undefined, {
         duration: 2000,
       });
     } catch (e) {
       // debugger;
       this.logger.error(e);
 
-      this.snackBar.open(`Could not import history for ${this.serviceName} due to ${e.message}`, null, {
+      this.snackBar.open(`Could not import history for ${this.serviceName} due to ${e.message}`, undefined, {
         duration: 2000,
       });
     } finally {

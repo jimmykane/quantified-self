@@ -32,7 +32,7 @@ export async function refreshTokens(querySnapshot: QuerySnapshot, serviceName: S
   logger.info(`Parsed ${count} auth tokens out of ${querySnapshot.size}`);
 }
 
-export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: ServiceNames, forceRefreshAndSave = false, useStaging = false): Promise<SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface> {
+export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: ServiceNames, forceRefreshAndSave = false): Promise<SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface> {
   const serviceConfig = getServiceConfig(serviceName, true);
   const serviceTokenData = <Auth2ServiceTokenInterface>doc.data();
   // doc.data() is never undefined for query doc snapshots
@@ -138,4 +138,38 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
   await doc.ref.update(newToken as any);
   logger.info(`Successfully saved refreshed token ${doc.id}`);
   return newToken;
+}
+
+/**
+ * Refreshes tokens that are older than the stale threshold or have never been refreshed.
+ *
+ * @param {string} serviceName The name of the service (e.g., 'Suunto', 'COROS').
+ * @param {number} staleThresholdDate The timestamp (ms) before which tokens are considered stale.
+ */
+export async function refreshStaleTokens(serviceName: string, staleThresholdDate: number): Promise<void> {
+  const firestore = admin.firestore();
+
+  // Query 1: Tokens older than the threshold
+  const staleTokensQuery = firestore
+    .collectionGroup('tokens')
+    .where('serviceName', '==', serviceName)
+    .where('dateRefreshed', '<=', staleThresholdDate)
+    .limit(50)
+    .get();
+
+  // Query 2: Tokens with no refresh date (null)
+  const missingDateRefreshedQuery = firestore
+    .collectionGroup('tokens')
+    .where('serviceName', '==', serviceName)
+    .where('dateRefreshed', '==', null)
+    .limit(50)
+    .get();
+
+  const [staleSnapshots, missingDateSnapshots] = await Promise.all([
+    staleTokensQuery,
+    missingDateRefreshedQuery,
+  ]);
+
+  await refreshTokens(staleSnapshots, serviceName as ServiceNames);
+  await refreshTokens(missingDateSnapshots, serviceName as ServiceNames);
 }

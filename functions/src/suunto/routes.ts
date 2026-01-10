@@ -4,9 +4,9 @@ import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import * as requestPromise from '../request-helper';
-import { getTokenData } from '../tokens';
-import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse } from '../utils';
-import * as Pako from 'pako';
+import { executeWithTokenRetry } from './retry-helper';
+import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
+import * as zlib from 'zlib';
 import { SERVICE_NAME } from './constants';
 import { config } from '../config';
 
@@ -37,52 +37,93 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
     return;
   }
 
-  if (!req.body) {
-    logger.error('No file provided\'');
-    res.status(500);
-    res.send();
+  if (!(await isProUser(userID))) {
+    logger.warn(`Blocking route upload for non-pro user ${userID}`);
+    res.status(403).send(PRO_REQUIRED_MESSAGE);
+    return;
+  }
+
+  let compressedData: Buffer;
+
+  // Check if it's a JSON body with a 'body' field
+  if (req.body && req.body.body) {
+    compressedData = Buffer.from(req.body.body, 'base64');
+  } else if (req.rawBody && Buffer.isBuffer(req.rawBody) && req.rawBody.length > 0) {
+    // If it's a JSON string in rawBody (case where body-parser didn't run or we want to be safe)
+    if (req.rawBody[0] === 0x7b) { // '{' character
+      try {
+        const parsed = JSON.parse(req.rawBody.toString());
+        if (parsed.body) {
+          compressedData = Buffer.from(parsed.body, 'base64');
+        } else {
+          compressedData = req.rawBody; // Fallback to raw if JSON but no 'body'
+        }
+      } catch (e) {
+        compressedData = req.rawBody; // Not JSON, use raw
+      }
+    } else {
+      compressedData = req.rawBody;
+    }
+  } else {
+    logger.error('No compressed body found (checked rawBody and body.body)');
+    res.status(400).send('No compressed body found');
     return;
   }
 
   const tokenQuerySnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(userID).collection('tokens').get();
   logger.info(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
 
+  let successCount = 0;
+  let authFailures = 0;
+
+  if (tokenQuerySnapshots.empty) {
+    res.status(401).send('No connected Suunto account found');
+    return;
+  }
+
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
-    let serviceToken;
-    try {
-      serviceToken = await getTokenData(tokenQueryDocumentSnapshot, SERVICE_NAME, false);
-    } catch (e: any) {
-      logger.error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
-      res.status(500);
-      res.send(e.name);
-      return;
-    }
     let result: any;
     try {
-      result = await requestPromise.post({
-        headers: {
-          'Authorization': serviceToken.accessToken,
-          'Content-Type': 'application/gpx+xml',
-          'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-          // json: true,
+      result = await executeWithTokenRetry(
+        tokenQueryDocumentSnapshot,
+        async (accessToken) => {
+          const postResult = await requestPromise.post({
+            headers: {
+              'Authorization': accessToken,
+              'Content-Type': 'application/gpx+xml',
+              'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
+              // json: true,
+            },
+            body: zlib.gunzipSync(compressedData).toString(),
+            url: 'https://cloudapi.suunto.com/v2/route/import',
+          });
+          return postResult;
         },
-        body: Pako.ungzip(Buffer.from(req.body, 'base64'), { to: 'string' }),
-        url: 'https://cloudapi.suunto.com/v2/route/import',
-      });
-      result = JSON.parse(result);
-      // console.log(`Deauthorized token ${doc.id} for ${decodedIdToken.uid}`)
-    } catch (e: any) {
-      logger.error(`Could upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
-      res.status(500);
-      res.send(e.name);
-      return;
+        `Upload route for user ${userID}`
+      );
+
+      logger.info('Suunto API raw response:', result);
+      if (typeof result === 'string') {
+        try {
+          result = JSON.parse(result);
+        } catch (e) {
+          logger.warn('Suunto API response is not JSON:', result);
+        }
+      }
+    } catch (e: unknown) {
+      const error = e as Error;
+      // Logging handled in helper mostly, but we log high level failure
+      logger.error(`Could not upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, error);
+      // We count auth failures if "Unauthorized" / 401 bubbles up (meaning retry failed)
+      if ((error as any).statusCode === 401) {
+        authFailures++;
+      }
+      continue;
     }
 
     if (result.error) {
       logger.error(`Could upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error`, result.error);
-      res.status(500);
-      res.send(result.error);
-      return;
+      continue;
     }
     try {
       const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(userID).collection('meta').doc(SERVICE_NAME).get();
@@ -94,10 +135,17 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
       await userServiceMetaDocumentSnapshot.ref.update({
         uploadedRoutesCount: uploadedRoutesCount + 1,
       });
-    } catch (e: any) {
+      successCount++;
+    } catch (e: unknown) {
       logger.error('Could not update uploadedRoutes count');
     }
   }
-  res.status(200);
-  res.send();
+
+  if (successCount > 0) {
+    res.status(200).send();
+  } else if (authFailures > 0) {
+    res.status(401).send('Authentication failed. Please re-connect your Suunto account.');
+  } else {
+    res.status(500).send('Upload failed due to service errors.');
+  }
 });

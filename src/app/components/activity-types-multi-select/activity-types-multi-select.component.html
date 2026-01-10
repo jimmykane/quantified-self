@@ -1,9 +1,9 @@
-<mat-form-field>
+<mat-form-field class="qs-subscript-hidden">
   <mat-label>Filter by activities</mat-label>
   <input type="text" placeholder="Filter by activities" aria-label="Filter by activities" matInput
     [matAutocomplete]="auto" [formControl]="activityTypesControl">
   @if (selectedActivityTypes.length) {
-  <button mat-button matSuffix mat-icon-button aria-label="Clear" (click)="clearSelection()">
+  <button matSuffix mat-icon-button aria-label="Clear" (click)="clearSelection()">
     <mat-icon>close</mat-icon>
   </button>
   }

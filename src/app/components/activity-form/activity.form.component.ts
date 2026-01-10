@@ -217,7 +217,7 @@ export class ActivityFormComponent implements OnInit {
       await this.eventService.setActivity(this.user, this.event, this.activity);
       await this.eventService.setEvent(this.user, this.event);
 
-      this.snackBar.open('Activity saved', null, {
+      this.snackBar.open('Activity saved', undefined, {
         duration: 2000,
       });
     } catch (e) {

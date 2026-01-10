@@ -33,3 +33,9 @@ You are an expert in Angular Material Design 3. Your goal is to maintain a "Pure
 - [ ] Did I avoid adding a new CSS class?
 - [ ] Are all colors using `--mat-sys-*` variables?
 - [ ] Is typography using `var(--mat-sys-*)`?
+
+6.  **Dialogs & Overlays**:
+    *   **DO NOT** pass custom `panelClass` to `MatDialog.open()` unless there is a documented exception.
+    *   All dialogs automatically receive the `qs-dialog-container` class via `MAT_DIALOG_DEFAULT_OPTIONS` in `app.module.ts`.
+    *   Dialog styling is defined globally in `styles.scss` under the `.qs-dialog-container` rule.
+    *   If a dialog requires a unique style, document it in the component's README or inline comment, and use the global variables.

@@ -6,25 +6,22 @@ import {
   OnDestroy,
   OnInit,
   ViewChild,
+  afterNextRender,
 } from '@angular/core';
 import { MatIconRegistry } from '@angular/material/icon';
 import { MatSidenav } from '@angular/material/sidenav';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Observable, Subscription } from 'rxjs';
 import {
-  NavigationCancel,
   NavigationEnd,
-  NavigationError,
-  NavigationStart,
-  Router, RouterEvent,
+  Router,
   RouterOutlet,
-  RoutesRecognized
 } from '@angular/router';
 import { AppAuthService } from './authentication/app.auth.service';
 import { AppUserService } from './services/app.user.service';
 import { AppSideNavService } from './services/side-nav/app-side-nav.service';
 import { AppRemoteConfigService } from './services/app.remote-config.service';
-import { DomSanitizer, Title } from '@angular/platform-browser';
+import { DomSanitizer } from '@angular/platform-browser';
 import { slideInAnimation } from './animations/animations';
 
 import * as firebase from 'firebase/app'
@@ -35,6 +32,8 @@ declare function require(moduleName: string): any;
 
 import { LoggerService } from './services/logger.service';
 import { AppAnalyticsService } from './services/app.analytics.service';
+import { SeoService } from './services/seo.service';
+import { AppIconService } from './services/app.icon.service';
 
 @Component({
   selector: 'app-root',
@@ -54,11 +53,11 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
   public bannerHeight = 0;
   public hasBanner = false;
-  public title!: string;
   private actionButtonsSubscription!: Subscription;
   private routerEventSubscription!: Subscription;
   public authState: boolean | null = null;
   public isOnboardingRoute = false;
+  private isFirstLoad = true;
   public onboardingCompleted = true; // Default to true to avoid hiding chrome of non-authenticated users prematurely
   public maintenanceMode$!: Observable<boolean>;
   public maintenanceMessage$!: Observable<string>;
@@ -72,18 +71,27 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     private changeDetectorRef: ChangeDetectorRef,
     public sideNavService: AppSideNavService,
     private remoteConfigService: AppRemoteConfigService,
-    private matIconRegistry: MatIconRegistry,
-    private domSanitizer: DomSanitizer,
-    private titleService: Title,
     private logger: LoggerService,
-    private analyticsService: AppAnalyticsService) {
+    private analyticsService: AppAnalyticsService,
+    private seoService: SeoService,
+    private iconService: AppIconService
+  ) {
     // this.afa.setAnalyticsCollectionEnabled(true)
-    this.addIconsToRegistry();
+    this.iconService.registerIcons();
+
+    // Mark app as hydrated after Angular takes over (reveals SVG icons)
+    afterNextRender(() => {
+      document.body.classList.add('app-hydrated');
+      // Allow animations after initial render
+      setTimeout(() => this.isFirstLoad = false, 100);
+    });
   }
 
   async ngOnInit() {
     this.maintenanceMode$ = this.remoteConfigService.getMaintenanceMode();
     this.maintenanceMessage$ = this.remoteConfigService.getMaintenanceMessage();
+    this.seoService.init(); // Initialize SEO service
+
     this.authService.user$.subscribe(async user => {
       this.authState = !!user;
       this.currentUser = user;
@@ -103,20 +111,19 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       if (event instanceof NavigationEnd) {
         this.updateOnboardingState();
       }
-      switch (true) {
-        case event instanceof RoutesRecognized: {
-          const firstChild = (<RoutesRecognized>event).state.root.firstChild;
-          if (firstChild) {
-            this.title = firstChild.data['title'];
-            this.titleService.setTitle(`${this.title} - Quantified Self`);
-          }
-          break;
-        }
-        default: {
-          break;
-        }
-      }
     });
+  }
+
+  get isDashboardRoute(): boolean {
+    return this.router.url.includes('/dashboard');
+  }
+
+  get isLoginRoute(): boolean {
+    return this.router.url.includes('/login');
+  }
+
+  get isAdminRoute(): boolean {
+    return this.router.url.includes('/admin');
   }
 
   private updateOnboardingState() {
@@ -165,162 +172,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     return true;
   }
 
-  private addIconsToRegistry() {
-    this.matIconRegistry.addSvgIcon(
-      'logo',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/app/logo.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'logo-font',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/app/logo-font.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'suunto',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/suunto.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'garmin',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/garmin.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'coros',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/coros.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'amcharts',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/amcharts.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'firebase',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/firebase.svg')
-    );
-
-    this.matIconRegistry.addSvgIcon(
-      'google_logo_light',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/google_logo_light.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'facebook_logo',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/facebook_logo.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'twitter_logo',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/twitter_logo.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'github_logo',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/github_logo.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'jetbrains_logo',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/logos/jetbrains.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'heart_rate',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/heart-rate.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'heart_pulse',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/heart-pulse.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'energy',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/energy.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'power',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/power.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'arrow_up_right',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/arrow-up-right.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'arrow_down_right',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/arrow-down-right.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'swimmer',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/swimmer.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'tte',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/tte.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'epoc',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/epoc.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'gas',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/gas.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'gap',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/gap.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'heat-map',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/heat-map.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'spiral',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/spiral.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'chart',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/chart.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'dashboard',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/dashboard.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'stacked-chart',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/stacked-chart.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'bar-chart',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/bar-chart.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'route',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/route.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'watch-sync',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/watch-sync.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'chart-types',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/chart-types.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'moving-time',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/moving-time.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'file-csv',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/file-csv.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'dark-mode',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/dark-mode.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'paypal',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/paypal.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'lap-type-manual',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/lap-types/manual.svg')
-    );
-    this.matIconRegistry.addSvgIcon(
-      'lap-type-interval',
-      this.domSanitizer.bypassSecurityTrustResourceUrl('assets/icons/lap-types/interval.svg')
-    );
-  }
-
   public onLogoClick() {
     if (this.authState) {
       this.router.navigate(['/dashboard']);
@@ -349,6 +200,9 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
 
   prepareRoute(outlet: RouterOutlet) {
+    if (this.isFirstLoad) {
+      return null;
+    }
     return outlet && outlet.activatedRouteData && outlet.activatedRouteData['animation'];
   }
 

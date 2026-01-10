@@ -1,46 +1,93 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { AppAuthService } from '../authentication/app.auth.service';
-import { AppUserService } from './app.user.service';
-import { Firestore } from '@angular/fire/firestore';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc } from '@angular/fire/firestore';
 import { Storage } from '@angular/fire/storage';
-import { DomSanitizer } from '@angular/platform-browser';
+import { Auth } from '@angular/fire/auth';
+import { AppAnalyticsService } from './app.analytics.service';
+import { AppUserService } from './app.user.service';
 import { LoggerService } from './logger.service';
+import { AppFileService } from './app.file.service';
+import { BrowserCompatibilityService } from './browser.compatibility.service';
+import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
 import { of } from 'rxjs';
-import { AppEventInterface } from '../../../functions/src/shared/app-event.interface';
-import { EventInterface } from '@sports-alliance/sports-lib';
-import { User } from '@sports-alliance/sports-lib';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AppEventUtilities } from '../utils/app.event.utilities';
 
-// Mocks
-const mockFirestore = {
-    firestore: {}
-} as any;
-const mockStorage = {
-    storage: {}
-} as any;
-const mockAuthService = {
-    user$: of(null)
-} as any;
-const mockUserService = {
-    getSubscriptionRole: vi.fn().mockResolvedValue('pro'),
-    isPro: vi.fn().mockResolvedValue(true)
-} as any;
-const mockLogger = {
-    log: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    captureMessage: vi.fn()
-} as any;
-const mockSanitizer = {
-    bypassSecurityTrustUrl: vi.fn()
-} as any;
+// Hoist mocks
+const mocks = vi.hoisted(() => {
+    return {
+        writeAllEventData: vi.fn(),
+        getEventFromJSON: vi.fn(),
+        getActivityFromJSON: vi.fn(),
+        sanitize: vi.fn(),
+        getCountFromServer: vi.fn(),
+    };
+});
+
+// Mock @angular/fire/firestore
+vi.mock('@angular/fire/firestore', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@angular/fire/firestore')>();
+    return {
+        ...actual,
+        doc: vi.fn(),
+        docData: vi.fn(),
+        collection: vi.fn(),
+        collectionData: vi.fn(),
+        query: vi.fn(),
+        where: vi.fn(),
+        deleteDoc: vi.fn(),
+        setDoc: vi.fn(),
+        getCountFromServer: mocks.getCountFromServer,
+        runInInjectionContext: vi.fn((injector, fn) => fn()),
+    };
+});
+
+// Mock @sports-alliance/sports-lib
+vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@sports-alliance/sports-lib')>();
+    return {
+        ...actual,
+        EventImporterJSON: {
+            getEventFromJSON: mocks.getEventFromJSON,
+            getActivityFromJSON: mocks.getActivityFromJSON,
+        },
+    };
+});
+
+// Mock EventJSONSanitizer
+vi.mock('../utils/event-json-sanitizer', () => ({
+    EventJSONSanitizer: {
+        sanitize: mocks.sanitize
+    }
+}));
+
+// Mock EventWriter as a class
+vi.mock('../../../functions/src/shared/event-writer', () => {
+    return {
+        EventWriter: class {
+            writeAllEventData = mocks.writeAllEventData;
+        },
+        FirestoreAdapter: {},
+        StorageAdapter: {},
+        OriginalFile: {}
+    };
+});
 
 describe('AppEventService', () => {
     let service: AppEventService;
-    let mockEvent: AppEventInterface;
-    let mockUser: User;
+    const mockFirestore = {};
+    const mockStorage = { getBucketName: () => 'test-bucket' };
+    const mockAuth = {};
+    const mockAnalytics = { logEvent: vi.fn() };
+    const mockUser = {
+        isPro: vi.fn().mockResolvedValue(true),
+        getSubscriptionRole: vi.fn().mockResolvedValue('pro'),
+        uid: 'test-uid'
+    };
+    const mockLogger = { log: vi.fn(), error: vi.fn(), warn: vi.fn(), captureMessage: vi.fn() };
+    const mockFileService = {};
+    const mockCompatibility = { checkCompressionSupport: vi.fn().mockReturnValue(true) };
+
+    const originalCompressionStream = globalThis.CompressionStream;
+    const originalResponse = globalThis.Response;
 
     beforeEach(() => {
         TestBed.configureTestingModule({
@@ -48,125 +95,129 @@ describe('AppEventService', () => {
                 AppEventService,
                 { provide: Firestore, useValue: mockFirestore },
                 { provide: Storage, useValue: mockStorage },
-                { provide: AppAuthService, useValue: mockAuthService },
-                { provide: AppUserService, useValue: mockUserService },
+                { provide: Auth, useValue: mockAuth },
+                { provide: AppAnalyticsService, useValue: mockAnalytics },
+                { provide: AppUserService, useValue: mockUser },
                 { provide: LoggerService, useValue: mockLogger },
-                { provide: DomSanitizer, useValue: mockSanitizer }
+                { provide: AppFileService, useValue: mockFileService },
+                { provide: BrowserCompatibilityService, useValue: mockCompatibility },
             ]
         });
         service = TestBed.inject(AppEventService);
-        mockUser = new User('test_uid');
+        vi.clearAllMocks();
 
-        // Mock event setup
-        mockEvent = {
-            getID: () => 'event_1',
-            getActivities: () => [],
-            setID: (_) => { },
-            addActivities: (_) => { },
-            clearActivities: () => { },
-            toJSON: () => ({}),
-            startDate: new Date(),
-            originalFiles: [
-                { path: 'test/path.json', startDate: new Date(), extension: 'json', data: 'mock_data' }
-            ]
-        } as unknown as AppEventInterface;
+        // Default mock implementations
+        mocks.sanitize.mockImplementation((json: any) => ({ sanitizedJson: json, unknownTypes: [] }));
+        mocks.getEventFromJSON.mockReturnValue({
+            setID: vi.fn().mockReturnThis(),
+            clearActivities: vi.fn(),
+            addActivities: vi.fn(),
+            getID: vi.fn().mockReturnValue('event1'),
+            toJSON: vi.fn().mockReturnValue({}),
+            getActivities: vi.fn().mockReturnValue([]),
+            startDate: new Date()
+        });
+        mocks.getActivityFromJSON.mockReturnValue({
+            setID: vi.fn().mockReturnThis(),
+            toJSON: vi.fn().mockReturnValue({})
+        });
+        mocks.getCountFromServer.mockResolvedValue({ data: () => ({ count: 0 }) });
+        mocks.writeAllEventData.mockResolvedValue(true);
+
+        // Polyfills
+        // @ts-ignore
+        globalThis.CompressionStream = vi.fn().mockImplementation(() => ({
+            writable: {}, readable: {}
+        }));
+        // @ts-ignore
+        globalThis.Response = vi.fn().mockImplementation((data) => ({
+            body: {
+                pipeThrough: vi.fn().mockReturnValue({}),
+            },
+            arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(8))
+        }));
+    });
+
+    afterEach(() => {
+        // @ts-ignore
+        globalThis.CompressionStream = originalCompressionStream;
+        // @ts-ignore
+        globalThis.Response = originalResponse;
+        vi.restoreAllMocks();
     });
 
     it('should be created', () => {
         expect(service).toBeTruthy();
     });
 
-    describe('attachStreamsToEventWithActivities', () => {
-        it('should pass skipEnrichment=true to orchestration', async () => {
-            // Spy on internal orchestration method
-            const orchestrationSpy = vi.spyOn(service as any, 'calculateStreamsFromWithOrchestration')
-                .mockResolvedValue(mockEvent); // Return dummy event
+    it('should skip compression if browser not supported', async () => {
+        mockCompatibility.checkCompressionSupport.mockReturnValue(false);
+        const mockEvent = {
+            getID: () => '1',
+            startDate: new Date(),
+            getActivities: () => [],
+            setID: vi.fn()
+        } as any;
+        const originalFiles = [{ extension: 'gpx', data: 'content', startDate: new Date() }] as any;
 
-            await service.attachStreamsToEventWithActivities(
-                mockUser,
-                mockEvent,
-                undefined,
-                true, // merge
-                true  // skipEnrichment
-            ).toPromise();
+        await service.writeAllEventData({ uid: 'user1' } as any, mockEvent, originalFiles);
 
-            expect(orchestrationSpy).toHaveBeenCalledWith(mockEvent, true);
-        });
-
-        it('should pass skipEnrichment=false (default) to orchestration', async () => {
-            const orchestrationSpy = vi.spyOn(service as any, 'calculateStreamsFromWithOrchestration')
-                .mockResolvedValue(mockEvent);
-
-            await service.attachStreamsToEventWithActivities(
-                mockUser,
-                mockEvent
-                // defaults: merge=true, skipEnrichment=false
-            ).toPromise();
-
-            // Check second arg is false (or undefined if implementation uses default param)
-            // Implementation: skipEnrichment: boolean = false
-            expect(orchestrationSpy).toHaveBeenCalledWith(mockEvent, false);
-        });
-
-        it('should return a NEW event instance when merge=false', async () => {
-            const freshEventCallback = { setID: vi.fn(), getActivities: () => [], getID: () => 'fresh_id' } as any;
-
-            vi.spyOn(service as any, 'calculateStreamsFromWithOrchestration')
-                .mockResolvedValue(freshEventCallback);
-
-            const result = await service.attachStreamsToEventWithActivities(
-                mockUser,
-                mockEvent,
-                undefined,
-                false // merge=false
-            ).toPromise();
-
-            expect(result).toBe(freshEventCallback);
-            // Should set ID to match original
-            expect(freshEventCallback.setID).toHaveBeenCalledWith(mockEvent.getID());
-            // Should NOT mutate original (e.g. not call clearActivities on original)
-            // We can spy on mockEvent.clearActivities if we want
-            // But since result === freshEventCallback, we know it returned the new one.
-        });
+        expect(globalThis.CompressionStream).not.toHaveBeenCalled();
+        expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Compression skipped'));
+        expect(mocks.writeAllEventData).toHaveBeenCalled();
     });
 
-    // Testing fetchAndParseOneFile logic indirectly by testing orchestration?
-    // Testing private method is hard. Ideally we mock dependencies and assume logic holds.
-    // Or we cast to any and test.
+    it('should get event and activities correctly', async () => {
+        const userId = 'user1';
+        const eventId = 'event1';
+        const user = { uid: userId } as any;
 
-    describe('fetchAndParseOneFile (via any cast)', () => {
-        it('should call AppEventUtilities.enrich when skipEnrichment is false', async () => {
-            // Mock getBytes to return a simple JSON
-            // We need to mock 'ref' and 'getBytes' from @angular/fire/storage
-            // Since we import them as module imports, vitest mocking is needed.
-            // But here we rely on the service using them.
-            // The service has `this.storage` injected.
-            // Code uses `ref(this.storage, ...)` and `getBytes(ref)`.
+        const mockEventData = { id: eventId, name: 'Test Event' };
+        const mockActivityData = { id: 'act1', type: 'Run' };
 
-            // This is tricky to verify without proper module mocking.
-            // However, we can use spyOn(AppEventUtilities, 'enrich').
-            const enrichSpy = vi.spyOn(AppEventUtilities, 'enrich');
+        (doc as Mock).mockReturnValue({}); // eventDoc
+        (docData as Mock).mockReturnValue(of(mockEventData));
+        (collection as Mock).mockReturnValue({}); // activitiesCollection
+        (collectionData as Mock).mockReturnValue(of([mockActivityData]));
 
-            // Mock internal dependencies to simulate success
-            const mockActivity = { getID: () => 'act1' } as any;
-            const mockImportedEvent = { getActivities: () => [mockActivity], getID: () => 'evt1' } as any;
+        const result = await service.getEventAndActivities(user, eventId).toPromise();
 
-            // We'll mock the IMPORTER to return a mock event, avoiding getBytes logic
-            // But wait, the code calls `getBytes` BEFORE importer.
-            // We must bypass getBytes or mock it.
+        expect(doc).toHaveBeenCalledWith(expect.anything(), 'users', userId, 'events', eventId);
+        expect(docData).toHaveBeenCalled();
+        expect(collection).toHaveBeenCalledWith(expect.anything(), 'users', userId, 'activities');
+        expect(collectionData).toHaveBeenCalled();
 
-            // Hack: Spy on fetchAndParseOneFile itself to check arg passing?
-            // No, we want to check logic INSIDE.
+        expect(mockLogger.error).not.toHaveBeenCalled();
+        expect(result).toBeTruthy();
+        expect(result!.getID()).toBe('event1');
+    });
 
-            // Let's rely on unit logic verification:
-            // If we assume `fetchAndParseOneFile` receives the flag correctly (verified above),
-            // AND we verified the code physically has the if(!skipEnrichment) block.
-            // Is that enough? User asked to "run tests".
+    it('should delete all event data', async () => {
+        const userId = 'user1';
+        const eventId = 'event1';
+        const user = { uid: userId } as any;
 
-            // Ideally we get full coverage.
-            // If we cannot easily mock getBytes here, we might skip the deep integration test 
-            // and trust the parameter passing test which confirms the 'wiring' is correct.
-            // The logic inside `fetchAndParseOneFile` is a simple conditional.
-        });
+        (doc as Mock).mockReturnValue({});
+        (deleteDoc as Mock).mockResolvedValue(undefined);
+
+        const result = await service.deleteAllEventData(user, eventId);
+
+        expect(doc).toHaveBeenCalledWith(expect.anything(), 'users', userId, 'events', eventId);
+        expect(deleteDoc).toHaveBeenCalled();
+        expect(result).toBe(true);
+    });
+
+    it('should call EventWriter in writeAllEventData', async () => {
+        const mockEvent = {
+            getID: () => '1',
+            startDate: new Date(),
+            getActivities: () => [],
+            setID: vi.fn()
+        } as any;
+        const user = { uid: 'user1' } as any;
+
+        await service.writeAllEventData(user, mockEvent);
+
+        expect(mocks.writeAllEventData).toHaveBeenCalled();
     });
 });

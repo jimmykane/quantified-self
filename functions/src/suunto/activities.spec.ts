@@ -2,6 +2,7 @@
 import { describe, it, vi, expect, beforeEach } from 'vitest';
 import * as functions from 'firebase-functions-test';
 import * as admin from 'firebase-admin';
+import { PRO_REQUIRED_MESSAGE } from '../utils';
 
 // Mock dependencies BEFORE importing the module under test
 const requestMocks = {
@@ -15,7 +16,9 @@ vi.mock('../request-helper', () => ({
         post: (...args: any[]) => requestMocks.post(...args),
         put: (...args: any[]) => requestMocks.put(...args),
         get: (...args: any[]) => requestMocks.get(...args),
+        // Add export helpers if needed, but usually default is enough if imported as * or default
     },
+    // Also mock named exports if the implementation uses them specifically
     post: (...args: any[]) => requestMocks.post(...args),
     put: (...args: any[]) => requestMocks.put(...args),
     get: (...args: any[]) => requestMocks.get(...args),
@@ -25,13 +28,19 @@ const utilsMocks = {
     getUserIDFromFirebaseToken: vi.fn(),
     isCorsAllowed: vi.fn().mockReturnValue(true),
     setAccessControlHeadersOnResponse: vi.fn(),
+    isProUser: vi.fn(),
 };
 
-vi.mock('../utils', () => ({
-    getUserIDFromFirebaseToken: (...args: any[]) => utilsMocks.getUserIDFromFirebaseToken(...args),
-    isCorsAllowed: (...args: any[]) => utilsMocks.isCorsAllowed(...args),
-    setAccessControlHeadersOnResponse: (...args: any[]) => utilsMocks.setAccessControlHeadersOnResponse(...args),
-}));
+vi.mock('../utils', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../utils')>();
+    return {
+        ...actual,
+        getUserIDFromFirebaseToken: (...args: any[]) => utilsMocks.getUserIDFromFirebaseToken(...args),
+        isCorsAllowed: (...args: any[]) => utilsMocks.isCorsAllowed(...args),
+        setAccessControlHeadersOnResponse: (...args: any[]) => utilsMocks.setAccessControlHeadersOnResponse(...args),
+        isProUser: (...args: any[]) => utilsMocks.isProUser(...args),
+    };
+});
 
 const tokensMocks = {
     getTokenData: vi.fn(),
@@ -94,11 +103,14 @@ import { importActivityToSuuntoApp } from './activities';
 describe('importActivityToSuuntoApp', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        // Default happy path
+        utilsMocks.isCorsAllowed.mockReturnValue(true);
+        utilsMocks.getUserIDFromFirebaseToken.mockResolvedValue('test-user-id');
+        utilsMocks.isProUser.mockResolvedValue(true);
     });
 
     it('should successfully upload an activity', async () => {
         // Setup Mocks
-        utilsMocks.getUserIDFromFirebaseToken.mockResolvedValue('test-user-id');
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
 
         // Mock init upload (POST)
@@ -122,7 +134,8 @@ describe('importActivityToSuuntoApp', () => {
             method: 'POST',
             body: { some: 'data' },
             rawBody: fileContent,
-            headers: { origin: 'http://localhost' }
+            headers: { origin: 'http://localhost' },
+            get: (header: string) => header === 'origin' ? 'http://localhost' : undefined // Basic checks
         } as any;
 
         const res = {
@@ -136,6 +149,7 @@ describe('importActivityToSuuntoApp', () => {
 
         // Assertions
         expect(utilsMocks.getUserIDFromFirebaseToken).toHaveBeenCalled();
+        expect(utilsMocks.isProUser).toHaveBeenCalledWith('test-user-id');
         expect(tokensMocks.getTokenData).toHaveBeenCalled();
 
         // 1. Check Init Upload
@@ -162,18 +176,72 @@ describe('importActivityToSuuntoApp', () => {
         expect(res.send).toHaveBeenCalled();
     });
 
-    it('should handle initialization failure', async () => {
-        // Setup Mocks
-        utilsMocks.getUserIDFromFirebaseToken.mockResolvedValue('test-user-id');
-        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+    it('should block COMPATIBILITY check (CORS)', async () => {
+        utilsMocks.isCorsAllowed.mockReturnValue(false);
+        const req = {
+            method: 'POST',
+            get: vi.fn(),
+        } as any;
+        const res = {
+            status: vi.fn().mockReturnThis(),
+            send: vi.fn(),
+        } as any;
 
-        // Mock init upload (POST) FAILURE
-        requestMocks.post.mockRejectedValue(new Error('Init failed'));
+        await importActivityToSuuntoApp(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.send).toHaveBeenCalledWith('Unauthorized');
+    });
+
+    it('should handle missing authentication', async () => {
+        utilsMocks.getUserIDFromFirebaseToken.mockResolvedValue(null);
 
         const req = {
             method: 'POST',
-            body: { some: 'data' },
-            rawBody: Buffer.from('data'),
+            get: vi.fn(),
+            headers: { origin: 'http://localhost' }
+        } as any;
+
+        const res = {
+            status: vi.fn().mockReturnThis(),
+            send: vi.fn(),
+            set: vi.fn(),
+        } as any;
+
+        await importActivityToSuuntoApp(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.send).toHaveBeenCalledWith('Unauthorized');
+    });
+
+    it('should block non-pro users', async () => {
+        utilsMocks.isProUser.mockResolvedValue(false);
+
+        const req = {
+            method: 'POST',
+            get: vi.fn(),
+            headers: { origin: 'http://localhost' }
+        } as any;
+
+        const res = {
+            status: vi.fn().mockReturnThis(),
+            send: vi.fn(),
+            set: vi.fn(),
+        } as any;
+
+        await importActivityToSuuntoApp(req, res);
+
+        expect(utilsMocks.getUserIDFromFirebaseToken).toHaveBeenCalled();
+        expect(utilsMocks.isProUser).toHaveBeenCalledWith('test-user-id');
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.send).toHaveBeenCalledWith(PRO_REQUIRED_MESSAGE);
+    });
+
+    it('should handle missing body', async () => {
+        const req = {
+            method: 'POST',
+            // body is undefined
+            get: vi.fn(),
             headers: { origin: 'http://localhost' }
         } as any;
 
@@ -186,12 +254,58 @@ describe('importActivityToSuuntoApp', () => {
         await importActivityToSuuntoApp(req, res);
 
         expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.send).toHaveBeenCalledWith('Error'); // e.name for Error('Init failed') is 'Error'
+    });
+
+    it('should handle invalid file content', async () => {
+        const req = {
+            method: 'POST',
+            body: {},
+            rawBody: Buffer.alloc(0), // Empty buffer
+            get: vi.fn(),
+            headers: { origin: 'http://localhost' }
+        } as any;
+
+        const res = {
+            status: vi.fn().mockReturnThis(),
+            send: vi.fn(),
+            set: vi.fn(),
+        } as any;
+
+        await importActivityToSuuntoApp(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.send).toHaveBeenCalledWith('File content missing or invalid');
+    });
+
+    it('should handle initialization failure', async () => {
+        // Setup Mocks
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+
+        // Mock init upload (POST) FAILURE
+        requestMocks.post.mockRejectedValue(new Error('Init failed'));
+
+        const req = {
+            method: 'POST',
+            body: { some: 'data' },
+            rawBody: Buffer.from('data'),
+            headers: { origin: 'http://localhost' },
+            get: vi.fn(),
+        } as any;
+
+        const res = {
+            status: vi.fn().mockReturnThis(),
+            send: vi.fn(),
+            set: vi.fn(),
+        } as any;
+
+        await importActivityToSuuntoApp(req, res);
+
+        expect(res.status).toHaveBeenCalledWith(500);
+        expect(res.send).toHaveBeenCalledWith('Init failed'); // Updated expectation
     });
 
     it('should handle upload failure', async () => {
         // Setup Mocks
-        utilsMocks.getUserIDFromFirebaseToken.mockResolvedValue('test-user-id');
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
 
         // Mock init upload (POST) SUCCESS
@@ -204,7 +318,8 @@ describe('importActivityToSuuntoApp', () => {
             method: 'POST',
             body: { some: 'data' },
             rawBody: Buffer.from('data'),
-            headers: { origin: 'http://localhost' }
+            headers: { origin: 'http://localhost' },
+            get: vi.fn(),
         } as any;
 
         const res = {
@@ -217,5 +332,51 @@ describe('importActivityToSuuntoApp', () => {
 
         expect(res.status).toHaveBeenCalledWith(500);
         expect(res.send).toHaveBeenCalledWith('Upload failed');
+    });
+
+    it('should retry on 401 during initialization', async () => {
+        // Setup Mocks
+        tokensMocks.getTokenData
+            .mockResolvedValueOnce({ accessToken: 'old-token' }) // 1st attempt
+            .mockResolvedValueOnce({ accessToken: 'new-token' }); // 2nd attempt (force refresh)
+
+        // Mock init upload (POST)
+        // 1. Fail with 401
+        // 2. Succeed
+        requestMocks.post
+            .mockRejectedValueOnce({ statusCode: 401, message: 'Unauthorized' })
+            .mockResolvedValueOnce(JSON.stringify({
+                id: 'test-upload-id-retry',
+                url: 'https://storage.suunto.com/upload-url-retry',
+                headers: {}
+            }));
+
+        // Mock binary upload (PUT) & Status (GET) for the successful retry
+        requestMocks.put.mockResolvedValue({});
+        requestMocks.get.mockResolvedValue(JSON.stringify({ status: 'PROCESSED', workoutKey: 'retry-key' }));
+
+        const req = {
+            method: 'POST',
+            body: { some: 'data' },
+            rawBody: Buffer.from('data'),
+            headers: { origin: 'http://localhost' },
+            get: vi.fn(),
+        } as any;
+
+        const res = {
+            status: vi.fn().mockReturnThis(),
+            send: vi.fn(),
+            set: vi.fn(),
+        } as any;
+
+        await importActivityToSuuntoApp(req, res);
+
+        // Verify Retry Logic
+        expect(tokensMocks.getTokenData).toHaveBeenCalledTimes(2);
+        expect(tokensMocks.getTokenData).toHaveBeenNthCalledWith(1, expect.anything(), expect.anything(), false);
+        expect(tokensMocks.getTokenData).toHaveBeenNthCalledWith(2, expect.anything(), expect.anything(), true);
+
+        expect(requestMocks.post).toHaveBeenCalledTimes(2); // Initial + Retry
+        expect(res.status).toHaveBeenCalledWith(200);
     });
 });

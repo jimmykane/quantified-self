@@ -1,10 +1,11 @@
 import { Component, inject, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { AppEventService } from '../../../services/app.event.service';
+import { AppFileService } from '../../../services/app.file.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { EventInterface } from '@sports-alliance/sports-lib';
+import { EventInterface, ActivityParsingOptions } from '@sports-alliance/sports-lib';
 import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
@@ -28,11 +29,9 @@ import { EventJSONSanitizer } from '../../../utils/event-json-sanitizer';
   standalone: false
 })
 export class UploadActivitiesComponent extends UploadAbstractDirective implements OnInit {
-  private analyticsService = inject(AppAnalyticsService);
   public uploadCount: number | null = null;
   public uploadLimit: number | null = null;
   public isPro: boolean = false;
-  private userService = inject(AppUserService);
 
   constructor(
     protected snackBar: MatSnackBar,
@@ -40,9 +39,12 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
     protected bottomSheet: MatBottomSheet,
     protected processingService: AppProcessingService,
     protected overlay: Overlay,
-    private eventService: AppEventService,
+    protected eventService: AppEventService,
     protected router: Router,
-    logger: LoggerService) {
+    protected logger: LoggerService,
+    protected fileService: AppFileService,
+    protected userService: AppUserService,
+    protected analyticsService: AppAnalyticsService) {
     super(snackBar, dialog, processingService, router, logger);
   }
 
@@ -67,46 +69,66 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
     this.uploadLimit = USAGE_LIMITS[role] || USAGE_LIMITS['free'];
   }
 
-  processAndUploadFile(file): Promise<EventInterface> {
+  processAndUploadFile(file: any): Promise<EventInterface> {
     this.analyticsService.logEvent('upload_file', { method: file.extension });
     return new Promise((resolve, reject) => {
       const fileReader = new FileReader;
       fileReader.onload = async () => {
         let newEvent;
-        const fileReaderResult = fileReader.result;
-        try {
-          if ((typeof fileReaderResult === 'string') && file.extension === 'json') {
-            try {
-              // Parse first to sanitize
-              const json = JSON.parse(fileReaderResult as string);
-              const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(json);
+        let fileReaderResult = fileReader.result;
 
-              if (unknownTypes.length > 0) {
-                this.logger.captureMessage('Unknown Data Types in Upload', { extra: { types: unknownTypes, file: file.filename } });
-                this.snackBar.open(`Warning: Unknown data types removed: ${unknownTypes.join(', ')}`, 'OK', { duration: 5000 });
+        // Decompress if needed (gzip magic bytes check)
+        if (fileReaderResult instanceof ArrayBuffer) {
+          fileReaderResult = await this.fileService.decompressIfNeeded(fileReaderResult as ArrayBuffer);
+        }
+        const options = new ActivityParsingOptions({
+          generateUnitStreams: false
+        });
+        try {
+          if ((fileReaderResult instanceof ArrayBuffer) && file.extension === 'fit') {
+            newEvent = await EventImporterFIT.getFromArrayBuffer(fileReaderResult, options);
+          } else if (fileReaderResult instanceof ArrayBuffer) {
+            // Deciding based on normalized extension
+            const text = new TextDecoder().decode(fileReaderResult);
+            if (file.extension === 'json') {
+              let json;
+              try {
+                json = JSON.parse(text);
+              } catch (e: any) {
+                try {
+                  newEvent = await EventImporterSuuntoSML.getFromJSONString(text, options);
+                } catch (smlError) {
+                  throw e;
+                }
               }
 
-              // Re-serialize for the importer if it expects a string, or see if it accepts object
-              // EventImporterSuuntoJSON.getFromJSONString expects string.
-              // Just pass the sanitized object if possible. Checking library... 
-              // It seems getFromJSONString calls EventImporterJSON.getFromJSON(JSON.parse(str)).
-              // So we can probably skip getFromJSONString and call getFromJSON if we had access, but checking imports...
-              // EventImporterSuuntoJSON extends EventImporterJSON.
-              // For safety and compatibility with current code structure, we'll re-stringify.
-              newEvent = await EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(sanitizedJson));
-
-            } catch (e) {
-
-              newEvent = await EventImporterSuuntoSML.getFromJSONString(fileReaderResult);
+              if (json) {
+                try {
+                  const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(json);
+                  if (unknownTypes.length > 0) {
+                    this.logger.captureMessage('Unknown Data Types in Upload', { extra: { types: unknownTypes, file: file.filename } });
+                    this.snackBar.open(`Warning: Unknown data types removed: ${unknownTypes.join(', ')}`, 'OK', { duration: 5000 });
+                  }
+                  newEvent = await EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(sanitizedJson), options);
+                } catch (e) {
+                  this.logger.warn('Failed to import JSON as Suunto App format, trying SML fallback', e);
+                  try {
+                    newEvent = await EventImporterSuuntoSML.getFromJSONString(text, options);
+                  } catch (smlError) {
+                    throw e;
+                  }
+                }
+              }
+            } else if (file.extension === 'sml') {
+              newEvent = await EventImporterSuuntoSML.getFromXML(text, options);
+            } else if (file.extension === 'tcx') {
+              newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(text, 'application/xml'), options);
+            } else if (file.extension === 'gpx') {
+              newEvent = await EventImporterGPX.getFromString(text, options);
+            } else {
+              reject(new Error('No compatible parser found'));
+              return;
             }
-          } else if ((typeof fileReaderResult === 'string') && file.extension === 'sml') {
-            newEvent = await EventImporterSuuntoSML.getFromXML(fileReaderResult);
-          } else if ((typeof fileReaderResult === 'string') && file.extension === 'tcx') {
-            newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(fileReaderResult, 'application/xml'));
-          } else if ((typeof fileReaderResult === 'string') && file.extension === 'gpx') {
-            newEvent = await EventImporterGPX.getFromString(fileReaderResult);
-          } else if ((fileReaderResult instanceof ArrayBuffer) && file.extension === 'fit') {
-            newEvent = await EventImporterFIT.getFromArrayBuffer(fileReaderResult);
           } else {
             reject(new Error('No compatible parser found'))
             return;
@@ -117,8 +139,12 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
           // But the JSON importer is the one prone to "Class type ... not in store" if it walks the JSON directly.
           // For now, handling the .json extension is the critical path requested.
 
+
+          if (!newEvent) {
+            throw new Error('Failed to parse event');
+          }
           newEvent.name = file.filename;
-        } catch (e) {
+        } catch (e: any) {
           this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message}`, 'OK', { duration: 2000 });
           reject(e); // no-op here!
           return;
@@ -132,7 +158,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
           });
           // Refresh count
           await this.calculateRemainingUploads();
-        } catch (e) {
+        } catch (e: any) {
           this.snackBar.open(`Could not upload ${file.filename}, reason: ${e.message}`);
           reject(e);
           return;
@@ -141,14 +167,8 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
         this.logger.log('Successfully uploaded event. ID:', newEvent.getID());
         resolve(newEvent);
       };
-      // Read it depending on the extension
-      if (file.extension === 'fit') {
-        // Fit files should be read as array buffers
-        fileReader.readAsArrayBuffer(file.file);
-      } else {
-        // All other as text
-        fileReader.readAsText(file.file);
-      }
+      // Always read as ArrayBuffer to allow for decompression if it's a .gz file
+      fileReader.readAsArrayBuffer(file.file);
     });
   }
 }

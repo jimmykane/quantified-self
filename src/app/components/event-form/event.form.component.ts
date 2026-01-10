@@ -84,11 +84,11 @@ export class EventFormComponent implements OnInit {
         // description: this.eventFormGroup.get('description').value,
         isMerge: this.eventFormGroup.get('isMerge').value,
       });
-      this.snackBar.open('Event saved', null, {
+      this.snackBar.open('Event saved', undefined, {
         duration: 2000,
       });
     } catch (e) {
-      this.snackBar.open('Could not save event', null, {
+      this.snackBar.open('Could not save event', undefined, {
         duration: 2000,
       });
       this.logger.error(e);

@@ -1,20 +1,39 @@
-mat-card{
-  /*margin-top: 2em;*/
-}
-mat-progress-bar{
-  /*margin-bottom: 2em;*/
+.progress-container {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 24px 24px;
+  /* Comfortable padding */
+  min-width: 300px;
+  /* Ensure it's not too narrow */
 }
 
-mat-list{
-  padding: 0;
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.status-text {
+  color: var(--mat-sys-on-surface);
   margin: 0;
 }
 
-mat-card-title{
-  text-align: center;
-  font-size: 1.2em !important;
+.percentage-text {
+  color: var(--mat-sys-primary);
+  font-feature-settings: "tnum";
+  /* Monospaced numbers prevent jumping */
+  margin-left: 16px;
 }
 
-::ng-deep .mat-card-header-text{
-  width: 100%;
+.custom-progress-bar {
+  border-radius: 4px;
+  /* Soften edges */
+  height: 6px !important;
+  /* Slightly thicker */
+}
+
+/* Ensure no default card margins interfere since we removed mat-card */
+:host {
+  display: block;
 }

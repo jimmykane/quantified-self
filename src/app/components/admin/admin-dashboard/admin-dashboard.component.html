@@ -155,6 +155,86 @@
     </div>
 
 
+    <!-- Financial Overview Section -->
+    <div class="dashboard-section">
+        <div class="section-title">
+            <h2>
+                <mat-icon>monetization_on</mat-icon>
+                Financial Overview (Current Month)
+            </h2>
+        </div>
+
+        <div class="stats-grid">
+            <!-- Stripe Revenue -->
+            <div class="glass-card app-stat-card status-success">
+                <div class="app-stat-header">
+                    <mat-icon>payments</mat-icon>
+                    <span>Stripe Revenue (Net)</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!isLoadingFinancials && financialStats">
+                    {{ formatCurrency(financialStats.revenue.total, financialStats.revenue.currency) }}
+                </div>
+                <div class="app-spinner-mini" *ngIf="isLoadingFinancials">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+                <span class="stat-subtitle" *ngIf="financialStats" style="font-size: 0.75rem; opacity: 0.8;">
+                    from {{ financialStats.revenue.invoiceCount }} paid invoices
+                </span>
+            </div>
+
+            <!-- GCP Costs -->
+            <div class="glass-card app-stat-card status-pending" style="cursor: pointer;"
+                *ngIf="financialStats?.cost?.reportUrl" (click)="openExternalLink(financialStats?.cost?.reportUrl)">
+                <div class="app-stat-header">
+                    <mat-icon>cloud</mat-icon>
+                    <span>GCP Estimated Cost</span>
+                </div>
+                <!-- If we have a numerical total (from override or later BigQuery export), show it -->
+                <div class="app-stat-value" *ngIf="!isLoadingFinancials && financialStats?.cost?.total !== null">
+                    {{ formatCurrency(financialStats?.cost?.total || 0, financialStats?.cost?.currency || 'eur') }}
+                </div>
+
+                <!-- Fallback to "View Report" if no numerical total is available -->
+                <div class="app-stat-value" *ngIf="!isLoadingFinancials && financialStats?.cost?.total === null"
+                    style="font-size: 1.5rem; display: flex; align-items: center; gap: 8px;">
+                    View Report <mat-icon
+                        style="font-size: 1.5rem; width: 1.5rem; height: 1.5rem;">open_in_new</mat-icon>
+                </div>
+                <div class="app-spinner-mini" *ngIf="isLoadingFinancials">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+                <div class="stat-subtitle" *ngIf="financialStats"
+                    style="font-size: 0.75rem; opacity: 0.8; display: flex; flex-direction: column; gap: 4px;">
+                    <span>Billing ID: {{ financialStats.cost.billingAccountId || 'N/A' }} ({{
+                        financialStats.cost.currency | uppercase }})</span>
+                    <span *ngIf="financialStats.cost.budget" style="font-weight: 500;">
+                        Budget: {{ formatCurrency(financialStats.cost.budget.amount,
+                        financialStats.cost.budget.currency) }}
+                    </span>
+                    <span *ngIf="financialStats.cost.advice"
+                        style="font-size: 0.65rem; color: var(--mat-sys-primary); margin-top: 4px; font-style: italic;">
+                        {{ financialStats.cost.advice }}
+                    </span>
+                    <span *ngIf="financialStats.cost.lastUpdated"
+                        style="font-size: 0.65rem; color: var(--mat-sys-on-surface-variant); margin-top: 4px; opacity: 0.7;">
+                        Last update: {{ financialStats.cost.lastUpdated | date:'short' }}
+                    </span>
+                </div>
+            </div>
+            <!-- Fallback if no report URL -->
+            <div class="glass-card app-stat-card status-error"
+                *ngIf="!isLoadingFinancials && !financialStats?.cost?.reportUrl">
+                <div class="app-stat-header">
+                    <mat-icon>cloud_off</mat-icon>
+                    <span>GCP Billing</span>
+                </div>
+                <div class="app-stat-value" style="font-size: 1.2rem;">Not Configured</div>
+                <span class="stat-subtitle">Check IAM permissions</span>
+            </div>
+        </div>
+    </div>
+
+
     <!-- Queue Status & Health Section -->
     <div class="dashboard-section">
         <div class="section-title">
@@ -237,23 +317,6 @@
                     <canvas baseChart [data]="barChartData" [options]="barChartOptions" [plugins]="barChartPlugins"
                         [legend]="barChartLegend" [type]="'bar'">
                     </canvas>
-                </div>
-            </div>
-
-            <!-- Auth Provider Breakdown Chart -->
-            <div class="glass-card" style="margin-bottom: 0;">
-                <h3 class="chart-header">
-                    <mat-icon style="margin-right: 8px; vertical-align: middle;">security</mat-icon>
-                    Auth Provider Breakdown
-                </h3>
-
-                <div class="chart-wrapper" style="height: 220px; padding: 16px;">
-                    <canvas baseChart [data]="authPieChartData" [options]="authPieChartOptions" [type]="'pie'">
-                    </canvas>
-                </div>
-
-                <div *ngIf="!userStats?.providers" class="empty-state" style="padding: 0 24px 24px;">
-                    No provider data available
                 </div>
             </div>
         </div>
@@ -440,6 +503,23 @@
             </div>
         </div>
 
+        <!-- Auth Provider Breakdown Chart -->
+        <div class="glass-card" style="margin-bottom: 24px;">
+            <h3 class="chart-header">
+                <mat-icon style="margin-right: 8px; vertical-align: middle;">security</mat-icon>
+                Auth Provider Breakdown
+            </h3>
+
+            <div class="chart-wrapper" style="height: 220px; padding: 16px;">
+                <canvas baseChart [data]="authPieChartData" [options]="authPieChartOptions" [type]="'pie'">
+                </canvas>
+            </div>
+
+            <div *ngIf="!userStats?.providers" class="empty-state" style="padding: 0 24px 24px;">
+                No provider data available
+            </div>
+        </div>
+
         <div class="glass-card qs-filter-container">
             <mat-form-field appearance="outline" class="qs-search-field">
                 <mat-label>Search users</mat-label>
@@ -568,6 +648,17 @@
                             <span class="status-badge" [ngClass]="user.disabled ? 'disabled' : 'active'">
                                 {{user.disabled ? 'Disabled' : 'Active'}}
                             </span>
+                        </td>
+                    </ng-container>
+
+                    <!-- Actions Column -->
+                    <ng-container matColumnDef="actions">
+                        <th mat-header-cell *matHeaderCellDef> Actions </th>
+                        <td mat-cell *matCellDef="let user">
+                            <button mat-icon-button color="primary" matTooltip="Impersonate User"
+                                (click)="onImpersonate(user)" *ngIf="!isAdmin(user)">
+                                <mat-icon>supervised_user_circle</mat-icon>
+                            </button>
                         </td>
                     </ng-container>
 

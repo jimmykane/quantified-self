@@ -1,4 +1,6 @@
-import { Injectable } from '@angular/core';
+import { APP_STORAGE } from './storage/app.storage.token';
+import { Inject, PLATFORM_ID, Injectable } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { Observable, BehaviorSubject, combineLatest } from 'rxjs';
 import { map, filter, shareReplay } from 'rxjs/operators';
 import { AppWindowService } from './app.window.service';
@@ -27,7 +29,9 @@ export class AppRemoteConfigService {
     constructor(
         private windowService: AppWindowService,
         private userService: AppUserService,
-        private logger: LoggerService
+        private logger: LoggerService,
+        @Inject(APP_STORAGE) private storage: Storage,
+        @Inject(PLATFORM_ID) private platformId: object
     ) {
         // Check admin status initially
         this.checkAdminStatus();
@@ -155,24 +159,37 @@ export class AppRemoteConfigService {
 
     private getOrCreateInstanceId(): string {
         const key = 'rc_instance_id';
-        let id = localStorage.getItem(key);
+        let id = this.storage.getItem(key);
         if (!id) {
-            id = crypto.randomUUID();
-            localStorage.setItem(key, id);
+            // crypto.randomUUID() is only available in secure contexts (HTTPS/localhost)
+            if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+                id = crypto.randomUUID();
+            } else {
+                // Fallback for insecure contexts or older browsers
+                id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+                    const r = Math.random() * 16 | 0;
+                    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+                    return v.toString(16);
+                });
+            }
+            this.storage.setItem(key, id);
         }
         return id;
     }
 
     private isBypassEnabled(): boolean {
         const STORAGE_KEY = 'bypass_maintenance';
-        const hasQueryParam = this.windowService.windowRef.location.search.includes('bypass_maintenance=true');
 
-        if (hasQueryParam) {
-            localStorage.setItem(STORAGE_KEY, 'true');
-            return true;
+        if (isPlatformBrowser(this.platformId)) {
+            const hasQueryParam = this.windowService.windowRef.location.search.includes('bypass_maintenance=true');
+
+            if (hasQueryParam) {
+                this.storage.setItem(STORAGE_KEY, 'true');
+                return true;
+            }
         }
 
-        return localStorage.getItem(STORAGE_KEY) === 'true';
+        return this.storage.getItem(STORAGE_KEY) === 'true';
     }
 
     getMaintenanceMode(): Observable<boolean> {

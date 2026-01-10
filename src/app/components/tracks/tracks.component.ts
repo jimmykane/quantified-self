@@ -1,12 +1,8 @@
-import { ChangeDetectorRef, Component, ElementRef, NgZone, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { ChangeDetectorRef, Component, ElementRef, NgZone, OnDestroy, OnInit, ViewChild, inject, Inject, PLATFORM_ID } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
-import * as L from 'leaflet';
-import { LatLng } from 'leaflet';
-import 'leaflet-providers';
-import 'leaflet-easybutton';
-import 'leaflet-fullscreen';
-import leafletImage from 'leaflet-image'
+// Leaflet imports removed for SSR safety - imported dynamically
 import { AppEventService } from '../../services/app.event.service';
 import { take } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -34,30 +30,29 @@ import { WhereFilterOp } from 'firebase/firestore';
   standalone: false
 })
 export class TracksComponent implements OnInit, OnDestroy {
-  @ViewChild('mapDiv', { static: true }) mapDiv: ElementRef;
+  @ViewChild('mapDiv', { static: true }) mapDiv!: ElementRef;
 
   public dateRangesToShow: DateRanges[] = [
     DateRanges.thisWeek,
     DateRanges.thisMonth,
     DateRanges.lastThirtyDays,
     DateRanges.thisYear,
-    DateRanges.all,
   ]
   bufferProgress = new Subject<number>();
   totalProgress = new Subject<number>();
 
-  public user: User;
+  public user!: User;
 
 
 
-  private map: L.Map;
-  private polyLines: L.Polyline[] = [];
+  private map!: any; // Typed as any to avoid importing L.Map in SSR
+  private polyLines: any[] = []; // Typed as any to avoid importing L.Polyline in SSR
   // private viewAllButton: L.Control.EasyButton;
   private scrolled = false;
 
-  private eventsSubscription: Subscription;
+  private eventsSubscription!: Subscription;
 
-  private promiseTime: number;
+  private promiseTime!: number;
   private analyticsService = inject(AppAnalyticsService);
 
   constructor(
@@ -71,28 +66,43 @@ export class TracksComponent implements OnInit, OnDestroy {
     private bottomSheet: MatBottomSheet,
     private overlay: Overlay,
     private userService: AppUserService,
-    private snackBar: MatSnackBar) {
+    private snackBar: MatSnackBar,
+    @Inject(PLATFORM_ID) private platformId: object
+  ) {
   }
 
   async ngOnInit() {
-    this.map = this.initMap()
+    if (!isPlatformBrowser(this.platformId)) {
+      return;
+    }
+
+    // Load Leaflet and plugins dynamically in browser only
+    const leafletModule = await import('leaflet');
+    const L = leafletModule.default || leafletModule;
+    await import('leaflet-providers');
+    await import('leaflet-easybutton');
+    await import('leaflet-fullscreen');
+
+    this.map = this.initMap(L)
     this.centerMapToStartingLocation(this.map);
     this.user = await this.authService.user$.pipe(take(1)).toPromise();
-    if (!this.user.settings.myTracksSettings) {
-      this.user.settings.myTracksSettings = {
-        dateRange: DateRanges.thisWeek
-      };
-    }
-    await this.loadTracksMapForUserByDateRange(this.user, this.map, this.user.settings.myTracksSettings.dateRange)
+    // Force default to This Week for performance/UX
+    this.user.settings.myTracksSettings = {
+      dateRange: DateRanges.thisWeek
+    };
+    await this.loadTracksMapForUserByDateRange(L, this.user, this.map, this.user.settings.myTracksSettings.dateRange)
   }
 
   public async search(event) {
+    if (!isPlatformBrowser(this.platformId)) return;
+    const leafletModule = await import('leaflet');
+    const L = leafletModule.default || leafletModule;
     this.unsubscribeFromAll();
     this.user.settings.myTracksSettings.dateRange = event.dateRange;
     await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
     this.clearAllPolylines();
     this.centerMapToStartingLocation(this.map)
-    await this.loadTracksMapForUserByDateRange(this.user, this.map, this.user.settings.myTracksSettings.dateRange)
+    await this.loadTracksMapForUserByDateRange(L, this.user, this.map, this.user.settings.myTracksSettings.dateRange)
     this.analyticsService.logEvent('my_tracks_search', { method: DateRanges[event.dateRange] });
   }
 
@@ -130,7 +140,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
   }
 
-  private async loadTracksMapForUserByDateRange(user: User, map: L.Map, dateRange: DateRanges) {
+  private async loadTracksMapForUserByDateRange(L: any, user: User, map: any, dateRange: DateRanges) {
     const promiseTime = new Date().getTime();
     this.promiseTime = promiseTime
     this.clearProgressAndOpenBottomSheet();
@@ -217,32 +227,46 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.polyLines = [];
   }
 
-  private panToLines(map: L.Map, lines: L.Polyline[]) {
+  private panToLines(map: any, lines: any[]) {
     if (!lines || !lines.length) {
       return;
     }
-    this.zone.runOutsideAngular(() => {
-      // Perhaps use panto with the lat,lng
-      map.fitBounds((L.featureGroup(lines)).getBounds(), {
-        noMoveStart: false,
-        animate: true,
-        padding: [25, 25],
-      });
-    })
+    // We need L here, but panToLines is called from loadTracksMapForUserByDateRange where we have L available? 
+    // Wait, panToLines is called inside the subscription.
+    // Ideally we pass L or use the dynamic import. 
+    // To simplify and avoid changing signature everywhere significantly and since panToLines is called from context where L is loaded (browser),
+    // we can import L dynamically here again (it's cached) OR pass it.
+    // Let's pass it or assume global L if the library exposes it, but dynamic import is safer.
+    // Actually, panToLines uses L.featureGroup.
+    import('leaflet').then(leafletModule => {
+      const L = leafletModule.default || leafletModule;
+      this.zone.runOutsideAngular(() => {
+        // Perhaps use panto with the lat,lng
+        map.fitBounds((L.featureGroup(lines)).getBounds(), {
+          noMoveStart: false,
+          animate: true,
+          padding: [25, 25],
+        });
+      })
+    });
   }
 
-  private centerMapToStartingLocation(map: L.Map) {
-    navigator.geolocation.getCurrentPosition(pos => {
-      if (!this.scrolled && this.polyLines.length === 0) {
-        map.panTo([pos.coords.latitude, pos.coords.longitude], {
-          noMoveStart: true,
-          animate: false,
+  private centerMapToStartingLocation(map: any) {
+    if (isPlatformBrowser(this.platformId)) {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(pos => {
+          if (!this.scrolled && this.polyLines.length === 0) {
+            map.panTo([pos.coords.latitude, pos.coords.longitude], {
+              noMoveStart: true,
+              animate: false,
+            });
+            // noMoveStart doesn't seem to have an effect, see Leaflet
+            // issue: https://github.com/Leaflet/Leaflet/issues/5396
+            this.clearScroll(map);
+          }
         });
-        // noMoveStart doesn't seem to have an effect, see Leaflet
-        // issue: https://github.com/Leaflet/Leaflet/issues/5396
-        this.clearScroll(map);
       }
-    });
+    }
   }
 
   private markScrolled(map) {
@@ -259,9 +283,9 @@ export class TracksComponent implements OnInit, OnDestroy {
     })
   }
 
-  private initMap(): L.Map {
+  private initMap(L: any): any {
     return this.zone.runOutsideAngular(() => {
-      const map = L.map(this.mapDiv.nativeElement, <L.MapOptions>{
+      const map = L.map(this.mapDiv.nativeElement, {
         center: [0, 0],
         fadeAnimation: true,
         zoomAnimation: true,
@@ -353,79 +377,3 @@ const AVAILABLE_THEMES = [
   'Stamen.Watercolor',
   'No map',
 ];
-
-
-export function screenshot(map, format) {
-  leafletImage(map, (err, canvas) => {
-    if (err) {
-      return window.alert(err);
-    }
-    if (format === 'png') {
-      canvas.toBlob(blob => {
-        // link.href = URL.createObjectURL(blob);
-        this.fileService.downloadFile(blob, 'should add dateranges', 'png')
-      });
-      // }
-    } else if (format === 'svg') {
-      const scale = 2;
-      const bounds = map.getPixelBounds();
-      bounds.min = bounds.min.multiplyBy(scale);
-      bounds.max = bounds.max.multiplyBy(scale);
-      const left = bounds.min.x;
-      const top = bounds.min.y;
-      const width = bounds.getSize().x;
-      const height = bounds.getSize().y;
-
-      const svg = L.SVG.create('svg');
-      const root = L.SVG.create('g');
-
-      svg.setAttribute('viewBox', `${left} ${top} ${width} ${height}`);
-
-      this.polyLines.forEach(polylines => {
-        // Project each point from LatLng, scale it up, round to
-        // nearest 1/10 (by multiplying by 10, rounding and
-        // dividing), and reducing by removing duplicates (when two
-        // consecutive points have rounded to the same value)
-        const pts = (<LatLng[]>polylines.getLatLngs()).map((ll) =>
-          map.project(ll)
-            .multiplyBy(scale * 10)
-            .round()
-            .divideBy(10)
-        ).reduce((acc, next) => {
-          if (acc.length === 0 ||
-            acc[acc.length - 1].x !== next.x ||
-            acc[acc.length - 1].y !== next.y) {
-            acc.push(next);
-          }
-          return acc;
-        }, []);
-
-        // If none of the points on the track are on the screen,
-        // don't export the track
-        if (!pts.some(pt => bounds.contains(pt))) {
-          return;
-        }
-        const path = L.SVG.pointsToPath([pts], false);
-        const el = L.SVG.create('path');
-
-        el.setAttribute('stroke', polylines.options.color);
-        el.setAttribute('stroke-opacity', polylines.options.opacity.toString());
-        el.setAttribute('stroke-width', (scale * polylines.options.weight).toString());
-        el.setAttribute('stroke-linecap', 'round');
-        el.setAttribute('stroke-linejoin', 'round');
-        el.setAttribute('fill', 'none');
-
-        el.setAttribute('d', path);
-
-        root.appendChild(el);
-      });
-
-      svg.appendChild(root);
-
-      const xml = (new XMLSerializer()).serializeToString(svg);
-
-      const blob = new Blob([xml], { type: 'application/octet-stream' });
-      this.fileService.downloadFile(blob, 'should add dateranges svg', 'svg')
-    }
-  });
-}

@@ -51,18 +51,25 @@ export class SideNavComponent implements OnInit, OnDestroy {
     })
     this.userSubscription = this.authService.user$.subscribe(async (user) => {
       this.user = user;
+      this.user = user;
       if (user) {
         this.isAdminUser = await this.userService.isAdmin();
       } else {
         this.isAdminUser = false;
       }
-    })
+    });
   }
 
   get isProUser(): boolean {
-    if (!this.user) return false;
-    const stripeRole = (this.user as any).stripeRole;
-    return stripeRole === 'pro' || stripeRole === 'basic' || (this.user as any).isPro === true;
+    return AppUserService.isProUser(this.user, this.isAdminUser);
+  }
+
+  get isBasicUser(): boolean {
+    return AppUserService.isBasicUser(this.user);
+  }
+
+  get hasPaidAccess(): boolean {
+    return AppUserService.hasPaidAccessUser(this.user, this.isAdminUser);
   }
 
   async donate() {
@@ -72,10 +79,7 @@ export class SideNavComponent implements OnInit, OnDestroy {
 
 
 
-  async gitHubSponsor() {
-    this.analyticsService.logEvent('github_sponsor');
-    window.open('https://github.com/sponsors/jimmykane?utm_source=qs');
-  }
+
 
   async gitHubStar() {
     this.analyticsService.logEvent('github_star');

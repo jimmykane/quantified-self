@@ -30,31 +30,31 @@
 
         <span class="fill-space"></span>
 
-        @if (authState === null && title && title !== 'Dashboard' && title !== 'Login') {
+        @if (authState === null && !isDashboardRoute && !isLoginRoute) {
         <button mat-flat-button class="right" color="accent" disabled>
           Loading
         </button>
         }
-        @if (authState === true && title && title !== 'Dashboard') {
+        @if (authState === true && !isDashboardRoute) {
         <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);">
           Dashboard
         </button>
         }
 
-        @if (title && title === 'Dashboard' && authService.user$ | async; as user) {
+        @if (isDashboardRoute && authService.user$ | async; as user) {
         <app-processing-indicator class="right"></app-processing-indicator>
         <app-upload-activities class="right" [user]="user">
         </app-upload-activities>
         }
 
-        @if (isAdminUser && title !== 'Admin') {
+        @if (isAdminUser && !isAdminRoute) {
         <button mat-icon-button class="right admin-button" matTooltip="Admin Dashboard"
           (click)="router.navigate(['/admin']);">
           <mat-icon>admin_panel_settings</mat-icon>
         </button>
         }
 
-        @if (authState === false && title && title !== 'Login') {
+        @if (authState === false && !isLoginRoute) {
         <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/login']);">
           Login or Register
         </button>

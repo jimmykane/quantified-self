@@ -1,5 +1,5 @@
 import { Component } from '@angular/core';
-import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ServiceNames, Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { HttpClient } from '@angular/common/http';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -49,5 +49,9 @@ export class ServicesCorosComponent extends ServicesAbstractComponentDirective {
 
   buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
     return token.redirect_uri
+  }
+
+  get corosOpenId(): string | undefined {
+    return (this.serviceTokens as Auth2ServiceTokenInterface[])?.[0]?.openId;
   }
 }

@@ -34,7 +34,7 @@
           @for (serviceToken of serviceTokens; track $index; let i = $index) {
           <mat-list-item style="height: auto; padding: 8px 0;">
             <mat-icon matListItemIcon (click)="clicks = clicks+1" style="margin-right: 8px;">account_circle</mat-icon>
-            <div matListItemTitle style="font-size: 0.9rem;">{{ serviceToken.userName }} </div>
+            <div matListItemTitle style="font-size: 0.9rem;">{{ getSuuntoUserName(serviceToken) }} </div>
             <div matListItemLine style="font-size: 0.8rem; opacity: 0.7;">Connected: {{serviceToken.dateCreated |
               date:'short'}}</div>
           </mat-list-item>
@@ -48,11 +48,15 @@
             [disabled]="!user || this.isGuest || isLoading || isConnecting || !hasProAccess"
             (click)="connectWithService($event)">
             @if (isConnecting) {
-            <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
-              color="accent"></mat-spinner>
-            Connecting...
+            <ng-container>
+              <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
+                color="accent"></mat-spinner>
+              Connecting...
+            </ng-container>
             } @else {
-            <mat-icon>link</mat-icon> Connect
+            <ng-container>
+              <mat-icon>link</mat-icon> Connect
+            </ng-container>
             }
           </button>
           }
@@ -61,11 +65,15 @@
           <button mat-stroked-button color="warn" style="width: 100%" [disabled]="isLoading || isDisconnecting"
             (click)="deauthorizeService($event)">
             @if (isDisconnecting) {
-            <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
-              color="warn"></mat-spinner>
-            Disconnecting...
+            <ng-container>
+              <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
+                color="warn"></mat-spinner>
+              Disconnecting...
+            </ng-container>
             } @else {
-            <mat-icon>link_off</mat-icon> Disconnect
+            <ng-container>
+              <mat-icon>link_off</mat-icon> Disconnect
+            </ng-container>
             }
           </button>
           }
@@ -156,11 +164,10 @@
       </div>
     </mat-card>
 
-    <!-- FIT Upload Card -->
-    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
-      (click)="!hasProAccess && triggerUpsell()">
+    <!-- FIT Upload Card - No (click) handler to allow file input interaction -->
+    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess">
       @if (!hasProAccess) {
-      <div class="lock-overlay">
+      <div class="lock-overlay" (click)="triggerUpsell()">
         <mat-icon class="lock-icon-large">lock</mat-icon>
         <span class="pro-badge">PRO</span>
       </div>
@@ -168,7 +175,7 @@
       <mat-card-header>
         <mat-card-subtitle class="tab-subtitle">
           <mat-icon>cloud_upload</mat-icon>
-          <span>FIT Upload</span>
+          <span>Upload FIT Activity</span>
         </mat-card-subtitle>
       </mat-card-header>
       <mat-divider></mat-divider>
@@ -179,11 +186,10 @@
       </div>
     </mat-card>
 
-    <!-- GPX Upload Card -->
-    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
-      (click)="!hasProAccess && triggerUpsell()">
+    <!-- GPX Upload Card - No (click) handler to allow file input interaction -->
+    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess">
       @if (!hasProAccess) {
-      <div class="lock-overlay">
+      <div class="lock-overlay" (click)="triggerUpsell()">
         <mat-icon class="lock-icon-large">lock</mat-icon>
         <span class="pro-badge">PRO</span>
       </div>
@@ -191,7 +197,7 @@
       <mat-card-header>
         <mat-card-subtitle class="tab-subtitle">
           <mat-icon svgIcon="route"></mat-icon>
-          <span>GPX Upload</span>
+          <span>Upload GPX Route</span>
         </mat-card-subtitle>
         @if (serviceMeta && serviceMeta.uploadedRoutesCount && serviceMeta.uploadedRoutesCount > 3) {
         <mat-card-subtitle class="smaller">

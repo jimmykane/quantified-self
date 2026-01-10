@@ -64,7 +64,7 @@ export class ChartsXYComponent extends DashboardChartAbstractDirective implement
     chartTitle.adapter.add('text', (text, target, key) => {
       const data = target.parent.parent.parent.parent['data'];
       const value = this.getAggregateData(data, this.chartDataValueType);
-      return `[font-size: 1.4em]${value.getDisplayType()}[/] [bold font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType}${this.chartDataCategoryType === ChartDataCategoryTypes.DateType ? ` @ ${TimeIntervals[this.chartDataTimeInterval]}` : ``})`;
+      return `[font-family: 'Barlow Condensed', sans-serif font-size: 1.4em]${value.getDisplayType()}[/] [bold font-family: 'Barlow Condensed', sans-serif font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType}${this.chartDataCategoryType === ChartDataCategoryTypes.DateType ? ` @ ${TimeIntervals[this.chartDataTimeInterval]}` : ``})`;
     });
     chartTitle.marginTop = core.percent(20);
     const categoryAxis = chart.xAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval, charts));
@@ -99,7 +99,7 @@ export class ChartsXYComponent extends DashboardChartAbstractDirective implement
     // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartDataType).unit}`;
     valueAxis.renderer.labels.template.adapter.add('text', (text, target) => {
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(text));
-      return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
+      return `[bold font-family: 'Barlow Condensed', sans-serif font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
     });
     valueAxis.renderer.labels.template.adapter.add('dx', (text, target) => {
       return 15;
@@ -170,7 +170,7 @@ export class ChartsXYComponent extends DashboardChartAbstractDirective implement
       categoryLabel.dy = -15;
       categoryLabel.label.adapter.add('text', (text, target) => {
         const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext[this.chartDataValueType]));
-        return `[bold font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
+        return `[bold font-family: 'Barlow Condensed', sans-serif font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
       });
       categoryLabel.label.background = new core.RoundedRectangle();
       categoryLabel.label.background.fillOpacity = 1;

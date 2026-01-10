@@ -12,7 +12,7 @@ import {
   GarminHealthAPIActivityQueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface,
 } from './queue/queue-item.interface';
-import { generateIDFromParts, setEvent, UsageLimitExceededError, enqueueWorkoutTask } from './utils';
+import { generateIDFromParts, setEvent, UsageLimitExceededError, enqueueWorkoutTask, UserNotFoundError } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getServiceWorkoutQueueName } from './shared/queue-names';
 import {
@@ -23,7 +23,7 @@ import * as requestPromise from './request-helper';
 import { config } from './config';
 import { getTokenData } from './tokens';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
-import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
+import { COROSAPIEventMetaData, SuuntoAppEventMetaData, ActivityParsingOptions } from '@sports-alliance/sports-lib';
 
 
 
@@ -41,7 +41,7 @@ export async function parseQueueItems(serviceName: ServiceNames) {
   logger.info('Starting timer: ParseQueueItems');
 
   const bulkWriter = admin.firestore().bulkWriter();
-  const limit = pLimit(20);
+  const limit = pLimit(10);
   const tokenCache = new Map<string, Promise<admin.firestore.QuerySnapshot>>();
   const usageCache = new Map<string, Promise<{ role: string, limit: number, currentCount: number }>>();
   const pendingWrites = new Map<string, number>();
@@ -89,7 +89,7 @@ export async function parseQueueItems(serviceName: ServiceNames) {
 }
 
 const TIMEOUT_DEFAULT = 300;
-const MEMORY_DEFAULT = '2GB';
+const MEMORY_DEFAULT = '4GB';
 const TIMEOUT_HIGH = 540;
 const MEMORY_HIGH = '4GB';
 
@@ -280,6 +280,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
 
     let result;
     try {
+      logger.info(`Downloading ${serviceName} workoutID: ${(queueItem as any).workoutID} for queue item ${queueItem.id}`);
       logger.info('Starting timer: DownloadFit');
       result = await getWorkoutForService(serviceName, queueItem, serviceToken);
       logger.info(`Downloaded FIT file for ${queueItem.id}`);
@@ -314,9 +315,10 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
 
     }
     logger.info('Ending timer: DownloadFit');
+    logger.info(`File size: ${result.byteLength || result.length} bytes for queue item ${queueItem.id}`);
     try {
       logger.info('Starting timer: CreateEvent');
-      const event = await EventImporterFIT.getFromArrayBuffer(result);
+      const event = await EventImporterFIT.getFromArrayBuffer(result, new ActivityParsingOptions({ generateUnitStreams: false }));
       logger.info('Ending timer: CreateEvent');
       event.name = event.startDate.toJSON(); // @todo improve
       logger.info(`Created Event from FIT file of ${queueItem.id}`);
@@ -351,6 +353,10 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         retryIncrement = 20;
         lastError = e;
         break; // Stop checking other tokens if usage limit exceeded
+      } else if (e instanceof UserNotFoundError) {
+        logger.error(new Error(`User for queue item ${queueItem.id} not found. Aborting retries. ${e.message}`));
+        await moveToDeadLetterQueue(queueItem, e, bulkWriter, 'USER_NOT_FOUND');
+        return QueueResult.MovedToDLQ;
       }
 
       logger.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.openId || serviceToken.userName} to ${queueItem.retryCount + 1} due to ${e.message}`));

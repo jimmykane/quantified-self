@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Router, ActivatedRoute } from '@angular/router';
 import { LoggerService } from '../../../services/logger.service';
@@ -10,9 +11,9 @@ import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
-import { EventImporterFIT } from '@sports-alliance/sports-lib';
+import { EventImporterFIT, ActivityParsingOptions } from '@sports-alliance/sports-lib';
 import { environment } from '../../../../environments/environment';
-import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
 
 
@@ -23,7 +24,7 @@ import { ServicesAbstractComponentDirective } from '../services-abstract-compone
   standalone: false
 })
 export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective implements OnInit {
-  public suuntoAppLinkFormGroup: UntypedFormGroup;
+  public suuntoAppLinkFormGroup!: UntypedFormGroup;
 
   public serviceName = ServiceNames.SuuntoApp;
   public isDownloading = false;
@@ -67,7 +68,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   }
 
   hasError(field: string) {
-    return !(this.suuntoAppLinkFormGroup.get(field).valid && this.suuntoAppLinkFormGroup.get(field).touched);
+    return !(this.suuntoAppLinkFormGroup.get(field)?.valid && this.suuntoAppLinkFormGroup.get(field)?.touched);
   }
 
   async onImportAndOpen() {
@@ -92,26 +93,32 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
 
     try {
 
-      const parts = this.suuntoAppLinkFormGroup.get('input').value.split('?')[0].split('/');
+      const parts = this.suuntoAppLinkFormGroup.get('input')?.value.split('?')[0].split('/');
       const activityID = parts[parts.length - 1] === '' ? parts[parts.length - 2] : parts[parts.length - 1];
 
-      const result = await this.http.get(
+      const result = await firstValueFrom(this.http.get(
         environment.functions.stWorkoutDownloadAsFit, {
         params: {
           activityID: activityID
         },
         responseType: 'arraybuffer',
-      }).toPromise();
+      }));
+
+      if (!result) {
+        throw new Error('No data received');
+      }
 
       if (!shouldImportAndOpen) {
         this.fileService.downloadFile(new Blob([new Uint8Array(result)]), activityID, 'fit');
         // .subscribe(response => this.downLoadFile(response, "application/ms-excel"));
-        this.snackBar.open('Activity download started', null, {
+        this.snackBar.open('Activity download started', undefined, {
           duration: 2000,
         });
         this.analyticsService.logEvent('downloaded_fit_file', { method: ServiceNames.SuuntoApp });
       } else {
-        const newEvent = await EventImporterFIT.getFromArrayBuffer(result);
+        const newEvent = await EventImporterFIT.getFromArrayBuffer(result, new ActivityParsingOptions({
+          generateUnitStreams: false
+        }));
         await this.eventService.writeAllEventData(this.user, newEvent, {
           data: result,
           extension: 'fit',
@@ -121,7 +128,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
         await this.router.navigate(['/user', this.user.uid, 'event', newEvent.getID()], {});
       }
     } catch (e) {
-      this.snackBar.open('Could not open activity. Make sure that the activity is public by opening the link in a new browser tab', null, {
+      this.snackBar.open('Could not open activity. Make sure that the activity is public by opening the link in a new browser tab', undefined, {
         duration: 5000,
       });
       this.logger.error(e);
@@ -140,5 +147,13 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
         this.validateAllFormFields(control);
       }
     });
+  }
+
+  get suuntoUserName(): string | undefined {
+    return (this.serviceTokens as Auth2ServiceTokenInterface[])?.[0]?.userName;
+  }
+
+  getSuuntoUserName(token: Auth1ServiceTokenInterface | Auth2ServiceTokenInterface): string | undefined {
+    return (token as Auth2ServiceTokenInterface).userName;
   }
 }

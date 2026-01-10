@@ -6,16 +6,17 @@
       [rowspan]="tile.size.rows">
       <!--      [rowspan]="(tile.size.rows >= tiles.length/numberOfCols) ? tiles.length/numberOfCols : tile.size.rows">-->
       @if (tile.type === tileTypes.Chart) {
-      <app-tile-chart class="glass-card" [user]="user" [type]="tile.type" [chartType]="tile.chartType"
-        [isLoading]="isLoading" [data]="tile.data" [showActions]="showActions" [chartTheme]="chartTheme"
-        [dataType]="tile.dataType" [dataValueType]="tile.dataValueType" [dataCategoryType]="tile.dataCategoryType"
-        [dataTimeInterval]="tile.timeInterval" [size]="tile.size" [order]="tile.order"></app-tile-chart>
+      <app-tile-chart class="glass-card" [user]="user" [type]="tile.type" [chartType]="getChartTile(tile).chartType"
+        [isLoading]="isLoading" [data]="getChartTile(tile).data" [showActions]="showActions" [chartTheme]="chartTheme"
+        [dataType]="getChartTile(tile).dataType" [dataValueType]="getChartTile(tile).dataValueType"
+        [dataCategoryType]="getChartTile(tile).dataCategoryType" [dataTimeInterval]="getChartTile(tile).timeInterval"
+        [size]="tile.size" [order]="tile.order"></app-tile-chart>
       }
       @if (tile.type === tileTypes.Map) {
       <app-tile-map class="glass-card" [user]="user" [type]="tile.type" [isLoading]="isLoading"
-        [showActions]="showActions" [events]="tile.events" [mapTheme]="tile.mapTheme" [mapType]="tile.mapType"
-        [showHeatMap]="tile.showHeatMap" [clusterMarkers]="tile.clusterMarkers" [size]="tile.size"
-        [order]="tile.order"></app-tile-map>
+        [showActions]="showActions" [events]="getMapTile(tile).events" [mapTheme]="getMapTile(tile).mapTheme"
+        [mapType]="getMapTile(tile).mapType" [showHeatMap]="getMapTile(tile).showHeatMap"
+        [clusterMarkers]="getMapTile(tile).clusterMarkers" [size]="tile.size" [order]="tile.order"></app-tile-map>
       }
     </mat-grid-tile>
     }

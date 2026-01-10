@@ -10,7 +10,8 @@ import {
   ChartDataCategoryTypes,
   ChartDataValueTypes,
   TileChartSettingsInterface,
-  TimeIntervals
+  TimeIntervals,
+  ChartTypes
 } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../../services/app.user.service';
 import { DataAltitudeMax } from '@sports-alliance/sports-lib';
@@ -58,7 +59,7 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
   public chartValueTypes = ChartDataValueTypes;
   public chartCategoryTypes = ChartDataCategoryTypes;
 
-  public dataGroups = [
+  public dataGroups: DataGroupInterface[] = [
     {
       name: 'Common',
       data: [
@@ -188,14 +189,8 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
   }
 }
 
-export enum ChartTypes {
-  Pie = 'Pie',
-  ColumnsHorizontal = 'Columns Horizontal',
-  ColumnsVertical = 'Columns Vertical',
-  PyramidsVertical = 'Pyramids Vertical',
-  LinesHorizontal = 'Lines Horizontal',
-  LinesVertical = 'Lines Vertical',
-  Spiral = 'Spiral',
-  IntensityZones = 'Intensity Zones',
-  // BrianDevine = 'Brian Devine'
+export interface DataGroupInterface {
+  name: string;
+  data: string[];
+  disabled?: boolean;
 }

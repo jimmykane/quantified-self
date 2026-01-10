@@ -1,4 +1,4 @@
-import { Component, inject, Inject } from '@angular/core';
+import { Component, inject, Inject, Optional } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatDialog, MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -36,11 +36,11 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
     protected dialog: MatDialog,
     protected processingService: AppProcessingService,
     protected router: Router,
-    @Inject(MAT_DIALOG_DATA) public data: any,
-    public dialogRef: MatDialogRef<UploadActivitiesToServiceComponent>,
+    @Optional() @Inject(MAT_DIALOG_DATA) public data: any,
+    @Optional() public dialogRef: MatDialogRef<UploadActivitiesToServiceComponent>,
     logger: LoggerService) {
     super(snackBar, dialog, processingService, router, logger);
-    if (data.serviceName) {
+    if (data?.serviceName) {
       this.serviceName = data.serviceName;
     }
   }
@@ -91,14 +91,16 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
               },
               error: (e: any) => {
                 this.logger.error(e);
-                this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message} `, 'OK', { duration: 10000 });
+                const errorMessage = typeof e.error === 'string' ? e.error : e.message;
+                this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${errorMessage} `, 'OK', { duration: 10000 });
                 reject(e);
               }
             });
 
         } catch (e: any) {
           this.logger.error(e);
-          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message} `, 'OK', { duration: 10000 });
+          const errorMessage = typeof e.error === 'string' ? e.error : e.message;
+          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${errorMessage} `, 'OK', { duration: 10000 });
           reject(e);
           return;
         }
