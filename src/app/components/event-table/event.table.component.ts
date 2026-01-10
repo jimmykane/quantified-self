@@ -28,7 +28,7 @@ import { EventInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { debounceTime, take, map } from 'rxjs/operators';
 import { firstValueFrom, Subject, Subscription } from 'rxjs';
-import { rowsAnimation } from '../../animations/animations';
+import { rowsAnimation, expandCollapse } from '../../animations/animations';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
 import { AppUserService } from '../../services/app.user.service';
@@ -51,6 +51,7 @@ import { Firestore, doc, collection } from '@angular/fire/firestore';
   styleUrls: ['./event.table.component.css'],
   animations: [
     rowsAnimation,
+    expandCollapse
   ],
   providers: [DatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,

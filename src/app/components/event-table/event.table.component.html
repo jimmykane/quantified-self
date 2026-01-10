@@ -11,7 +11,7 @@
   </mat-form-field>
 
   @if (selection.selected.length) {
-  <div class="buttons">
+  <div class="buttons" [@expandCollapse]>
     @if (this.selection.selected.length > 1) {
     <button mat-icon-button [matBadge]="selection.selected.length" matBadgeColor="primary" matBadgeSize="small"
       matTooltip="Merge {{selection.selected.length}} events"

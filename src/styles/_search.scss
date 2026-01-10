@@ -11,8 +11,10 @@
 
 .qs-search-field {
     @include qs-hide-subscript;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     max-width: 400px;
+    transition: all 0.3s ease-in-out;
 
     .mat-mdc-text-field-wrapper {
         background-color: rgba(255, 255, 255, 0.5);
