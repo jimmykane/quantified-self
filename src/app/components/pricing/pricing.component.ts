@@ -54,16 +54,25 @@ export class PricingComponent implements OnInit, OnDestroy {
 
     async ngOnInit(): Promise<void> {
         // Define a synthetic "Free" product that matches the StripeProduct structure
-        const freeProduct: any = {
+        const freeProduct: StripeProduct = {
             id: 'free_tier',
+            active: true,
             name: 'Free Forever',
             description: 'The essentials to get started',
+            images: [],
+            role: 'free',
             metadata: { role: 'free' },
             prices: [{
                 id: 'free_price',
-                unit_amount: 0,
+                active: true,
                 currency: 'USD',
-                recurring: { interval: 'forever' }
+                unit_amount: 0,
+                description: 'Free price',
+                type: 'recurring',
+                interval: 'year',
+                interval_count: 1,
+                trial_period_days: 0,
+                recurring: { interval: 'forever' as any }
             }]
         };
 
@@ -207,7 +216,11 @@ export class PricingComponent implements OnInit, OnDestroy {
             // but `updateUserProperties` takes `User`.
 
             // Let's get the user first.
-            const uid = this.auth.currentUser.uid;
+            const uid = this.auth.currentUser?.uid;
+            if (!uid) {
+                this.router.navigate(['/login']);
+                return;
+            }
             const user = await firstValueFrom(this.userService.getUserByID(uid));
 
             if (user) {

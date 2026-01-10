@@ -250,7 +250,7 @@ describe('EventTableComponent', () => {
         it('should show message when no events are selected', async () => {
             component.selection.clear();
             await component.downloadOriginals();
-            expect(mockSnackBar.open).toHaveBeenCalledWith('No events selected', null, { duration: 2000 });
+            expect(mockSnackBar.open).toHaveBeenCalledWith('No events selected', undefined, { duration: 2000 });
         });
 
         it('should show message when selected events have no original files', async () => {
@@ -261,7 +261,7 @@ describe('EventTableComponent', () => {
 
             await component.downloadOriginals();
 
-            expect(mockSnackBar.open).toHaveBeenCalledWith('No original files available for selected events', null, { duration: 3000 });
+            expect(mockSnackBar.open).toHaveBeenCalledWith('No original files available for selected events', undefined, { duration: 3000 });
         });
 
         it('should download and zip files from events with originalFiles array', async () => {

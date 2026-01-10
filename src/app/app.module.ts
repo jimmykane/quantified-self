@@ -17,6 +17,7 @@ import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingServ
 import { provideRemoteConfig, getRemoteConfig } from '@angular/fire/remote-config';
 import { provideStorage, getStorage } from '@angular/fire/storage';
 import { MaterialModule } from './modules/material.module';
+import { SharedModule } from './modules/shared.module';
 import { ClipboardModule } from '@angular/cdk/clipboard';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { MAT_DIALOG_DEFAULT_OPTIONS } from '@angular/material/dialog';
@@ -39,7 +40,6 @@ export function initializeRemoteConfig(remoteConfigService: AppRemoteConfigServi
 
 import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/date-locale.config';
 import { APP_STORAGE } from './services/storage/app.storage.token';
-import { AppSkeletonComponent } from './components/loading/skeleton/app.skeleton.component';
 
 
 @NgModule({
@@ -50,12 +50,12 @@ import { AppSkeletonComponent } from './components/loading/skeleton/app.skeleton
     ProcessingIndicatorComponent,
     GracePeriodBannerComponent,
     RouteLoaderComponent,
-    AppSkeletonComponent
   ],
   bootstrap: [AppComponent],
   imports: [
     BrowserModule,
     BrowserAnimationsModule,
+    SharedModule,
     AppRoutingModule,
     ClipboardModule,
     MaterialModule,

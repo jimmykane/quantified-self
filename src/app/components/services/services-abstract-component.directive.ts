@@ -35,13 +35,13 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 export abstract class ServicesAbstractComponentDirective implements OnInit, OnDestroy, OnChanges {
   public abstract serviceName: ServiceNames;
 
-  @Input() user: User;
-  @Input() isGuest: boolean;
-  @Input() hasProAccess: boolean;
+  @Input() user!: User;
+  @Input() isGuest!: boolean;
+  @Input() hasProAccess!: boolean;
   @Input() isAdmin: boolean = false;
   public isLoading = false;
-  public serviceTokens: Auth2ServiceTokenInterface[] | Auth1ServiceTokenInterface[];
-  public serviceMeta: UserServiceMetaInterface
+  public serviceTokens: Auth2ServiceTokenInterface[] | Auth1ServiceTokenInterface[] | undefined;
+  public serviceMeta: UserServiceMetaInterface | undefined;
   public selectedTabIndex = 0;
   public serviceNames = ServiceNames;
   public isConnecting = false;
@@ -50,7 +50,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   public isConnected = false;
 
 
-  protected serviceDataSubscription: Subscription;
+  protected serviceDataSubscription!: Subscription;
 
   protected router = inject(Router);
   protected changeDetectorRef = inject(ChangeDetectorRef);
@@ -85,8 +85,8 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         .getUserMetaForService(this.user, this.serviceName),
     ]).pipe(tap((results) => {
       if (!results) {
-        this.serviceTokens = null;
-        this.serviceMeta = null;
+        this.serviceTokens = undefined;
+        this.serviceMeta = undefined;
         return;
       }
       this.serviceTokens = results[0];
@@ -105,7 +105,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
           this.analyticsService.logEvent('service_connected', { service_name: this.serviceName });
           // If we just connected, triggering sync automatically might be nice
           // But usually we just show connected state.
-          this.snackBar.open(`Successfully connected to ${this.serviceName}`, null, {
+          this.snackBar.open(`Successfully connected to ${this.serviceName}`, undefined, {
             duration: 10000,
           });
         }
@@ -116,12 +116,12 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         await this.requestAndSetToken(this.route.snapshot.queryParamMap)
         this.analyticsService.logEvent('connected_to_service', { serviceName: this.serviceName });
         this.forceConnected = true;
-        this.snackBar.open(`Successfully connected to ${this.serviceName}`, null, {
+        this.snackBar.open(`Successfully connected to ${this.serviceName}`, undefined, {
           duration: 10000,
         });
       } catch (e) {
         this.logger.error(e);
-        this.snackBar.open(`Could not connect due to ${e.message}`, null, {
+        this.snackBar.open(`Could not connect due to ${e.message}`, undefined, {
           duration: 10000,
         });
       } finally {
@@ -149,7 +149,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     } catch (e) {
       this.isConnecting = false;
       this.logger.error(e);
-      this.snackBar.open(`Could not connect to ${this.serviceName} due to ${e.message}`, null, {
+      this.snackBar.open(`Could not connect to ${this.serviceName} due to ${e.message}`, undefined, {
         duration: 5000,
       });
     }
@@ -163,13 +163,13 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     this.isDisconnecting = true;
     try {
       await this.userService.deauthorizeService(this.serviceName);
-      this.snackBar.open(`Disconnected successfully`, null, {
+      this.snackBar.open(`Disconnected successfully`, undefined, {
         duration: 2000,
       });
       this.analyticsService.logEvent('disconnected_from_service', { serviceName: this.serviceName });
     } catch (e) {
       this.logger.error(e);
-      this.snackBar.open(`Could not disconnect due to ${e.message}`, null, {
+      this.snackBar.open(`Could not disconnect due to ${e.message}`, undefined, {
         duration: 2000,
       });
     }
