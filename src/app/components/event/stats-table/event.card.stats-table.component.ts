@@ -15,11 +15,13 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib';
 import { SelectionModel } from '@angular/cdk/collections';
 import { DataExportService } from '../../../services/data-export.service';
+import { expandCollapse } from '../../../animations/animations';
 
 @Component({
   selector: 'app-event-stats-table',
   templateUrl: './event.card.stats-table.component.html',
   styleUrls: ['./event.card.stats-table.component.css'],
+  animations: [expandCollapse],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })

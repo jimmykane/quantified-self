@@ -26,7 +26,7 @@
     </mat-form-field>
 
     @if (selection.hasValue()) {
-    <div class="selection-actions">
+    <div class="selection-actions" [@expandCollapse]>
       <button mat-flat-button color="primary" (click)="copyToClipboard()" matTooltip="Copy Selected to Markdown">
         <mat-icon>integration_instructions</mat-icon>
       </button>

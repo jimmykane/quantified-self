@@ -72,6 +72,7 @@ mat-row:hover:not(.selected-row) {
 .table-actions mat-form-field {
   flex: 1;
   min-width: 200px;
+  transition: all 0.3s ease-in-out;
 }
 
 .selection-actions {
@@ -80,6 +81,8 @@ mat-row:hover:not(.selected-row) {
   align-items: center;
   /* Allow height to be determined by contents, but align with input */
   height: auto;
+  overflow: visible;
+  white-space: nowrap;
 }
 
 .selection-actions button {
