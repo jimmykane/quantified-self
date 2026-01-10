@@ -69,7 +69,9 @@ export class EventCardComponent implements OnInit {
   );
 
   public hasDevicesFlag = computed(() =>
-    this.event()?.getActivities().some(a => a.creator?.devices?.length > 0) ?? false
+    this.event()?.getActivities().some(a =>
+      a.creator?.devices?.some(d => d.name || d.manufacturer)
+    ) ?? false
   );
 
   public hasPositionsFlag = computed(() =>

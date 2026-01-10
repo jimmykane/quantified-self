@@ -83,7 +83,9 @@ export class EventSummaryComponent implements OnChanges {
   }
 
   get hasDevices(): boolean {
-    return this.selectedActivities?.some(a => a.creator?.devices?.length > 0);
+    return this.selectedActivities?.some(a =>
+      a.creator?.devices?.some(d => d.name || d.manufacturer)
+    ) ?? false;
   }
 
   openDevices() {
