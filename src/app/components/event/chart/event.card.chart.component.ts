@@ -97,7 +97,7 @@ const DOWNSAMPLE_FACTOR_PER_HOUR = 1.5;
 @Component({
   selector: 'app-event-card-chart',
   templateUrl: './event.card.chart.component.html',
-  styleUrls: ['./event.card.chart.component.css'],
+  styleUrls: ['./event.card.chart.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })

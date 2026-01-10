@@ -57,7 +57,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   public noMapData = false;
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
-  public mapTypeId: google.maps.MapTypeId = google.maps.MapTypeId.ROADMAP;
+  public mapTypeId: google.maps.MapTypeId = 'roadmap' as any as google.maps.MapTypeId;
   public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
 
   // Map options
