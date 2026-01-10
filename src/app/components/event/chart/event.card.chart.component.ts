@@ -285,6 +285,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
 
   ngOnDestroy() {
+    // Stop any pending async processes
+    this.processSequence++;
+
     this.unSubscribeFromAll();
     if (this.cursorPositionSubscription) {
       this.cursorPositionSubscription.unsubscribe();
@@ -1087,7 +1090,11 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     });
   }
 
-  private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface): am4charts.XYSeries {
+  private createOrUpdateChartSeries(activity: ActivityInterface, stream: StreamInterface): am4charts.XYSeries | undefined {
+    if (!this.chart || this.chart.isDisposed()) {
+      return undefined;
+    }
+
     // @todo try run outside angular
     let series = this.chart.series.values.find(seriesItem => seriesItem.id === this.getSeriesIDFromActivityAndStream(activity, stream));
     // If there is already a series with this id only data update should be done
