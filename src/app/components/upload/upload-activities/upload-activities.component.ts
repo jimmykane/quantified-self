@@ -91,16 +91,33 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
             // Deciding based on normalized extension
             const text = new TextDecoder().decode(fileReaderResult);
             if (file.extension === 'json') {
+              let json;
               try {
-                const json = JSON.parse(text);
-                const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(json);
-                if (unknownTypes.length > 0) {
-                  this.logger.captureMessage('Unknown Data Types in Upload', { extra: { types: unknownTypes, file: file.filename } });
-                  this.snackBar.open(`Warning: Unknown data types removed: ${unknownTypes.join(', ')}`, 'OK', { duration: 5000 });
+                json = JSON.parse(text);
+              } catch (e: any) {
+                try {
+                  newEvent = await EventImporterSuuntoSML.getFromJSONString(text, options);
+                } catch (smlError) {
+                  throw e;
                 }
-                newEvent = await EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(sanitizedJson), options);
-              } catch (e) {
-                newEvent = await EventImporterSuuntoSML.getFromJSONString(text, options);
+              }
+
+              if (json) {
+                try {
+                  const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(json);
+                  if (unknownTypes.length > 0) {
+                    this.logger.captureMessage('Unknown Data Types in Upload', { extra: { types: unknownTypes, file: file.filename } });
+                    this.snackBar.open(`Warning: Unknown data types removed: ${unknownTypes.join(', ')}`, 'OK', { duration: 5000 });
+                  }
+                  newEvent = await EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(sanitizedJson), options);
+                } catch (e) {
+                  this.logger.warn('Failed to import JSON as Suunto App format, trying SML fallback', e);
+                  try {
+                    newEvent = await EventImporterSuuntoSML.getFromJSONString(text, options);
+                  } catch (smlError) {
+                    throw e;
+                  }
+                }
               }
             } else if (file.extension === 'sml') {
               newEvent = await EventImporterSuuntoSML.getFromXML(text, options);
@@ -122,6 +139,10 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
           // But the JSON importer is the one prone to "Class type ... not in store" if it walks the JSON directly.
           // For now, handling the .json extension is the critical path requested.
 
+
+          if (!newEvent) {
+            throw new Error('Failed to parse event');
+          }
           newEvent.name = file.filename;
         } catch (e: any) {
           this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message}`, 'OK', { duration: 2000 });
