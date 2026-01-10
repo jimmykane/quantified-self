@@ -4,6 +4,7 @@
 @use 'sass:map';
 @use 'styles/forms';
 @use 'styles/search';
+@use 'styles/segmented-buttons';
 
 // Include the common styles for Angular Material. We include this here so that you only
 // have to load a single css file for Angular Material in your app.
@@ -793,55 +794,5 @@ tr.mat-row:focus,
   mat-form-field {
     width: 100%;
     display: block;
-  }
-}
-
-/* ==========================================================================
-   Global Segmented Button Group
-   Standardized styling for sets of toggle buttons (like charts, maps).
-   ========================================================================== */
-.qs-segmented-button-group {
-  border: 1px solid var(--mat-app-outline-variant);
-  border-radius: 20px;
-  overflow: hidden;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  background: transparent;
-
-  mat-button-toggle {
-    font-size: 0.8rem;
-    background-color: transparent;
-    color: var(--mat-app-on-surface-variant);
-    border-left: 1px solid var(--mat-app-outline-variant);
-    height: 100%;
-    display: flex;
-    align-items: center;
-
-    &:first-child {
-      border-left: none;
-    }
-
-    &.mat-button-toggle-checked {
-      background-color: var(--mat-app-secondary-container);
-      color: var(--mat-app-on-secondary-container);
-      font-weight: 500;
-
-      /* Only target icon inside checked state if needed, but safe to global hide for this style */
-    }
-
-    /* Force hide any checkmarks or icons that might appear */
-    ::ng-deep .mat-pseudo-checkbox {
-      display: none !important;
-    }
-
-    /* Ensure label content is centered and has padding */
-    ::ng-deep .mat-button-toggle-label-content {
-      padding: 0 12px !important;
-      line-height: normal !important;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
   }
 }
