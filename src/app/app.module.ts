@@ -1,5 +1,6 @@
 import { APP_INITIALIZER, ErrorHandler, LOCALE_ID, NgModule } from '@angular/core';
-import { LoggerService, GlobalErrorHandler } from './services/logger.service';
+import { LoggerService } from './services/logger.service';
+import { GlobalErrorHandler } from './services/global-error-handler.service';
 import { BrowserModule } from '@angular/platform-browser';
 import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app.routing.module';
