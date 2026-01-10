@@ -62,33 +62,8 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.nav-item mat-icon {
-    font-size: 18px;
-    width: 18px;
-    height: 18px;
-    margin-right: 4px;
-}
-
-.nav-item:hover {
-    background-color: rgba(0, 0, 0, 0.1);
-    opacity: 1;
-    transform: translateY(-1px);
-}
-
-:host-context(.dark-theme) .nav-item:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.nav-item.active {
-    background-color: var(--mat-sys-primary, #3f51b5);
-    color: var(--mat-sys-on-primary, white);
-    border-color: transparent;
-    opacity: 1;
-}
-
-.nav-item.active mat-icon {
-    color: var(--mat-sys-on-primary, white);
-}
+// .nav-item mat-icon removed
+// .nav-item.active mat-icon removed
 
 /* Main Content Area */
 .settings-content {
@@ -109,10 +84,19 @@
     // color: var(--text-primary); /* REMOVED */
 }
 
+.header-content {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 24px;
+    padding-bottom: 0;
+}
+
 .layer-icon {
-    width: 100px;
-    height: 50px;
-    margin-bottom: 0px;
+    width: 64px;
+    height: 64px;
+    font-size: 64px;
+    margin-bottom: 0;
     transform-origin: left;
 }
 

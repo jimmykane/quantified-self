@@ -3,13 +3,13 @@
   <nav class="settings-nav">
     <ul class="nav-list">
       <li class="nav-item" [class.active]="activeSection === 'suunto'" (click)="activeSection = 'suunto'">
-        <mat-icon svgIcon="suunto"></mat-icon> Suunto
+        Suunto
       </li>
       <li class="nav-item" [class.active]="activeSection === 'garmin'" (click)="activeSection = 'garmin'">
-        <mat-icon svgIcon="garmin"></mat-icon> Garmin
+        Garmin
       </li>
       <li class="nav-item" [class.active]="activeSection === 'coros'" (click)="activeSection = 'coros'">
-        <mat-icon svgIcon="coros"></mat-icon> COROS
+        COROS
       </li>
     </ul>
   </nav>
@@ -20,9 +20,9 @@
     <!-- Suunto Section -->
     @if (activeSection === 'suunto') {
     <mat-card class="settings-card glass-card">
-      <div class="header-content" style="padding: 24px; padding-bottom: 0;">
+      <div class="header-content">
         <div class="header-avatar">
-          <mat-icon class="layer-icon" svgIcon="suunto" style="width: 40px; height: 40px;"></mat-icon>
+          <mat-icon class="layer-icon" svgIcon="suunto"></mat-icon>
         </div>
         <div class="header-info">
           <h1>Suunto Integration</h1>
@@ -38,9 +38,9 @@
     <!-- Garmin Section -->
     @if (activeSection === 'garmin') {
     <mat-card class="settings-card glass-card">
-      <div class="header-content" style="padding: 24px; padding-bottom: 0;">
+      <div class="header-content">
         <div class="header-avatar">
-          <mat-icon class="layer-icon" svgIcon="garmin" style="width: 40px; height: 40px;"></mat-icon>
+          <mat-icon class="layer-icon" svgIcon="garmin"></mat-icon>
         </div>
         <div class="header-info">
           <h1>Garmin Integration</h1>
@@ -57,9 +57,9 @@
     <!-- COROS Section -->
     @if (activeSection === 'coros') {
     <mat-card class="settings-card glass-card">
-      <div class="header-content" style="padding: 24px; padding-bottom: 0;">
+      <div class="header-content">
         <div class="header-avatar">
-          <mat-icon class="layer-icon" svgIcon="coros" style="width: 40px; height: 40px;"></mat-icon>
+          <mat-icon class="layer-icon" svgIcon="coros"></mat-icon>
         </div>
         <div class="header-info">
           <h1>COROS Integration</h1>
