@@ -46,20 +46,34 @@
           <button mat-flat-button color="primary" style="width: 100%"
             [disabled]="!user || this.isGuest || isLoading || isConnecting || !hasProAccess"
             (click)="connectWithService($event)">
-            <mat-spinner *ngIf="isConnecting" diameter="20"
-              style="display:inline-block; vertical-align: middle; margin-right: 8px;" color="accent"></mat-spinner>
-            <mat-icon *ngIf="!isConnecting">link</mat-icon>
-            {{ isConnecting ? 'Connecting...' : 'Connect' }}
+            @if (isConnecting) {
+            <ng-container>
+              <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
+                color="accent"></mat-spinner>
+              Connecting...
+            </ng-container>
+            } @else {
+            <ng-container>
+              <mat-icon>link</mat-icon> Connect
+            </ng-container>
+            }
           </button>
           }
 
           @if (isConnectedToService()) {
           <button mat-stroked-button color="warn" style="width: 100%" [disabled]="isLoading || isDisconnecting"
             (click)="deauthorizeService($event)">
-            <mat-spinner *ngIf="isDisconnecting" diameter="20"
-              style="display:inline-block; vertical-align: middle; margin-right: 8px;" color="warn"></mat-spinner>
-            <mat-icon *ngIf="!isDisconnecting">link_off</mat-icon>
-            {{ isDisconnecting ? 'Disconnecting...' : 'Disconnect' }}
+            @if (isDisconnecting) {
+            <ng-container>
+              <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
+                color="warn"></mat-spinner>
+              Disconnecting...
+            </ng-container>
+            } @else {
+            <ng-container>
+              <mat-icon>link_off</mat-icon> Disconnect
+            </ng-container>
+            }
           </button>
           }
         </div>
