@@ -1,10 +1,10 @@
 import * as functions from 'firebase-functions/v1';
-import { MAX_RETRY_COUNT, QUEUE_SCHEDULE } from './shared/queue-config';
+import { MAX_RETRY_COUNT, QUEUE_SCHEDULE, MAX_PENDING_TASKS, DISPATCH_SPREAD_SECONDS } from './shared/queue-config';
 import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
 import { QueueErrors, QueueLogs } from './shared/constants';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
-import pLimit from 'p-limit';
+
 import { increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue, QueueResult } from './queue-utils';
 import { processGarminHealthAPIActivityQueueItem } from './garmin/queue';
 import {
@@ -12,7 +12,7 @@ import {
   GarminHealthAPIActivityQueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface,
 } from './queue/queue-item.interface';
-import { generateIDFromParts, setEvent, UsageLimitExceededError, enqueueWorkoutTask, UserNotFoundError } from './utils';
+import { generateIDFromParts, setEvent, UsageLimitExceededError, enqueueWorkoutTask, UserNotFoundError, getCloudTaskQueueDepth } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getServiceWorkoutQueueName } from './shared/queue-names';
 import {
@@ -27,65 +27,45 @@ import { COROSAPIEventMetaData, SuuntoAppEventMetaData, ActivityParsingOptions }
 
 
 
-export async function parseQueueItems(serviceName: ServiceNames) {
-  const RETRY_COUNT = MAX_RETRY_COUNT;
-  const LIMIT = 200;
+export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
+  // Check queue depth
+  const pendingTasks = await getCloudTaskQueueDepth();
+  if (pendingTasks >= MAX_PENDING_TASKS) {
+    logger.info(`Queue busy (${pendingTasks} pending tasks), skipping dispatch to limit load.`);
+    return;
+  }
+
+  const availableSlots = MAX_PENDING_TASKS - pendingTasks;
+  // Use availableSlots as batch limit (effectively capping concurrent tasks)
+  const batchSize = availableSlots; // Caps at 100 max
+
   // @todo add queue item sort date for creation
   const querySnapshot = await admin.firestore()
     .collection(getServiceWorkoutQueueName(serviceName))
     .where('processed', '==', false)
-    .where('retryCount', '<', RETRY_COUNT)
-    .limit(LIMIT).get(); // Max 10 retries
-  logger.info(`Found ${querySnapshot.size} queue items to process`);
-  let count = 0;
-  logger.info('Starting timer: ParseQueueItems');
+    .where('dispatchedToCloudTask', '==', null)
+    .where('retryCount', '<', MAX_RETRY_COUNT)
+    .limit(batchSize)
+    .get();
 
-  const bulkWriter = admin.firestore().bulkWriter();
-  const limit = pLimit(10);
-  const tokenCache = new Map<string, Promise<admin.firestore.QuerySnapshot>>();
-  const usageCache = new Map<string, Promise<{ role: string, limit: number, currentCount: number }>>();
-  const pendingWrites = new Map<string, number>();
+  if (querySnapshot.empty) {
+    logger.info(`No undispatched items found for ${serviceName}`);
+    return;
+  }
 
-  const promises = querySnapshot.docs.map(async (queueItem) => {
-    return limit(async () => {
-      try {
-        switch (serviceName) {
-          default:
-            throw new Error('Not Implemented');
-          case ServiceNames.COROSAPI:
-            await parseWorkoutQueueItemForServiceName(serviceName, <COROSAPIWorkoutQueueItemInterface>Object.assign({
-              id: queueItem.id,
-              ref: queueItem.ref,
-            }, queueItem.data()), bulkWriter, tokenCache, usageCache, pendingWrites);
-            break;
-          case ServiceNames.SuuntoApp:
-            await parseWorkoutQueueItemForServiceName(serviceName, <SuuntoAppWorkoutQueueItemInterface>Object.assign({
-              id: queueItem.id,
-              ref: queueItem.ref,
-            }, queueItem.data()), bulkWriter, tokenCache, usageCache, pendingWrites);
-            break;
-          case ServiceNames.GarminHealthAPI:
-            await processGarminHealthAPIActivityQueueItem(Object.assign({
-              id: queueItem.id,
-              ref: queueItem.ref,
-            }, <GarminHealthAPIActivityQueueItemInterface>queueItem.data()), bulkWriter, tokenCache, usageCache, pendingWrites);
-            break;
-        }
-        count++;
-        logger.info(`Parsed queue item ${count}/${querySnapshot.size} and id ${queueItem.id}`);
-        // console.timeLog('ParseQueueItems'); // timeLog might be noisy in parallel
-      } catch (e: unknown) {
-        const error = e as Error;
-        logger.error(new Error(`Error parsing queue item ${queueItem.id}: ${error.message}`));
-      }
-    });
+  logger.info(`Dispatching ${querySnapshot.size} items for ${serviceName} (${pendingTasks} already pending)`);
+
+  const delayPerItem = DISPATCH_SPREAD_SECONDS / querySnapshot.size;
+
+  const promises = querySnapshot.docs.map(async (doc, index) => {
+    const delay = Math.floor(index * delayPerItem);
+    await enqueueWorkoutTask(serviceName, doc.id, delay);
+    // Mark as dispatched prevents re-queueing
+    return doc.ref.update({ dispatchedToCloudTask: Date.now() });
   });
 
   await Promise.all(promises);
-  await bulkWriter.close();
-
-  logger.info('Ending timer: ParseQueueItems');
-  logger.info(`Parsed ${count} queue items out of ${querySnapshot.size}`);
+  logger.info(`Dispatched ${querySnapshot.size} tasks spread over ${DISPATCH_SPREAD_SECONDS}s`);
 }
 
 const TIMEOUT_DEFAULT = 300;
@@ -98,7 +78,7 @@ export const parseGarminHealthAPIActivityQueue = functions.region('europe-west2'
   memory: MEMORY_HIGH,
   maxInstances: 1,
 }).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
-  await parseQueueItems(ServiceNames.GarminHealthAPI);
+  await dispatchQueueItemTasks(ServiceNames.GarminHealthAPI);
 });
 
 export const parseCOROSAPIWorkoutQueue = functions.region('europe-west2').runWith({
@@ -106,7 +86,7 @@ export const parseCOROSAPIWorkoutQueue = functions.region('europe-west2').runWit
   memory: MEMORY_DEFAULT,
   maxInstances: 1,
 }).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
-  await parseQueueItems(ServiceNames.COROSAPI);
+  await dispatchQueueItemTasks(ServiceNames.COROSAPI);
 });
 
 export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runWith({
@@ -114,7 +94,7 @@ export const parseSuuntoAppActivityQueue = functions.region('europe-west2').runW
   memory: MEMORY_HIGH,
   maxInstances: 1,
 }).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
-  await parseQueueItems(ServiceNames.SuuntoApp);
+  await dispatchQueueItemTasks(ServiceNames.SuuntoApp);
 });
 
 
@@ -154,7 +134,7 @@ export async function addToQueueForGarmin(queueItem: { userID: string, startTime
     retryCount: 0,
     processed: false,
     userAccessToken: queueItem.userAccessToken,
-  }, ServiceNames.GarminHealthAPI);
+  }, ServiceNames.GarminHealthAPI, queueItem.manual);
 }
 
 /**
@@ -375,12 +355,16 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   return increaseRetryCountForQueueItem(queueItem, lastError, retryIncrement, bulkWriter);
 }
 
-async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface | GarminHealthAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames): Promise<admin.firestore.DocumentReference> {
+async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface | GarminHealthAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames, deferDispatch: boolean = false): Promise<admin.firestore.DocumentReference> {
   const queueItemDocument = admin.firestore().collection(getServiceWorkoutQueueName(serviceName)).doc(queueItem.id);
   await queueItemDocument.set(Object.assign(queueItem, {
     expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
+    dispatchedToCloudTask: deferDispatch ? null : Date.now(),
   }));
-  // Dispatch a Cloud Task for immediate processing
-  await enqueueWorkoutTask(serviceName, queueItem.id);
+
+  if (!deferDispatch) {
+    // Dispatch a Cloud Task for immediate processing
+    await enqueueWorkoutTask(serviceName, queueItem.id);
+  }
   return queueItemDocument;
 }

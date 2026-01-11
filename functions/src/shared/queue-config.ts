@@ -18,3 +18,9 @@ export const CLOUD_TASK_RETRY_CONFIG = {
     maxBackoffSeconds: 14400,  // 4 hours
     maxDoublings: 4,
 } as const;
+
+/** Max pending Cloud Tasks before skipping dispatch to preserve finding quota permissions */
+export const MAX_PENDING_TASKS = 1000;
+
+/** Time window to spread dispatched tasks (seconds) - 15 minutes */
+export const DISPATCH_SPREAD_SECONDS = 15 * 60;
