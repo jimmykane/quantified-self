@@ -245,6 +245,132 @@ describe('utils', () => {
     });
 });
 
+
+// Mock @google-cloud/tasks
+const mockCloudTasksClient = {
+    queuePath: vi.fn(),
+    listTasks: vi.fn(),
+    createTask: vi.fn(),
+    close: vi.fn(),
+};
+
+vi.mock('@google-cloud/tasks', () => {
+    return {
+        CloudTasksClient: vi.fn(() => mockCloudTasksClient),
+    };
+});
+
+describe('Cloud Tasks Utils', () => {
+    // Re-import utils for each test to ensure fresh mocks if needed, 
+    // but typically vi.mock works at top level. 
+    // We already mocked google-cloud/tasks globally above.
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Setup default mock behaviors
+        mockCloudTasksClient.queuePath.mockReturnValue('projects/p/locations/l/queues/q');
+    });
+
+    // Mock config
+    vi.mock('./config', () => ({
+        config: {
+            cloudtasks: {
+                projectId: 'test-project',
+                location: 'test-location',
+                queue: 'test-queue',
+                serviceAccountEmail: 'sa@test.com'
+            }
+        }
+    }));
+
+    describe('getCloudTaskQueueDepth', () => {
+        it('should return number of tasks', async () => {
+            const { getCloudTaskQueueDepth } = await import('./utils');
+
+            mockCloudTasksClient.listTasks.mockResolvedValue([
+                [{}, {}, {}], // 3 tasks
+                {}, // request info
+                {} // response info
+            ]);
+
+            const depth = await getCloudTaskQueueDepth();
+
+            expect(depth).toBe(3);
+            expect(mockCloudTasksClient.queuePath).toHaveBeenCalledWith('test-project', 'test-location', 'test-queue');
+            expect(mockCloudTasksClient.listTasks).toHaveBeenCalled();
+        });
+    });
+
+    describe('enqueueWorkoutTask', () => {
+        it('should enqueue task with correct payload', async () => {
+            const { enqueueWorkoutTask } = await import('./utils');
+            const { ServiceNames } = await import('@sports-alliance/sports-lib');
+
+            mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
+
+            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123');
+
+            expect(mockCloudTasksClient.createTask).toHaveBeenCalledWith({
+                parent: 'projects/p/locations/l/queues/q',
+                task: expect.objectContaining({
+                    name: 'projects/p/locations/l/queues/q/tasks/garminHealthAPI-item-123', // Deduplication ID (Sanitized)
+                    httpRequest: expect.objectContaining({
+                        url: expect.stringContaining('test-location-test-project.cloudfunctions.net/test-queue'),
+                        httpMethod: 'POST',
+                        body: expect.any(String), // Base64 encoded
+                    })
+                })
+            });
+        });
+
+        it('should include scheduleTime if delay is provided', async () => {
+            const { enqueueWorkoutTask } = await import('./utils');
+            const { ServiceNames } = await import('@sports-alliance/sports-lib');
+
+            mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
+
+            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 60);
+
+            expect(mockCloudTasksClient.createTask).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    task: expect.objectContaining({
+                        scheduleTime: expect.objectContaining({
+                            seconds: expect.any(Number)
+                        })
+                    })
+                })
+            );
+        });
+
+        it('should handle ALREADY_EXISTS error gracefully', async () => {
+            const { enqueueWorkoutTask } = await import('./utils');
+            const { ServiceNames } = await import('@sports-alliance/sports-lib');
+
+            const error = new Error('Already Exists');
+            (error as any).code = 6;
+            mockCloudTasksClient.createTask.mockRejectedValue(error);
+
+            // Should not throw
+            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123');
+
+            // Should verify we tried
+            expect(mockCloudTasksClient.createTask).toHaveBeenCalled();
+        });
+
+        it('should handle non-6 errors by catching/logging (not throwing)', async () => {
+            const { enqueueWorkoutTask } = await import('./utils');
+            const { ServiceNames } = await import('@sports-alliance/sports-lib');
+
+            const error = new Error('Some other error');
+            mockCloudTasksClient.createTask.mockRejectedValue(error);
+
+            // Currently implementation catches generic errors and logs them.
+            // It does NOT rethrow.
+            await expect(enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123')).resolves.not.toThrow();
+        });
+    });
+});
+
 async function tryCatch(fn: () => Promise<any>) {
     try { await fn(); } catch (e) {
         // ignore error

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
+import { MAX_PENDING_TASKS, DISPATCH_SPREAD_SECONDS } from './shared/queue-config';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
 // Mock firebase-functions first (needed by auth modules at load time)
@@ -116,6 +117,16 @@ vi.mock('./request-helper', () => ({
         get: vi.fn(),
     },
     get: vi.fn(),
+}));
+
+// Mock utils
+vi.mock('./utils', () => ({
+    generateIDFromParts: vi.fn((parts) => parts.join('-')),
+    setEvent: vi.fn(),
+    UsageLimitExceededError: class extends Error { },
+    UserNotFoundError: class extends Error { },
+    enqueueWorkoutTask: vi.fn(),
+    getCloudTaskQueueDepth: vi.fn().mockResolvedValue(0),
 }));
 
 // Import after mocks are set up
@@ -318,6 +329,153 @@ describe('queue', () => {
             );
             expect(batch.delete).toHaveBeenCalledWith(mockRef);
             expect(batch.commit).toHaveBeenCalled();
+        });
+    });
+
+    describe('dispatchQueueItemTasks', () => {
+        it('should skip dispatch if queue is full', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(MAX_PENDING_TASKS); // Max pending
+            const { dispatchQueueItemTasks } = await import('./queue');
+
+            await dispatchQueueItemTasks(ServiceNames.GarminHealthAPI);
+
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('should dispatch available slots when queue is partially full', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(MAX_PENDING_TASKS - 2); // 2 slots available
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            // Mock query results
+            const mockDoc1 = { id: 'doc1', ref: { update: vi.fn(), parent: { id: 'col' }, id: 'doc1' }, data: () => ({}) };
+            const mockDoc2 = { id: 'doc2', ref: { update: vi.fn(), parent: { id: 'col' }, id: 'doc2' }, data: () => ({}) };
+
+            const firestore = admin.firestore();
+            const collection = firestore.collection('any');
+            // We need to spy on the chain: collection -> where -> where -> where -> limit -> get
+            // The global mock implementation of `limit` returns `mockCollection`, and `get` returns docs.
+            // We can override the return value of `get`
+            vi.mocked(collection.get).mockResolvedValue({
+                docs: [mockDoc1, mockDoc2] as any,
+                size: 2,
+                empty: false,
+                query: {} as any,
+                forEach: vi.fn(),
+                docChanges: vi.fn(),
+                readTime: {} as any,
+                isEqual: vi.fn(),
+            });
+
+            await dispatchQueueItemTasks(ServiceNames.GarminHealthAPI);
+
+            // Verify limit was called with batch size
+            expect(collection.limit).toHaveBeenCalledWith(2);
+
+            // Verify enqueue called for both
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2);
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminHealthAPI, 'doc1', expect.any(Number));
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminHealthAPI, 'doc2', expect.any(Number));
+
+            // Verify dispatchedToCloudTask update
+            expect(mockDoc1.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+            expect(mockDoc2.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it('should apply staggered delay to dispatched tasks', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            // Mock 3 docs
+            const mockDocs = [
+                { id: '1', ref: { update: vi.fn() }, data: () => ({}) },
+                { id: '2', ref: { update: vi.fn() }, data: () => ({}) },
+                { id: '3', ref: { update: vi.fn() }, data: () => ({}) }
+            ];
+
+            const firestore = admin.firestore();
+            const delayPerItem = Math.floor(DISPATCH_SPREAD_SECONDS / mockDocs.length);
+
+            vi.mocked(firestore.collection('any').get).mockResolvedValue({
+                docs: mockDocs as any,
+                size: 3,
+                empty: false,
+                isEqual: vi.fn(), // Fix TS error
+            } as any);
+
+            await dispatchQueueItemTasks(ServiceNames.GarminHealthAPI);
+
+            // Expected spread: Total 1800s. Size 3. Delay per item = 600s.
+            // Items: 0, 600, 1200
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(1, ServiceNames.GarminHealthAPI, '1', 0);
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminHealthAPI, '2', delayPerItem);
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(3, ServiceNames.GarminHealthAPI, '3', delayPerItem * 2);
+        });
+
+        it('should do nothing if no items found', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            const firestore = admin.firestore();
+            vi.mocked(firestore.collection('any').get).mockResolvedValue({
+                docs: [],
+                size: 0,
+                empty: true,
+                isEqual: vi.fn(), // Fix TS error
+            } as any);
+
+            await dispatchQueueItemTasks(ServiceNames.GarminHealthAPI);
+
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('addToQueue deferred dispatch', () => {
+        it('should defer dispatch for manual/bulk items', async () => {
+            const utils = await import('./utils');
+            // Reset mocks
+            vi.mocked(utils.enqueueWorkoutTask).mockClear();
+
+            const { addToQueueForGarmin } = await import('./queue');
+
+            await addToQueueForGarmin({
+                userID: 'u1',
+                startTimeInSeconds: 123,
+                manual: true, // DEFER
+                activityFileID: 'f1',
+                activityFileType: 'FIT',
+                token: 't1',
+                userAccessToken: 'at1'
+            });
+
+            // Should NOT call enqueue
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('should immediate dispatch for normal items', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.enqueueWorkoutTask).mockClear();
+
+            const { addToQueueForGarmin } = await import('./queue');
+
+            await addToQueueForGarmin({
+                userID: 'u1',
+                startTimeInSeconds: 123,
+                manual: false, // IMMEDIATE
+                activityFileID: 'f1',
+                activityFileType: 'FIT',
+                token: 't1',
+                userAccessToken: 'at1'
+            });
+
+            // Should call enqueue
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalled();
         });
     });
 });

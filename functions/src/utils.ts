@@ -313,8 +313,33 @@ export async function isProUser(userID: string): Promise<boolean> {
  * @param queueItemId The ID of the document in the {serviceName}Queue collection
  */
 import { config } from './config';
+import { MAX_PENDING_TASKS } from './shared/queue-config';
 
-export async function enqueueWorkoutTask(serviceName: ServiceNames, queueItemId: string) {
+export async function getCloudTaskQueueDepth(): Promise<number> {
+  const client = new CloudTasksClient();
+  const { projectId, location, queue } = config.cloudtasks;
+
+  if (!projectId) {
+    throw new Error('Project ID is not defined in config');
+  }
+
+  const parent = client.queuePath(projectId, location, queue);
+
+  // Just list first page to check if we hit the threshold
+  // We don't need exact count if it's large
+  const [tasks] = await client.listTasks({
+    parent,
+    pageSize: MAX_PENDING_TASKS
+  });
+
+  return tasks.length;
+}
+
+export async function enqueueWorkoutTask(
+  serviceName: ServiceNames,
+  queueItemId: string,
+  scheduleDelaySeconds?: number
+) {
   const client = new CloudTasksClient();
 
   const { projectId, location, queue, serviceAccountEmail } = config.cloudtasks;
@@ -326,9 +351,15 @@ export async function enqueueWorkoutTask(serviceName: ServiceNames, queueItemId:
   const url = `https://${location}-${projectId}.cloudfunctions.net/${queue}`;
   const parent = client.queuePath(projectId, location, queue);
 
+  // Deterministic task name for deduplication
+  // Sanitize serviceName to allow only letters, numbers, hyphens, or underscores
+  const sanitizedServiceName = serviceName.replace(/[^a-zA-Z0-9-_]/g, '-');
+  const taskName = `${parent}/tasks/${sanitizedServiceName}-${queueItemId}`;
+
   const payload = { data: { queueItemId, serviceName } };
 
-  const task = {
+  const task: any = {
+    name: taskName,
     httpRequest: {
       httpMethod: 'POST' as const,
       url,
@@ -342,12 +373,23 @@ export async function enqueueWorkoutTask(serviceName: ServiceNames, queueItemId:
     },
   };
 
+  if (scheduleDelaySeconds) {
+    task.scheduleTime = {
+      seconds: Math.floor(Date.now() / 1000) + scheduleDelaySeconds
+    };
+  }
+
   try {
-    logger.info(`[Dispatcher] Attempting to enqueue task for ${serviceName}:${queueItemId} to ${url} in project ${projectId}`);
     const [response] = await client.createTask({ parent, task });
-    logger.info(`[Dispatcher] Successfully enqueued task: ${response.name}`);
-  } catch (error) {
+    logger.info(`[Dispatcher] Enqueued task: ${response.name}`);
+  } catch (error: any) {
+    if (error.code === 6) { // ALREADY_EXISTS (GRPC code 6)
+      logger.info(`[Dispatcher] Task already exists for ${serviceName}:${queueItemId}, skipping`);
+      return;
+    }
     logger.error(`[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`, error);
+    // Don't rethrow - we just log failure to dispatch this one. 
+    // The calling loop might proceed to next item. 
   }
 }
 
