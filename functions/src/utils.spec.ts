@@ -313,7 +313,7 @@ describe('Cloud Tasks Utils', () => {
             expect(mockCloudTasksClient.createTask).toHaveBeenCalledWith({
                 parent: 'projects/p/locations/l/queues/q',
                 task: expect.objectContaining({
-                    name: 'projects/p/locations/l/queues/q/tasks/garminHealthAPI-item-123', // Deduplication ID
+                    name: 'projects/p/locations/l/queues/q/tasks/garminHealthAPI-item-123', // Deduplication ID (Sanitized)
                     httpRequest: expect.objectContaining({
                         url: expect.stringContaining('test-location-test-project.cloudfunctions.net/test-queue'),
                         httpMethod: 'POST',

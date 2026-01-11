@@ -352,7 +352,9 @@ export async function enqueueWorkoutTask(
   const parent = client.queuePath(projectId, location, queue);
 
   // Deterministic task name for deduplication
-  const taskName = `${parent}/tasks/${serviceName}-${queueItemId}`;
+  // Sanitize serviceName to allow only letters, numbers, hyphens, or underscores
+  const sanitizedServiceName = serviceName.replace(/[^a-zA-Z0-9-_]/g, '-');
+  const taskName = `${parent}/tasks/${sanitizedServiceName}-${queueItemId}`;
 
   const payload = { data: { queueItemId, serviceName } };
 
