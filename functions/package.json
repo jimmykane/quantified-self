@@ -17,7 +17,6 @@
     "firebase-functions": "^7.0.2",
     "node-fetch": "^2.7.0",
     "oauth-1.0a": "^2.2.6",
-    "p-limit": "^3.1.0",
     "simple-oauth2": "^5.0.0",
     "stripe": "^20.1.0",
     "xmldom": "^0.6.0"
