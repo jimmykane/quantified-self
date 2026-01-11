@@ -88,5 +88,6 @@ export async function getCOROSQueueItemFromWorkout(openId: string, labelId: stri
     FITFileURI: fitUrl,
     retryCount: 0, // So it can be re-processed
     processed: false, // So it can be re-processed
+    dispatchedToCloudTask: null,
   };
 }

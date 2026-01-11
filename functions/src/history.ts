@@ -72,7 +72,8 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
         batch.set(queueRef, {
           ...workoutQueueItem,
           expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
-          fromHistory: true
+          fromHistory: true,
+          dispatchedToCloudTask: null,
         });
         processedWorkoutsCount++;
       }
@@ -131,6 +132,7 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
             workoutID: item.workoutKey,
             retryCount: 0, // So it can be re-processed
             processed: false, // So it can be re-processed
+            dispatchedToCloudTask: null,
           };
         }));
     case ServiceNames.COROSAPI:

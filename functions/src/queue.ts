@@ -112,6 +112,7 @@ export async function addToQueueForSuunto(queueItem: { userName: string, workout
     workoutID: queueItem.workoutID,
     retryCount: 0,
     processed: false,
+    dispatchedToCloudTask: null,
   }, ServiceNames.SuuntoApp);
 }
 
@@ -134,6 +135,7 @@ export async function addToQueueForGarmin(queueItem: { userID: string, startTime
     retryCount: 0,
     processed: false,
     userAccessToken: queueItem.userAccessToken,
+    dispatchedToCloudTask: null,
   }, ServiceNames.GarminHealthAPI, queueItem.manual);
 }
 
