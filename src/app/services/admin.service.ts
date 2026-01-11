@@ -1,7 +1,7 @@
 import { inject, Injectable, EnvironmentInjector } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
 import { Functions, httpsCallableFromURL } from '@angular/fire/functions';
-import { from, Observable, timer } from 'rxjs';
+import { from, Observable } from 'rxjs';
 import { map, switchMap } from 'rxjs/operators';
 import { environment } from '../../environments/environment';
 
@@ -139,34 +139,8 @@ export class AdminService {
         );
     }
 
-    getQueueStatsDirect(includeAnalysis = false): Observable<QueueStats> {
-        const now = new Date();
-        const currentMinutes = now.getMinutes();
 
-        // Target: 11th minute of the hour
-        const targetMinute = 11;
 
-        const nextTarget = new Date(now);
-        nextTarget.setSeconds(0);
-        nextTarget.setMilliseconds(0);
-
-        if (currentMinutes < targetMinute) {
-            // Example: It's 10:05. Target 10:11.
-            nextTarget.setMinutes(targetMinute);
-        } else {
-            // Example: It's 10:15. Target 11:11.
-            nextTarget.setHours(now.getHours() + 1);
-            nextTarget.setMinutes(targetMinute);
-        }
-
-        const initialDelay = nextTarget.getTime() - now.getTime();
-        const period = 3600000; // 1 hour
-
-        return timer(initialDelay, period).pipe(
-            switchMap(() => from(this.getQueueStatsFn({ includeAnalysis }))),
-            map(result => result.data)
-        );
-    }
 
 
     getTotalUserCount(): Observable<{ total: number; pro: number; basic: number; free: number; providers: Record<string, number> }> {

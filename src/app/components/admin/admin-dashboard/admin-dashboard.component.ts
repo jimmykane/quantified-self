@@ -273,26 +273,10 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
             next: (stats) => {
                 this.updateQueueStatsUI(stats);
                 this.isLoadingStats = false;
-                // After initial full fetch, start polling only basic counts (no analysis)
-                this.startQueueStatsPolling();
             },
             error: (err) => {
                 this.logger.error('Failed to load initial queue stats:', err);
                 this.isLoadingStats = false;
-                // Still try to poll basic stats even if initial full fetch fails
-                this.startQueueStatsPolling();
-            }
-        });
-    }
-
-    private startQueueStatsPolling(): void {
-        // Poll every 1 minute with analysis=false
-        this.adminService.getQueueStatsDirect(false).pipe(takeUntil(this.destroy$)).subscribe({
-            next: (stats) => {
-                this.updateQueueStatsUI(stats, true);
-            },
-            error: (err) => {
-                this.logger.error('Failed to poll queue stats:', err);
             }
         });
     }

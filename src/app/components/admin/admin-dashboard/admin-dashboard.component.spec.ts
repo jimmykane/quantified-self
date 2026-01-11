@@ -75,7 +75,6 @@ describe('AdminDashboardComponent', () => {
     let adminServiceSpy: {
         getUsers: ReturnType<typeof vi.fn>;
         getQueueStats: ReturnType<typeof vi.fn>;
-        getQueueStatsDirect: ReturnType<typeof vi.fn>;
         getTotalUserCount: ReturnType<typeof vi.fn>;
         getMaintenanceStatus: ReturnType<typeof vi.fn>;
         setMaintenanceMode: ReturnType<typeof vi.fn>;
@@ -122,7 +121,6 @@ describe('AdminDashboardComponent', () => {
         adminServiceSpy = {
             getUsers: vi.fn().mockReturnValue(of(mockResponse)),
             getQueueStats: vi.fn().mockReturnValue(of(mockQueueStats)),
-            getQueueStatsDirect: vi.fn().mockReturnValue(of(mockQueueStats)),
             getTotalUserCount: vi.fn().mockReturnValue(of({ total: 100, pro: 30, basic: 70, free: 0 })),
             getMaintenanceStatus: vi.fn().mockReturnValue(of({ enabled: false, message: 'Test' })),
             setMaintenanceMode: vi.fn().mockReturnValue(of({ success: true, enabled: true, message: 'Test' })),
