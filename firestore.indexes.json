@@ -5,6 +5,29 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "dispatchedToCloudTask",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "processed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "retryCount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "COROSAPIWorkoutQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "processed",
           "order": "ASCENDING"
         },
@@ -637,6 +660,29 @@
         },
         {
           "fieldPath": "dateCreated",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "garminHealthAPIActivityQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "processed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dispatchedToCloudTask",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "retryCount",
           "order": "ASCENDING"
         },
         {
