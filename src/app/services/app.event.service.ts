@@ -311,7 +311,7 @@ export class AppEventService implements OnDestroy {
     // 3. Process and Compress Original Files if needed
     if (originalFiles) {
       const files = Array.isArray(originalFiles) ? originalFiles : [originalFiles];
-      const textExtensions = ['gpx', 'tcx', 'json'];
+      const textExtensions = ['gpx', 'tcx', 'json', 'sml'];
       for (const file of files) {
         // Normalize extension: strip .gz if present to check if it's a text-based file
         const extension = file.extension.toLowerCase();
@@ -340,6 +340,19 @@ export class AppEventService implements OnDestroy {
             file.extension = `${baseExtension}.gz`; // Ensure it always ends with .gz
           } catch (e) {
             this.logger.error(`[AppEventService] Compression failed for file, uploading uncompressed`, e);
+          }
+          // Check compressed size - 10MB limit (outside try-catch so errors propagate)
+          const compressedSize = file.data instanceof ArrayBuffer ? file.data.byteLength : (file.data as Blob).size;
+          if (compressedSize > 10 * 1024 * 1024) {
+            throw new Error(`File is too large after compression (${(compressedSize / 1024 / 1024).toFixed(1)}MB). Maximum size is 10MB.`);
+          }
+        } else {
+          // Non-compressible file (e.g. FIT) - check raw size
+          const rawSize = file.data instanceof ArrayBuffer ? file.data.byteLength :
+            (file.data instanceof Blob ? file.data.size :
+              (typeof file.data === 'string' ? file.data.length : 0));
+          if (rawSize > 10 * 1024 * 1024) {
+            throw new Error(`File is too large (${(rawSize / 1024 / 1024).toFixed(1)}MB). Maximum size is 10MB.`);
           }
         }
       }
