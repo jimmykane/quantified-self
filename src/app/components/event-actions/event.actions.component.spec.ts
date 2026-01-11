@@ -19,7 +19,8 @@ import { MatMenuModule } from '@angular/material/menu';
 
 vi.mock('@angular/fire/analytics', () => ({
     Analytics: class { },
-    logEvent: vi.fn()
+    logEvent: vi.fn(),
+    setAnalyticsCollectionEnabled: vi.fn()
 }));
 
 describe('EventActionsComponent', () => {
@@ -72,7 +73,7 @@ describe('EventActionsComponent', () => {
                 { provide: AppEventService, useValue: mockEventService },
                 { provide: AppFileService, useValue: mockFileService },
                 { provide: MatSnackBar, useValue: mockSnackBar },
-                { provide: Analytics, useValue: { logEvent: vi.fn() } }, // Mock Analytics
+                { provide: Analytics, useValue: null }, // Mock Analytics
                 { provide: Auth, useValue: { currentUser: { uid: 'test-user' } } }, // Mock Auth
                 { provide: Router, useValue: { navigate: vi.fn() } },
                 { provide: MatDialog, useValue: { open: vi.fn() } },

@@ -727,6 +727,29 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "dispatchedToCloudTask",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "processed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "retryCount",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "suuntoAppWorkoutQueue",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "processed",
           "order": "ASCENDING"
         },
