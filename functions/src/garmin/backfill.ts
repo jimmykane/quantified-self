@@ -6,6 +6,7 @@ import * as requestPromise from '../request-helper';
 import * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
+import { GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS } from '../shared/history-import.constants';
 
 const GARMIN_ACTIVITIES_BACKFILL_URI = 'https://healthapi.garmin.com/wellness-api/rest/backfill/activities';
 const TIMEOUT_IN_SECONDS = 300;
@@ -82,7 +83,7 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
   if (userServiceMetaDocumentSnapshot.exists) {
     const data = <UserServiceMetaInterface>userServiceMetaDocumentSnapshot.data();
     if (data.didLastHistoryImport) {
-      const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + (3 * 24 * 60 * 60 * 1000)); // 3 days
+      const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + (GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000)); // 3 days
       if ((nextHistoryImportAvailableDate > new Date())) {
         logger.error(`User ${userID} tried todo history import for ${ServiceNames.GarminHealthAPI} while not allowed`);
         throw new Error(`History import cannot happen before ${nextHistoryImportAvailableDate}`);

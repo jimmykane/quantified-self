@@ -11,7 +11,6 @@ import { ServicesGarminComponent } from '../components/services/garmin/services.
 import { ServicesCorosComponent } from '../components/services/coros/services.coros.component';
 import { UploadActivitiesToServiceComponent } from '../components/upload/upload-activities-to-service/upload-activities-to-service.component';
 
-
 @NgModule({
     imports: [
         CommonModule,

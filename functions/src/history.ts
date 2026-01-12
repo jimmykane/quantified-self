@@ -1,6 +1,7 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
+import { HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT } from './shared/history-import.constants';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { getTokenData } from './tokens';
 import * as requestPromise from './request-helper';
@@ -156,6 +157,6 @@ export async function isAllowedToDoHistoryImport(userID: string, serviceName: Se
     return true;
   }
   const data = <UserServiceMetaInterface>userServiceMetaDocumentSnapshot.data();
-  const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + ((data.processedActivitiesFromLastHistoryImportCount / 500) * 24 * 60 * 60 * 1000)); // 7 days for  285,7142857143 per day
+  const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + ((data.processedActivitiesFromLastHistoryImportCount / HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT) * 24 * 60 * 60 * 1000)); // 7 days for  285,7142857143 per day
   return !((nextHistoryImportAvailableDate > new Date()) && data.processedActivitiesFromLastHistoryImportCount !== 0);
 }

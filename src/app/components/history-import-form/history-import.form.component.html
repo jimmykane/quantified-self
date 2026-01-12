@@ -1,12 +1,50 @@
 @if (userMetaForService && userMetaForService.didLastHistoryImport && !isAllowedToDoHistoryImport) {
-<div class="status-section">
-  <h4>Status</h4>
-  <p><strong>Last import:</strong> {{ userMetaForService.didLastHistoryImport | date: 'short' }}</p>
-  @if (serviceName === serviceNames.SuuntoApp) {
-  <p><strong>Queued:</strong> {{ userMetaForService.processedActivitiesFromLastHistoryImportCount }} activities</p>
-  }
-  <p><strong>Next available:</strong> {{ nextImportAvailableDate | date: 'short' }}</p>
-</div>
+<mat-card class="status-card">
+  <mat-card-header>
+    <mat-icon mat-card-avatar>history_toggle_off</mat-icon>
+    <mat-card-title>Import Status</mat-card-title>
+    <mat-card-subtitle>Last import: {{ userMetaForService.didLastHistoryImport | date: 'short' }}</mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    <mat-list role="list">
+      @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI) {
+      <mat-list-item role="listitem">
+        <mat-icon matListItemIcon>queue</mat-icon>
+        <div matListItemTitle>Queued Activities</div>
+        <div matListItemLine class="stats-value">{{ userMetaForService.processedActivitiesFromLastHistoryImportCount }}
+        </div>
+      </mat-list-item>
+      <mat-list-item role="listitem">
+        <mat-icon matListItemIcon>info</mat-icon>
+        <div matListItemTitle>Cooldown Period</div>
+        <div matListItemLine>
+          <mat-chip-listbox>
+            <mat-chip-option highlighted color="warn" [selectable]="false">{{ cooldownDays }} days</mat-chip-option>
+          </mat-chip-listbox>
+        </div>
+        <p matListItemLine class="mat-caption text-secondary">~{{ activitiesPerDayLimit }} activities/day limit</p>
+      </mat-list-item>
+      } @else if (serviceName === serviceNames.GarminHealthAPI) {
+      <mat-list-item role="listitem">
+        <mat-icon matListItemIcon>timer</mat-icon>
+        <div matListItemTitle>Cooldown</div>
+        <div matListItemLine>
+          <mat-chip-listbox>
+            <mat-chip-option highlighted color="accent" [selectable]="false">{{ garminCooldownDays }} days
+              fixed</mat-chip-option>
+          </mat-chip-listbox>
+        </div>
+      </mat-list-item>
+      }
+      <mat-divider></mat-divider>
+      <mat-list-item role="listitem">
+        <mat-icon matListItemIcon>event_available</mat-icon>
+        <div matListItemTitle>Next Available Import</div>
+        <div matListItemLine class="date-highlight">{{ nextImportAvailableDate | date: 'medium' }}</div>
+      </mat-list-item>
+    </mat-list>
+  </mat-card-content>
+</mat-card>
 }
 
 @if (formGroup && isAllowedToDoHistoryImport) {

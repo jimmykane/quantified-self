@@ -1,6 +1,7 @@
 import { NgModule } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
+import { MatDividerModule } from '@angular/material/divider';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCommonModule, MatRippleModule } from '@angular/material/core';
@@ -72,6 +73,7 @@ import { MatChipsModule } from '@angular/material/chips';
     MatRippleModule,
     MatBadgeModule,
     MatAutocompleteModule,
+    MatDividerModule,
   ],
   declarations: [],
   providers: [

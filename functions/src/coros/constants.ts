@@ -6,5 +6,4 @@ export const COROSAPI_ACCESS_TOKENS_COLLECTION_NAME = 'COROSAPIAccessTokens';
 export const COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME = 'COROSAPIWorkoutQueue';
 export const SERVICE_NAME = ServiceNames.COROSAPI;
 export const USE_STAGING = false;
-export const COROS_HISTORY_IMPORT_LIMIT_MONTHS = 3;
 
