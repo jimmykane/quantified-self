@@ -374,7 +374,7 @@ async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface |
 
   if (!deferDispatch) {
     // Dispatch a Cloud Task for immediate processing
-    await enqueueWorkoutTask(serviceName, queueItem.id);
+    await enqueueWorkoutTask(serviceName, queueItem.id, queueItem.dateCreated);
   }
   return queueItemDocument;
 }
