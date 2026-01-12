@@ -11,19 +11,8 @@ import {
 } from '@sports-alliance/sports-lib';
 
 import * as base58 from 'bs58';
-import { v2beta3 } from '@google-cloud/tasks';
-let _cloudTasksClient: v2beta3.CloudTasksClient | null = null;
-function getCloudTasksClient() {
-  if (!_cloudTasksClient) {
-    _cloudTasksClient = new v2beta3.CloudTasksClient();
-  }
-  return _cloudTasksClient;
-}
-
-import { config } from './config';
 import { EventWriter, FirestoreAdapter, StorageAdapter, LogAdapter, OriginalFile } from './shared/event-writer';
 import { generateIDFromParts as sharedGenerateIDFromParts } from './shared/id-generator';
-import { ServiceNames } from '@sports-alliance/sports-lib';
 
 
 export function generateIDFromPartsOld(parts: string[]): string {
@@ -316,116 +305,10 @@ export async function isProUser(userID: string): Promise<boolean> {
   return role === 'pro';
 }
 
-/**
- * Enqueues a task to process a single workout queue item.
- * @param serviceName The service (Garmin, Suunto, Coros)
- * @param queueItemId The ID of the document in the {serviceName}Queue collection
- */
-// Cloud Task state caching
-let cachedQueueDepth: { count: number; timestamp: number } | null = null;
-const CACHE_TTL_MS = 60000; // 1 minute
-
-/**
- * Resets the Cloud Task queue depth cache.
- * Note: This is primarily used for unit testing.
- */
-export function resetCloudTaskQueueDepthCache(): void {
-  cachedQueueDepth = null;
-}
-
-export async function getCloudTaskQueueDepth(forceRefresh = false): Promise<number> {
-  if (!forceRefresh && cachedQueueDepth && (Date.now() - cachedQueueDepth.timestamp < CACHE_TTL_MS)) {
-    return cachedQueueDepth.count;
-  }
-
-  // Client is now a lazily initialized singleton
-  const client = getCloudTasksClient();
-
-  const { projectId, location, queue } = config.cloudtasks;
-
-  if (!projectId) {
-    throw new Error('Project ID is not defined in config');
-  }
-
-  const name = client.queuePath(projectId, location, queue);
-
-  const [response] = await client.getQueue({
-    name,
-    readMask: {
-      paths: ['stats'],
-    },
-  });
-
-  const tasksCount = Number(response.stats?.tasksCount || 0);
-  cachedQueueDepth = { count: tasksCount, timestamp: Date.now() };
-  return tasksCount;
-}
-
-export async function enqueueWorkoutTask(
-  serviceName: ServiceNames,
-  queueItemId: string,
-  dateCreated: number,
-  scheduleDelaySeconds?: number
-) {
-  // Client is now a lazily initialized singleton
-  const client = getCloudTasksClient();
-
-
-  const { projectId, location, queue, serviceAccountEmail } = config.cloudtasks;
-
-  if (!projectId) {
-    throw new Error('Project ID is not defined in config');
-  }
-
-  const url = `https://${location}-${projectId}.cloudfunctions.net/${queue}`;
-  const parent = client.queuePath(projectId, location, queue);
-
-  // Deterministic task name for deduplication
-  // Sanitize serviceName to allow only letters, numbers, hyphens, or underscores
-  const sanitizedServiceName = serviceName.replace(/[^a-zA-Z0-9-_]/g, '-');
-
-  // Use dateCreated to ensure uniqueness for re-created items (race condition fix)
-  // while preserving deduplication for retries of the SAME item.
-  const taskName = `${parent}/tasks/${sanitizedServiceName}-${queueItemId}-${dateCreated}`;
-
-  const payload = { data: { queueItemId, serviceName } };
-
-  const task: any = {
-    name: taskName,
-    httpRequest: {
-      httpMethod: 'POST' as const,
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: Buffer.from(JSON.stringify(payload)).toString('base64'),
-      oidcToken: {
-        serviceAccountEmail,
-      },
-    },
-  };
-
-  if (scheduleDelaySeconds) {
-    task.scheduleTime = {
-      seconds: Math.floor(Date.now() / 1000) + scheduleDelaySeconds
-    };
-  }
-
-  try {
-    const [response] = await client.createTask({ parent, task });
-    logger.info(`[Dispatcher] Enqueued task: ${response.name}`);
-  } catch (error: any) {
-    if (error.code === 6) { // ALREADY_EXISTS (GRPC code 6)
-      logger.info(`[Dispatcher] Task already exists for ${serviceName}:${queueItemId}, skipping`);
-      return;
-    }
-    logger.error(`[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`, error);
-    // Don't rethrow - we just log failure to dispatch this one. 
-    // The calling loop might proceed to next item. 
-  }
-}
-
-
-
-
+// Re-export Cloud Tasks utilities from shared module for backward compatibility
+export {
+  getCloudTaskQueueDepth,
+  enqueueWorkoutTask,
+  resetCloudTaskQueueDepthCache,
+} from './shared/cloud-tasks';
 
