@@ -233,6 +233,13 @@ export class AppEventService implements OnDestroy {
     )
   }
 
+  public getEventMetaDataKeys(user: User, eventID: string): Observable<string[]> {
+    const metaDataCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'events', eventID, 'metaData'));
+    return from(runInInjectionContext(this.injector, () => getDocs(metaDataCollection))).pipe(
+      map((querySnapshot) => querySnapshot.docs.map(doc => doc.id))
+    );
+  }
+
   /**
    * @deprecated Streams are no longer stored in Firestore. Use attachStreamsToEventWithActivities instead.
    */
