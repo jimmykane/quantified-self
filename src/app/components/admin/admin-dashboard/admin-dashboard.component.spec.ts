@@ -20,6 +20,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import { ChangeDetectorRef, NO_ERRORS_SCHEMA, Component, Input, Directive } from '@angular/core';
+import { By } from '@angular/platform-browser';
 
 
 
@@ -115,7 +116,14 @@ describe('AdminDashboardComponent', () => {
         pageSize: 25
     };
 
-    const mockQueueStats = { pending: 0, succeeded: 0, stuck: 0, providers: [], advanced: { throughput: 0, maxLagMs: 0, retryHistogram: { '0-3': 0, '4-7': 0, '8-9': 0 }, topErrors: [] } };
+    const mockQueueStats = {
+        pending: 10,
+        succeeded: 20,
+        stuck: 5,
+        providers: [],
+        cloudTasks: { pending: 42 },
+        advanced: { throughput: 0, maxLagMs: 0, retryHistogram: { '0-3': 0, '4-7': 0, '8-9': 0 }, topErrors: [] }
+    };
 
     beforeEach(async () => {
         adminServiceSpy = {
@@ -359,6 +367,41 @@ describe('AdminDashboardComponent', () => {
             fixture.detectChanges();
 
             expect(component.authPieChartOptions!.plugins!.legend!.labels!.color).toBe('rgba(255, 255, 255, 0.8)');
+        });
+    });
+
+    describe('Queue Stats Integration', () => {
+        it('should load queue stats on init', () => {
+            expect(adminServiceSpy.getQueueStats).toHaveBeenCalled();
+            expect(component.queueStats).toEqual(mockQueueStats);
+        });
+
+        it('should display Cloud Tasks pending count in the UI', () => {
+            fixture.detectChanges();
+            const debugElement = fixture.debugElement.query(By.css('.app-stat-card.status-info'));
+            expect(debugElement).toBeTruthy();
+
+            const value = debugElement.query(By.css('.app-stat-value')).nativeElement.textContent;
+            expect(value.trim()).toBe('42');
+
+            const label = debugElement.query(By.css('.app-stat-header span')).nativeElement.textContent;
+            expect(label).toContain('Cloud Tasks');
+        });
+
+        it('should merge cloudTasks data in updateQueueStatsUI', () => {
+            const partialStats = { pending: 15 } as any; // Missing cloudTasks
+
+            // Call internal method directly to test merging logic
+            (component as any).updateQueueStatsUI(partialStats, true);
+
+            // Should preserve existing cloudTasks if not present in update
+            expect(component.queueStats.pending).toBe(15);
+            expect(component.queueStats.cloudTasks).toEqual({ pending: 42 });
+
+            // Should update cloudTasks if present
+            const updateWithCloud = { cloudTasks: { pending: 100 } } as any;
+            (component as any).updateQueueStatsUI(updateWithCloud, true);
+            expect(component.queueStats.cloudTasks).toEqual({ pending: 100 });
         });
     });
 });

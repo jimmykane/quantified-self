@@ -4,6 +4,7 @@ import {
     generateIDFromPartsOld,
     isCorsAllowed,
     determineRedirectURI,
+    resetCloudTaskQueueDepthCache,
 } from './utils';
 
 describe('utils', () => {
@@ -249,14 +250,16 @@ describe('utils', () => {
 // Mock @google-cloud/tasks
 const mockCloudTasksClient = {
     queuePath: vi.fn(),
-    listTasks: vi.fn(),
+    getQueue: vi.fn(),
     createTask: vi.fn(),
     close: vi.fn(),
 };
 
 vi.mock('@google-cloud/tasks', () => {
     return {
-        CloudTasksClient: vi.fn(() => mockCloudTasksClient),
+        v2beta3: {
+            CloudTasksClient: vi.fn(() => mockCloudTasksClient),
+        }
     };
 });
 
@@ -267,6 +270,7 @@ describe('Cloud Tasks Utils', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        resetCloudTaskQueueDepthCache();
         // Setup default mock behaviors
         mockCloudTasksClient.queuePath.mockReturnValue('projects/p/locations/l/queues/q');
     });
@@ -284,20 +288,98 @@ describe('Cloud Tasks Utils', () => {
     }));
 
     describe('getCloudTaskQueueDepth', () => {
-        it('should return number of tasks', async () => {
+        it('should return number of tasks using getQueue stats', async () => {
             const { getCloudTaskQueueDepth } = await import('./utils');
 
-            mockCloudTasksClient.listTasks.mockResolvedValue([
-                [{}, {}, {}], // 3 tasks
-                {}, // request info
-                {} // response info
+            mockCloudTasksClient.getQueue.mockResolvedValue([
+                {
+                    stats: {
+                        tasksCount: '42'
+                    }
+                }
             ]);
 
             const depth = await getCloudTaskQueueDepth();
 
-            expect(depth).toBe(3);
+            expect(depth).toBe(42);
             expect(mockCloudTasksClient.queuePath).toHaveBeenCalledWith('test-project', 'test-location', 'test-queue');
-            expect(mockCloudTasksClient.listTasks).toHaveBeenCalled();
+            expect(mockCloudTasksClient.getQueue).toHaveBeenCalledWith({
+                name: 'projects/p/locations/l/queues/q',
+                readMask: { paths: ['stats'] }
+            });
+        });
+
+        it('should use cached value if called multiple times within TTL', async () => {
+            const { getCloudTaskQueueDepth } = await import('./utils');
+
+            mockCloudTasksClient.getQueue.mockResolvedValue([
+                { stats: { tasksCount: '10' } }
+            ]);
+
+            const depth1 = await getCloudTaskQueueDepth();
+            expect(depth1).toBe(10);
+            expect(mockCloudTasksClient.getQueue).toHaveBeenCalledTimes(1);
+
+            // Second call should return cached value without hitting API
+            const depth2 = await getCloudTaskQueueDepth();
+            expect(depth2).toBe(10);
+            expect(mockCloudTasksClient.getQueue).toHaveBeenCalledTimes(1);
+        });
+
+        it('should bypass cache when forceRefresh is true', async () => {
+            const { getCloudTaskQueueDepth } = await import('./utils');
+
+            mockCloudTasksClient.getQueue.mockResolvedValueOnce([
+                { stats: { tasksCount: '10' } }
+            ]);
+
+            await getCloudTaskQueueDepth(); // Fill cache
+            expect(mockCloudTasksClient.getQueue).toHaveBeenCalledTimes(1);
+
+            mockCloudTasksClient.getQueue.mockResolvedValueOnce([
+                { stats: { tasksCount: '20' } }
+            ]);
+
+            // Call with forceRefresh = true
+            const depth = await getCloudTaskQueueDepth(true);
+            expect(depth).toBe(20);
+            expect(mockCloudTasksClient.getQueue).toHaveBeenCalledTimes(2);
+        });
+
+        it('should return 0 if tasksCount is missing', async () => {
+            const { getCloudTaskQueueDepth } = await import('./utils');
+
+            mockCloudTasksClient.getQueue.mockResolvedValue([
+                {
+                    stats: {}
+                }
+            ]);
+
+            const depth = await getCloudTaskQueueDepth();
+            expect(depth).toBe(0);
+        });
+
+        it('should return 0 if stats is missing', async () => {
+            const { getCloudTaskQueueDepth } = await import('./utils');
+
+            mockCloudTasksClient.getQueue.mockResolvedValue([
+                {}
+            ]);
+
+            const depth = await getCloudTaskQueueDepth();
+            expect(depth).toBe(0);
+        });
+
+        it('should throw error if projectId is missing', async () => {
+            const { getCloudTaskQueueDepth } = await import('./utils');
+            const { config } = await import('./config');
+
+            const originalProjectId = config.cloudtasks.projectId;
+            (config.cloudtasks as any).projectId = undefined;
+
+            await expect(getCloudTaskQueueDepth()).rejects.toThrow('Project ID is not defined in config');
+
+            (config.cloudtasks as any).projectId = originalProjectId;
         });
     });
 

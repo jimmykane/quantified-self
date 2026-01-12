@@ -29,7 +29,7 @@ import { COROSAPIEventMetaData, SuuntoAppEventMetaData, ActivityParsingOptions }
 
 export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
   // Check queue depth
-  const pendingTasks = await getCloudTaskQueueDepth();
+  const pendingTasks = await getCloudTaskQueueDepth(true);
   if (pendingTasks >= MAX_PENDING_TASKS) {
     logger.info(`Queue busy (${pendingTasks} pending tasks), skipping dispatch to limit load.`);
     return;

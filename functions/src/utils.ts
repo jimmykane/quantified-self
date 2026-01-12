@@ -11,7 +11,8 @@ import {
 } from '@sports-alliance/sports-lib';
 
 import * as base58 from 'bs58';
-import { CloudTasksClient } from '@google-cloud/tasks';
+import { v2beta3 } from '@google-cloud/tasks';
+import { config } from './config';
 import { EventWriter, FirestoreAdapter, StorageAdapter, LogAdapter, OriginalFile } from './shared/event-writer';
 import { generateIDFromParts as sharedGenerateIDFromParts } from './shared/id-generator';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -312,27 +313,42 @@ export async function isProUser(userID: string): Promise<boolean> {
  * @param serviceName The service (Garmin, Suunto, Coros)
  * @param queueItemId The ID of the document in the {serviceName}Queue collection
  */
-import { config } from './config';
-import { MAX_PENDING_TASKS } from './shared/queue-config';
+// Cloud Task state caching
+let cachedQueueDepth: { count: number; timestamp: number } | null = null;
+const CACHE_TTL_MS = 60000; // 1 minute
 
-export async function getCloudTaskQueueDepth(): Promise<number> {
-  const client = new CloudTasksClient();
+/**
+ * Resets the Cloud Task queue depth cache.
+ * Note: This is primarily used for unit testing.
+ */
+export function resetCloudTaskQueueDepthCache(): void {
+  cachedQueueDepth = null;
+}
+
+export async function getCloudTaskQueueDepth(forceRefresh = false): Promise<number> {
+  if (!forceRefresh && cachedQueueDepth && (Date.now() - cachedQueueDepth.timestamp < CACHE_TTL_MS)) {
+    return cachedQueueDepth.count;
+  }
+
+  const client = new v2beta3.CloudTasksClient();
   const { projectId, location, queue } = config.cloudtasks;
 
   if (!projectId) {
     throw new Error('Project ID is not defined in config');
   }
 
-  const parent = client.queuePath(projectId, location, queue);
+  const name = client.queuePath(projectId, location, queue);
 
-  // Just list first page to check if we hit the threshold
-  // We don't need exact count if it's large
-  const [tasks] = await client.listTasks({
-    parent,
-    pageSize: MAX_PENDING_TASKS
+  const [response] = await client.getQueue({
+    name,
+    readMask: {
+      paths: ['stats'],
+    },
   });
 
-  return tasks.length;
+  const tasksCount = Number(response.stats?.tasksCount || 0);
+  cachedQueueDepth = { count: tasksCount, timestamp: Date.now() };
+  return tasksCount;
 }
 
 export async function enqueueWorkoutTask(
@@ -340,7 +356,7 @@ export async function enqueueWorkoutTask(
   queueItemId: string,
   scheduleDelaySeconds?: number
 ) {
-  const client = new CloudTasksClient();
+  const client = new v2beta3.CloudTasksClient();
 
   const { projectId, location, queue, serviceAccountEmail } = config.cloudtasks;
 

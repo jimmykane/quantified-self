@@ -6,6 +6,7 @@ import { getStripe } from '../stripe/client';
 import { CloudBillingClient } from '@google-cloud/billing';
 import { BudgetServiceClient } from '@google-cloud/billing-budgets';
 import { BigQuery } from '@google-cloud/bigquery';
+import { getCloudTaskQueueDepth } from '../utils';
 
 /**
  * Normalizes error messages by replacing dynamic values (numbers, IDs) with placeholders.
@@ -361,6 +362,10 @@ export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
 
     try {
         const db = admin.firestore();
+        const cloudTaskDepth = await getCloudTaskQueueDepth().catch(e => {
+            logger.error('Error getting Cloud Task depth:', e);
+            return 0;
+        });
         let totalPending = 0;
         let totalSucceeded = 0;
         let totalStuck = 0;
@@ -487,6 +492,9 @@ export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
             pending: totalPending,
             succeeded: totalSucceeded,
             stuck: totalStuck,
+            cloudTasks: {
+                pending: cloudTaskDepth
+            },
             providers,
             dlq,
             advanced: {

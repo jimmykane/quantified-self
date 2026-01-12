@@ -371,6 +371,7 @@ describe('queue', () => {
 
             await dispatchQueueItemTasks(ServiceNames.GarminHealthAPI);
 
+            expect(utils.getCloudTaskQueueDepth).toHaveBeenCalledWith(true);
             // Verify limit was called with batch size
             expect(collection.limit).toHaveBeenCalledWith(2);
 
@@ -409,6 +410,7 @@ describe('queue', () => {
 
             await dispatchQueueItemTasks(ServiceNames.GarminHealthAPI);
 
+            expect(utils.getCloudTaskQueueDepth).toHaveBeenCalledWith(true);
             // Expected spread: Total 1800s. Size 3. Delay per item = 600s.
             // Items: 0, 600, 1200
             expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(1, ServiceNames.GarminHealthAPI, '1', 0);

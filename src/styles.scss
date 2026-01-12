@@ -549,6 +549,15 @@ mat-table {
   }
 }
 
+.app-stat-card.status-info {
+  border-bottom: 4px solid #3b82f6;
+
+  .app-stat-value,
+  mat-icon {
+    color: #3b82f6;
+  }
+}
+
 .dark-theme .app-stat-card.status-pending {
   border-bottom: 4px solid #f59e0b;
 }
@@ -577,6 +586,15 @@ mat-table {
 
 .dark-theme .app-stat-card.status-error {
   border-bottom: 4px solid #ef4444;
+}
+
+.dark-theme .app-stat-card.status-info {
+  border-bottom: 4px solid #60a5fa;
+
+  .app-stat-value,
+  mat-icon {
+    color: #60a5fa;
+  }
 }
 
 .app-stat-card.status-dlq {

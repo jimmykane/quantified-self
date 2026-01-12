@@ -289,6 +289,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
                 pending: stats.pending,
                 succeeded: stats.succeeded,
                 stuck: stats.stuck,
+                cloudTasks: stats.cloudTasks ?? this.queueStats.cloudTasks,
                 providers: stats.providers,
                 advanced: this.queueStats.advanced ? {
                     ...this.queueStats.advanced,

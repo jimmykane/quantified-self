@@ -58,6 +58,9 @@ export interface QueueStats {
     pending: number;
     succeeded: number;
     stuck: number;
+    cloudTasks?: {
+        pending: number;
+    };
     providers: {
         name: string;
         pending: number;

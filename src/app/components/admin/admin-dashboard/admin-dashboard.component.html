@@ -249,12 +249,25 @@
             <div class="glass-card app-stat-card status-pending">
                 <div class="app-stat-header">
                     <mat-icon>hourglass_empty</mat-icon>
-                    <span>Pending</span>
+                    <span>Pending (DB)</span>
                 </div>
                 <div class="app-stat-value" *ngIf="!isLoadingStats">{{ queueStats?.pending ?? 0 }}</div>
                 <div class="app-spinner-mini" *ngIf="isLoadingStats">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">waiting in Firestore</span>
+            </div>
+            <div class="glass-card app-stat-card status-info"
+                matTooltip="Tasks currently in flight or scheduled in the Google Cloud Tasks service.">
+                <div class="app-stat-header">
+                    <mat-icon>flight_takeoff</mat-icon>
+                    <span>Cloud Tasks</span>
+                </div>
+                <div class="app-stat-value" *ngIf="!isLoadingStats">{{ queueStats?.cloudTasks?.pending ?? 0 }}</div>
+                <div class="app-spinner-mini" *ngIf="isLoadingStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+                <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">active/scheduled in GCP</span>
             </div>
             <div class="glass-card app-stat-card status-success">
                 <div class="app-stat-header">
