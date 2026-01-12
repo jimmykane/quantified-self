@@ -12,6 +12,14 @@ import {
 
 import * as base58 from 'bs58';
 import { v2beta3 } from '@google-cloud/tasks';
+let _cloudTasksClient: v2beta3.CloudTasksClient | null = null;
+function getCloudTasksClient() {
+  if (!_cloudTasksClient) {
+    _cloudTasksClient = new v2beta3.CloudTasksClient();
+  }
+  return _cloudTasksClient;
+}
+
 import { config } from './config';
 import { EventWriter, FirestoreAdapter, StorageAdapter, LogAdapter, OriginalFile } from './shared/event-writer';
 import { generateIDFromParts as sharedGenerateIDFromParts } from './shared/id-generator';
@@ -330,7 +338,9 @@ export async function getCloudTaskQueueDepth(forceRefresh = false): Promise<numb
     return cachedQueueDepth.count;
   }
 
-  const client = new v2beta3.CloudTasksClient();
+  // Client is now a lazily initialized singleton
+  const client = getCloudTasksClient();
+
   const { projectId, location, queue } = config.cloudtasks;
 
   if (!projectId) {
@@ -357,7 +367,9 @@ export async function enqueueWorkoutTask(
   dateCreated: number,
   scheduleDelaySeconds?: number
 ) {
-  const client = new v2beta3.CloudTasksClient();
+  // Client is now a lazily initialized singleton
+  const client = getCloudTasksClient();
+
 
   const { projectId, location, queue, serviceAccountEmail } = config.cloudtasks;
 
