@@ -79,6 +79,7 @@ export const ALLOWED_CORS_ORIGINS: (string | RegExp)[] = [
 
 export function isCorsAllowed(req: Request) {
   const origin = <string>req.get('origin') || '';
+  logger.info(`CORS check for origin: ${origin}`);
   return ALLOWED_CORS_ORIGINS.some(allowed => {
     if (allowed instanceof RegExp) {
       return allowed.test(origin);
