@@ -17,7 +17,7 @@ vi.mock('firebase-admin', () => ({
 describe('TTL Configuration', () => {
     it('should have correct configuration values', () => {
         expect(TTL_CONFIG.MAIL_IN_DAYS).toBe(90);
-        expect(TTL_CONFIG.QUEUE_ITEM_IN_DAYS).toBe(14);
+        expect(TTL_CONFIG.QUEUE_ITEM_IN_DAYS).toBe(7);
     });
 
     describe('getExpireAtTimestamp', () => {
