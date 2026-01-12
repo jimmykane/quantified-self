@@ -21,7 +21,6 @@ const COLLECTION_GROUPS = [
     "metaData",
     "athletes",
     "users",
-    "coaches",
     "garminHealthAPITokens",
     "suuntoAppAccessTokens",
     "COROSAPIAccessTokens",

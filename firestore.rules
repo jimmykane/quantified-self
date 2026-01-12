@@ -1,11 +1,6 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isCoach(userID) {
-      return exists(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)) && get(/databases/$(database)/documents/coaches/$(request.auth.uid)/athletes/$(userID)).data.accepted == true;
-    }
-    
-
     function isAdmin() {
       return request.auth != null && request.auth.token.admin == true;
     }
@@ -15,7 +10,6 @@ service cloud.firestore {
     // available in rules.
     match /users/{userID} {
       allow read: if resource.data.privacy == 'public';
-      allow read: if isCoach(userID) == true;
       allow read, write: if request.auth.uid == userID;
       allow create: if request.auth.uid != null;
       
@@ -73,7 +67,6 @@ service cloud.firestore {
 
         match /events/{eventID} {
           allow read: if resource.data.privacy == 'public';
-          allow read: if isCoach(userID) == true;
           // RESTRICTED ACCESS: Must be owner AND have a valid role (Free, Basic, or PRO)
           // TEMPORARILY DISABLED FOR TESTING - Re-enable when ready to enforce paywall
           // allow read, write: if request.auth.uid == userID && isSubscribed();
@@ -92,7 +85,6 @@ service cloud.firestore {
           
           match /activities/{activityID} {
             // New Flat Activities Collection
-            allow read: if isCoach(userID) == true; // @todo restrict to coach/privacy?
             allow read, write: if request.auth.uid == userID;
           }
 
@@ -163,15 +155,6 @@ service cloud.firestore {
     match /userAccountPrivileges/{document=**} {
       allow write: if false;
       allow read: if true;
-    }
-
-
-    match /coaches/{userID} {
-      allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
-       match /athletes/{athleteUserID} {
-          allow read,delete: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
-          allow read, write: if request.auth.uid == athleteUserID && request.auth.token.firebase.sign_in_provider != 'anonymous';
-       }
     }
 
     match /failed_jobs/{document=**} {
