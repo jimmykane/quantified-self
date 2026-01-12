@@ -5,3 +5,6 @@ pre-commit:
       root: "functions"
       glob: "**/*.{ts,js}"
       run: npx eslint {staged_files} --fix && git add {staged_files}
+    lint-angular:
+      glob: "{src/*.{ts,html},src/**/*.{ts,html}}"
+      run: ESLINT_USE_FLAT_CONFIG=false npx eslint {staged_files} --fix && git add {staged_files}
