@@ -51,6 +51,17 @@
                 <mat-spinner diameter="24"></mat-spinner>
             </div>
         </div>
+        <!-- DLQ inline with status cards -->
+        <div class="glass-card app-stat-card status-dlq" *ngIf="stats?.dlq" style="background: rgba(244, 67, 54, 0.1);">
+            <div class="app-stat-header">
+                <mat-icon style="color: #f44336;">error_outline</mat-icon>
+                <span style="color: #f44336;">Dead Letter Queue</span>
+            </div>
+            <div class="app-stat-value" *ngIf="!loading" style="color: #f44336;">{{ stats?.dlq?.total ?? 0 }}</div>
+            <div class="app-spinner-mini" *ngIf="loading">
+                <mat-spinner diameter="24"></mat-spinner>
+            </div>
+        </div>
     </div>
 
     <!-- Advanced Stats -->
@@ -91,23 +102,6 @@
                 <canvas baseChart [data]="barChartData" [options]="barChartOptions" [plugins]="barChartPlugins"
                     [legend]="barChartLegend" [type]="'bar'">
                 </canvas>
-            </div>
-        </div>
-    </div>
-
-    <!-- DLQ Stats -->
-    <div class="stats-grid" *ngIf="stats?.dlq">
-        <div class="glass-card app-stat-card status-dlq" style="background: rgba(244, 67, 54, 0.1);">
-            <div class="app-stat-header">
-                <mat-icon style="color: #f44336;">error_outline</mat-icon>
-                <span style="color: #f44336;">Dead Letter Queue</span>
-            </div>
-            <div class="app-stat-value" *ngIf="!loading" style="color: #f44336;">{{ stats?.dlq?.total ??
-                0
-                }}
-            </div>
-            <div class="app-spinner-mini" *ngIf="loading">
-                <mat-spinner diameter="24"></mat-spinner>
             </div>
         </div>
     </div>

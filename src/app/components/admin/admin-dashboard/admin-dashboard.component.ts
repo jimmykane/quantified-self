@@ -383,7 +383,16 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     }
 
     // Helper methods
-    // formatDuration and getServiceLogo moved to AdminQueueStatsComponent
+    // getServiceLogo is still needed for User Management table
+    getServiceLogo(provider: string): string {
+        switch (provider.toLowerCase()) {
+            case 'garmin': return 'assets/logos/garmin.svg';
+            case 'suunto': return 'assets/logos/suunto.svg';
+            case 'coros': return 'assets/logos/coros.svg';
+            default: return '';
+        }
+    }
+    // formatDuration moved to AdminQueueStatsComponent
     // formatCurrency and openExternalLink moved to AdminFinancialsComponent
 
     // Maintenance mode methods removed (moved to AdminMaintenanceComponent)
