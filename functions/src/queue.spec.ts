@@ -252,6 +252,7 @@ describe('queue', () => {
             expect(mockUpdate).toHaveBeenCalled();
             const updateArg = (mockUpdate.mock.calls[0] as any[])[0];
             expect(updateArg.retryCount).toBe(1);
+            expect(updateArg.dispatchedToCloudTask).toBeNull();
             expect(updateArg.ref).toBeUndefined(); // ref should be stripped
         });
     });

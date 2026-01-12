@@ -347,6 +347,10 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         logger.error(new Error(`User for queue item ${queueItem.id} not found. Aborting retries. ${e.message}`));
         await moveToDeadLetterQueue(queueItem, e, bulkWriter, 'USER_NOT_FOUND');
         return QueueResult.MovedToDLQ;
+      } else if ((e as any).code === 'EVENT_EMPTY_ERROR') {
+        logger.error(new Error(`FIT file for ${queueItem.id} contains no activities. Aborting retries.`));
+        await moveToDeadLetterQueue(queueItem, e, bulkWriter, 'EVENT_EMPTY_ERROR');
+        return QueueResult.MovedToDLQ;
       }
 
       logger.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.openId || serviceToken.userName} to ${queueItem.retryCount + 1} due to ${e.message}`));
