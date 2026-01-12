@@ -34,6 +34,7 @@ import { ChartConfiguration, ChartOptions } from 'chart.js';
 import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
 import { AdminFinancialsComponent } from '../admin-financials/admin-financials.component';
 import { AdminQueueStatsComponent } from '../admin-queue-stats/admin-queue-stats.component';
+import { AdminUserManagementComponent, UserStats } from '../admin-user-management/admin-user-management.component';
 
 @Component({
     selector: 'app-admin-dashboard',
@@ -56,11 +57,10 @@ import { AdminQueueStatsComponent } from '../admin-queue-stats/admin-queue-stats
         MatExpansionModule,
         MatDialogModule,
         MatTooltipModule,
-        MatTooltipModule,
-        BaseChartDirective,
         RouterModule,
         AdminFinancialsComponent,
-        AdminQueueStatsComponent
+        AdminQueueStatsComponent,
+        AdminUserManagementComponent
     ],
     providers: [provideCharts(withDefaultRegisterables())]
 })
@@ -344,6 +344,12 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     clearSearch(): void {
         this.searchTerm = '';
         this.searchSubject.next('');
+    }
+
+    onSearchChange(term: string): void {
+        this.searchTerm = term;
+        this.currentPage = 0;
+        this.fetchUsers();
     }
 
     // Helper methods
