@@ -131,7 +131,8 @@ export class AdminService {
             pageSize: params.pageSize ?? 25,
             searchTerm: params.searchTerm,
             sortField: params.sortField,
-            sortDirection: params.sortDirection
+            sortDirection: params.sortDirection,
+            filterService: params.filterService
         })).pipe(
             map(result => result.data)
         );

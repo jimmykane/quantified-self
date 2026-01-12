@@ -146,10 +146,19 @@
 .qs-filter-container {
     margin-bottom: 16px;
     padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
 }
 
 .qs-search-field {
-    width: 100%;
+    flex: 1;
+    min-width: 200px;
+}
+
+.qs-filter-field {
+    min-width: 150px;
 }
 
 // Table Styles

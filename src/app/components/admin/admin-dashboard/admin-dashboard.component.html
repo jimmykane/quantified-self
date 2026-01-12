@@ -31,6 +31,7 @@
     <!-- User Management Section -->
     <app-admin-user-management [users]="users" [userStats]="userStats" [isLoading]="isLoading" [error]="error"
         [totalCount]="totalCount" [currentPage]="currentPage" [pageSize]="pageSize" [pageSizeOptions]="pageSizeOptions"
+        [filterService]="filterService" (filterServiceChange)="onFilterServiceChange($event)"
         (pageChange)="onPageChange($event)" (sortChange)="onSortChange($event)" (searchChange)="onSearchChange($event)"
         (impersonate)="onImpersonate($event)">
     </app-admin-user-management>

@@ -75,7 +75,7 @@
     </div>
 
     <div class="glass-card qs-filter-container">
-        <mat-form-field appearance="outline" class="qs-search-field">
+        <mat-form-field appearance="outline" class="qs-search-field" subscriptSizing="dynamic">
             <mat-label>Search users</mat-label>
             <input matInput [value]="searchTerm" (input)="onSearchInput($event)"
                 placeholder="Search by email, name, or UID">
@@ -85,7 +85,8 @@
             </button>
         </mat-form-field>
 
-        <mat-form-field appearance="outline" class="qs-filter-field" style="max-width: 200px;">
+        <mat-form-field appearance="outline" class="qs-filter-field" style="max-width: 200px;"
+            subscriptSizing="dynamic">
             <mat-label>Filter Service</mat-label>
             <mat-select [value]="filterService" (selectionChange)="onFilterServiceChange($event.value)">
                 <mat-option [value]="undefined">All Services</mat-option>
