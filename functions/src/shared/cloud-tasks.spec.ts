@@ -1,18 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { resetCloudTaskQueueDepthCache } from './cloud-tasks';
+import { resetCloudTaskQueueDepthCache, resetCloudTasksClient } from './cloud-tasks';
 
 // Mock @google-cloud/tasks
-const mockCloudTasksClient = {
-    queuePath: vi.fn(),
-    getQueue: vi.fn(),
-    createTask: vi.fn(),
-    close: vi.fn(),
-};
+const { mockCloudTasksClient, CloudTasksClientSpy } = vi.hoisted(() => {
+    const mockCloudTasksClient = {
+        queuePath: vi.fn(),
+        getQueue: vi.fn(),
+        createTask: vi.fn(),
+        close: vi.fn(),
+    };
+    const CloudTasksClientSpy = vi.fn(() => mockCloudTasksClient);
+    return { mockCloudTasksClient, CloudTasksClientSpy };
+});
 
 vi.mock('@google-cloud/tasks', () => {
     return {
         v2beta3: {
-            CloudTasksClient: vi.fn(() => mockCloudTasksClient),
+            CloudTasksClient: CloudTasksClientSpy,
         }
     };
 });
@@ -40,8 +44,10 @@ describe('Cloud Tasks Utils', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         resetCloudTaskQueueDepthCache();
+        resetCloudTasksClient();
         // Setup default mock behaviors
         mockCloudTasksClient.queuePath.mockReturnValue('projects/p/locations/l/queues/q');
+        CloudTasksClientSpy.mockClear();
     });
 
     describe('getCloudTaskQueueDepth', () => {
@@ -409,6 +415,45 @@ describe('Cloud Tasks Utils', () => {
 
             await expect(enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 1000)).rejects.toThrow('DEADLINE_EXCEEDED');
             expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to enqueue task'), error);
+        });
+
+        it('should retry on UNAVAILABLE (code 14) error and reset client', async () => {
+            const { enqueueWorkoutTask } = await import('./cloud-tasks');
+            const { ServiceNames } = await import('@sports-alliance/sports-lib');
+
+            const unavailableError = new Error('Unavailable');
+            (unavailableError as any).code = 14;
+
+            mockCloudTasksClient.createTask
+                .mockRejectedValueOnce(unavailableError)
+                .mockResolvedValueOnce([{ name: 'task-name' }]);
+
+            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-retry', 1000);
+
+            expect(mockCloudTasksClient.createTask).toHaveBeenCalledTimes(2);
+            // First call (lazy init) + Second call (re-init after invalidation) = 2 constructor calls
+            // Wait, if _cloudTasksClient is null initially -> 1 call.
+            // Then invalidation -> _cloudTasksClient = null.
+            // Next retry -> new instantiation -> 1 call.
+            // Total 2 constructor calls.
+            expect(CloudTasksClientSpy).toHaveBeenCalledTimes(2);
+        });
+
+        it('should retry on ECONNRESET error and reset client', async () => {
+            const { enqueueWorkoutTask } = await import('./cloud-tasks');
+            const { ServiceNames } = await import('@sports-alliance/sports-lib');
+
+            const connResetError = new Error('read ECONNRESET');
+            (connResetError as any).code = 14; // Often matches UNAVAILABLE but text matters too
+
+            mockCloudTasksClient.createTask
+                .mockRejectedValueOnce(connResetError)
+                .mockResolvedValueOnce([{ name: 'task-name' }]);
+
+            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-retry-reset', 1000);
+
+            expect(mockCloudTasksClient.createTask).toHaveBeenCalledTimes(2);
+            expect(CloudTasksClientSpy).toHaveBeenCalledTimes(2);
         });
     });
 

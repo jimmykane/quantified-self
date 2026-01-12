@@ -35,6 +35,14 @@ export function resetCloudTaskQueueDepthCache(): void {
 }
 
 /**
+ * Resets the Cloud Tasks client singleton.
+ * Note: This is primarily used for unit testing.
+ */
+export function resetCloudTasksClient(): void {
+    _cloudTasksClient = null;
+}
+
+/**
  * Get the current depth (number of tasks) in the Cloud Tasks queue.
  * Uses caching to reduce API calls unless forceRefresh is true.
  */
@@ -115,15 +123,41 @@ export async function enqueueWorkoutTask(
         };
     }
 
-    try {
-        const [response] = await client.createTask({ parent, task });
-        logger.info(`[Dispatcher] Enqueued task: ${response.name}`);
-    } catch (error: any) {
-        if ((error as any).code === 6) { // ALREADY_EXISTS (GRPC code 6)
-            logger.info(`[Dispatcher] Task already exists for ${serviceName}:${queueItemId}, skipping`);
+    let attempt = 0;
+    const MAX_RETRIES = 3;
+
+    while (attempt < MAX_RETRIES) {
+        try {
+            // Get the current client instance (may be new if reset occurred)
+            const currentClient = getCloudTasksClient();
+            const [response] = await currentClient.createTask({ parent, task });
+            logger.info(`[Dispatcher] Enqueued task: ${response.name}`);
             return;
+        } catch (error: any) {
+            if ((error as any).code === 6) { // ALREADY_EXISTS (GRPC code 6)
+                logger.info(`[Dispatcher] Task already exists for ${serviceName}:${queueItemId}, skipping`);
+                return;
+            }
+
+            // Check for retryable errors: UNAVAILABLE (14) or ECONNRESET
+            const isRetryable = (error.code === 14) ||
+                (error.message && (error.message.includes('ECONNRESET') || error.message.includes('Unavailable')));
+
+            if (isRetryable && attempt < MAX_RETRIES - 1) {
+                logger.warn(`[Dispatcher] Transient error enqueueing task (attempt ${attempt + 1}/${MAX_RETRIES}): ${error.message}. Resetting client and retrying...`);
+
+                // Force client reset
+                _cloudTasksClient = null;
+
+                attempt++;
+                // Exponential backoff: 1s, 2s, 4s...
+                const delayMs = 1000 * Math.pow(2, attempt - 1);
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+                continue;
+            }
+
+            logger.error(`[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`, error);
+            throw error;
         }
-        logger.error(`[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`, error);
-        throw error;
     }
 }
