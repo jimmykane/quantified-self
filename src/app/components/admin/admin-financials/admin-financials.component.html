@@ -1,0 +1,75 @@
+<div class="dashboard-section">
+    <div class="section-title">
+        <h2>
+            <mat-icon>monetization_on</mat-icon>
+            Financial Overview (Current Month)
+        </h2>
+    </div>
+
+    <div class="stats-grid">
+        <!-- Stripe Revenue -->
+        <div class="glass-card app-stat-card status-success">
+            <div class="app-stat-header">
+                <mat-icon>payments</mat-icon>
+                <span>Stripe Revenue (Net)</span>
+            </div>
+            <div class="app-stat-value" *ngIf="!loading && stats">
+                {{ formatCurrency(stats.revenue.total, stats.revenue.currency) }}
+            </div>
+            <div class="app-spinner-mini" *ngIf="loading">
+                <mat-spinner diameter="24"></mat-spinner>
+            </div>
+            <span class="stat-subtitle" *ngIf="stats" style="font-size: 0.75rem; opacity: 0.8;">
+                from {{ stats.revenue.invoiceCount }} paid invoices
+            </span>
+        </div>
+
+        <!-- GCP Costs -->
+        <div class="glass-card app-stat-card status-pending" style="cursor: pointer;" *ngIf="stats?.cost?.reportUrl"
+            (click)="openExternalLink(stats?.cost?.reportUrl)">
+            <div class="app-stat-header">
+                <mat-icon>cloud</mat-icon>
+                <span>GCP Estimated Cost</span>
+            </div>
+            <!-- If we have a numerical total (from override or later BigQuery export), show it -->
+            <div class="app-stat-value" *ngIf="!loading && stats?.cost?.total !== null">
+                {{ formatCurrency(stats?.cost?.total || 0, stats?.cost?.currency || 'eur') }}
+            </div>
+
+            <!-- Fallback to "View Report" if no numerical total is available -->
+            <div class="app-stat-value" *ngIf="!loading && stats?.cost?.total === null"
+                style="font-size: 1.5rem; display: flex; align-items: center; gap: 8px;">
+                View Report <mat-icon style="font-size: 1.5rem; width: 1.5rem; height: 1.5rem;">open_in_new</mat-icon>
+            </div>
+            <div class="app-spinner-mini" *ngIf="loading">
+                <mat-spinner diameter="24"></mat-spinner>
+            </div>
+            <div class="stat-subtitle" *ngIf="stats"
+                style="font-size: 0.75rem; opacity: 0.8; display: flex; flex-direction: column; gap: 4px;">
+                <span>Billing ID: {{ stats.cost.billingAccountId || 'N/A' }} ({{
+                    stats.cost.currency | uppercase }})</span>
+                <span *ngIf="stats.cost.budget" style="font-weight: 500;">
+                    Budget: {{ formatCurrency(stats.cost.budget.amount,
+                    stats.cost.budget.currency) }}
+                </span>
+                <span *ngIf="stats.cost.advice"
+                    style="font-size: 0.65rem; color: var(--mat-sys-primary); margin-top: 4px; font-style: italic;">
+                    {{ stats.cost.advice }}
+                </span>
+                <span *ngIf="stats.cost.lastUpdated"
+                    style="font-size: 0.65rem; color: var(--mat-sys-on-surface-variant); margin-top: 4px; opacity: 0.7;">
+                    Last update: {{ stats.cost.lastUpdated | date:'short' }}
+                </span>
+            </div>
+        </div>
+        <!-- Fallback if no report URL -->
+        <div class="glass-card app-stat-card status-error" *ngIf="!loading && !stats?.cost?.reportUrl">
+            <div class="app-stat-header">
+                <mat-icon>cloud_off</mat-icon>
+                <span>GCP Billing</span>
+            </div>
+            <div class="app-stat-value" style="font-size: 1.2rem;">Not Configured</div>
+            <span class="stat-subtitle">Check IAM permissions</span>
+        </div>
+    </div>
+</div>

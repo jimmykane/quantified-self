@@ -32,6 +32,7 @@ import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmat
 import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration, ChartOptions } from 'chart.js';
 import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
+import { AdminFinancialsComponent } from '../admin-financials/admin-financials.component';
 
 @Component({
     selector: 'app-admin-dashboard',
@@ -56,7 +57,8 @@ import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
         MatTooltipModule,
         MatTooltipModule,
         BaseChartDirective,
-        RouterModule
+        RouterModule,
+        AdminFinancialsComponent
     ],
     providers: [provideCharts(withDefaultRegisterables())]
 })
@@ -458,18 +460,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         return `${seconds}s`;
     }
 
-    formatCurrency(amountCents: number, currency: string): string {
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: currency.toUpperCase()
-        }).format(amountCents / 100);
-    }
-
-    openExternalLink(url: string | null): void {
-        if (url) {
-            window.open(url, '_blank');
-        }
-    }
+    // formatCurrency and openExternalLink moved to AdminFinancialsComponent
 
     // Maintenance mode methods removed (moved to AdminMaintenanceComponent)
 
