@@ -38,7 +38,7 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
 
   const availableSlots = MAX_PENDING_TASKS - pendingTasks;
   // Use availableSlots as batch limit (effectively capping concurrent tasks)
-  const batchSize = availableSlots; // Caps at 100 max
+  const batchSize = availableSlots; // Caps at 1000 max
 
   // @todo add queue item sort date for creation
   const querySnapshot = await admin.firestore()
