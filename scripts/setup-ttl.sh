@@ -3,9 +3,7 @@
 # Array of collection group names
 COLLECTIONS=(
     "COROSAPIWorkoutQueue"
-    "COROSAPIHistoryImportWorkoutQueue"
     "suuntoAppWorkoutQueue"
-    "suuntoAppHistoryImportActivityQueue"
     "garminHealthAPIActivityQueue"
     "failed_jobs"
     "mail"
