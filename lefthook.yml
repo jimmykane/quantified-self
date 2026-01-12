@@ -1,0 +1,7 @@
+pre-commit:
+  parallel: true
+  commands:
+    lint-functions:
+      root: "functions"
+      glob: "**/*.{ts,js}"
+      run: npx eslint {staged_files} --fix && git add {staged_files}
