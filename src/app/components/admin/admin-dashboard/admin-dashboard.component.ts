@@ -33,6 +33,7 @@ import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration, ChartOptions } from 'chart.js';
 import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
 import { AdminFinancialsComponent } from '../admin-financials/admin-financials.component';
+import { AdminQueueStatsComponent } from '../admin-queue-stats/admin-queue-stats.component';
 
 @Component({
     selector: 'app-admin-dashboard',
@@ -58,7 +59,8 @@ import { AdminFinancialsComponent } from '../admin-financials/admin-financials.c
         MatTooltipModule,
         BaseChartDirective,
         RouterModule,
-        AdminFinancialsComponent
+        AdminFinancialsComponent,
+        AdminQueueStatsComponent
     ],
     providers: [provideCharts(withDefaultRegisterables())]
 })
@@ -133,21 +135,8 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     private readonly CHART_TEXT_DARK = 'rgba(255, 255, 255, 0.8)';
     private readonly CHART_TEXT_LIGHT = 'rgba(0, 0, 0, 0.8)';
     private readonly CHART_GRID_DARK = 'rgba(255, 255, 255, 0.1)';
-    private readonly CHART_GRID_LIGHT = 'rgba(0, 0, 0, 0.1)';
-
     // Charts
-    public barChartLegend = true;
-    public barChartPlugins = [];
-    public barChartData: ChartConfiguration<'bar'>['data'] = {
-        labels: ['0-3 Retries', '4-7 Retries', '8-9 Retries'],
-        datasets: [
-            { data: [0, 0, 0], label: 'Pending Items' }
-        ]
-    };
-    public barChartOptions: ChartConfiguration<'bar'>['options'] = {
-        responsive: true,
-        maintainAspectRatio: false
-    };
+    // Configuration moved to AdminQueueStatsComponent
 
     // Maintenance mode removed (moved to AdminMaintenanceComponent)
 
@@ -181,41 +170,12 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
             this.fetchUsers();
         });
 
-        // Handle theme changes for charts
+        // Handle theme changes for charts - Logic moved to AdminQueueStatsComponent
+        // Theme subscription kept if needed for other things, but chart specific logic removed.
+        // Actually, since this component no longer has charts, we might not need this subscription at all
+        // unless other parts use it. For now, removing the chart update block.
         this.appThemeService.getAppTheme().pipe(takeUntil(this.destroy$)).subscribe(theme => {
-            const isDark = theme === AppThemes.Dark;
-            const textColor = isDark ? this.CHART_TEXT_DARK : this.CHART_TEXT_LIGHT;
-            const gridColor = isDark ? this.CHART_GRID_DARK : this.CHART_GRID_LIGHT;
-
-            // Update Pie Chart Options
-            this.authPieChartOptions = {
-                ...this.authPieChartOptions,
-                plugins: {
-                    ...this.authPieChartOptions!.plugins,
-                    legend: {
-                        ...this.authPieChartOptions!.plugins!.legend,
-                        labels: {
-                            ...this.authPieChartOptions!.plugins!.legend!.labels,
-                            color: textColor
-                        }
-                    }
-                }
-            };
-
-            // Update Bar Chart Options
-            this.barChartOptions = {
-                ...this.barChartOptions,
-                scales: {
-                    x: {
-                        ticks: { color: textColor },
-                        grid: { color: gridColor }
-                    },
-                    y: {
-                        ticks: { color: textColor },
-                        grid: { color: gridColor }
-                    }
-                }
-            };
+            // No local charts to update theme for
         });
 
         // Use resolved data
@@ -304,27 +264,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         } else {
             this.queueStats = stats;
         }
-
-        if (this.queueStats.advanced?.retryHistogram) {
-            this.barChartData = {
-                labels: ['0-3 Retries', '4-7 Retries', '8-9 Retries'],
-                datasets: [
-                    {
-                        data: [
-                            this.queueStats.advanced.retryHistogram['0-3'],
-                            this.queueStats.advanced.retryHistogram['4-7'],
-                            this.queueStats.advanced.retryHistogram['8-9']
-                        ],
-                        label: 'Pending Items',
-                        backgroundColor: [
-                            'rgba(75, 192, 192, 0.6)', // Greenish
-                            'rgba(255, 206, 86, 0.6)', // Yellowish
-                            'rgba(255, 99, 132, 0.6)'  // Reddish
-                        ]
-                    }
-                ]
-            };
-        }
+        // Chart update logic moved to AdminQueueStatsComponent ngOnChanges
     }
 
     fetchFinancialStats(): void {
@@ -407,14 +347,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     }
 
     // Helper methods
-    getServiceLogo(provider: string): string {
-        switch (provider.toLowerCase()) {
-            case 'garmin': return 'assets/logos/garmin.svg';
-            case 'suunto': return 'assets/logos/suunto.svg';
-            case 'coros': return 'assets/logos/coros.svg';
-            default: return '';
-        }
-    }
+
 
     formatConnectionDate(timestamp: any): string {
         if (!timestamp) return 'Time unknown';
@@ -449,17 +382,8 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     }
 
-    formatDuration(ms: number): string {
-        if (!ms) return '0s';
-        const seconds = Math.floor(ms / 1000);
-        const minutes = Math.floor(seconds / 60);
-        const hours = Math.floor(minutes / 60);
-
-        if (hours > 0) return `${hours}h ${minutes % 60}m`;
-        if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
-        return `${seconds}s`;
-    }
-
+    // Helper methods
+    // formatDuration and getServiceLogo moved to AdminQueueStatsComponent
     // formatCurrency and openExternalLink moved to AdminFinancialsComponent
 
     // Maintenance mode methods removed (moved to AdminMaintenanceComponent)
