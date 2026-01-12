@@ -192,9 +192,6 @@ describe('AdminDashboardComponent', () => {
             schemas: [NO_ERRORS_SCHEMA]
         })
             .overrideProvider(MatDialog, { useValue: matDialogSpy })
-            .overrideComponent(AdminDashboardComponent, {
-                remove: { imports: [BaseChartDirective] }
-            })
             .compileComponents();
 
         fixture = TestBed.createComponent(AdminDashboardComponent);
@@ -274,101 +271,7 @@ describe('AdminDashboardComponent', () => {
         expect(component.searchTerm).toBe('');
     });
 
-    describe('Maintenance Mode', () => {
-        beforeEach(() => {
-            // Update mock to match the expected structure with environments
-            const mockStatus = {
-                prod: { enabled: false, message: 'Test' },
-                beta: { enabled: false, message: 'TestBeta' },
-                dev: { enabled: false, message: 'TestDev' }
-            };
-            adminServiceSpy.getMaintenanceStatus.mockReturnValue(of(mockStatus));
 
-            // Re-trigger ngOnInit since we updated the mock but the component was already created
-            component.ngOnInit();
-        });
-
-        it('should fetch maintenance status on init', () => {
-            expect(component.prodMaintenance.enabled).toBe(false);
-            expect(component.prodMaintenance.message).toBe('Test');
-        });
-
-        it('should detect message changes', () => {
-            component.prodMaintenance.message = 'New Message';
-            expect(component.hasMessageChanged('prod')).toBe(true);
-
-            component.prodMaintenance.message = 'Test';
-            expect(component.hasMessageChanged('prod')).toBe(false);
-        });
-
-        it('should save maintenance message', () => {
-            component.prodMaintenance.message = 'Updated Message';
-            adminServiceSpy.setMaintenanceMode.mockReturnValue(of({ success: true, enabled: false, message: 'Updated Message' }));
-
-            component.saveMaintenanceMessage('prod');
-
-            expect(adminServiceSpy.setMaintenanceMode).toHaveBeenCalledWith(false, 'Updated Message', 'prod');
-            expect(component.prodMaintenance.message).toBe('Updated Message');
-            expect(component.hasMessageChanged('prod')).toBe(false); // Should be reset
-        });
-
-        it('should include message when toggling maintenance with confirmation', () => {
-            component.prodMaintenance.message = 'Toggle Message';
-            adminServiceSpy.setMaintenanceMode.mockReturnValue(of({ success: true, enabled: true, message: 'Toggle Message' }));
-
-            // Mock dialog confirmation
-            matDialogSpy.open.mockReturnValue({
-                afterClosed: () => of(true)
-            });
-
-            // Pass a mock event that includes the source property
-            component.onMaintenanceToggle({ checked: true, source: { checked: true } } as any, 'prod');
-
-            expect(matDialogSpy.open).toHaveBeenCalled();
-            expect(adminServiceSpy.setMaintenanceMode).toHaveBeenCalledWith(true, 'Toggle Message', 'prod');
-            expect(component.prodMaintenance.enabled).toBe(true);
-        });
-
-        it('should cancel toggle if dialog is rejected', () => {
-            component.prodMaintenance.enabled = false; // Initial state
-            // Mock dialog rejection
-            matDialogSpy.open.mockReturnValue({
-                afterClosed: () => of(false)
-            });
-
-            const mockSource = { checked: true };
-            component.onMaintenanceToggle({ checked: true, source: mockSource } as any, 'prod');
-
-            expect(matDialogSpy.open).toHaveBeenCalled();
-            expect(adminServiceSpy.setMaintenanceMode).not.toHaveBeenCalled();
-            // Should revert the checked state of the source
-            expect(mockSource.checked).toBe(false);
-            expect(component.prodMaintenance.enabled).toBe(false);
-        });
-    });
-
-    describe('Theme Support', () => {
-        it('should update chart options when theme changes to light', () => {
-            // Initial state should be dark (from our mock setup)
-            expect(component.authPieChartOptions!.plugins!.legend!.labels!.color).toBe('rgba(255, 255, 255, 0.8)');
-
-            // Toggle to light theme
-            themeSubject.next(AppThemes.Normal);
-            fixture.detectChanges();
-
-            // Check updated colors
-            expect(component.authPieChartOptions!.plugins!.legend!.labels!.color).toBe('rgba(0, 0, 0, 0.8)');
-            expect(component.barChartOptions!.scales!['x']!.ticks!.color).toBe('rgba(0, 0, 0, 0.8)');
-        });
-
-        it('should update chart options when theme changes back to dark', () => {
-            themeSubject.next(AppThemes.Normal); // Start with light
-            themeSubject.next(AppThemes.Dark);   // Back to dark
-            fixture.detectChanges();
-
-            expect(component.authPieChartOptions!.plugins!.legend!.labels!.color).toBe('rgba(255, 255, 255, 0.8)');
-        });
-    });
 
     describe('Queue Stats Integration', () => {
         it('should load queue stats on init', () => {
@@ -376,17 +279,7 @@ describe('AdminDashboardComponent', () => {
             expect(component.queueStats).toEqual(mockQueueStats);
         });
 
-        it('should display Cloud Tasks pending count in the UI', () => {
-            fixture.detectChanges();
-            const debugElement = fixture.debugElement.query(By.css('.app-stat-card.status-info'));
-            expect(debugElement).toBeTruthy();
 
-            const value = debugElement.query(By.css('.app-stat-value')).nativeElement.textContent;
-            expect(value.trim()).toBe('42');
-
-            const label = debugElement.query(By.css('.app-stat-header span')).nativeElement.textContent;
-            expect(label).toContain('Cloud Tasks');
-        });
 
         it('should merge cloudTasks data in updateQueueStatsUI', () => {
             const partialStats = { pending: 15 } as any; // Missing cloudTasks

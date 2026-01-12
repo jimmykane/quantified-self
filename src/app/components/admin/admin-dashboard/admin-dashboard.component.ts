@@ -303,6 +303,8 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         this.error = null;
 
         const params: ListUsersParams = {
+            page: this.currentPage,
+            pageSize: this.pageSize,
             searchTerm: this.searchTerm || undefined,
             sortField: this.sortField,
             sortDirection: this.sortDirection,
