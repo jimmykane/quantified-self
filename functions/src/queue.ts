@@ -8,6 +8,7 @@ import * as logger from 'firebase-functions/logger';
 import { increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue, QueueResult } from './queue-utils';
 import { processGarminHealthAPIActivityQueueItem } from './garmin/queue';
 import {
+  QueueItemInterface,
   COROSAPIWorkoutQueueItemInterface,
   GarminHealthAPIActivityQueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface,
@@ -59,7 +60,14 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
 
   const promises = querySnapshot.docs.map(async (doc, index) => {
     const delay = Math.floor(index * delayPerItem);
-    await enqueueWorkoutTask(serviceName, doc.id, delay);
+    const data = doc.data() as QueueItemInterface;
+
+    if (!data.dateCreated) {
+      logger.error(`Queue item ${doc.id} missing dateCreated, skipping dispatch.`);
+      return;
+    }
+
+    await enqueueWorkoutTask(serviceName, doc.id, data.dateCreated, delay);
     // Mark as dispatched prevents re-queueing
     return doc.ref.update({ dispatchedToCloudTask: Date.now() });
   });

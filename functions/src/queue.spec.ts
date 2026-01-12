@@ -155,6 +155,7 @@ describe('queue', () => {
                 retryCount: 0,
                 processed: false,
                 dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
             };
 
             await increaseRetryCountForQueueItem(queueItem, new Error('Test error'));
@@ -182,6 +183,7 @@ describe('queue', () => {
                 retryCount: 0,
                 processed: false,
                 dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
             };
 
             // 10 is max retry count
@@ -209,6 +211,7 @@ describe('queue', () => {
                 errors: [{ error: 'Previous error', atRetryCount: 1, date: Date.now() - 1000 }],
                 processed: false,
                 dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
             };
 
             await increaseRetryCountForQueueItem(queueItem, new Error('New error'));
@@ -223,6 +226,7 @@ describe('queue', () => {
                 retryCount: 0,
                 processed: false,
                 dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
             };
 
             await expect(
@@ -240,6 +244,7 @@ describe('queue', () => {
                 retryCount: 0,
                 processed: false,
                 dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
             };
 
             await increaseRetryCountForQueueItem(queueItem, new Error('Test'));
@@ -262,6 +267,7 @@ describe('queue', () => {
                 retryCount: 0,
                 processed: false,
                 dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
             };
 
             await updateToProcessed(queueItem);
@@ -280,6 +286,7 @@ describe('queue', () => {
                 retryCount: 0,
                 processed: false,
                 dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
             };
 
             await expect(
@@ -307,6 +314,7 @@ describe('queue', () => {
                 retryCount: 9,
                 processed: false,
                 dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
             };
 
             await moveToDeadLetterQueue(queueItem, new Error('Fatal error'));
@@ -350,8 +358,8 @@ describe('queue', () => {
             const admin = await import('firebase-admin');
 
             // Mock query results
-            const mockDoc1 = { id: 'doc1', ref: { update: vi.fn(), parent: { id: 'col' }, id: 'doc1' }, data: () => ({}) };
-            const mockDoc2 = { id: 'doc2', ref: { update: vi.fn(), parent: { id: 'col' }, id: 'doc2' }, data: () => ({}) };
+            const mockDoc1 = { id: 'doc1', ref: { update: vi.fn(), parent: { id: 'col' }, id: 'doc1' }, data: () => ({ dateCreated: Date.now() }) };
+            const mockDoc2 = { id: 'doc2', ref: { update: vi.fn(), parent: { id: 'col' }, id: 'doc2' }, data: () => ({ dateCreated: Date.now() }) };
 
             const firestore = admin.firestore();
             const collection = firestore.collection('any');
@@ -377,8 +385,8 @@ describe('queue', () => {
 
             // Verify enqueue called for both
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2);
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminHealthAPI, 'doc1', expect.any(Number));
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminHealthAPI, 'doc2', expect.any(Number));
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminHealthAPI, 'doc1', expect.any(Number), expect.any(Number));
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminHealthAPI, 'doc2', expect.any(Number), expect.any(Number));
 
             // Verify dispatchedToCloudTask update
             expect(mockDoc1.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
@@ -391,11 +399,10 @@ describe('queue', () => {
             const { dispatchQueueItemTasks } = await import('./queue');
             const admin = await import('firebase-admin');
 
-            // Mock 3 docs
             const mockDocs = [
-                { id: '1', ref: { update: vi.fn() }, data: () => ({}) },
-                { id: '2', ref: { update: vi.fn() }, data: () => ({}) },
-                { id: '3', ref: { update: vi.fn() }, data: () => ({}) }
+                { id: '1', ref: { update: vi.fn() }, data: () => ({ dateCreated: Date.now() }) },
+                { id: '2', ref: { update: vi.fn() }, data: () => ({ dateCreated: Date.now() }) },
+                { id: '3', ref: { update: vi.fn() }, data: () => ({ dateCreated: Date.now() }) }
             ];
 
             const firestore = admin.firestore();
@@ -413,9 +420,9 @@ describe('queue', () => {
             expect(utils.getCloudTaskQueueDepth).toHaveBeenCalledWith(true);
             // Expected spread: Total 1800s. Size 3. Delay per item = 600s.
             // Items: 0, 600, 1200
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(1, ServiceNames.GarminHealthAPI, '1', 0);
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminHealthAPI, '2', delayPerItem);
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(3, ServiceNames.GarminHealthAPI, '3', delayPerItem * 2);
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(1, ServiceNames.GarminHealthAPI, '1', expect.any(Number), 0);
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminHealthAPI, '2', expect.any(Number), delayPerItem);
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(3, ServiceNames.GarminHealthAPI, '3', expect.any(Number), delayPerItem * 2);
         });
 
         it('should do nothing if no items found', async () => {

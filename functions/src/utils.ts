@@ -354,6 +354,7 @@ export async function getCloudTaskQueueDepth(forceRefresh = false): Promise<numb
 export async function enqueueWorkoutTask(
   serviceName: ServiceNames,
   queueItemId: string,
+  dateCreated: number,
   scheduleDelaySeconds?: number
 ) {
   const client = new v2beta3.CloudTasksClient();
@@ -370,7 +371,10 @@ export async function enqueueWorkoutTask(
   // Deterministic task name for deduplication
   // Sanitize serviceName to allow only letters, numbers, hyphens, or underscores
   const sanitizedServiceName = serviceName.replace(/[^a-zA-Z0-9-_]/g, '-');
-  const taskName = `${parent}/tasks/${sanitizedServiceName}-${queueItemId}`;
+
+  // Use dateCreated to ensure uniqueness for re-created items (race condition fix)
+  // while preserving deduplication for retries of the SAME item.
+  const taskName = `${parent}/tasks/${sanitizedServiceName}-${queueItemId}-${dateCreated}`;
 
   const payload = { data: { queueItemId, serviceName } };
 

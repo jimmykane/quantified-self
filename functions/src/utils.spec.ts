@@ -390,12 +390,13 @@ describe('Cloud Tasks Utils', () => {
 
             mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
 
-            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123');
+            const dateCreated = 1000;
+            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', dateCreated);
 
             expect(mockCloudTasksClient.createTask).toHaveBeenCalledWith({
                 parent: 'projects/p/locations/l/queues/q',
                 task: expect.objectContaining({
-                    name: 'projects/p/locations/l/queues/q/tasks/garminHealthAPI-item-123', // Deduplication ID (Sanitized)
+                    name: 'projects/p/locations/l/queues/q/tasks/garminHealthAPI-item-123-1000', // Deduplication ID (Sanitized + dateCreated)
                     httpRequest: expect.objectContaining({
                         url: expect.stringContaining('test-location-test-project.cloudfunctions.net/test-queue'),
                         httpMethod: 'POST',
@@ -411,7 +412,7 @@ describe('Cloud Tasks Utils', () => {
 
             mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
 
-            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 60);
+            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 1000, 60);
 
             expect(mockCloudTasksClient.createTask).toHaveBeenCalledWith(
                 expect.objectContaining({
@@ -433,7 +434,7 @@ describe('Cloud Tasks Utils', () => {
             mockCloudTasksClient.createTask.mockRejectedValue(error);
 
             // Should not throw
-            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123');
+            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 1000);
 
             // Should verify we tried
             expect(mockCloudTasksClient.createTask).toHaveBeenCalled();
@@ -448,7 +449,7 @@ describe('Cloud Tasks Utils', () => {
 
             // Currently implementation catches generic errors and logs them.
             // It does NOT rethrow.
-            await expect(enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123')).resolves.not.toThrow();
+            await expect(enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 1000)).resolves.not.toThrow();
         });
     });
 });
