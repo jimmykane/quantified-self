@@ -79,6 +79,18 @@
 
         @include bp.xsmall {
             font-size: 1.25rem;
+            margin-bottom: 0; // Reset margin if any
+        }
+    }
+
+    @include bp.xsmall {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+
+        // Make button full width on mobile for easier tapping
+        button {
+            width: 100%;
         }
     }
 }
@@ -159,90 +171,8 @@ td.mat-cell {
     color: rgba(255, 255, 255, 0.6);
 }
 
-.maintenance-header-title {
-    align-items: center;
-    gap: 12px;
-    font-weight: 400;
-}
+// Maintenance styles moved to admin-maintenance.component.scss
 
-.maintenance-header-description {
-    align-items: center;
-    justify-content: space-between;
-
-    @include bp.xsmall {
-
-        // Hide text description on very small screens to save space
-        .status-text {
-            display: none;
-        }
-
-        justify-content: flex-end; // Push toggle to end
-    }
-}
-
-.status-text {
-    &.online {
-        color: #4caf50;
-    }
-
-    &.offline {
-        color: #f44336;
-    }
-}
-
-.maintenance-content {
-    padding-top: 16px;
-}
-
-.maintenance-description {
-    margin: 0 0 16px 0;
-    font-size: 0.9rem;
-    color: #666; // Light theme default
-}
-
-:host-context(.dark-theme) .maintenance-description {
-    color: rgba(255, 255, 255, 0.7);
-}
-
-.maintenance-form-container {
-    display: flex;
-    gap: 16px;
-    align-items: flex-start;
-    flex-wrap: wrap;
-
-    @include bp.xsmall {
-        flex-direction: column;
-        gap: 12px;
-    }
-}
-
-.maintenance-message-field {
-    flex: 1;
-    min-width: 300px;
-
-    @include bp.xsmall {
-        min-width: 100%; // Takes full width on mobile
-        width: 100%;
-    }
-}
-
-.maintenance-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-
-    @include bp.xsmall {
-        width: 100%; // Button container full width
-    }
-}
-
-.save-btn {
-    height: 56px;
-
-    @include bp.xsmall {
-        width: 100%; // Button full width
-    }
-}
 
 .empty-state {
     color: #999;
