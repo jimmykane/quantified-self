@@ -258,14 +258,14 @@ describe('Cloud Tasks Utils', () => {
             expect(mockCloudTasksClient.createTask).toHaveBeenCalled();
         });
 
-        it('should handle non-6 errors by catching/logging (not throwing)', async () => {
+        it('should rethrow non-6 errors', async () => {
             const { enqueueWorkoutTask } = await import('./cloud-tasks');
             const { ServiceNames } = await import('@sports-alliance/sports-lib');
 
             const error = new Error('Some other error');
             mockCloudTasksClient.createTask.mockRejectedValue(error);
 
-            await expect(enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 1000)).resolves.not.toThrow();
+            await expect(enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 1000)).rejects.toThrow('Some other error');
         });
 
         it('should throw error if projectId is missing', async () => {
@@ -394,9 +394,8 @@ describe('Cloud Tasks Utils', () => {
             (error as Error & { code: number }).code = 7;
             mockCloudTasksClient.createTask.mockRejectedValue(error);
 
-            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 1000);
-
-            expect(logger.error).toHaveBeenCalled();
+            await expect(enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 1000)).rejects.toThrow('Permission denied');
+            expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to enqueue task'), error);
         });
 
         it('should handle network timeout errors', async () => {
@@ -408,9 +407,8 @@ describe('Cloud Tasks Utils', () => {
             (error as Error & { code: number }).code = 4;
             mockCloudTasksClient.createTask.mockRejectedValue(error);
 
-            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 1000);
-
-            expect(logger.error).toHaveBeenCalled();
+            await expect(enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 1000)).rejects.toThrow('DEADLINE_EXCEEDED');
+            expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to enqueue task'), error);
         });
     });
 

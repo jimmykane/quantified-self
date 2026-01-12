@@ -119,11 +119,11 @@ export async function enqueueWorkoutTask(
         const [response] = await client.createTask({ parent, task });
         logger.info(`[Dispatcher] Enqueued task: ${response.name}`);
     } catch (error: any) {
-        if (error.code === 6) { // ALREADY_EXISTS (GRPC code 6)
+        if ((error as any).code === 6) { // ALREADY_EXISTS (GRPC code 6)
             logger.info(`[Dispatcher] Task already exists for ${serviceName}:${queueItemId}, skipping`);
             return;
         }
         logger.error(`[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`, error);
-        // Don't rethrow - log and continue to prevent blocking other tasks
+        throw error;
     }
 }
