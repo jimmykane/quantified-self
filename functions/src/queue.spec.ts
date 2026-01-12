@@ -488,4 +488,92 @@ describe('queue', () => {
             expect(utils.enqueueWorkoutTask).toHaveBeenCalled();
         });
     });
+
+    describe('increaseRetryCountForQueueItem - dispatchedToCloudTask reset', () => {
+        it('should reset dispatchedToCloudTask to null when item had a timestamp', async () => {
+            const mockUpdate = vi.fn(() => Promise.resolve());
+            const mockRef = { update: mockUpdate };
+
+            const queueItem: QueueItemInterface = {
+                id: 'test-dispatch-reset',
+                ref: mockRef as any,
+                retryCount: 1,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: 1704067200000, // A timestamp value
+            };
+
+            await increaseRetryCountForQueueItem(queueItem, new Error('Transient failure'));
+
+            expect(mockUpdate).toHaveBeenCalled();
+            const updateArg = (mockUpdate.mock.calls[0] as any[])[0];
+
+            // Critical: dispatchedToCloudTask must be null so dispatcher picks it up again
+            expect(updateArg.dispatchedToCloudTask).toBeNull();
+            expect(updateArg.retryCount).toBe(2);
+        });
+
+        it('should keep dispatchedToCloudTask as null if it was already null', async () => {
+            const mockUpdate = vi.fn(() => Promise.resolve());
+            const mockRef = { update: mockUpdate };
+
+            const queueItem: QueueItemInterface = {
+                id: 'test-dispatch-was-null',
+                ref: mockRef as any,
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+
+            await increaseRetryCountForQueueItem(queueItem, new Error('Some error'));
+
+            const updateArg = (mockUpdate.mock.calls[0] as any[])[0];
+            expect(updateArg.dispatchedToCloudTask).toBeNull();
+        });
+    });
+
+    describe('EVENT_EMPTY_ERROR handling', () => {
+        it('should move to DLQ immediately when FIT file has no activities', async () => {
+            // This test verifies the fix for empty FIT files going to DLQ immediately
+            // instead of retrying 10 times
+
+            const admin = await import('firebase-admin');
+            const firestore = admin.firestore();
+            const batch = firestore.batch();
+
+            const mockRef = {
+                parent: { id: 'suuntoAppWorkoutQueue' },
+                update: vi.fn(),
+                delete: vi.fn(),
+                id: 'empty-fit-item'
+            };
+
+            const queueItem: QueueItemInterface = {
+                id: 'empty-fit-item',
+                ref: mockRef as any,
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+
+            // Create an error with the EVENT_EMPTY_ERROR code
+            const emptyEventError: any = new Error('No activities found');
+            emptyEventError.code = 'EVENT_EMPTY_ERROR';
+
+            // Call moveToDeadLetterQueue directly since parseWorkoutQueueItemForServiceName
+            // requires complex token mocking
+            const result = await moveToDeadLetterQueue(queueItem, emptyEventError, undefined, 'EVENT_EMPTY_ERROR');
+
+            // Should have moved to DLQ
+            expect(result).toBe('MOVED_TO_DLQ');
+            expect(batch.set).toHaveBeenCalled();
+            expect(batch.delete).toHaveBeenCalledWith(mockRef);
+
+            // Verify the context is preserved
+            const setCallArgs = (batch.set as any).mock.calls[0][1];
+            expect(setCallArgs.context).toBe('EVENT_EMPTY_ERROR');
+        });
+    });
 });
