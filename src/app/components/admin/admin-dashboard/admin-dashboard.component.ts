@@ -87,6 +87,9 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     sortField = 'email';
     sortDirection: 'asc' | 'desc' = 'asc';
 
+    // Filter Service state
+    filterService: 'garmin' | 'suunto' | 'coros' | undefined = undefined;
+
     isLoading = true;
     error: string | null = null;
 
@@ -300,11 +303,10 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         this.error = null;
 
         const params: ListUsersParams = {
-            page: this.currentPage,
-            pageSize: this.pageSize,
             searchTerm: this.searchTerm || undefined,
             sortField: this.sortField,
-            sortDirection: this.sortDirection
+            sortDirection: this.sortDirection,
+            filterService: this.filterService
         };
 
         this.adminService.getUsers(params).subscribe({
@@ -349,6 +351,12 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     onSearchChange(term: string): void {
         this.searchTerm = term;
         this.currentPage = 0;
+        this.fetchUsers();
+    }
+
+    onFilterServiceChange(service: 'garmin' | 'suunto' | 'coros' | undefined): void {
+        this.filterService = service;
+        this.currentPage = 0; // Reset to first page
         this.fetchUsers();
     }
 
