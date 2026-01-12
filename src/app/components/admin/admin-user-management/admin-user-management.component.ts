@@ -9,6 +9,7 @@ import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatSortModule, Sort, MatSort } from '@angular/material/sort';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
 import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration, ChartOptions } from 'chart.js';
 import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
@@ -43,6 +44,7 @@ export interface UserStats {
         MatSortModule,
         MatInputModule,
         MatFormFieldModule,
+        MatSelectModule,
         BaseChartDirective
     ],
     providers: [provideCharts(withDefaultRegisterables())]
@@ -59,11 +61,13 @@ export class AdminUserManagementComponent implements OnInit, OnChanges, OnDestro
     @Input() currentPage = 0;
     @Input() pageSize = 10;
     @Input() pageSizeOptions: number[] = [5, 10, 25, 50];
+    @Input() filterService: 'garmin' | 'suunto' | 'coros' | undefined = undefined;
 
     // Outputs
     @Output() pageChange = new EventEmitter<PageEvent>();
     @Output() sortChange = new EventEmitter<Sort>();
     @Output() searchChange = new EventEmitter<string>();
+    @Output() filterServiceChange = new EventEmitter<'garmin' | 'suunto' | 'coros' | undefined>();
     @Output() impersonate = new EventEmitter<AdminUser>();
 
     displayedColumns: string[] = [
@@ -179,6 +183,10 @@ export class AdminUserManagementComponent implements OnInit, OnChanges, OnDestro
     clearSearch(): void {
         this.searchTerm = '';
         this.searchSubject.next('');
+    }
+
+    onFilterServiceChange(service: 'garmin' | 'suunto' | 'coros' | undefined): void {
+        this.filterServiceChange.emit(service);
     }
 
     onImpersonate(user: AdminUser): void {

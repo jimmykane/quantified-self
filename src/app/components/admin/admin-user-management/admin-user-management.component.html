@@ -84,6 +84,16 @@
                 <mat-icon>close</mat-icon>
             </button>
         </mat-form-field>
+
+        <mat-form-field appearance="outline" class="qs-filter-field" style="max-width: 200px;">
+            <mat-label>Filter Service</mat-label>
+            <mat-select [value]="filterService" (selectionChange)="onFilterServiceChange($event.value)">
+                <mat-option [value]="undefined">All Services</mat-option>
+                <mat-option value="garmin">Garmin</mat-option>
+                <mat-option value="suunto">Suunto</mat-option>
+                <mat-option value="coros">Coros</mat-option>
+            </mat-select>
+        </mat-form-field>
     </div>
 
     <div class="glass-card table-container">
