@@ -165,7 +165,7 @@ export async function validateOAuth2State(userID: string, serviceName: ServiceNa
   return tokensDocumentSnapshotData && tokensDocumentSnapshotData.state && tokensDocumentSnapshotData.state === state;
 }
 
-export function convertAccessTokenResponseToServiceToken(response: AccessToken, serviceName: ServiceNames): SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface | GarminAPIAuth2ServiceTokenInterface {
+export function convertAccessTokenResponseToServiceToken(response: AccessToken, serviceName: ServiceNames, uniqueId?: string): SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface | GarminAPIAuth2ServiceTokenInterface {
   const currentDate = new Date();
   switch (serviceName) {
     default:
@@ -178,7 +178,7 @@ export function convertAccessTokenResponseToServiceToken(response: AccessToken, 
         tokenType: response.token.token_type,
         expiresAt: currentDate.getTime() + ((response.token as any).expires_in * 1000),
         scope: response.token.scope,
-        userName: (response.token as any).user,
+        userName: uniqueId || (response.token as any).user,
         dateCreated: currentDate.getTime(),
         dateRefreshed: currentDate.getTime(),
       };
@@ -190,7 +190,7 @@ export function convertAccessTokenResponseToServiceToken(response: AccessToken, 
         tokenType: response.token.token_type || 'bearer',
         expiresAt: currentDate.getTime() + ((response.token as any).expires_in * 1000),
         scope: response.token.scope || 'workout',
-        openId: (response.token as any).openId,
+        openId: uniqueId || (response.token as any).openId,
         dateCreated: currentDate.getTime(),
         dateRefreshed: currentDate.getTime(),
       };
@@ -202,7 +202,7 @@ export function convertAccessTokenResponseToServiceToken(response: AccessToken, 
         tokenType: response.token.token_type || 'bearer',
         expiresAt: currentDate.getTime() + ((response.token as any).expires_in * 1000),
         scope: response.token.scope || 'workout',
-        userID: (response.token as any).user, // This is the Garmin User ID
+        userID: uniqueId || (response.token as any).user, // This is the Garmin User ID
         dateCreated: currentDate.getTime(),
         dateRefreshed: currentDate.getTime(),
       };
@@ -261,8 +261,6 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
       const userData = typeof userResponse === 'string' ? JSON.parse(userResponse) : userResponse;
       if (userData && userData.userId) {
         uniqueId = userData.userId;
-        // Merge userId into token object so it gets saved
-        (results.token as any).user = uniqueId;
       }
     } catch (e) {
       logger.error(`Failed to fetch Garmin User ID: ${e}`);
@@ -274,7 +272,7 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
     .collection(serviceConfig.tokenCollectionName)
     .doc(userID).collection('tokens')
     .doc(uniqueId)// @todo make this dynamic and not silly like this
-    .set(convertAccessTokenResponseToServiceToken(results, serviceName));
+    .set(convertAccessTokenResponseToServiceToken(results, serviceName, uniqueId));
 
   // Remove any OTHER users connected to this same external account
   const externalUserId = uniqueId;
