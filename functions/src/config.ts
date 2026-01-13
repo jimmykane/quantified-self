@@ -16,8 +16,8 @@ interface CorosApiConfig {
 }
 
 interface GarminHealthApiConfig {
-    consumer_key: string;
-    consumer_secret: string;
+    client_id: string;
+    client_secret: string;
 }
 
 interface CloudTasksConfig {
@@ -32,7 +32,10 @@ interface AppConfig {
     corosapi: CorosApiConfig;
     garminhealthapi: GarminHealthApiConfig;
     cloudtasks: CloudTasksConfig;
+
 }
+
+
 
 function getEnvVar(name: string): string {
     const value = process.env[name];
@@ -43,6 +46,7 @@ function getEnvVar(name: string): string {
 }
 
 export const config: AppConfig = {
+
     get suuntoapp() {
         return {
             client_id: getEnvVar('SUUNTOAPP_CLIENT_ID'),
@@ -58,8 +62,8 @@ export const config: AppConfig = {
     },
     get garminhealthapi() {
         return {
-            consumer_key: getEnvVar('GARMINHEALTHAPI_CONSUMER_KEY'),
-            consumer_secret: getEnvVar('GARMINHEALTHAPI_CONSUMER_SECRET'),
+            client_id: getEnvVar('GARMINAPI_CLIENT_ID'),
+            client_secret: getEnvVar('GARMINAPI_CLIENT_SECRET'),
         };
     },
     get cloudtasks() {

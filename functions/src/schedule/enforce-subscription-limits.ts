@@ -3,7 +3,7 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { deauthorizeServiceForUser } from '../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { deauthorizeGarminHealthAPIForUser } from '../garmin/auth/wrapper';
+
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
 import { GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
@@ -81,7 +81,7 @@ export const enforceSubscriptionLimits = onSchedule({
             // Disconnect sync
             try { await deauthorizeServiceForUser(uid, ServiceNames.SuuntoApp); } catch (e) { logger.error(`Error deauthorizing Suunto for ${uid}`, e); }
             try { await deauthorizeServiceForUser(uid, ServiceNames.COROSAPI); } catch (e) { logger.error(`Error deauthorizing COROS for ${uid}`, e); }
-            try { await deauthorizeGarminHealthAPIForUser(uid); } catch (e) { logger.error(`Error deauthorizing Garmin for ${uid}`, e); }
+            try { await deauthorizeServiceForUser(uid, ServiceNames.GarminHealthAPI); } catch (e) { logger.error(`Error deauthorizing Garmin for ${uid}`, e); }
         }
 
         // 5. Activity Pruning (Destructive - Delete Newest)

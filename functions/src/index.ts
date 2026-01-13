@@ -59,13 +59,17 @@ export {
   deauthorizeSuuntoApp,
 } from './suunto/auth/wrapper';
 
-// Garmin Auth
 export {
   deauthorizeGarminHealthAPI,
   deauthorizeGarminHealthAPIUsers,
+  receiveGarminHealthAPIUserPermissions,
   getGarminHealthAPIAuthRequestTokenRedirectURI,
   requestAndSetGarminHealthAPIAccessToken,
 } from './garmin/auth/wrapper';
+
+
+
+
 
 // Coros Queue & History
 export {
@@ -112,6 +116,7 @@ export {
 // Tokens
 export { refreshCOROSAPIRefreshTokens } from './coros/tokens';
 export { refreshSuuntoAppRefreshTokens } from './suunto/tokens';
+export { refreshGarminHealthAPIRefreshTokens } from './garmin/tokens';
 
 // Suunto Utils
 export { stWorkoutDownloadAsFit } from './suunto/st-workout-download-as-fit';

@@ -62,19 +62,17 @@ vi.mock('firebase-functions/v2/scheduler', () => ({
 // Import AFTER mocks
 import { enforceSubscriptionLimits } from './enforce-subscription-limits';
 import * as OAuth2 from '../OAuth2';
-import * as GarminWrapper from '../garmin/auth/wrapper';
+
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
 
 describe('enforceSubscriptionLimits', () => {
     let deauthorizeServiceSpy: any;
-    let deauthorizeGarminSpy: any;
 
     beforeEach(() => {
         vi.clearAllMocks();
 
         deauthorizeServiceSpy = vi.spyOn(OAuth2, 'deauthorizeServiceForUser').mockResolvedValue(undefined);
-        deauthorizeGarminSpy = vi.spyOn(GarminWrapper, 'deauthorizeGarminHealthAPIForUser').mockResolvedValue(undefined);
 
         // Reset mock implementations
         mockFirestoreInstance.collection.mockImplementation(() => mockQuery([]));
@@ -119,7 +117,7 @@ describe('enforceSubscriptionLimits', () => {
         await wrapped({});
 
         expect(mockFirestoreInstance.doc).not.toHaveBeenCalled();
-        expect(deauthorizeGarminSpy).not.toHaveBeenCalled();
+
     });
 
     it('should skip cleanup if user is within grace period', async () => {
@@ -139,7 +137,7 @@ describe('enforceSubscriptionLimits', () => {
         const wrapped = enforceSubscriptionLimits as any;
         await wrapped({});
 
-        expect(deauthorizeGarminSpy).not.toHaveBeenCalled();
+
         expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
     });
 
@@ -170,7 +168,7 @@ describe('enforceSubscriptionLimits', () => {
             lastDowngradedAt: 'SERVER_TIMESTAMP'
         }), { merge: true });
 
-        expect(deauthorizeGarminSpy).not.toHaveBeenCalled();
+
     });
 
     it('should disconnect and prune if grace period expired', async () => {
@@ -200,7 +198,11 @@ describe('enforceSubscriptionLimits', () => {
         await wrapped({});
 
         // Verify disconnection
-        expect(deauthorizeGarminSpy).toHaveBeenCalledWith('user1');
+        // Expect deauthorizeServiceForUser to be called for Suunto, COROS, and Garmin
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.SuuntoApp);
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.COROSAPI);
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.GarminHealthAPI);
+
         expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', { stripeRole: 'free' });
 
         // Verify pruning (12 - 10 = 2 excess)

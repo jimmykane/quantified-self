@@ -1,10 +1,16 @@
 
 import { describe, it, vi, expect, beforeEach } from 'vitest';
-import * as functions from 'firebase-functions-test';
+
 import * as admin from 'firebase-admin';
 import { PRO_REQUIRED_MESSAGE } from '../utils';
 
 // Mock dependencies BEFORE importing the module under test
+vi.mock('../config', () => ({
+    config: {
+        suuntoapp: { subscription_key: 'test-key' }
+    }
+}));
+
 const requestMocks = {
     post: vi.fn(),
     put: vi.fn(),

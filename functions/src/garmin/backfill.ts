@@ -1,14 +1,15 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
-import { GarminHealthAPIAuth } from './auth/auth';
+
 import * as requestPromise from '../request-helper';
 import * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS } from '../shared/history-import.constants';
+import { getTokenData } from '../tokens';
 
-const GARMIN_ACTIVITIES_BACKFILL_URI = 'https://healthapi.garmin.com/wellness-api/rest/backfill/activities';
+const GARMIN_ACTIVITIES_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/backfill/activities';
 const TIMEOUT_IN_SECONDS = 300;
 const MEMORY = '256MB';
 
@@ -91,18 +92,26 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
     }
   }
 
-  const tokensDocumentSnapshotData = (await admin.firestore().collection('garminHealthAPITokens').doc(userID).get()).data();
-  if (!tokensDocumentSnapshotData || !tokensDocumentSnapshotData.accessToken || !tokensDocumentSnapshotData.accessTokenSecret) {
-    logger.error('No token found');
+  const tokensQuerySnapshot = await admin.firestore().collection('garminHealthAPITokens').doc(userID).collection('tokens').limit(1).get();
+  if (tokensQuerySnapshot.empty) {
+    logger.error(`No token found for user ${userID}`);
     throw new Error('Bad request: No token found');
   }
+  const tokenDoc = tokensQuerySnapshot.docs[0];
 
-  const oAuth = GarminHealthAPIAuth();
+  // Use getTokenData for auto-refresh if expired
+  let serviceToken;
+  try {
+    serviceToken = await getTokenData(tokenDoc, ServiceNames.GarminHealthAPI);
+  } catch (e: any) {
+    logger.error(`Failed to get/refresh Garmin token for ${userID}: ${e.message}`);
+    throw new Error('Token refresh failed');
+  }
 
   // We need to break down the requests to multiple of 90 days max. 7776000s
   // So if the date range the user sent is 179 days we need to send 2 request with the respective ranges
   const maxDeltaInMS = 7776000000;
-  logger.info(`Starting backfill for Garmin User ID: ${tokensDocumentSnapshotData.userID}`);
+  logger.info(`Starting backfill for Garmin User ID: ${(serviceToken as any).userID}`);
   const batchCount = Math.ceil((+endDate - +startDate) / maxDeltaInMS);
 
   for (let i = 0; i < batchCount; i++) {
@@ -112,13 +121,9 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
       new Date(batchStartDate.getTime() + maxDeltaInMS);
     try {
       await requestPromise.get({
-        headers: oAuth.toHeader(oAuth.authorize({
-          url: `${GARMIN_ACTIVITIES_BACKFILL_URI}?summaryStartTimeInSeconds=${Math.floor(batchStartDate.getTime() / 1000)}&summaryEndTimeInSeconds=${Math.ceil(batchEndDate.getTime() / 1000)}`,
-          method: 'GET',
-        }, {
-          key: tokensDocumentSnapshotData.accessToken,
-          secret: tokensDocumentSnapshotData.accessTokenSecret,
-        })),
+        headers: {
+          'Authorization': `Bearer ${serviceToken.accessToken}`,
+        },
         url: `${GARMIN_ACTIVITIES_BACKFILL_URI}?summaryStartTimeInSeconds=${Math.floor(batchStartDate.getTime() / 1000)}&summaryEndTimeInSeconds=${Math.ceil(batchEndDate.getTime() / 1000)}`,
       });
     } catch (e: any) {

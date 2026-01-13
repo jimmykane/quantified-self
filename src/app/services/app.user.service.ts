@@ -528,12 +528,12 @@ export class AppUserService implements OnDestroy {
       }).toPromise();
   }
 
-  public async requestAndSetCurrentUserGarminAccessToken(state: string, oauthVerifier: string) {
+  public async requestAndSetCurrentUserGarminAccessToken(state: string, code: string) {
     const idToken = await this.auth.currentUser?.getIdToken(true);
     return this.http.post(
       environment.functions.requestAndSetGarminHealthAPIAccessToken, {
       state: state,
-      oauthVerifier: oauthVerifier
+      code: code
     },
       {
         headers:

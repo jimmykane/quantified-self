@@ -1,23 +1,29 @@
-import * as crypto from 'crypto';
-// import OAuth as OAuth from 'oauth-1.0a';
-
-import OAuth from 'oauth-1.0a';
+import { AuthorizationCode } from 'simple-oauth2';
 import { config } from '../../config';
+
+// Specifics from Garmin Documentation
+const AUTH_HOST = 'https://connect.garmin.com';
+const TOKEN_HOST = 'https://diauth.garmin.com';
+const AUTH_PATH = '/oauth2Confirm';
+const TOKEN_PATH = '/di-oauth2-service/oauth/token';
+
 /**
- * Creates a configured OAuth 1.0a for Garmin Health API.
+ * Creates a configured simple-oauth2 client for Garmin Health API.
  */
-export function GarminHealthAPIAuth() {
-  return new OAuth({
-    consumer: {
-      key: config.garminhealthapi.consumer_key,
-      secret: config.garminhealthapi.consumer_secret,
+export function GarminHealthAPIAuth(refresh = false): AuthorizationCode {
+  return new AuthorizationCode({
+    client: {
+      id: config.garminhealthapi.client_id,
+      secret: config.garminhealthapi.client_secret,
     },
-    signature_method: 'HMAC-SHA1',
-    hash_function(base_string: string, key: string): any {
-      return crypto
-        .createHmac('sha1', key)
-        .update(base_string)
-        .digest('base64');
+    auth: {
+      tokenHost: TOKEN_HOST,
+      authorizeHost: AUTH_HOST,
+      authorizePath: AUTH_PATH,
+      tokenPath: TOKEN_PATH,
+    },
+    options: {
+      authorizationMethod: 'body',
     },
   });
 }

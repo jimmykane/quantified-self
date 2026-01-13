@@ -2,7 +2,7 @@ import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { deauthorizeServiceForUser, getServiceConfig } from '../OAuth2';
-import { deauthorizeGarminHealthAPIForUser } from '../garmin/auth/wrapper';
+
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
 /**
@@ -85,8 +85,8 @@ export const cleanupUserAccounts = functions.region('europe-west2').auth.user().
         },
         {
             name: 'Garmin',
-            deauthFn: (id) => deauthorizeGarminHealthAPIForUser(id),
-            collectionName: 'garminHealthAPITokens' // Imported constant would be better but string is safe here
+            deauthFn: (id) => deauthorizeServiceForUser(id, ServiceNames.GarminHealthAPI),
+            collectionName: 'garminHealthAPITokens'
         }
     ];
 

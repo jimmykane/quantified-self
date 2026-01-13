@@ -74,7 +74,7 @@ async function enrichUsers(
                         .orderBy('created', 'desc')
                         .limit(1)
                         .get(),
-                    db.collection('garminHealthAPITokens').doc(user.uid).get(),
+                    db.collection('garminHealthAPITokens').doc(user.uid).collection('tokens').limit(1).get(),
                     db.collection('suuntoAppAccessTokens').doc(user.uid).collection('tokens').limit(1).get(),
                     db.collection('COROSAPIAccessTokens').doc(user.uid).collection('tokens').limit(1).get()
                 ]);
@@ -89,9 +89,10 @@ async function enrichUsers(
                     };
                 }
 
-                if (garminDoc.exists) {
-                    const docData = garminDoc.data();
-                    connectedServices.push({ provider: 'Garmin', connectedAt: docData?.dateCreated || garminDoc.createTime });
+                if (!garminDoc.empty) {
+                    const doc = garminDoc.docs[0];
+                    const docData = doc.data();
+                    connectedServices.push({ provider: 'Garmin', connectedAt: docData?.dateCreated || doc.createTime });
                 }
                 if (!suuntoSnapshot.empty) {
                     const doc = suuntoSnapshot.docs[0];

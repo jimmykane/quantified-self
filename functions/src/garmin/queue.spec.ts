@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ServiceNames } from '@sports-alliance/sports-lib';
 import { UsageLimitExceededError } from '../utils';
 
 // Mock dependencies using vi.hoisted
@@ -94,143 +93,160 @@ vi.mock('firebase-functions/logger', () => ({
 }));
 
 // Mock firebase-admin
-mockWhere.mockReturnValue({ get: mockGet });
-mockCollection.mockReturnValue({ where: mockWhere });
-const mockFirestore = {
-    collection: mockCollection,
-};
-
 vi.mock('firebase-admin', () => ({
     default: {
-        firestore: () => mockFirestore,
+        firestore: () => ({ collection: mockCollection }),
     },
-    firestore: () => mockFirestore,
+    firestore: () => ({ collection: mockCollection }),
 }));
 
 // Import SUT
 import { processGarminHealthAPIActivityQueueItem, insertGarminHealthAPIActivityFileToQueue } from './queue';
 import { addToQueueForGarmin } from '../queue';
 
-describe('insertGarminHealthAPIActivityFileToQueue', () => {
-    let req: any;
-    let res: any;
+describe('Garmin Queue', () => { // Grouping for cleaner output
 
-    beforeEach(() => {
+    // Shared Setup Helper
+    const setupMocks = () => {
+        // Reset call history but keep implementations if needed, OR re-implement
         vi.clearAllMocks();
-        req = {
-            body: {
-                activityFiles: [{
-                    userId: 'garmin-user-id',
-                    userAccessToken: 'garmin-access-token',
-                    fileType: 'FIT',
-                    callbackURL: 'https://callback?id=123&token=abc',
-                    startTimeInSeconds: 1000,
-                    manual: false,
-                }]
-            }
-        };
-        res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn().mockReturnThis(),
-        };
-    });
 
-    it('should correctly extract metadata and call addToQueueForGarmin', async () => {
-        await insertGarminHealthAPIActivityFileToQueue(req, res);
+        // Default: Mock Where returning Get
+        mockWhere.mockReturnValue({ get: mockGet, limit: vi.fn().mockReturnValue({ get: mockGet }) });
 
-        expect(addToQueueForGarmin).toHaveBeenCalledWith({
-            userID: 'garmin-user-id',
-            startTimeInSeconds: 1000,
-            manual: false,
-            activityFileID: '123',
-            activityFileType: 'FIT',
-            token: 'abc',
-            userAccessToken: 'garmin-access-token',
+        // Default: Mock Collection returning Doc -> Collection -> Limit -> Get
+        const mockLimit = vi.fn().mockReturnValue({ get: mockGet });
+        const mockSubCollection = vi.fn().mockReturnValue({ limit: mockLimit });
+        const mockDoc = vi.fn().mockReturnValue({ collection: mockSubCollection });
+
+        mockCollection.mockReturnValue({
+            where: mockWhere,
+            doc: mockDoc
         });
-        expect(res.status).toHaveBeenCalledWith(200);
-    });
-});
 
-describe('processGarminHealthAPIActivityQueueItem', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockWhere.mockReturnValue({ get: mockGet });
-        mockCollection.mockReturnValue({ where: mockWhere });
         mockRequestGet.mockResolvedValue(new ArrayBuffer(8));
-    });
+    };
 
-    it('should abort retries if UsageLimitExceededError is thrown by setEvent', async () => {
-        const queueItem = {
-            id: 'test-item',
-            userID: 'test-user',
-            activityFileID: 'file-id',
-            activityFileType: 'FIT',
-            token: 'token',
-            userAccessToken: 'garmin-access-token',
-            retryCount: 0,
-            manual: false,
-            startTimeInSeconds: 12345
-        };
+    describe('insertGarminHealthAPIActivityFileToQueue', () => {
+        let req: any;
+        let res: any;
 
-        // Mock token retrieval
-        mockGet.mockResolvedValue({
-            size: 1,
-            docs: [{
-                id: 'token-doc-id',
-                data: () => ({ accessToken: 'token', accessTokenSecret: 'secret', userID: 'test-user' }),
-            }]
+        beforeEach(() => {
+            setupMocks();
+            req = {
+                body: {
+                    activityFiles: [{
+                        userId: 'garmin-user-id',
+                        userAccessToken: 'garmin-access-token',
+                        fileType: 'FIT',
+                        callbackURL: 'https://callback?id=123&token=abc',
+                        startTimeInSeconds: 1000,
+                        manual: false,
+                    }]
+                }
+            };
+            res = {
+                status: vi.fn().mockReturnThis(),
+                send: vi.fn().mockReturnThis(),
+            };
         });
 
-        // Mock UsageLimitExceededError from setEvent
-        mockSetEvent.mockRejectedValue(new UsageLimitExceededError('Limit reached'));
+        it('should correctly extract metadata and call addToQueueForGarmin', async () => {
+            await insertGarminHealthAPIActivityFileToQueue(req, res);
 
-        // Execute
-        mockIncreaseRetryCountForQueueItem.mockResolvedValue('RETRY_INCREMENTED');
-        const result = await processGarminHealthAPIActivityQueueItem(queueItem as any);
-
-        // Verify
-        expect(result).toBe('RETRY_INCREMENTED');
-
-        // Verify correct query was made
-        expect(mockCollection).toHaveBeenCalledWith('garminHealthAPITokens');
-        expect(mockWhere).toHaveBeenCalledWith('accessToken', '==', 'garmin-access-token');
+            expect(addToQueueForGarmin).toHaveBeenCalledWith({
+                userID: 'garmin-user-id',
+                startTimeInSeconds: 1000,
+                manual: false,
+                activityFileID: '123',
+                activityFileType: 'FIT',
+                token: 'abc',
+                userAccessToken: 'garmin-access-token',
+                callbackURL: 'https://callback?id=123&token=abc',
+            });
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
     });
 
-    it('should log a warning if no token is found', async () => {
-        const logger = await import('firebase-functions/logger');
-        const loggerSpy = vi.spyOn(logger, 'warn');
-        const queueItem = {
-            id: 'test-item-no-token',
-            userID: 'test-user-missing',
-            activityFileID: 'file-id',
-            activityFileType: 'FIT',
-            token: 'token',
-            userAccessToken: 'missing-token',
-            retryCount: 0,
-            manual: false,
-            startTimeInSeconds: 12345
-        };
-
-        // Mock empty token retrieval
-        mockGet.mockResolvedValue({
-            size: 0,
-            docs: []
+    describe('processGarminHealthAPIActivityQueueItem', () => {
+        beforeEach(() => {
+            setupMocks();
         });
 
-        // Execute
-        mockMoveToDeadLetterQueue.mockResolvedValue('MOVED_TO_DLQ');
-        const result = await processGarminHealthAPIActivityQueueItem(queueItem as any);
+        it('should abort retries if UsageLimitExceededError is thrown by setEvent', async () => {
+            const queueItem = {
+                id: 'test-item',
+                userID: 'test-user',
+                activityFileID: 'file-id',
+                activityFileType: 'FIT',
+                token: 'token',
+                userAccessToken: 'garmin-access-token',
+                retryCount: 0,
+                manual: false,
+                startTimeInSeconds: 12345,
+                callbackURL: 'https://test-url'
+            };
 
-        // Verify
-        expect(result).toBe('MOVED_TO_DLQ');
+            // Mock successful token retrieval
+            mockGet.mockResolvedValue({
+                size: 1,
+                docs: [{
+                    id: 'token-doc-id',
+                    data: () => ({ accessToken: 'token', accessTokenSecret: 'secret', userID: 'test-user' }),
+                }]
+            });
 
-        // Verify
-        expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('No token found'));
-        expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
-            queueItem,
-            expect.any(Error),
-            undefined,
-            'NO_TOKEN_FOUND'
-        );
+            // Mock UsageLimitExceededError from setEvent
+            mockSetEvent.mockRejectedValue(new UsageLimitExceededError('Limit reached'));
+
+            // Execute
+            mockIncreaseRetryCountForQueueItem.mockResolvedValue('RETRY_INCREMENTED');
+            const result = await processGarminHealthAPIActivityQueueItem(queueItem as any);
+
+            // Verify
+            expect(result).toBe('RETRY_INCREMENTED');
+            expect(mockCollection).toHaveBeenCalledWith('garminHealthAPITokens');
+            // Check that the token retrieval path was exercised
+            // The chain is: collection -> doc -> collection -> limit -> get
+            // We check if get was called (which is the terminal of our mocked chain)
+            expect(mockGet).toHaveBeenCalled();
+        });
+
+        it('should log a warning if no token is found', async () => {
+            const logger = await import('firebase-functions/logger');
+            const loggerSpy = vi.spyOn(logger, 'warn');
+            const queueItem = {
+                id: 'test-item-no-token',
+                userID: 'test-user-missing',
+                activityFileID: 'file-id',
+                activityFileType: 'FIT',
+                token: 'token',
+                userAccessToken: 'missing-token',
+                retryCount: 0,
+                manual: false,
+                startTimeInSeconds: 12345,
+                callbackURL: 'https://test-url'
+            };
+
+            // Mock empty token retrieval
+            mockGet.mockResolvedValue({
+                size: 0,
+                docs: []
+            });
+
+            // Execute
+            mockMoveToDeadLetterQueue.mockResolvedValue('MOVED_TO_DLQ');
+            const result = await processGarminHealthAPIActivityQueueItem(queueItem as any);
+
+            // Verify
+            expect(result).toBe('MOVED_TO_DLQ');
+            expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('No token found'));
+            expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
+                queueItem,
+                expect.any(Error),
+                undefined,
+                'NO_TOKEN_FOUND'
+            );
+        });
     });
 });

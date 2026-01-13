@@ -202,6 +202,59 @@ describe('tokens', () => {
             expect(result.accessToken).toBe('new-access-exp');
         });
 
+        it('should apply 600s buffer to expiresAt for Suunto tokens', async () => {
+            const mockExpiresAt = new Date(Date.now() + 86400000); // 24h from now
+            mockToken.expired.mockReturnValue(true);
+            mockToken.refresh.mockResolvedValue({
+                token: {
+                    access_token: 'new-access',
+                    refresh_token: 'new-refresh',
+                    expires_at: mockExpiresAt,
+                    user: 'suunto-user',
+                    token_type: 'Bearer',
+                    scope: 'workout',
+                },
+            });
+
+            await getTokenData(mockDoc, ServiceNames.SuuntoApp, false);
+
+            // Verify the update was called with expiresAt reduced by 600000ms (600 seconds)
+            expect(mockDoc.ref.update).toHaveBeenCalled();
+            const updateArg = mockDoc.ref.update.mock.calls[0][0];
+            expect(updateArg.expiresAt).toBe(mockExpiresAt.getTime() - 600000);
+        });
+
+        it('should apply 600s buffer to expiresAt for Garmin tokens', async () => {
+            mockDoc.data.mockReturnValue({
+                accessToken: 'old-garmin',
+                refreshToken: 'old-garmin-refresh',
+                expiresAt: Date.now() + 3600000,
+                serviceName: ServiceNames.GarminHealthAPI,
+                userID: 'garmin-user-id',
+                dateCreated: 1000,
+                dateRefreshed: 1000,
+            });
+
+            const mockExpiresAt = new Date(Date.now() + 86400000); // 24h from now
+            mockToken.expired.mockReturnValue(true);
+            mockToken.refresh.mockResolvedValue({
+                token: {
+                    access_token: 'new-garmin-access',
+                    refresh_token: 'new-garmin-refresh',
+                    expires_at: mockExpiresAt,
+                    token_type: 'Bearer',
+                    scope: 'workout',
+                },
+            });
+
+            await getTokenData(mockDoc, ServiceNames.GarminHealthAPI, false);
+
+            // Verify the update was called with expiresAt reduced by 600000ms (600 seconds)
+            expect(mockDoc.ref.update).toHaveBeenCalled();
+            const updateArg = mockDoc.ref.update.mock.calls[0][0];
+            expect(updateArg.expiresAt).toBe(mockExpiresAt.getTime() - 600000);
+        });
+
         it('should handle COROS token refresh', async () => {
             mockDoc.data.mockReturnValue({
                 accessToken: 'old-coros',

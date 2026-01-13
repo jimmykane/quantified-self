@@ -51,16 +51,23 @@ const mockFirestore = {
         doc: vi.fn(() => ({
             collection: vi.fn(() => ({
                 doc: vi.fn(() => mockDocRef),
-                count: vi.fn(() => ({ get: vi.fn(() => ({ data: () => ({ count: 5 }) })) }))
+                count: vi.fn(() => ({ get: vi.fn(() => ({ data: () => ({ count: 5 }) })) })),
+                // Add support for Garmin token lookup: .limit(1).get() or just .get()
+                limit: vi.fn(() => ({
+                    get: vi.fn(() => Promise.resolve(mockSnapshot))
+                })),
+                get: vi.fn(() => Promise.resolve(mockSnapshot))
             })),
             get: vi.fn(() => Promise.resolve({ data: () => ({}) })),
             set: vi.fn()
         })),
         where: vi.fn(() => ({
             get: vi.fn(() => Promise.resolve(mockSnapshot)),
-            where: vi.fn(() => ({ get: vi.fn(() => Promise.resolve(mockSnapshot)) }))
+            where: vi.fn(() => ({ get: vi.fn(() => Promise.resolve(mockSnapshot)) })),
+            limit: vi.fn(() => ({ get: vi.fn(() => Promise.resolve(mockSnapshot)) }))
         })),
         add: vi.fn(),
+        limit: vi.fn(() => ({ get: vi.fn(() => Promise.resolve(mockSnapshot)) }))
     })),
     collectionGroup: vi.fn(() => ({
         where: vi.fn(() => ({

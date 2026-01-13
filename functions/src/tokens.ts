@@ -1,12 +1,12 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import {
-  Auth2ServiceTokenInterface,
   COROSAPIAuth2ServiceTokenInterface,
   SuuntoAPIAuth2ServiceTokenInterface,
+  Auth2ServiceTokenInterface,
 } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { getServiceConfig } from './OAuth2';
+import { getServiceConfig, GarminHealthAPIAuth2ServiceTokenInterface } from './OAuth2';
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 import QuerySnapshot = admin.firestore.QuerySnapshot;
 
@@ -32,7 +32,7 @@ export async function refreshTokens(querySnapshot: QuerySnapshot, serviceName: S
   logger.info(`Parsed ${count} auth tokens out of ${querySnapshot.size}`);
 }
 
-export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: ServiceNames, forceRefreshAndSave = false): Promise<SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface> {
+export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: ServiceNames, forceRefreshAndSave = false): Promise<SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface | GarminHealthAPIAuth2ServiceTokenInterface> {
   const serviceConfig = getServiceConfig(serviceName, true);
   const serviceTokenData = <Auth2ServiceTokenInterface>doc.data();
   // doc.data() is never undefined for query doc snapshots
@@ -68,6 +68,18 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
           scope: serviceTokenData.scope,
           tokenType: serviceTokenData.tokenType,
           userName: serviceTokenData.userName,
+          dateRefreshed: serviceTokenData.dateRefreshed,
+          dateCreated: serviceTokenData.dateCreated,
+        };
+      case ServiceNames.GarminHealthAPI:
+        return <GarminHealthAPIAuth2ServiceTokenInterface>{
+          serviceName: serviceName,
+          accessToken: serviceTokenData.accessToken,
+          refreshToken: serviceTokenData.refreshToken,
+          expiresAt: serviceTokenData.expiresAt,
+          scope: serviceTokenData.scope,
+          tokenType: serviceTokenData.tokenType,
+          userID: (serviceTokenData as any).userID,
           dateRefreshed: serviceTokenData.dateRefreshed,
           dateCreated: serviceTokenData.dateCreated,
         };
@@ -120,10 +132,23 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
         serviceName: serviceName,
         accessToken: responseToken.token.access_token,
         refreshToken: responseToken.token.refresh_token,
-        expiresAt: (responseToken.token as any).expires_at.getTime() - 6000,
+        expiresAt: (responseToken.token as any).expires_at.getTime() - 600000, // 600 seconds buffer per Garmin recommendation
         scope: responseToken.token.scope,
         tokenType: responseToken.token.token_type,
         userName: (responseToken.token as any).user,
+        dateRefreshed: date.getTime(),
+        dateCreated: serviceTokenData.dateCreated,
+      };
+      break;
+    case ServiceNames.GarminHealthAPI:
+      newToken = <GarminHealthAPIAuth2ServiceTokenInterface>{
+        serviceName: serviceName,
+        accessToken: responseToken.token.access_token,
+        refreshToken: responseToken.token.refresh_token,
+        expiresAt: (responseToken.token as any).expires_at.getTime() - 600000, // 600 seconds buffer per Garmin recommendation
+        scope: responseToken.token.scope,
+        tokenType: responseToken.token.token_type,
+        userID: (serviceTokenData as any).userID, // Preserve User ID
         dateRefreshed: date.getTime(),
         dateCreated: serviceTokenData.dateCreated,
       };
