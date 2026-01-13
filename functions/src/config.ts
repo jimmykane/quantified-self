@@ -15,7 +15,7 @@ interface CorosApiConfig {
     client_secret: string;
 }
 
-interface GarminHealthApiConfig {
+interface GarminApiConfig {
     client_id: string;
     client_secret: string;
 }
@@ -30,7 +30,7 @@ interface CloudTasksConfig {
 interface AppConfig {
     suuntoapp: SuuntoAppConfig;
     corosapi: CorosApiConfig;
-    garminhealthapi: GarminHealthApiConfig;
+    garminapi: GarminApiConfig;
     cloudtasks: CloudTasksConfig;
 
 }
@@ -60,7 +60,7 @@ export const config: AppConfig = {
             client_secret: getEnvVar('COROSAPI_CLIENT_SECRET'),
         };
     },
-    get garminhealthapi() {
+    get garminapi() {
         return {
             client_id: getEnvVar('GARMINAPI_CLIENT_ID'),
             client_secret: getEnvVar('GARMINAPI_CLIENT_SECRET'),

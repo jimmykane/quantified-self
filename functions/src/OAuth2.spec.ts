@@ -136,11 +136,11 @@ describe('OAuth2', () => {
             expect(config.oauth2Client).toBeDefined();
         });
 
-        it('should return config for GarminHealthAPI', () => {
-            const config = getServiceConfig(ServiceNames.GarminHealthAPI);
+        it('should return config for GarminAPI', () => {
+            const config = getServiceConfig(ServiceNames.GarminAPI);
 
             expect(config).toBeDefined();
-            expect(config.tokenCollectionName).toBe('garminHealthAPITokens');
+            expect(config.tokenCollectionName).toBe('garminAPITokens');
             // Scope might be null or specific, let's just check client existence
             expect(config.oauth2Client).toBeDefined();
         });
@@ -456,7 +456,7 @@ describe('OAuth2', () => {
         }, 10000);
 
         it('should remove duplicates for Garmin using userID field', async () => {
-            const garminService = ServiceNames.GarminHealthAPI;
+            const garminService = ServiceNames.GarminAPI;
             const garminUserId = 'garmin-user-123';
 
             // Mock getServiceConfig to return Garmin config
@@ -484,7 +484,7 @@ describe('OAuth2', () => {
                 docs: [{
                     id: 'dup-token',
                     ref: { parent: { parent: { id: 'other-user' } }, delete: mockDelete },
-                    data: () => ({ serviceName: ServiceNames.GarminHealthAPI, userID: garminUserId })
+                    data: () => ({ serviceName: ServiceNames.GarminAPI, userID: garminUserId })
                 }]
             });
             mockDelete.mockResolvedValue({});

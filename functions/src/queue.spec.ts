@@ -347,7 +347,7 @@ describe('queue', () => {
             vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(MAX_PENDING_TASKS); // Max pending
             const { dispatchQueueItemTasks } = await import('./queue');
 
-            await dispatchQueueItemTasks(ServiceNames.GarminHealthAPI);
+            await dispatchQueueItemTasks(ServiceNames.GarminAPI);
 
             expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
         });
@@ -378,7 +378,7 @@ describe('queue', () => {
                 isEqual: vi.fn(),
             });
 
-            await dispatchQueueItemTasks(ServiceNames.GarminHealthAPI);
+            await dispatchQueueItemTasks(ServiceNames.GarminAPI);
 
             expect(utils.getCloudTaskQueueDepth).toHaveBeenCalledWith(true);
             // Verify limit was called with batch size
@@ -386,8 +386,8 @@ describe('queue', () => {
 
             // Verify enqueue called for both
             expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2);
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminHealthAPI, 'doc1', expect.any(Number), expect.any(Number));
-            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminHealthAPI, 'doc2', expect.any(Number), expect.any(Number));
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminAPI, 'doc1', expect.any(Number), expect.any(Number));
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminAPI, 'doc2', expect.any(Number), expect.any(Number));
 
             // Verify dispatchedToCloudTask update
             expect(mockDoc1.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
@@ -416,14 +416,14 @@ describe('queue', () => {
                 isEqual: vi.fn(), // Fix TS error
             } as any);
 
-            await dispatchQueueItemTasks(ServiceNames.GarminHealthAPI);
+            await dispatchQueueItemTasks(ServiceNames.GarminAPI);
 
             expect(utils.getCloudTaskQueueDepth).toHaveBeenCalledWith(true);
             // Expected spread: Total 1800s. Size 3. Delay per item = 600s.
             // Items: 0, 600, 1200
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(1, ServiceNames.GarminHealthAPI, '1', expect.any(Number), 0);
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminHealthAPI, '2', expect.any(Number), delayPerItem);
-            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(3, ServiceNames.GarminHealthAPI, '3', expect.any(Number), delayPerItem * 2);
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(1, ServiceNames.GarminAPI, '1', expect.any(Number), 0);
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminAPI, '2', expect.any(Number), delayPerItem);
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(3, ServiceNames.GarminAPI, '3', expect.any(Number), delayPerItem * 2);
         });
 
         it('should do nothing if no items found', async () => {
@@ -440,7 +440,7 @@ describe('queue', () => {
                 isEqual: vi.fn(), // Fix TS error
             } as any);
 
-            await dispatchQueueItemTasks(ServiceNames.GarminHealthAPI);
+            await dispatchQueueItemTasks(ServiceNames.GarminAPI);
 
             expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
         });

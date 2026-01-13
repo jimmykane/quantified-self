@@ -6,7 +6,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
-import { GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
+import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
 import { GRACE_PERIOD_DAYS } from '../shared/limits';
 
 /**
@@ -21,7 +21,7 @@ export const enforceSubscriptionLimits = onSchedule({
     const userIDs = new Set<string>();
 
     // Garmin Tokens
-    const garminSnapshot = await admin.firestore().collection(GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME).get();
+    const garminSnapshot = await admin.firestore().collection(GARMIN_API_TOKENS_COLLECTION_NAME).get();
     garminSnapshot.forEach(doc => userIDs.add(doc.id));
 
     // Suunto Tokens
@@ -81,7 +81,7 @@ export const enforceSubscriptionLimits = onSchedule({
             // Disconnect sync
             try { await deauthorizeServiceForUser(uid, ServiceNames.SuuntoApp); } catch (e) { logger.error(`Error deauthorizing Suunto for ${uid}`, e); }
             try { await deauthorizeServiceForUser(uid, ServiceNames.COROSAPI); } catch (e) { logger.error(`Error deauthorizing COROS for ${uid}`, e); }
-            try { await deauthorizeServiceForUser(uid, ServiceNames.GarminHealthAPI); } catch (e) { logger.error(`Error deauthorizing Garmin for ${uid}`, e); }
+            try { await deauthorizeServiceForUser(uid, ServiceNames.GarminAPI); } catch (e) { logger.error(`Error deauthorizing Garmin for ${uid}`, e); }
         }
 
         // 5. Activity Pruning (Destructive - Delete Newest)

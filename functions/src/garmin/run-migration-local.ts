@@ -5,7 +5,7 @@
 import * as admin from 'firebase-admin';
 import * as dotenv from 'dotenv';
 import { migrateUserToken } from './migrate-tokens';
-import { GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME } from './constants';
+import { GARMIN_API_TOKENS_COLLECTION_NAME } from './constants';
 
 dotenv.config();
 
@@ -21,7 +21,7 @@ async function runLocalMigration() {
     const limit = 50;
 
     const snapshot = await admin.firestore()
-        .collection(GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME)
+        .collection(GARMIN_API_TOKENS_COLLECTION_NAME)
         .where('accessToken', '!=', null) // Target legacy docs
         .limit(limit)
         .get();
@@ -34,7 +34,7 @@ async function runLocalMigration() {
     for (const doc of snapshot.docs) {
         const data = doc.data();
         // Skip if serviceName mismatch (safety)
-        if (data.serviceName && data.serviceName !== 'GarminHealthAPI') continue;
+        if (data.serviceName && data.serviceName !== 'GarminAPI') continue;
 
         console.log(`Migrating user ${doc.id}...`);
 

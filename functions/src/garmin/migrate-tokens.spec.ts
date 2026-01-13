@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as admin from 'firebase-admin';
 import * as requestHelper from '../request-helper';
 import { migrateUserToken } from './migrate-tokens';
-import { GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME } from './constants';
+import { GARMIN_API_TOKENS_COLLECTION_NAME } from './constants';
 
 // Define robust mock factory
 const mockSet = vi.fn().mockResolvedValue({});
@@ -20,7 +20,7 @@ const querySnapshotNotEmpty = {
     size: 1,
     docs: [{
         id: 'user1',
-        data: () => ({ accessToken: 'old_access', accessTokenSecret: 'old_secret', serviceName: 'GarminHealthAPI' })
+        data: () => ({ accessToken: 'old_access', accessTokenSecret: 'old_secret', serviceName: 'GarminAPI' })
     }]
 };
 
@@ -76,7 +76,7 @@ vi.mock('../request-helper', () => ({
 
 vi.mock('../config', () => ({
     config: {
-        garminhealthapi: {
+        garminapi: {
             client_id: 'client_id',
             client_secret: 'client_secret'
         },
@@ -143,7 +143,7 @@ describe('migrateUserToken', () => {
         }));
 
         // Verify write path: collection(GARMIN).doc(u1).collection(tokens).doc(u1).set(...)
-        expect(mockCollectionTop).toHaveBeenCalledWith(GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME);
+        expect(mockCollectionTop).toHaveBeenCalledWith(GARMIN_API_TOKENS_COLLECTION_NAME);
         expect(mockDoc).toHaveBeenCalledWith('u1'); // Parent
         expect(mockCollectionInner).toHaveBeenCalledWith('tokens');
         // mockDoc called again with 'u1'? Yes, reusing mockDoc for simplicity

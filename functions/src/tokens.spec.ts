@@ -229,7 +229,7 @@ describe('tokens', () => {
                 accessToken: 'old-garmin',
                 refreshToken: 'old-garmin-refresh',
                 expiresAt: Date.now() + 3600000,
-                serviceName: ServiceNames.GarminHealthAPI,
+                serviceName: ServiceNames.GarminAPI,
                 userID: 'garmin-user-id',
                 dateCreated: 1000,
                 dateRefreshed: 1000,
@@ -247,7 +247,7 @@ describe('tokens', () => {
                 },
             });
 
-            await getTokenData(mockDoc, ServiceNames.GarminHealthAPI, false);
+            await getTokenData(mockDoc, ServiceNames.GarminAPI, false);
 
             // Verify the update was called with expiresAt reduced by 600000ms (600 seconds)
             expect(mockDoc.ref.update).toHaveBeenCalled();

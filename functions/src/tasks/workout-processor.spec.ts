@@ -51,7 +51,7 @@ describe('processWorkoutTask', () => {
 
     it('should process a valid queue item', async () => {
         const queueItemId = 'test-id';
-        const serviceName = ServiceNames.GarminHealthAPI;
+        const serviceName = ServiceNames.GarminAPI;
         const queueData = { processed: false, some: 'data' };
 
         mockGet.mockResolvedValue({
@@ -71,7 +71,7 @@ describe('processWorkoutTask', () => {
 
     it('should skip if item already processed', async () => {
         const queueItemId = 'test-id';
-        const serviceName = ServiceNames.GarminHealthAPI;
+        const serviceName = ServiceNames.GarminAPI;
         const queueData = { processed: true };
 
         mockGet.mockResolvedValue({
@@ -90,7 +90,7 @@ describe('processWorkoutTask', () => {
 
     it('should skip if item does not exist', async () => {
         const queueItemId = 'test-id';
-        const serviceName = ServiceNames.GarminHealthAPI;
+        const serviceName = ServiceNames.GarminAPI;
 
         mockGet.mockResolvedValue({
             exists: false,
@@ -107,7 +107,7 @@ describe('processWorkoutTask', () => {
 
     it('should throw if processing fails triggering task retry', async () => {
         const queueItemId = 'test-id';
-        const serviceName = ServiceNames.GarminHealthAPI;
+        const serviceName = ServiceNames.GarminAPI;
         const queueData = { processed: false };
 
         mockGet.mockResolvedValue({
@@ -126,7 +126,7 @@ describe('processWorkoutTask', () => {
 
     it('should throw Error if QueueResult.Failed is returned', async () => {
         const queueItemId = 'test-id';
-        const serviceName = ServiceNames.GarminHealthAPI;
+        const serviceName = ServiceNames.GarminAPI;
         const queueData = { processed: false };
 
         mockGet.mockResolvedValue({
@@ -145,7 +145,7 @@ describe('processWorkoutTask', () => {
 
     it('should NOT throw if QueueResult.Processed is returned', async () => {
         const queueItemId = 'test-id';
-        const serviceName = ServiceNames.GarminHealthAPI;
+        const serviceName = ServiceNames.GarminAPI;
         const queueData = { processed: false };
 
         mockGet.mockResolvedValue({
@@ -164,7 +164,7 @@ describe('processWorkoutTask', () => {
 
     it('should NOT throw if QueueResult.RetryIncremented is returned', async () => {
         const queueItemId = 'test-id';
-        const serviceName = ServiceNames.GarminHealthAPI;
+        const serviceName = ServiceNames.GarminAPI;
         const queueData = { processed: false };
 
         mockGet.mockResolvedValue({
@@ -183,7 +183,7 @@ describe('processWorkoutTask', () => {
 
     it('should NOT throw if QueueResult.MovedToDLQ is returned', async () => {
         const queueItemId = 'test-id';
-        const serviceName = ServiceNames.GarminHealthAPI;
+        const serviceName = ServiceNames.GarminAPI;
         const queueData = { processed: false };
 
         mockGet.mockResolvedValue({
@@ -202,7 +202,7 @@ describe('processWorkoutTask', () => {
 
     it('should log warning for unexpected QueueResult but not throw', async () => {
         const queueItemId = 'test-id';
-        const serviceName = ServiceNames.GarminHealthAPI;
+        const serviceName = ServiceNames.GarminAPI;
         const queueData = { processed: false };
 
         mockGet.mockResolvedValue({

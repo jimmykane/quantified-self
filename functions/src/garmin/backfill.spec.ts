@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as admin from 'firebase-admin';
 import * as requestHelper from '../request-helper';
-import { backfillHealthAPIActivities } from './backfill';
+import { backfillGarminAPIActivities } from './backfill';
 import * as utils from '../utils';
 
 // Simple, robust mock setup
@@ -66,7 +66,7 @@ vi.mock('../request-helper', () => ({
 }));
 
 vi.mock('./auth/auth', () => ({
-    GarminHealthAPIAuth: vi.fn()
+    GarminAPIAuth: vi.fn()
 }));
 
 // Mock getTokenData for auto-refresh
@@ -101,7 +101,7 @@ describe('Garmin Backfill', () => {
 
         // Specific Logic for Collection chaining
         collectionMock.mockImplementation((name: string) => {
-            if (name === 'garminHealthAPITokens') {
+            if (name === 'garminAPITokens') {
                 return {
                     doc: vi.fn().mockReturnValue({ // .doc(uid)
                         collection: vi.fn().mockReturnValue({ // .collection(tokens)
@@ -146,7 +146,7 @@ describe('Garmin Backfill', () => {
     });
 
     it('should trigger backfill and return 200', async () => {
-        await backfillHealthAPIActivities(req, res);
+        await backfillGarminAPIActivities(req, res);
         expect(res.status).toHaveBeenCalledWith(200);
         expect(requestHelper.get).toHaveBeenCalled();
     });
@@ -172,14 +172,14 @@ describe('Garmin Backfill', () => {
             // The code pulls user ID first, then tokens.
             // If we only override users, others might default to 'collectionObj' return from TOP level mock.
             // But we overwrote the implementation!
-            // We must support 'garminHealthAPITokens' too.
+            // We must support 'garminAPITokens' too.
         });
 
         // Wait, rewriting implementation entirely is risky. 
         // Better to use stateful mocks or distinct spies.
         // But for this test, if it fails throttling, it never reaches tokens.
 
-        await backfillHealthAPIActivities(req, res);
+        await backfillGarminAPIActivities(req, res);
         expect(res.status).toHaveBeenCalledWith(403);
     });
 
@@ -187,10 +187,10 @@ describe('Garmin Backfill', () => {
         req.body = { startDate: '2023-01-01', endDate: '2023-04-10' };
 
         // Restore default implementation (set in beforeEach) which has valid tokens
-        // But we need to verify 'garminHealthAPITokens' works.
+        // But we need to verify 'garminAPITokens' works.
         // beforeEach sets it up.
 
-        await backfillHealthAPIActivities(req, res);
+        await backfillGarminAPIActivities(req, res);
         expect(requestHelper.get).toHaveBeenCalledTimes(2);
     });
 
@@ -199,7 +199,7 @@ describe('Garmin Backfill', () => {
         error.statusCode = 409;
         (requestHelper.get as any).mockRejectedValue(error);
 
-        await backfillHealthAPIActivities(req, res);
+        await backfillGarminAPIActivities(req, res);
         expect(res.status).toHaveBeenCalledWith(409);
     });
 });

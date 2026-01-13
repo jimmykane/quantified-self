@@ -651,7 +651,7 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "garminHealthAPIActivityQueue",
+      "collectionGroup": "garminAPIActivityQueue",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -670,7 +670,7 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "garminHealthAPIActivityQueue",
+      "collectionGroup": "garminAPIActivityQueue",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -693,7 +693,7 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "garminHealthAPIActivityQueue",
+      "collectionGroup": "garminAPIActivityQueue",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -712,7 +712,7 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "garminHealthAPIActivityQueue",
+      "collectionGroup": "garminAPIActivityQueue",
       "queryScope": "COLLECTION",
       "fields": [
         {
@@ -908,7 +908,7 @@
       ]
     },
     {
-      "collectionGroup": "garminHealthAPIActivityQueue",
+      "collectionGroup": "garminAPIActivityQueue",
       "fieldPath": "expireAt",
       "ttl": true,
       "indexes": [

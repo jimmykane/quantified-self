@@ -10,11 +10,11 @@ const TOKEN_PATH = '/di-oauth2-service/oauth/token';
 /**
  * Creates a configured simple-oauth2 client for Garmin Health API.
  */
-export function GarminHealthAPIAuth(refresh = false): AuthorizationCode {
+export function GarminAPIAuth(refresh = false): AuthorizationCode {
   return new AuthorizationCode({
     client: {
-      id: config.garminhealthapi.client_id,
-      secret: config.garminhealthapi.client_secret,
+      id: config.garminapi.client_id,
+      secret: config.garminapi.client_secret,
     },
     auth: {
       tokenHost: TOKEN_HOST,

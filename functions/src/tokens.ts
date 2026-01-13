@@ -6,7 +6,7 @@ import {
   Auth2ServiceTokenInterface,
 } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { getServiceConfig, GarminHealthAPIAuth2ServiceTokenInterface } from './OAuth2';
+import { getServiceConfig, GarminAPIAuth2ServiceTokenInterface } from './OAuth2';
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 import QuerySnapshot = admin.firestore.QuerySnapshot;
 
@@ -32,7 +32,7 @@ export async function refreshTokens(querySnapshot: QuerySnapshot, serviceName: S
   logger.info(`Parsed ${count} auth tokens out of ${querySnapshot.size}`);
 }
 
-export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: ServiceNames, forceRefreshAndSave = false): Promise<SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface | GarminHealthAPIAuth2ServiceTokenInterface> {
+export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: ServiceNames, forceRefreshAndSave = false): Promise<SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface | GarminAPIAuth2ServiceTokenInterface> {
   const serviceConfig = getServiceConfig(serviceName, true);
   const serviceTokenData = <Auth2ServiceTokenInterface>doc.data();
   // doc.data() is never undefined for query doc snapshots
@@ -71,8 +71,8 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
           dateRefreshed: serviceTokenData.dateRefreshed,
           dateCreated: serviceTokenData.dateCreated,
         };
-      case ServiceNames.GarminHealthAPI:
-        return <GarminHealthAPIAuth2ServiceTokenInterface>{
+      case ServiceNames.GarminAPI:
+        return <GarminAPIAuth2ServiceTokenInterface>{
           serviceName: serviceName,
           accessToken: serviceTokenData.accessToken,
           refreshToken: serviceTokenData.refreshToken,
@@ -140,8 +140,8 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
         dateCreated: serviceTokenData.dateCreated,
       };
       break;
-    case ServiceNames.GarminHealthAPI:
-      newToken = <GarminHealthAPIAuth2ServiceTokenInterface>{
+    case ServiceNames.GarminAPI:
+      newToken = <GarminAPIAuth2ServiceTokenInterface>{
         serviceName: serviceName,
         accessToken: responseToken.token.access_token,
         refreshToken: responseToken.token.refresh_token,

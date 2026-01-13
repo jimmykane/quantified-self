@@ -3,7 +3,7 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import * as requestPromise from '../request-helper';
 import { config } from '../config';
-import { GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME } from './constants';
+import { GARMIN_API_TOKENS_COLLECTION_NAME } from './constants';
 import * as crypto from 'crypto';
 import OAuth from 'oauth-1.0a';
 
@@ -21,7 +21,7 @@ export async function migrateUserToken(userID: string, oauth1Token: any) {
     // Check if already migrated
     // We check the subcollection 'tokens'
     const subCollection = await admin.firestore()
-        .collection(GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME)
+        .collection(GARMIN_API_TOKENS_COLLECTION_NAME)
         .doc(userID)
         .collection('tokens')
         .limit(1)
@@ -40,8 +40,8 @@ export async function migrateUserToken(userID: string, oauth1Token: any) {
     // Signed using OAuth 1.0a
     const oauth = new OAuth({
         consumer: {
-            key: config.garminhealthapi.client_id, // Consumer Key acts as Client ID
-            secret: config.garminhealthapi.client_secret,
+            key: config.garminapi.client_id, // Consumer Key acts as Client ID
+            secret: config.garminapi.client_secret,
         },
         signature_method: 'HMAC-SHA1',
         hash_function(base_string, key) {
@@ -52,16 +52,7 @@ export async function migrateUserToken(userID: string, oauth1Token: any) {
         },
     });
 
-    const requestData = {
-        url: TOKEN_EXCHANGE_URL,
-        method: 'POST',
-        data: {
-            // Not parameters, just empty for signing? 
-            // Or we sign the body params?
-            // Usually OAuth1 signs the parameters.
-            // URL params?
-        }
-    };
+
 
     // Garmin Guide: "POST parameters: oauth_token, oauth_token_secret, code_challenge"
     // So these must be included in the signature.
@@ -114,12 +105,12 @@ export async function migrateUserToken(userID: string, oauth1Token: any) {
         const garminUserID = userID; // In legacy, doc ID IS garmin user ID.
 
         await admin.firestore()
-            .collection(GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME)
+            .collection(GARMIN_API_TOKENS_COLLECTION_NAME)
             .doc(userID) // Parent Doc
             .collection('tokens')
             .doc(garminUserID)
             .set({
-                serviceName: 'GarminHealthAPI',
+                serviceName: 'GarminAPI',
                 accessToken: tokens.access_token,
                 refreshToken: tokens.refresh_token,
                 expiresAt: expiresAt,

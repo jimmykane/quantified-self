@@ -103,7 +103,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
           || this.userMetaForService.processedActivitiesFromLastHistoryImportCount === 0;
         break;
         break;
-      case ServiceNames.GarminHealthAPI:
+      case ServiceNames.GarminAPI:
         this.isAllowedToDoHistoryImport = new Date(this.userMetaForService.didLastHistoryImport + (GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000)) < new Date()
         this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + (GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000));
         break;

@@ -60,11 +60,11 @@ export {
 } from './suunto/auth/wrapper';
 
 export {
-  deauthorizeGarminHealthAPI,
-  deauthorizeGarminHealthAPIUsers,
-  receiveGarminHealthAPIUserPermissions,
-  getGarminHealthAPIAuthRequestTokenRedirectURI,
-  requestAndSetGarminHealthAPIAccessToken,
+  deauthorizeGarminAPI,
+  deauthorizeGarminAPIUsers,
+  receiveGarminAPIUserPermissions,
+  getGarminAPIAuthRequestTokenRedirectURI,
+  requestAndSetGarminAPIAccessToken,
 } from './garmin/auth/wrapper';
 
 
@@ -101,22 +101,22 @@ export {
 
 // Garmin Queue & Backfill
 export {
-  insertGarminHealthAPIActivityFileToQueue,
+  insertGarminAPIActivityFileToQueue,
 } from './garmin/queue';
 
 export {
-  parseGarminHealthAPIActivityQueue,
+  parseGarminAPIActivityQueue,
 } from './queue';
 
 
 export {
-  backfillHealthAPIActivities,
+  backfillGarminAPIActivities,
 } from './garmin/backfill';
 
 // Tokens
 export { refreshCOROSAPIRefreshTokens } from './coros/tokens';
 export { refreshSuuntoAppRefreshTokens } from './suunto/tokens';
-export { refreshGarminHealthAPIRefreshTokens } from './garmin/tokens';
+export { refreshGarminAPIRefreshTokens } from './garmin/tokens';
 
 // Suunto Utils
 export { stWorkoutDownloadAsFit } from './suunto/st-workout-download-as-fit';

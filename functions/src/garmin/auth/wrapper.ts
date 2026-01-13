@@ -17,9 +17,9 @@ import {
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import * as admin from 'firebase-admin';
 
-const SERVICE_NAME = ServiceNames.GarminHealthAPI;
+const SERVICE_NAME = ServiceNames.GarminAPI;
 
-export const getGarminHealthAPIAuthRequestTokenRedirectURI = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const getGarminAPIAuthRequestTokenRedirectURI = functions.region('europe-west2').https.onRequest(async (req, res) => {
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
     logger.error('Not allowed');
     res.status(403).send('Unauthorized');
@@ -63,7 +63,7 @@ export const getGarminHealthAPIAuthRequestTokenRedirectURI = functions.region('e
   }
 });
 
-export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const requestAndSetGarminAPIAccessToken = functions.region('europe-west2').https.onRequest(async (req, res) => {
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
     logger.error('Not allowed');
     res.status(403).send('Unauthorized');
@@ -116,7 +116,7 @@ export const requestAndSetGarminHealthAPIAccessToken = functions.region('europe-
 });
 
 
-export const deauthorizeGarminHealthAPI = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const deauthorizeGarminAPI = functions.region('europe-west2').https.onRequest(async (req, res) => {
   if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
     logger.error('Not allowed');
     res.status(403).send('Unauthorized');
@@ -150,7 +150,7 @@ export const deauthorizeGarminHealthAPI = functions.region('europe-west2').https
 });
 
 // Webhook for Garmin Deregistration
-export const receiveGarminHealthAPIDeregistration = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const receiveGarminAPIDeregistration = functions.region('europe-west2').https.onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
     return;
@@ -172,11 +172,11 @@ export const receiveGarminHealthAPIDeregistration = functions.region('europe-wes
 
     try {
       // Find the Firebase User(s) holding this Garmin connection
-      // New Token Structure: garminHealthAPITokens/{firebaseUserID}/tokens/{garminUserID} with field `userID` == garminUserId
+      // New Token Structure: garminAPITokens/{firebaseUserID}/tokens/{garminUserID} with field `userID` == garminUserId
       const tokenQuerySnapshot = await admin.firestore()
         .collectionGroup('tokens')
         .where('userID', '==', garminUserId)
-        .where('serviceName', '==', ServiceNames.GarminHealthAPI)
+        .where('serviceName', '==', ServiceNames.GarminAPI)
         .get();
 
       if (tokenQuerySnapshot.empty) {
@@ -189,7 +189,7 @@ export const receiveGarminHealthAPIDeregistration = functions.region('europe-wes
         if (firebaseUserID) {
           logger.info(`Deauthorizing Firebase User ${firebaseUserID} (Garmin ID: ${garminUserId})`);
           try {
-            await deauthorizeServiceForUser(firebaseUserID, ServiceNames.GarminHealthAPI);
+            await deauthorizeServiceForUser(firebaseUserID, ServiceNames.GarminAPI);
           } catch (e) {
             logger.error(`Failed to deauthorize user ${firebaseUserID}`, e);
           }
@@ -206,7 +206,7 @@ export const receiveGarminHealthAPIDeregistration = functions.region('europe-wes
 // Webhook for Garmin User Permission Changes
 // Per Section 2.6.3: Users can opt out of data sharing by turning off certain permissions.
 // This webhook notifies us if those permissions change post-connection.
-export const receiveGarminHealthAPIUserPermissions = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const receiveGarminAPIUserPermissions = functions.region('europe-west2').https.onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
     return;
@@ -243,4 +243,4 @@ export const receiveGarminHealthAPIUserPermissions = functions.region('europe-we
 });
 
 // Alias for backwards compatibility if needed, or just remove the old export name
-export const deauthorizeGarminHealthAPIUsers = receiveGarminHealthAPIDeregistration;
+export const deauthorizeGarminAPIUsers = receiveGarminAPIDeregistration;

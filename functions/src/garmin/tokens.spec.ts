@@ -20,7 +20,7 @@ vi.mock('firebase-functions/v1', () => ({
     })
 }));
 
-import { refreshGarminHealthAPIRefreshTokens } from './tokens';
+import { refreshGarminAPIRefreshTokens } from './tokens';
 
 describe('Garmin Tokens Scheduler', () => {
     beforeEach(() => {
@@ -29,7 +29,7 @@ describe('Garmin Tokens Scheduler', () => {
 
     it('should call refreshStaleTokens with correct service name and threshold', async () => {
         // Execute the scheduled function handler
-        await (refreshGarminHealthAPIRefreshTokens as any)();
+        await (refreshGarminAPIRefreshTokens as any)();
 
         // Calculate expected threshold (approximate)
         const now = Date.now();
@@ -37,7 +37,7 @@ describe('Garmin Tokens Scheduler', () => {
         const expectedThreshold = now - thirtyDaysMs;
 
         expect(tokens.refreshStaleTokens).toHaveBeenCalledWith(
-            ServiceNames.GarminHealthAPI,
+            ServiceNames.GarminAPI,
             expect.any(Number)
         );
 

@@ -95,7 +95,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
     this.hasProAccess = isPro;
 
     const serviceNameParam = this.route.snapshot.queryParamMap.get('serviceName');
-    if (serviceNameParam === ServiceNames.GarminHealthAPI) {
+    if (serviceNameParam === ServiceNames.GarminAPI) {
       this.activeSection = 'garmin';
     } else if (serviceNameParam === ServiceNames.COROSAPI) {
       this.activeSection = 'coros';

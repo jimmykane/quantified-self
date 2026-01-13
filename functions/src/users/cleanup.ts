@@ -68,7 +68,7 @@ export const cleanupUserAccounts = functions.region('europe-west2').auth.user().
 
     // Import constants locally to avoid top-level side effects if helpful, 
     // though for these it's fine. Using hardcoded string or importing constant is fine.
-    // For Garmin, collection name is 'garminHealthAPITokens' (from constants)
+    // For Garmin, collection name is 'garminAPITokens' (from constants)
     // For Suunto, getServiceConfig returns it.
     // For COROS, getServiceConfig returns it.
 
@@ -85,8 +85,8 @@ export const cleanupUserAccounts = functions.region('europe-west2').auth.user().
         },
         {
             name: 'Garmin',
-            deauthFn: (id) => deauthorizeServiceForUser(id, ServiceNames.GarminHealthAPI),
-            collectionName: 'garminHealthAPITokens'
+            deauthFn: (id) => deauthorizeServiceForUser(id, ServiceNames.GarminAPI),
+            collectionName: 'garminAPITokens'
         }
     ];
 

@@ -107,7 +107,7 @@ import * as admin from 'firebase-admin';
 // Import subject under test
 import { getUserRole, UserNotFoundError } from '../utils';
 import { parseWorkoutQueueItemForServiceName } from '../queue';
-import { processGarminHealthAPIActivityQueueItem } from '../garmin/queue';
+import { processGarminAPIActivityQueueItem } from '../garmin/queue';
 
 // We need to mock some internals to force flow
 vi.mock('../tokens', () => ({
@@ -135,7 +135,7 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
 });
 
 vi.mock('../garmin/auth/auth', () => ({
-    GarminHealthAPIAuth: () => ({
+    GarminAPIAuth: () => ({
         authorize: vi.fn().mockReturnValue({}),
         toHeader: vi.fn().mockReturnValue({})
     })
@@ -354,7 +354,7 @@ describe('User Not Found Scenarios', () => {
 
             const bulkWriter = (admin.firestore() as any).bulkWriter();
 
-            await processGarminHealthAPIActivityQueueItem(
+            await processGarminAPIActivityQueueItem(
                 queueItem,
                 bulkWriter
             );

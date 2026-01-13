@@ -25,7 +25,7 @@ export interface COROSAPIWorkoutQueueItemInterface extends QueueItemInterface {
   FITFileURI: string,
 }
 
-export interface GarminHealthAPIActivityQueueItemInterface extends QueueItemInterface {
+export interface GarminAPIActivityQueueItemInterface extends QueueItemInterface {
   userID: string
   startTimeInSeconds: number,
   manual: boolean,

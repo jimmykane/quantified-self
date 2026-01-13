@@ -217,12 +217,12 @@ describe('Cloud Tasks Utils', () => {
             mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
 
             const dateCreated = 1000;
-            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', dateCreated);
+            await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', dateCreated);
 
             expect(mockCloudTasksClient.createTask).toHaveBeenCalledWith({
                 parent: 'projects/p/locations/l/queues/q',
                 task: expect.objectContaining({
-                    name: 'projects/p/locations/l/queues/q/tasks/garminHealthAPI-item-123-1000',
+                    name: 'projects/p/locations/l/queues/q/tasks/garminAPI-item-123-1000',
                     httpRequest: expect.objectContaining({
                         url: expect.stringContaining('test-location-test-project.cloudfunctions.net/test-queue'),
                         httpMethod: 'POST',
@@ -238,7 +238,7 @@ describe('Cloud Tasks Utils', () => {
 
             mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
 
-            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 1000, 60);
+            await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000, 60);
 
             expect(mockCloudTasksClient.createTask).toHaveBeenCalledWith(
                 expect.objectContaining({
@@ -259,7 +259,7 @@ describe('Cloud Tasks Utils', () => {
             (error as Error & { code: number }).code = 6;
             mockCloudTasksClient.createTask.mockRejectedValue(error);
 
-            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 1000);
+            await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000);
 
             expect(mockCloudTasksClient.createTask).toHaveBeenCalled();
         });
@@ -271,7 +271,7 @@ describe('Cloud Tasks Utils', () => {
             const error = new Error('Some other error');
             mockCloudTasksClient.createTask.mockRejectedValue(error);
 
-            await expect(enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 1000)).rejects.toThrow('Some other error');
+            await expect(enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000)).rejects.toThrow('Some other error');
         });
 
         it('should throw error if projectId is missing', async () => {
@@ -282,7 +282,7 @@ describe('Cloud Tasks Utils', () => {
             const originalProjectId = config.cloudtasks.projectId;
             (config.cloudtasks as unknown as Record<string, unknown>).projectId = undefined;
 
-            await expect(enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 1000))
+            await expect(enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000))
                 .rejects.toThrow('Project ID is not defined in config');
 
             (config.cloudtasks as unknown as Record<string, unknown>).projectId = originalProjectId;
@@ -353,7 +353,7 @@ describe('Cloud Tasks Utils', () => {
 
             mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
 
-            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 1000, 0);
+            await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000, 0);
 
             // With delay of 0, scheduleTime should not be set (falsy check)
             const call = mockCloudTasksClient.createTask.mock.calls[0][0];
@@ -367,8 +367,8 @@ describe('Cloud Tasks Utils', () => {
             mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
 
             // Same queueItemId but different dateCreated
-            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 1000);
-            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 2000);
+            await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000);
+            await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 2000);
 
             const calls = mockCloudTasksClient.createTask.mock.calls;
             const taskName1 = calls[0][0].task.name;
@@ -386,7 +386,7 @@ describe('Cloud Tasks Utils', () => {
             mockCloudTasksClient.createTask.mockResolvedValue([{ name: 'task-name' }]);
 
             const longId = 'a'.repeat(200);
-            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, longId, 1000);
+            await enqueueWorkoutTask(ServiceNames.GarminAPI, longId, 1000);
 
             expect(mockCloudTasksClient.createTask).toHaveBeenCalled();
         });
@@ -400,7 +400,7 @@ describe('Cloud Tasks Utils', () => {
             (error as Error & { code: number }).code = 7;
             mockCloudTasksClient.createTask.mockRejectedValue(error);
 
-            await expect(enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 1000)).rejects.toThrow('Permission denied');
+            await expect(enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000)).rejects.toThrow('Permission denied');
             expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to enqueue task'), error);
         });
 
@@ -413,7 +413,7 @@ describe('Cloud Tasks Utils', () => {
             (error as Error & { code: number }).code = 4;
             mockCloudTasksClient.createTask.mockRejectedValue(error);
 
-            await expect(enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-123', 1000)).rejects.toThrow('DEADLINE_EXCEEDED');
+            await expect(enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000)).rejects.toThrow('DEADLINE_EXCEEDED');
             expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to enqueue task'), error);
         });
 
@@ -428,7 +428,7 @@ describe('Cloud Tasks Utils', () => {
                 .mockRejectedValueOnce(unavailableError)
                 .mockResolvedValueOnce([{ name: 'task-name' }]);
 
-            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-retry', 1000);
+            await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-retry', 1000);
 
             expect(mockCloudTasksClient.createTask).toHaveBeenCalledTimes(2);
             // First call (lazy init) + Second call (re-init after invalidation) = 2 constructor calls
@@ -450,7 +450,7 @@ describe('Cloud Tasks Utils', () => {
                 .mockRejectedValueOnce(connResetError)
                 .mockResolvedValueOnce([{ name: 'task-name' }]);
 
-            await enqueueWorkoutTask(ServiceNames.GarminHealthAPI, 'item-retry-reset', 1000);
+            await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-retry-reset', 1000);
 
             expect(mockCloudTasksClient.createTask).toHaveBeenCalledTimes(2);
             expect(CloudTasksClientSpy).toHaveBeenCalledTimes(2);

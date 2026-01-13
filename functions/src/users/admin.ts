@@ -74,7 +74,7 @@ async function enrichUsers(
                         .orderBy('created', 'desc')
                         .limit(1)
                         .get(),
-                    db.collection('garminHealthAPITokens').doc(user.uid).collection('tokens').limit(1).get(),
+                    db.collection('garminAPITokens').doc(user.uid).collection('tokens').limit(1).get(),
                     db.collection('suuntoAppAccessTokens').doc(user.uid).collection('tokens').limit(1).get(),
                     db.collection('COROSAPIAccessTokens').doc(user.uid).collection('tokens').limit(1).get()
                 ]);
@@ -147,7 +147,7 @@ export const listUsers = onAdminCall<ListUsersRequest, any>({
             let collectionName = '';
             switch (filterService) {
                 case 'garmin':
-                    collectionName = 'garminHealthAPITokens';
+                    collectionName = 'garminAPITokens';
                     break;
                 case 'suunto':
                     collectionName = 'suuntoAppAccessTokens';
@@ -392,7 +392,7 @@ export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
     const PROVIDER_QUEUES: Record<string, string[]> = {
         'Suunto': ['suuntoAppWorkoutQueue'],
         'COROS': ['COROSAPIWorkoutQueue'],
-        'Garmin': ['garminHealthAPIActivityQueue']
+        'Garmin': ['garminAPIActivityQueue']
     };
 
     try {

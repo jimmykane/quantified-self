@@ -27,7 +27,7 @@ vi.mock('@sports-alliance/sports-lib', () => ({
     ServiceNames: {
         COROSAPI: 'COROSAPI',
         SuuntoApp: 'SuuntoApp',
-        GarminHealthAPI: 'GarminHealthAPI'
+        GarminAPI: 'GarminAPI'
     },
     UserServiceMetaInterface: {}
 }));

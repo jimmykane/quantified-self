@@ -9,7 +9,7 @@ import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { generateIDFromParts, setEvent, UsageLimitExceededError, UserNotFoundError } from '../utils';
 import * as requestPromise from '../request-helper';
 import {
-  GarminHealthAPIActivityQueueItemInterface,
+  GarminAPIActivityQueueItemInterface,
 } from '../queue/queue-item.interface';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getTokenData } from '../tokens';
@@ -17,19 +17,20 @@ import { EventImporterGPX } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
 import * as xmldom from 'xmldom';
 import {
-  GarminHealthAPIEventMetaData,
+  GarminAPIEventMetaData,
   ActivityParsingOptions,
 } from '@sports-alliance/sports-lib';
+
 interface RequestError extends Error {
   statusCode?: number;
 }
 
 
-export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe-west2').runWith({
+export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,
   memory: '256MB',
 }).https.onRequest(async (req, res) => {
-  const activityFiles: GarminHealthAPIActivityFileInterface[] = req.body.activityFiles;
+  const activityFiles: GarminAPIActivityFileInterface[] = req.body.activityFiles;
   const queueItemRefs: admin.firestore.DocumentReference[] = [];
   for (const activityFile of activityFiles) {
     let queueItemDocumentReference;
@@ -66,12 +67,12 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
 
 
 
-export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminHealthAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<QueueResult> {
+export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<QueueResult> {
   logger.info(`Processing queue item ${queueItem.id} at retry count ${queueItem.retryCount}`);
   // queueItem is never undefined for query queueItem snapshots
   let tokenQuerySnapshots: admin.firestore.QuerySnapshot | undefined;
   // Use UserID for cache key as it's stable, unlike access tokens
-  const userKey = `GarminHealthAPI:${queueItem.userID}`;
+  const userKey = `GarminAPI:${queueItem.userID}`;
 
   if (tokenCache) {
     let tokenPromise = tokenCache.get(userKey);
@@ -79,7 +80,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
       // Lookup by userID (Garmin User ID)
       // Note: queueItem.userID is the Firebase User ID (mapped in queue dispatch)
       // So logical path is: collection(GARMIN).doc(queueItem.userID).collection('tokens').limit(1)
-      tokenPromise = admin.firestore().collection('garminHealthAPITokens').doc(queueItem.userID).collection('tokens').limit(1).get();
+      tokenPromise = admin.firestore().collection('garminAPITokens').doc(queueItem.userID).collection('tokens').limit(1).get();
       tokenCache.set(userKey, tokenPromise);
     }
     try {
@@ -89,7 +90,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
       return increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
     }
   } else {
-    tokenQuerySnapshots = await admin.firestore().collection('garminHealthAPITokens').doc(queueItem.userID).collection('tokens').limit(1).get();
+    tokenQuerySnapshots = await admin.firestore().collection('garminAPITokens').doc(queueItem.userID).collection('tokens').limit(1).get();
   }
 
   if (!tokenQuerySnapshots.size) {
@@ -100,7 +101,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
   // Use getTokenData (Shared) to handle auto-refresh if needed
   let serviceToken;
   try {
-    serviceToken = await getTokenData(tokenQuerySnapshots.docs[0], ServiceNames.GarminHealthAPI);
+    serviceToken = await getTokenData(tokenQuerySnapshots.docs[0], ServiceNames.GarminAPI);
   } catch (e: any) {
     logger.error(`Failed to get/refresh token for ${queueItem.id}: ${e.message}`);
     return increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
@@ -179,7 +180,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
     }
     event.name = event.startDate.toJSON(); // @todo improve
     logger.info(`Created Event from FIT file of ${queueItem.id} and token user ${(serviceToken as any).userID}`);
-    const metaData = new GarminHealthAPIEventMetaData(
+    const metaData = new GarminAPIEventMetaData(
       queueItem.userID,
       queueItem.activityFileID,
       queueItem.activityFileType,
@@ -212,7 +213,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
 
 
 
-export interface GarminHealthAPIActivityFileInterface {
+export interface GarminAPIActivityFileInterface {
   userId: string,
   userAccessToken: string,
   fileType: 'FIT' | 'TCX' | 'GPX',

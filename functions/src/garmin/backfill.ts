@@ -13,7 +13,7 @@ const GARMIN_ACTIVITIES_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/res
 const TIMEOUT_IN_SECONDS = 300;
 const MEMORY = '256MB';
 
-export const backfillHealthAPIActivities = functions.region('europe-west2').runWith({
+export const backfillGarminAPIActivities = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_IN_SECONDS,
   memory: MEMORY,
 }).https.onRequest(async (req, res) => {
@@ -80,19 +80,19 @@ export const backfillHealthAPIActivities = functions.region('europe-west2').runW
 
 export async function processGarminBackfill(userID: string, startDate: Date, endDate: Date) {
   // First check last history import
-  const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(userID).collection('meta').doc(ServiceNames.GarminHealthAPI).get();
+  const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(userID).collection('meta').doc(ServiceNames.GarminAPI).get();
   if (userServiceMetaDocumentSnapshot.exists) {
     const data = <UserServiceMetaInterface>userServiceMetaDocumentSnapshot.data();
     if (data.didLastHistoryImport) {
       const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + (GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000)); // 3 days
       if ((nextHistoryImportAvailableDate > new Date())) {
-        logger.error(`User ${userID} tried todo history import for ${ServiceNames.GarminHealthAPI} while not allowed`);
+        logger.error(`User ${userID} tried todo history import for ${ServiceNames.GarminAPI} while not allowed`);
         throw new Error(`History import cannot happen before ${nextHistoryImportAvailableDate}`);
       }
     }
   }
 
-  const tokensQuerySnapshot = await admin.firestore().collection('garminHealthAPITokens').doc(userID).collection('tokens').limit(1).get();
+  const tokensQuerySnapshot = await admin.firestore().collection('garminAPITokens').doc(userID).collection('tokens').limit(1).get();
   if (tokensQuerySnapshot.empty) {
     logger.error(`No token found for user ${userID}`);
     throw new Error('Bad request: No token found');
@@ -102,7 +102,7 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
   // Use getTokenData for auto-refresh if expired
   let serviceToken;
   try {
-    serviceToken = await getTokenData(tokenDoc, ServiceNames.GarminHealthAPI);
+    serviceToken = await getTokenData(tokenDoc, ServiceNames.GarminAPI);
   } catch (e: any) {
     logger.error(`Failed to get/refresh Garmin token for ${userID}: ${e.message}`);
     throw new Error('Token refresh failed');
@@ -148,7 +148,7 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
       .collection('users')
       .doc(userID)
       .collection('meta')
-      .doc(ServiceNames.GarminHealthAPI).set({
+      .doc(ServiceNames.GarminAPI).set({
         didLastHistoryImport: (new Date()).getTime(),
       });
   } catch (e: any) {

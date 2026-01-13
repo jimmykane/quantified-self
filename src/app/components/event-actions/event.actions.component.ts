@@ -23,10 +23,8 @@ import { DataDistance } from '@sports-alliance/sports-lib';
 import { environment } from '../../../environments/environment';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Auth, getIdToken } from '@angular/fire/auth';
-import {
-  GarminHealthAPIEventMetaDataInterface,
-  ServiceNames,
-} from '@sports-alliance/sports-lib';
+
+import { ServiceNames, GarminAPIEventMetaData } from '@sports-alliance/sports-lib';
 import { EventExporterGPX } from '@sports-alliance/sports-lib';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
 import { ActivityUtilities } from '@sports-alliance/sports-lib';
@@ -48,7 +46,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
 
 
-  public garminHealthAPIServiceMetaData!: GarminHealthAPIEventMetaDataInterface;
+  public garminAPIServiceMetaData!: GarminAPIEventMetaData;
   private deleteConfirmationSubscription!: Subscription;
 
   private auth = inject(Auth);
@@ -82,7 +80,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     }
 
 
-    this.garminHealthAPIServiceMetaData = <GarminHealthAPIEventMetaDataInterface>(await this.eventService.getEventMetaData(this.user, this.event.getID(), ServiceNames.GarminHealthAPI)
+    this.garminAPIServiceMetaData = <GarminAPIEventMetaData>(await this.eventService.getEventMetaData(this.user, this.event.getID(), ServiceNames.GarminAPI)
       .pipe(take(1)).toPromise());
     this.changeDetectorRef.detectChanges();
   }

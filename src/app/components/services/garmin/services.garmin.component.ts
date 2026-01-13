@@ -22,7 +22,7 @@ import { ServicesAbstractComponentDirective } from '../services-abstract-compone
 })
 export class ServicesGarminComponent extends ServicesAbstractComponentDirective {
 
-  public serviceName: ServiceNames = ServiceNames.GarminHealthAPI;
+  public serviceName: ServiceNames = ServiceNames.GarminAPI;
 
   constructor(protected http: HttpClient,
     protected fileService: AppFileService,

@@ -61,7 +61,7 @@ vi.mock('../request-helper', () => ({
 }));
 
 vi.mock('./auth/auth', () => ({
-    GarminHealthAPIAuth: () => ({
+    GarminAPIAuth: () => ({
         authorize: vi.fn(),
         toHeader: vi.fn().mockReturnValue({}),
     })
@@ -101,7 +101,7 @@ vi.mock('firebase-admin', () => ({
 }));
 
 // Import SUT
-import { processGarminHealthAPIActivityQueueItem, insertGarminHealthAPIActivityFileToQueue } from './queue';
+import { processGarminAPIActivityQueueItem, insertGarminAPIActivityFileToQueue } from './queue';
 import { addToQueueForGarmin } from '../queue';
 
 describe('Garmin Queue', () => { // Grouping for cleaner output
@@ -127,7 +127,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
         mockRequestGet.mockResolvedValue(new ArrayBuffer(8));
     };
 
-    describe('insertGarminHealthAPIActivityFileToQueue', () => {
+    describe('insertGarminAPIActivityFileToQueue', () => {
         let req: any;
         let res: any;
 
@@ -152,7 +152,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
         });
 
         it('should correctly extract metadata and call addToQueueForGarmin', async () => {
-            await insertGarminHealthAPIActivityFileToQueue(req, res);
+            await insertGarminAPIActivityFileToQueue(req, res);
 
             expect(addToQueueForGarmin).toHaveBeenCalledWith({
                 userID: 'garmin-user-id',
@@ -168,7 +168,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
         });
     });
 
-    describe('processGarminHealthAPIActivityQueueItem', () => {
+    describe('processGarminAPIActivityQueueItem', () => {
         beforeEach(() => {
             setupMocks();
         });
@@ -201,11 +201,11 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
 
             // Execute
             mockIncreaseRetryCountForQueueItem.mockResolvedValue('RETRY_INCREMENTED');
-            const result = await processGarminHealthAPIActivityQueueItem(queueItem as any);
+            const result = await processGarminAPIActivityQueueItem(queueItem as any);
 
             // Verify
             expect(result).toBe('RETRY_INCREMENTED');
-            expect(mockCollection).toHaveBeenCalledWith('garminHealthAPITokens');
+            expect(mockCollection).toHaveBeenCalledWith('garminAPITokens');
             // Check that the token retrieval path was exercised
             // The chain is: collection -> doc -> collection -> limit -> get
             // We check if get was called (which is the terminal of our mocked chain)
@@ -236,7 +236,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
 
             // Execute
             mockMoveToDeadLetterQueue.mockResolvedValue('MOVED_TO_DLQ');
-            const result = await processGarminHealthAPIActivityQueueItem(queueItem as any);
+            const result = await processGarminAPIActivityQueueItem(queueItem as any);
 
             // Verify
             expect(result).toBe('MOVED_TO_DLQ');

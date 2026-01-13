@@ -64,7 +64,7 @@ import { enforceSubscriptionLimits } from './enforce-subscription-limits';
 import * as OAuth2 from '../OAuth2';
 
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
+import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
 
 describe('enforceSubscriptionLimits', () => {
     let deauthorizeServiceSpy: any;
@@ -124,7 +124,7 @@ describe('enforceSubscriptionLimits', () => {
         const futureDate = new Date(Date.now() + 100000);
 
         mockFirestoreInstance.collection.mockImplementation((path: string) => {
-            if (path === GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
+            if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
             return mockQuery([]);
         });
 
@@ -143,7 +143,7 @@ describe('enforceSubscriptionLimits', () => {
 
     it('should initialize grace period if missing (Fail-safe)', async () => {
         mockFirestoreInstance.collection.mockImplementation((path: string) => {
-            if (path === GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
+            if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
             return mockQuery([]);
         });
 
@@ -175,7 +175,7 @@ describe('enforceSubscriptionLimits', () => {
         const pastDate = new Date(Date.now() - 100000);
 
         mockFirestoreInstance.collection.mockImplementation((path: string) => {
-            if (path === GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
+            if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
             if (path.includes('subscriptions')) return mockQuery([]); // No active pros
             if (path.includes('events')) {
                 // Return 2 events to delete (12 total, limit 10)
@@ -201,7 +201,7 @@ describe('enforceSubscriptionLimits', () => {
         // Expect deauthorizeServiceForUser to be called for Suunto, COROS, and Garmin
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.SuuntoApp);
         expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.COROSAPI);
-        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.GarminHealthAPI);
+        expect(deauthorizeServiceSpy).toHaveBeenCalledWith('user1', ServiceNames.GarminAPI);
 
         expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', { stripeRole: 'free' });
 
@@ -213,7 +213,7 @@ describe('enforceSubscriptionLimits', () => {
         const pastDate = new Date(Date.now() - 100000);
 
         mockFirestoreInstance.collection.mockImplementation((path: string) => {
-            if (path === GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
+            if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }]);
             if (path.includes('subscriptions')) return mockQuery([]); // No active pros
             if (path.includes('events')) {
                 // Return exactly 10 events (Limit is 10)
