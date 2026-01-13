@@ -455,62 +455,63 @@ describe('OAuth2', () => {
             expect(mockCollection).toHaveBeenCalledWith('tokens');
         }, 10000);
 
-        it('should remove duplicates for Garmin using userID field', async () => {
+        it('should handle immutable token objects and fetch Garmin User ID correctly', async () => {
             const garminService = ServiceNames.GarminAPI;
             const garminUserId = 'garmin-user-123';
-
-            // Mock getServiceConfig to return Garmin config
-            // Note: In this test suite we are mocking imports, so we rely on the implementation 
-            // calling the config. We can check if it calls the correct duplicate query.
-
-            // We need to mock that the token exchange returns a user ID
-            const mockTokenResponse = {
-                token: {
-                    access_token: 'gt',
-                    refresh_token: 'gr',
-                    user: garminUserId, // User ID returned directly 
-                    expires_in: 3600
-                }
-            };
-
-            // We need to mock simple-oauth2 getToken to return this
-            // But verify side effects on the query.
+            const accessToken = 'garmin-access-token';
 
             // Reset mocks
             vi.clearAllMocks();
+
+            // Mock getServiceConfig to return GarminAPI config
+            // Note: Since AuthorizationCode is mocked globally, we can mock its prototype method
+            // or rely on the factory. Let's spy on the prototype to return our immutable token.
+            const immutableToken = Object.freeze({
+                token: Object.freeze({
+                    access_token: accessToken,
+                    refresh_token: 'gr',
+                    expires_in: 3600
+                    // Note: 'user' is MISSING here, simulating it coming from separate endpoint
+                })
+            });
+
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue(immutableToken as any);
+
+            // Mock the User ID fetch
+            (requestPromise.get as any).mockResolvedValue(JSON.stringify({ userId: garminUserId }));
+
+            // Mock Firestore interactions
             mockGet.mockResolvedValue({
-                empty: false,
-                size: 1,
-                docs: [{
-                    id: 'dup-token',
-                    ref: { parent: { parent: { id: 'other-user' } }, delete: mockDelete },
-                    data: () => ({ serviceName: ServiceNames.GarminAPI, userID: garminUserId })
-                }]
+                empty: true, // No duplicates for this test
+                size: 0,
+                docs: [],
+                data: () => ({}) // No code verifier stored
             });
             mockDelete.mockResolvedValue({});
 
-            // Mock getToken to return our garmin object
-            // We have to overwrite the class mock behavior for this test or rely on the fact 
-            // that getAndSet... calls oauth2Client.getToken()
+            // Execute
+            await getAndSetServiceOAuth2AccessTokenForUser(userID, garminService, redirectUri, code);
 
-            // Since we can't easily inject a new client, we just assume the default mock works 
-            // but we need to ensure the logic *inside* getAndSet uses the right field.
+            // Assertions
 
-            // Actually, we can spy on the collection group query construction.
-            // But query construction is chained.
+            // 1. Check if User ID was fetched
+            expect(requestPromise.get).toHaveBeenCalledWith(expect.objectContaining({
+                url: 'https://apis.garmin.com/wellness-api/rest/user/id',
+                headers: { Authorization: `Bearer ${accessToken}` }
+            }));
 
-            // Let's just run the function and assert that the query was built and executed.
-            // We need to mock the token response to include 'user' so it knows what ID to search for.
+            // 2. Check if token was saved with the CORRECT User ID as the document key
+            // .doc(userID).collection('tokens').doc(uniqueId).set(...)
+            expect(mockCollection).toHaveBeenCalledWith('tokens'); // Subcollection
+            expect(mockDoc).toHaveBeenCalledWith(garminUserId); // Validation that uniqueId was used
 
-            // Re-mock AuthorizationCode for this test? Hard with vi.mock hoisted.
-            // We can just trust the generic flow test covers the structure, 
-            // but we specifically want to verify the 'userID' where clause.
-
-            // We can't easily verify the 'where' arguments because 'mockCollection' returns 'mockCollectionInstance'
-            // and we didn't spy on 'where' with specific args in a way we can retrieve easily without a distinct spy.
-
-            // Let's rely on the fact that if we provide a token with 'user', 
-            // the code path for Garmin WILL attempt to find duplicates.
+            // 3. Verify convertAccessTokenResponseToServiceToken result structure (indirectly via set)
+            // We can spy on the set call
+            // Since mockDoc returns mockDocInstance, let's verify mockDocInstance.set
+            const setArg = (mockDocInstance.set as any).mock.calls[0][0];
+            expect(setArg.serviceName).toBe(garminService);
+            expect(setArg.userID).toBe(garminUserId); // Critical check: User ID inserted into token object
         });
     });
 });
