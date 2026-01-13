@@ -76,6 +76,12 @@ const routes: Routes = [
     canMatch: [authGuard, onboardingGuard],
   },
   {
+    path: 'user/:userID/event/:eventID',
+    loadChildren: () => import('./modules/event.module').then(module => module.EventModule),
+    data: { title: 'Event Details', animation: 'Event' },
+    canMatch: [authGuard, onboardingGuard]
+  },
+  {
     path: 'policies',
     loadChildren: () => import('./modules/policies.module').then(module => module.PoliciesModule),
     data: { title: 'Policies', animation: 'Policies' }
