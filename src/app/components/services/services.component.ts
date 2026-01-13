@@ -32,6 +32,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public isAdmin = false;
 
   private userSubscription!: Subscription;
+  private routeSubscription!: Subscription;
 
   constructor(private http: HttpClient, private fileService: AppFileService,
     private eventService: AppEventService,
@@ -72,6 +73,37 @@ export class ServicesComponent implements OnInit, OnDestroy {
         this.processUser(user, isPro);
       }
     }));
+
+    this.routeSubscription = this.route.queryParamMap.subscribe(params => {
+      const serviceNameParam = params.get('serviceName');
+      if (serviceNameParam === ServiceNames.GarminAPI) {
+        this.activeSection = 'garmin';
+      } else if (serviceNameParam === ServiceNames.COROSAPI) {
+        this.activeSection = 'coros';
+      } else {
+        this.activeSection = 'suunto';
+      }
+    });
+  }
+
+  async selectService(section: 'suunto' | 'garmin' | 'coros') {
+    let serviceName: string;
+    switch (section) {
+      case 'garmin':
+        serviceName = ServiceNames.GarminAPI;
+        break;
+      case 'coros':
+        serviceName = ServiceNames.COROSAPI;
+        break;
+      default:
+        serviceName = ServiceNames.SuuntoApp;
+        break;
+    }
+    await this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { serviceName: serviceName },
+      queryParamsHandling: 'merge',
+    });
   }
 
   processUser(user: User | null, isPro: boolean) {
@@ -94,6 +126,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
     this.hasProAccess = isPro;
 
+    // Initial check from snapshot if not already set by subscription
     const serviceNameParam = this.route.snapshot.queryParamMap.get('serviceName');
     if (serviceNameParam === ServiceNames.GarminAPI) {
       this.activeSection = 'garmin';
@@ -108,6 +141,9 @@ export class ServicesComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.userSubscription) {
       this.userSubscription.unsubscribe();
+    }
+    if (this.routeSubscription) {
+      this.routeSubscription.unsubscribe();
     }
   }
 }
