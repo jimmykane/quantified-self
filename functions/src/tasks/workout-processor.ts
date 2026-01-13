@@ -58,6 +58,7 @@ export const processWorkoutTask = onTaskDispatched({
                 break;
             case QueueResult.Failed:
                 logger.error(`[TaskWorker] Fatal failure updating state for ${serviceName} item: ${queueItemId}`);
+                throw new Error(`Fatal failure updating state for ${serviceName} item: ${queueItemId}`);
                 break;
             default:
                 logger.warn(`[TaskWorker] Unexpected result for ${serviceName} item: ${queueItemId}: ${result}`);
