@@ -58,7 +58,7 @@ vi.mock('../../utils', () => ({
     setAccessControlHeadersOnResponse: vi.fn().mockImplementation((req, res) => res),
     getUserIDFromFirebaseToken: vi.fn(),
     isProUser: vi.fn(),
-    determineRedirectURI: vi.fn(),
+    determineRedirectURI: vi.fn((req) => req.body?.redirectUri || req.query?.redirect_uri),
     PRO_REQUIRED_MESSAGE: 'Service sync is a Pro feature.',
 }));
 
@@ -127,14 +127,14 @@ describe('Garmin Auth Wrapper', () => {
 
     describe('requestAndSetGarminAPIAccessToken', () => {
         it('should exchange tokens if state is valid', async () => {
-            req.body = { state: 'validState', code: 'validCode', redirectUri: 'https://cb' };
+            req.body = { state: 'validState', code: 'validCode', redirectUri: 'https://callback' };
             vi.mocked(OAuth2.validateOAuth2State).mockResolvedValue(true);
             vi.mocked(OAuth2.getAndSetServiceOAuth2AccessTokenForUser).mockResolvedValue(undefined);
 
             await requestAndSetGarminAPIAccessToken(req, res);
 
             expect(OAuth2.validateOAuth2State).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'validState');
-            expect(OAuth2.getAndSetServiceOAuth2AccessTokenForUser).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'https://cb', 'validCode');
+            expect(OAuth2.getAndSetServiceOAuth2AccessTokenForUser).toHaveBeenCalledWith('testUserID', ServiceNames.GarminAPI, 'https://callback', 'validCode');
             expect(res.send).toHaveBeenCalled();
         });
 

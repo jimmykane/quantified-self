@@ -533,7 +533,8 @@ export class AppUserService implements OnDestroy {
     return this.http.post(
       environment.functions.requestAndSetGarminAPIAccessToken, {
       state: state,
-      code: code
+      code: code,
+      redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.GarminAPI}&connect=1`)
     },
       {
         headers:

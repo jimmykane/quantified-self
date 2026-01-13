@@ -17,6 +17,7 @@ vi.mock('../../utils', () => ({
     setAccessControlHeadersOnResponse: vi.fn(),
     getUserIDFromFirebaseToken: vi.fn().mockResolvedValue('testUserID'),
     isProUser: vi.fn().mockResolvedValue(true),
+    determineRedirectURI: vi.fn((req) => req.body?.redirectUri || req.query?.redirect_uri),
     PRO_REQUIRED_MESSAGE: 'Service sync is a Pro feature.'
 }));
 

@@ -92,7 +92,7 @@ export const requestAndSetGarminAPIAccessToken = functions.region('europe-west2'
 
   const code = req.body.code;
   const state = req.body.state;
-  const redirectUri = req.body.redirectUri;
+  const redirectUri = determineRedirectURI(req);
 
   if (!code || !state || !redirectUri) {
     logger.error('Missing code, state, or redirectUri');
