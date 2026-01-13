@@ -255,6 +255,26 @@ describe('tokens', () => {
             expect(updateArg.expiresAt).toBe(mockExpiresAt.getTime() - 600000);
         });
 
+        it('should include permissions in the returned Garmin token data', async () => {
+            const permissions = ['ACTIVITY_EXPORT', 'HEALTH_EXPORT'];
+            mockDoc.data.mockReturnValue({
+                accessToken: 'old-garmin',
+                refreshToken: 'old-garmin-refresh',
+                expiresAt: Date.now() + 3600000,
+                serviceName: ServiceNames.GarminAPI,
+                userID: 'garmin-user-id',
+                permissions: permissions,
+                dateCreated: 1000,
+                dateRefreshed: 1000,
+            });
+
+            mockToken.expired.mockReturnValue(false);
+
+            const result: any = await getTokenData(mockDoc, ServiceNames.GarminAPI, false);
+
+            expect(result.permissions).toEqual(permissions);
+        });
+
         it('should handle COROS token refresh', async () => {
             mockDoc.data.mockReturnValue({
                 accessToken: 'old-coros',

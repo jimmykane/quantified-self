@@ -80,6 +80,7 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
           scope: serviceTokenData.scope,
           tokenType: serviceTokenData.tokenType,
           userID: (serviceTokenData as any).userID,
+          permissions: (serviceTokenData as any).permissions, // Expose permissions
           dateRefreshed: serviceTokenData.dateRefreshed,
           dateCreated: serviceTokenData.dateCreated,
         };
@@ -149,6 +150,7 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
         scope: responseToken.token.scope,
         tokenType: responseToken.token.token_type,
         userID: (serviceTokenData as any).userID, // Preserve User ID
+        permissions: (serviceTokenData as any).permissions, // Preserve persist permissions
         dateRefreshed: date.getTime(),
         dateCreated: serviceTokenData.dateCreated,
       };

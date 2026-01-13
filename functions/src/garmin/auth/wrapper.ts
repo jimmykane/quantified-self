@@ -233,10 +233,36 @@ export const receiveGarminAPIUserPermissions = functions.region('europe-west2').
     // If permissions array is empty, user has revoked all data sharing (but token still valid)
     logger.info(`Garmin User ${garminUserId} permission change at ${changeTimeInSeconds}: ${JSON.stringify(permissions)}`);
 
-    // NOTE: We don't deauthorize here because the token is still valid.
-    // The user has simply opted out of certain data types.
-    // If all permissions are revoked, data will stop flowing, but we keep the connection.
-    // If the user wants to fully disconnect, they would use the deregistration flow.
+    try {
+      // Find the Firebase User(s) holding this Garmin connection
+      const tokenQuerySnapshot = await admin.firestore()
+        .collectionGroup('tokens')
+        .where('userID', '==', garminUserId)
+        .where('serviceName', '==', ServiceNames.GarminAPI)
+        .get();
+
+      if (tokenQuerySnapshot.empty) {
+        logger.warn(`No active session found for Garmin User ID ${garminUserId} to update permissions`);
+        continue;
+      }
+
+      const batch = admin.firestore().batch();
+      let updateCount = 0;
+
+      for (const tokenDoc of tokenQuerySnapshot.docs) {
+        batch.update(tokenDoc.ref, {
+          permissions: permissions,
+        });
+        updateCount++;
+      }
+
+      if (updateCount > 0) {
+        await batch.commit();
+        logger.info(`Updated permissions for ${updateCount} tokens for Garmin User ${garminUserId}`);
+      }
+    } catch (e: any) {
+      logger.error(`Error processing permission change for ${garminUserId}`, e);
+    }
   }
 
   res.status(200).send();

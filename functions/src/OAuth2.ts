@@ -17,6 +17,7 @@ import {
 
 export interface GarminAPIAuth2ServiceTokenInterface extends Auth2ServiceTokenInterface {
   userID: string;
+  permissions?: string[];
 }
 import { getTokenData } from './tokens';
 import * as requestPromise from './request-helper';

@@ -27,6 +27,12 @@ mockDoc.mockReturnValue(mockDocInstance);
 mockCollection.mockReturnValue(mockCollectionInstance);
 
 const mockCollectionGroup = vi.fn().mockReturnThis();
+const mockBatchUpdate = vi.fn();
+const mockBatchCommit = vi.fn().mockResolvedValue([]);
+const mockBatch = {
+    update: mockBatchUpdate,
+    commit: mockBatchCommit
+};
 
 // Mock firebase-admin
 vi.mock('firebase-admin', () => {
@@ -34,6 +40,7 @@ vi.mock('firebase-admin', () => {
         firestore: vi.fn(() => ({
             collection: mockCollection,
             collectionGroup: mockCollectionGroup,
+            batch: vi.fn().mockReturnValue(mockBatch)
         })),
     };
 });
@@ -227,24 +234,56 @@ describe('Garmin Auth Wrapper', () => {
     });
 
     describe('receiveGarminAPIUserPermissions', () => {
-        it('should process valid permission change payload', async () => {
+        it('should process valid permission change payload and update token', async () => {
             const { receiveGarminAPIUserPermissions } = await import('./wrapper');
 
+            const permissions = ['ACTIVITY_EXPORT', 'HEALTH_EXPORT'];
             req.body = {
                 userPermissionsChange: [{
                     userId: 'garminUser456',
-                    permissions: ['ACTIVITY_EXPORT', 'HEALTH_EXPORT'],
+                    permissions: permissions,
                     summaryId: 'x120d383-60256e84',
                     changeTimeInSeconds: 1613065860
                 }]
             };
 
+            // Mock Collection Group Query
+            const mockTokenDoc = {
+                ref: {
+                    parent: {
+                        parent: {
+                            id: 'firebaseUserXYZ'
+                        }
+                    }
+                }
+            };
+
+            const mockQuerySnapshot = {
+                empty: false,
+                docs: [mockTokenDoc]
+            };
+
+            const mockWhere = vi.fn().mockReturnThis();
+            mockCollectionGroup.mockReturnValue({
+                where: mockWhere,
+                get: vi.fn().mockResolvedValue(mockQuerySnapshot)
+            });
+            mockWhere.mockReturnValue({ where: mockWhere, get: vi.fn().mockResolvedValue(mockQuerySnapshot) });
+
             await receiveGarminAPIUserPermissions(req, res);
 
-            // Should return 200 (just logs, doesn't deauthorize)
+            // Verify logic
+            // 1. collectionGroup called to find token
+            expect(mockCollectionGroup).toHaveBeenCalledWith('tokens');
+            expect(mockWhere).toHaveBeenCalledWith('userID', '==', 'garminUser456');
+            expect(mockWhere).toHaveBeenCalledWith('serviceName', '==', ServiceNames.GarminAPI);
+
+            // 2. batch update called
+            expect(mockBatchUpdate).toHaveBeenCalledWith(mockTokenDoc.ref, { permissions: permissions });
+            expect(mockBatchCommit).toHaveBeenCalled();
+
+            // Should return 200
             expect(res.status).toHaveBeenCalledWith(200);
-            // Deauthorize should NOT be called (permissions change doesn't mean disconnect)
-            expect(OAuth2.deauthorizeServiceForUser).not.toHaveBeenCalled();
         });
 
         it('should handle invalid payload gracefully', async () => {
@@ -269,7 +308,7 @@ describe('Garmin Auth Wrapper', () => {
             expect(res.send).toHaveBeenCalledWith('Method Not Allowed');
         });
 
-        it('should handle empty permissions array (user revoked all)', async () => {
+        it('should handle empty permissions array (user revoked all) by updating token', async () => {
             const { receiveGarminAPIUserPermissions } = await import('./wrapper');
 
             req.body = {
@@ -280,11 +319,26 @@ describe('Garmin Auth Wrapper', () => {
                 }]
             };
 
+            const mockTokenDoc = { ref: { path: 'tokens/doc1' } };
+            const mockQuerySnapshot = {
+                empty: false,
+                docs: [mockTokenDoc]
+            };
+            const mockWhere = vi.fn().mockReturnThis();
+            mockCollectionGroup.mockReturnValue({
+                where: mockWhere,
+                get: vi.fn().mockResolvedValue(mockQuerySnapshot)
+            });
+            mockWhere.mockReturnValue({ where: mockWhere, get: vi.fn().mockResolvedValue(mockQuerySnapshot) });
+
+
             await receiveGarminAPIUserPermissions(req, res);
 
-            // Should return 200 (logs empty permissions, but doesn't deauthorize)
+            // Should return 200
             expect(res.status).toHaveBeenCalledWith(200);
-            expect(OAuth2.deauthorizeServiceForUser).not.toHaveBeenCalled();
+            // Verify batch update with empty permissions
+            expect(mockBatchUpdate).toHaveBeenCalledWith(mockTokenDoc.ref, { permissions: [] });
+            expect(mockBatchCommit).toHaveBeenCalled();
         });
     });
 });
