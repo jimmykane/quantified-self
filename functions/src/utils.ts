@@ -61,7 +61,10 @@ export async function getUserIDFromFirebaseToken(req: Request): Promise<string |
 }
 
 export function determineRedirectURI(req: Request): string {
-  return String(req.query.redirect_uri); // @todo should check for authorized redirects as well
+  // For POST requests, check body first (frontend sends redirectUri in body)
+  // For GET requests, check query params
+  const redirectUri = req.body?.redirectUri || req.query.redirect_uri;
+  return redirectUri ? String(redirectUri) : '';
 }
 
 export function setAccessControlHeadersOnResponse(req: Request, res: Response) {

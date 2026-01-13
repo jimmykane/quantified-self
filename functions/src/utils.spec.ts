@@ -222,15 +222,16 @@ describe('utils', () => {
             const mockReq = {
                 query: {},
             } as unknown as Parameters<typeof determineRedirectURI>[0];
-            // Should return 'undefined' as a string since it uses String()
-            expect(determineRedirectURI(mockReq)).toBe('undefined');
+            // Should return empty string when redirect_uri is not provided
+            expect(determineRedirectURI(mockReq)).toBe('');
         });
 
         it('should handle null redirect_uri', () => {
             const mockReq = {
                 query: { redirect_uri: null },
             } as unknown as Parameters<typeof determineRedirectURI>[0];
-            expect(determineRedirectURI(mockReq)).toBe('null');
+            // Should return empty string when redirect_uri is null
+            expect(determineRedirectURI(mockReq)).toBe('');
         });
 
         it('should handle empty string redirect_uri', () => {
