@@ -54,14 +54,15 @@ export const processWorkoutTask = onTaskDispatched({
                 logger.warn(`[TaskWorker] Item ${queueItemId} for ${serviceName} was moved to DLQ (failed_jobs).`);
                 break;
             case QueueResult.RetryIncremented:
-                logger.info(`[TaskWorker] Item ${queueItemId} for ${serviceName} failed and retry count was incremented.`);
-                break;
+                logger.warn(`[TaskWorker] Item ${queueItemId} for ${serviceName} failed and retry count was incremented.`);
+                throw new Error(`Item ${queueItemId} failed and was scheduled for retry.`);
             case QueueResult.Failed:
                 logger.error(`[TaskWorker] Fatal failure updating state for ${serviceName} item: ${queueItemId}`);
                 throw new Error(`Fatal failure updating state for ${serviceName} item: ${queueItemId}`);
 
             default:
-                logger.warn(`[TaskWorker] Unexpected result for ${serviceName} item: ${queueItemId}: ${result}`);
+                logger.error(`[TaskWorker] Unexpected result for ${serviceName} item: ${queueItemId}: ${result}`);
+                throw new Error(`Unexpected result for ${queueItemId}: ${result}`);
         }
 
     } catch (error) {
