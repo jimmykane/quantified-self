@@ -107,7 +107,7 @@ export function getServiceConfig(serviceName: ServiceNames, refresh = false): Se
     case ServiceNames.GarminAPI:
       return {
         oauth2Client: GarminAPIAuth(refresh),
-        oAuthScopes: 'workout',
+        oAuthScopes: 'PARTNER_WRITE PARTNER_READ CONNECT_READ CONNECT_WRITE',
         tokenCollectionName: GARMIN_API_TOKENS_COLLECTION_NAME,
       };
   }
@@ -395,6 +395,6 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
 
 export interface ServiceConfig {
   oauth2Client: AuthorizationCode,
-  oAuthScopes: 'workout',
+  oAuthScopes: string,
   tokenCollectionName: typeof SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME | typeof COROSAPI_ACCESS_TOKENS_COLLECTION_NAME | typeof GARMIN_API_TOKENS_COLLECTION_NAME
 }
