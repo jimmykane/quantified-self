@@ -1,0 +1,210 @@
+<div class="dashboard-section">
+    <div class="section-title">
+        <h2>
+            <mat-icon>dns</mat-icon>
+            Queue Status & Health
+        </h2>
+    </div>
+
+    <!-- Queue Stats -->
+    <div class="stats-grid">
+        <div class="glass-card app-stat-card status-pending">
+            <div class="app-stat-header">
+                <mat-icon>hourglass_empty</mat-icon>
+                <span>Pending (DB)</span>
+            </div>
+            <div class="app-stat-value" *ngIf="!loading">{{ stats?.pending ?? 0 }}</div>
+            <div class="app-spinner-mini" *ngIf="loading">
+                <mat-spinner diameter="24"></mat-spinner>
+            </div>
+            <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">waiting in Firestore</span>
+        </div>
+        <div class="glass-card app-stat-card status-info"
+            matTooltip="Tasks currently in flight or scheduled in the Google Cloud Tasks service.">
+            <div class="app-stat-header">
+                <mat-icon>flight_takeoff</mat-icon>
+                <span>Cloud Tasks</span>
+            </div>
+            <div class="app-stat-value" *ngIf="!loading">{{ stats?.cloudTasks?.pending ?? 0 }}</div>
+            <div class="app-spinner-mini" *ngIf="loading">
+                <mat-spinner diameter="24"></mat-spinner>
+            </div>
+            <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">active/scheduled in GCP</span>
+        </div>
+        <div class="glass-card app-stat-card status-success">
+            <div class="app-stat-header">
+                <mat-icon>check_circle</mat-icon>
+                <span>Succeeded</span>
+            </div>
+            <div class="app-stat-value" *ngIf="!loading">{{ stats?.succeeded ?? 0 }}</div>
+            <div class="app-spinner-mini" *ngIf="loading">
+                <mat-spinner diameter="24"></mat-spinner>
+            </div>
+        </div>
+        <div class="glass-card app-stat-card status-error">
+            <div class="app-stat-header">
+                <mat-icon>error</mat-icon>
+                <span>Stuck</span>
+            </div>
+            <div class="app-stat-value" *ngIf="!loading">{{ stats?.stuck ?? 0 }}</div>
+            <div class="app-spinner-mini" *ngIf="loading">
+                <mat-spinner diameter="24"></mat-spinner>
+            </div>
+        </div>
+        <!-- DLQ inline with status cards -->
+        <div class="glass-card app-stat-card status-dlq" *ngIf="stats?.dlq" style="background: rgba(244, 67, 54, 0.1);">
+            <div class="app-stat-header">
+                <mat-icon style="color: #f44336;">error_outline</mat-icon>
+                <span style="color: #f44336;">Dead Letter Queue</span>
+            </div>
+            <div class="app-stat-value" *ngIf="!loading" style="color: #f44336;">{{ stats?.dlq?.total ?? 0 }}</div>
+            <div class="app-spinner-mini" *ngIf="loading">
+                <mat-spinner diameter="24"></mat-spinner>
+            </div>
+        </div>
+    </div>
+
+    <!-- Advanced Stats -->
+    <div class="stats-grid" *ngIf="stats?.advanced">
+        <!-- Throughput -->
+        <div class="glass-card app-stat-card status-success">
+            <div class="app-stat-header">
+                <mat-icon>speed</mat-icon>
+                <span>Throughput (1h)</span>
+            </div>
+            <div class="app-stat-value">{{ stats?.advanced?.throughput ?? 0 }}</div>
+            <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">items processed</span>
+        </div>
+
+        <!-- Max Lag -->
+        <div class="glass-card app-stat-card status-pending">
+            <div class="app-stat-header">
+                <mat-icon>update</mat-icon>
+                <span>Max Lag</span>
+            </div>
+            <div class="app-stat-value">{{ formatDuration(stats?.advanced?.maxLagMs || 0) }}</div>
+            <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">oldest pending</span>
+        </div>
+    </div>
+
+    <!-- Queue Status & Charts Grid -->
+    <div
+        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; margin-bottom: 24px;">
+        <!-- Retry Distribution Chart -->
+        <div class="glass-card" style="margin-bottom: 0;">
+            <h3 class="chart-header">Retry Distribution (Pending Items)</h3>
+
+            <div class="spinner-container" *ngIf="loading" style="height: 180px; justify-content: center;">
+                <mat-spinner diameter="40"></mat-spinner>
+            </div>
+
+            <div class="chart-wrapper" *ngIf="!loading && stats?.advanced?.retryHistogram" style="height: 220px;">
+                <canvas baseChart [data]="barChartData" [options]="barChartOptions" [plugins]="barChartPlugins"
+                    [legend]="barChartLegend" [type]="'bar'">
+                </canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- DLQ Breakdown -->
+    <div class="glass-card table-container" *ngIf="stats?.dlq?.total" style="margin-bottom: 24px;">
+        <h3 class="card-title">Recent Failures Analysis (Last 50)</h3>
+        <div class="failures-analysis-container">
+
+            <!-- By Context -->
+            <div class="analysis-column">
+                <h4 class="subsection-title">By Reason</h4>
+                <div *ngFor="let item of stats?.dlq?.byContext" class="analysis-item">
+                    <span class="analysis-label">{{ item.context }}</span>
+                    <span class="status-badge disabled">{{ item.count }}</span>
+                </div>
+            </div>
+
+            <!-- By Collection -->
+            <div class="analysis-column">
+                <h4 class="subsection-title">By Queue</h4>
+                <div *ngFor="let item of stats?.dlq?.byProvider" class="analysis-item">
+                    <span class="analysis-label-sm">{{ item.provider }}</span>
+                    <span class="status-badge disabled">{{ item.count }}</span>
+                </div>
+            </div>
+
+            <!-- Top Errors -->
+            <div class="analysis-column">
+                <h4 class="subsection-title">Top Errors</h4>
+                <div *ngFor="let item of stats?.advanced?.topErrors" class="analysis-item">
+                    <span class="analysis-error-text" [matTooltip]="item.error">{{ item.error }}</span>
+                    <span class="status-badge disabled" style="flex-shrink: 0; margin-left: 8px;">{{ item.count
+                        }}</span>
+                </div>
+                <div *ngIf="!stats?.advanced?.topErrors?.length" class="empty-state">
+                    No errors recorded
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Provider Queue Status -->
+    <div class="glass-card table-container" *ngIf="stats?.providers?.length" style="margin-bottom: 0;">
+        <h3 class="card-title">Provider Queue Status</h3>
+        <div class="table-wrapper">
+            <table mat-table [dataSource]="stats?.providers || []">
+                <!-- Provider Column -->
+                <ng-container matColumnDef="provider">
+                    <th mat-header-cell *matHeaderCellDef> Provider </th>
+                    <td mat-cell *matCellDef="let stat">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <img [src]="getServiceLogo(stat.name)" [alt]="stat.name" style="height: 24px; width: 24px;">
+                            <span style="font-weight: 500;">{{ stat.name }}</span>
+                        </div>
+                    </td>
+                </ng-container>
+
+                <!-- Pending Column -->
+                <ng-container matColumnDef="pending">
+                    <th mat-header-cell *matHeaderCellDef> Pending </th>
+                    <td mat-cell *matCellDef="let stat">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="status-dot" [class.active]="stat.pending > 0"></span>
+                            {{ stat.pending }}
+                        </div>
+                    </td>
+                </ng-container>
+
+                <!-- Succeeded Column -->
+                <ng-container matColumnDef="succeeded">
+                    <th mat-header-cell *matHeaderCellDef> Succeeded </th>
+                    <td mat-cell *matCellDef="let stat" style="color: #4caf50;"> {{ stat.succeeded }} </td>
+                </ng-container>
+
+                <!-- Stuck Column -->
+                <ng-container matColumnDef="stuck">
+                    <th mat-header-cell *matHeaderCellDef matTooltip="Items stuck in queue (retries >= 10)"> Stuck
+                    </th>
+                    <td mat-cell *matCellDef="let stat">
+                        <span [style.color]="stat.stuck > 0 ? '#ff9800' : 'inherit'"
+                            [style.fontWeight]="stat.stuck > 0 ? '500' : 'normal'">
+                            {{ stat.stuck }}
+                        </span>
+                    </td>
+                </ng-container>
+
+                <!-- Dead Column -->
+                <ng-container matColumnDef="dead">
+                    <th mat-header-cell *matHeaderCellDef matTooltip="Failed jobs in Dead Letter Queue"> Dead
+                    </th>
+                    <td mat-cell *matCellDef="let stat">
+                        <span [style.color]="stat.dead > 0 ? '#f44336' : 'inherit'"
+                            [style.fontWeight]="stat.dead > 0 ? '500' : 'normal'">
+                            {{ stat.dead }}
+                        </span>
+                    </td>
+                </ng-container>
+
+                <tr mat-header-row *matHeaderRowDef="['provider', 'pending', 'succeeded', 'stuck', 'dead']"></tr>
+                <tr mat-row *matRowDef="let row; columns: ['provider', 'pending', 'succeeded', 'stuck', 'dead'];">
+                </tr>
+            </table>
+        </div>
+    </div>
+</div>

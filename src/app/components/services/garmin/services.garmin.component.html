@@ -10,13 +10,18 @@
   <div class="features-grid">
 
     <!-- Connectivity Card (Now inside Pro Grid) -->
-    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess && !isConnectedToService()"
-      [class.unlocked]="hasProAccess || isConnectedToService()"
+    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess || !isAdmin"
+      [class.coming-soon]="hasProAccess && !isAdmin" [class.unlocked]="hasProAccess && isAdmin"
       (click)="!hasProAccess && !isConnectedToService() && triggerUpsell()">
       @if (!hasProAccess && !isConnectedToService()) {
       <div class="lock-overlay">
         <mat-icon class="lock-icon-large">lock</mat-icon>
         <span class="pro-badge">PRO</span>
+      </div>
+      } @else if (!isAdmin && !isConnectedToService()) {
+      <div class="lock-overlay coming-soon-overlay">
+        <mat-icon class="lock-icon-large">schedule</mat-icon>
+        <span class="pro-badge">COMING SOON</span>
       </div>
       }
       <mat-card-header>
@@ -43,7 +48,7 @@
         <div style="margin-top: auto; padding-top: 16px;">
           @if (!isConnectedToService()) {
           <button mat-flat-button color="primary" style="width: 100%"
-            [disabled]="!user || this.isGuest || isLoading || isConnecting || !hasProAccess"
+            [disabled]="!user || this.isGuest || isLoading || isConnecting || !hasProAccess || !isAdmin"
             (click)="connectWithService($event)">
             @if (isConnecting) {
             <ng-container>
@@ -117,4 +122,3 @@
 
   </div>
 </div>
-<app-shade [isActive]="isLoading"></app-shade>

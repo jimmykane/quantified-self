@@ -75,7 +75,10 @@ export async function increaseRetryCountForQueueItem(queueItem: QueueItemInterfa
     try {
         const ref = queueItem.ref;
         queueItem.ref = undefined;
-        const updateData = JSON.parse(JSON.stringify(queueItem));
+        // Reset dispatchedToCloudTask to null so the dispatcher can pick it up again
+        const updateData = Object.assign(JSON.parse(JSON.stringify(queueItem)), {
+            dispatchedToCloudTask: null
+        });
         if (bulkWriter) {
             void bulkWriter.update(ref, updateData);
         } else {

@@ -70,7 +70,7 @@ describe('AppAuthService', () => {
                 AppAuthService,
                 { provide: Auth, useValue: mockAuth },
                 { provide: Firestore, useValue: mockFirestore },
-                { provide: Analytics, useValue: mockAnalytics },
+                { provide: Analytics, useValue: null },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: MatSnackBar, useValue: mockSnackBar },
                 { provide: LocalStorageService, useValue: mockLocalStorageService },

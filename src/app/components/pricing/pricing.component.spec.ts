@@ -78,7 +78,7 @@ describe('PricingComponent', () => {
                 },
                 {
                     provide: Analytics,
-                    useValue: {}
+                    useValue: null
                 }
             ]
         }).compileComponents();

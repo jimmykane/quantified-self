@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
+import { MAX_PENDING_TASKS, DISPATCH_SPREAD_SECONDS } from './shared/queue-config';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
 // Mock firebase-functions first (needed by auth modules at load time)
@@ -118,6 +119,16 @@ vi.mock('./request-helper', () => ({
     get: vi.fn(),
 }));
 
+// Mock utils
+vi.mock('./utils', () => ({
+    generateIDFromParts: vi.fn((parts) => parts.join('-')),
+    setEvent: vi.fn(),
+    UsageLimitExceededError: class extends Error { },
+    UserNotFoundError: class extends Error { },
+    enqueueWorkoutTask: vi.fn(),
+    getCloudTaskQueueDepth: vi.fn().mockResolvedValue(0),
+}));
+
 // Import after mocks are set up
 import { increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue } from './queue-utils';
 import {
@@ -144,6 +155,7 @@ describe('queue', () => {
                 retryCount: 0,
                 processed: false,
                 dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
             };
 
             await increaseRetryCountForQueueItem(queueItem, new Error('Test error'));
@@ -171,6 +183,7 @@ describe('queue', () => {
                 retryCount: 0,
                 processed: false,
                 dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
             };
 
             // 10 is max retry count
@@ -198,6 +211,7 @@ describe('queue', () => {
                 errors: [{ error: 'Previous error', atRetryCount: 1, date: Date.now() - 1000 }],
                 processed: false,
                 dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
             };
 
             await increaseRetryCountForQueueItem(queueItem, new Error('New error'));
@@ -212,6 +226,7 @@ describe('queue', () => {
                 retryCount: 0,
                 processed: false,
                 dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
             };
 
             await expect(
@@ -229,6 +244,7 @@ describe('queue', () => {
                 retryCount: 0,
                 processed: false,
                 dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
             };
 
             await increaseRetryCountForQueueItem(queueItem, new Error('Test'));
@@ -236,6 +252,7 @@ describe('queue', () => {
             expect(mockUpdate).toHaveBeenCalled();
             const updateArg = (mockUpdate.mock.calls[0] as any[])[0];
             expect(updateArg.retryCount).toBe(1);
+            expect(updateArg.dispatchedToCloudTask).toBeNull();
             expect(updateArg.ref).toBeUndefined(); // ref should be stripped
         });
     });
@@ -251,6 +268,7 @@ describe('queue', () => {
                 retryCount: 0,
                 processed: false,
                 dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
             };
 
             await updateToProcessed(queueItem);
@@ -269,6 +287,7 @@ describe('queue', () => {
                 retryCount: 0,
                 processed: false,
                 dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
             };
 
             await expect(
@@ -296,6 +315,7 @@ describe('queue', () => {
                 retryCount: 9,
                 processed: false,
                 dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
             };
 
             await moveToDeadLetterQueue(queueItem, new Error('Fatal error'));
@@ -318,6 +338,242 @@ describe('queue', () => {
             );
             expect(batch.delete).toHaveBeenCalledWith(mockRef);
             expect(batch.commit).toHaveBeenCalled();
+        });
+    });
+
+    describe('dispatchQueueItemTasks', () => {
+        it('should skip dispatch if queue is full', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(MAX_PENDING_TASKS); // Max pending
+            const { dispatchQueueItemTasks } = await import('./queue');
+
+            await dispatchQueueItemTasks(ServiceNames.GarminHealthAPI);
+
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('should dispatch available slots when queue is partially full', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(MAX_PENDING_TASKS - 2); // 2 slots available
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            // Mock query results
+            const mockDoc1 = { id: 'doc1', ref: { update: vi.fn(), parent: { id: 'col' }, id: 'doc1' }, data: () => ({ dateCreated: Date.now() }) };
+            const mockDoc2 = { id: 'doc2', ref: { update: vi.fn(), parent: { id: 'col' }, id: 'doc2' }, data: () => ({ dateCreated: Date.now() }) };
+
+            const firestore = admin.firestore();
+            const collection = firestore.collection('any');
+            // We need to spy on the chain: collection -> where -> where -> where -> limit -> get
+            // The global mock implementation of `limit` returns `mockCollection`, and `get` returns docs.
+            // We can override the return value of `get`
+            vi.mocked(collection.get).mockResolvedValue({
+                docs: [mockDoc1, mockDoc2] as any,
+                size: 2,
+                empty: false,
+                query: {} as any,
+                forEach: vi.fn(),
+                docChanges: vi.fn(),
+                readTime: {} as any,
+                isEqual: vi.fn(),
+            });
+
+            await dispatchQueueItemTasks(ServiceNames.GarminHealthAPI);
+
+            expect(utils.getCloudTaskQueueDepth).toHaveBeenCalledWith(true);
+            // Verify limit was called with batch size
+            expect(collection.limit).toHaveBeenCalledWith(2);
+
+            // Verify enqueue called for both
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(2);
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminHealthAPI, 'doc1', expect.any(Number), expect.any(Number));
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledWith(ServiceNames.GarminHealthAPI, 'doc2', expect.any(Number), expect.any(Number));
+
+            // Verify dispatchedToCloudTask update
+            expect(mockDoc1.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+            expect(mockDoc2.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+        });
+
+        it('should apply staggered delay to dispatched tasks', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            const mockDocs = [
+                { id: '1', ref: { update: vi.fn() }, data: () => ({ dateCreated: Date.now() }) },
+                { id: '2', ref: { update: vi.fn() }, data: () => ({ dateCreated: Date.now() }) },
+                { id: '3', ref: { update: vi.fn() }, data: () => ({ dateCreated: Date.now() }) }
+            ];
+
+            const firestore = admin.firestore();
+            const delayPerItem = Math.floor(DISPATCH_SPREAD_SECONDS / mockDocs.length);
+
+            vi.mocked(firestore.collection('any').get).mockResolvedValue({
+                docs: mockDocs as any,
+                size: 3,
+                empty: false,
+                isEqual: vi.fn(), // Fix TS error
+            } as any);
+
+            await dispatchQueueItemTasks(ServiceNames.GarminHealthAPI);
+
+            expect(utils.getCloudTaskQueueDepth).toHaveBeenCalledWith(true);
+            // Expected spread: Total 1800s. Size 3. Delay per item = 600s.
+            // Items: 0, 600, 1200
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(1, ServiceNames.GarminHealthAPI, '1', expect.any(Number), 0);
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(2, ServiceNames.GarminHealthAPI, '2', expect.any(Number), delayPerItem);
+            expect(utils.enqueueWorkoutTask).toHaveBeenNthCalledWith(3, ServiceNames.GarminHealthAPI, '3', expect.any(Number), delayPerItem * 2);
+        });
+
+        it('should do nothing if no items found', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            const firestore = admin.firestore();
+            vi.mocked(firestore.collection('any').get).mockResolvedValue({
+                docs: [],
+                size: 0,
+                empty: true,
+                isEqual: vi.fn(), // Fix TS error
+            } as any);
+
+            await dispatchQueueItemTasks(ServiceNames.GarminHealthAPI);
+
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('addToQueue deferred dispatch', () => {
+        it('should defer dispatch for manual/bulk items', async () => {
+            const utils = await import('./utils');
+            // Reset mocks
+            vi.mocked(utils.enqueueWorkoutTask).mockClear();
+
+            const { addToQueueForGarmin } = await import('./queue');
+
+            await addToQueueForGarmin({
+                userID: 'u1',
+                startTimeInSeconds: 123,
+                manual: true, // DEFER
+                activityFileID: 'f1',
+                activityFileType: 'FIT',
+                token: 't1',
+                userAccessToken: 'at1'
+            });
+
+            // Should NOT call enqueue
+            expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
+        });
+
+        it('should immediate dispatch for normal items', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.enqueueWorkoutTask).mockClear();
+
+            const { addToQueueForGarmin } = await import('./queue');
+
+            await addToQueueForGarmin({
+                userID: 'u1',
+                startTimeInSeconds: 123,
+                manual: false, // IMMEDIATE
+                activityFileID: 'f1',
+                activityFileType: 'FIT',
+                token: 't1',
+                userAccessToken: 'at1'
+            });
+
+            // Should call enqueue
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalled();
+        });
+    });
+
+    describe('increaseRetryCountForQueueItem - dispatchedToCloudTask reset', () => {
+        it('should reset dispatchedToCloudTask to null when item had a timestamp', async () => {
+            const mockUpdate = vi.fn(() => Promise.resolve());
+            const mockRef = { update: mockUpdate };
+
+            const queueItem: QueueItemInterface = {
+                id: 'test-dispatch-reset',
+                ref: mockRef as any,
+                retryCount: 1,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: 1704067200000, // A timestamp value
+            };
+
+            await increaseRetryCountForQueueItem(queueItem, new Error('Transient failure'));
+
+            expect(mockUpdate).toHaveBeenCalled();
+            const updateArg = (mockUpdate.mock.calls[0] as any[])[0];
+
+            // Critical: dispatchedToCloudTask must be null so dispatcher picks it up again
+            expect(updateArg.dispatchedToCloudTask).toBeNull();
+            expect(updateArg.retryCount).toBe(2);
+        });
+
+        it('should keep dispatchedToCloudTask as null if it was already null', async () => {
+            const mockUpdate = vi.fn(() => Promise.resolve());
+            const mockRef = { update: mockUpdate };
+
+            const queueItem: QueueItemInterface = {
+                id: 'test-dispatch-was-null',
+                ref: mockRef as any,
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+
+            await increaseRetryCountForQueueItem(queueItem, new Error('Some error'));
+
+            const updateArg = (mockUpdate.mock.calls[0] as any[])[0];
+            expect(updateArg.dispatchedToCloudTask).toBeNull();
+        });
+    });
+
+    describe('EVENT_EMPTY_ERROR handling', () => {
+        it('should move to DLQ immediately when FIT file has no activities', async () => {
+            // This test verifies the fix for empty FIT files going to DLQ immediately
+            // instead of retrying 10 times
+
+            const admin = await import('firebase-admin');
+            const firestore = admin.firestore();
+            const batch = firestore.batch();
+
+            const mockRef = {
+                parent: { id: 'suuntoAppWorkoutQueue' },
+                update: vi.fn(),
+                delete: vi.fn(),
+                id: 'empty-fit-item'
+            };
+
+            const queueItem: QueueItemInterface = {
+                id: 'empty-fit-item',
+                ref: mockRef as any,
+                retryCount: 0,
+                processed: false,
+                dateCreated: Date.now(),
+                dispatchedToCloudTask: null,
+            };
+
+            // Create an error with the EVENT_EMPTY_ERROR code
+            const emptyEventError: any = new Error('No activities found');
+            emptyEventError.code = 'EVENT_EMPTY_ERROR';
+
+            // Call moveToDeadLetterQueue directly since parseWorkoutQueueItemForServiceName
+            // requires complex token mocking
+            const result = await moveToDeadLetterQueue(queueItem, emptyEventError, undefined, 'EVENT_EMPTY_ERROR');
+
+            // Should have moved to DLQ
+            expect(result).toBe('MOVED_TO_DLQ');
+            expect(batch.set).toHaveBeenCalled();
+            expect(batch.delete).toHaveBeenCalledWith(mockRef);
+
+            // Verify the context is preserved
+            const setCallArgs = (batch.set as any).mock.calls[0][1];
+            expect(setCallArgs.context).toBe('EVENT_EMPTY_ERROR');
         });
     });
 });

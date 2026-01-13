@@ -16,7 +16,7 @@ import { User } from '@sports-alliance/sports-lib';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../../constants/coros';
+import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT } from '../../../../functions/src/shared/history-import.constants';
 import dayjs from 'dayjs';
 
 
@@ -42,6 +42,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public serviceNames = ServiceNames
   public isPro = false;
   public corosHistoryLimitMonths = COROS_HISTORY_IMPORT_LIMIT_MONTHS;
+  public activitiesPerDayLimit = HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT;
+  public garminCooldownDays = GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS;
   private eventService = inject(AppEventService);
   private userService = inject(AppUserService);
   private analyticsService = inject(AppAnalyticsService);
@@ -95,14 +97,15 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
           this.formGroup.enable();
           break;
         }
-        this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + ((this.userMetaForService.processedActivitiesFromLastHistoryImportCount / 500) * 24 * 60 * 60 * 1000)) // 7 days for  285,7142857143 per day
+        this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + ((this.userMetaForService.processedActivitiesFromLastHistoryImportCount / HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT) * 24 * 60 * 60 * 1000)) // 7 days for  285,7142857143 per day
         this.isAllowedToDoHistoryImport =
           this.nextImportAvailableDate < (new Date())
           || this.userMetaForService.processedActivitiesFromLastHistoryImportCount === 0;
         break;
+        break;
       case ServiceNames.GarminHealthAPI:
-        this.isAllowedToDoHistoryImport = new Date(this.userMetaForService.didLastHistoryImport + (3 * 24 * 60 * 60 * 1000)) < new Date()
-        this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + (3 * 24 * 60 * 60 * 1000));
+        this.isAllowedToDoHistoryImport = new Date(this.userMetaForService.didLastHistoryImport + (GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000)) < new Date()
+        this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + (GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000));
         break;
       default:
         this.logger.error(new Error(`Service name is not available ${this.serviceName} for history import`));
@@ -164,6 +167,13 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
   ngOnDestroy(): void {
 
+  }
+
+  get cooldownDays(): number {
+    if (!this.userMetaForService?.processedActivitiesFromLastHistoryImportCount) {
+      return 0;
+    }
+    return Math.ceil(this.userMetaForService.processedActivitiesFromLastHistoryImportCount / this.activitiesPerDayLimit);
   }
 }
 

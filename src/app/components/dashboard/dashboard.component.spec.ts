@@ -83,7 +83,7 @@ describe('DashboardComponent', () => {
                 { provide: ActivatedRoute, useValue: mockActivatedRoute },
                 { provide: MatDialog, useValue: mockDialog },
                 { provide: MatSnackBar, useValue: mockSnackBar },
-                { provide: Analytics, useValue: {} }
+                { provide: Analytics, useValue: null }
             ],
             schemas: [NO_ERRORS_SCHEMA]
         })

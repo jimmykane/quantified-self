@@ -297,26 +297,7 @@ describe('Firestore Security Rules', () => {
             }));
         });
 
-        it('should allow a verified Coach to read their athletes activity', async () => {
-            const coachId = 'coach_user';
-            const athleteId = 'athlete_user';
-            const activityId = 'athlete_activity';
 
-            const db = testEnv.authenticatedContext(coachId).firestore();
-
-            await testEnv.withSecurityRulesDisabled(async (context) => {
-                // Setup Coach relationship
-                await context.firestore().collection(`coaches/${coachId}/athletes`).doc(athleteId).set({
-                    accepted: true
-                });
-                // Create athlete activity
-                await context.firestore().collection(`users/${athleteId}/activities`).doc(activityId).set({
-                    type: 'Running'
-                });
-            });
-
-            await assertSucceeds(db.collection(`users/${athleteId}/activities`).doc(activityId).get());
-        });
 
         it('should DENY unauthenticated users from reading activities', async () => {
             const db = testEnv.unauthenticatedContext().firestore();

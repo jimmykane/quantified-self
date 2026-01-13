@@ -1,0 +1,145 @@
+@use '../../../../styles/breakpoints' as bp;
+
+.dashboard-section {
+    margin-bottom: 2rem;
+    animation: fadeIn 0.5s ease-out;
+}
+
+.section-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+
+    h2 {
+        font-size: 1.5rem;
+        font-weight: 400;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+
+        @include bp.xsmall {
+            font-size: 1.25rem;
+        }
+    }
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+
+    @include bp.xsmall {
+        gap: 1rem;
+        margin-bottom: 2rem;
+        grid-template-columns: 1fr;
+    }
+}
+
+// Card Styles - Copied from admin-dashboard.component.scss
+//Ideally these should be in a shared SCSS file
+.glass-card {
+    background: var(--mat-sys-surface, white); // Fallback
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+
+    :host-context(.dark-theme) & {
+        background: rgba(30, 30, 30, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+}
+
+.app-stat-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 140px;
+    border-left: 4px solid transparent;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+    &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 12px -1px rgba(0, 0, 0, 0.15);
+    }
+
+    &.status-success {
+        border-left-color: #4caf50;
+    }
+
+    &.status-pending {
+        border-left-color: #ff9800;
+    }
+
+    &.status-error {
+        border-left-color: #f44336;
+    }
+
+    &.status-info {
+        border-left-color: #2196f3;
+    }
+}
+
+.app-stat-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--mat-sys-on-surface-variant, rgba(0, 0, 0, 0.6));
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+
+    mat-icon {
+        font-size: 20px;
+        width: 20px;
+        height: 20px;
+    }
+
+    :host-context(.dark-theme) & {
+        color: rgba(255, 255, 255, 0.7);
+    }
+}
+
+.app-stat-value {
+    font-size: 2rem;
+    font-weight: 300;
+    color: var(--mat-sys-on-surface, rgba(0, 0, 0, 0.87));
+    margin: 0.5rem 0;
+
+    :host-context(.dark-theme) & {
+        color: rgba(255, 255, 255, 0.9);
+    }
+}
+
+.app-spinner-mini {
+    display: flex;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.stat-subtitle {
+    font-size: 0.8rem;
+    color: var(--mat-sys-on-surface-variant, rgba(0, 0, 0, 0.6));
+
+    :host-context(.dark-theme) & {
+        color: rgba(255, 255, 255, 0.5);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

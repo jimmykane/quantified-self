@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as utils from '../utils';
 import * as history from '../history';
-import { SERVICE_NAME, COROS_HISTORY_IMPORT_LIMIT_MONTHS } from './constants';
+import { SERVICE_NAME } from './constants';
+import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../shared/history-import.constants';
 
 // Mock dependencies
 vi.mock('firebase-functions/v1', () => ({

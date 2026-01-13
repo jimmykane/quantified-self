@@ -6,6 +6,14 @@ import {
     determineRedirectURI,
 } from './utils';
 
+async function tryCatch(fn: () => Promise<unknown>) {
+    try { await fn(); } catch (e) {
+        // ignore error
+        void e;
+    }
+}
+
+
 describe('utils', () => {
     describe('generateIDFromParts', () => {
         it('should generate a consistent hash for the same inputs', async () => {
@@ -41,6 +49,44 @@ describe('utils', () => {
             const result2 = await generateIDFromParts(['b', 'a']);
             expect(result1).not.toBe(result2);
         });
+
+        it('should handle parts with special characters', async () => {
+            const result = await generateIDFromParts(['user@123', 'workout#456']);
+            expect(result).toMatch(/^[a-f0-9]+$/);
+        });
+
+        it('should handle unicode characters', async () => {
+            const result = await generateIDFromParts(['用户', 'тренировка']);
+            expect(result).toBeTruthy();
+            expect(result).toMatch(/^[a-f0-9]+$/);
+        });
+
+        it('should handle very long parts', async () => {
+            const longPart = 'a'.repeat(10000);
+            const result = await generateIDFromParts([longPart]);
+            expect(result).toBeTruthy();
+        });
+
+        it('should handle parts with colons', async () => {
+            // Colons are used as delimiters internally
+            const result = await generateIDFromParts(['part:with:colons', 'other']);
+            expect(result).toBeTruthy();
+        });
+
+        it('should handle empty string parts', async () => {
+            const result = await generateIDFromParts(['', 'valid', '']);
+            expect(result).toBeTruthy();
+        });
+
+        it('should produce deterministic output across multiple calls', async () => {
+            const results = await Promise.all([
+                generateIDFromParts(['test', 'value']),
+                generateIDFromParts(['test', 'value']),
+                generateIDFromParts(['test', 'value']),
+            ]);
+            expect(results[0]).toBe(results[1]);
+            expect(results[1]).toBe(results[2]);
+        });
     });
 
     describe('generateIDFromPartsOld', () => {
@@ -60,55 +106,104 @@ describe('utils', () => {
             const result = generateIDFromPartsOld(['test', 'value']);
             expect(result).toMatch(/^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$/);
         });
+
+        it('should handle empty parts array', () => {
+            const result = generateIDFromPartsOld([]);
+            // Empty array produces empty string (no parts to join)
+            expect(result).toBe('');
+        });
+
+        it('should handle special characters', () => {
+            const result = generateIDFromPartsOld(['user@123!', 'workout#456']);
+            expect(result).toMatch(/^[123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz]+$/);
+        });
     });
 
     describe('isCorsAllowed', () => {
         it('should allow localhost:4200', () => {
             const mockReq = {
                 get: vi.fn().mockReturnValue('http://localhost:4200'),
-            } as any;
+            } as unknown as Parameters<typeof isCorsAllowed>[0];
             expect(isCorsAllowed(mockReq)).toBe(true);
         });
 
         it('should allow localhost:4201 (https)', () => {
             const mockReq = {
                 get: vi.fn().mockReturnValue('https://localhost:4201'),
-            } as any;
+            } as unknown as Parameters<typeof isCorsAllowed>[0];
             expect(isCorsAllowed(mockReq)).toBe(true);
         });
 
         it('should allow localhost:8080', () => {
             const mockReq = {
                 get: vi.fn().mockReturnValue('http://localhost:8080'),
-            } as any;
+            } as unknown as Parameters<typeof isCorsAllowed>[0];
             expect(isCorsAllowed(mockReq)).toBe(true);
         });
 
         it('should allow quantified-self.io', () => {
             const mockReq = {
                 get: vi.fn().mockReturnValue('https://quantified-self.io'),
-            } as any;
+            } as unknown as Parameters<typeof isCorsAllowed>[0];
             expect(isCorsAllowed(mockReq)).toBe(true);
         });
 
         it('should allow beta.quantified-self.io', () => {
             const mockReq = {
                 get: vi.fn().mockReturnValue('https://beta.quantified-self.io'),
-            } as any;
+            } as unknown as Parameters<typeof isCorsAllowed>[0];
             expect(isCorsAllowed(mockReq)).toBe(true);
         });
 
         it('should deny unknown origins', () => {
             const mockReq = {
                 get: vi.fn().mockReturnValue('https://malicious-site.com'),
-            } as any;
+            } as unknown as Parameters<typeof isCorsAllowed>[0];
             expect(isCorsAllowed(mockReq)).toBe(false);
         });
 
         it('should deny undefined origin', () => {
             const mockReq = {
                 get: vi.fn().mockReturnValue(undefined),
-            } as any;
+            } as unknown as Parameters<typeof isCorsAllowed>[0];
+            expect(isCorsAllowed(mockReq)).toBe(false);
+        });
+
+        it('should deny null origin', () => {
+            const mockReq = {
+                get: vi.fn().mockReturnValue(null),
+            } as unknown as Parameters<typeof isCorsAllowed>[0];
+            expect(isCorsAllowed(mockReq)).toBe(false);
+        });
+
+        it('should deny empty string origin', () => {
+            const mockReq = {
+                get: vi.fn().mockReturnValue(''),
+            } as unknown as Parameters<typeof isCorsAllowed>[0];
+            expect(isCorsAllowed(mockReq)).toBe(false);
+        });
+
+        it('should allow localhost with various port numbers', () => {
+            const ports = [3000, 4200, 4201, 5000, 8080, 9000];
+            for (const port of ports) {
+                const mockReq = {
+                    get: vi.fn().mockReturnValue(`http://localhost:${port}`),
+                } as unknown as Parameters<typeof isCorsAllowed>[0];
+                expect(isCorsAllowed(mockReq)).toBe(true);
+            }
+        });
+
+        it('should deny origin that looks similar but is not allowed', () => {
+            const mockReq = {
+                get: vi.fn().mockReturnValue('https://quantified-self.io.evil.com'),
+            } as unknown as Parameters<typeof isCorsAllowed>[0];
+            expect(isCorsAllowed(mockReq)).toBe(false);
+        });
+
+        it('should deny subdomain that is not beta', () => {
+            const mockReq = {
+                get: vi.fn().mockReturnValue('https://staging.quantified-self.io'),
+            } as unknown as Parameters<typeof isCorsAllowed>[0];
             expect(isCorsAllowed(mockReq)).toBe(false);
         });
     });
@@ -119,16 +214,37 @@ describe('utils', () => {
                 query: {
                     redirect_uri: 'https://quantified-self.io/callback',
                 },
-            } as any;
+            } as unknown as Parameters<typeof determineRedirectURI>[0];
             expect(determineRedirectURI(mockReq)).toBe('https://quantified-self.io/callback');
         });
 
         it('should handle missing redirect_uri', () => {
             const mockReq = {
                 query: {},
-            } as any;
+            } as unknown as Parameters<typeof determineRedirectURI>[0];
             // Should return 'undefined' as a string since it uses String()
             expect(determineRedirectURI(mockReq)).toBe('undefined');
+        });
+
+        it('should handle null redirect_uri', () => {
+            const mockReq = {
+                query: { redirect_uri: null },
+            } as unknown as Parameters<typeof determineRedirectURI>[0];
+            expect(determineRedirectURI(mockReq)).toBe('null');
+        });
+
+        it('should handle empty string redirect_uri', () => {
+            const mockReq = {
+                query: { redirect_uri: '' },
+            } as unknown as Parameters<typeof determineRedirectURI>[0];
+            expect(determineRedirectURI(mockReq)).toBe('');
+        });
+
+        it('should handle array redirect_uri (takes first)', () => {
+            const mockReq = {
+                query: { redirect_uri: ['first', 'second'] },
+            } as unknown as Parameters<typeof determineRedirectURI>[0];
+            expect(determineRedirectURI(mockReq)).toBe('first,second');
         });
     });
 
@@ -183,7 +299,7 @@ describe('utils', () => {
 
             it('should enforce limit of 10 for free users', async () => {
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
-                const { checkEventUsageLimit, UsageLimitExceededError } = await getUtils();
+                const { checkEventUsageLimit } = await getUtils();
 
                 // Case: Under Limit (9)
                 mockCountGet.mockResolvedValueOnce({ data: () => ({ count: 9 }) });
@@ -196,7 +312,7 @@ describe('utils', () => {
 
             it('should enforce limit of 100 for basic users', async () => {
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'basic' } });
-                const { checkEventUsageLimit, UsageLimitExceededError } = await getUtils();
+                const { checkEventUsageLimit } = await getUtils();
 
                 // Case: Under Limit (99)
                 mockCountGet.mockResolvedValueOnce({ data: () => ({ count: 99 }) });
@@ -221,6 +337,33 @@ describe('utils', () => {
                 const docObj = mockDoc.mock.results[0].value;
                 expect(docObj.collection).toHaveBeenCalledWith('events');
             });
+
+            it('should allow exactly at limit - 1', async () => {
+                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
+                const { checkEventUsageLimit } = await getUtils();
+
+                // Free limit is 10, so 9 should pass
+                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: 9 }) });
+                await expect(checkEventUsageLimit('user1')).resolves.not.toThrow();
+            });
+
+            it('should handle user with no customClaims', async () => {
+                mockGetUser.mockResolvedValue({});
+                const { checkEventUsageLimit } = await getUtils();
+
+                // No claims means free tier
+                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: 11 }) });
+                await expect(checkEventUsageLimit('user1')).rejects.toThrow();
+            });
+
+            it('should handle user with empty customClaims', async () => {
+                mockGetUser.mockResolvedValue({ customClaims: {} });
+                const { checkEventUsageLimit } = await getUtils();
+
+                // Empty claims means free tier
+                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: 11 }) });
+                await expect(checkEventUsageLimit('user1')).rejects.toThrow();
+            });
         });
 
         describe('isProUser', () => {
@@ -241,13 +384,82 @@ describe('utils', () => {
                 const { isProUser } = await getUtils();
                 await expect(isProUser('user1')).resolves.toBe(false);
             });
+
+            it('should return false for users with no customClaims', async () => {
+                mockGetUser.mockResolvedValue({});
+                const { isProUser } = await getUtils();
+                await expect(isProUser('user1')).resolves.toBe(false);
+            });
+
+            it('should return false for users with empty customClaims', async () => {
+                mockGetUser.mockResolvedValue({ customClaims: {} });
+                const { isProUser } = await getUtils();
+                await expect(isProUser('user1')).resolves.toBe(false);
+            });
+
+            it('should return false for unknown role', async () => {
+                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'unknown' } });
+                const { isProUser } = await getUtils();
+                await expect(isProUser('user1')).resolves.toBe(false);
+            });
+        });
+
+        describe('getUserRole', () => {
+            it('should return pro for pro users', async () => {
+                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
+                const { getUserRole } = await getUtils();
+                await expect(getUserRole('user1')).resolves.toBe('pro');
+            });
+
+            it('should return basic for basic users', async () => {
+                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'basic' } });
+                const { getUserRole } = await getUtils();
+                await expect(getUserRole('user1')).resolves.toBe('basic');
+            });
+
+            it('should return free for free users', async () => {
+                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
+                const { getUserRole } = await getUtils();
+                await expect(getUserRole('user1')).resolves.toBe('free');
+            });
+
+            it('should return free when no customClaims', async () => {
+                mockGetUser.mockResolvedValue({});
+                const { getUserRole } = await getUtils();
+                await expect(getUserRole('user1')).resolves.toBe('free');
+            });
+
+            it('should return free when customClaims empty', async () => {
+                mockGetUser.mockResolvedValue({ customClaims: {} });
+                const { getUserRole } = await getUtils();
+                await expect(getUserRole('user1')).resolves.toBe('free');
+            });
+        });
+    });
+
+    describe('Custom Error Classes', () => {
+        it('UsageLimitExceededError should have correct name', async () => {
+            const { UsageLimitExceededError } = await import('./utils');
+            const error = new UsageLimitExceededError('Test message');
+            expect(error.name).toBe('UsageLimitExceededError');
+            expect(error.message).toBe('Test message');
+            expect(error).toBeInstanceOf(Error);
+        });
+
+        it('TokenNotFoundError should have correct name', async () => {
+            const { TokenNotFoundError } = await import('./utils');
+            const error = new TokenNotFoundError('Test message');
+            expect(error.name).toBe('TokenNotFoundError');
+            expect(error.message).toBe('Test message');
+            expect(error).toBeInstanceOf(Error);
+        });
+
+        it('UserNotFoundError should have correct name', async () => {
+            const { UserNotFoundError } = await import('./utils');
+            const error = new UserNotFoundError('Test message');
+            expect(error.name).toBe('UserNotFoundError');
+            expect(error.message).toBe('Test message');
+            expect(error).toBeInstanceOf(Error);
         });
     });
 });
-
-async function tryCatch(fn: () => Promise<any>) {
-    try { await fn(); } catch (e) {
-        // ignore error
-        void e;
-    }
-}

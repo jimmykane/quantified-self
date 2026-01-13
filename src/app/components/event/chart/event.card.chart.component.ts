@@ -656,6 +656,10 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     // });
     series.events.on('shown', () => {
+      // Guard against disposed series/chart during async event firing
+      if (series.isDisposed() || !this.chart || this.chart.isDisposed()) {
+        return;
+      }
 
       series.hidden = false;
       this.showSeriesYAxis(series);
@@ -675,6 +679,10 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     });
     // Hidden
     series.events.on('hidden', () => {
+      // Guard against disposed series/chart during async event firing
+      if (series.isDisposed() || !this.chart || this.chart.isDisposed()) {
+        return;
+      }
 
       series.hidden = true;
       if (!this.getVisibleSeriesWithSameYAxis(series).length) {
@@ -967,13 +975,24 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
       }
 
+      // Guard: Check if chart was disposed between zone.run and here
+      if (!this.chart || this.chart.isDisposed()) {
+        return;
+      }
+
       // Since we created series, we can get them from chart
       const series = this.chart.series.values;
 
       // Show if needed without animations to prevent unwanted auto-zooms
-      series.forEach(s => this.shouldHideSeries(s) ? s.hide(0) : s.show(0));
+      series.forEach(s => {
+        if (s.isDisposed()) return;
+        this.shouldHideSeries(s) ? s.hide(0) : s.show(0);
+      });
       // Store at local storage the visible / non visible series
-      series.forEach(s => s.hidden ? this.chartSettingsLocalStorageService.hideSeriesID(this.event, s.id) : this.chartSettingsLocalStorageService.showSeriesID(this.event, s.id));
+      series.forEach(s => {
+        if (s.isDisposed()) return;
+        s.hidden ? this.chartSettingsLocalStorageService.hideSeriesID(this.event, s.id) : this.chartSettingsLocalStorageService.showSeriesID(this.event, s.id);
+      });
       // Snap to series will be set after zoom reset to avoid interference
 
       if (this.xAxisType === XAxisTypes.Time) {
@@ -985,7 +1004,11 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       // Wrapped in a longer timeout to ensure ALL chunks are processed and amCharts has stable ranges.
       // Multi-activity charts often conflict with amCharts automatic mini-validation cycles.
       setTimeout(() => {
-        if (!this.chart || !this.chart.xAxes) {
+        // Revalidate sequence and disposed state after 2s delay
+        if (seq !== this.processSequence) {
+          return;
+        }
+        if (!this.chart || this.chart.isDisposed() || !this.chart.xAxes) {
           return;
         }
 

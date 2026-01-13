@@ -62,7 +62,7 @@ describe('LoginComponent', () => {
 
     // Mock dependencies for inject()
     const mockAuth = {};
-    const mockAnalytics = {};
+    const mockAnalytics = null;
 
     const mockDialog = {};
 

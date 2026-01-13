@@ -14,7 +14,8 @@ const {
     mockGetBillingAccount,
     mockListBudgets,
     mockGetTables,
-    mockBigQueryQuery
+    mockBigQueryQuery,
+    mockGetCloudTaskQueueDepth
 } = vi.hoisted(() => {
     const mockListUsers = vi.fn();
     const mockCreateCustomToken = vi.fn();
@@ -44,6 +45,7 @@ const {
     const mockListBudgets = vi.fn();
     const mockGetTables = vi.fn();
     const mockBigQueryQuery = vi.fn();
+    const mockGetCloudTaskQueueDepth = vi.fn().mockResolvedValue(42);
 
     return {
         mockListUsers,
@@ -58,7 +60,8 @@ const {
         mockGetBillingAccount,
         mockListBudgets,
         mockGetTables,
-        mockBigQueryQuery
+        mockBigQueryQuery,
+        mockGetCloudTaskQueueDepth
     };
 });
 
@@ -118,7 +121,8 @@ vi.mock('firebase-functions/v2/https', () => ({
 }));
 
 vi.mock('../utils', () => ({
-    ALLOWED_CORS_ORIGINS: ['*']
+    ALLOWED_CORS_ORIGINS: ['*'],
+    getCloudTaskQueueDepth: mockGetCloudTaskQueueDepth
 }));
 
 import { listUsers, getQueueStats, getUserCount, getMaintenanceStatus, setMaintenanceMode, impersonateUser, getFinancialStats } from './admin';
@@ -418,6 +422,15 @@ describe('getQueueStats Cloud Function', () => {
             { provider: 'suuntoAppWorkoutQueue', count: 1 },
             { provider: 'COROSAPIWorkoutQueue', count: 1 }
         ]));
+
+        // Check Cloud Tasks stat
+        expect(result.cloudTasks).toEqual({ pending: 42 });
+    });
+
+    it('should handle Cloud Task depth error and return 0', async () => {
+        mockGetCloudTaskQueueDepth.mockRejectedValueOnce(new Error('Queue depth error'));
+        const result = await (getQueueStats as any)(request);
+        expect(result.cloudTasks).toEqual({ pending: 0 });
     });
 
     it('should return only basic statistics when includeAnalysis is false', async () => {
@@ -516,7 +529,9 @@ describe('getMaintenanceStatus Cloud Function', () => {
                     maintenance_mode: { defaultValue: { value: 'true' } },
                     maintenance_message: { defaultValue: { value: 'RC Message' } }
                 }
-            })
+            }),
+            validateTemplate: vi.fn(),
+            publishTemplate: vi.fn()
         });
     });
 

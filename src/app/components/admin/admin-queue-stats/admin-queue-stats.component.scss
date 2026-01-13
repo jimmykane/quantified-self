@@ -1,0 +1,339 @@
+@use '../../../../styles/breakpoints' as bp;
+
+.dashboard-section {
+    margin-bottom: 2rem;
+    animation: fadeIn 0.5s ease-out;
+}
+
+.section-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+
+    h2 {
+        font-size: 1.5rem;
+        font-weight: 400;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+
+        @include bp.xsmall {
+            font-size: 1.25rem;
+        }
+    }
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+
+    @include bp.xsmall {
+        gap: 1rem;
+        margin-bottom: 2rem;
+        grid-template-columns: 1fr;
+    }
+}
+
+// Card Styles - Shared
+.glass-card {
+    background: var(--mat-sys-surface, white); // Fallback
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+
+    :host-context(.dark-theme) & {
+        background: rgba(30, 30, 30, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+}
+
+.app-stat-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 140px;
+    border-left: 4px solid transparent;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+    &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 12px -1px rgba(0, 0, 0, 0.15);
+    }
+
+    &.status-success {
+        border-left-color: #4caf50;
+    }
+
+    &.status-pending {
+        border-left-color: #ff9800;
+    }
+
+    &.status-error {
+        border-left-color: #f44336;
+    }
+
+    &.status-info {
+        border-left-color: #2196f3;
+    }
+
+    &.status-dlq {
+        border-left-color: #f44336;
+    }
+}
+
+.app-stat-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--mat-sys-on-surface-variant, rgba(0, 0, 0, 0.6));
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+
+    mat-icon {
+        font-size: 20px;
+        width: 20px;
+        height: 20px;
+    }
+
+    :host-context(.dark-theme) & {
+        color: rgba(255, 255, 255, 0.7);
+    }
+}
+
+.app-stat-value {
+    font-size: 2rem;
+    font-weight: 300;
+    color: var(--mat-sys-on-surface, rgba(0, 0, 0, 0.87));
+    margin: 0.5rem 0;
+
+    :host-context(.dark-theme) & {
+        color: rgba(255, 255, 255, 0.9);
+    }
+}
+
+.app-spinner-mini {
+    display: flex;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.stat-subtitle {
+    font-size: 0.8rem;
+    color: var(--mat-sys-on-surface-variant, rgba(0, 0, 0, 0.6));
+
+    :host-context(.dark-theme) & {
+        color: rgba(255, 255, 255, 0.5);
+    }
+}
+
+// Chart Header
+.chart-header {
+    padding: 1.5rem 1.5rem 0.5rem 1.5rem;
+    margin: 0;
+    color: #333;
+    font-size: 1.1rem;
+    font-weight: 400;
+
+    :host-context(.dark-theme) & {
+        color: rgba(255, 255, 255, 0.87);
+    }
+}
+
+.chart-wrapper {
+    width: 100%;
+    min-height: 300px;
+    display: block;
+    position: relative;
+    padding: 0 1.5rem 1.5rem;
+    box-sizing: border-box;
+
+    @include bp.xsmall {
+        padding: 0 1rem 1rem;
+        min-height: 250px;
+    }
+
+    canvas {
+        width: 100% !important;
+        height: 100% !important;
+    }
+}
+
+// DLQ Breakdown Styles
+.card-title {
+    padding: 1.5rem 1.5rem 0.5rem 1.5rem;
+    font-size: 1.1rem;
+    font-weight: 400;
+    color: #333;
+
+    :host-context(.dark-theme) & {
+        color: rgba(255, 255, 255, 0.87);
+    }
+}
+
+.failures-analysis-container {
+    display: flex;
+    gap: 24px;
+    padding: 0 16px 16px;
+
+    @include bp.medium {
+        flex-wrap: wrap;
+    }
+
+    @include bp.xsmall {
+        flex-direction: column;
+        gap: 24px;
+    }
+}
+
+.analysis-column {
+    flex: 1;
+    min-width: 200px;
+}
+
+.subsection-title {
+    margin-bottom: 12px;
+    font-size: 0.9rem;
+    color: #666;
+
+    :host-context(.dark-theme) & {
+        color: rgba(255, 255, 255, 0.6);
+    }
+}
+
+.analysis-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+
+    :host-context(.dark-theme) & {
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+}
+
+.analysis-label {
+    font-weight: 400;
+}
+
+.analysis-label-sm {
+    font-size: 0.9rem;
+}
+
+.analysis-error-text {
+    font-size: 0.85rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+    display: block;
+
+    @include bp.xsmall {
+        max-width: 250px;
+    }
+}
+
+.status-badge.disabled {
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 0.75rem;
+    background: #ffebee;
+    color: #c62828;
+
+    :host-context(.dark-theme) & {
+        background: rgba(198, 40, 40, 0.2);
+        color: #ef9a9a;
+    }
+}
+
+.empty-state {
+    color: #999;
+    font-size: 0.9rem;
+    font-style: italic;
+
+    :host-context(.dark-theme) & {
+        color: rgba(255, 255, 255, 0.4);
+    }
+}
+
+// Table Styles
+.table-container {
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    margin-bottom: 3rem;
+
+    @include bp.xsmall {
+        margin-bottom: 2rem;
+        border-radius: 8px;
+    }
+}
+
+.table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+}
+
+table {
+    width: 100%;
+    background: transparent !important;
+}
+
+th.mat-header-cell {
+    background: rgba(0, 0, 0, 0.02);
+    font-weight: 400;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.8;
+
+    :host-context(.dark-theme) & {
+        background: rgba(255, 255, 255, 0.05);
+    }
+}
+
+td.mat-cell {
+    font-size: 0.95rem;
+}
+
+.status-dot {
+    height: 8px;
+    width: 8px;
+    border-radius: 50%;
+    background-color: #cbd5e1;
+    display: inline-block;
+
+    &.active {
+        background-color: #f59e0b;
+        box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+    }
+
+    :host-context(.dark-theme) & {
+        background-color: rgba(255, 255, 255, 0.2);
+
+        &.active {
+            background-color: #f59e0b;
+        }
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

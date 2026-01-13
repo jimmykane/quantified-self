@@ -55,17 +55,8 @@ export abstract class UploadAbstractDirective implements OnInit {
     }
 
     const rawFiles = [...(event.target.files || event.dataTransfer.files)];
-    // Add as local to show totals
-    const filesToProcess = rawFiles.filter(file => {
-      // 10MB limit
-      if (file.size > 10 * 1024 * 1024) {
-        this.snackBar.open(`File ${file.name} is too large. Maximum size is 10MB.`, 'OK', {
-          duration: 5000,
-        });
-        return false;
-      }
-      return true;
-    }).map(file => {
+    // Size checks are handled in app.event.service.ts (after compression for text files)
+    const filesToProcess = rawFiles.map(file => {
       const name = file.name;
       let extension = name.split('.').pop().toLowerCase();
       let filename = name.split('.').shift();

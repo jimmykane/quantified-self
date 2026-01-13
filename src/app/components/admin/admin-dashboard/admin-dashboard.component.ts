@@ -1,7 +1,7 @@
 import { Component, OnInit, ViewChild, AfterViewInit, OnDestroy } from '@angular/core';
 import { AdminService, AdminUser, ListUsersParams, QueueStats, FinancialStats } from '../../../services/admin.service';
 
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AdminResolverData } from '../../../resolvers/admin.resolver';
@@ -22,7 +22,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatButtonModule } from '@angular/material/button';
-import { MatSlideToggleModule, MatSlideToggleChange } from '@angular/material/slide-toggle';
+// import { MatSlideToggleModule } from '@angular/material/slide-toggle'; // Removed
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -32,6 +32,9 @@ import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmat
 import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration, ChartOptions } from 'chart.js';
 import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
+import { AdminFinancialsComponent } from '../admin-financials/admin-financials.component';
+import { AdminQueueStatsComponent } from '../admin-queue-stats/admin-queue-stats.component';
+import { AdminUserManagementComponent, UserStats } from '../admin-user-management/admin-user-management.component';
 
 @Component({
     selector: 'app-admin-dashboard',
@@ -49,11 +52,15 @@ import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
         MatIconModule,
         MatProgressSpinnerModule,
         MatButtonModule,
-        MatSlideToggleModule,
+        // MatSlideToggleModule, // Removed
+
         MatExpansionModule,
         MatDialogModule,
         MatTooltipModule,
-        BaseChartDirective
+        RouterModule,
+        AdminFinancialsComponent,
+        AdminQueueStatsComponent,
+        AdminUserManagementComponent
     ],
     providers: [provideCharts(withDefaultRegisterables())]
 })
@@ -79,6 +86,9 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     // Sort state
     sortField = 'email';
     sortDirection: 'asc' | 'desc' = 'asc';
+
+    // Filter Service state
+    filterService: 'garmin' | 'suunto' | 'coros' | undefined = undefined;
 
     isLoading = true;
     error: string | null = null;
@@ -128,27 +138,11 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
     private readonly CHART_TEXT_DARK = 'rgba(255, 255, 255, 0.8)';
     private readonly CHART_TEXT_LIGHT = 'rgba(0, 0, 0, 0.8)';
     private readonly CHART_GRID_DARK = 'rgba(255, 255, 255, 0.1)';
-    private readonly CHART_GRID_LIGHT = 'rgba(0, 0, 0, 0.1)';
-
     // Charts
-    public barChartLegend = true;
-    public barChartPlugins = [];
-    public barChartData: ChartConfiguration<'bar'>['data'] = {
-        labels: ['0-3 Retries', '4-7 Retries', '8-9 Retries'],
-        datasets: [
-            { data: [0, 0, 0], label: 'Pending Items' }
-        ]
-    };
-    public barChartOptions: ChartConfiguration<'bar'>['options'] = {
-        responsive: true,
-        maintainAspectRatio: false
-    };
+    // Configuration moved to AdminQueueStatsComponent
 
-    // Maintenance mode
-    prodMaintenance = { enabled: false, message: '', originalMessage: '' };
-    betaMaintenance = { enabled: false, message: '', originalMessage: '' };
-    devMaintenance = { enabled: false, message: '', originalMessage: '' };
-    isUpdatingMaintenance = false;
+    // Maintenance mode removed (moved to AdminMaintenanceComponent)
+
 
     // Cleanup
     private destroy$ = new Subject<void>();
@@ -179,41 +173,12 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
             this.fetchUsers();
         });
 
-        // Handle theme changes for charts
+        // Handle theme changes for charts - Logic moved to AdminQueueStatsComponent
+        // Theme subscription kept if needed for other things, but chart specific logic removed.
+        // Actually, since this component no longer has charts, we might not need this subscription at all
+        // unless other parts use it. For now, removing the chart update block.
         this.appThemeService.getAppTheme().pipe(takeUntil(this.destroy$)).subscribe(theme => {
-            const isDark = theme === AppThemes.Dark;
-            const textColor = isDark ? this.CHART_TEXT_DARK : this.CHART_TEXT_LIGHT;
-            const gridColor = isDark ? this.CHART_GRID_DARK : this.CHART_GRID_LIGHT;
-
-            // Update Pie Chart Options
-            this.authPieChartOptions = {
-                ...this.authPieChartOptions,
-                plugins: {
-                    ...this.authPieChartOptions!.plugins,
-                    legend: {
-                        ...this.authPieChartOptions!.plugins!.legend,
-                        labels: {
-                            ...this.authPieChartOptions!.plugins!.legend!.labels,
-                            color: textColor
-                        }
-                    }
-                }
-            };
-
-            // Update Bar Chart Options
-            this.barChartOptions = {
-                ...this.barChartOptions,
-                scales: {
-                    x: {
-                        ticks: { color: textColor },
-                        grid: { color: gridColor }
-                    },
-                    y: {
-                        ticks: { color: textColor },
-                        grid: { color: gridColor }
-                    }
-                }
-            };
+            // No local charts to update theme for
         });
 
         // Use resolved data
@@ -240,7 +205,8 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         // Given "Resolvers for Layout", the user list is the layout. Queue stats are a widget.
         this.fetchQueueStats();
         this.fetchFinancialStats();
-        this.fetchMaintenanceStatus();
+        // this.fetchMaintenanceStatus(); // Removed
+
     }
 
     updateAuthChart(providers: Record<string, number>): void {
@@ -273,26 +239,10 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
             next: (stats) => {
                 this.updateQueueStatsUI(stats);
                 this.isLoadingStats = false;
-                // After initial full fetch, start polling only basic counts (no analysis)
-                this.startQueueStatsPolling();
             },
             error: (err) => {
                 this.logger.error('Failed to load initial queue stats:', err);
                 this.isLoadingStats = false;
-                // Still try to poll basic stats even if initial full fetch fails
-                this.startQueueStatsPolling();
-            }
-        });
-    }
-
-    private startQueueStatsPolling(): void {
-        // Poll every 1 minute with analysis=false
-        this.adminService.getQueueStatsDirect(false).pipe(takeUntil(this.destroy$)).subscribe({
-            next: (stats) => {
-                this.updateQueueStatsUI(stats, true);
-            },
-            error: (err) => {
-                this.logger.error('Failed to poll queue stats:', err);
             }
         });
     }
@@ -305,6 +255,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
                 pending: stats.pending,
                 succeeded: stats.succeeded,
                 stuck: stats.stuck,
+                cloudTasks: stats.cloudTasks ?? this.queueStats.cloudTasks,
                 providers: stats.providers,
                 advanced: this.queueStats.advanced ? {
                     ...this.queueStats.advanced,
@@ -316,27 +267,7 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         } else {
             this.queueStats = stats;
         }
-
-        if (this.queueStats.advanced?.retryHistogram) {
-            this.barChartData = {
-                labels: ['0-3 Retries', '4-7 Retries', '8-9 Retries'],
-                datasets: [
-                    {
-                        data: [
-                            this.queueStats.advanced.retryHistogram['0-3'],
-                            this.queueStats.advanced.retryHistogram['4-7'],
-                            this.queueStats.advanced.retryHistogram['8-9']
-                        ],
-                        label: 'Pending Items',
-                        backgroundColor: [
-                            'rgba(75, 192, 192, 0.6)', // Greenish
-                            'rgba(255, 206, 86, 0.6)', // Yellowish
-                            'rgba(255, 99, 132, 0.6)'  // Reddish
-                        ]
-                    }
-                ]
-            };
-        }
+        // Chart update logic moved to AdminQueueStatsComponent ngOnChanges
     }
 
     fetchFinancialStats(): void {
@@ -376,7 +307,8 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
             pageSize: this.pageSize,
             searchTerm: this.searchTerm || undefined,
             sortField: this.sortField,
-            sortDirection: this.sortDirection
+            sortDirection: this.sortDirection,
+            filterService: this.filterService
         };
 
         this.adminService.getUsers(params).subscribe({
@@ -418,15 +350,20 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         this.searchSubject.next('');
     }
 
-    // Helper methods
-    getServiceLogo(provider: string): string {
-        switch (provider.toLowerCase()) {
-            case 'garmin': return 'assets/logos/garmin.svg';
-            case 'suunto': return 'assets/logos/suunto.svg';
-            case 'coros': return 'assets/logos/coros.svg';
-            default: return '';
-        }
+    onSearchChange(term: string): void {
+        this.searchTerm = term;
+        this.currentPage = 0;
+        this.fetchUsers();
     }
+
+    onFilterServiceChange(service: 'garmin' | 'suunto' | 'coros' | undefined): void {
+        this.filterService = service;
+        this.currentPage = 0; // Reset to first page
+        this.fetchUsers();
+    }
+
+    // Helper methods
+
 
     formatConnectionDate(timestamp: any): string {
         if (!timestamp) return 'Time unknown';
@@ -461,141 +398,21 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     }
 
-    formatDuration(ms: number): string {
-        if (!ms) return '0s';
-        const seconds = Math.floor(ms / 1000);
-        const minutes = Math.floor(seconds / 60);
-        const hours = Math.floor(minutes / 60);
-
-        if (hours > 0) return `${hours}h ${minutes % 60}m`;
-        if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
-        return `${seconds}s`;
-    }
-
-    formatCurrency(amountCents: number, currency: string): string {
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: currency.toUpperCase()
-        }).format(amountCents / 100);
-    }
-
-    openExternalLink(url: string | null): void {
-        if (url) {
-            window.open(url, '_blank');
+    // Helper methods
+    // getServiceLogo is still needed for User Management table
+    getServiceLogo(provider: string): string {
+        switch (provider.toLowerCase()) {
+            case 'garmin': return 'assets/logos/garmin.svg';
+            case 'suunto': return 'assets/logos/suunto.svg';
+            case 'coros': return 'assets/logos/coros.svg';
+            default: return '';
         }
     }
+    // formatDuration moved to AdminQueueStatsComponent
+    // formatCurrency and openExternalLink moved to AdminFinancialsComponent
 
-    // Maintenance mode methods
-    fetchMaintenanceStatus(): void {
-        this.adminService.getMaintenanceStatus().subscribe({
-            next: (status) => {
-                this.prodMaintenance = {
-                    enabled: status.prod.enabled,
-                    message: status.prod.message || "",
-                    originalMessage: status.prod.message || ""
-                };
-                this.betaMaintenance = {
-                    enabled: status.beta.enabled,
-                    message: status.beta.message || "",
-                    originalMessage: status.beta.message || ""
-                };
-                this.devMaintenance = {
-                    enabled: status.dev.enabled,
-                    message: status.dev.message || "",
-                    originalMessage: status.dev.message || ""
-                };
-            },
-            error: (err) => {
-                this.logger.error('Failed to fetch maintenance status:', err);
-            }
-        });
-    }
+    // Maintenance mode methods removed (moved to AdminMaintenanceComponent)
 
-    hasMessageChanged(env: 'prod' | 'beta' | 'dev'): boolean {
-        const m = env === 'prod' ? this.prodMaintenance : (env === 'beta' ? this.betaMaintenance : this.devMaintenance);
-        return m.message !== m.originalMessage;
-    }
-
-    saveMaintenanceMessage(env: 'prod' | 'beta' | 'dev'): void {
-        if (!this.hasMessageChanged(env)) return;
-
-        const m = env === 'prod' ? this.prodMaintenance : (env === 'beta' ? this.betaMaintenance : this.devMaintenance);
-        this.isUpdatingMaintenance = true;
-        this.adminService.setMaintenanceMode(m.enabled, m.message, env).subscribe({
-            next: (result) => {
-                const updated = {
-                    enabled: result.enabled,
-                    message: result.message,
-                    originalMessage: result.message
-                };
-                if (env === 'prod') this.prodMaintenance = updated;
-                else if (env === 'beta') this.betaMaintenance = updated;
-                else this.devMaintenance = updated;
-                this.isUpdatingMaintenance = false;
-            },
-            error: (err) => {
-                this.logger.error(`Failed to save ${env} maintenance message:`, err);
-                this.isUpdatingMaintenance = false;
-            }
-        });
-    }
-
-    onMaintenanceToggle(event: MatSlideToggleChange, env: 'prod' | 'beta' | 'dev'): void {
-        const isEnable = event.checked;
-        const envLabels = { prod: 'PRODUCTION', beta: 'BETA', dev: 'DEV' };
-        const envLabel = envLabels[env];
-        const confirmMessage = isEnable
-            ? `Are you sure you want to ENABLE maintenance mode for ${envLabel}? This will prevent all non-admin users in that environment from accessing the app.`
-            : `Are you sure you want to DISABLE maintenance mode for ${envLabel}? All users in that environment will regain access immediately.`;
-
-        const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-            width: '400px',
-            data: {
-                title: isEnable ? `Enable ${envLabel} Maintenance?` : `Disable ${envLabel} Maintenance?`,
-                message: confirmMessage,
-                confirmText: isEnable ? 'Enable' : 'Disable',
-                cancelText: 'Cancel'
-            }
-        });
-
-        dialogRef.afterClosed().subscribe(result => {
-            if (!result) {
-                // Revert the toggle UI if cancelled
-                event.source.checked = !isEnable;
-                if (env === 'prod') this.prodMaintenance.enabled = !isEnable;
-                else if (env === 'beta') this.betaMaintenance.enabled = !isEnable;
-                else this.devMaintenance.enabled = !isEnable;
-                return;
-            }
-
-            this.isUpdatingMaintenance = true;
-            const m = env === 'prod' ? this.prodMaintenance : (env === 'beta' ? this.betaMaintenance : this.devMaintenance);
-
-            this.adminService.setMaintenanceMode(isEnable, m.message, env).subscribe({
-                next: (result) => {
-                    const updated = {
-                        enabled: result.enabled,
-                        message: result.message,
-                        originalMessage: result.message
-                    };
-                    if (env === 'prod') this.prodMaintenance = updated;
-                    else if (env === 'beta') this.betaMaintenance = updated;
-                    else this.devMaintenance = updated;
-                    this.isUpdatingMaintenance = false;
-                    this.logger.log(`Maintenance mode [${env}] ${result.enabled ? 'ENABLED' : 'DISABLED'}`);
-                },
-                error: (err) => {
-                    this.logger.error(`Failed to update ${env} maintenance mode:`, err);
-                    this.isUpdatingMaintenance = false;
-                    // Revert the toggle
-                    if (env === 'prod') this.prodMaintenance.enabled = !isEnable;
-                    else if (env === 'beta') this.betaMaintenance.enabled = !isEnable;
-                    else this.devMaintenance.enabled = !isEnable;
-                    event.source.checked = !isEnable;
-                }
-            });
-        });
-    }
 
     onImpersonate(user: AdminUser): void {
         const dialogRef = this.dialog.open(ConfirmationDialogComponent, {

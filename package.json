@@ -80,6 +80,7 @@
     "express": "^5.2.1",
     "firebase-admin": "^13.6.0",
     "jsdom": "^27.3.0",
+    "lefthook": "^2.0.14",
     "ts-node": "~10.9.2",
     "typescript": "^5.9.3",
     "vite": "^7.2.7",

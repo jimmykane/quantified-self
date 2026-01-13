@@ -122,4 +122,33 @@ describe('EventCardStatsTableComponent', () => {
     });
 
     // Removed navigator.clipboard test as logic is now in DataExportService
+
+    it('should add Software Version row if swInfo is present', () => {
+        const activityWithVersion = {
+            ...mockActivity,
+            creator: { name: 'Garmin', swInfo: '12.00' },
+            getID: () => 'act1'
+        } as unknown as ActivityInterface;
+
+        component.selectedActivities = [activityWithVersion];
+        component.ngOnChanges({});
+
+        const swRow = component.data.data.find(row => row.Name === 'Software Version');
+        expect(swRow).toBeDefined();
+        expect(swRow['Garmin #ff0000']).toBe('12.00');
+    });
+
+    it('should NOT add Software Version row if versions are empty', () => {
+        const activityNoVersion = {
+            ...mockActivity,
+            creator: { name: 'Garmin', swInfo: '' },
+            getID: () => 'act1'
+        } as unknown as ActivityInterface;
+
+        component.selectedActivities = [activityNoVersion];
+        component.ngOnChanges({});
+
+        const swRow = component.data.data.find(row => row.Name === 'Software Version');
+        expect(swRow).toBeUndefined();
+    });
 });

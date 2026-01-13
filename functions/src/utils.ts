@@ -11,10 +11,8 @@ import {
 } from '@sports-alliance/sports-lib';
 
 import * as base58 from 'bs58';
-import { CloudTasksClient } from '@google-cloud/tasks';
 import { EventWriter, FirestoreAdapter, StorageAdapter, LogAdapter, OriginalFile } from './shared/event-writer';
 import { generateIDFromParts as sharedGenerateIDFromParts } from './shared/id-generator';
-import { ServiceNames } from '@sports-alliance/sports-lib';
 
 
 export function generateIDFromPartsOld(parts: string[]): string {
@@ -81,6 +79,7 @@ export const ALLOWED_CORS_ORIGINS: (string | RegExp)[] = [
 
 export function isCorsAllowed(req: Request) {
   const origin = <string>req.get('origin') || '';
+  logger.info(`CORS check for origin: ${origin}`);
   return ALLOWED_CORS_ORIGINS.some(allowed => {
     if (allowed instanceof RegExp) {
       return allowed.test(origin);
@@ -307,51 +306,10 @@ export async function isProUser(userID: string): Promise<boolean> {
   return role === 'pro';
 }
 
-/**
- * Enqueues a task to process a single workout queue item.
- * @param serviceName The service (Garmin, Suunto, Coros)
- * @param queueItemId The ID of the document in the {serviceName}Queue collection
- */
-import { config } from './config';
-
-export async function enqueueWorkoutTask(serviceName: ServiceNames, queueItemId: string) {
-  const client = new CloudTasksClient();
-
-  const { projectId, location, queue, serviceAccountEmail } = config.cloudtasks;
-
-  if (!projectId) {
-    throw new Error('Project ID is not defined in config');
-  }
-
-  const url = `https://${location}-${projectId}.cloudfunctions.net/${queue}`;
-  const parent = client.queuePath(projectId, location, queue);
-
-  const payload = { data: { queueItemId, serviceName } };
-
-  const task = {
-    httpRequest: {
-      httpMethod: 'POST' as const,
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: Buffer.from(JSON.stringify(payload)).toString('base64'),
-      oidcToken: {
-        serviceAccountEmail,
-      },
-    },
-  };
-
-  try {
-    logger.info(`[Dispatcher] Attempting to enqueue task for ${serviceName}:${queueItemId} to ${url} in project ${projectId}`);
-    const [response] = await client.createTask({ parent, task });
-    logger.info(`[Dispatcher] Successfully enqueued task: ${response.name}`);
-  } catch (error) {
-    logger.error(`[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`, error);
-  }
-}
-
-
-
-
+// Re-export Cloud Tasks utilities from shared module for backward compatibility
+export {
+  getCloudTaskQueueDepth,
+  enqueueWorkoutTask,
+  resetCloudTaskQueueDepthCache,
+} from './shared/cloud-tasks';
 

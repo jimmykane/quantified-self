@@ -1,23 +1,33 @@
 /* Compact History Import Form Styles */
 
-.status-section {
-  padding: 0.5rem 0;
+.status-card {
+  margin-bottom: 24px;
+  background-color: var(--mat-sys-surface-variant);
+  color: var(--mat-sys-on-surface-variant);
 }
 
-.status-section h4 {
-  margin: 0 0 0.5rem 0;
-  font-size: 0.9rem;
-  opacity: 0.7;
+.status-card mat-card-content {
+  padding-top: 0;
 }
 
-.status-section p {
-  margin: 0.25rem 0;
-  font-size: 0.85rem;
-  line-height: 1.4;
+.stats-value {
+  font-weight: 500;
+  font-size: 1.1em;
 }
 
-.status-section strong {
-  opacity: 0.8;
+.text-secondary {
+  color: var(--mat-sys-outline);
+}
+
+.date-highlight {
+  color: var(--mat-sys-primary);
+  font-weight: bold;
+}
+
+/* Ensure list items wrap properly */
+/* Angular Material 15+ list styling adjustments if needed */
+.mat-mdc-list-item-line {
+  white-space: normal !important;
 }
 
 .history-import-form {

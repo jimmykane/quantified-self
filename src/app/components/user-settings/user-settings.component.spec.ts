@@ -93,7 +93,7 @@ describe('UserSettingsComponent', () => {
                 { provide: MatDialog, useValue: {} },
                 { provide: LoggerService, useValue: { error: vi.fn() } },
                 { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
-                { provide: Analytics, useValue: {} },
+                { provide: Analytics, useValue: null },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();

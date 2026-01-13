@@ -1,15 +1,8 @@
-
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AdminDashboardComponent } from '../components/admin/admin-dashboard/admin-dashboard.component';
+import { AdminMaintenanceComponent } from '../components/admin/admin-maintenance/admin-maintenance.component';
 import { RouterModule, Routes } from '@angular/router';
-import { MatTableModule } from '@angular/material/table';
-import { MatPaginatorModule } from '@angular/material/paginator';
-import { MatSortModule } from '@angular/material/sort';
-import { MatInputModule } from '@angular/material/input';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatIconModule } from '@angular/material/icon';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { adminGuard } from '../authentication/admin.guard';
 import { adminResolver } from '../resolvers/admin.resolver';
 
@@ -21,6 +14,11 @@ const routes: Routes = [
         resolve: {
             adminData: adminResolver
         }
+    },
+    {
+        path: 'maintenance',
+        component: AdminMaintenanceComponent,
+        canActivate: [adminGuard]
     }
 ];
 
@@ -28,7 +26,8 @@ const routes: Routes = [
     imports: [
         CommonModule,
         RouterModule.forChild(routes),
-        AdminDashboardComponent
+        AdminDashboardComponent,
+        AdminMaintenanceComponent
     ]
 })
 export class AdminModule { }

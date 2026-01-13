@@ -2,10 +2,8 @@
 
 :host {
     display: block;
-    min-height: 100vh;
-    margin-bottom: 2rem;
+    width: 100%;
 }
-
 
 .admin-container {
     padding: 2rem;
@@ -18,51 +16,53 @@
 }
 
 .header-container {
-    margin-bottom: 2rem;
     text-align: center;
-}
+    margin-bottom: 2rem;
 
-.premium-subtitle {
-    font-size: 1.1rem;
-    color: var(--mat-sys-on-surface-variant, rgba(0, 0, 0, 0.6));
-    letter-spacing: 1px;
-    margin-top: 0.5rem;
-}
+    h1 {
+        margin: 0 0 0.5rem 0;
+    }
 
-:host-context(.dark-theme) .premium-subtitle {
-    color: rgba(255, 255, 255, 0.7);
-}
-
-.loading-shade {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.3); // Semi-transparent for both themes
-    z-index: 999;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    backdrop-filter: blur(2px);
-}
-
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 3rem;
-
-    @include bp.xsmall {
-        gap: 1rem;
-        margin-bottom: 2rem;
-        // Force single column on very small screens if needed, but auto-fit handles 280px well.
-        // If screen < 320px (tiny), 280px minmax might cause overflow if not handled.
-        grid-template-columns: 1fr;
+    .premium-subtitle {
+        margin: 0;
+        opacity: 0.8;
     }
 }
 
-/* Data Sections */
+.dashboard-container {
+    padding: 2rem;
+    max-width: 1600px;
+    margin: 0 auto;
+
+    @include bp.xsmall {
+        padding: 1rem;
+    }
+}
+
+.dashboard-header {
+    margin-bottom: 2rem;
+
+    // Header alignment for mobile
+    @include bp.xsmall {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+        align-items: flex-start;
+
+        // Ensure buttons wrap properly or stack
+        .header-actions {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+        }
+    }
+}
+
+.dashboard-section {
+    margin-bottom: 2rem;
+    animation: fadeIn 0.5s ease-out;
+}
+
 .section-title {
     display: flex;
     justify-content: space-between;
@@ -79,491 +79,50 @@
 
         @include bp.xsmall {
             font-size: 1.25rem;
+            margin-bottom: 0; // Reset margin if any
+        }
+    }
+
+    @include bp.xsmall {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+
+        // Make button full width on mobile for easier tapping
+        button {
+            width: 100%;
         }
     }
 }
 
-.table-container {
-    // background: white; /* REMOVED */
-    // background handled by .glass-card
-    border-radius: 12px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    overflow: hidden;
-    margin-bottom: 3rem;
-
-    @include bp.xsmall {
-        margin-bottom: 2rem;
-        border-radius: 8px; // Slightly smaller radius for mobile
-    }
-}
-
-.table-wrapper {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    width: 100%;
-}
-
-table {
-    width: 100%;
-    background: transparent !important;
-}
-
-th.mat-header-cell {
-    background: rgba(0, 0, 0, 0.02);
-    font-weight: 400;
-    font-size: 0.85rem;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    // color: #546e7a; /* REMOVED */
-    opacity: 0.8;
-}
-
-:host-context(.dark-theme) th.mat-header-cell {
-    background: rgba(255, 255, 255, 0.05);
-}
-
-td.mat-cell {
-    font-size: 0.95rem;
-    // color: #37474f; /* REMOVED */
-}
-
-/* Text & Header Styles */
-// Separated to allow .card-title to inherit global typography
-.chart-header {
-    padding: 1.5rem 1.5rem 0.5rem 1.5rem; // Standardize padding
-    margin: 0; // Remove default margins
-    color: #333; // Light theme default
-    font-size: 1.1rem;
-    font-weight: 400;
-}
-
-// Preserve layout for Admin dashboard cards, but inherit global font styles
-.card-title {
-    padding: 1.5rem 1.5rem 0.5rem 1.5rem;
-}
-
-
-
-
-:host-context(.dark-theme) .chart-header {
-    color: rgba(255, 255, 255, 0.87);
-}
-
-.subsection-title {
-    margin-bottom: 12px;
-    font-size: 0.9rem;
-    color: #666; // Light theme default
-}
-
-:host-context(.dark-theme) .subsection-title {
-    color: rgba(255, 255, 255, 0.6);
-}
-
-.maintenance-header-title {
-    align-items: center;
-    gap: 12px;
-    font-weight: 400;
-}
-
-.maintenance-header-description {
-    align-items: center;
-    justify-content: space-between;
-
-    @include bp.xsmall {
-
-        // Hide text description on very small screens to save space
-        .status-text {
-            display: none;
-        }
-
-        justify-content: flex-end; // Push toggle to end
-    }
-}
-
-.status-text {
-    &.online {
-        color: #4caf50;
-    }
-
-    &.offline {
-        color: #f44336;
-    }
-}
-
-.maintenance-content {
-    padding-top: 16px;
-}
-
-.maintenance-description {
-    margin: 0 0 16px 0;
-    font-size: 0.9rem;
-    color: #666; // Light theme default
-}
-
-:host-context(.dark-theme) .maintenance-description {
-    color: rgba(255, 255, 255, 0.7);
-}
-
-.maintenance-form-container {
-    display: flex;
-    gap: 16px;
-    align-items: flex-start;
-    flex-wrap: wrap;
-
-    @include bp.xsmall {
-        flex-direction: column;
-        gap: 12px;
-    }
-}
-
-.maintenance-message-field {
-    flex: 1;
-    min-width: 300px;
-
-    @include bp.xsmall {
-        min-width: 100%; // Takes full width on mobile
-        width: 100%;
-    }
-}
-
-.maintenance-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-
-    @include bp.xsmall {
-        width: 100%; // Button container full width
-    }
-}
-
-.save-btn {
-    height: 56px;
-
-    @include bp.xsmall {
-        width: 100%; // Button full width
-    }
-}
-
-.empty-state {
-    color: #999;
-    font-size: 0.9rem;
-    font-style: italic;
-}
-
-:host-context(.dark-theme) .empty-state {
-    color: rgba(255, 255, 255, 0.4);
-}
-
-.text-detail-date {
-    font-size: 11px;
-    color: #666;
-}
-
-:host-context(.dark-theme) .text-detail-date {
-    color: rgba(255, 255, 255, 0.5);
-}
-
-.text-detail-muted {
-    color: #999;
-}
-
-:host-context(.dark-theme) .text-detail-muted {
-    color: rgba(255, 255, 255, 0.3);
-}
-
-/* User Identity Cell */
-.user-identity {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 0;
-}
-
-.user-avatar {
-    width: 36px;
-    height: 36px;
-    background: #eee;
-    border-radius: 50%;
-    object-fit: cover;
-}
-
-.user-info {
-    display: flex;
-    flex-direction: column;
-}
-
-.user-name {
-    font-weight: 400;
-    // color: #263238; /* REMOVED */
-}
-
-.user-email {
-    font-size: 0.8rem;
-    opacity: 0.6;
-}
-
-/* Badges */
-.badge,
-.role-badge,
-.status-badge {
-    padding: 4px 12px;
-    border-radius: 16px;
-    font-size: 0.75rem;
-    font-weight: 400;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.badge.success,
-.status-badge.active {
-    background: #e8f5e9;
-    color: #2e7d32;
-}
-
-.badge.warning {
-    background: #fff3e0;
-    color: #ef6c00;
-}
-
-.badge.error,
-.status-badge.disabled {
-    background: #ffebee;
-    color: #c62828;
-}
-
-.badge.info {
-    background: #e3f2fd;
-    color: #1565c0;
-}
-
-.role-badge.pro {
-    background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-    color: white;
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-}
-
-.role-badge.basic {
-    background: rgba(0, 0, 0, 0.05);
-    color: rgba(0, 0, 0, 0.8);
-    border: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-.failures-analysis-container {
-    display: flex;
-    gap: 24px;
-    padding: 0 16px 16px;
-
-    @include bp.medium {
-        // Tablet: maybe still fine, or stack if too cramped
-        flex-wrap: wrap;
-    }
-
-    @include bp.small {
-        // Small screens: stack
-        flex-direction: column;
-        gap: 32px;
-    }
-
-    @include bp.xsmall {
-        // Mobile: stack
-        flex-direction: column;
-        gap: 24px;
-        padding: 0 16px 16px;
-    }
-}
-
-.analysis-column {
-    flex: 1;
-
-    // Ensure it doesn't shrink to 0
-    min-width: 200px;
-}
-
-.analysis-item {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 0;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-
-    &.align-center {
-        align-items: center;
-    }
-}
-
-.analysis-label {
-    font-weight: 400;
-}
-
-.analysis-label-sm {
-    font-size: 0.9rem;
-}
-
-.analysis-error-text {
-    font-size: 0.85rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 180px;
-    display: block;
-
-    @include bp.xsmall {
-        max-width: 250px; // More space when stacked
-    }
-}
-
-.role-badge.free {
-    background: rgba(0, 0, 0, 0.05);
-    color: rgba(0, 0, 0, 0.5);
-}
-
-:host-context(.dark-theme) {
-
-    .badge.success,
-    .status-badge.active {
-        background: rgba(46, 125, 50, 0.2);
-        color: #a5d6a7;
-    }
-
-    .badge.warning {
-        background: rgba(239, 108, 0, 0.2);
-        color: #ffcc80;
-    }
-
-    .badge.error,
-    .status-badge.disabled {
-        background: rgba(198, 40, 40, 0.2);
-        color: #ef9a9a;
-    }
-
-    .badge.info {
-        background: rgba(21, 101, 192, 0.2);
-        color: #90caf9;
-    }
-
-    .role-badge.basic {
-        background: rgba(255, 255, 255, 0.1);
-        color: rgba(255, 255, 255, 0.9);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-
-    .role-badge.free {
-        background: rgba(255, 255, 255, 0.05);
-        color: rgba(255, 255, 255, 0.5);
-    }
-}
-
-/* Queue Status Styles */
-.queue-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 1.5rem;
-}
-
-.queue-card {
-    // background: white;
-    // background handled by .glass-card
+.glass-card {
+    background: var(--mat-sys-surface, white); // Fallback
     border-radius: 12px;
     padding: 1.5rem;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    border: 1px solid rgba(0, 0, 0, 0.05);
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+
+    :host-context(.dark-theme) & {
+        background: rgba(30, 30, 30, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
 }
 
-:host-context(.dark-theme) .queue-card {
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-
-.queue-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 0.5rem;
-}
-
-.queue-name {
+// Chart Styles (Pie Chart still remains in dashboard?)
+// Check if Auth Pie chart uses these
+.chart-header {
+    padding: 1.5rem 1.5rem 0.5rem 1.5rem;
+    margin: 0;
+    color: #333;
+    font-size: 1.1rem;
     font-weight: 400;
-    font-size: 1rem;
-    // color: #37474f;
-}
 
-.queue-stats {
-    display: flex;
-    justify-content: space-around;
-    margin-top: auto;
-    padding-top: 1rem;
-    border-top: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-:host-context(.dark-theme) .queue-stats {
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.stat-mini {
-    text-align: center;
-}
-
-.stat-mini .label {
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    opacity: 0.6;
-    display: block;
-}
-
-.stat-mini .value {
-    font-size: 1.2rem;
-    font-weight: 400;
-    display: block;
-}
-
-.status-indicator {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-
-    &.healthy {
-        background-color: #4caf50;
-        box-shadow: 0 0 8px rgba(76, 175, 80, 0.4);
-    }
-
-    &.busy {
-        background-color: #ff9800;
-    }
-
-    &.critical {
-        background-color: #f44336;
-        animation: pulse 1.5s infinite;
+    :host-context(.dark-theme) & {
+        color: rgba(255, 255, 255, 0.87);
     }
 }
 
-@keyframes pulse {
-    0% {
-        transform: scale(0.95);
-        opacity: 0.7;
-    }
-
-    50% {
-        transform: scale(1.1);
-        opacity: 1;
-    }
-
-    100% {
-        transform: scale(0.95);
-        opacity: 0.7;
-    }
-}
-
-/* New Section Styles */
-.dashboard-section {
-    margin-bottom: 2rem;
-    animation: fadeIn 0.5s ease-out;
-}
-
-/* Chart Styles */
 .chart-wrapper {
     width: 100%;
     min-height: 300px;
@@ -583,6 +142,139 @@ td.mat-cell {
     }
 }
 
+// Stats Grid - Still used by User/Auth Stats?
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+
+    @include bp.xsmall {
+        gap: 1rem;
+        margin-bottom: 2rem;
+        grid-template-columns: 1fr;
+    }
+}
+
+
+.app-stat-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 140px;
+    border-left: 4px solid transparent;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+    &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 12px -1px rgba(0, 0, 0, 0.15);
+    }
+
+    &.status-success {
+        border-left-color: #4caf50;
+    }
+
+    &.status-pending {
+        border-left-color: #ff9800;
+    }
+
+    &.status-error {
+        border-left-color: #f44336;
+    }
+
+    &.status-info {
+        border-left-color: #2196f3;
+    }
+
+    // status-dlq moved
+}
+
+
+.app-stat-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--mat-sys-on-surface-variant, rgba(0, 0, 0, 0.6));
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+
+    mat-icon {
+        font-size: 20px;
+        width: 20px;
+        height: 20px;
+    }
+
+    :host-context(.dark-theme) & {
+        color: rgba(255, 255, 255, 0.7);
+    }
+}
+
+.app-stat-value {
+    font-size: 2rem;
+    font-weight: 300;
+    color: var(--mat-sys-on-surface, rgba(0, 0, 0, 0.87));
+    margin: 0.5rem 0;
+
+    :host-context(.dark-theme) & {
+        color: rgba(255, 255, 255, 0.9);
+    }
+}
+
+.app-spinner-mini {
+    display: flex;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.stat-subtitle {
+    font-size: 0.8rem;
+    color: var(--mat-sys-on-surface-variant, rgba(0, 0, 0, 0.6));
+
+    :host-context(.dark-theme) & {
+        color: rgba(255, 255, 255, 0.5);
+    }
+}
+
+// User Table Styles
+.user-table-container {
+    border-radius: 12px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    margin-bottom: 3rem;
+    transition: all 0.3s ease;
+
+    &.loading-state {
+        opacity: 0.7;
+        pointer-events: none;
+    }
+}
+
+table {
+    width: 100%;
+    background: transparent !important;
+}
+
+th.mat-header-cell {
+    background: rgba(0, 0, 0, 0.02);
+    font-weight: 400;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.8;
+
+    :host-context(.dark-theme) & {
+        background: rgba(255, 255, 255, 0.05);
+    }
+}
+
+td.mat-cell {
+    font-size: 0.95rem;
+}
+
+// Animations
 @keyframes fadeIn {
     from {
         opacity: 0;
@@ -595,58 +287,18 @@ td.mat-cell {
     }
 }
 
-/* Provider Icons */
-.provider-icons {
+.spinner-container {
     display: flex;
-    gap: 4px;
+    flex-direction: column;
+    justify-content: center;
     align-items: center;
+    padding: 3rem;
+    gap: 1rem;
+    color: var(--mat-sys-primary);
 }
 
-.provider-icons mat-icon {
-    font-size: 18px;
-    width: 18px;
-    height: 18px;
-    opacity: 0.7;
-}
-
-.provider-google {
-    color: #4285F4;
-}
-
-.provider-email {
-    color: #64748b;
-}
-
-.provider-apple {
-    color: #000000;
-}
-
-.provider-facebook {
-    color: #1877F2;
-}
-
-:host-context(.dark-theme) .provider-apple {
-    color: #ffffff;
-}
-
-/* Provider Queue Stats Status Dot */
-.status-dot {
-    height: 8px;
-    width: 8px;
-    border-radius: 50%;
-    background-color: #cbd5e1;
-    display: inline-block;
-}
-
-.status-dot.active {
-    background-color: #f59e0b;
-    box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
-}
-
-:host-context(.dark-theme) .status-dot {
-    background-color: rgba(255, 255, 255, 0.2);
-}
-
-:host-context(.dark-theme) .status-dot {
-    background-color: rgba(255, 255, 255, 0.2);
+// Search Field
+.search-field {
+    width: 100%;
+    font-size: 0.9rem;
 }

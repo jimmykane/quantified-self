@@ -6,6 +6,7 @@ import { getStripe } from '../stripe/client';
 import { CloudBillingClient } from '@google-cloud/billing';
 import { BudgetServiceClient } from '@google-cloud/billing-budgets';
 import { BigQuery } from '@google-cloud/bigquery';
+import { getCloudTaskQueueDepth } from '../utils';
 
 /**
  * Normalizes error messages by replacing dynamic values (numbers, IDs) with placeholders.
@@ -24,6 +25,7 @@ interface ListUsersRequest {
     searchTerm?: string;
     sortField?: string;
     sortDirection?: 'asc' | 'desc';
+    filterService?: 'garmin' | 'suunto' | 'coros';
 }
 
 interface BasicUser {
@@ -136,6 +138,32 @@ export const listUsers = onAdminCall<ListUsersRequest, any>({
         const searchTerm = (data.searchTerm || '').toLowerCase().trim();
         const sortField = data.sortField || 'email';
         const sortDirection = data.sortDirection || 'asc';
+        const filterService = data.filterService;
+
+        // Step 0: Get Service User IDs (if filtering)
+        let allowedUids: Set<string> | null = null;
+        if (filterService) {
+            let collectionName = '';
+            switch (filterService) {
+                case 'garmin':
+                    collectionName = 'garminHealthAPITokens';
+                    break;
+                case 'suunto':
+                    collectionName = 'suuntoAppAccessTokens';
+                    break;
+                case 'coros':
+                    collectionName = 'COROSAPIAccessTokens';
+                    break;
+            }
+
+            if (collectionName) {
+                // Optimization: getting docs with select() only fetches the ID in some SDKs, 
+                // but in Admin SDK it usually fetches full doc unless select() is strictly respected by the backend.
+                // However, the cost is 1 read per document.
+                const snapshot = await admin.firestore().collection(collectionName).select().get();
+                allowedUids = new Set(snapshot.docs.map(d => d.id));
+            }
+        }
 
         // ============================================
         // STEP 1: Fetch ALL users from Firebase Auth
@@ -149,7 +177,7 @@ export const listUsers = onAdminCall<ListUsersRequest, any>({
 
             // Extract only the fields we need (minimizes memory usage)
             for (const userRecord of listResult.users) {
-                allAuthUsers.push({
+                const user: BasicUser = {
                     uid: userRecord.uid,
                     email: userRecord.email,
                     displayName: userRecord.displayName,
@@ -160,8 +188,15 @@ export const listUsers = onAdminCall<ListUsersRequest, any>({
                         creationTime: userRecord.metadata?.creationTime || null,
                     },
                     disabled: userRecord.disabled,
-                    providerIds: userRecord.providerData.map(p => p.providerId),
-                });
+                    providerIds: userRecord.providerData.map(p => p.providerId)
+                };
+
+                // Filter by Service UID Set (if applicable)
+                if (allowedUids && !allowedUids.has(user.uid)) {
+                    continue;
+                }
+
+                allAuthUsers.push(user);
             }
 
             nextPageToken = listResult.pageToken;
@@ -361,6 +396,10 @@ export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
 
     try {
         const db = admin.firestore();
+        const cloudTaskDepth = await getCloudTaskQueueDepth().catch(e => {
+            logger.error('Error getting Cloud Task depth:', e);
+            return 0;
+        });
         let totalPending = 0;
         let totalSucceeded = 0;
         let totalStuck = 0;
@@ -487,6 +526,9 @@ export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
             pending: totalPending,
             succeeded: totalSucceeded,
             stuck: totalStuck,
+            cloudTasks: {
+                pending: cloudTaskDepth
+            },
             providers,
             dlq,
             advanced: {

@@ -68,12 +68,7 @@
   </mat-list-item>
   }
 
-  @if (user && user.isCoach) {
-  <mat-list-item routerLinkActive="active" routerLink="/coaching" (click)="sideNav.close();">
-    <mat-icon>sports</mat-icon>
-    <span>Coaching</span>
-  </mat-list-item>
-  }
+
 
   <!-- Account Section -->
   @if (user) {

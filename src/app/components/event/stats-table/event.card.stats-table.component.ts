@@ -163,6 +163,27 @@ export class EventCardStatsTableComponent implements OnChanges {
       return 0;
     });
 
+    // Add Software Version row (if available)
+    const swVersionRow = { Name: 'Software Version' } as any;
+    let hasSwVersion = false;
+
+    this.selectedActivities.forEach(activity => {
+      const creator = activity.creator as any;
+      // Check commonly used fields for SW version
+      const version = creator.swInfo || creator.swVersion || creator.version;
+
+      if (version !== undefined && version !== null && version !== '') {
+        hasSwVersion = true;
+        swVersionRow[`${activity.creator.name} ${this.eventColorService.getActivityColor(this.selectedActivities, activity)}`] = version;
+      } else {
+        swVersionRow[`${activity.creator.name} ${this.eventColorService.getActivityColor(this.selectedActivities, activity)}`] = '';
+      }
+    });
+
+    if (hasSwVersion) {
+      data.push(swVersionRow);
+    }
+
     // debugger;
 
     // Set the data
