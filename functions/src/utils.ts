@@ -60,11 +60,31 @@ export async function getUserIDFromFirebaseToken(req: Request): Promise<string |
   }
 }
 
+const ALLOWED_REDIRECT_PATTERNS = [
+  /^https?:\/\/localhost(:\d+)?(\/.*)?$/,
+  /^https:\/\/(beta\.)?quantified-self\.io(\/.*)?$/
+];
+
 export function determineRedirectURI(req: Request): string {
   // For POST requests, check body first (frontend sends redirectUri in body)
   // For GET requests, check query params
-  const redirectUri = req.body?.redirectUri || req.query.redirect_uri;
-  return redirectUri ? String(redirectUri) : '';
+  let redirectUri = req.body?.redirectUri || req.query.redirect_uri;
+
+  if (Array.isArray(redirectUri)) {
+    redirectUri = redirectUri[0];
+  }
+
+  if (!redirectUri) return '';
+
+  const uri = String(redirectUri);
+  const isAllowed = ALLOWED_REDIRECT_PATTERNS.some(pattern => pattern.test(uri));
+
+  if (!isAllowed) {
+    logger.warn(`Blocked invalid redirect_uri: ${uri}`);
+    return '';
+  }
+
+  return uri;
 }
 
 export function setAccessControlHeadersOnResponse(req: Request, res: Response) {
