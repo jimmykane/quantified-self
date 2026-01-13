@@ -59,6 +59,8 @@ describe('processWorkoutTask', () => {
             data: () => queueData,
         });
 
+        mockParseWorkoutQueueItemForServiceName.mockResolvedValue(QueueResult.Processed);
+
         const request = {
             data: { queueItemId, serviceName }
         };
@@ -162,7 +164,7 @@ describe('processWorkoutTask', () => {
         await expect((processWorkoutTask as any)(request)).resolves.toBeUndefined();
     });
 
-    it('should NOT throw if QueueResult.RetryIncremented is returned', async () => {
+    it('should throw if QueueResult.RetryIncremented is returned', async () => {
         const queueItemId = 'test-id';
         const serviceName = ServiceNames.GarminAPI;
         const queueData = { processed: false };
@@ -178,7 +180,7 @@ describe('processWorkoutTask', () => {
             data: { queueItemId, serviceName }
         };
 
-        await expect((processWorkoutTask as any)(request)).resolves.toBeUndefined();
+        await expect((processWorkoutTask as any)(request)).rejects.toThrow(`Item ${queueItemId} failed and was scheduled for retry.`);
     });
 
     it('should NOT throw if QueueResult.MovedToDLQ is returned', async () => {
@@ -200,7 +202,7 @@ describe('processWorkoutTask', () => {
         await expect((processWorkoutTask as any)(request)).resolves.toBeUndefined();
     });
 
-    it('should log warning for unexpected QueueResult but not throw', async () => {
+    it('should throw error for unexpected QueueResult', async () => {
         const queueItemId = 'test-id';
         const serviceName = ServiceNames.GarminAPI;
         const queueData = { processed: false };
@@ -217,7 +219,7 @@ describe('processWorkoutTask', () => {
             data: { queueItemId, serviceName }
         };
 
-        await expect((processWorkoutTask as any)(request)).resolves.toBeUndefined();
+        await expect((processWorkoutTask as any)(request)).rejects.toThrow(`Unexpected result for ${queueItemId}: UNKNOWN_RESULT`);
     });
 });
 
