@@ -14,7 +14,7 @@ import { QueueResult } from '../queue-utils';
  */
 export const processWorkoutTask = onTaskDispatched({
     retryConfig: CLOUD_TASK_RETRY_CONFIG,
-    memory: '4GiB',
+    memory: '1GiB',
     timeoutSeconds: 540,
     region: 'europe-west2',
 }, async (request) => {
