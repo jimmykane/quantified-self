@@ -1,5 +1,6 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as admin from 'firebase-admin';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { cleanupOrphanedUsers } from './cleanup-orphaned-users';
 import * as OAuth2 from '../OAuth2';
 import * as GarminWrapper from '../garmin/auth/wrapper';
@@ -15,7 +16,7 @@ vi.mock('../OAuth2', () => ({
 }));
 
 vi.mock('../garmin/auth/wrapper', () => ({
-    deauthorizeGarminHealthAPIForUser: vi.fn(),
+    deauthorizeGarminAPIForUser: vi.fn(),
 }));
 
 vi.mock('firebase-admin', () => {
@@ -198,7 +199,8 @@ describe('cleanupOrphanedUsers', () => {
         await cleanupOrphanedUsers();
 
         expect(mockRecursiveDelete).toHaveBeenCalledWith(expect.objectContaining({ path: 'users/orphaned-user' }));
-        expect(OAuth2.deauthorizeServiceForUser).toHaveBeenCalledWith('orphaned-user', expect.anything());
-        expect(GarminWrapper.deauthorizeGarminHealthAPIForUser).toHaveBeenCalledWith('orphaned-user');
+        expect(OAuth2.deauthorizeServiceForUser).toHaveBeenCalledWith('orphaned-user', ServiceNames.SuuntoApp);
+        expect(OAuth2.deauthorizeServiceForUser).toHaveBeenCalledWith('orphaned-user', ServiceNames.COROSAPI);
+        expect(OAuth2.deauthorizeServiceForUser).toHaveBeenCalledWith('orphaned-user', ServiceNames.GarminAPI);
     });
 });

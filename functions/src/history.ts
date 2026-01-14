@@ -38,7 +38,7 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
 
     let workoutQueueItems: any;
     try {
-      workoutQueueItems = await getWorkoutQueueItems(serviceName, serviceToken, startDate, endDate);
+      workoutQueueItems = await getWorkoutQueueItems(serviceName, serviceToken as any, startDate, endDate);
     } catch (e: any) {
       logger.info(`Could not get history for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error: ${e}`);
       throw e;

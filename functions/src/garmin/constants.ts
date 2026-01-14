@@ -1,2 +1,2 @@
-export const GARMIN_HEALTHAPI_WORKOUT_QUEUE_COLLECTION_NAME = 'garminHealthAPIActivityQueue';
-export const GARMIN_HEALTH_API_TOKENS_COLLECTION_NAME = 'garminHealthAPITokens';
+export const GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME = 'garminAPIActivityQueue';
+export const GARMIN_API_TOKENS_COLLECTION_NAME = 'garminAPITokens';

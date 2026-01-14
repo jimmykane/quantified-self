@@ -137,12 +137,19 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
 
               if (status === 'PROCESSED') {
                 logger.info(`Successfully processed activity for user ${userID}. WorkoutKey: ${statusJson.workoutKey}`);
+                res.status(200).json({ status: 'success', message: 'Activity uploaded to Suunto', workoutKey: statusJson.workoutKey });
                 return; // Success
               } else if (status === 'ERROR') {
+                if (statusJson.message === 'Already exists') {
+                  logger.info(`Activity already exists in Suunto for user ${userID}.`);
+                  res.status(200).json({ status: 'info', code: 'ALREADY_EXISTS', message: 'Activity already exists in Suunto' });
+                  return; // Success
+                }
                 throw new Error(`Suunto processing failed: ${statusJson.message}`);
               }
-            } catch (e: any) {
-              logger.error(`Could not check upload status for ${uploadId} for user ${userID} (attempt ${attempts})`, e);
+            } catch (e: unknown) {
+              const errorMessage = e instanceof Error ? e.message : String(e);
+              logger.error(`Could not check upload status for ${uploadId} for user ${userID} (attempt ${attempts})`, errorMessage);
               // If it's a 401 during polling, throwing allows retry-helper to refresh and restart the WHOLE process.
               // If it's unrelated, we might want to continue polling?
               // But requestPromise throws on error status.
@@ -172,6 +179,5 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
       return;
     }
   }
-  res.status(200);
-  res.send();
+  res.status(200).json({ status: 'success' });
 });

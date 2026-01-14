@@ -3,7 +3,7 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
 // Hoist mocks
-const { authBuilderMock, deauthorizeServiceMock, deauthorizeGarminMock, firestoreMock, getServiceConfigMock, batchMock, whereMock } = vi.hoisted(() => {
+const { authBuilderMock, deauthorizeServiceMock, firestoreMock, getServiceConfigMock, batchMock, whereMock } = vi.hoisted(() => {
     const onDeleteMock = vi.fn((handler) => handler);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const userMock = vi.fn((_id?: string) => ({ onDelete: onDeleteMock }));
@@ -58,7 +58,7 @@ const { authBuilderMock, deauthorizeServiceMock, deauthorizeGarminMock, firestor
     return {
         authBuilderMock: { user: userMock },
         deauthorizeServiceMock: vi.fn(),
-        deauthorizeGarminMock: vi.fn(),
+
         firestoreMock: firestore,
         getServiceConfigMock: vi.fn(),
         batchMock,
@@ -85,9 +85,7 @@ vi.mock('../OAuth2', () => ({
     getServiceConfig: getServiceConfigMock
 }));
 
-vi.mock('../garmin/auth/wrapper', () => ({
-    deauthorizeGarminHealthAPIForUser: deauthorizeGarminMock
-}));
+
 
 // Import function under test
 import { cleanupUserAccounts } from './cleanup';
@@ -129,7 +127,7 @@ describe('cleanupUserAccounts', () => {
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.COROSAPI);
 
         // Verify Garmin
-        expect(deauthorizeGarminMock).toHaveBeenCalledWith('testUser123');
+        expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.GarminAPI);
     });
 
     it('should force delete Suunto tokens even if deauthorization fails', async () => {
@@ -150,7 +148,7 @@ describe('cleanupUserAccounts', () => {
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.COROSAPI);
 
         // Verify Garmin was still called
-        expect(deauthorizeGarminMock).toHaveBeenCalledWith('testUser123');
+        expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.GarminAPI);
     });
 
     it('should continue if parent doc deletion fails', async () => {
@@ -171,7 +169,7 @@ describe('cleanupUserAccounts', () => {
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.COROSAPI);
 
         // Verify Garmin was still called
-        expect(deauthorizeGarminMock).toHaveBeenCalledWith('testUser123');
+        expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.GarminAPI);
     });
 
     it('should query and delete emails for the user', async () => {
@@ -272,7 +270,7 @@ describe('cleanupUserAccounts', () => {
 
         // Should still call COROS and Garmin
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.COROSAPI);
-        expect(deauthorizeGarminMock).toHaveBeenCalledWith('testUser123');
+        expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.GarminAPI);
     });
 
     it('should force delete Garmin tokens even if deauthorization fails', async () => {
@@ -280,18 +278,23 @@ describe('cleanupUserAccounts', () => {
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
 
         // Make Garmin fail
-        deauthorizeGarminMock.mockRejectedValueOnce(new Error('Garmin 500 API Error'));
+        deauthorizeServiceMock.mockImplementation((userId, serviceName) => {
+            if (serviceName === ServiceNames.GarminAPI) {
+                return Promise.reject(new Error('Garmin 500 API Error'));
+            }
+            return Promise.resolve();
+        });
 
         await wrapped(user, { eventId: 'eventId' } as any);
 
         // Verify Garmin deauth attempted
-        expect(deauthorizeGarminMock).toHaveBeenCalledWith('testUser123');
+        expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.GarminAPI);
 
         // Verify local cleanup encountered error but TRIED to delete
         // Note: The helper calls deleteTokenDocumentWithSubcollections, which calls doc(uid).delete()
-        expect(firestoreMock().collection).toHaveBeenCalledWith('garminHealthAPITokens');
-        expect(firestoreMock().collection('garminHealthAPITokens').doc).toHaveBeenCalledWith('testUser123');
-        expect(firestoreMock().collection('garminHealthAPITokens').doc('testUser123').delete).toHaveBeenCalled();
+        expect(firestoreMock().collection).toHaveBeenCalledWith('garminAPITokens');
+        expect(firestoreMock().collection('garminAPITokens').doc).toHaveBeenCalledWith('testUser123');
+        expect(firestoreMock().collection('garminAPITokens').doc('testUser123').delete).toHaveBeenCalled();
     });
 
     it('should force delete COROS tokens even if deauthorization fails', async () => {

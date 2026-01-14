@@ -6,35 +6,36 @@ import { addToQueueForGarmin } from '../queue';
 import { increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue, QueueResult } from '../queue-utils';
 
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
-import { generateIDFromParts, setEvent, UsageLimitExceededError, UserNotFoundError } from '../utils';
-import { GarminHealthAPIAuth } from './auth/auth';
+import { generateEventID, setEvent, UsageLimitExceededError, UserNotFoundError } from '../utils';
 import * as requestPromise from '../request-helper';
 import {
-  GarminHealthAPIActivityQueueItemInterface,
+  GarminAPIActivityQueueItemInterface,
 } from '../queue/queue-item.interface';
+import { ServiceNames } from '@sports-alliance/sports-lib';
+import { getTokenData } from '../tokens';
 import { EventImporterGPX } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
 import * as xmldom from 'xmldom';
 import {
-  GarminHealthAPIEventMetaData,
+  GarminAPIEventMetaData,
   ActivityParsingOptions,
 } from '@sports-alliance/sports-lib';
+
 interface RequestError extends Error {
   statusCode?: number;
 }
 
-const GARMIN_ACTIVITY_URI = 'https://apis.garmin.com/wellness-api/rest/activityFile';
 
-export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe-west2').runWith({
+export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: 60,
   memory: '256MB',
 }).https.onRequest(async (req, res) => {
-  const activityFiles: GarminHealthAPIActivityFileInterface[] = req.body.activityFiles;
+  const activityFiles: GarminAPIActivityFileInterface[] = req.body.activityFiles;
   const queueItemRefs: admin.firestore.DocumentReference[] = [];
   for (const activityFile of activityFiles) {
     let queueItemDocumentReference;
     try {
-      const activityFileID = new URLSearchParams(activityFile.callbackURL.split('?')[1]).get('id');
+      const activityFileID = activityFile.summaryId || new URLSearchParams(activityFile.callbackURL.split('?')[1]).get('id');
       const activityFileToken = new URLSearchParams(activityFile.callbackURL.split('?')[1]).get('token');
       if (!activityFileID) {
         res.status(500).send();
@@ -50,6 +51,7 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
           activityFileType: activityFile.fileType,
           token: activityFileToken || 'No token',
           userAccessToken: activityFile.userAccessToken,
+          callbackURL: activityFile.callbackURL,
         });
       queueItemRefs.push(queueItemDocumentReference);
     } catch (e: unknown) {
@@ -65,16 +67,23 @@ export const insertGarminHealthAPIActivityFileToQueue = functions.region('europe
 
 
 
-export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminHealthAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<QueueResult> {
+export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<QueueResult> {
   logger.info(`Processing queue item ${queueItem.id} at retry count ${queueItem.retryCount}`);
   // queueItem is never undefined for query queueItem snapshots
   let tokenQuerySnapshots: admin.firestore.QuerySnapshot | undefined;
-  const userKey = `GarminHealthAPI:${queueItem['userAccessToken']}`;
+  // Use UserID for cache key as it's stable, unlike access tokens
+  const userKey = `GarminAPI:${queueItem.userID}`;
 
   if (tokenCache) {
     let tokenPromise = tokenCache.get(userKey);
     if (!tokenPromise) {
-      tokenPromise = admin.firestore().collection('garminHealthAPITokens').where('accessToken', '==', queueItem['userAccessToken']).get();
+      // Lookup by userID (Garmin User ID) which is stored in the 'userID' field of the token document
+      // Since we don't know the Firebase User ID (the parent doc ID), we must use a Collection Group Query.
+      tokenPromise = admin.firestore().collectionGroup('tokens')
+        .where('userID', '==', queueItem.userID)
+        .where('serviceName', '==', ServiceNames.GarminAPI)
+        .limit(1)
+        .get();
       tokenCache.set(userKey, tokenPromise);
     }
     try {
@@ -84,49 +93,58 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
       return increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
     }
   } else {
-    tokenQuerySnapshots = await admin.firestore().collection('garminHealthAPITokens').where('accessToken', '==', queueItem['userAccessToken']).get();
+    tokenQuerySnapshots = await admin.firestore().collectionGroup('tokens')
+      .where('userID', '==', queueItem.userID)
+      .where('serviceName', '==', ServiceNames.GarminAPI)
+      .limit(1)
+      .get();
   }
 
   if (!tokenQuerySnapshots.size) {
     logger.warn(QueueLogs.NO_TOKEN_FOUND.replace('${id}', queueItem.id));
-    // return increaseRetryCountForQueueItem(queueItem, new Error('No tokens found'), 20, bulkWriter);
     return moveToDeadLetterQueue(queueItem, new Error(QueueErrors.NO_TOKEN_FOUND), bulkWriter, 'NO_TOKEN_FOUND');
   }
 
-  const serviceToken = tokenQuerySnapshots.docs[0].data();
-
-  const oAuth = GarminHealthAPIAuth();
+  // Use getTokenData (Shared) to handle auto-refresh if needed
+  let serviceToken;
+  try {
+    serviceToken = await getTokenData(tokenQuerySnapshots.docs[0], ServiceNames.GarminAPI);
+  } catch (e: any) {
+    logger.error(`Failed to get/refresh token for ${queueItem.id}: ${e.message}`);
+    return increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
+  }
 
   let result;
-  const url = `${GARMIN_ACTIVITY_URI}?id=${queueItem.activityFileID}&token=${queueItem.token}`;
+  // Use the ORIGINAL callback URL directly, do not reconstruct it
+  const url = queueItem.callbackURL;
+
   try {
     logger.info(`Downloading Garmin activityID: ${queueItem.activityFileID} for queue item ${queueItem.id}`);
     logger.info('Starting timer: DownloadFile');
     result = await requestPromise.get({
-      headers: oAuth.toHeader(oAuth.authorize({
-        url: url,
-        method: 'get',
+      headers: {
+        'Authorization': `Bearer ${serviceToken.accessToken}`,
       },
-        {
-          key: serviceToken.accessToken,
-          secret: serviceToken.accessTokenSecret,
-        })),
       encoding: queueItem.activityFileType === 'FIT' ? null : undefined,
-      // gzip: true,
       url: url,
     });
     logger.info('Ending timer: DownloadFile');
-    logger.info(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${serviceToken.userID}`);
+    logger.info(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${(serviceToken as any).userID}`);
   } catch (error: unknown) {
     const e = error as RequestError;
     if (e.statusCode === 400) {
-      logger.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 403, increasing retry by 20 URL: ${url}`));
+      logger.error(new Error(`Could not get workout for ${queueItem.id} and token user ${(serviceToken as any).userID} due to 400, increasing retry by 20 URL: ${url}`));
       await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
     } else if (e.statusCode === 500) {
-      logger.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID} due to 500 increasing retry by 20 URL: ${url}`));
+      logger.error(new Error(`Could not get workout for ${queueItem.id} and token user ${(serviceToken as any).userID} due to 500 increasing retry by 20 URL: ${url}`));
       await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
+    } else if (e.statusCode === 401) {
+      // Token might be bad, getTokenData usually handles refresh but if it fails here, maybe we need force refresh?
+      // For now, treat as error
+      logger.error(new Error(`401 Unauthorized for ${queueItem.id}. Token might be invalid despite refresh.`));
+      await increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
     } else {
-      logger.error(new Error(`Could not get workout for ${queueItem.id} and token user ${serviceToken.userID}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}  URL: ${url}`));
+      logger.error(new Error(`Could not get workout for ${queueItem.id} and token user ${(serviceToken as any).userID}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}  URL: ${url}`));
       await increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
     }
     logger.info('Ending timer: DownloadFile');
@@ -148,27 +166,19 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
           logger.error('Could not decode as GPX trying as FIT');
         }
         if (!event) {
-          // Let it fail in any case
-          // @todo extract or encode somehow
-          // I hate this
-          logger.info('Starting timer: DownloadFile');
+          logger.info('Starting timer: DownloadFileRetry');
+          // Retry as FIT if GPX failed (Legacy fallback?)
+          // Note: We use the same URL
           result = await requestPromise.get({
-            headers: oAuth.toHeader(oAuth.authorize({
-              url: url,
-              method: 'get',
+            headers: {
+              'Authorization': `Bearer ${serviceToken.accessToken}`,
             },
-              {
-                key: serviceToken.accessToken,
-                secret: serviceToken.accessTokenSecret,
-              })),
             encoding: null,
-            // gzip: true,
             url: url,
           });
-          logger.info('Ending timer: DownloadFile');
-          logger.info(`Downloaded ${queueItem.activityFileType} for ${queueItem.id} and token user ${serviceToken.userID}`);
-          logger.info(`File size: ${result.byteLength || result.length} bytes for queue item ${queueItem.id}`);
-          event = await EventImporterFIT.getFromArrayBuffer(result, new ActivityParsingOptions({ generateUnitStreams: false })); // Let it fail here
+          logger.info('Ending timer: DownloadFileRetry');
+          logger.info(`Downloaded ${queueItem.activityFileType} (retry as FIT) for ${queueItem.id}`);
+          event = await EventImporterFIT.getFromArrayBuffer(result, new ActivityParsingOptions({ generateUnitStreams: false }));
         }
         break;
       case 'TCX':
@@ -176,17 +186,19 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
         break;
     }
     event.name = event.startDate.toJSON(); // @todo improve
-    logger.info(`Created Event from FIT file of ${queueItem.id} and token user ${serviceToken.userID}`);
-    const metaData = new GarminHealthAPIEventMetaData(
+    logger.info(`Created Event from FIT file of ${queueItem.id} and token user ${(serviceToken as any).userID}`);
+    const metaData = new GarminAPIEventMetaData(
       queueItem.userID,
       queueItem.activityFileID,
       queueItem.activityFileType,
       queueItem.manual || false,
       queueItem.startTimeInSeconds || 0, // 0 is ok here I suppose
       new Date());
-    const eventID = await generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()]);
-    await setEvent(tokenQuerySnapshots.docs[0].id, eventID, event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase(), startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
-    logger.info(`Created Event ${event.getID()} for ${queueItem.id} user id ${tokenQuerySnapshots.docs[0].id} and token user ${serviceToken.userID}`);
+    // The parent of the token document is the 'tokens' collection, and its parent is the User document.
+    const firebaseUserID = tokenQuerySnapshots.docs[0].ref.parent.parent!.id;
+    const eventID = await generateEventID(firebaseUserID, event.startDate);
+    await setEvent(firebaseUserID, eventID, event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase(), startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+    logger.info(`Created Event ${event.getID()} for ${queueItem.id} user id ${firebaseUserID} and token user ${(serviceToken as any).userID}`);
     // For each ended so we can set it to processed
     return updateToProcessed(queueItem, bulkWriter);
   } catch (e: unknown) {
@@ -202,7 +214,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
     }
 
     const err = e instanceof Error ? e : new Error(String(e));
-    logger.info(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.userID} to ${queueItem.retryCount + 1} due to ${err.message}`));
+    logger.info(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${(serviceToken as any).userID} to ${queueItem.retryCount + 1} due to ${err.message}`));
     await increaseRetryCountForQueueItem(queueItem, err, 1, bulkWriter);
     return QueueResult.RetryIncremented;
   }
@@ -210,7 +222,7 @@ export async function processGarminHealthAPIActivityQueueItem(queueItem: GarminH
 
 
 
-export interface GarminHealthAPIActivityFileInterface {
+export interface GarminAPIActivityFileInterface {
   userId: string,
   userAccessToken: string,
   fileType: 'FIT' | 'TCX' | 'GPX',
@@ -218,4 +230,5 @@ export interface GarminHealthAPIActivityFileInterface {
   startTimeInSeconds: number,
   manual: boolean,
   token: string,
+  summaryId?: string,
 }

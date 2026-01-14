@@ -91,7 +91,7 @@ describe('listUsers Cloud Function - Service Filtering', () => {
     it('should filter users by Garmin service', async () => {
         // Mock garmin tokens
         mockCollection.mockImplementation((name) => {
-            if (name === 'garminHealthAPITokens') {
+            if (name === 'garminAPITokens') {
                 return {
                     select: vi.fn().mockReturnThis(),
                     get: vi.fn().mockResolvedValue({
@@ -111,7 +111,7 @@ describe('listUsers Cloud Function - Service Filtering', () => {
 
         expect(result.users).toHaveLength(1);
         expect(result.users[0].uid).toBe('u_garmin');
-        expect(mockCollection).toHaveBeenCalledWith('garminHealthAPITokens');
+        expect(mockCollection).toHaveBeenCalledWith('garminAPITokens');
     });
 
     it('should filter users by Suunto service', async () => {
@@ -165,7 +165,7 @@ describe('listUsers Cloud Function - Service Filtering', () => {
     it('should return empty list if no users satisfy the service filter', async () => {
         // Firestore returns empty for garmin
         mockCollection.mockImplementation((name) => {
-            if (name === 'garminHealthAPITokens') {
+            if (name === 'garminAPITokens') {
                 return {
                     select: vi.fn().mockReturnThis(),
                     get: vi.fn().mockResolvedValue({

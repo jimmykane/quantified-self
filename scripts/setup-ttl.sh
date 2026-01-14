@@ -4,7 +4,7 @@
 COLLECTIONS=(
     "COROSAPIWorkoutQueue"
     "suuntoAppWorkoutQueue"
-    "garminHealthAPIActivityQueue"
+    "garminAPIActivityQueue"
     "failed_jobs"
     "mail"
 )

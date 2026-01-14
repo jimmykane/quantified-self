@@ -3,7 +3,7 @@ import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { setEvent } from './utils';
-import { GarminHealthAPIEventMetaData } from '@sports-alliance/sports-lib';
+import { GarminAPIEventMetaData } from '@sports-alliance/sports-lib';
 
 export const testEventUpload = functions.region('europe-west2').https.onRequest(async (req, res) => {
     try {
@@ -35,7 +35,7 @@ export const testEventUpload = functions.region('europe-west2').https.onRequest(
         };
 
         // Dummy Metadata
-        const metaData = new GarminHealthAPIEventMetaData(
+        const metaData = new GarminAPIEventMetaData(
             userID, 'test-file-id', 'FIT', false, 123456, new Date()
         );
 

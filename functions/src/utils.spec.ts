@@ -222,15 +222,16 @@ describe('utils', () => {
             const mockReq = {
                 query: {},
             } as unknown as Parameters<typeof determineRedirectURI>[0];
-            // Should return 'undefined' as a string since it uses String()
-            expect(determineRedirectURI(mockReq)).toBe('undefined');
+            // Should return empty string when redirect_uri is not provided
+            expect(determineRedirectURI(mockReq)).toBe('');
         });
 
         it('should handle null redirect_uri', () => {
             const mockReq = {
                 query: { redirect_uri: null },
             } as unknown as Parameters<typeof determineRedirectURI>[0];
-            expect(determineRedirectURI(mockReq)).toBe('null');
+            // Should return empty string when redirect_uri is null
+            expect(determineRedirectURI(mockReq)).toBe('');
         });
 
         it('should handle empty string redirect_uri', () => {
@@ -242,9 +243,38 @@ describe('utils', () => {
 
         it('should handle array redirect_uri (takes first)', () => {
             const mockReq = {
-                query: { redirect_uri: ['first', 'second'] },
+                query: { redirect_uri: ['https://quantified-self.io/callback', 'second'] },
             } as unknown as Parameters<typeof determineRedirectURI>[0];
-            expect(determineRedirectURI(mockReq)).toBe('first,second');
+            // Should validly return the first element
+            expect(determineRedirectURI(mockReq)).toBe('https://quantified-self.io/callback');
+        });
+
+        it('should allow localhost with port', () => {
+            const mockReq = {
+                query: { redirect_uri: 'http://localhost:4200/auth/callback' },
+            } as unknown as Parameters<typeof determineRedirectURI>[0];
+            expect(determineRedirectURI(mockReq)).toBe('http://localhost:4200/auth/callback');
+        });
+
+        it('should allow beta subdomain', () => {
+            const mockReq = {
+                query: { redirect_uri: 'https://beta.quantified-self.io/auth/callback' },
+            } as unknown as Parameters<typeof determineRedirectURI>[0];
+            expect(determineRedirectURI(mockReq)).toBe('https://beta.quantified-self.io/auth/callback');
+        });
+
+        it('should block external domains', () => {
+            const mockReq = {
+                query: { redirect_uri: 'https://evil.com/callback' },
+            } as unknown as Parameters<typeof determineRedirectURI>[0];
+            expect(determineRedirectURI(mockReq)).toBe('');
+        });
+
+        it('should block malicious subdomains', () => {
+            const mockReq = {
+                query: { redirect_uri: 'https://quantified-self.io.evil.com/callback' },
+            } as unknown as Parameters<typeof determineRedirectURI>[0];
+            expect(determineRedirectURI(mockReq)).toBe('');
         });
     });
 

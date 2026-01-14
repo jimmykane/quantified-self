@@ -4,7 +4,7 @@ import { map } from 'rxjs/operators';
 
 
 export type JobType = 'upload' | 'download' | 'process';
-export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'duplicate';
 
 export interface BackgroundJob {
     id: string;

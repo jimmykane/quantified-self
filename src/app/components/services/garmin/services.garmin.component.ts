@@ -8,7 +8,7 @@ import { LoggerService } from '../../../services/logger.service';
 import { AppFileService } from '../../../services/app.file.service';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppAuthService } from '../../../authentication/app.auth.service';
-import { Auth1ServiceTokenInterface } from '@sports-alliance/sports-lib';
+import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
@@ -22,7 +22,7 @@ import { ServicesAbstractComponentDirective } from '../services-abstract-compone
 })
 export class ServicesGarminComponent extends ServicesAbstractComponentDirective {
 
-  public serviceName: ServiceNames = ServiceNames.GarminHealthAPI;
+  public serviceName: ServiceNames = ServiceNames.GarminAPI;
 
   constructor(protected http: HttpClient,
     protected fileService: AppFileService,
@@ -37,10 +37,9 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
 
   async requestAndSetToken() {
     const state = this.route.snapshot.queryParamMap.get('state');
-    const oauthToken = this.route.snapshot.queryParamMap.get('oauth_token');
-    const oauthVerifier = this.route.snapshot.queryParamMap.get('oauth_verifier');
-    if (state && oauthToken && oauthVerifier) {
-      await this.userService.requestAndSetCurrentUserGarminAccessToken(state, oauthVerifier);
+    const code = this.route.snapshot.queryParamMap.get('code');
+    if (state && code) {
+      await this.userService.requestAndSetCurrentUserGarminAccessToken(state, code);
     }
   }
 
@@ -48,12 +47,11 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     return (!!this.serviceTokens?.length && !!this.serviceTokens[0]?.accessToken) || this.forceConnected;
   }
 
-  buildRedirectURIFromServiceToken(token: { redirect_uri: string, state: string, oauthToken: string }): string {
-    const serviceNameStr = this.serviceName as unknown as string;
-    return `${token.redirect_uri}?oauth_token=${token.oauthToken}&oauth_callback=${encodeURIComponent(`${this.windowService.currentDomain}/services?state=${token.state}&serviceName=${serviceNameStr}&connect=1`)}`
+  buildRedirectURIFromServiceToken(token: { redirect_uri: string }): string {
+    return token.redirect_uri;
   }
 
   get garminUserID(): string | undefined {
-    return (this.serviceTokens as Auth1ServiceTokenInterface[])?.[0]?.userID;
+    return (this.serviceTokens as any[])?.[0]?.userID;
   }
 }

@@ -1,7 +1,6 @@
 import * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { deauthorizeServiceForUser } from '../OAuth2';
-import { deauthorizeGarminHealthAPIForUser } from '../garmin/auth/wrapper';
 import * as readline from 'readline';
 
 // Initialize admin if not already initialized
@@ -61,7 +60,7 @@ async function cleanupUser(uid: string, dryRun: boolean) {
     const services = [
         { name: 'Suunto', fn: () => deauthorizeServiceForUser(uid, ServiceNames.SuuntoApp) },
         { name: 'COROS', fn: () => deauthorizeServiceForUser(uid, ServiceNames.COROSAPI) },
-        { name: 'Garmin', fn: () => deauthorizeGarminHealthAPIForUser(uid) }
+        { name: 'Garmin', fn: () => deauthorizeServiceForUser(uid, ServiceNames.GarminAPI) }
     ];
 
     for (const service of services) {
@@ -126,7 +125,7 @@ async function cleanupUser(uid: string, dryRun: boolean) {
 
     // 5. Delete related documents in top-level collections (Queues, Failed Jobs)
     const topLevelCollections = [
-        'garminHealthAPIActivityQueue',
+        'garminAPIActivityQueue',
         'suuntoAppWorkoutQueue',
         'COROSAPIWorkoutQueue',
         'failed_jobs',

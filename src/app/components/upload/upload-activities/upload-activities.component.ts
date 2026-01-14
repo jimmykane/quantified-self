@@ -29,23 +29,19 @@ import { EventJSONSanitizer } from '../../../utils/event-json-sanitizer';
   standalone: false
 })
 export class UploadActivitiesComponent extends UploadAbstractDirective implements OnInit {
+  protected bottomSheet = inject(MatBottomSheet);
+  protected overlay = inject(Overlay);
+  protected eventService = inject(AppEventService);
+  protected fileService = inject(AppFileService);
+  protected userService = inject(AppUserService);
+  protected analyticsService = inject(AppAnalyticsService);
+
   public uploadCount: number | null = null;
   public uploadLimit: number | null = null;
   public isPro: boolean = false;
 
-  constructor(
-    protected snackBar: MatSnackBar,
-    protected dialog: MatDialog,
-    protected bottomSheet: MatBottomSheet,
-    protected processingService: AppProcessingService,
-    protected overlay: Overlay,
-    protected eventService: AppEventService,
-    protected router: Router,
-    protected logger: LoggerService,
-    protected fileService: AppFileService,
-    protected userService: AppUserService,
-    protected analyticsService: AppAnalyticsService) {
-    super(snackBar, dialog, processingService, router, logger);
+  constructor() {
+    super();
   }
 
   async ngOnInit() {
@@ -124,7 +120,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
             } else if (file.extension === 'tcx') {
               newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(text, 'application/xml'), options);
             } else if (file.extension === 'gpx') {
-              newEvent = await EventImporterGPX.getFromString(text, options);
+              newEvent = await EventImporterGPX.getFromString(text, null, options);
             } else {
               reject(new Error('No compatible parser found'));
               return;

@@ -6,13 +6,13 @@ import * as logger from 'firebase-functions/logger';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import {
   COROSAPIEventMetaData,
-  GarminHealthAPIEventMetaData,
   SuuntoAppEventMetaData
 } from '@sports-alliance/sports-lib';
+import { GarminAPIEventMetaData } from '@sports-alliance/sports-lib';
 
 import * as base58 from 'bs58';
 import { EventWriter, FirestoreAdapter, StorageAdapter, LogAdapter, OriginalFile } from './shared/event-writer';
-import { generateIDFromParts as sharedGenerateIDFromParts } from './shared/id-generator';
+import { generateIDFromParts as sharedGenerateIDFromParts, generateEventID as sharedGenerateEventID } from './shared/id-generator';
 
 
 export function generateIDFromPartsOld(parts: string[]): string {
@@ -21,6 +21,10 @@ export function generateIDFromPartsOld(parts: string[]): string {
 
 export async function generateIDFromParts(parts: string[]): Promise<string> {
   return sharedGenerateIDFromParts(parts);
+}
+
+export async function generateEventID(userID: string, startDate: Date): Promise<string> {
+  return sharedGenerateEventID(userID, startDate);
 }
 
 export async function getUserIDFromFirebaseToken(req: Request): Promise<string | null> {
@@ -60,8 +64,31 @@ export async function getUserIDFromFirebaseToken(req: Request): Promise<string |
   }
 }
 
+const ALLOWED_REDIRECT_PATTERNS = [
+  /^https?:\/\/localhost(:\d+)?(\/.*)?$/,
+  /^https:\/\/(beta\.)?quantified-self\.io(\/.*)?$/
+];
+
 export function determineRedirectURI(req: Request): string {
-  return String(req.query.redirect_uri); // @todo should check for authorized redirects as well
+  // For POST requests, check body first (frontend sends redirectUri in body)
+  // For GET requests, check query params
+  let redirectUri = req.body?.redirectUri || req.query.redirect_uri;
+
+  if (Array.isArray(redirectUri)) {
+    redirectUri = redirectUri[0];
+  }
+
+  if (!redirectUri) return '';
+
+  const uri = String(redirectUri);
+  const isAllowed = ALLOWED_REDIRECT_PATTERNS.some(pattern => pattern.test(uri));
+
+  if (!isAllowed) {
+    logger.warn(`Blocked invalid redirect_uri: ${uri}`);
+    return '';
+  }
+
+  return uri;
 }
 
 export function setAccessControlHeadersOnResponse(req: Request, res: Response) {
@@ -88,7 +115,7 @@ export function isCorsAllowed(req: Request) {
   });
 }
 
-export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminHealthAPIEventMetaData | COROSAPIEventMetaData, originalFile?: OriginalFile, bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>) {
+export async function setEvent(userID: string, eventID: string, event: EventInterface, metaData: SuuntoAppEventMetaData | GarminAPIEventMetaData | COROSAPIEventMetaData, originalFile?: OriginalFile, bulkWriter?: admin.firestore.BulkWriter, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>) {
   // Enforce Usage Limit
   await checkEventUsageLimit(userID, usageCache, pendingWrites);
 

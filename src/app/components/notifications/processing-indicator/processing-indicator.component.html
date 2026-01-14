@@ -23,6 +23,8 @@
                 <mat-spinner diameter="20"></mat-spinner>
                 } @else if (job.status === 'completed') {
                 <mat-icon class="success">check_circle</mat-icon>
+                } @else if (job.status === 'duplicate') {
+                <mat-icon class="warning">info</mat-icon>
                 } @else if (job.status === 'failed') {
                 <mat-icon class="error">error</mat-icon>
                 } @else {

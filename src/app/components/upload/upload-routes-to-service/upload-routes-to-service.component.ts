@@ -27,21 +27,15 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
   private analyticsService = inject(AppAnalyticsService);
   private auth = inject(Auth);
   private compatibilityService = inject(BrowserCompatibilityService);
+  private http = inject(HttpClient);
 
   public data: any = inject(MAT_DIALOG_DATA, { optional: true });
   public dialogRef = inject(MatDialogRef<UploadRoutesToServiceComponent>, { optional: true });
 
   private serviceName: ServiceNames = ServiceNames.SuuntoApp;
 
-  constructor(
-    protected snackBar: MatSnackBar,
-    protected dialog: MatDialog,
-    protected processingService: AppProcessingService,
-    private http: HttpClient,
-    protected router: Router,
-    logger: LoggerService
-  ) {
-    super(snackBar, dialog, processingService, router, logger);
+  constructor() {
+    super();
     if (this.data?.serviceName) {
       this.serviceName = this.data.serviceName;
     }

@@ -9,7 +9,7 @@ if (admin.apps.length === 0) {
 const COLLECTIONS = [
     'suuntoAppWorkoutQueue',
     'COROSAPIWorkoutQueue',
-    'garminHealthAPIActivityQueue'
+    'garminAPIActivityQueue'
 ];
 
 async function cleanupQueue() {
