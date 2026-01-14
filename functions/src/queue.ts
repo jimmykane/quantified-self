@@ -13,7 +13,7 @@ import {
   GarminAPIActivityQueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface,
 } from './queue/queue-item.interface';
-import { generateIDFromParts, setEvent, UsageLimitExceededError, enqueueWorkoutTask, UserNotFoundError, getCloudTaskQueueDepth } from './utils';
+import { generateIDFromParts, generateEventID, setEvent, UsageLimitExceededError, enqueueWorkoutTask, UserNotFoundError, getCloudTaskQueueDepth } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getServiceWorkoutQueueName } from './shared/queue-names';
 import {
@@ -129,7 +129,7 @@ export async function addToQueueForSuunto(queueItem: { userName: string, workout
  * @param queueItem
  */
 export async function addToQueueForGarmin(queueItem: { userID: string, startTimeInSeconds: number, manual: boolean, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX', token: string, userAccessToken: string, callbackURL: string }): Promise<admin.firestore.DocumentReference> {
-  const queueID = await generateIDFromParts([queueItem.userID, (queueItem.startTimeInSeconds || 0).toString()]);
+  const queueID = await generateIDFromParts([queueItem.userID, queueItem.activityFileID]);
   logger.info(`Inserting to queue ${queueID} for ${queueItem.userID} fileID ${queueItem.activityFileID}`);
   return addToWorkoutQueue({
     id: queueID,
@@ -320,14 +320,14 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         case ServiceNames.COROSAPI: {
           const corosWorkoutQueueItem = queueItem as COROSAPIWorkoutQueueItemInterface;
           const corosMetaData = new COROSAPIEventMetaData(corosWorkoutQueueItem.workoutID, corosWorkoutQueueItem.openId, corosWorkoutQueueItem.FITFileURI, new Date());
-          const deterministicID = await generateIDFromParts([corosWorkoutQueueItem.openId, corosWorkoutQueueItem.workoutID, corosWorkoutQueueItem.FITFileURI]);
+          const deterministicID = await generateEventID(parentID, event.startDate);
           await setEvent(parentID, deterministicID, event, corosMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
           break;
         }
         case ServiceNames.SuuntoApp: {
           const suuntoWorkoutQueueItem = queueItem as SuuntoAppWorkoutQueueItemInterface;
           const suuntoMetaData = new SuuntoAppEventMetaData(suuntoWorkoutQueueItem.workoutID, suuntoWorkoutQueueItem.userName, new Date());
-          const deterministicID = await generateIDFromParts([suuntoWorkoutQueueItem.userName, suuntoWorkoutQueueItem.workoutID]);
+          const deterministicID = await generateEventID(parentID, event.startDate);
           await setEvent(parentID, deterministicID, event, suuntoMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
         }
       }

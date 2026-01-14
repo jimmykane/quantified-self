@@ -12,7 +12,7 @@ import { GarminAPIEventMetaData } from '@sports-alliance/sports-lib';
 
 import * as base58 from 'bs58';
 import { EventWriter, FirestoreAdapter, StorageAdapter, LogAdapter, OriginalFile } from './shared/event-writer';
-import { generateIDFromParts as sharedGenerateIDFromParts } from './shared/id-generator';
+import { generateIDFromParts as sharedGenerateIDFromParts, generateEventID as sharedGenerateEventID } from './shared/id-generator';
 
 
 export function generateIDFromPartsOld(parts: string[]): string {
@@ -21,6 +21,10 @@ export function generateIDFromPartsOld(parts: string[]): string {
 
 export async function generateIDFromParts(parts: string[]): Promise<string> {
   return sharedGenerateIDFromParts(parts);
+}
+
+export async function generateEventID(userID: string, startDate: Date): Promise<string> {
+  return sharedGenerateEventID(userID, startDate);
 }
 
 export async function getUserIDFromFirebaseToken(req: Request): Promise<string | null> {

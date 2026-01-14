@@ -6,7 +6,7 @@ import { addToQueueForGarmin } from '../queue';
 import { increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue, QueueResult } from '../queue-utils';
 
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
-import { generateIDFromParts, setEvent, UsageLimitExceededError, UserNotFoundError } from '../utils';
+import { generateEventID, setEvent, UsageLimitExceededError, UserNotFoundError } from '../utils';
 import * as requestPromise from '../request-helper';
 import {
   GarminAPIActivityQueueItemInterface,
@@ -35,7 +35,7 @@ export const insertGarminAPIActivityFileToQueue = functions.region('europe-west2
   for (const activityFile of activityFiles) {
     let queueItemDocumentReference;
     try {
-      const activityFileID = new URLSearchParams(activityFile.callbackURL.split('?')[1]).get('id');
+      const activityFileID = activityFile.summaryId || new URLSearchParams(activityFile.callbackURL.split('?')[1]).get('id');
       const activityFileToken = new URLSearchParams(activityFile.callbackURL.split('?')[1]).get('token');
       if (!activityFileID) {
         res.status(500).send();
@@ -194,9 +194,9 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
       queueItem.manual || false,
       queueItem.startTimeInSeconds || 0, // 0 is ok here I suppose
       new Date());
-    const eventID = await generateIDFromParts([queueItem.userID, (queueItem.startTimeInSeconds || 0).toString()]);
     // The parent of the token document is the 'tokens' collection, and its parent is the User document.
     const firebaseUserID = tokenQuerySnapshots.docs[0].ref.parent.parent!.id;
+    const eventID = await generateEventID(firebaseUserID, event.startDate);
     await setEvent(firebaseUserID, eventID, event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase(), startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
     logger.info(`Created Event ${event.getID()} for ${queueItem.id} user id ${firebaseUserID} and token user ${(serviceToken as any).userID}`);
     // For each ended so we can set it to processed
@@ -230,4 +230,5 @@ export interface GarminAPIActivityFileInterface {
   startTimeInSeconds: number,
   manual: boolean,
   token: string,
+  summaryId?: string,
 }
