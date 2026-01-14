@@ -2,6 +2,7 @@ import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import { deauthorizeServiceForUser, getServiceConfig } from '../OAuth2';
+import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
 
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
@@ -86,7 +87,7 @@ export const cleanupUserAccounts = functions.region('europe-west2').auth.user().
         {
             name: 'Garmin',
             deauthFn: (id) => deauthorizeServiceForUser(id, ServiceNames.GarminAPI),
-            collectionName: 'garminAPITokens'
+            collectionName: GARMIN_API_TOKENS_COLLECTION_NAME
         }
     ];
 

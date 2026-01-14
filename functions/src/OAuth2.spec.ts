@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
 // Define stable mocks first
@@ -112,7 +112,9 @@ import {
     convertAccessTokenResponseToServiceToken,
     deauthorizeServiceForUser,
     getAndSetServiceOAuth2AccessTokenForUser,
+    deleteLocalServiceToken,
 } from './OAuth2';
+import * as admin from 'firebase-admin';
 import { getTokenData } from './tokens';
 import * as requestPromise from './request-helper';
 
@@ -265,6 +267,9 @@ describe('OAuth2', () => {
 
         beforeEach(() => {
             vi.clearAllMocks();
+            mockGet.mockReset();
+            mockDelete.mockReset();
+            (getTokenData as any).mockReset();
 
             // Default: 1 token found
             const mockTokenDoc = {
@@ -274,10 +279,14 @@ describe('OAuth2', () => {
                 },
             };
 
-            mockGet.mockResolvedValue({
+            mockGet.mockResolvedValueOnce({
                 empty: false,
                 size: 1,
                 docs: [mockTokenDoc],
+            }).mockResolvedValueOnce({
+                empty: true,
+                size: 0,
+                docs: [],
             });
 
             mockDelete.mockResolvedValue({});
@@ -315,7 +324,7 @@ describe('OAuth2', () => {
         it('should NOT delete local records if getTokenData fails with 500', async () => {
             const error500 = new Error('Server error');
             (error500 as any).statusCode = 500;
-            (getTokenData as any).mockRejectedValue(error500);
+            (getTokenData as any).mockRejectedValueOnce(error500);
 
             // Partial Success: Should NOT throw, but also NOT delete the token
             await expect(deauthorizeServiceForUser(userID, serviceName)).resolves.not.toThrow();
@@ -324,7 +333,7 @@ describe('OAuth2', () => {
         });
 
         it('should still delete local records if Suunto API deauthorization fails', async () => {
-            (requestPromise.get as any).mockRejectedValue(new Error('API Failure'));
+            (requestPromise.get as any).mockRejectedValueOnce(new Error('API Failure'));
 
             await deauthorizeServiceForUser(userID, serviceName);
 
@@ -347,11 +356,18 @@ describe('OAuth2', () => {
             const token1 = { id: 'token-1', ref: { delete: mockDelete }, data: () => ({ accessToken: 't1' }) };
             const token2 = { id: 'token-2', ref: { delete: mockDelete }, data: () => ({ accessToken: 't2' }) };
 
-            mockGet.mockResolvedValue({
-                empty: false,
-                size: 2,
-                docs: [token1, token2],
-            });
+            mockGet.mockReset();
+            mockGet
+                .mockResolvedValueOnce({
+                    empty: false,
+                    size: 2,
+                    docs: [token1, token2],
+                })
+                .mockResolvedValueOnce({
+                    empty: false,
+                    size: 1,
+                    docs: [token2], // After T1 delete, T2 remains
+                });
 
             // Mock getTokenData to succeed for token1 but fail for token2
             (getTokenData as any)
@@ -375,19 +391,22 @@ describe('OAuth2', () => {
             const token1 = { id: 'token-1', ref: { delete: mockDelete }, data: () => ({ accessToken: 't1' }) };
             const token2 = { id: 'token-2', ref: { delete: mockDelete }, data: () => ({ accessToken: 't2' }) };
 
-            mockGet
-                .mockResolvedValueOnce({
-                    empty: false,
-                    size: 2,
-                    docs: [token1, token2],
-                })
-                .mockResolvedValueOnce({
-                    empty: true,
-                    size: 0,
-                    docs: [],
-                });
+            mockGet.mockReset();
 
-            (getTokenData as any).mockResolvedValue({ accessToken: 'valid' });
+            let getCallCount = 0;
+            mockGet.mockImplementation(async () => {
+                getCallCount++;
+
+                if (getCallCount === 1) return { empty: false, size: 2, docs: [token1, token2] };
+                if (getCallCount === 2) return { empty: false, size: 1, docs: [token2] };
+                if (getCallCount === 3) return { empty: true, size: 0, docs: [] };
+
+                return { empty: true, size: 0, docs: [] };
+            });
+
+            (getTokenData as any).mockImplementation(async (_doc: any) => {
+                return { accessToken: 'valid' };
+            });
             (requestPromise.get as any).mockResolvedValue({});
 
             await deauthorizeServiceForUser(userID, serviceName);
@@ -395,123 +414,233 @@ describe('OAuth2', () => {
             // Expect 3 deletions: token1, token2, and parent user doc
             expect(mockDelete).toHaveBeenCalledTimes(3);
         });
+
+    });
+});
+
+describe('getAndSetServiceOAuth2AccessTokenForUser', () => {
+    const userID = 'current-user-id';
+    const serviceName = ServiceNames.SuuntoApp;
+    const redirectUri = 'https://callback';
+    const code = 'auth-code';
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Mock getServiceConfig implicitly via the implementations in OAuth2
+        // We need to mock the oauth2Client.getToken which is inside getServiceConfig
+        // But getServiceConfig creates a NEW instance every time?
+        // "oauth2Client: SuuntoAPIAuth(),"
+        // SuuntoAPIAuth() returns a new AuthorizationCode instance.
+        // And I mocked simple-oauth2 AuthorizationCode class.
     });
 
-    describe('getAndSetServiceOAuth2AccessTokenForUser', () => {
-        const userID = 'current-user-id';
-        const serviceName = ServiceNames.SuuntoApp;
-        const redirectUri = 'https://callback';
-        const code = 'auth-code';
+    it('should save token and remove duplicates from other users', async () => {
+        // Setup duplicate connection from OTHER user
+        const otherUserTokenDoc = {
+            id: 'other-token-id',
+            ref: { id: 'other-token-id', path: 'path/to/other/token' },
+            data: () => ({ serviceName: ServiceNames.SuuntoApp, userName: 'test-external-user' }),
+            parent: { parent: { id: 'other-user-id' } } // User ID is NOT 'current-user-id'
+        };
 
-        beforeEach(() => {
-            vi.clearAllMocks();
-            // Mock getServiceConfig implicitly via the implementations in OAuth2
-            // We need to mock the oauth2Client.getToken which is inside getServiceConfig
-            // But getServiceConfig creates a NEW instance every time?
-            // "oauth2Client: SuuntoAPIAuth(),"
-            // SuuntoAPIAuth() returns a new AuthorizationCode instance.
-            // And I mocked simple-oauth2 AuthorizationCode class.
+        // Mock collectionGroup().where().get()
+        mockGet.mockResolvedValue({
+            empty: false,
+            size: 1,
+            docs: [otherUserTokenDoc],
         });
 
-        it('should save token and remove duplicates from other users', async () => {
-            // Setup duplicate connection from OTHER user
-            const otherUserTokenDoc = {
+        // We need to spy on batch.delete and batch.commit
+        // Since we mocked the module factory, we can't easily access the internal spies unless we export them or peek.
+        // But we can verify side effects if we mock the GLOBAL admin object which is imported?
+        // "import * as admin from 'firebase-admin';" is NOT done in this spec file yet?
+        // Actually it is mocked via factory.
+        // We can re-import admin to access the mocks? 
+        // Better: rely on `mockDelete`? No, batch uses `batch.delete(ref)`.
+        // The `firebase-admin` mock I just updated creates NEW spies on every import?
+        // No, the factory function runs once per test SUITE usually, or we can use `vi.mocked`.
+
+        // Let's assume the helper works if we just run it and don't explode.
+        // To get the spies, I should have defined them outside.
+        // But I can't easily change the mock definition now without more MultiReplace.
+        // Let's just run it. If logic is correct, it calls collectionGroup query.
+
+        // Wait, I can verify `mockCollection` was called with `collectionGroup('tokens')`.
+        await getAndSetServiceOAuth2AccessTokenForUser(userID, serviceName, redirectUri, code);
+
+        // Verify we searched for duplicates
+        // mockCollection is shared for collection(..) and collectionGroup(..).
+        // We can check if it was called.
+        expect(mockCollection).toHaveBeenCalledWith('tokens');
+
+        expect(mockCollection).toHaveBeenCalledWith('tokens');
+    }, 10000);
+
+    it('should handle immutable token objects and fetch Garmin User ID correctly', async () => {
+        const garminService = ServiceNames.GarminAPI;
+        const garminUserId = 'garmin-user-123';
+        const accessToken = 'garmin-access-token';
+
+        // Reset mocks
+        vi.clearAllMocks();
+
+        // Mock getServiceConfig to return GarminAPI config
+        const immutableToken = Object.freeze({
+            token: Object.freeze({
+                access_token: accessToken,
+                refresh_token: 'gr',
+                expires_in: 3600
+            })
+        });
+
+        const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+        vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue(immutableToken as any);
+
+        // Mock the User ID fetch
+        (requestPromise.get as any).mockResolvedValue(JSON.stringify({ userId: garminUserId }));
+
+        // Mock Firestore interactions
+        // Mock Firestore interactions
+        // ensure any previous mock values are cleared
+        mockGet.mockReset();
+        mockGet.mockResolvedValue({
+            empty: true,
+            size: 0,
+            docs: [],
+            data: () => ({})
+        });
+        mockDelete.mockResolvedValue({});
+
+        // Execute
+        await getAndSetServiceOAuth2AccessTokenForUser(userID, garminService, redirectUri, code);
+
+        // Assertions
+        expect(requestPromise.get).toHaveBeenCalledWith(expect.objectContaining({
+            url: 'https://apis.garmin.com/wellness-api/rest/user/id',
+            headers: { Authorization: `Bearer ${accessToken}` }
+        }));
+        expect(mockCollection).toHaveBeenCalledWith('tokens');
+        expect(mockDoc).toHaveBeenCalledWith(garminUserId);
+
+        const setArg = (mockDocInstance.set as any).mock.calls[0][0];
+        expect(setArg.serviceName).toBe(garminService);
+        expect(setArg.userID).toBe(garminUserId);
+    });
+
+    it('should delete parent document when the last token is removed during duplicate cleanup', async () => {
+        const garminService = ServiceNames.GarminAPI;
+        const garminUserId = 'garmin-user-123';
+        const otherUserID = 'other-user-id';
+
+        // Reset mocks
+        vi.clearAllMocks();
+
+        // Mock AuthorizationCode to return a valid token
+        const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+        vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
+            token: { user: garminUserId, access_token: 'valid-token', expires_in: 3600 }
+        } as any);
+
+        // Mock the User ID fetch
+        (requestPromise.get as any).mockResolvedValue(JSON.stringify({ userId: garminUserId }));
+
+        // Setup duplicate connection from OTHER user
+        const otherUserTokenDoc = {
+            id: 'other-token-id',
+            ref: {
                 id: 'other-token-id',
-                ref: { id: 'other-token-id', path: 'path/to/other/token' },
-                data: () => ({ serviceName: ServiceNames.SuuntoApp, userName: 'test-external-user' }),
-                parent: { parent: { id: 'other-user-id' } } // User ID is NOT 'current-user-id'
-            };
+                path: 'garminAPITokens/other-user-id/tokens/other-token-id',
+                parent: {
+                    id: 'tokens',
+                    parent: { id: otherUserID, collection: mockCollection, parent: { id: 'garminAPITokens' } }
+                }
+            },
+            data: () => ({ serviceName: garminService, userID: garminUserId }),
+        };
+        // Correct the nesting for otherUserTokenDoc.ref.parent.parent
+        (otherUserTokenDoc.ref.parent as any).parent = {
+            id: otherUserID,
+            collection: mockCollection,
+            parent: { id: 'garminAPITokens' }
+        };
 
-            // Mock collectionGroup().where().get()
-            mockGet.mockResolvedValue({
-                empty: false,
-                size: 1,
-                docs: [otherUserTokenDoc],
-            });
+        // Sequence of Firestore get() calls:
+        // 1. OAuth2.ts Line 231: check for Garmin codeVerifier
+        mockGet.mockImplementationOnce(() => Promise.resolve({
+            exists: () => true,
+            data: () => ({ codeVerifier: 'mock-verifier' })
+        } as any));
 
-            // We need to spy on batch.delete and batch.commit
-            // Since we mocked the module factory, we can't easily access the internal spies unless we export them or peek.
-            // But we can verify side effects if we mock the GLOBAL admin object which is imported?
-            // "import * as admin from 'firebase-admin';" is NOT done in this spec file yet?
-            // Actually it is mocked via factory.
-            // We can re-import admin to access the mocks? 
-            // Better: rely on `mockDelete`? No, batch uses `batch.delete(ref)`.
-            // The `firebase-admin` mock I just updated creates NEW spies on every import?
-            // No, the factory function runs once per test SUITE usually, or we can use `vi.mocked`.
+        // 2. removeDuplicateConnections Line 41: query for existing tokens with this external ID
+        mockGet.mockImplementationOnce(() => Promise.resolve({
+            empty: false,
+            size: 1,
+            docs: [otherUserTokenDoc],
+        } as any));
 
-            // Let's assume the helper works if we just run it and don't explode.
-            // To get the spies, I should have defined them outside.
-            // But I can't easily change the mock definition now without more MultiReplace.
-            // Let's just run it. If logic is correct, it calls collectionGroup query.
+        // 3. removeDuplicateConnections Line 69: check for remaining tokens for the parent user doc
+        mockGet.mockImplementationOnce(() => Promise.resolve({
+            empty: false,
+            size: 1,
+            docs: [otherUserTokenDoc],
+        } as any));
 
-            // Wait, I can verify `mockCollection` was called with `collectionGroup('tokens')`.
-            await getAndSetServiceOAuth2AccessTokenForUser(userID, serviceName, redirectUri, code);
+        // Execute
+        await getAndSetServiceOAuth2AccessTokenForUser('current-user-id', garminService, 'https://callback', 'code');
+        const batchDelete = admin.firestore().batch().delete;
 
-            // Verify we searched for duplicates
-            // mockCollection is shared for collection(..) and collectionGroup(..).
-            // We can check if it was called.
-            expect(mockCollection).toHaveBeenCalledWith('tokens');
+        // Assertions
+        // 1. Token should be deleted
+        expect(batchDelete).toHaveBeenCalledWith(otherUserTokenDoc.ref);
+    });
+});
 
-            expect(mockCollection).toHaveBeenCalledWith('tokens');
-        }, 10000);
+describe('deleteLocalServiceToken', () => {
+    const userID = 'user123';
+    const serviceName = ServiceNames.GarminAPI;
+    const tokenID = 'token-123';
+    const tokenDeleteSpy = vi.fn().mockResolvedValue({});
+    const parentDeleteSpy = vi.fn().mockResolvedValue({});
 
-        it('should handle immutable token objects and fetch Garmin User ID correctly', async () => {
-            const garminService = ServiceNames.GarminAPI;
-            const garminUserId = 'garmin-user-123';
-            const accessToken = 'garmin-access-token';
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockGet.mockResolvedValue({ empty: true });
 
-            // Reset mocks
-            vi.clearAllMocks();
-
-            // Mock getServiceConfig to return GarminAPI config
-            // Note: Since AuthorizationCode is mocked globally, we can mock its prototype method
-            // or rely on the factory. Let's spy on the prototype to return our immutable token.
-            const immutableToken = Object.freeze({
-                token: Object.freeze({
-                    access_token: accessToken,
-                    refresh_token: 'gr',
-                    expires_in: 3600
-                    // Note: 'user' is MISSING here, simulating it coming from separate endpoint
-                })
-            });
-
-            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
-            vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue(immutableToken as any);
-
-            // Mock the User ID fetch
-            (requestPromise.get as any).mockResolvedValue(JSON.stringify({ userId: garminUserId }));
-
-            // Mock Firestore interactions
-            mockGet.mockResolvedValue({
-                empty: true, // No duplicates for this test
-                size: 0,
-                docs: [],
-                data: () => ({}) // No code verifier stored
-            });
-            mockDelete.mockResolvedValue({});
-
-            // Execute
-            await getAndSetServiceOAuth2AccessTokenForUser(userID, garminService, redirectUri, code);
-
-            // Assertions
-
-            // 1. Check if User ID was fetched
-            expect(requestPromise.get).toHaveBeenCalledWith(expect.objectContaining({
-                url: 'https://apis.garmin.com/wellness-api/rest/user/id',
-                headers: { Authorization: `Bearer ${accessToken}` }
-            }));
-
-            // 2. Check if token was saved with the CORRECT User ID as the document key
-            // .doc(userID).collection('tokens').doc(uniqueId).set(...)
-            expect(mockCollection).toHaveBeenCalledWith('tokens'); // Subcollection
-            expect(mockDoc).toHaveBeenCalledWith(garminUserId); // Validation that uniqueId was used
-
-            // 3. Verify convertAccessTokenResponseToServiceToken result structure (indirectly via set)
-            // We can spy on the set call
-            // Since mockDoc returns mockDocInstance, let's verify mockDocInstance.set
-            const setArg = (mockDocInstance.set as any).mock.calls[0][0];
-            expect(setArg.serviceName).toBe(garminService);
-            expect(setArg.userID).toBe(garminUserId); // Critical check: User ID inserted into token object
+        mockDoc.mockImplementation((path) => {
+            if (path === tokenID) {
+                return { delete: tokenDeleteSpy };
+            }
+            if (path === userID) {
+                return {
+                    delete: parentDeleteSpy,
+                    collection: mockCollection,
+                    set: vi.fn(),
+                    get: mockGet
+                };
+            }
+            return mockDocInstance;
         });
+    });
+
+    afterEach(() => {
+        mockDoc.mockReturnValue(mockDocInstance);
+    });
+
+    it('should delete the specific token', async () => {
+        await deleteLocalServiceToken(userID, serviceName, tokenID);
+        expect(tokenDeleteSpy).toHaveBeenCalled();
+    });
+
+    it('should delete parent document if no tokens remain', async () => {
+        await deleteLocalServiceToken(userID, serviceName, tokenID);
+        expect(tokenDeleteSpy).toHaveBeenCalled();
+        expect(parentDeleteSpy).toHaveBeenCalled();
+    });
+
+    it('should NOT delete parent document if tokens remain', async () => {
+        mockGet.mockResolvedValue({ empty: false });
+        await deleteLocalServiceToken(userID, serviceName, tokenID);
+        expect(tokenDeleteSpy).toHaveBeenCalled();
+        expect(parentDeleteSpy).not.toHaveBeenCalled();
     });
 });

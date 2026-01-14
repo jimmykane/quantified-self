@@ -7,6 +7,9 @@ import { CloudBillingClient } from '@google-cloud/billing';
 import { BudgetServiceClient } from '@google-cloud/billing-budgets';
 import { BigQuery } from '@google-cloud/bigquery';
 import { getCloudTaskQueueDepth } from '../utils';
+import { GARMIN_API_TOKENS_COLLECTION_NAME, GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../garmin/constants';
+import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME, SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
+import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME, COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
 
 /**
  * Normalizes error messages by replacing dynamic values (numbers, IDs) with placeholders.
@@ -74,9 +77,9 @@ async function enrichUsers(
                         .orderBy('created', 'desc')
                         .limit(1)
                         .get(),
-                    db.collection('garminAPITokens').doc(user.uid).collection('tokens').limit(1).get(),
-                    db.collection('suuntoAppAccessTokens').doc(user.uid).collection('tokens').limit(1).get(),
-                    db.collection('COROSAPIAccessTokens').doc(user.uid).collection('tokens').limit(1).get()
+                    db.collection(GARMIN_API_TOKENS_COLLECTION_NAME).doc(user.uid).collection('tokens').limit(1).get(),
+                    db.collection(SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME).doc(user.uid).collection('tokens').limit(1).get(),
+                    db.collection(COROSAPI_ACCESS_TOKENS_COLLECTION_NAME).doc(user.uid).collection('tokens').limit(1).get()
                 ]);
 
                 if (!subsSnapshot.empty) {
@@ -147,13 +150,13 @@ export const listUsers = onAdminCall<ListUsersRequest, any>({
             let collectionName = '';
             switch (filterService) {
                 case 'garmin':
-                    collectionName = 'garminAPITokens';
+                    collectionName = GARMIN_API_TOKENS_COLLECTION_NAME;
                     break;
                 case 'suunto':
-                    collectionName = 'suuntoAppAccessTokens';
+                    collectionName = SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME;
                     break;
                 case 'coros':
-                    collectionName = 'COROSAPIAccessTokens';
+                    collectionName = COROSAPI_ACCESS_TOKENS_COLLECTION_NAME;
                     break;
             }
 
@@ -390,9 +393,9 @@ export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
 }, async (request) => {
     const includeAnalysis = request.data?.includeAnalysis ?? false;
     const PROVIDER_QUEUES: Record<string, string[]> = {
-        'Suunto': ['suuntoAppWorkoutQueue'],
-        'COROS': ['COROSAPIWorkoutQueue'],
-        'Garmin': ['garminAPIActivityQueue']
+        'Suunto': [SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME],
+        'COROS': [COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME],
+        'Garmin': [GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME]
     };
 
     try {

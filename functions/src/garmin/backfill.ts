@@ -8,6 +8,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS } from '../shared/history-import.constants';
 import { getTokenData } from '../tokens';
+import { GARMIN_API_TOKENS_COLLECTION_NAME } from './constants';
 
 const GARMIN_ACTIVITIES_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/backfill/activities';
 const TIMEOUT_IN_SECONDS = 300;
@@ -92,7 +93,7 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
     }
   }
 
-  const tokensQuerySnapshot = await admin.firestore().collection('garminAPITokens').doc(userID).collection('tokens').limit(1).get();
+  const tokensQuerySnapshot = await admin.firestore().collection(GARMIN_API_TOKENS_COLLECTION_NAME).doc(userID).collection('tokens').limit(1).get();
   if (tokensQuerySnapshot.empty) {
     logger.error(`No token found for user ${userID}`);
     throw new Error('Bad request: No token found');

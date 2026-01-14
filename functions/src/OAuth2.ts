@@ -293,6 +293,7 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
   const userDocRef = admin.firestore().collection(serviceConfig.tokenCollectionName).doc(userID);
   const tokenQuerySnapshots = await userDocRef.collection('tokens').get();
 
+
   if (tokenQuerySnapshots.empty) {
     logger.warn(`No tokens found for user ${userID} in ${serviceConfig.tokenCollectionName}. Deleting parent document.`);
     await userDocRef.delete();
@@ -372,22 +373,24 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
 
     if (shouldDeleteToken) {
       try {
-        await tokenQueryDocumentSnapshot.ref.delete();
-        logger.info(`Deleted token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
+        await deleteLocalServiceToken(userID, serviceName, tokenQueryDocumentSnapshot.id);
       } catch (deleteError: any) {
         logger.error(`Failed to delete local token ${tokenQueryDocumentSnapshot.id}: ${deleteError.message}`);
-        // If we can't delete it locally, effectively it failed to be cleaned up
-        failedTokenCount++;
       }
     }
   }
+}
 
-  // Only delete the parent document if ALL tokens were successfully deleted
-  if (failedTokenCount === 0) {
+export async function deleteLocalServiceToken(userID: string, serviceName: ServiceNames, tokenID: string) {
+  const serviceConfig = getServiceConfig(serviceName);
+  const userDocRef = admin.firestore().collection(serviceConfig.tokenCollectionName).doc(userID);
+
+  await userDocRef.collection('tokens').doc(tokenID).delete();
+
+  // Check if any tokens remain
+  const remainingTokens = await userDocRef.collection('tokens').limit(1).get();
+  if (remainingTokens.empty) {
     await userDocRef.delete();
-    logger.info(`Deleted parent document ${userID} from ${serviceConfig.tokenCollectionName}`);
-  } else {
-    logger.warn(`Skipping parent document deletion for ${userID} because ${failedTokenCount} tokens could not be safely deauthorized.`);
   }
 }
 

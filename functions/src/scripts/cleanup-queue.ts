@@ -1,5 +1,8 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
+import { GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../garmin/constants';
+import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
+import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
 
 // Initialize admin if not already initialized
 if (admin.apps.length === 0) {
@@ -7,9 +10,9 @@ if (admin.apps.length === 0) {
 }
 
 const COLLECTIONS = [
-    'suuntoAppWorkoutQueue',
-    'COROSAPIWorkoutQueue',
-    'garminAPIActivityQueue'
+    SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME,
+    COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
+    GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME
 ];
 
 async function cleanupQueue() {

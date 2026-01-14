@@ -2,6 +2,9 @@ import * as admin from 'firebase-admin';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { deauthorizeServiceForUser } from '../OAuth2';
 import * as readline from 'readline';
+import { GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../garmin/constants';
+import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
+import { COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
 
 // Initialize admin if not already initialized
 if (admin.apps.length === 0) {
@@ -125,9 +128,9 @@ async function cleanupUser(uid: string, dryRun: boolean) {
 
     // 5. Delete related documents in top-level collections (Queues, Failed Jobs)
     const topLevelCollections = [
-        'garminAPIActivityQueue',
-        'suuntoAppWorkoutQueue',
-        'COROSAPIWorkoutQueue',
+        GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME,
+        SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME,
+        COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME,
         'failed_jobs',
     ];
 
