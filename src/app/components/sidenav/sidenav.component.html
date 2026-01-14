@@ -102,7 +102,7 @@
   <!-- Preferences Section -->
   <div class="sidenav-section-header">Preferences</div>
 
-  <mat-list-item (click)="$event.stopPropagation(); $event.preventDefault(); themeService.toggleTheme()">
+  <mat-list-item (click)="$event.stopPropagation(); $event.preventDefault(); themeService.toggleTheme($event)">
     <mat-icon svgIcon="dark-mode"></mat-icon>
     <span>Dark theme</span>
     <span class="fill-space"></span>

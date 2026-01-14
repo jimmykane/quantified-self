@@ -199,3 +199,48 @@ mat-progress-bar {
     border-right: 1px solid rgba(255, 255, 255, 0.12);
   }
 }
+
+/* Gradient Sweep Theme Animation Overlay */
+.theme-reveal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 99999;
+  pointer-events: none;
+
+  /* Gradient that sweeps from left to right */
+  background: linear-gradient(90deg,
+      #ffffff 0%,
+      #ffffff 50%,
+      transparent 50%,
+      transparent 100%);
+  background-size: 200% 100%;
+  background-position: 100% 0;
+  animation: gradient-sweep 0.6s ease-in-out forwards;
+
+  &.dark-theme {
+    background: linear-gradient(90deg,
+        #121212 0%,
+        #121212 50%,
+        transparent 50%,
+        transparent 100%);
+    background-size: 200% 100%;
+    background-position: 100% 0;
+  }
+}
+
+@keyframes gradient-sweep {
+  0% {
+    background-position: 100% 0;
+  }
+
+  50% {
+    background-position: 0% 0;
+  }
+
+  100% {
+    background-position: -100% 0;
+  }
+}
