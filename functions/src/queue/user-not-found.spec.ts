@@ -69,11 +69,14 @@ const mockFirestore = {
         add: vi.fn(),
         limit: vi.fn(() => ({ get: vi.fn(() => Promise.resolve(mockSnapshot)) }))
     })),
-    collectionGroup: vi.fn(() => ({
-        where: vi.fn(() => ({
+    collectionGroup: vi.fn(() => {
+        const queryBuilder = {
+            where: vi.fn(() => queryBuilder),
+            limit: vi.fn(() => queryBuilder),
             get: vi.fn(() => Promise.resolve(mockSnapshot))
-        }))
-    })),
+        };
+        return queryBuilder;
+    }),
     batch: vi.fn(() => mockBatch),
     bulkWriter: vi.fn(() => ({
         set: vi.fn(),
