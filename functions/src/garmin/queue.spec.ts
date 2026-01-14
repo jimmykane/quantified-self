@@ -1,3 +1,4 @@
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UsageLimitExceededError } from '../utils';
 
@@ -7,6 +8,7 @@ const {
     mockGet,
     mockWhere,
     mockCollection,
+    mockCollectionGroup,
     mockRequestGet,
     mockIncreaseRetryCountForQueueItem,
     mockMoveToDeadLetterQueue
@@ -16,6 +18,7 @@ const {
         mockGet: vi.fn(),
         mockWhere: vi.fn(),
         mockCollection: vi.fn(),
+        mockCollectionGroup: vi.fn(),
         mockRequestGet: vi.fn(),
         mockIncreaseRetryCountForQueueItem: vi.fn(),
         mockMoveToDeadLetterQueue: vi.fn(),
@@ -95,9 +98,15 @@ vi.mock('firebase-functions/logger', () => ({
 // Mock firebase-admin
 vi.mock('firebase-admin', () => ({
     default: {
-        firestore: () => ({ collection: mockCollection }),
+        firestore: () => ({
+            collection: mockCollection,
+            collectionGroup: mockCollectionGroup
+        }),
     },
-    firestore: () => ({ collection: mockCollection }),
+    firestore: () => ({
+        collection: mockCollection,
+        collectionGroup: mockCollectionGroup
+    }),
 }));
 
 // Import SUT
@@ -124,7 +133,19 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             doc: mockDoc
         });
 
+        // Mock chained collectionGroup query
+        // const mockSnapshot = {}; 
+        const mockCollectionGroupLimit = vi.fn().mockReturnValue({ get: mockGet }); // Use global mockGet
+        // Need to support multiple .where() calls
+        const mockWhereReturn = { limit: mockCollectionGroupLimit, where: vi.fn() };
+        mockWhereReturn.where.mockReturnValue(mockWhereReturn);
+
+        mockCollectionGroup.mockReturnValue({ where: vi.fn().mockReturnValue(mockWhereReturn) });
+
         mockRequestGet.mockResolvedValue(new ArrayBuffer(8));
+
+        // Force setEvent to fail
+        vi.mocked(mockSetEvent).mockRejectedValue(new UsageLimitExceededError('Limit exceeded'));
     };
 
     describe('insertGarminAPIActivityFileToQueue', () => {
@@ -205,7 +226,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
 
             // Verify
             expect(result).toBe('RETRY_INCREMENTED');
-            expect(mockCollection).toHaveBeenCalledWith('garminAPITokens');
+            expect(mockCollectionGroup).toHaveBeenCalledWith('tokens');
             // Check that the token retrieval path was exercised
             // The chain is: collection -> doc -> collection -> limit -> get
             // We check if get was called (which is the terminal of our mocked chain)

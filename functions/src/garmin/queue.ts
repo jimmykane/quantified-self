@@ -77,10 +77,13 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
   if (tokenCache) {
     let tokenPromise = tokenCache.get(userKey);
     if (!tokenPromise) {
-      // Lookup by userID (Garmin User ID)
-      // Note: queueItem.userID is the Firebase User ID (mapped in queue dispatch)
-      // So logical path is: collection(GARMIN).doc(queueItem.userID).collection('tokens').limit(1)
-      tokenPromise = admin.firestore().collection('garminAPITokens').doc(queueItem.userID).collection('tokens').limit(1).get();
+      // Lookup by userID (Garmin User ID) which is stored in the 'userID' field of the token document
+      // Since we don't know the Firebase User ID (the parent doc ID), we must use a Collection Group Query.
+      tokenPromise = admin.firestore().collectionGroup('tokens')
+        .where('userID', '==', queueItem.userID)
+        .where('serviceName', '==', ServiceNames.GarminAPI)
+        .limit(1)
+        .get();
       tokenCache.set(userKey, tokenPromise);
     }
     try {
@@ -90,7 +93,11 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
       return increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
     }
   } else {
-    tokenQuerySnapshots = await admin.firestore().collection('garminAPITokens').doc(queueItem.userID).collection('tokens').limit(1).get();
+    tokenQuerySnapshots = await admin.firestore().collectionGroup('tokens')
+      .where('userID', '==', queueItem.userID)
+      .where('serviceName', '==', ServiceNames.GarminAPI)
+      .limit(1)
+      .get();
   }
 
   if (!tokenQuerySnapshots.size) {
