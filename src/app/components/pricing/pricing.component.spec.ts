@@ -101,8 +101,8 @@ describe('PricingComponent', () => {
 
         expect(dialogSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
             data: expect.objectContaining({
-                title: 'Downgrade Warning',
-                message: expect.stringContaining('30-day grace period')
+                title: 'Manage Subscription',
+                message: expect.stringContaining('secure billing portal')
             })
         }));
     });
