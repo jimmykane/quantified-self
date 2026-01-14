@@ -20,6 +20,7 @@ import { DataPowerMax } from '@sports-alliance/sports-lib';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
+import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
 
 @Directive()
@@ -94,6 +95,11 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
       statRowElement[DataSpeedAvg.type] = activityTypes.reduce((accu, activityType) => {
         return [...accu, ...ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(ActivityTypes[activityType])]
       }, []).reduce((accu, dataType) => {
+
+        // Hide Grade Adjusted Pace from the dashboard event table
+        if ((typeof DataGradeAdjustedPace !== 'undefined' && dataType === DataGradeAdjustedPace.type) || dataType === 'GradeAdjustedPace' || dataType === 'Average Grade Adjusted Pace') {
+          return accu;
+        }
         const stat = stats.find(iStat => iStat.getType() === dataType);
         return stat ?
           [...accu, ...DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, unitSettings)]
