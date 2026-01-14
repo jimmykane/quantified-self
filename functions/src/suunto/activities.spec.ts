@@ -1,7 +1,7 @@
 
 import { describe, it, vi, expect, beforeEach } from 'vitest';
 
-import * as admin from 'firebase-admin';
+
 import { PRO_REQUIRED_MESSAGE } from '../utils';
 
 // Mock dependencies BEFORE importing the module under test
@@ -180,6 +180,47 @@ describe('importActivityToSuuntoApp', () => {
         // 3. Success Response
         expect(res.status).toHaveBeenCalledWith(200);
         expect(res.send).toHaveBeenCalled();
+    });
+
+    it('should handle "Already exists" error from Suunto gracefully', async () => {
+        // Setup Mocks
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+
+        // Mock init upload (POST)
+        requestMocks.post.mockResolvedValue(JSON.stringify({
+            id: 'test-upload-id-dup',
+            url: 'https://storage.suunto.com/upload-url-dup',
+            headers: {}
+        }));
+
+        // Mock binary upload (PUT)
+        requestMocks.put.mockResolvedValue({});
+
+        // Mock status check (GET) - Returning "Already exists"
+        requestMocks.get.mockResolvedValue(JSON.stringify({ status: 'ERROR', message: 'Already exists' }));
+
+        const req = {
+            method: 'POST',
+            body: { some: 'data' },
+            rawBody: Buffer.from('data'),
+            headers: { origin: 'http://localhost' },
+            get: vi.fn(),
+        } as any;
+
+        const res = {
+            status: vi.fn().mockReturnThis(),
+            json: vi.fn(),
+            send: vi.fn(),
+            set: vi.fn(),
+        } as any;
+
+        await importActivityToSuuntoApp(req, res);
+
+        // Assertions
+        expect(res.status).toHaveBeenCalledWith(200);
+        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+            code: 'ALREADY_EXISTS'
+        }));
     });
 
     it('should block COMPATIBILITY check (CORS)', async () => {

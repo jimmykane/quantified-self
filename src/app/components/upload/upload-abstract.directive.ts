@@ -1,4 +1,4 @@
-import { Directive, Input, OnInit } from '@angular/core';
+import { Directive, inject, Input, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { User } from '@sports-alliance/sports-lib';
 import { FileInterface } from './file.interface';
@@ -17,14 +17,13 @@ export abstract class UploadAbstractDirective implements OnInit {
   @Input() requiresPro: boolean = false;
   public isUploading = false;
 
-  constructor(
-    protected snackBar: MatSnackBar,
-    protected dialog: MatDialog,
-    protected processingService: AppProcessingService,
-    protected router: Router,
-    protected logger: LoggerService) {
+  protected snackBar = inject(MatSnackBar);
+  protected dialog = inject(MatDialog);
+  protected processingService = inject(AppProcessingService);
+  protected router = inject(Router);
+  protected logger = inject(LoggerService);
 
-  }
+  constructor() { }
 
 
   ngOnInit(): void {
