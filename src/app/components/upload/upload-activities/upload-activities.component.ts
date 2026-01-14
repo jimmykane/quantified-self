@@ -120,7 +120,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
             } else if (file.extension === 'tcx') {
               newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(text, 'application/xml'), options);
             } else if (file.extension === 'gpx') {
-              newEvent = await EventImporterGPX.getFromString(text, options);
+              newEvent = await EventImporterGPX.getFromString(text, null, options);
             } else {
               reject(new Error('No compatible parser found'));
               return;
