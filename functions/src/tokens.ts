@@ -81,6 +81,7 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
           tokenType: serviceTokenData.tokenType,
           userID: (serviceTokenData as any).userID,
           permissions: (serviceTokenData as any).permissions, // Expose permissions
+          permissionsLastChangedAt: (serviceTokenData as any).permissionsLastChangedAt,
           dateRefreshed: serviceTokenData.dateRefreshed,
           dateCreated: serviceTokenData.dateCreated,
         };

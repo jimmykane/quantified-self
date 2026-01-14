@@ -32,6 +32,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   @Input() serviceName: ServiceNames;
   @Input() userMetaForService: UserServiceMetaInterface;
   @Input() minDate: Date | null = null;
+  @Input() missingPermissions: string[] = [];
   @Output() importInitiated = new EventEmitter<void>();
 
 
@@ -104,6 +105,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         break;
         break;
       case ServiceNames.GarminAPI:
+        if (this.missingPermissions && (this.missingPermissions.includes('HISTORICAL_DATA_EXPORT') || this.missingPermissions.includes('ACTIVITY_EXPORT'))) {
+          this.isAllowedToDoHistoryImport = false;
+          this.formGroup.disable();
+          return;
+        }
         this.isAllowedToDoHistoryImport = new Date(this.userMetaForService.didLastHistoryImport + (GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000)) < new Date()
         this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + (GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000));
         break;

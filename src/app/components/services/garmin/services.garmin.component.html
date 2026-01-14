@@ -42,7 +42,35 @@
             <div matListItemLine style="font-size: 0.8rem; opacity: 0.7;">Connected: {{serviceTokens?.[0]?.dateCreated
               | date:'short'}}</div>
           </mat-list-item>
+          <mat-list-item style="height: auto; padding: 8px 0;" *ngIf="permissionsLastChangedAt">
+            <mat-icon matListItemIcon style="margin-right: 8px;">update</mat-icon>
+            <div matListItemTitle style="font-size: 0.9rem;">Permissions Updated</div>
+            <div matListItemLine style="font-size: 0.8rem; opacity: 0.7;">{{ permissionsLastChangedAt * 1000 |
+              date:'short' }}</div>
+          </mat-list-item>
         </mat-list>
+
+        <div *ngIf="missingPermissions.length > 0" class="warning-box"
+          style="margin-top: 16px; padding: 12px; background-color: rgba(244, 67, 54, 0.1); border-radius: 8px; border: 1px solid rgba(244, 67, 54, 0.3);">
+          <div style="display: flex; align-items: flex-start; gap: 12px;">
+            <mat-icon style="color: #f44336;">warning</mat-icon>
+            <div>
+              <strong style="display: block; color: #f44336; margin-bottom: 4px;">Missing Permissions</strong>
+              <p style="margin: 0; font-size: 0.85rem; opacity: 0.8;">
+                Some features are disabled. Missing permissions:
+              </p>
+              <ul style="margin: 4px 0 8px 16px; padding: 0; font-size: 0.85rem;">
+                <li *ngFor="let permission of missingPermissions">
+                  {{ getPermissionLabel(permission) }} <span style="opacity: 0.6; font-size: 0.75rem;">({{ permission
+                    }})</span>
+                </li>
+              </ul>
+              <p style="margin: 4px 0 0 0; font-size: 0.85rem;">
+                Please reconnect to grant all permissions.
+              </p>
+            </div>
+          </div>
+        </div>
         }
 
         <div style="margin-top: auto; padding-top: 16px;">

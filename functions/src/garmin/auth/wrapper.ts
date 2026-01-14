@@ -252,6 +252,7 @@ export const receiveGarminAPIUserPermissions = functions.region('europe-west2').
       for (const tokenDoc of tokenQuerySnapshot.docs) {
         batch.update(tokenDoc.ref, {
           permissions: permissions,
+          permissionsLastChangedAt: changeTimeInSeconds,
         });
         updateCount++;
       }

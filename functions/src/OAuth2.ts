@@ -18,7 +18,9 @@ import {
 export interface GarminAPIAuth2ServiceTokenInterface extends Auth2ServiceTokenInterface {
   userID: string;
   permissions?: string[];
+  permissionsLastChangedAt?: number;
 }
+import { getGarminUserId, getGarminPermissions } from './garmin/auth/api';
 import { getTokenData } from './tokens';
 import * as requestPromise from './request-helper';
 import { config } from './config';
@@ -252,27 +254,30 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
   let uniqueId = (results.token as any).user || (results.token as any).openId;
   if (serviceName === ServiceNames.GarminAPI) {
     try {
-      const userResponse = await requestPromise.get({
-        url: 'https://apis.garmin.com/wellness-api/rest/user/id',
-        headers: {
-          Authorization: `Bearer ${results.token.access_token}`,
-        },
-      });
-      const userData = typeof userResponse === 'string' ? JSON.parse(userResponse) : userResponse;
-      if (userData && userData.userId) {
-        uniqueId = userData.userId;
-      }
-    } catch (e) {
-      logger.error(`Failed to fetch Garmin User ID: ${e}`);
+      uniqueId = await getGarminUserId(results.token.access_token as string);
+    } catch (e: any) {
+      // Error is already logged in utils, but we throw here to stop the flow
       throw new Error(`Failed to fetch Garmin User ID for user ${userID}`);
     }
+  }
+
+  // Fetch Permissions for Garmin
+  let permissions: string[] | undefined;
+  if (serviceName === ServiceNames.GarminAPI) {
+    permissions = await getGarminPermissions(results.token.access_token as string);
+  }
+
+  const tokenData = convertAccessTokenResponseToServiceToken(results, serviceName, uniqueId);
+  if (serviceName === ServiceNames.GarminAPI && permissions) {
+    (tokenData as GarminAPIAuth2ServiceTokenInterface).permissions = permissions;
+    (tokenData as GarminAPIAuth2ServiceTokenInterface).permissionsLastChangedAt = Math.floor(Date.now() / 1000);
   }
 
   await admin.firestore()
     .collection(serviceConfig.tokenCollectionName)
     .doc(userID).collection('tokens')
     .doc(uniqueId)// @todo make this dynamic and not silly like this
-    .set(convertAccessTokenResponseToServiceToken(results, serviceName, uniqueId));
+    .set(tokenData);
 
   // Remove any OTHER users connected to this same external account
   const externalUserId = uniqueId;

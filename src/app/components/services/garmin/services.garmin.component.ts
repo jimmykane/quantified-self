@@ -12,6 +12,7 @@ import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
+import { GARMIN_REQUIRED_PERMISSIONS } from '../../../../../functions/src/garmin/constants';
 
 
 @Component({
@@ -23,6 +24,15 @@ import { ServicesAbstractComponentDirective } from '../services-abstract-compone
 export class ServicesGarminComponent extends ServicesAbstractComponentDirective {
 
   public serviceName: ServiceNames = ServiceNames.GarminAPI;
+
+  public readonly permissionLabels: { [key: string]: string } = {
+    'HISTORICAL_DATA_EXPORT': 'Historical Data Export',
+    'ACTIVITY_EXPORT': 'Activity Export',
+    'WORKOUT_IMPORT': 'Workout Import',
+    'HEALTH_EXPORT': 'Health Export',
+    'COURSE_IMPORT': 'Course Import',
+    'MCT_EXPORT': 'Menstrual Cycle Tracking Export'
+  };
 
   constructor(protected http: HttpClient,
     protected fileService: AppFileService,
@@ -53,5 +63,22 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
 
   get garminUserID(): string | undefined {
     return (this.serviceTokens as any[])?.[0]?.userID;
+  }
+
+  get permissionsLastChangedAt(): number | undefined {
+    return (this.serviceTokens as any[])?.[0]?.permissionsLastChangedAt;
+  }
+
+  get missingPermissions(): string[] {
+    const token = (this.serviceTokens as any[])?.[0];
+    if (!token || !token.permissions) {
+      return [];
+    }
+    const requiredPermissions = GARMIN_REQUIRED_PERMISSIONS;
+    return requiredPermissions.filter(p => !token.permissions.includes(p));
+  }
+
+  getPermissionLabel(permission: string): string {
+    return this.permissionLabels[permission] || permission;
   }
 }
