@@ -77,9 +77,9 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
 }
 
 const TIMEOUT_DEFAULT = 300;
-const MEMORY_DEFAULT = '4GB';
+const MEMORY_DEFAULT = '256MB';
 const TIMEOUT_HIGH = 540;
-const MEMORY_HIGH = '4GB';
+const MEMORY_HIGH = '256MB';
 
 export const parseGarminAPIActivityQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_HIGH,

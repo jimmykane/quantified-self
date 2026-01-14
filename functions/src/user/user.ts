@@ -8,7 +8,7 @@ import { isCorsAllowed } from '../utils';
 export const deleteSelf = functions
     .runWith({
         timeoutSeconds: 540,
-        memory: '2GB'
+        memory: '256MB'
     })
     .region('europe-west2')
     .https.onCall(async (data, context) => {
