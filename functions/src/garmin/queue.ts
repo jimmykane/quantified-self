@@ -194,9 +194,11 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
       queueItem.manual || false,
       queueItem.startTimeInSeconds || 0, // 0 is ok here I suppose
       new Date());
-    const eventID = await generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()]);
-    await setEvent(tokenQuerySnapshots.docs[0].id, eventID, event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase(), startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
-    logger.info(`Created Event ${event.getID()} for ${queueItem.id} user id ${tokenQuerySnapshots.docs[0].id} and token user ${(serviceToken as any).userID}`);
+    const eventID = await generateIDFromParts([queueItem.userID, (queueItem.startTimeInSeconds || 0).toString()]);
+    // The parent of the token document is the 'tokens' collection, and its parent is the User document.
+    const firebaseUserID = tokenQuerySnapshots.docs[0].ref.parent.parent!.id;
+    await setEvent(firebaseUserID, eventID, event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase(), startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
+    logger.info(`Created Event ${event.getID()} for ${queueItem.id} user id ${firebaseUserID} and token user ${(serviceToken as any).userID}`);
     // For each ended so we can set it to processed
     return updateToProcessed(queueItem, bulkWriter);
   } catch (e: unknown) {

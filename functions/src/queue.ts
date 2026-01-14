@@ -129,7 +129,7 @@ export async function addToQueueForSuunto(queueItem: { userName: string, workout
  * @param queueItem
  */
 export async function addToQueueForGarmin(queueItem: { userID: string, startTimeInSeconds: number, manual: boolean, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX', token: string, userAccessToken: string, callbackURL: string }): Promise<admin.firestore.DocumentReference> {
-  const queueID = await generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()]);
+  const queueID = await generateIDFromParts([queueItem.userID, (queueItem.startTimeInSeconds || 0).toString()]);
   logger.info(`Inserting to queue ${queueID} for ${queueItem.userID} fileID ${queueItem.activityFileID}`);
   return addToWorkoutQueue({
     id: queueID,
