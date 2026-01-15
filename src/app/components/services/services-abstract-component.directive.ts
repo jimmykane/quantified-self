@@ -113,9 +113,21 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         this.snackBar.open(`Successfully connected to ${this.serviceName}`, undefined, {
           duration: 10000,
         });
-      } catch (e) {
+      } catch (e: any) {
         this.logger.error(e);
-        this.snackBar.open(`Could not connect due to ${e.message}`, undefined, {
+        const status = e?.status;
+        let message: string;
+
+        if (status === 502) {
+          const partnerName = this.getPartnerDisplayName();
+          message = `${partnerName} is temporarily unavailable. Please try again later.`;
+        } else if (status === 403 && e?.error?.includes?.('Pro')) {
+          message = 'This feature requires a Pro subscription.';
+        } else {
+          message = `Could not connect due to ${e.message || 'Unknown error'}`;
+        }
+
+        this.snackBar.open(message, undefined, {
           duration: 10000,
         });
       } finally {
@@ -140,10 +152,20 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       const tokenAndURI = await this.userService.getCurrentUserServiceTokenAndRedirectURI(this.serviceName);
       // Get the redirect url for the unsigned token created with the post
       this.windowService.windowRef.location.href = this.buildRedirectURIFromServiceToken(tokenAndURI);
-    } catch (e) {
+    } catch (e: any) {
       this.isConnecting = false;
       this.logger.error(e);
-      this.snackBar.open(`Could not connect to ${this.serviceName} due to ${e.message}`, undefined, {
+      const status = e?.status;
+      let message: string;
+
+      if (status === 502) {
+        const partnerName = this.getPartnerDisplayName();
+        message = `${partnerName} is temporarily unavailable. Please try again later.`;
+      } else {
+        message = `Could not connect to ${this.getPartnerDisplayName()} due to ${e.message || 'Unknown error'}`;
+      }
+
+      this.snackBar.open(message, undefined, {
         duration: 5000,
       });
     }
@@ -161,9 +183,19 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
         duration: 2000,
       });
       this.analyticsService.logEvent('disconnected_from_service', { serviceName: this.serviceName });
-    } catch (e) {
+    } catch (e: any) {
       this.logger.error(e);
-      this.snackBar.open(`Could not disconnect due to ${e.message}`, undefined, {
+      const status = e?.status;
+      let message: string;
+
+      if (status === 502) {
+        const partnerName = this.getPartnerDisplayName();
+        message = `${partnerName} is temporarily unavailable. Please try again later.`;
+      } else {
+        message = `Could not disconnect due to ${e.message || 'Unknown error'}`;
+      }
+
+      this.snackBar.open(message, undefined, {
         duration: 2000,
       });
     }
@@ -179,6 +211,19 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
     snackBarRef.onAction().subscribe(() => {
       this.router.navigate(['/settings']);
     });
+  }
+
+  protected getPartnerDisplayName(): string {
+    switch (this.serviceName) {
+      case ServiceNames.GarminAPI:
+        return 'Garmin';
+      case ServiceNames.SuuntoApp:
+        return 'Suunto';
+      case ServiceNames.COROSAPI:
+        return 'COROS';
+      default:
+        return 'Partner service';
+    }
   }
 
   ngOnDestroy(): void {

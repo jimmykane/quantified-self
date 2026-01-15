@@ -299,6 +299,11 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         retryIncrement = 20;
         lastError = e;
         continue;
+      } else if (e.statusCode === 502) {
+        logger.warn(`Partner service unavailable (502) for ${queueItem.id}, will retry soon.`);
+        retryIncrement = 1;
+        lastError = e;
+        continue;
       } else {
         logger.error(new Error(`Could not get workout for ${queueItem.id}. Trying to refresh token and update retry count from ${queueItem.retryCount} to ${queueItem.retryCount + 1} -> ${e.message}`));
         continue;

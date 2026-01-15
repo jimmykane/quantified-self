@@ -7,6 +7,7 @@ COLLECTIONS=(
     "garminAPIActivityQueue"
     "failed_jobs"
     "mail"
+    "orphaned_service_tokens"
 )
 
 # Field name for TTL

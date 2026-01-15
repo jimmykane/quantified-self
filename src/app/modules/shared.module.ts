@@ -17,6 +17,8 @@ import { EventSearchComponent } from '../components/event-search/event-search.co
 import { ActivityTypesMultiSelectComponent } from '../components/activity-types-multi-select/activity-types-multi-select.component';
 import { ActivityTypeIconComponent } from '../components/activity-type-icon/activity-type-icon.component';
 
+import { ServiceSyncingStateComponent } from '../components/shared/service-syncing-state/service-syncing-state.component';
+
 @NgModule({
     imports: [
         CommonModule,
@@ -37,6 +39,7 @@ import { ActivityTypeIconComponent } from '../components/activity-type-icon/acti
         ActivityTypesMultiSelectComponent,
         ActivityTypeIconComponent,
         AppSkeletonComponent,
+        ServiceSyncingStateComponent,
     ],
     providers: [],
     exports: [
@@ -56,6 +59,7 @@ import { ActivityTypeIconComponent } from '../components/activity-type-icon/acti
         EventSearchComponent,
         ActivityTypesMultiSelectComponent,
         ActivityTypeIconComponent,
+        ServiceSyncingStateComponent,
     ]
 })
 

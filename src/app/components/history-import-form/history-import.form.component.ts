@@ -71,6 +71,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.processChanges();
   }
 
+  get isMissingGarminPermissions(): boolean {
+    return this.serviceName === ServiceNames.GarminAPI &&
+      (this.missingPermissions.includes('HISTORICAL_DATA_EXPORT') || this.missingPermissions.includes('ACTIVITY_EXPORT'));
+  }
+
   ngOnChanges(changes: SimpleChanges) {
     if (!this.serviceName) {
       throw new Error('Component needs serviceName')
@@ -84,8 +89,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.isLoading = true;
     if (!this.userMetaForService || !this.userMetaForService.didLastHistoryImport) {
       this.isAllowedToDoHistoryImport = true;
-      this.formGroup.enable();
-      // Set this to done loading
+      (this.isAllowedToDoHistoryImport && !this.isMissingGarminPermissions) ? this.formGroup.enable() : this.formGroup.disable();
       this.isLoading = false;
       return;
     }
@@ -105,13 +109,11 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         break;
         break;
       case ServiceNames.GarminAPI:
-        if (this.missingPermissions && (this.missingPermissions.includes('HISTORICAL_DATA_EXPORT') || this.missingPermissions.includes('ACTIVITY_EXPORT'))) {
-          this.isAllowedToDoHistoryImport = false;
-          this.formGroup.disable();
-          return;
-        }
-        this.isAllowedToDoHistoryImport = new Date(this.userMetaForService.didLastHistoryImport + (GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000)) < new Date()
         this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + (GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000));
+        this.isAllowedToDoHistoryImport = this.nextImportAvailableDate < new Date()
+        if (this.isMissingGarminPermissions) {
+          this.isAllowedToDoHistoryImport = true; // Still allow showing the form
+        }
         break;
       default:
         this.logger.error(new Error(`Service name is not available ${this.serviceName} for history import`));
@@ -119,12 +121,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         // this.isAllowedToDoHistoryImport = false;
         break;
     }
-    this.isAllowedToDoHistoryImport ? this.formGroup.enable() : this.formGroup.disable();
+    (this.isAllowedToDoHistoryImport && !this.isMissingGarminPermissions) ? this.formGroup.enable() : this.formGroup.disable();
     // Set this to done loading
     this.isLoading = false;
   }
 
-  async onSubmit(event) {
+  async onSubmit(event: Event) {
     event.preventDefault();
     if (!this.formGroup.valid) {
       this.validateAllFormFields(this.formGroup);
@@ -148,7 +150,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       this.snackBar.open('History import has been queued', undefined, {
         duration: 2000,
       });
-    } catch (e) {
+    } catch (e: any) {
       // debugger;
       this.logger.error(e);
 

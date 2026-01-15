@@ -101,7 +101,8 @@ export const requestAndSetCOROSAPIAccessToken = functions.region('europe-west2')
     await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code);
   } catch (e: any) {
     logger.error(e);
-    res.status(500).send('Authorization code flow error');
+    const status = e.statusCode || (e.output && e.output.statusCode) || 500;
+    res.status(status).send(status === 502 ? 'COROS service is temporarily unavailable' : 'Authorization code flow error');
   }
   res.status(200).send();
 });

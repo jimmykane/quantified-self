@@ -120,4 +120,18 @@ describe('HistoryImportFormComponent', () => {
         } as UserServiceMetaInterface;
         expect(component.cooldownDays).toBe(0);
     });
+
+    it('should disable form when missing required Garmin permissions', () => {
+        component.serviceName = ServiceNames.GarminAPI;
+        component.missingPermissions = ['HISTORICAL_DATA_EXPORT'];
+        component.userMetaForService = {
+            didLastHistoryImport: 0 // Never imported
+        } as any;
+
+        (component as any).processChanges();
+
+        expect(component.isMissingGarminPermissions).toBe(true);
+        expect(component.isAllowedToDoHistoryImport).toBe(true); // Should be true to show the form
+        expect(component.formGroup.disabled).toBe(true);
+    });
 });

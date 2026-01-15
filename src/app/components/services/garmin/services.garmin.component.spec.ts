@@ -2,10 +2,11 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ServicesGarminComponent } from './services.garmin.component';
+import { ServiceSyncingStateComponent } from '../../shared/service-syncing-state/service-syncing-state.component';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { RouterTestingModule } from '@angular/router/testing';
 import { AppFileService } from '../../../services/app.file.service';
 import { Analytics } from '@angular/fire/analytics';
@@ -24,11 +25,12 @@ describe('ServicesGarminComponent', () => {
     beforeEach(async () => {
         mockUserService = {
             isAdmin: vi.fn(),
-            requestAndSetCurrentUserGarminAccessToken: vi.fn()
+            requestAndSetCurrentUserGarminAccessToken: vi.fn(),
+            getCurrentUserServiceTokenAndRedirectURI: vi.fn(),
         };
 
         await TestBed.configureTestingModule({
-            declarations: [ServicesGarminComponent],
+            declarations: [ServicesGarminComponent, ServiceSyncingStateComponent],
             imports: [
                 MatCardModule,
                 MatIconModule,
@@ -43,7 +45,7 @@ describe('ServicesGarminComponent', () => {
                 { provide: AppEventService, useValue: {} },
                 { provide: AppAuthService, useValue: { user$: { pipe: () => ({ subscribe: () => { } }) } } },
                 { provide: AppUserService, useValue: mockUserService },
-                { provide: AppWindowService, useValue: { currentDomain: 'http://localhost' } },
+                { provide: AppWindowService, useValue: { currentDomain: 'http://localhost', windowRef: { location: { href: '' } } } },
                 { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } }
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
@@ -101,6 +103,62 @@ describe('ServicesGarminComponent', () => {
 
             expect(card.classList).toContain('unlocked');
             expect(lockOverlay).toBeFalsy();
+        });
+    });
+
+    describe('Connection Logic', () => {
+        it('should display partner-specific message on 502 error', async () => {
+            const snackBar = TestBed.inject(MatSnackBar);
+            const snackBarSpy = vi.spyOn(snackBar, 'open');
+
+            // Mock 502 error
+            const error502 = { status: 502, message: 'Bad Gateway' };
+            mockUserService.getCurrentUserServiceTokenAndRedirectURI.mockRejectedValue(error502);
+
+            component.hasProAccess = true; // Ensure connection logic proceeds
+            fixture.detectChanges();
+
+            // Execute the connection logic (inherited from abstract directive)
+            await component.connectWithService(new MouseEvent('click'));
+
+            expect(snackBarSpy).toHaveBeenCalledWith(
+                'Garmin is temporarily unavailable. Please try again later.',
+                undefined,
+                expect.objectContaining({ duration: 5000 })
+            );
+        });
+
+        it('should show syncing state when forceConnected is true but tokens are not yet loaded', () => {
+            component.forceConnected = true;
+            component.serviceTokens = undefined;
+            component.hasProAccess = true;
+            fixture.detectChanges();
+
+            const syncingText = fixture.nativeElement.textContent;
+            expect(syncingText).toContain('Syncing connection details...');
+
+            // Should NOT show the account circle icon (part of the connected list)
+            const accountIcon = fixture.nativeElement.querySelector('mat-icon[matListItemIcon]');
+            expect(accountIcon).toBeFalsy();
+        });
+
+        it('should show syncing state when tokens are loaded but permissions are missing from the token', () => {
+            // Mock token without permissions array
+            component.serviceTokens = [{
+                accessToken: 'test-token',
+                userID: 'test-user-123',
+                // permissions property missing
+            } as any];
+            component.hasProAccess = true;
+            fixture.detectChanges();
+
+            // Verify syncing state
+            const syncingText = fixture.nativeElement.textContent;
+            expect(syncingText).toContain('Syncing connection details...');
+
+            // Verify connected list is NOT shown
+            const accountIcon = fixture.nativeElement.querySelector('mat-icon[matListItemIcon]');
+            expect(accountIcon).toBeFalsy();
         });
     });
 });

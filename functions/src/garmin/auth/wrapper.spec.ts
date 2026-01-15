@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as utils from '../../utils';
 import * as OAuth2 from '../../OAuth2';
-import * as admin from 'firebase-admin';
 
 // Define stable mocks
 const mockDelete = vi.fn().mockResolvedValue({});
@@ -66,6 +65,7 @@ vi.mock('../../OAuth2', () => ({
     getServiceOAuth2CodeRedirectAndSaveStateToUser: vi.fn(),
     getAndSetServiceOAuth2AccessTokenForUser: vi.fn(),
     deauthorizeServiceForUser: vi.fn(),
+    deleteLocalServiceToken: vi.fn(),
     validateOAuth2State: vi.fn(),
 }));
 
@@ -170,11 +170,12 @@ describe('Garmin Auth Wrapper', () => {
     });
 
     describe('receiveGarminAPIDeregistration', () => {
-        it('should deauthorize users by reverse lookup', async () => {
+        it('should deauthorize users by reverse lookup using deleteLocalServiceToken', async () => {
             req.body = { deregistrations: [{ userId: 'garminUser123' }] };
 
             // Mock Collection Group Query
             const mockTokenDoc = {
+                id: 'tokenDoc123',
                 ref: {
                     parent: {
                         parent: {
@@ -189,27 +190,110 @@ describe('Garmin Auth Wrapper', () => {
                 docs: [mockTokenDoc]
             };
 
-            // Setup mock chain for admin.firestore().collectionGroup().where().where().get()
             const mockWhere = vi.fn().mockReturnThis();
-
-            // Configure GLOBAL mock
             mockCollectionGroup.mockReturnValue({
                 where: mockWhere,
                 get: vi.fn().mockResolvedValue(mockQuerySnapshot)
             });
-            mockWhere.mockReturnValue({ where: mockWhere, get: vi.fn().mockResolvedValue(mockQuerySnapshot) }); // chain for multiple wheres
+            mockWhere.mockReturnValue({ where: mockWhere, get: vi.fn().mockResolvedValue(mockQuerySnapshot) });
 
             await deauthorizeGarminAPIUsers(req, res);
 
             // Verify logic
-            // 1. collectionGroup called
             expect(mockCollectionGroup).toHaveBeenCalledWith('tokens');
-            // 2. where clauses
             expect(mockWhere).toHaveBeenCalledWith('userID', '==', 'garminUser123');
             expect(mockWhere).toHaveBeenCalledWith('serviceName', '==', ServiceNames.GarminAPI);
-            // 3. deauthorizeServiceForUser called with correct Firebase User ID
-            expect(OAuth2.deauthorizeServiceForUser).toHaveBeenCalledWith('firebaseUserXYZ', ServiceNames.GarminAPI);
 
+            // Should call deleteLocalServiceToken instead of deauthorizeServiceForUser
+            expect(OAuth2.deleteLocalServiceToken).toHaveBeenCalledWith('firebaseUserXYZ', ServiceNames.GarminAPI, 'tokenDoc123');
+            expect(OAuth2.deauthorizeServiceForUser).not.toHaveBeenCalled();
+
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        it('should handle multiple Firebase users connected to the same Garmin ID', async () => {
+            req.body = { deregistrations: [{ userId: 'sharedGarminID' }] };
+
+            const mockTokenDoc1 = { id: 'doc1', ref: { parent: { parent: { id: 'userA' } } } };
+            const mockTokenDoc2 = { id: 'doc2', ref: { parent: { parent: { id: 'userB' } } } };
+
+            const mockQuerySnapshot = {
+                empty: false,
+                docs: [mockTokenDoc1, mockTokenDoc2]
+            };
+
+            const mockWhere = vi.fn().mockReturnThis();
+            mockCollectionGroup.mockReturnValue({
+                where: mockWhere,
+                get: vi.fn().mockResolvedValue(mockQuerySnapshot)
+            });
+            mockWhere.mockReturnValue({ where: mockWhere, get: vi.fn().mockResolvedValue(mockQuerySnapshot) });
+
+            await deauthorizeGarminAPIUsers(req, res);
+
+            expect(OAuth2.deleteLocalServiceToken).toHaveBeenCalledTimes(2);
+            expect(OAuth2.deleteLocalServiceToken).toHaveBeenCalledWith('userA', ServiceNames.GarminAPI, 'doc1');
+            expect(OAuth2.deleteLocalServiceToken).toHaveBeenCalledWith('userB', ServiceNames.GarminAPI, 'doc2');
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        it('should process multiple deregistrations in one payload', async () => {
+            req.body = {
+                deregistrations: [
+                    { userId: 'user1' },
+                    { userId: 'user2' }
+                ]
+            };
+
+            const mockTokenDoc1 = { id: 'doc1', ref: { parent: { parent: { id: 'fb1' } } } };
+            const mockTokenDoc2 = { id: 'doc2', ref: { parent: { parent: { id: 'fb2' } } } };
+
+            const mockWhere = vi.fn().mockReturnThis();
+            const mockGet = vi.fn()
+                .mockResolvedValueOnce({ empty: false, docs: [mockTokenDoc1] })
+                .mockResolvedValueOnce({ empty: false, docs: [mockTokenDoc2] });
+
+            mockCollectionGroup.mockReturnValue({
+                where: mockWhere,
+                get: mockGet
+            });
+
+            await deauthorizeGarminAPIUsers(req, res);
+
+            expect(OAuth2.deleteLocalServiceToken).toHaveBeenCalledTimes(2);
+            expect(OAuth2.deleteLocalServiceToken).toHaveBeenCalledWith('fb1', ServiceNames.GarminAPI, 'doc1');
+            expect(OAuth2.deleteLocalServiceToken).toHaveBeenCalledWith('fb2', ServiceNames.GarminAPI, 'doc2');
+            expect(res.status).toHaveBeenCalledWith(200);
+        });
+
+        it('should continue processing if one deauthorization fails', async () => {
+            req.body = {
+                deregistrations: [
+                    { userId: 'failUser' },
+                    { userId: 'successUser' }
+                ]
+            };
+
+            const mockTokenDocFail = { id: 'docFail', ref: { parent: { parent: { id: 'fbFail' } } } };
+            const mockTokenDocSuccess = { id: 'docSuccess', ref: { parent: { parent: { id: 'fbSuccess' } } } };
+
+            const mockWhere = vi.fn().mockReturnThis();
+            const mockGet = vi.fn()
+                .mockResolvedValueOnce({ empty: false, docs: [mockTokenDocFail] })
+                .mockResolvedValueOnce({ empty: false, docs: [mockTokenDocSuccess] });
+
+            mockCollectionGroup.mockReturnValue({
+                where: mockWhere,
+                get: mockGet
+            });
+
+            vi.mocked(OAuth2.deleteLocalServiceToken)
+                .mockRejectedValueOnce(new Error('Firestore error'))
+                .mockResolvedValueOnce(undefined);
+
+            await deauthorizeGarminAPIUsers(req, res);
+
+            expect(OAuth2.deleteLocalServiceToken).toHaveBeenCalledTimes(2);
             expect(res.status).toHaveBeenCalledWith(200);
         });
 
@@ -279,7 +363,10 @@ describe('Garmin Auth Wrapper', () => {
             expect(mockWhere).toHaveBeenCalledWith('serviceName', '==', ServiceNames.GarminAPI);
 
             // 2. batch update called
-            expect(mockBatchUpdate).toHaveBeenCalledWith(mockTokenDoc.ref, { permissions: permissions });
+            expect(mockBatchUpdate).toHaveBeenCalledWith(mockTokenDoc.ref, {
+                permissions: permissions,
+                permissionsLastChangedAt: 1613065860
+            });
             expect(mockBatchCommit).toHaveBeenCalled();
 
             // Should return 200
@@ -337,7 +424,10 @@ describe('Garmin Auth Wrapper', () => {
             // Should return 200
             expect(res.status).toHaveBeenCalledWith(200);
             // Verify batch update with empty permissions
-            expect(mockBatchUpdate).toHaveBeenCalledWith(mockTokenDoc.ref, { permissions: [] });
+            expect(mockBatchUpdate).toHaveBeenCalledWith(mockTokenDoc.ref, {
+                permissions: [],
+                permissionsLastChangedAt: 1613065860
+            });
             expect(mockBatchCommit).toHaveBeenCalled();
         });
     });

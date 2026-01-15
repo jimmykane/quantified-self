@@ -12,6 +12,7 @@ import {
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
   getAndSetServiceOAuth2AccessTokenForUser,
   deauthorizeServiceForUser,
+  deleteLocalServiceToken,
   validateOAuth2State
 } from '../../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -58,8 +59,8 @@ export const getGarminAPIAuthRequestTokenRedirectURI = functions.region('europe-
       redirect_uri: url,
     });
   } catch (e: any) {
-    logger.error(e);
-    res.status(500).send('Internal Server Error');
+    const status = e.statusCode || (e.output && e.output.statusCode) || 500;
+    res.status(status).send(status === 502 ? 'Garmin service is temporarily unavailable' : 'Internal Server Error');
   }
 });
 
@@ -111,7 +112,8 @@ export const requestAndSetGarminAPIAccessToken = functions.region('europe-west2'
     res.send();
   } catch (e: any) {
     logger.error(e);
-    res.status(500).send('Could not get access token for user');
+    const status = e.statusCode || (e.output && e.output.statusCode) || 500;
+    res.status(status).send(status === 502 ? 'Garmin service is temporarily unavailable' : 'Could not get access token for user');
   }
 });
 
@@ -166,13 +168,19 @@ export const receiveGarminAPIDeregistration = functions.region('europe-west2').h
   const deregistrations = req.body.deregistrations;
   logger.info(`Received ${deregistrations.length} deregistrations from Garmin`);
 
+  let successCount = 0;
+  let failCount = 0;
+  let skippedCount = 0;
+
   for (const deregistration of deregistrations) {
     const garminUserId = deregistration.userId;
-    if (!garminUserId) continue;
+    if (!garminUserId) {
+      skippedCount++;
+      continue;
+    }
 
     try {
       // Find the Firebase User(s) holding this Garmin connection
-      // New Token Structure: garminAPITokens/{firebaseUserID}/tokens/{garminUserID} with field `userID` == garminUserId
       const tokenQuerySnapshot = await admin.firestore()
         .collectionGroup('tokens')
         .where('userID', '==', garminUserId)
@@ -180,25 +188,34 @@ export const receiveGarminAPIDeregistration = functions.region('europe-west2').h
         .get();
 
       if (tokenQuerySnapshot.empty) {
-        logger.info(`No active session found for Garmin User ID ${garminUserId}`);
+        logger.info(`No active tokens found for Garmin User ID ${garminUserId}. Skipping.`);
+        skippedCount++;
         continue;
       }
 
       for (const tokenDoc of tokenQuerySnapshot.docs) {
         const firebaseUserID = tokenDoc.ref.parent.parent?.id;
         if (firebaseUserID) {
-          logger.info(`Deauthorizing Firebase User ${firebaseUserID} (Garmin ID: ${garminUserId})`);
+          logger.info(`Processing deregistration for Firebase User ${firebaseUserID} (Garmin ID: ${garminUserId})`);
           try {
-            await deauthorizeServiceForUser(firebaseUserID, ServiceNames.GarminAPI);
+            await deleteLocalServiceToken(firebaseUserID, ServiceNames.GarminAPI, tokenDoc.id);
+            successCount++;
           } catch (e) {
-            logger.error(`Failed to deauthorize user ${firebaseUserID}`, e);
+            logger.error(`Failed to process deregistration for Firebase User ${firebaseUserID} (Garmin ID: ${garminUserId})`, e);
+            failCount++;
           }
+        } else {
+          logger.warn(`Could not determine Firebase User ID for Garmin ID ${garminUserId} from document ${tokenDoc.id}`);
+          failCount++;
         }
       }
     } catch (e: any) {
-      logger.error(`Error processing deregistration for ${garminUserId}`, e);
+      logger.error(`Error processing deregistration for Garmin User ID ${garminUserId}`, e);
+      failCount++;
     }
   }
+
+  logger.info(`Garmin deregistration batch complete. Summary: ${successCount} processed, ${failCount} failed, ${skippedCount} skipped/not found.`);
 
   res.status(200).send();
 });

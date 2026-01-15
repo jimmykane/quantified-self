@@ -61,7 +61,9 @@ describe('AppThemeService', () => {
 
     afterEach(() => {
         document.body.classList.remove('dark-theme');
-        service.ngOnDestroy();
+        if (service) {
+            service.ngOnDestroy();
+        }
     });
 
     it('should be created', () => {

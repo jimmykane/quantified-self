@@ -92,6 +92,7 @@ describe('Garmin Backfill', () => {
             accessToken: 'valid-access-token',
             refreshToken: 'valid-refresh-token',
             userID: 'garmin-user-123',
+            permissions: ['HISTORICAL_DATA_EXPORT', 'ACTIVITY_EXPORT']
         });
 
         // Reset default mock returns

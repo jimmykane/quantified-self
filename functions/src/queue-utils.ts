@@ -24,7 +24,7 @@ export async function moveToDeadLetterQueue(queueItem: QueueItemInterface, error
         failedAt: (new Date()).getTime(),
         originalCollection: queueItem.ref.parent ? queueItem.ref.parent.id : 'unknown',
         context: context || 'MAX_RETRY_REACHED',
-        expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),
+        expireAt: getExpireAtTimestamp(TTL_CONFIG.FAILED_JOBS_IN_DAYS),
         // Remove ref from payload
         ref: undefined
     });

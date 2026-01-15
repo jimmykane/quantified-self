@@ -10,7 +10,7 @@ const ROLE_DISPLAY_NAMES: { [key: string]: string } = {
     'pro': 'Pro'
 };
 
-export const checkSubscriptionNotifications = onSchedule('every 24 hours', async (event) => {
+export const checkSubscriptionNotifications = onSchedule({ schedule: 'every 24 hours', region: 'europe-west2' }, async (event) => {
     const db = admin.firestore();
     const now = new Date();
 

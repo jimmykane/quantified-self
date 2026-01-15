@@ -31,6 +31,9 @@
         <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
 
         @if (isConnectedToService()) {
+        @if (!corosOpenId) {
+        <app-service-syncing-state></app-service-syncing-state>
+        } @else {
         <mat-list style="width: 100%; padding: 0;">
           @for (serviceToken of serviceTokens; track $index) {
           <mat-list-item style="height: auto; padding: 8px 0;">
@@ -41,6 +44,7 @@
           </mat-list-item>
           }
         </mat-list>
+        }
         }
 
         <div style="margin-top: auto; padding-top: 16px;">
