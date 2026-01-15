@@ -947,7 +947,7 @@ describe('OAuth2', () => {
                 .rejects.toThrow('Auth adapter not implemented for service: UnsupportedService');
         });
 
-        it('should query userName field for Suunto and delete duplicate', async () => {
+        it('should query userName field for Suunto and delete duplicate via deleteLocalServiceToken', async () => {
             const docWithOtherUser = {
                 id: 'token-id-other-user',
                 ref: {
@@ -967,8 +967,9 @@ describe('OAuth2', () => {
             await removeDuplicateConnections(currentUserID, ServiceNames.SuuntoApp, externalUserId);
 
             expect(mockWhere).toHaveBeenCalledWith('userName', '==', externalUserId);
-            expect(mockBatchDelete).toHaveBeenCalledWith(docWithOtherUser.ref);
-            expect(mockBatchCommit).toHaveBeenCalled();
+            // Now uses deleteLocalServiceToken instead of batch delete
+            // The token delete and parent check happen via deleteLocalServiceToken
+            expect(mockDelete).toHaveBeenCalled();
         });
 
         it('should query openId field for COROS', async () => {

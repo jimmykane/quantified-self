@@ -18,7 +18,6 @@ export async function removeDuplicateConnections(currentUserID: string, serviceN
 
   const snapshot = await query.get();
 
-  const batch = admin.firestore().batch();
   let deleteCount = 0;
 
   for (const doc of snapshot.docs) {
@@ -35,27 +34,13 @@ export async function removeDuplicateConnections(currentUserID: string, serviceN
 
     if (otherUserId && otherUserId !== currentUserID) {
       logger.warn(`Found duplicate connection for ${serviceName} account ${externalUserId}. Connected to User ${otherUserId}, but now User ${currentUserID} is connecting. Deleting old token ${doc.id} for User ${otherUserId}.`);
-      batch.delete(doc.ref);
+      // Use deleteLocalServiceToken to also clean up parent document if this was the last token
+      await deleteLocalServiceToken(otherUserId, serviceName, doc.id);
       deleteCount++;
-
-      // We should also check if we need to delete the parent document (User ID doc) if this was the last token.
-      // However, we can't know for sure in a batch content without reading again.
-      // But usually we can add a check or just assume if we delete the token, we might leave a hollow parent.
-      // The manual Deauthorize logic checks `tokenQuerySnapshots.empty`.
-      // Here, we can't easily do it inside the batch loop efficiently without N extra reads.
-      // Given this is an edge case (duplicate takeover), leaving a hollow parent doc is acceptable for now.
-      // The parent doc has no data, it's just a folder in Firestore UI, unless it has fields.
-      // In OAuth2.ts, line 58, we set `state` on the parent doc. So it's not empty.
-      // So we should NOT delete the parent doc blindly.
-      // Ideally, we would want to cleanup strictly, but let's stick to deleting the token for now 
-      // to avoid complex race conditions or extra reads. 
-      // The user asked "are you deleting the parent user document".
-      // If I WANT to delete it, I need to know if it has other tokens.
     }
   }
 
   if (deleteCount > 0) {
-    await batch.commit();
     logger.info(`Removed ${deleteCount} stale connections for ${serviceName} account ${externalUserId}.`);
   }
 }
