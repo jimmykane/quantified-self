@@ -32,23 +32,38 @@ export async function getGarminUserId(accessToken: string): Promise<string> {
  * @returns Array of permissions or empty array if failed/missing.
  */
 export async function getGarminPermissions(accessToken: string): Promise<string[]> {
-    try {
-        const permissionsResponse = await requestPromise.get({
-            url: 'https://apis.garmin.com/wellness-api/rest/user/permissions',
-            headers: {
-                Authorization: `Bearer ${accessToken}`,
-            },
-        });
-        const permissionsData = typeof permissionsResponse === 'string' ? JSON.parse(permissionsResponse) : permissionsResponse;
-        if (permissionsData && Array.isArray(permissionsData.permissions)) {
-            return permissionsData.permissions;
+    const maxRetries = 3;
+    let attempt = 0;
+    let delayMs = 1000;
+
+    while (attempt <= maxRetries) {
+        try {
+            const permissionsResponse = await requestPromise.get({
+                url: 'https://apis.garmin.com/wellness-api/rest/user/permissions',
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                },
+            });
+            const permissionsData = typeof permissionsResponse === 'string' ? JSON.parse(permissionsResponse) : permissionsResponse;
+            if (permissionsData && Array.isArray(permissionsData.permissions)) {
+                return permissionsData.permissions;
+            }
+            return [];
+        } catch (e: any) {
+            const statusCode = e.statusCode || (e.output && e.output.statusCode);
+
+            if (attempt < maxRetries) {
+                logger.warn(`Failed to fetch Garmin Permissions (Attempt ${attempt + 1}/${maxRetries + 1}): ${e.message} (Status: ${statusCode}). Retrying in ${delayMs}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+                attempt++;
+                delayMs *= 2; // Exponential backoff: 1s, 2s, 4s
+            } else {
+                logger.error(`Failed to fetch Garmin Permissions after ${attempt + 1} attempts: ${e}`);
+                return [];
+            }
         }
-        return [];
-    } catch (e: any) {
-        logger.error(`Failed to fetch Garmin Permissions: ${e}`);
-        // Return empty array so strictly non-fatal, but logged
-        return [];
     }
+    return [];
 }
 
 /**
