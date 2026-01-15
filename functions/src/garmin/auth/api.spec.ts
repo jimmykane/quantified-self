@@ -151,16 +151,19 @@ describe('Garmin API Utils', () => {
             vi.useFakeTimers();
             const promise = getGarminPermissions(MOCK_ACCESS_TOKEN);
 
-            await vi.advanceTimersByTimeAsync(1000);
-            await vi.advanceTimersByTimeAsync(2000);
-            await vi.advanceTimersByTimeAsync(4000);
+            await vi.advanceTimersByTimeAsync(1000); // 1st
+            await vi.advanceTimersByTimeAsync(2000); // 2nd
+            await vi.advanceTimersByTimeAsync(4000); // 3rd
+            await vi.advanceTimersByTimeAsync(8000); // 4th
+            await vi.advanceTimersByTimeAsync(16000); // 5th
+            await vi.advanceTimersByTimeAsync(32000); // 6th
 
             const permissions = await promise;
 
             expect(permissions).toEqual([]);
-            // initial call + 3 retries = 4 calls total
-            expect(requestPromise.get).toHaveBeenCalledTimes(4);
-            expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to fetch Garmin Permissions after 4 attempts'));
+            // initial call + 6 retries = 7 calls total
+            expect(requestPromise.get).toHaveBeenCalledTimes(7);
+            expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to fetch Garmin Permissions after 7 attempts'));
             vi.useRealTimers();
         });
 

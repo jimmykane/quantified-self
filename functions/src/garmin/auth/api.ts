@@ -32,7 +32,7 @@ export async function getGarminUserId(accessToken: string): Promise<string> {
  * @returns Array of permissions or empty array if failed/missing.
  */
 export async function getGarminPermissions(accessToken: string): Promise<string[]> {
-    const maxRetries = 3;
+    const maxRetries = 6;
     let attempt = 0;
     let delayMs = 1000;
 
