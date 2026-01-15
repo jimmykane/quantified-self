@@ -168,13 +168,19 @@ export const receiveGarminAPIDeregistration = functions.region('europe-west2').h
   const deregistrations = req.body.deregistrations;
   logger.info(`Received ${deregistrations.length} deregistrations from Garmin`);
 
+  let successCount = 0;
+  let failCount = 0;
+  let skippedCount = 0;
+
   for (const deregistration of deregistrations) {
     const garminUserId = deregistration.userId;
-    if (!garminUserId) continue;
+    if (!garminUserId) {
+      skippedCount++;
+      continue;
+    }
 
     try {
       // Find the Firebase User(s) holding this Garmin connection
-      // New Token Structure: garminAPITokens/{firebaseUserID}/tokens/{garminUserID} with field `userID` == garminUserId
       const tokenQuerySnapshot = await admin.firestore()
         .collectionGroup('tokens')
         .where('userID', '==', garminUserId)
@@ -182,7 +188,8 @@ export const receiveGarminAPIDeregistration = functions.region('europe-west2').h
         .get();
 
       if (tokenQuerySnapshot.empty) {
-        logger.info(`No active tokens found for Garmin User ID ${garminUserId}`);
+        logger.info(`No active tokens found for Garmin User ID ${garminUserId}. Skipping.`);
+        skippedCount++;
         continue;
       }
 
@@ -192,15 +199,23 @@ export const receiveGarminAPIDeregistration = functions.region('europe-west2').h
           logger.info(`Processing deregistration for Firebase User ${firebaseUserID} (Garmin ID: ${garminUserId})`);
           try {
             await deleteLocalServiceToken(firebaseUserID, ServiceNames.GarminAPI, tokenDoc.id);
+            successCount++;
           } catch (e) {
             logger.error(`Failed to process deregistration for Firebase User ${firebaseUserID} (Garmin ID: ${garminUserId})`, e);
+            failCount++;
           }
+        } else {
+          logger.warn(`Could not determine Firebase User ID for Garmin ID ${garminUserId} from document ${tokenDoc.id}`);
+          failCount++;
         }
       }
     } catch (e: any) {
-      logger.error(`Error processing deregistration for ${garminUserId}`, e);
+      logger.error(`Error processing deregistration for Garmin User ID ${garminUserId}`, e);
+      failCount++;
     }
   }
+
+  logger.info(`Garmin deregistration batch complete. Summary: ${successCount} processed, ${failCount} failed, ${skippedCount} skipped/not found.`);
 
   res.status(200).send();
 });
