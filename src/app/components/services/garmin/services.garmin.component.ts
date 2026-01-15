@@ -12,6 +12,7 @@ import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
+import { GARMIN_REQUIRED_PERMISSIONS } from '../../../../../functions/src/garmin/constants';
 
 
 @Component({
@@ -23,6 +24,24 @@ import { ServicesAbstractComponentDirective } from '../services-abstract-compone
 export class ServicesGarminComponent extends ServicesAbstractComponentDirective {
 
   public serviceName: ServiceNames = ServiceNames.GarminAPI;
+
+  public readonly permissionLabels: { [key: string]: string } = {
+    'HISTORICAL_DATA_EXPORT': 'History Importer',
+    'ACTIVITY_EXPORT': 'Activity Sync',
+    'WORKOUT_IMPORT': 'Workout Import',
+    'HEALTH_EXPORT': 'Health Export',
+    'COURSE_IMPORT': 'Course Import',
+    'MCT_EXPORT': 'Menstrual Cycle Tracking Export'
+  };
+
+  public readonly permissionExplanations: { [key: string]: string } = {
+    'HISTORICAL_DATA_EXPORT': 'Without this, you cannot import your past activities from Garmin Connect.',
+    'ACTIVITY_EXPORT': 'Without this, your new activities will not automatically sync to Quantified Self.',
+    'WORKOUT_IMPORT': 'Coming soon: This will be used to sync training plans to your device.',
+    'HEALTH_EXPORT': 'Coming soon: This will be used for daily health statistics.',
+    'COURSE_IMPORT': 'Coming soon: This will be used for route synchronization.',
+    'MCT_EXPORT': 'Coming soon: This will be used for health tracking data.'
+  };
 
   constructor(protected http: HttpClient,
     protected fileService: AppFileService,
@@ -53,5 +72,52 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
 
   get garminUserID(): string | undefined {
     return (this.serviceTokens as any[])?.[0]?.userID;
+  }
+
+  get permissionsLastChangedAt(): number | undefined {
+    return (this.serviceTokens as any[])?.[0]?.permissionsLastChangedAt;
+  }
+
+  get missingPermissions(): string[] {
+    const token = (this.serviceTokens as any[])?.[0];
+    if (!token || !token.permissions) {
+      return [];
+    }
+    const requiredPermissions = GARMIN_REQUIRED_PERMISSIONS;
+    return requiredPermissions.filter(p => !token.permissions.includes(p));
+  }
+
+  get hasPermissionsLoaded(): boolean {
+    const token = (this.serviceTokens as any[])?.[0];
+    return !!token && Array.isArray(token.permissions);
+  }
+
+  getPermissionLabel(permission: string): string {
+    return this.permissionLabels[permission] || permission;
+  }
+
+  getPermissionExplanation(permission: string): string {
+    return this.permissionExplanations[permission] || '';
+  }
+
+  /**
+   * Attempts to open Garmin Connect mobile app, falls back to web
+   * iOS uses gcm-ciq:// scheme, Android may not support deeplinks to settings
+   */
+  openGarminConnectApp(): void {
+    const webUrl = 'https://connect.garmin.com/modern/account';
+    const iosScheme = 'gcm-ciq://';
+
+    // Try iOS deeplink first (will do nothing on desktop/Android)
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = iosScheme;
+    document.body.appendChild(iframe);
+
+    // Fallback to web after a short delay
+    setTimeout(() => {
+      document.body.removeChild(iframe);
+      window.open(webUrl, '_blank');
+    }, 500);
   }
 }

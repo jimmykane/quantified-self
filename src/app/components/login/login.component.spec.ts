@@ -325,7 +325,7 @@ describe('LoginComponent', () => {
 
         expect(mockAuthService.getRedirectResult).toHaveBeenCalled();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
-        expect(mockSnackBar.open).toHaveBeenCalledWith(expect.stringContaining('Welcome back Redirect User'), undefined, expect.anything());
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
     });
 
     it('should handle failed redirect result on init', async () => {

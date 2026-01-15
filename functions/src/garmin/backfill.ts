@@ -8,6 +8,8 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS } from '../shared/history-import.constants';
 import { getTokenData } from '../tokens';
+import { GARMIN_API_TOKENS_COLLECTION_NAME } from './constants';
+import { GarminAPIAuth2ServiceTokenInterface } from './auth/adapter';
 
 const GARMIN_ACTIVITIES_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/backfill/activities';
 const TIMEOUT_IN_SECONDS = 300;
@@ -92,7 +94,7 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
     }
   }
 
-  const tokensQuerySnapshot = await admin.firestore().collection('garminAPITokens').doc(userID).collection('tokens').limit(1).get();
+  const tokensQuerySnapshot = await admin.firestore().collection(GARMIN_API_TOKENS_COLLECTION_NAME).doc(userID).collection('tokens').limit(1).get();
   if (tokensQuerySnapshot.empty) {
     logger.error(`No token found for user ${userID}`);
     throw new Error('Bad request: No token found');
@@ -106,6 +108,15 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
   } catch (e: any) {
     logger.error(`Failed to get/refresh Garmin token for ${userID}: ${e.message}`);
     throw new Error('Token refresh failed');
+  }
+
+  // Check for required permissions
+  const garminToken = serviceToken as GarminAPIAuth2ServiceTokenInterface;
+  if (!garminToken.permissions ||
+    !garminToken.permissions.includes('HISTORICAL_DATA_EXPORT') ||
+    !garminToken.permissions.includes('ACTIVITY_EXPORT')) {
+    logger.error(`User ${userID} missing required permissions for backfill`, { permissions: garminToken.permissions });
+    throw new Error('Missing required Garmin permissions (Historical Data Export, Activity Export). Please reconnect your Garmin account and ensure all permissions are granted.');
   }
 
   // We need to break down the requests to multiple of 90 days max. 7776000s

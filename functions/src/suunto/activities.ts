@@ -7,6 +7,7 @@ import * as admin from 'firebase-admin';
 import * as requestPromise from '../request-helper';
 import { executeWithTokenRetry } from './retry-helper';
 import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
+import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 
 
 
@@ -61,7 +62,7 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
     return;
   }
 
-  const tokenQuerySnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(userID).collection('tokens').get();
+  const tokenQuerySnapshots = await admin.firestore().collection(SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME).doc(userID).collection('tokens').get();
   logger.info(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {

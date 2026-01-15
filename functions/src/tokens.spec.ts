@@ -45,9 +45,10 @@ vi.mock('simple-oauth2', () => ({
 
 vi.mock('./OAuth2', () => ({
     getServiceConfig: vi.fn(),
+    deleteLocalServiceToken: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { getServiceConfig } from './OAuth2';
+import { getServiceConfig, deleteLocalServiceToken } from './OAuth2';
 import * as admin from 'firebase-admin'; // needed for types/access
 
 describe('tokens', () => {
@@ -61,6 +62,7 @@ describe('tokens', () => {
 
         // Reset the firestore mock behavior defaults
         firestoreMock.collectionGroup.mockReset();
+        (deleteLocalServiceToken as any).mockReset().mockResolvedValue(undefined);
 
         mockDoc = {
             // ... (unchanged)
@@ -77,6 +79,7 @@ describe('tokens', () => {
             ref: {
                 update: vi.fn(() => Promise.resolve()),
                 delete: vi.fn(() => Promise.resolve()),
+                parent: { parent: { id: 'firebase-user-123' } },
             },
         };
 
@@ -318,7 +321,7 @@ describe('tokens', () => {
             await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
                 .rejects.toThrow('Unauthorized');
 
-            expect(mockDoc.ref.delete).toHaveBeenCalled();
+            expect(deleteLocalServiceToken).toHaveBeenCalledWith('firebase-user-123', ServiceNames.SuuntoApp, 'user-123');
         });
 
         it('should delete token on standard 401 error', async () => {
@@ -330,7 +333,7 @@ describe('tokens', () => {
             await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
                 .rejects.toThrow('Unauthorized');
 
-            expect(mockDoc.ref.delete).toHaveBeenCalled();
+            expect(deleteLocalServiceToken).toHaveBeenCalledWith('firebase-user-123', ServiceNames.SuuntoApp, 'user-123');
         });
 
         it('should delete token on 400 invalid_grant error', async () => {
@@ -342,7 +345,7 @@ describe('tokens', () => {
             await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
                 .rejects.toThrow('invalid_grant');
 
-            expect(mockDoc.ref.delete).toHaveBeenCalled();
+            expect(deleteLocalServiceToken).toHaveBeenCalledWith('firebase-user-123', ServiceNames.SuuntoApp, 'user-123');
         });
 
         it('should NOT delete token on generic 500 error', async () => {
@@ -355,6 +358,19 @@ describe('tokens', () => {
                 .rejects.toThrow('Server Error');
 
             expect(mockDoc.ref.delete).not.toHaveBeenCalled();
+        });
+
+        it('should NOT delete token on 502 error', async () => {
+            mockToken.expired.mockReturnValue(true);
+            const error: any = new Error('Bad Gateway');
+            error.statusCode = 502;
+            mockToken.refresh.mockRejectedValue(error);
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
+                .rejects.toThrow('Bad Gateway');
+
+            expect(mockDoc.ref.delete).not.toHaveBeenCalled();
+            expect(deleteLocalServiceToken).not.toHaveBeenCalled();
         });
     });
 

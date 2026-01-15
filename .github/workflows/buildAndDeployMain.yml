@@ -1,0 +1,67 @@
+name: MAIN HOSTING Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: main-deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    uses: ./.github/workflows/_run-tests.yml
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Firebase Tools
+        run: npm install -g firebase-tools
+
+      - name: Get licenses
+        run: |
+          curl "https://firebasestorage.googleapis.com/v0/b/quantified-self-io.appspot.com/o/assets%2Flicenses.json?alt=media&token=470a21d4-571d-432d-a6f6-95df7a24de33" --create-dirs -o licenses.json
+
+      - name: Build functions
+        run: |
+          cd functions
+          npm ci
+          npm run build
+          cd ..
+
+      - name: Install, clean and build
+        run: |
+          npm ci
+          npm run clean
+          npm run build-production
+
+      - name: Create SA key
+        run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "${{ runner.temp }}/firebase_service_account.json"
+
+      - name: Create functions env file
+        run: |
+          echo "STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}" >> functions/.env
+          echo "SUUNTOAPP_CLIENT_ID=${{ secrets.SUUNTOAPP_CLIENT_ID }}" >> functions/.env
+          echo "SUUNTOAPP_CLIENT_SECRET=${{ secrets.SUUNTOAPP_CLIENT_SECRET }}" >> functions/.env
+          echo "SUUNTOAPP_SUBSCRIPTION_KEY=${{ secrets.SUUNTOAPP_SUBSCRIPTION_KEY }}" >> functions/.env
+          echo "COROSAPI_CLIENT_ID=${{ secrets.COROSAPI_CLIENT_ID }}" >> functions/.env
+          echo "COROSAPI_CLIENT_SECRET=${{ secrets.COROSAPI_CLIENT_SECRET }}" >> functions/.env
+          echo "GARMINHEALTHAPI_CONSUMER_KEY=${{ secrets.GARMINHEALTHAPI_CONSUMER_KEY }}" >> functions/.env
+          echo "GARMINHEALTHAPI_CONSUMER_SECRET=${{ secrets.GARMINHEALTHAPI_CONSUMER_SECRET }}" >> functions/.env
+          echo "GARMINAPI_CLIENT_ID=${{ secrets.GARMINAPI_CLIENT_ID }}" >> functions/.env
+          echo "GARMINAPI_CLIENT_SECRET=${{ secrets.GARMINAPI_CLIENT_SECRET }}" >> functions/.env
+
+      - name: Deploy to Firebase
+        run: |
+          export GOOGLE_APPLICATION_CREDENTIALS="${{ runner.temp }}/firebase_service_account.json"
+          firebase deploy --only hosting:production

@@ -27,8 +27,9 @@ export const processWorkoutTask = onTaskDispatched({
     const queueDoc = await queueRef.get();
 
     if (!queueDoc.exists) {
-        logger.error(`[TaskWorker] Queue item ${queueItemId} not found in ${collectionName}`);
-        return;
+        // Throw error so Cloud Tasks retries with exponential backoff.
+        // This handles race conditions where the task executes before Firestore write propagates.
+        throw new Error(`[TaskWorker] Queue item ${queueItemId} not found in ${collectionName}`);
     }
 
     const queueItem = queueDoc.data();

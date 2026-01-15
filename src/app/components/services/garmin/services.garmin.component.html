@@ -35,6 +35,9 @@
         <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
 
         @if (isConnectedToService()) {
+        @if (!garminUserID || !hasPermissionsLoaded) {
+        <app-service-syncing-state></app-service-syncing-state>
+        } @else {
         <mat-list style="width: 100%; padding: 0;">
           <mat-list-item style="height: auto; padding: 8px 0;">
             <mat-icon matListItemIcon style="margin-right: 8px;">account_circle</mat-icon>
@@ -42,7 +45,44 @@
             <div matListItemLine style="font-size: 0.8rem; opacity: 0.7;">Connected: {{serviceTokens?.[0]?.dateCreated
               | date:'short'}}</div>
           </mat-list-item>
+          <mat-list-item style="height: auto; padding: 8px 0;" *ngIf="permissionsLastChangedAt">
+            <mat-icon matListItemIcon style="margin-right: 8px;">update</mat-icon>
+            <div matListItemTitle style="font-size: 0.9rem;">Permissions Updated</div>
+            <div matListItemLine style="font-size: 0.8rem; opacity: 0.7;">{{ permissionsLastChangedAt * 1000 |
+              date:'short' }}</div>
+          </mat-list-item>
         </mat-list>
+
+        <div *ngIf="missingPermissions.length > 0" class="qs-warning-box" style="margin-top: 16px;">
+          <mat-icon>warning</mat-icon>
+          <div class="qs-warning-content">
+            <strong>Missing Permissions</strong>
+            <p>Some features are disabled. Missing permissions:</p>
+            <ul>
+              <li *ngFor="let permission of missingPermissions">
+                <div style="font-weight: 500;">{{ getPermissionLabel(permission) }}</div>
+                <div style="opacity: 0.7; font-size: 0.8rem; margin-bottom: 4px;">{{
+                  getPermissionExplanation(permission) }}</div>
+              </li>
+            </ul>
+            <p style="margin-top: 8px;"><strong>To update permissions:</strong></p>
+            <ul>
+              <li>
+                <a href="https://connect.garmin.com/modern/account" target="_blank" rel="noopener">Garmin Connect
+                  Web</a>
+                → Account Information → Connected Apps
+              </li>
+              <li>
+                <a (click)="openGarminConnectApp()" style="cursor: pointer;">Open Garmin Connect App</a>
+                → More → Settings → Connected Apps
+              </li>
+            </ul>
+            <p style="margin-top: 4px; opacity: 0.7; font-size: 0.8rem;">
+              After updating permissions, reconnect to refresh.
+            </p>
+          </div>
+        </div>
+        }
         }
 
         <div style="margin-top: auto; padding-top: 16px;">
@@ -113,6 +153,7 @@
         </p>
         @if (hasProAccess && isAdmin) {
         <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"
+          [missingPermissions]="missingPermissions"
           (importInitiated)="onHistoryImportInitiated()"></app-history-import-form>
         } @else if (hasProAccess) {
         <p class="feature-description">Import history is coming soon for Garmin.</p>

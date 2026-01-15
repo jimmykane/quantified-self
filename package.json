@@ -76,6 +76,7 @@
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^8.49.0",
     "@typescript-eslint/parser": "^8.49.0",
+    "@vitest/coverage-v8": "^3.2.4",
     "eslint": "^9.39.1",
     "express": "^5.2.1",
     "firebase-admin": "^13.6.0",

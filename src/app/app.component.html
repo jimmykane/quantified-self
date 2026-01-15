@@ -1,5 +1,10 @@
 <ng-container *ngIf="(maintenanceMode$ | async) !== true; else maintenanceTemplate">
   <ng-container *ngIf="authState !== null; else loadingApp">
+    <!-- Circular Reveal Theme Overlay -->
+    <div *ngIf="themeOverlayActive" class="theme-reveal-overlay" [ngClass]="themeOverlayClass"
+      [ngStyle]="themeOverlayStyle">
+    </div>
+
     <div [class.has-banner]="hasBanner" class="app-layout-wrapper">
       <app-grace-period-banner (heightChanged)="onBannerHeightChanged($event)"></app-grace-period-banner>
 

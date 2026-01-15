@@ -34,6 +34,7 @@ import { LoggerService } from './services/logger.service';
 import { AppAnalyticsService } from './services/app.analytics.service';
 import { SeoService } from './services/seo.service';
 import { AppIconService } from './services/app.icon.service';
+import { AppThemeService } from './services/app.theme.service';
 
 @Component({
   selector: 'app-root',
@@ -64,6 +65,13 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   private currentUser: any = null;
   public isAdminUser = false;
 
+  public currentTheme$: Observable<any>;
+
+  // Circular reveal animation state
+  public themeOverlayActive = false;
+  public themeOverlayClass = '';
+  public themeOverlayStyle: { [key: string]: string } = {};
+
   constructor(
     public authService: AppAuthService,
     private userService: AppUserService,
@@ -74,10 +82,13 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     private logger: LoggerService,
     private analyticsService: AppAnalyticsService,
     private seoService: SeoService,
-    private iconService: AppIconService
+    private iconService: AppIconService,
+    private themeService: AppThemeService,
   ) {
     // this.afa.setAnalyticsCollectionEnabled(true)
     this.iconService.registerIcons();
+
+    this.currentTheme$ = this.themeService.getAppTheme();
 
     // Mark app as hydrated after Angular takes over (reveals SVG icons)
     afterNextRender(() => {
@@ -110,6 +121,13 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     this.routerEventSubscription = this.router.events.subscribe((event) => {
       if (event instanceof NavigationEnd) {
         this.updateOnboardingState();
+      }
+    });
+
+    // Subscribe to theme changes for circular reveal animation
+    this.themeService.themeChange$.subscribe(change => {
+      if (change) {
+        this.triggerCircularReveal(change.x, change.y, change.theme);
       }
     });
   }
@@ -208,6 +226,34 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
   ngAfterViewChecked() {
     // Reserved for future use
+  }
+
+  private triggerCircularReveal(x: number, y: number, theme: any) {
+    // Set the overlay class based on new theme
+    this.themeOverlayClass = theme === 'Dark' ? 'dark-theme' : '';
+
+    // Clear any previous style (not needed for gradient sweep, but kept for compatibility)
+    this.themeOverlayStyle = {};
+
+    // Activate overlay immediately
+    this.themeOverlayActive = true;
+    this.changeDetectorRef.detectChanges();
+
+    // Apply the actual theme to body mid-animation (around 50%)
+    // This ensures the theme changes under the overlay while it's still covering
+    setTimeout(() => {
+      if (theme === 'Dark') {
+        document.body.classList.add('dark-theme');
+      } else {
+        document.body.classList.remove('dark-theme');
+      }
+    }, 300); // Apply at ~50% of 600ms animation
+
+    // After animation completes, deactivate overlay
+    setTimeout(() => {
+      this.themeOverlayActive = false;
+      this.changeDetectorRef.detectChanges();
+    }, 600); // Match animation duration
   }
 
   ngOnDestroy(): void {

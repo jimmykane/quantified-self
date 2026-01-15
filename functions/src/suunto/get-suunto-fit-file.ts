@@ -6,7 +6,7 @@ import * as admin from 'firebase-admin';
 import * as requestPromise from '../request-helper';
 import { getTokenData } from '../tokens';
 import { isCorsAllowed, setAccessControlHeadersOnResponse } from '../utils';
-import { SERVICE_NAME } from './constants';
+import { SERVICE_NAME, SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import { config } from '../config';
 
 /**
@@ -61,7 +61,7 @@ export const getSuuntoFITFile = functions.region('europe-west2').https.onRequest
     return;
   }
 
-  const tokenQuerySnapshots = await admin.firestore().collection('suuntoAppAccessTokens').doc(decodedIdToken.uid).collection('tokens').get();
+  const tokenQuerySnapshots = await admin.firestore().collection(SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME).doc(decodedIdToken.uid).collection('tokens').get();
   logger.info(`Found ${tokenQuerySnapshots.size} tokens for user ${decodedIdToken.uid}`);
 
   let serviceTokenToUse;

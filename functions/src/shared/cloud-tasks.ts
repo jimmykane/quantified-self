@@ -117,11 +117,12 @@ export async function enqueueWorkoutTask(
         },
     };
 
-    if (scheduleDelaySeconds) {
-        task.scheduleTime = {
-            seconds: Math.floor(Date.now() / 1000) + scheduleDelaySeconds
-        };
-    }
+    // Add minimum delay to give Firestore time to propagate writes (race condition fix).
+    // If scheduleDelaySeconds is provided, use the max of it and 1 second.
+    const minDelaySeconds = Math.max(scheduleDelaySeconds ?? 1, 1);
+    task.scheduleTime = {
+        seconds: Math.floor(Date.now() / 1000) + minDelaySeconds
+    };
 
     let attempt = 0;
     const MAX_RETRIES = 3;

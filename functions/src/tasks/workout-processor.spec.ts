@@ -90,7 +90,7 @@ describe('processWorkoutTask', () => {
         expect(mockParseWorkoutQueueItemForServiceName).not.toHaveBeenCalled();
     });
 
-    it('should skip if item does not exist', async () => {
+    it('should throw if item does not exist (triggers Cloud Task retry)', async () => {
         const queueItemId = 'test-id';
         const serviceName = ServiceNames.GarminAPI;
 
@@ -102,8 +102,9 @@ describe('processWorkoutTask', () => {
             data: { queueItemId, serviceName }
         };
 
-        await (processWorkoutTask as any)(request);
-
+        await expect((processWorkoutTask as any)(request)).rejects.toThrow(
+            '[TaskWorker] Queue item test-id not found in garminAPIActivityQueue'
+        );
         expect(mockParseWorkoutQueueItemForServiceName).not.toHaveBeenCalled();
     });
 

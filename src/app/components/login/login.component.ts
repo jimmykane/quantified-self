@@ -321,9 +321,6 @@ export class LoginComponent implements OnInit, OnDestroy {
       const databaseUser = await this.userService.getUserByID(loginServiceUser.user.uid).pipe(take(1)).toPromise();
       this.analyticsService.logEvent('login', { method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest' });
       await this.router.navigate(['/dashboard']);
-      this.snackBar.open(`Welcome back ${databaseUser?.displayName || 'Guest'} `, undefined, {
-        duration: 5000,
-      });
     } catch (e) {
       this.logger.error(e);
       this.isLoading = false;

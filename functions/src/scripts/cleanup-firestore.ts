@@ -3,6 +3,7 @@ const logger = console;
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { deauthorizeServiceForUser } from '../OAuth2';
 import * as readline from 'readline';
+import { GARMIN_API_TOKENS_COLLECTION_NAME, GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../garmin/constants';
 
 // Initialize admin if not already initialized
 if (admin.apps.length === 0) {
@@ -20,10 +21,10 @@ const COLLECTION_GROUPS = [
     "metaData",
     "athletes",
     "users",
-    "garminAPITokens",
+    GARMIN_API_TOKENS_COLLECTION_NAME,
     "suuntoAppAccessTokens",
     "COROSAPIAccessTokens",
-    "garminAPIActivityQueue",
+    GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME,
     "suuntoAppWorkoutQueue",
     "COROSAPIWorkoutQueue",
     "system",
@@ -34,7 +35,7 @@ const COLLECTION_GROUPS = [
 const DEAUTH_CONFIG: Record<string, { service: ServiceNames | null, fn: (uid: string, service?: any) => Promise<void> }> = {
     'suuntoAppAccessTokens': { service: ServiceNames.SuuntoApp, fn: deauthorizeServiceForUser },
     'COROSAPIAccessTokens': { service: ServiceNames.COROSAPI, fn: deauthorizeServiceForUser },
-    'garminAPITokens': { service: ServiceNames.GarminAPI, fn: deauthorizeServiceForUser }
+    [GARMIN_API_TOKENS_COLLECTION_NAME]: { service: ServiceNames.GarminAPI, fn: deauthorizeServiceForUser }
 };
 
 async function confirm(message: string): Promise<boolean> {

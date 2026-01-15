@@ -6,7 +6,8 @@ import {
   Auth2ServiceTokenInterface,
 } from '@sports-alliance/sports-lib';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { getServiceConfig, GarminAPIAuth2ServiceTokenInterface } from './OAuth2';
+import { getServiceConfig, deleteLocalServiceToken } from './OAuth2';
+import { GarminAPIAuth2ServiceTokenInterface } from './garmin/auth/adapter';
 import QueryDocumentSnapshot = admin.firestore.QueryDocumentSnapshot;
 import QuerySnapshot = admin.firestore.QuerySnapshot;
 
@@ -81,6 +82,7 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
           tokenType: serviceTokenData.tokenType,
           userID: (serviceTokenData as any).userID,
           permissions: (serviceTokenData as any).permissions, // Expose permissions
+          permissionsLastChangedAt: (serviceTokenData as any).permissionsLastChangedAt,
           dateRefreshed: serviceTokenData.dateRefreshed,
           dateCreated: serviceTokenData.dateCreated,
         };
@@ -104,8 +106,8 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
     const statusCode = e.statusCode || (e.output && e.output.statusCode);
     const errorDescription = e.message || (e.error && (e.error.error_description || e.error.error));
 
-    // Suppress logging for 400/401/500 as these are expected during cleanup or due to partner issues
-    if (statusCode === 401 || statusCode === 400 || statusCode === 500) {
+    // Suppress logging for 400/401/500/502 as these are expected during cleanup or due to partner issues
+    if (statusCode === 401 || statusCode === 400 || statusCode === 500 || statusCode === 502) {
       // Do not log the full stack trace for these known errors during cleanup
       logger.warn(`Token refresh for user ${doc.id} failed (${statusCode}): ${errorDescription}`);
     } else {
@@ -115,8 +117,16 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
     // If it's a 401 (Unauthorized) or 400 (Bad Request with invalid_grant), delete the token as it's no longer valid.
     if (statusCode === 401 || (statusCode === 400 && String(errorDescription).toLowerCase().includes('invalid_grant'))) {
       try {
-        await doc.ref.delete();
-        logger.info(`Deleted token ${doc.id} because it's no longer valid.`);
+        // Extract userID from path: {collection}/{userID}/tokens/{tokenID}
+        const userID = doc.ref.parent.parent?.id;
+        if (userID) {
+          await deleteLocalServiceToken(userID, serviceName, doc.id);
+          logger.info(`Deleted token ${doc.id} for user ${userID} because it's no longer valid.`);
+        } else {
+          // Fallback to raw delete if path is unexpected
+          await doc.ref.delete();
+          logger.info(`Deleted token ${doc.id} (fallback) because it's no longer valid.`);
+        }
       } catch (deleteError: any) {
         logger.error(`Could not delete token ${doc.id}`, deleteError);
       }

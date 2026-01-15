@@ -2,6 +2,8 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from './suunto/constants';
+import { GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from './garmin/constants';
 
 /!**
  * Function to reset the retry count of a queue's items for a specific date range
@@ -15,7 +17,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 
 async function resetRetryCount(serviceName: ServiceNames, startDate: Date, endDate: Date){
   const querySnapshot = await admin.firestore()
-    .collection(serviceName === ServiceNames.SuuntoApp ? 'suuntoAppWorkoutQueue' : 'garminAPIActivityQueue')
+    .collection(serviceName === ServiceNames.SuuntoApp ? SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME : GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME)
     .where("processed", "==", false)
     .where("dateCreated", ">=", startDate.getTime())
     .where("dateCreated", "<=", endDate.getTime())
