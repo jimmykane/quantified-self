@@ -347,7 +347,7 @@ describe('Cloud Tasks Utils', () => {
             });
         });
 
-        it('should support zero delay (immediate execution)', async () => {
+        it('should enforce minimum 1 second delay (race condition fix)', async () => {
             const { enqueueWorkoutTask } = await import('./cloud-tasks');
             const { ServiceNames } = await import('@sports-alliance/sports-lib');
 
@@ -355,9 +355,10 @@ describe('Cloud Tasks Utils', () => {
 
             await enqueueWorkoutTask(ServiceNames.GarminAPI, 'item-123', 1000, 0);
 
-            // With delay of 0, scheduleTime should not be set (falsy check)
+            // With delay of 0, scheduleTime should still be set with minimum 1 second
             const call = mockCloudTasksClient.createTask.mock.calls[0][0];
-            expect(call.task.scheduleTime).toBeUndefined();
+            expect(call.task.scheduleTime).toBeDefined();
+            expect(call.task.scheduleTime.seconds).toBeGreaterThan(0);
         });
 
         it('should use dateCreated in task name for deduplication', async () => {
