@@ -71,10 +71,14 @@ vi.mock('firebase-admin', () => {
         commit: mockBatchCommit,
     });
 
-    const firestore = () => ({
+    const firestore = Object.assign(() => ({
         collection: mockCollection,
         collectionGroup: mockCollection,
         batch: batch,
+    }), {
+        FieldValue: {
+            delete: vi.fn().mockReturnValue('delete-sentinel'),
+        },
     });
     return {
         default: {
@@ -902,6 +906,62 @@ describe('OAuth2', () => {
 
             await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.SuuntoApp, redirectUri, code))
                 .rejects.toThrow(/No results when geting token/);
+        });
+    });
+
+    describe('getAndSetServiceOAuth2AccessTokenForUser - cleanup', () => {
+        const userID = 'test-user';
+        const redirectUri = 'https://callback';
+        const code = 'auth-code';
+        const mockUpdate = vi.fn().mockResolvedValue({});
+
+        beforeEach(async () => {
+            vi.clearAllMocks();
+            mockGet.mockClear();
+            mockGet.mockResolvedValue({
+                exists: true,
+                data: () => ({ state: 'some-state', codeVerifier: 'some-verifier' }),
+                empty: true,
+                docs: [],
+            } as any);
+            mockDocInstance.update = mockUpdate;
+
+            // Explicitly restore any spies from previous tests if they weren't cleaned up
+            const simpleOAuth2 = await import('simple-oauth2');
+            vi.spyOn(simpleOAuth2.AuthorizationCode.prototype, 'getToken').mockRestore();
+        });
+
+        it('should cleanup state and codeVerifier after successful token exchange', async () => {
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue({
+                token: { user: 'test-external-user', access_token: 'mock-token' },
+                expired: () => false,
+            } as any);
+
+            // Mock Garmin User ID fetch
+            (requestPromise.get as any).mockResolvedValueOnce({ userId: 'mock-garmin-user' });
+            // Mock permissions fetch (non-fatal but good to have)
+            (requestPromise.get as any).mockResolvedValueOnce({ permissions: [] });
+
+            await getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.GarminAPI, redirectUri, code);
+
+            expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
+                state: 'delete-sentinel',
+                codeVerifier: 'delete-sentinel',
+            }));
+        });
+
+        it('should cleanup state and codeVerifier even if token exchange fails', async () => {
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockRejectedValue(new Error('Exchange failed'));
+
+            await expect(getAndSetServiceOAuth2AccessTokenForUser(userID, ServiceNames.GarminAPI, redirectUri, code))
+                .rejects.toThrow('Exchange failed');
+
+            expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({
+                state: 'delete-sentinel',
+                codeVerifier: 'delete-sentinel',
+            }));
         });
     });
 

@@ -129,39 +129,53 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
   const tokensDocumentSnapshot = await admin.firestore().collection(adapter.tokenCollectionName).doc(userID).get();
   const tokensDocumentSnapshotData = tokensDocumentSnapshot.data ? tokensDocumentSnapshot.data() : undefined;
 
-  const tokenConfig = adapter.getTokenRequestConfig(redirectUri, code, tokensDocumentSnapshotData);
+  try {
+    const tokenConfig = adapter.getTokenRequestConfig(redirectUri, code, tokensDocumentSnapshotData);
 
-  const oauth2Client = adapter.getOAuth2Client();
-  const results: AccessToken = await oauth2Client.getToken(tokenConfig);
+    const oauth2Client = adapter.getOAuth2Client();
+    const results: AccessToken = await oauth2Client.getToken(tokenConfig);
 
-  if (!results || !results.token || !results.token.access_token) {
-    logger.error(`Failed to get token results for ${serviceName}`, { results });
-    throw new Error(`No results when geting token for userID: ${userID}, serviceName: ${serviceName}`);
-  }
+    if (!results || !results.token || !results.token.access_token) {
+      logger.error(`Failed to get token results for ${serviceName}`, { results });
+      throw new Error(`No results when geting token for userID: ${userID}, serviceName: ${serviceName}`);
+    }
 
-  // Use adapter to process post-token logic (fetch uniqueId, permissions, etc)
-  const processedTokenData = await adapter.processNewToken(results, userID);
-  const { uniqueId } = processedTokenData;
+    // Use adapter to process post-token logic (fetch uniqueId, permissions, etc)
+    const processedTokenData = await adapter.processNewToken(results, userID);
+    const { uniqueId } = processedTokenData;
 
-  const tokenData = adapter.convertTokenResponse(results, uniqueId, processedTokenData);
+    const tokenData = adapter.convertTokenResponse(results, uniqueId, processedTokenData);
 
-  await admin.firestore()
-    .collection(adapter.tokenCollectionName)
-    .doc(userID).collection('tokens')
-    .doc(uniqueId || 'default')
-    .set(tokenData);
+    await admin.firestore()
+      .collection(adapter.tokenCollectionName)
+      .doc(userID).collection('tokens')
+      .doc(uniqueId || 'default')
+      .set(tokenData);
 
-  // Remove any OTHER users connected to this same external account
-  if (uniqueId) {
+    // Remove any OTHER users connected to this same external account
+    if (uniqueId) {
+      try {
+        await removeDuplicateConnections(userID, serviceName, uniqueId);
+      } catch (e) {
+        logger.error(`Failed to cleanup duplicate connections for ${userID}`, e);
+        // Don't fail the auth flow for this, just log
+      }
+    }
+
+    logger.info(`User ${userID} successfully connected to ${serviceName}`);
+  } finally {
+    // Cleanup temporary fields (state, PKCE verifier)
     try {
-      await removeDuplicateConnections(userID, serviceName, uniqueId);
+      await admin.firestore().collection(adapter.tokenCollectionName).doc(userID).update({
+        state: admin.firestore.FieldValue.delete(),
+        codeVerifier: admin.firestore.FieldValue.delete(),
+      });
+      logger.info(`Cleaned up temporary OAuth2 data for User ${userID} and ${serviceName}`);
     } catch (e) {
-      logger.error(`Failed to cleanup duplicate connections for ${userID}`, e);
-      // Don't fail the auth flow for this, just log
+      // Don't fail if cleanup fails, but log it
+      logger.warn(`Failed to cleanup temporary OAuth2 data for user ${userID}`, e);
     }
   }
-
-  logger.info(`User ${userID} successfully connected to ${serviceName}`);
 }
 
 export async function deauthorizeServiceForUser(userID: string, serviceName: ServiceNames) {
