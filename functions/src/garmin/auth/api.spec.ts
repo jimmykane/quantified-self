@@ -11,6 +11,7 @@ vi.mock('../../request-helper', () => ({
 // Mock logger
 vi.mock('firebase-functions/logger', () => ({
     error: vi.fn(),
+    warn: vi.fn(),
 }));
 
 describe('Garmin API Utils', () => {
@@ -95,13 +96,73 @@ describe('Garmin API Utils', () => {
             expect(permissions).toEqual([]);
         });
 
-        it('should return empty array and log error when API call fails', async () => {
+
+        it('should retry and succeed (1st retry)', async () => {
+            const mockPermissions = ['HISTORICAL_DATA_EXPORT'];
+            const mockResponse = { permissions: mockPermissions };
+
+            // First call fails, second succeeds
+            (requestPromise.get as any)
+                .mockRejectedValueOnce(new Error('403 Forbidden'))
+                .mockResolvedValueOnce(mockResponse);
+
+            vi.useFakeTimers();
+            const promise = getGarminPermissions(MOCK_ACCESS_TOKEN);
+
+            // Advance time for backoff 1s
+            await vi.advanceTimersByTimeAsync(1000);
+
+            const permissions = await promise;
+
+            expect(permissions).toEqual(mockPermissions);
+            expect(requestPromise.get).toHaveBeenCalledTimes(2);
+            expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Retrying in 1000ms'));
+            vi.useRealTimers();
+        });
+
+        it('should retry and succeed (3rd retry)', async () => {
+            const mockPermissions = ['HISTORICAL_DATA_EXPORT'];
+            const mockResponse = { permissions: mockPermissions };
+
+            // fails 3 times, succeeds on 4th call (retry #3)
+            (requestPromise.get as any)
+                .mockRejectedValueOnce(new Error('Fail 1'))
+                .mockRejectedValueOnce(new Error('Fail 2'))
+                .mockRejectedValueOnce(new Error('Fail 3'))
+                .mockResolvedValueOnce(mockResponse);
+
+            vi.useFakeTimers();
+            const promise = getGarminPermissions(MOCK_ACCESS_TOKEN);
+
+            await vi.advanceTimersByTimeAsync(1000); // 1st retry
+            await vi.advanceTimersByTimeAsync(2000); // 2nd retry
+            await vi.advanceTimersByTimeAsync(4000); // 3rd retry
+
+            const permissions = await promise;
+
+            expect(permissions).toEqual(mockPermissions);
+            expect(requestPromise.get).toHaveBeenCalledTimes(4);
+            vi.useRealTimers();
+        });
+
+        it('should return empty array and log error after exhausting retries', async () => {
             (requestPromise.get as any).mockRejectedValue(new Error('API Error'));
 
-            const permissions = await getGarminPermissions(MOCK_ACCESS_TOKEN);
+            vi.useFakeTimers();
+            const promise = getGarminPermissions(MOCK_ACCESS_TOKEN);
+
+            await vi.advanceTimersByTimeAsync(1000);
+            await vi.advanceTimersByTimeAsync(2000);
+            await vi.advanceTimersByTimeAsync(4000);
+
+            const permissions = await promise;
 
             expect(permissions).toEqual([]);
-            expect(logger.error).toHaveBeenCalledWith('Failed to fetch Garmin Permissions: Error: API Error');
+            // initial call + 3 retries = 4 calls total
+            expect(requestPromise.get).toHaveBeenCalledTimes(4);
+            expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to fetch Garmin Permissions after 4 attempts'));
+            vi.useRealTimers();
         });
+
     });
 });
