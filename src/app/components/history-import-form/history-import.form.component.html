@@ -51,12 +51,11 @@
 @if (isPro) {
 <form [formGroup]="formGroup" class="qs-form history-import-form">
   @if (isMissingGarminPermissions) {
-  <div class="warning-box"
-    style="margin-bottom: 24px; padding: 12px; background-color: rgba(244, 67, 54, 0.1); border-radius: 8px; border: 1px solid rgba(244, 67, 54, 0.3); display: flex; align-items: flex-start; gap: 12px;">
-    <mat-icon style="color: #f44336;">warning</mat-icon>
-    <div>
-      <strong style="display: block; color: #f44336; margin-bottom: 4px;">Missing Permissions</strong>
-      <p style="margin: 0; font-size: 0.85rem; opacity: 0.8;">
+  <div class="qs-warning-box" style="margin-bottom: 24px;">
+    <mat-icon>warning</mat-icon>
+    <div class="qs-warning-content">
+      <strong>Missing Permissions</strong>
+      <p>
         Export permissions are required for history import. Please reconnect to Garmin and grant all permissions.
       </p>
     </div>

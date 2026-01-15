@@ -50,42 +50,33 @@
           </mat-list-item>
         </mat-list>
 
-        <div *ngIf="missingPermissions.length > 0" class="warning-box"
-          style="margin-top: 16px; padding: 12px; background-color: rgba(244, 67, 54, 0.1); border-radius: 8px; border: 1px solid rgba(244, 67, 54, 0.3);">
-          <div style="display: flex; align-items: flex-start; gap: 12px;">
-            <mat-icon style="color: #f44336;">warning</mat-icon>
-            <div>
-              <strong style="display: block; color: #f44336; margin-bottom: 4px;">Missing Permissions</strong>
-              <p style="margin: 0; font-size: 0.85rem; opacity: 0.8;">
-                Some features are disabled. Missing permissions:
-              </p>
-              <ul style="margin: 4px 0 8px 16px; padding: 0; font-size: 0.85rem;">
-                <li *ngFor="let permission of missingPermissions">
-                  <div style="font-weight: 500;">{{ getPermissionLabel(permission) }}</div>
-                  <div style="opacity: 0.7; font-size: 0.8rem; margin-bottom: 4px;">{{
-                    getPermissionExplanation(permission) }}</div>
-                </li>
-              </ul>
-              <p style="margin: 8px 0 0 0; font-size: 0.85rem;">
-                <strong>To update permissions:</strong>
-              </p>
-              <ul style="margin: 4px 0 8px 16px; padding: 0; font-size: 0.85rem;">
-                <li>
-                  <a href="https://connect.garmin.com/modern/account" target="_blank" rel="noopener"
-                    style="color: var(--mat-sys-primary);">Garmin Connect Web</a>
-                  → Account Information → Connected Apps
-                </li>
-                <li>
-                  <a (click)="openGarminConnectApp()" style="color: var(--mat-sys-primary); cursor: pointer;">
-                    Open Garmin Connect App
-                  </a>
-                  → More → Settings → Connected Apps
-                </li>
-              </ul>
-              <p style="margin: 4px 0 0 0; font-size: 0.8rem; opacity: 0.7;">
-                After updating permissions, reconnect to refresh.
-              </p>
-            </div>
+        <div *ngIf="missingPermissions.length > 0" class="qs-warning-box" style="margin-top: 16px;">
+          <mat-icon>warning</mat-icon>
+          <div class="qs-warning-content">
+            <strong>Missing Permissions</strong>
+            <p>Some features are disabled. Missing permissions:</p>
+            <ul>
+              <li *ngFor="let permission of missingPermissions">
+                <div style="font-weight: 500;">{{ getPermissionLabel(permission) }}</div>
+                <div style="opacity: 0.7; font-size: 0.8rem; margin-bottom: 4px;">{{
+                  getPermissionExplanation(permission) }}</div>
+              </li>
+            </ul>
+            <p style="margin-top: 8px;"><strong>To update permissions:</strong></p>
+            <ul>
+              <li>
+                <a href="https://connect.garmin.com/modern/account" target="_blank" rel="noopener">Garmin Connect
+                  Web</a>
+                → Account Information → Connected Apps
+              </li>
+              <li>
+                <a (click)="openGarminConnectApp()" style="cursor: pointer;">Open Garmin Connect App</a>
+                → More → Settings → Connected Apps
+              </li>
+            </ul>
+            <p style="margin-top: 4px; opacity: 0.7; font-size: 0.8rem;">
+              After updating permissions, reconnect to refresh.
+            </p>
           </div>
         </div>
         }

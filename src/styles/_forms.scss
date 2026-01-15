@@ -92,6 +92,57 @@
     }
 }
 
+// Warning Box Standardized Component
+.qs-warning-box {
+    padding: 12px;
+    background-color: color-mix(in srgb, var(--mat-sys-error), transparent 90%);
+    border-radius: 8px;
+    border: 1px solid color-mix(in srgb, var(--mat-sys-error), transparent 70%);
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+
+    mat-icon {
+        color: var(--mat-sys-error);
+        overflow: visible !important; // Fix for "cropped" triangle icons
+        flex-shrink: 0;
+    }
+
+    .qs-warning-content {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+
+        strong {
+            color: var(--mat-sys-error);
+            font-size: 0.95rem;
+            line-height: 1.2;
+        }
+
+        p {
+            margin: 0;
+            font-size: 0.85rem;
+            opacity: 0.8;
+            line-height: 1.4;
+        }
+
+        ul {
+            margin: 4px 0 0 16px;
+            padding: 0;
+            font-size: 0.85rem;
+        }
+
+        a {
+            color: var(--mat-sys-primary);
+            text-decoration: none;
+
+            &:hover {
+                text-decoration: underline;
+            }
+        }
+    }
+}
+
 // Dark theme adjustments
 .dark-theme {
     .qs-form {
