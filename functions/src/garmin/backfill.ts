@@ -9,7 +9,7 @@ import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS } from '../shared/history-import.constants';
 import { getTokenData } from '../tokens';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from './constants';
-import { GarminAPIAuth2ServiceTokenInterface } from '../OAuth2';
+import { GarminAPIAuth2ServiceTokenInterface } from './auth/adapter';
 
 const GARMIN_ACTIVITIES_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/rest/backfill/activities';
 const TIMEOUT_IN_SECONDS = 300;

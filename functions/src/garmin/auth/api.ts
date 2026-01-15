@@ -50,3 +50,21 @@ export async function getGarminPermissions(accessToken: string): Promise<string[
         return [];
     }
 }
+
+/**
+ * Deauthorizes a user from the Garmin API.
+ * @param accessToken The access token of the user to deauthorize.
+ */
+export async function deauthorizeGarminUser(accessToken: string): Promise<void> {
+    try {
+        await requestPromise.delete({
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+            },
+            url: 'https://apis.garmin.com/wellness-api/rest/user/registration',
+        });
+    } catch (e: any) {
+        logger.error(`Failed to deauthorize Garmin user: ${e}`);
+        throw e;
+    }
+}

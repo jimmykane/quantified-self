@@ -279,7 +279,10 @@ describe('Garmin Auth Wrapper', () => {
             expect(mockWhere).toHaveBeenCalledWith('serviceName', '==', ServiceNames.GarminAPI);
 
             // 2. batch update called
-            expect(mockBatchUpdate).toHaveBeenCalledWith(mockTokenDoc.ref, { permissions: permissions });
+            expect(mockBatchUpdate).toHaveBeenCalledWith(mockTokenDoc.ref, {
+                permissions: permissions,
+                permissionsLastChangedAt: 1613065860
+            });
             expect(mockBatchCommit).toHaveBeenCalled();
 
             // Should return 200
@@ -337,7 +340,10 @@ describe('Garmin Auth Wrapper', () => {
             // Should return 200
             expect(res.status).toHaveBeenCalledWith(200);
             // Verify batch update with empty permissions
-            expect(mockBatchUpdate).toHaveBeenCalledWith(mockTokenDoc.ref, { permissions: [] });
+            expect(mockBatchUpdate).toHaveBeenCalledWith(mockTokenDoc.ref, {
+                permissions: [],
+                permissionsLastChangedAt: 1613065860
+            });
             expect(mockBatchCommit).toHaveBeenCalled();
         });
     });
