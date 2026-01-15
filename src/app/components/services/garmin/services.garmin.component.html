@@ -61,12 +61,29 @@
               </p>
               <ul style="margin: 4px 0 8px 16px; padding: 0; font-size: 0.85rem;">
                 <li *ngFor="let permission of missingPermissions">
-                  {{ getPermissionLabel(permission) }} <span style="opacity: 0.6; font-size: 0.75rem;">({{ permission
-                    }})</span>
+                  <div style="font-weight: 500;">{{ getPermissionLabel(permission) }}</div>
+                  <div style="opacity: 0.7; font-size: 0.8rem; margin-bottom: 4px;">{{
+                    getPermissionExplanation(permission) }}</div>
                 </li>
               </ul>
-              <p style="margin: 4px 0 0 0; font-size: 0.85rem;">
-                Please reconnect to grant all permissions.
+              <p style="margin: 8px 0 0 0; font-size: 0.85rem;">
+                <strong>To update permissions:</strong>
+              </p>
+              <ul style="margin: 4px 0 8px 16px; padding: 0; font-size: 0.85rem;">
+                <li>
+                  <a href="https://connect.garmin.com/modern/account" target="_blank" rel="noopener"
+                    style="color: var(--mat-sys-primary);">Garmin Connect Web</a>
+                  → Account Information → Connected Apps
+                </li>
+                <li>
+                  <a (click)="openGarminConnectApp()" style="color: var(--mat-sys-primary); cursor: pointer;">
+                    Open Garmin Connect App
+                  </a>
+                  → More → Settings → Connected Apps
+                </li>
+              </ul>
+              <p style="margin: 4px 0 0 0; font-size: 0.8rem; opacity: 0.7;">
+                After updating permissions, reconnect to refresh.
               </p>
             </div>
           </div>
