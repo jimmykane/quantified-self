@@ -158,6 +158,7 @@
         </p>
         @if (hasProAccess && isAdmin) {
         <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"
+          [missingPermissions]="missingPermissions"
           (importInitiated)="onHistoryImportInitiated()"></app-history-import-form>
         } @else if (hasProAccess) {
         <p class="feature-description">Import history is coming soon for Garmin.</p>

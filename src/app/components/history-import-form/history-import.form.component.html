@@ -50,6 +50,18 @@
 @if (formGroup && isAllowedToDoHistoryImport) {
 @if (isPro) {
 <form [formGroup]="formGroup" class="qs-form history-import-form">
+  @if (isMissingGarminPermissions) {
+  <div class="warning-box"
+    style="margin-bottom: 24px; padding: 12px; background-color: rgba(244, 67, 54, 0.1); border-radius: 8px; border: 1px solid rgba(244, 67, 54, 0.3); display: flex; align-items: flex-start; gap: 12px;">
+    <mat-icon style="color: #f44336;">warning</mat-icon>
+    <div>
+      <strong style="display: block; color: #f44336; margin-bottom: 4px;">Missing Permissions</strong>
+      <p style="margin: 0; font-size: 0.85rem; opacity: 0.8;">
+        Export permissions are required for history import. Please reconnect to Garmin and grant all permissions.
+      </p>
+    </div>
+  </div>
+  }
   @if (minDate && serviceName === serviceNames.COROSAPI) {
   <div class="limit-info">
     <mat-icon>info</mat-icon>
@@ -89,7 +101,8 @@
     </mat-checkbox>
   </div>
   <div class="qs-form-actions">
-    <button mat-flat-button color="primary" (click)="onSubmit($event)" [disabled]="!formGroup.valid || isLoading">
+    <button mat-flat-button color="primary" (click)="onSubmit($event)"
+      [disabled]="!formGroup.valid || isLoading || formGroup.disabled">
       @if (isLoading) {
       <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
         color="accent"></mat-spinner>
