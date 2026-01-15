@@ -8,6 +8,8 @@ import { AppRemoteConfigService } from './services/app.remote-config.service';
 import { AppAnalyticsService } from './services/app.analytics.service';
 import { SeoService } from './services/seo.service';
 import { AppIconService } from './services/app.icon.service';
+import { AppThemeService } from './services/app.theme.service';
+
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { Router, RouterModule, ActivatedRoute } from '@angular/router';
 import { DomSanitizer } from '@angular/platform-browser';
@@ -67,6 +69,11 @@ describe('AppComponent', () => {
     const mockAnalyticsService = {
         setAnalyticsCollectionEnabled: vi.fn()
     };
+    const mockThemeService = {
+        getAppTheme: vi.fn().mockReturnValue(of('Normal')),
+        themeChange$: new Subject()
+    };
+
 
     beforeEach(async () => {
         await TestBed.configureTestingModule({
@@ -88,6 +95,7 @@ describe('AppComponent', () => {
                 { provide: AppRemoteConfigService, useValue: mockRemoteConfigService },
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 { provide: SeoService, useValue: mockSeoService },
+                { provide: AppThemeService, useValue: mockThemeService },
                 {
                     provide: AppUserService, useValue: {
                         updateUserProperties: vi.fn().mockReturnValue(Promise.resolve()),
