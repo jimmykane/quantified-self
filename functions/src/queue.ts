@@ -6,14 +6,14 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 
 import { increaseRetryCountForQueueItem, updateToProcessed, moveToDeadLetterQueue, QueueResult } from './queue-utils';
-import { processGarminHealthAPIActivityQueueItem } from './garmin/queue';
+import { processGarminAPIActivityQueueItem } from './garmin/queue';
 import {
   QueueItemInterface,
   COROSAPIWorkoutQueueItemInterface,
-  GarminHealthAPIActivityQueueItemInterface,
+  GarminAPIActivityQueueItemInterface,
   SuuntoAppWorkoutQueueItemInterface,
 } from './queue/queue-item.interface';
-import { generateIDFromParts, setEvent, UsageLimitExceededError, enqueueWorkoutTask, UserNotFoundError, getCloudTaskQueueDepth } from './utils';
+import { generateIDFromParts, generateEventID, setEvent, UsageLimitExceededError, enqueueWorkoutTask, UserNotFoundError, getCloudTaskQueueDepth } from './utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getServiceWorkoutQueueName } from './shared/queue-names';
 import {
@@ -77,16 +77,16 @@ export async function dispatchQueueItemTasks(serviceName: ServiceNames) {
 }
 
 const TIMEOUT_DEFAULT = 300;
-const MEMORY_DEFAULT = '4GB';
+const MEMORY_DEFAULT = '256MB';
 const TIMEOUT_HIGH = 540;
-const MEMORY_HIGH = '4GB';
+const MEMORY_HIGH = '256MB';
 
-export const parseGarminHealthAPIActivityQueue = functions.region('europe-west2').runWith({
+export const parseGarminAPIActivityQueue = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_HIGH,
   memory: MEMORY_HIGH,
   maxInstances: 1,
 }).pubsub.schedule(QUEUE_SCHEDULE).onRun(async () => {
-  await dispatchQueueItemTasks(ServiceNames.GarminHealthAPI);
+  await dispatchQueueItemTasks(ServiceNames.GarminAPI);
 });
 
 export const parseCOROSAPIWorkoutQueue = functions.region('europe-west2').runWith({
@@ -128,8 +128,8 @@ export async function addToQueueForSuunto(queueItem: { userName: string, workout
  * Needed to create and stamp an id
  * @param queueItem
  */
-export async function addToQueueForGarmin(queueItem: { userID: string, startTimeInSeconds: number, manual: boolean, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX', token: string, userAccessToken: string }): Promise<admin.firestore.DocumentReference> {
-  const queueID = await generateIDFromParts([queueItem.userID, queueItem.startTimeInSeconds.toString()]);
+export async function addToQueueForGarmin(queueItem: { userID: string, startTimeInSeconds: number, manual: boolean, activityFileID: string, activityFileType: 'FIT' | 'TCX' | 'GPX', token: string, userAccessToken: string, callbackURL: string }): Promise<admin.firestore.DocumentReference> {
+  const queueID = await generateIDFromParts([queueItem.userID, queueItem.activityFileID]);
   logger.info(`Inserting to queue ${queueID} for ${queueItem.userID} fileID ${queueItem.activityFileID}`);
   return addToWorkoutQueue({
     id: queueID,
@@ -143,8 +143,9 @@ export async function addToQueueForGarmin(queueItem: { userID: string, startTime
     retryCount: 0,
     processed: false,
     userAccessToken: queueItem.userAccessToken,
+    callbackURL: queueItem.callbackURL,
     dispatchedToCloudTask: null,
-  }, ServiceNames.GarminHealthAPI, queueItem.manual);
+  }, ServiceNames.GarminAPI, queueItem.manual);
 }
 
 /**
@@ -158,7 +159,7 @@ export async function addToQueueForCOROS(queueItem: COROSAPIWorkoutQueueItemInte
 
 export function getWorkoutForService(
   serviceName: ServiceNames,
-  workoutQueueItem: COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface | GarminHealthAPIActivityQueueItemInterface,
+  workoutQueueItem: COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface,
   serviceToken?: SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface): Promise<any> {
   switch (serviceName) {
     default:
@@ -183,9 +184,9 @@ export function getWorkoutForService(
 }
 
 
-export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNames, queueItem: COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface | GarminHealthAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<QueueResult> {
-  if (serviceName === ServiceNames.GarminHealthAPI) {
-    return processGarminHealthAPIActivityQueueItem(queueItem as GarminHealthAPIActivityQueueItemInterface, bulkWriter, tokenCache, usageCache, pendingWrites);
+export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNames, queueItem: COROSAPIWorkoutQueueItemInterface | SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface, bulkWriter?: admin.firestore.BulkWriter, tokenCache?: Map<string, Promise<admin.firestore.QuerySnapshot>>, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<QueueResult> {
+  if (serviceName === ServiceNames.GarminAPI) {
+    return processGarminAPIActivityQueueItem(queueItem as GarminAPIActivityQueueItemInterface, bulkWriter, tokenCache, usageCache, pendingWrites);
   }
 
   logger.info(`Processing queue item ${queueItem.id} at retry count ${queueItem.retryCount}`);
@@ -272,7 +273,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     try {
       logger.info(`Downloading ${serviceName} workoutID: ${(queueItem as any).workoutID} for queue item ${queueItem.id}`);
       logger.info('Starting timer: DownloadFit');
-      result = await getWorkoutForService(serviceName, queueItem, serviceToken);
+      result = await getWorkoutForService(serviceName, queueItem, serviceToken as any);
       logger.info(`Downloaded FIT file for ${queueItem.id}`);
     } catch (e: any) {
       logger.info('Ending timer: DownloadFit');
@@ -281,7 +282,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         try {
           // Force refresh token and save
           serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, true);
-          result = await getWorkoutForService(serviceName, queueItem, serviceToken);
+          result = await getWorkoutForService(serviceName, queueItem, serviceToken as any);
         } catch (retryError: any) {
           logger.error(new Error(`Could not get workout for ${queueItem.id} even after force refresh: ${retryError.message}`));
           // Continue to next token
@@ -319,14 +320,14 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         case ServiceNames.COROSAPI: {
           const corosWorkoutQueueItem = queueItem as COROSAPIWorkoutQueueItemInterface;
           const corosMetaData = new COROSAPIEventMetaData(corosWorkoutQueueItem.workoutID, corosWorkoutQueueItem.openId, corosWorkoutQueueItem.FITFileURI, new Date());
-          const deterministicID = await generateIDFromParts([corosWorkoutQueueItem.openId, corosWorkoutQueueItem.workoutID, corosWorkoutQueueItem.FITFileURI]);
+          const deterministicID = await generateEventID(parentID, event.startDate);
           await setEvent(parentID, deterministicID, event, corosMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
           break;
         }
         case ServiceNames.SuuntoApp: {
           const suuntoWorkoutQueueItem = queueItem as SuuntoAppWorkoutQueueItemInterface;
           const suuntoMetaData = new SuuntoAppEventMetaData(suuntoWorkoutQueueItem.workoutID, suuntoWorkoutQueueItem.userName, new Date());
-          const deterministicID = await generateIDFromParts([suuntoWorkoutQueueItem.userName, suuntoWorkoutQueueItem.workoutID]);
+          const deterministicID = await generateEventID(parentID, event.startDate);
           await setEvent(parentID, deterministicID, event, suuntoMetaData, { data: result, extension: 'fit', startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
         }
       }
@@ -369,7 +370,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   return increaseRetryCountForQueueItem(queueItem, lastError, retryIncrement, bulkWriter);
 }
 
-async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface | GarminHealthAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames, deferDispatch: boolean = false): Promise<admin.firestore.DocumentReference> {
+async function addToWorkoutQueue(queueItem: SuuntoAppWorkoutQueueItemInterface | GarminAPIActivityQueueItemInterface | COROSAPIWorkoutQueueItemInterface, serviceName: ServiceNames, deferDispatch: boolean = false): Promise<admin.firestore.DocumentReference> {
   const queueItemDocument = admin.firestore().collection(getServiceWorkoutQueueName(serviceName)).doc(queueItem.id);
   await queueItemDocument.set(Object.assign(queueItem, {
     expireAt: getExpireAtTimestamp(TTL_CONFIG.QUEUE_ITEM_IN_DAYS),

@@ -638,7 +638,7 @@ export class AppEventService implements OnDestroy {
         newEvent = await EventImporterFIT.getFromArrayBuffer(arrayBuffer, options);
       } else if (extension === 'gpx') {
         const text = new TextDecoder().decode(arrayBuffer);
-        newEvent = await EventImporterGPX.getFromString(text, options);
+        newEvent = await EventImporterGPX.getFromString(text, null, options);
       } else if (extension === 'tcx') {
         const text = new TextDecoder().decode(arrayBuffer);
         newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(text, 'application/xml'), options);

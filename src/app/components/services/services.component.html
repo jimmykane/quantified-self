@@ -2,13 +2,13 @@
   <!-- Horizontal Navigation -->
   <nav class="settings-nav">
     <ul class="nav-list">
-      <li class="nav-item" [class.active]="activeSection === 'suunto'" (click)="activeSection = 'suunto'">
+      <li class="nav-item" [class.active]="activeSection === 'suunto'" (click)="selectService('suunto')">
         Suunto
       </li>
-      <li class="nav-item" [class.active]="activeSection === 'garmin'" (click)="activeSection = 'garmin'">
+      <li class="nav-item" [class.active]="activeSection === 'garmin'" (click)="selectService('garmin')">
         Garmin
       </li>
-      <li class="nav-item" [class.active]="activeSection === 'coros'" (click)="activeSection = 'coros'">
+      <li class="nav-item" [class.active]="activeSection === 'coros'" (click)="selectService('coros')">
         COROS
       </li>
     </ul>

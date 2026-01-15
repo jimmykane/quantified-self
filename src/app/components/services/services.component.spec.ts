@@ -12,6 +12,7 @@ import { AppEventService } from '../../services/app.event.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { of } from 'rxjs';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 
 describe('ServicesComponent', () => {
     let component: ServicesComponent;
@@ -41,7 +42,10 @@ describe('ServicesComponent', () => {
                 queryParamMap: {
                     get: vi.fn()
                 }
-            }
+            },
+            queryParamMap: of({
+                get: vi.fn()
+            })
         };
 
         await TestBed.configureTestingModule({
@@ -90,5 +94,14 @@ describe('ServicesComponent', () => {
         await new Promise(resolve => setTimeout(resolve, 0));
 
         expect(component.isAdmin).toBe(false);
+    });
+
+    it('should navigate with correct query params when selectService is called', async () => {
+        await component.selectService('garmin');
+        expect(mockRouter.navigate).toHaveBeenCalledWith([], {
+            relativeTo: mockActivatedRoute,
+            queryParams: { serviceName: ServiceNames.GarminAPI },
+            queryParamsHandling: 'merge',
+        });
     });
 });

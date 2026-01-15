@@ -10,6 +10,7 @@ import {
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
   validateOAuth2State,
 } from '../../OAuth2';
+import { determineRedirectURI } from '../../utils';
 
 const SERVICE_NAME = ServiceNames.SuuntoApp;
 
@@ -43,14 +44,14 @@ export const getSuuntoAPIAuthRequestTokenRedirectURI = functions.region('europe-
     return;
   }
 
-  if (!req.body.redirectUri) {
-    logger.error('Missing redirectUri');
-    res.status(500).send('Bad Request');
+  const redirectURI = determineRedirectURI(req);
+  if (!redirectURI) {
+    res.status(400).send('Missing redirect_uri');
     return;
   }
 
   res.send({
-    redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, req.body.redirectUri),
+    redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectURI),
   });
 });
 
@@ -87,11 +88,11 @@ export const requestAndSetSuuntoAPIAccessToken = functions.region('europe-west2'
 
   const state = req.body.state;
   const code = req.body.code;
-  const redirectUri = req.body.redirectUri;
+  const redirectUri = determineRedirectURI(req);
 
   if (!state || !code || !redirectUri) {
     logger.error('Missing state or code or redirectUri');
-    res.status(500).send('Bad Request');
+    res.status(400).send('Bad Request');
     return;
   }
 

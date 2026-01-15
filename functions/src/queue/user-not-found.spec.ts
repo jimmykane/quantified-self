@@ -51,22 +51,32 @@ const mockFirestore = {
         doc: vi.fn(() => ({
             collection: vi.fn(() => ({
                 doc: vi.fn(() => mockDocRef),
-                count: vi.fn(() => ({ get: vi.fn(() => ({ data: () => ({ count: 5 }) })) }))
+                count: vi.fn(() => ({ get: vi.fn(() => ({ data: () => ({ count: 5 }) })) })),
+                // Add support for Garmin token lookup: .limit(1).get() or just .get()
+                limit: vi.fn(() => ({
+                    get: vi.fn(() => Promise.resolve(mockSnapshot))
+                })),
+                get: vi.fn(() => Promise.resolve(mockSnapshot))
             })),
             get: vi.fn(() => Promise.resolve({ data: () => ({}) })),
             set: vi.fn()
         })),
         where: vi.fn(() => ({
             get: vi.fn(() => Promise.resolve(mockSnapshot)),
-            where: vi.fn(() => ({ get: vi.fn(() => Promise.resolve(mockSnapshot)) }))
+            where: vi.fn(() => ({ get: vi.fn(() => Promise.resolve(mockSnapshot)) })),
+            limit: vi.fn(() => ({ get: vi.fn(() => Promise.resolve(mockSnapshot)) }))
         })),
         add: vi.fn(),
+        limit: vi.fn(() => ({ get: vi.fn(() => Promise.resolve(mockSnapshot)) }))
     })),
-    collectionGroup: vi.fn(() => ({
-        where: vi.fn(() => ({
+    collectionGroup: vi.fn(() => {
+        const queryBuilder = {
+            where: vi.fn(() => queryBuilder),
+            limit: vi.fn(() => queryBuilder),
             get: vi.fn(() => Promise.resolve(mockSnapshot))
-        }))
-    })),
+        };
+        return queryBuilder;
+    }),
     batch: vi.fn(() => mockBatch),
     bulkWriter: vi.fn(() => ({
         set: vi.fn(),
@@ -100,7 +110,7 @@ import * as admin from 'firebase-admin';
 // Import subject under test
 import { getUserRole, UserNotFoundError } from '../utils';
 import { parseWorkoutQueueItemForServiceName } from '../queue';
-import { processGarminHealthAPIActivityQueueItem } from '../garmin/queue';
+import { processGarminAPIActivityQueueItem } from '../garmin/queue';
 
 // We need to mock some internals to force flow
 vi.mock('../tokens', () => ({
@@ -128,7 +138,7 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
 });
 
 vi.mock('../garmin/auth/auth', () => ({
-    GarminHealthAPIAuth: () => ({
+    GarminAPIAuth: () => ({
         authorize: vi.fn().mockReturnValue({}),
         toHeader: vi.fn().mockReturnValue({})
     })
@@ -347,7 +357,7 @@ describe('User Not Found Scenarios', () => {
 
             const bulkWriter = (admin.firestore() as any).bulkWriter();
 
-            await processGarminHealthAPIActivityQueueItem(
+            await processGarminAPIActivityQueueItem(
                 queueItem,
                 bulkWriter
             );

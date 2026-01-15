@@ -97,10 +97,14 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
     };
 });
 
-vi.mock('./utils', () => ({
-    generateIDFromParts: vi.fn(() => 'id123'),
-    setEvent: vi.fn(() => Promise.resolve())
-}));
+vi.mock('./utils', async (importOriginal) => {
+    const actual = await importOriginal<any>();
+    return {
+        ...actual,
+        generateIDFromParts: vi.fn(() => 'id123'),
+        setEvent: vi.fn(() => Promise.resolve())
+    };
+});
 
 import { parseWorkoutQueueItemForServiceName } from './queue';
 import { getTokenData } from './tokens';

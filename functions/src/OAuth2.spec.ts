@@ -136,9 +136,13 @@ describe('OAuth2', () => {
             expect(config.oauth2Client).toBeDefined();
         });
 
-        it('should throw for unsupported service', () => {
-            expect(() => getServiceConfig(ServiceNames.GarminHealthAPI))
-                .toThrow('Not implemented');
+        it('should return config for GarminAPI', () => {
+            const config = getServiceConfig(ServiceNames.GarminAPI);
+
+            expect(config).toBeDefined();
+            expect(config.tokenCollectionName).toBe('garminAPITokens');
+            // Scope might be null or specific, let's just check client existence
+            expect(config.oauth2Client).toBeDefined();
         });
     });
 
@@ -448,8 +452,66 @@ describe('OAuth2', () => {
             // We can check if it was called.
             expect(mockCollection).toHaveBeenCalledWith('tokens');
 
-            // We can't strictly verify batch.delete without exposing the spy. 
-            // BUT we can verify the behavior: logic requires query.get() to return docs.
+            expect(mockCollection).toHaveBeenCalledWith('tokens');
         }, 10000);
+
+        it('should handle immutable token objects and fetch Garmin User ID correctly', async () => {
+            const garminService = ServiceNames.GarminAPI;
+            const garminUserId = 'garmin-user-123';
+            const accessToken = 'garmin-access-token';
+
+            // Reset mocks
+            vi.clearAllMocks();
+
+            // Mock getServiceConfig to return GarminAPI config
+            // Note: Since AuthorizationCode is mocked globally, we can mock its prototype method
+            // or rely on the factory. Let's spy on the prototype to return our immutable token.
+            const immutableToken = Object.freeze({
+                token: Object.freeze({
+                    access_token: accessToken,
+                    refresh_token: 'gr',
+                    expires_in: 3600
+                    // Note: 'user' is MISSING here, simulating it coming from separate endpoint
+                })
+            });
+
+            const MockAuthCode = (await import('simple-oauth2')).AuthorizationCode;
+            vi.spyOn(MockAuthCode.prototype, 'getToken').mockResolvedValue(immutableToken as any);
+
+            // Mock the User ID fetch
+            (requestPromise.get as any).mockResolvedValue(JSON.stringify({ userId: garminUserId }));
+
+            // Mock Firestore interactions
+            mockGet.mockResolvedValue({
+                empty: true, // No duplicates for this test
+                size: 0,
+                docs: [],
+                data: () => ({}) // No code verifier stored
+            });
+            mockDelete.mockResolvedValue({});
+
+            // Execute
+            await getAndSetServiceOAuth2AccessTokenForUser(userID, garminService, redirectUri, code);
+
+            // Assertions
+
+            // 1. Check if User ID was fetched
+            expect(requestPromise.get).toHaveBeenCalledWith(expect.objectContaining({
+                url: 'https://apis.garmin.com/wellness-api/rest/user/id',
+                headers: { Authorization: `Bearer ${accessToken}` }
+            }));
+
+            // 2. Check if token was saved with the CORRECT User ID as the document key
+            // .doc(userID).collection('tokens').doc(uniqueId).set(...)
+            expect(mockCollection).toHaveBeenCalledWith('tokens'); // Subcollection
+            expect(mockDoc).toHaveBeenCalledWith(garminUserId); // Validation that uniqueId was used
+
+            // 3. Verify convertAccessTokenResponseToServiceToken result structure (indirectly via set)
+            // We can spy on the set call
+            // Since mockDoc returns mockDocInstance, let's verify mockDocInstance.set
+            const setArg = (mockDocInstance.set as any).mock.calls[0][0];
+            expect(setArg.serviceName).toBe(garminService);
+            expect(setArg.userID).toBe(garminUserId); // Critical check: User ID inserted into token object
+        });
     });
 });

@@ -13,7 +13,7 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { DatePipe } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of, Subject, delay } from 'rxjs';
-import { User, EventInterface } from '@sports-alliance/sports-lib';
+import { User, EventInterface, DataPace, DataGradeAdjustedPace, DataSpeedAvg } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Analytics } from '@angular/fire/analytics';
 import { Firestore } from '@angular/fire/firestore';
@@ -594,6 +594,36 @@ describe('EventTableComponent', () => {
             expect(mockEventService.downloadFile).toHaveBeenCalledWith(
                 'users/用户/events/活动/original.gpx.gz'
             );
+        });
+    });
+
+
+
+    describe('Dashboard GAP Display', () => {
+        it('should exclude Grade Adjusted Pace from Average Speed column', () => {
+            const e1 = new MockEvent('event1');
+            (e1 as any).getStatsAsArray = () => [
+                { getType: () => DataPace.type, getValue: () => 300, getDisplayValue: () => '5:00', getDisplayUnit: () => ' min/km' } as any,
+                { getType: () => 'Average Grade Adjusted Pace', getValue: () => 295, getDisplayValue: () => '4:55', getDisplayUnit: () => ' min/km' } as any,
+            ];
+            (e1 as any).getActivityTypesAsString = () => 'Running';
+            (e1 as any).getActivityTypesAsArray = () => ['Running'];
+            (e1 as any).getStat = (type: string) => {
+                if (type === 'Activity Types') {
+                    return { getValue: () => ['Running'] };
+                }
+                return null;
+            };
+
+            component.events = [e1 as any];
+
+            (component as any).processChanges();
+
+            const row = component.data.data[0];
+            const paceValue = row[DataSpeedAvg.type];
+
+            expect(paceValue).not.toContain('4:55');
+            expect(paceValue).toBeDefined();
         });
     });
 });

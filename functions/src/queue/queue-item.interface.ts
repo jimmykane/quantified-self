@@ -25,14 +25,15 @@ export interface COROSAPIWorkoutQueueItemInterface extends QueueItemInterface {
   FITFileURI: string,
 }
 
-export interface GarminHealthAPIActivityQueueItemInterface extends QueueItemInterface {
+export interface GarminAPIActivityQueueItemInterface extends QueueItemInterface {
   userID: string
   startTimeInSeconds: number,
   manual: boolean,
   activityFileID: string,
   activityFileType: 'FIT' | 'TCX' | 'GPX',
   token: string,
-  userAccessToken: string
+  userAccessToken: string,
+  callbackURL: string
 }
 
 export interface QueueItemError {

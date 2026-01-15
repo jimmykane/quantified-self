@@ -24,7 +24,7 @@
         </div>
         <p matListItemLine class="mat-caption text-secondary">~{{ activitiesPerDayLimit }} activities/day limit</p>
       </mat-list-item>
-      } @else if (serviceName === serviceNames.GarminHealthAPI) {
+      } @else if (serviceName === serviceNames.GarminAPI) {
       <mat-list-item role="listitem">
         <mat-icon matListItemIcon>timer</mat-icon>
         <div matListItemTitle>Cooldown</div>
@@ -82,7 +82,7 @@
         @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI) {
         I understand this may take hours to days.
         }
-        @if (serviceName === serviceNames.GarminHealthAPI) {
+        @if (serviceName === serviceNames.GarminAPI) {
         I understand I can only import every 3 days.
         }
       </span>

@@ -62,8 +62,14 @@
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-// .nav-item mat-icon removed
-// .nav-item.active mat-icon removed
+.nav-item.active {
+    opacity: 1;
+    background-color: var(--mat-sys-primary-container);
+    color: var(--mat-sys-on-primary-container);
+    border-color: var(--mat-sys-primary);
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
 
 /* Main Content Area */
 .settings-content {

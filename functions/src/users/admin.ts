@@ -74,7 +74,7 @@ async function enrichUsers(
                         .orderBy('created', 'desc')
                         .limit(1)
                         .get(),
-                    db.collection('garminHealthAPITokens').doc(user.uid).get(),
+                    db.collection('garminAPITokens').doc(user.uid).collection('tokens').limit(1).get(),
                     db.collection('suuntoAppAccessTokens').doc(user.uid).collection('tokens').limit(1).get(),
                     db.collection('COROSAPIAccessTokens').doc(user.uid).collection('tokens').limit(1).get()
                 ]);
@@ -89,9 +89,10 @@ async function enrichUsers(
                     };
                 }
 
-                if (garminDoc.exists) {
-                    const docData = garminDoc.data();
-                    connectedServices.push({ provider: 'Garmin', connectedAt: docData?.dateCreated || garminDoc.createTime });
+                if (!garminDoc.empty) {
+                    const doc = garminDoc.docs[0];
+                    const docData = doc.data();
+                    connectedServices.push({ provider: 'Garmin', connectedAt: docData?.dateCreated || doc.createTime });
                 }
                 if (!suuntoSnapshot.empty) {
                     const doc = suuntoSnapshot.docs[0];
@@ -146,7 +147,7 @@ export const listUsers = onAdminCall<ListUsersRequest, any>({
             let collectionName = '';
             switch (filterService) {
                 case 'garmin':
-                    collectionName = 'garminHealthAPITokens';
+                    collectionName = 'garminAPITokens';
                     break;
                 case 'suunto':
                     collectionName = 'suuntoAppAccessTokens';
@@ -391,7 +392,7 @@ export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
     const PROVIDER_QUEUES: Record<string, string[]> = {
         'Suunto': ['suuntoAppWorkoutQueue'],
         'COROS': ['COROSAPIWorkoutQueue'],
-        'Garmin': ['garminHealthAPIActivityQueue']
+        'Garmin': ['garminAPIActivityQueue']
     };
 
     try {

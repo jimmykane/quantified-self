@@ -2,7 +2,8 @@ import { Component, Inject, OnInit } from '@angular/core';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppEventService } from '../../../services/app.event.service';
-import { DataFeeling, DataRPE, EventInterface, Feelings, isNumber, RPEBorgCR10SCale, ServiceNames, User } from '@sports-alliance/sports-lib';
+import { DataFeeling, DataRPE, EventInterface, Feelings, isNumber, RPEBorgCR10SCale, User } from '@sports-alliance/sports-lib';
+import { ServiceNames } from '@sports-alliance/sports-lib';
 import { EnumeratorHelpers } from '../../../helpers/enumerator-helpers';
 import { AppEventInterface } from '../../../../../functions/src/shared/app-event.interface';
 
@@ -48,8 +49,8 @@ export class EventDetailsSummaryBottomSheetComponent implements OnInit {
                     this.serviceName = ServiceNames.COROSAPI;
                 } else if (keys.includes(ServiceNames.SuuntoApp)) {
                     this.serviceName = ServiceNames.SuuntoApp;
-                } else if (keys.includes(ServiceNames.GarminHealthAPI)) {
-                    this.serviceName = ServiceNames.GarminHealthAPI;
+                } else if (keys.includes(ServiceNames.GarminAPI)) {
+                    this.serviceName = ServiceNames.GarminAPI;
                 }
 
                 if (this.serviceName) {
@@ -102,7 +103,7 @@ export class EventDetailsSummaryBottomSheetComponent implements OnInit {
                 return 'assets/logos/coros.svg';
             case ServiceNames.SuuntoApp:
                 return 'assets/logos/suunto-logo.svg';
-            case ServiceNames.GarminHealthAPI:
+            case ServiceNames.GarminAPI:
                 return 'assets/logos/garmin.svg';
             default:
                 return '';

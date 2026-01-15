@@ -53,6 +53,8 @@ jobs:
           echo "COROSAPI_CLIENT_SECRET=${{ secrets.COROSAPI_CLIENT_SECRET }}" >> functions/.env
           echo "GARMINHEALTHAPI_CONSUMER_KEY=${{ secrets.GARMINHEALTHAPI_CONSUMER_KEY }}" >> functions/.env
           echo "GARMINHEALTHAPI_CONSUMER_SECRET=${{ secrets.GARMINHEALTHAPI_CONSUMER_SECRET }}" >> functions/.env
+          echo "GARMINAPI_CLIENT_ID=${{ secrets.GARMINAPI_CLIENT_ID }}" >> functions/.env
+          echo "GARMINAPI_CLIENT_SECRET=${{ secrets.GARMINAPI_CLIENT_SECRET }}" >> functions/.env
 
       - name: Deploy to Firebase
         run: |

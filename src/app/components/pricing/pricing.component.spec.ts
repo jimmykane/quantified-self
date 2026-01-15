@@ -101,8 +101,28 @@ describe('PricingComponent', () => {
 
         expect(dialogSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
             data: expect.objectContaining({
-                title: 'Downgrade Warning',
-                message: expect.stringContaining('30-day grace period')
+                title: 'Manage Subscription',
+                message: expect.stringContaining('device sync will be disconnected')
+            })
+        }));
+    });
+
+    it('should show downgrade warning for basic users without sync mention', async () => {
+        component.currentRole = 'basic';
+        const dialog = TestBed.inject(MatDialog);
+        const dialogSpy = vi.spyOn(dialog, 'open');
+
+        await component.manageSubscription();
+
+        expect(dialogSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            data: expect.objectContaining({
+                title: 'Manage Subscription',
+                message: expect.stringContaining('secure billing portal')
+            })
+        }));
+        expect(dialogSpy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            data: expect.not.objectContaining({
+                message: expect.stringContaining('device sync')
             })
         }));
     });

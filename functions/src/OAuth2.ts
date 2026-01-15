@@ -1,16 +1,24 @@
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { COROSAPIAuth } from './coros/auth/auth';
+import { GarminAPIAuth } from './garmin/auth/auth';
 import * as crypto from 'crypto';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { SuuntoAPIAuth } from './suunto/auth/auth';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from './coros/constants';
+import { GARMIN_API_TOKENS_COLLECTION_NAME } from './garmin/constants';
 import { AccessToken, AuthorizationCode } from 'simple-oauth2';
 import {
   COROSAPIAuth2ServiceTokenInterface,
   SuuntoAPIAuth2ServiceTokenInterface,
+  Auth2ServiceTokenInterface,
 } from '@sports-alliance/sports-lib';
+
+export interface GarminAPIAuth2ServiceTokenInterface extends Auth2ServiceTokenInterface {
+  userID: string;
+  permissions?: string[];
+}
 import { getTokenData } from './tokens';
 import * as requestPromise from './request-helper';
 import { config } from './config';
@@ -24,6 +32,9 @@ async function removeDuplicateConnections(currentUserID: string, serviceName: Se
     query = query.where('userName', '==', externalUserId);
   } else if (serviceName === ServiceNames.COROSAPI) {
     query = query.where('openId', '==', externalUserId);
+  } else if (serviceName === ServiceNames.GarminAPI) {
+    // Garmin stores "userId" in the token doc (merged from /user/id endpoint or token response)
+    query = query.where('userID', '==', externalUserId);
   } else {
     return;
   }
@@ -93,6 +104,12 @@ export function getServiceConfig(serviceName: ServiceNames, refresh = false): Se
         oAuthScopes: 'workout',
         tokenCollectionName: COROSAPI_ACCESS_TOKENS_COLLECTION_NAME,
       };
+    case ServiceNames.GarminAPI:
+      return {
+        oauth2Client: GarminAPIAuth(refresh),
+        oAuthScopes: 'PARTNER_WRITE PARTNER_READ CONNECT_READ CONNECT_WRITE',
+        tokenCollectionName: GARMIN_API_TOKENS_COLLECTION_NAME,
+      };
   }
 }
 
@@ -105,14 +122,33 @@ export function getServiceConfig(serviceName: ServiceNames, refresh = false): Se
 export async function getServiceOAuth2CodeRedirectAndSaveStateToUser(userID: string, serviceName: ServiceNames, redirectUri: string): Promise<string> {
   const serviceConfig = getServiceConfig(serviceName);
   const state = crypto.randomBytes(20).toString('hex');
-  const serviceRedirectURI = serviceConfig.oauth2Client.authorizeURL({
+
+  // PKCE Setup for Garmin
+  let codeVerifier: string | undefined;
+  let codeChallenge: string | undefined;
+
+  if (serviceName === ServiceNames.GarminAPI) {
+    // Generate PKCE Verifier and Challenge (S256)
+    codeVerifier = crypto.randomBytes(32).toString('base64url');
+    codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+  }
+
+  const authorizationOptions: any = {
     redirect_uri: redirectUri,
     scope: serviceConfig.oAuthScopes,
     state: state,
-  });
+  };
+
+  if (codeChallenge) {
+    authorizationOptions.code_challenge = codeChallenge;
+    authorizationOptions.code_challenge_method = 'S256';
+  }
+
+  const serviceRedirectURI = serviceConfig.oauth2Client.authorizeURL(authorizationOptions);
 
   await admin.firestore().collection(serviceConfig.tokenCollectionName).doc(userID).set({
     state: state,
+    ...(codeVerifier ? { codeVerifier } : {}),
   });
 
   return serviceRedirectURI;
@@ -129,7 +165,7 @@ export async function validateOAuth2State(userID: string, serviceName: ServiceNa
   return tokensDocumentSnapshotData && tokensDocumentSnapshotData.state && tokensDocumentSnapshotData.state === state;
 }
 
-export function convertAccessTokenResponseToServiceToken(response: AccessToken, serviceName: ServiceNames): SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface {
+export function convertAccessTokenResponseToServiceToken(response: AccessToken, serviceName: ServiceNames, uniqueId?: string): SuuntoAPIAuth2ServiceTokenInterface | COROSAPIAuth2ServiceTokenInterface | GarminAPIAuth2ServiceTokenInterface {
   const currentDate = new Date();
   switch (serviceName) {
     default:
@@ -142,7 +178,7 @@ export function convertAccessTokenResponseToServiceToken(response: AccessToken, 
         tokenType: response.token.token_type,
         expiresAt: currentDate.getTime() + ((response.token as any).expires_in * 1000),
         scope: response.token.scope,
-        userName: (response.token as any).user,
+        userName: uniqueId || (response.token as any).user,
         dateCreated: currentDate.getTime(),
         dateRefreshed: currentDate.getTime(),
       };
@@ -154,7 +190,19 @@ export function convertAccessTokenResponseToServiceToken(response: AccessToken, 
         tokenType: response.token.token_type || 'bearer',
         expiresAt: currentDate.getTime() + ((response.token as any).expires_in * 1000),
         scope: response.token.scope || 'workout',
-        openId: (response.token as any).openId,
+        openId: uniqueId || (response.token as any).openId,
+        dateCreated: currentDate.getTime(),
+        dateRefreshed: currentDate.getTime(),
+      };
+    case ServiceNames.GarminAPI:
+      return <GarminAPIAuth2ServiceTokenInterface>{
+        serviceName: serviceName,
+        accessToken: response.token.access_token,
+        refreshToken: response.token.refresh_token,
+        tokenType: response.token.token_type || 'bearer',
+        expiresAt: currentDate.getTime() + ((response.token as any).expires_in * 1000),
+        scope: response.token.scope || 'workout',
+        userID: uniqueId || (response.token as any).user, // This is the Garmin User ID
         dateCreated: currentDate.getTime(),
         dateRefreshed: currentDate.getTime(),
       };
@@ -170,11 +218,27 @@ export function convertAccessTokenResponseToServiceToken(response: AccessToken, 
  */
 export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, serviceName: ServiceNames, redirectUri: string, code: string) {
   const serviceConfig = getServiceConfig(serviceName);
-  const results: AccessToken = await serviceConfig.oauth2Client.getToken({
+
+  // Check for PKCE Verifier
+  let codeVerifier: string | undefined;
+  if (serviceName === ServiceNames.GarminAPI) {
+    const tokensDocumentSnapshotData = (await admin.firestore().collection(serviceConfig.tokenCollectionName).doc(userID).get()).data();
+    if (tokensDocumentSnapshotData && tokensDocumentSnapshotData.codeVerifier) {
+      codeVerifier = tokensDocumentSnapshotData.codeVerifier;
+    }
+  }
+
+  const tokenConfig: any = {
     code: code,
     scope: serviceConfig.oAuthScopes,
     redirect_uri: redirectUri,
-  });
+  };
+
+  if (codeVerifier) {
+    tokenConfig.code_verifier = codeVerifier;
+  }
+
+  const results: AccessToken = await serviceConfig.oauth2Client.getToken(tokenConfig);
 
 
   if (!results || !results.token || !results.token.access_token) {
@@ -182,14 +246,36 @@ export async function getAndSetServiceOAuth2AccessTokenForUser(userID: string, s
     throw new Error(`No results when geting token for userID: ${userID}, serviceName: ${serviceName}`);
   }
 
+  // Fetch User ID for Garmin if needed
+  // Note: We use this ID to detect duplicate connections (Last One Wins policy).
+  // If this same Garmin User ID is found on another Firebase User, we remove it there.
+  let uniqueId = (results.token as any).user || (results.token as any).openId;
+  if (serviceName === ServiceNames.GarminAPI) {
+    try {
+      const userResponse = await requestPromise.get({
+        url: 'https://apis.garmin.com/wellness-api/rest/user/id',
+        headers: {
+          Authorization: `Bearer ${results.token.access_token}`,
+        },
+      });
+      const userData = typeof userResponse === 'string' ? JSON.parse(userResponse) : userResponse;
+      if (userData && userData.userId) {
+        uniqueId = userData.userId;
+      }
+    } catch (e) {
+      logger.error(`Failed to fetch Garmin User ID: ${e}`);
+      throw new Error(`Failed to fetch Garmin User ID for user ${userID}`);
+    }
+  }
+
   await admin.firestore()
     .collection(serviceConfig.tokenCollectionName)
     .doc(userID).collection('tokens')
-    .doc((results.token as any).user || (results.token as any).openId)// @todo make this dynamic and not silly like this
-    .set(convertAccessTokenResponseToServiceToken(results, serviceName));
+    .doc(uniqueId)// @todo make this dynamic and not silly like this
+    .set(convertAccessTokenResponseToServiceToken(results, serviceName, uniqueId));
 
   // Remove any OTHER users connected to this same external account
-  const externalUserId = (results.token as any).user || (results.token as any).openId;
+  const externalUserId = uniqueId;
   if (externalUserId) {
     try {
       await removeDuplicateConnections(userID, serviceName, externalUserId);
@@ -256,6 +342,15 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
             url: `https://cloudapi-oauth.suunto.com/oauth/deauthorize?client_id=${config.suuntoapp.client_id}`,
           });
           break;
+        case ServiceNames.GarminAPI:
+          // Per PDF: DELETE https://apis.garmin.com/wellness-api/rest/user/registration
+          deauthorizationRequest = requestPromise.delete({
+            headers: {
+              'Authorization': `Bearer ${serviceToken.accessToken}`,
+            },
+            url: 'https://apis.garmin.com/wellness-api/rest/user/registration',
+          });
+          break;
       }
 
       if (deauthorizationRequest) {
@@ -298,6 +393,6 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
 
 export interface ServiceConfig {
   oauth2Client: AuthorizationCode,
-  oAuthScopes: 'workout',
-  tokenCollectionName: typeof SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME | typeof COROSAPI_ACCESS_TOKENS_COLLECTION_NAME
+  oAuthScopes: string,
+  tokenCollectionName: typeof SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME | typeof COROSAPI_ACCESS_TOKENS_COLLECTION_NAME | typeof GARMIN_API_TOKENS_COLLECTION_NAME
 }

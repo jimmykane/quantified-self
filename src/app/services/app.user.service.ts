@@ -455,8 +455,8 @@ export class AppUserService implements OnDestroy {
       case ServiceNames.COROSAPI:
       case ServiceNames.SuuntoApp:
         return this.getServiceTokens(user, serviceName);
-      case ServiceNames.GarminHealthAPI:
-        return this.getGarminHealthAPITokens(user);
+      case ServiceNames.GarminAPI:
+        return this.getGarminAPITokens(user);
     }
   }
 
@@ -475,7 +475,7 @@ export class AppUserService implements OnDestroy {
     const idToken = await this.auth.currentUser?.getIdToken(true);
     const serviceNamesToFunctionsURI = {
       [ServiceNames.SuuntoApp]: environment.functions.suuntoAPIHistoryImportURI,
-      [ServiceNames.GarminHealthAPI]: environment.functions.backfillHealthAPIActivities,
+      [ServiceNames.GarminAPI]: environment.functions.backfillHealthAPIActivities,
       [ServiceNames.COROSAPI]: environment.functions.COROSAPIHistoryImportURI,
     }
     return this.http.post(
@@ -495,7 +495,7 @@ export class AppUserService implements OnDestroy {
     const idToken = await this.auth.currentUser?.getIdToken(true);
     const serviceNamesToFunctionsURI = {
       [ServiceNames.SuuntoApp]: environment.functions.deauthorizeSuuntoApp,
-      [ServiceNames.GarminHealthAPI]: environment.functions.deauthorizeGarminHealthAPI,
+      [ServiceNames.GarminAPI]: environment.functions.deauthorizeGarminAPI,
       [ServiceNames.COROSAPI]: environment.functions.deauthorizeCOROSAPI,
     }
     return this.http.post(
@@ -512,7 +512,7 @@ export class AppUserService implements OnDestroy {
   public async getCurrentUserServiceTokenAndRedirectURI(serviceName: ServiceNames): Promise<{ redirect_uri: string } | { redirect_uri: string, state: string, oauthToken: string }> {
     const serviceNamesToFunctionsURI = {
       [ServiceNames.SuuntoApp]: environment.functions.getSuuntoAPIAuthRequestTokenRedirectURI,
-      [ServiceNames.GarminHealthAPI]: environment.functions.getGarminHealthAPIAuthRequestTokenRedirectURI,
+      [ServiceNames.GarminAPI]: environment.functions.getGarminAPIAuthRequestTokenRedirectURI,
       [ServiceNames.COROSAPI]: environment.functions.getCOROSAPIAuthRequestTokenRedirectURI
     }
     const idToken = await this.auth.currentUser?.getIdToken(true);
@@ -528,12 +528,13 @@ export class AppUserService implements OnDestroy {
       }).toPromise();
   }
 
-  public async requestAndSetCurrentUserGarminAccessToken(state: string, oauthVerifier: string) {
+  public async requestAndSetCurrentUserGarminAccessToken(state: string, code: string) {
     const idToken = await this.auth.currentUser?.getIdToken(true);
     return this.http.post(
-      environment.functions.requestAndSetGarminHealthAPIAccessToken, {
+      environment.functions.requestAndSetGarminAPIAccessToken, {
       state: state,
-      oauthVerifier: oauthVerifier
+      code: code,
+      redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.GarminAPI}&connect=1`)
     },
       {
         headers:
@@ -825,11 +826,11 @@ export class AppUserService implements OnDestroy {
     });
   }
 
-  private getGarminHealthAPITokens(user: User): Observable<any[]> {
+  private getGarminAPITokens(user: User): Observable<any[]> {
     return runInInjectionContext(this.injector, () => {
-      const docRef = doc(this.firestore, 'garminHealthAPITokens', user.uid);
-      return docData(docRef).pipe(
-        map(d => [d]),
+      // Garmin tokens are stored in: garminAPITokens/{userID}/tokens/{garminUserID}
+      const collectionRef = collection(this.firestore, 'garminAPITokens', user.uid, 'tokens');
+      return collectionData(collectionRef).pipe(
         catchError(() => {
           return [];
         })

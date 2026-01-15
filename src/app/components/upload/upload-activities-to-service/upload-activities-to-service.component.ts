@@ -24,6 +24,13 @@ import { getSize } from '@sports-alliance/sports-lib';
 })
 
 export class UploadActivitiesToServiceComponent extends UploadAbstractDirective {
+  protected snackBar = inject(MatSnackBar);
+  protected dialog = inject(MatDialog);
+  protected processingService = inject(AppProcessingService);
+  protected router = inject(Router);
+  protected logger = inject(LoggerService);
+  public data = inject(MAT_DIALOG_DATA, { optional: true });
+  public dialogRef = inject(MatDialogRef<UploadActivitiesToServiceComponent>, { optional: true });
   private auth = inject(Auth);
   private eventService = inject(AppEventService);
   private userService = inject(AppUserService);
@@ -31,17 +38,10 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   private http = inject(HttpClient);
   private serviceName: ServiceNames = ServiceNames.SuuntoApp;
 
-  constructor(
-    protected snackBar: MatSnackBar,
-    protected dialog: MatDialog,
-    protected processingService: AppProcessingService,
-    protected router: Router,
-    @Optional() @Inject(MAT_DIALOG_DATA) public data: any,
-    @Optional() public dialogRef: MatDialogRef<UploadActivitiesToServiceComponent>,
-    logger: LoggerService) {
-    super(snackBar, dialog, processingService, router, logger);
-    if (data?.serviceName) {
-      this.serviceName = data.serviceName;
+  constructor() {
+    super();
+    if (this.data?.serviceName) {
+      this.serviceName = this.data.serviceName;
     }
   }
 
@@ -86,7 +86,16 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
                     this.processingService.updateJob(file.jobId, { progress: percentDone });
                   }
                 } else if (event.type === HttpEventType.Response) {
-                  resolve(true);
+                  const body = event.body;
+                  if (body && body.code === 'ALREADY_EXISTS') {
+                    if (file.jobId) {
+                      this.processingService.updateJob(file.jobId, { status: 'duplicate', details: 'Activity already exists in Suunto' });
+                    }
+                    this.snackBar.open(`Activity already exists in Suunto: ${file.filename}.${file.extension}`, 'OK', { duration: 5000 });
+                    resolve(true); // Still resolve as true since it's not a failure
+                  } else {
+                    resolve(true);
+                  }
                 }
               },
               error: (e: any) => {

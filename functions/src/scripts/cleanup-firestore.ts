@@ -2,7 +2,6 @@ import * as admin from 'firebase-admin';
 const logger = console;
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { deauthorizeServiceForUser } from '../OAuth2';
-import { deauthorizeGarminHealthAPIForUser } from '../garmin/auth/wrapper';
 import * as readline from 'readline';
 
 // Initialize admin if not already initialized
@@ -21,10 +20,10 @@ const COLLECTION_GROUPS = [
     "metaData",
     "athletes",
     "users",
-    "garminHealthAPITokens",
+    "garminAPITokens",
     "suuntoAppAccessTokens",
     "COROSAPIAccessTokens",
-    "garminHealthAPIActivityQueue",
+    "garminAPIActivityQueue",
     "suuntoAppWorkoutQueue",
     "COROSAPIWorkoutQueue",
     "system",
@@ -35,7 +34,7 @@ const COLLECTION_GROUPS = [
 const DEAUTH_CONFIG: Record<string, { service: ServiceNames | null, fn: (uid: string, service?: any) => Promise<void> }> = {
     'suuntoAppAccessTokens': { service: ServiceNames.SuuntoApp, fn: deauthorizeServiceForUser },
     'COROSAPIAccessTokens': { service: ServiceNames.COROSAPI, fn: deauthorizeServiceForUser },
-    'garminHealthAPITokens': { service: null, fn: deauthorizeGarminHealthAPIForUser }
+    'garminAPITokens': { service: ServiceNames.GarminAPI, fn: deauthorizeServiceForUser }
 };
 
 async function confirm(message: string): Promise<boolean> {

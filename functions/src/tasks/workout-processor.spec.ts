@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { QueueResult } from '../queue-utils';
 
 // Mock firebase-functions v2 tasks
 vi.mock('firebase-functions/v2/tasks', () => ({
@@ -50,13 +51,15 @@ describe('processWorkoutTask', () => {
 
     it('should process a valid queue item', async () => {
         const queueItemId = 'test-id';
-        const serviceName = ServiceNames.GarminHealthAPI;
+        const serviceName = ServiceNames.GarminAPI;
         const queueData = { processed: false, some: 'data' };
 
         mockGet.mockResolvedValue({
             exists: true,
             data: () => queueData,
         });
+
+        mockParseWorkoutQueueItemForServiceName.mockResolvedValue(QueueResult.Processed);
 
         const request = {
             data: { queueItemId, serviceName }
@@ -70,7 +73,7 @@ describe('processWorkoutTask', () => {
 
     it('should skip if item already processed', async () => {
         const queueItemId = 'test-id';
-        const serviceName = ServiceNames.GarminHealthAPI;
+        const serviceName = ServiceNames.GarminAPI;
         const queueData = { processed: true };
 
         mockGet.mockResolvedValue({
@@ -89,7 +92,7 @@ describe('processWorkoutTask', () => {
 
     it('should skip if item does not exist', async () => {
         const queueItemId = 'test-id';
-        const serviceName = ServiceNames.GarminHealthAPI;
+        const serviceName = ServiceNames.GarminAPI;
 
         mockGet.mockResolvedValue({
             exists: false,
@@ -106,7 +109,7 @@ describe('processWorkoutTask', () => {
 
     it('should throw if processing fails triggering task retry', async () => {
         const queueItemId = 'test-id';
-        const serviceName = ServiceNames.GarminHealthAPI;
+        const serviceName = ServiceNames.GarminAPI;
         const queueData = { processed: false };
 
         mockGet.mockResolvedValue({
@@ -122,4 +125,101 @@ describe('processWorkoutTask', () => {
 
         await expect((processWorkoutTask as any)(request)).rejects.toThrow('Fail');
     });
+
+    it('should throw Error if QueueResult.Failed is returned', async () => {
+        const queueItemId = 'test-id';
+        const serviceName = ServiceNames.GarminAPI;
+        const queueData = { processed: false };
+
+        mockGet.mockResolvedValue({
+            exists: true,
+            data: () => queueData,
+        });
+
+        mockParseWorkoutQueueItemForServiceName.mockResolvedValue(QueueResult.Failed);
+
+        const request = {
+            data: { queueItemId, serviceName }
+        };
+
+        await expect((processWorkoutTask as any)(request)).rejects.toThrow(`Fatal failure updating state for ${serviceName} item: ${queueItemId}`);
+    });
+
+    it('should NOT throw if QueueResult.Processed is returned', async () => {
+        const queueItemId = 'test-id';
+        const serviceName = ServiceNames.GarminAPI;
+        const queueData = { processed: false };
+
+        mockGet.mockResolvedValue({
+            exists: true,
+            data: () => queueData,
+        });
+
+        mockParseWorkoutQueueItemForServiceName.mockResolvedValue(QueueResult.Processed);
+
+        const request = {
+            data: { queueItemId, serviceName }
+        };
+
+        await expect((processWorkoutTask as any)(request)).resolves.toBeUndefined();
+    });
+
+    it('should throw if QueueResult.RetryIncremented is returned', async () => {
+        const queueItemId = 'test-id';
+        const serviceName = ServiceNames.GarminAPI;
+        const queueData = { processed: false };
+
+        mockGet.mockResolvedValue({
+            exists: true,
+            data: () => queueData,
+        });
+
+        mockParseWorkoutQueueItemForServiceName.mockResolvedValue(QueueResult.RetryIncremented);
+
+        const request = {
+            data: { queueItemId, serviceName }
+        };
+
+        await expect((processWorkoutTask as any)(request)).rejects.toThrow(`Item ${queueItemId} failed and was scheduled for retry.`);
+    });
+
+    it('should NOT throw if QueueResult.MovedToDLQ is returned', async () => {
+        const queueItemId = 'test-id';
+        const serviceName = ServiceNames.GarminAPI;
+        const queueData = { processed: false };
+
+        mockGet.mockResolvedValue({
+            exists: true,
+            data: () => queueData,
+        });
+
+        mockParseWorkoutQueueItemForServiceName.mockResolvedValue(QueueResult.MovedToDLQ);
+
+        const request = {
+            data: { queueItemId, serviceName }
+        };
+
+        await expect((processWorkoutTask as any)(request)).resolves.toBeUndefined();
+    });
+
+    it('should throw error for unexpected QueueResult', async () => {
+        const queueItemId = 'test-id';
+        const serviceName = ServiceNames.GarminAPI;
+        const queueData = { processed: false };
+
+        mockGet.mockResolvedValue({
+            exists: true,
+            data: () => queueData,
+        });
+
+        // Use a value that doesn't exist in QueueResult enum
+        mockParseWorkoutQueueItemForServiceName.mockResolvedValue('UNKNOWN_RESULT' as any);
+
+        const request = {
+            data: { queueItemId, serviceName }
+        };
+
+        await expect((processWorkoutTask as any)(request)).rejects.toThrow(`Unexpected result for ${queueItemId}: UNKNOWN_RESULT`);
+    });
 });
+

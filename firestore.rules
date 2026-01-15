@@ -132,11 +132,14 @@ service cloud.firestore {
        }
     }
 
-    match /garminHealthAPITokens/{userID} {
+    match /garminAPITokens/{userID} {
       allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
+       match /tokens/{document=**} {
+          allow read, write: if request.auth.uid == userID && request.auth.token.firebase.sign_in_provider != 'anonymous';
+       }
     }
 
-    match /garminHealthAPIActivityQueue/{userID} {
+    match /garminAPIActivityQueue/{userID} {
       allow read: if isAdmin();
       allow write: if false;
     }
