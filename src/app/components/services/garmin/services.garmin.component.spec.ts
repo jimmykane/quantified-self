@@ -2,6 +2,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ServicesGarminComponent } from './services.garmin.component';
+import { ServiceSyncingStateComponent } from '../../shared/service-syncing-state/service-syncing-state.component';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
@@ -29,7 +30,7 @@ describe('ServicesGarminComponent', () => {
         };
 
         await TestBed.configureTestingModule({
-            declarations: [ServicesGarminComponent],
+            declarations: [ServicesGarminComponent, ServiceSyncingStateComponent],
             imports: [
                 MatCardModule,
                 MatIconModule,
