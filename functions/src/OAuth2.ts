@@ -49,11 +49,6 @@ export async function removeDuplicateConnections(currentUserID: string, serviceN
  *
  * @param serviceName
  * @param refresh
- */
-/**
- *
- * @param serviceName
- * @param refresh
  * @deprecated Use getServiceAdapter instead
  */
 export function getServiceConfig(serviceName: ServiceNames, refresh = false): { oauth2Client: any, oAuthScopes: string, tokenCollectionName: string } {
@@ -185,8 +180,8 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
 
 
   if (tokenQuerySnapshots.empty) {
-    logger.warn(`No tokens found for user ${userID} in ${adapter.tokenCollectionName}. Deleting parent document.`);
-    await userDocRef.delete();
+    logger.warn(`No tokens found for user ${userID} in ${adapter.tokenCollectionName}. Cleaning up abandoned data.`);
+    await admin.firestore().recursiveDelete(userDocRef);
     throw new TokenNotFoundError('No tokens found');
   }
 
@@ -245,8 +240,8 @@ export async function deleteLocalServiceToken(userID: string, serviceName: Servi
   const remainingTokens = await userDocRef.collection('tokens').limit(1).get();
   logger.info(`Remaining tokens for ${userID}: ${remainingTokens.size}`);
   if (remainingTokens.empty) {
-    logger.info(`No remaining tokens for ${userID}. Deleting parent document.`);
-    await userDocRef.delete();
+    logger.info(`No remaining tokens for ${userID}. Deleting parent document and all descendant data (surgical).`);
+    await admin.firestore().recursiveDelete(userDocRef);
   }
 }
 

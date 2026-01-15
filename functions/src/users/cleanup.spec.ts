@@ -1,9 +1,10 @@
 import functionsTest from 'firebase-functions-test';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as functions from 'firebase-functions/v1';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
 // Hoist mocks
-const { authBuilderMock, deauthorizeServiceMock, firestoreMock, getServiceConfigMock, batchMock, whereMock } = vi.hoisted(() => {
+const { authBuilderMock, deauthorizeServiceMock, firestoreMock, getServiceConfigMock, batchMock, whereMock, recursiveDeleteMock } = vi.hoisted(() => {
     const onDeleteMock = vi.fn((handler) => handler);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const userMock = vi.fn((_id?: string) => ({ onDelete: onDeleteMock }));
@@ -50,9 +51,12 @@ const { authBuilderMock, deauthorizeServiceMock, firestoreMock, getServiceConfig
         commit: vi.fn(),
     };
 
+    const recursiveDeleteMock = vi.fn().mockResolvedValue({});
+
     const firestore = vi.fn(() => ({
         collection: collectionMock,
-        batch: vi.fn(() => batchMock)
+        batch: vi.fn(() => batchMock),
+        recursiveDelete: recursiveDeleteMock
     }));
 
     return {
@@ -62,7 +66,8 @@ const { authBuilderMock, deauthorizeServiceMock, firestoreMock, getServiceConfig
         firestoreMock: firestore,
         getServiceConfigMock: vi.fn(),
         batchMock,
-        whereMock
+        whereMock,
+        recursiveDeleteMock
     };
 });
 
@@ -114,14 +119,14 @@ describe('cleanupUserAccounts', () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
 
-        await wrapped(user, { eventId: 'eventId' } as any);
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
         // Verify Suunto
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.SuuntoApp);
         expect(getServiceConfigMock).toHaveBeenCalledWith(ServiceNames.SuuntoApp);
         expect(firestoreMock().collection).toHaveBeenCalledWith('mockCollection');
         expect(firestoreMock().collection('mockCollection').doc).toHaveBeenCalledWith('testUser123');
-        expect(firestoreMock().collection('mockCollection').doc('testUser123').delete).toHaveBeenCalled();
+        expect(recursiveDeleteMock).toHaveBeenCalled();
 
         // Verify COROS
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.COROSAPI);
@@ -137,12 +142,12 @@ describe('cleanupUserAccounts', () => {
         // Make Suunto fail
         deauthorizeServiceMock.mockRejectedValueOnce(new Error('Suunto 500 API Error'));
 
-        await wrapped(user, { eventId: 'eventId' } as any);
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
         // Verify Suunto was called (and failed)
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.SuuntoApp);
         // But local cleanup should STILL happen
-        expect(firestoreMock().collection('mockCollection').doc('testUser123').delete).toHaveBeenCalled();
+        expect(recursiveDeleteMock).toHaveBeenCalled();
 
         // COROS succeeded
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.COROSAPI);
@@ -155,12 +160,10 @@ describe('cleanupUserAccounts', () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
 
-        // Make Suunto doc deletion fail (via the doc().delete mock)
-        const collectionObj = firestoreMock().collection('mockCollection');
-        const docObj = collectionObj.doc('testUser123');
-        docObj.delete.mockRejectedValueOnce(new Error('Firestore delete failed'));
+        // Make Suunto doc deletion fail (via the recursiveDelete mock)
+        recursiveDeleteMock.mockRejectedValueOnce(new Error('Firestore delete failed'));
 
-        await wrapped(user, { eventId: 'eventId' } as any);
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
         // Verify Suunto was called
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.SuuntoApp);
@@ -193,7 +196,7 @@ describe('cleanupUserAccounts', () => {
 
         whereMock.mockReturnValue({ get: getMock });
 
-        await wrapped(user, { eventId: 'eventId' } as any);
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
         expect(firestoreMock().collection).toHaveBeenCalledWith('mail');
 
@@ -208,52 +211,15 @@ describe('cleanupUserAccounts', () => {
         expect(batchMock.commit).toHaveBeenCalled();
     });
 
-    it('should query tokens subcollection before deleting parent doc', async () => {
+    it('should recursively delete parent doc', async () => {
         const wrapped = cleanupUserAccounts;
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
 
-        await wrapped(user, { eventId: 'eventId' } as any);
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
-        // Verify tokens subcollection was queried for both Suunto and COROS
-        const docObj = firestoreMock().collection('mockCollection').doc('testUser123');
-        expect(docObj.collection).toHaveBeenCalledWith('tokens');
-    });
-
-    it('should batch delete tokens from subcollection when they exist', async () => {
-        const wrapped = cleanupUserAccounts;
-        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
-
-        // Mock tokens subcollection with existing tokens
-        const tokenDocs = [
-            { id: 'token1', ref: { id: 'token1' } },
-            { id: 'token2', ref: { id: 'token2' } }
-        ];
-        const docObj = firestoreMock().collection('mockCollection').doc('testUser123');
-        docObj.collection.mockReturnValue({
-            get: vi.fn().mockResolvedValue({ empty: false, docs: tokenDocs })
-        });
-
-        await wrapped(user, { eventId: 'eventId' } as any);
-
-        // Verify batch delete was called for each token
-        expect(batchMock.delete).toHaveBeenCalledWith({ id: 'token1' });
-        expect(batchMock.delete).toHaveBeenCalledWith({ id: 'token2' });
-        expect(batchMock.commit).toHaveBeenCalled();
-    });
-
-    it('should skip batch commit when no tokens in subcollection', async () => {
-        const wrapped = cleanupUserAccounts;
-        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
-
-        // Reset batch mock call count
-        batchMock.commit.mockClear();
-        batchMock.delete.mockClear();
-
-        // Tokens subcollection is empty by default in our mock setup
-        await wrapped(user, { eventId: 'eventId' } as any);
-
-        // Parent doc delete should still be called
-        expect(firestoreMock().collection('mockCollection').doc('testUser123').delete).toHaveBeenCalled();
+        // Verify recursiveDelete was called with the correct doc ref
+        const docRef = firestoreMock().collection('mockCollection').doc('testUser123');
+        expect(recursiveDeleteMock).toHaveBeenCalledWith(docRef);
     });
 
     it('should handle subcollection deletion error and continue', async () => {
@@ -261,12 +227,10 @@ describe('cleanupUserAccounts', () => {
         const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
 
         // Make subcollection query throw for first service
-        const docObj = firestoreMock().collection('mockCollection').doc('testUser123');
-        docObj.collection.mockReturnValueOnce({
-            get: vi.fn().mockRejectedValue(new Error('Firestore error'))
-        });
+        // Make recursiveDelete throw
+        recursiveDeleteMock.mockRejectedValueOnce(new Error('Firestore error'));
 
-        await wrapped(user, { eventId: 'eventId' } as any);
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
         // Should still call COROS and Garmin
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.COROSAPI);
@@ -285,7 +249,7 @@ describe('cleanupUserAccounts', () => {
             return Promise.resolve();
         });
 
-        await wrapped(user, { eventId: 'eventId' } as any);
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
         // Verify Garmin deauth attempted
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.GarminAPI);
@@ -294,7 +258,7 @@ describe('cleanupUserAccounts', () => {
         // Note: The helper calls deleteTokenDocumentWithSubcollections, which calls doc(uid).delete()
         expect(firestoreMock().collection).toHaveBeenCalledWith('garminAPITokens');
         expect(firestoreMock().collection('garminAPITokens').doc).toHaveBeenCalledWith('testUser123');
-        expect(firestoreMock().collection('garminAPITokens').doc('testUser123').delete).toHaveBeenCalled();
+        expect(recursiveDeleteMock).toHaveBeenCalled();
     });
 
     it('should force delete COROS tokens even if deauthorization fails', async () => {
@@ -311,7 +275,7 @@ describe('cleanupUserAccounts', () => {
             return Promise.resolve();
         });
 
-        await wrapped(user, { eventId: 'eventId' } as any);
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
 
         // Verify COROS deauth attempted
         expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.COROSAPI);
@@ -320,6 +284,6 @@ describe('cleanupUserAccounts', () => {
         // Note: Config mock returns 'mockCollection' for all calls currently
         expect(firestoreMock().collection).toHaveBeenCalledWith('mockCollection');
         expect(firestoreMock().collection('mockCollection').doc).toHaveBeenCalledWith('testUser123');
-        expect(firestoreMock().collection('mockCollection').doc('testUser123').delete).toHaveBeenCalled();
+        expect(recursiveDeleteMock).toHaveBeenCalled();
     });
 });

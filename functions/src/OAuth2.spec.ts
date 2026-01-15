@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { AccessToken } from 'simple-oauth2';
 
 // Define stable mocks first
 const mockDelete = vi.fn().mockResolvedValue({});
@@ -9,7 +10,7 @@ const mockGet = vi.fn().mockImplementation(() => Promise.resolve({
     empty: true,
     size: 0,
     docs: [],
-} as any));
+} as unknown as admin.firestore.QuerySnapshot));
 const mockCollection = vi.fn();
 const mockDoc = vi.fn();
 const mockWhere = vi.fn().mockReturnThis();
@@ -17,6 +18,7 @@ const mockLimit = vi.fn().mockReturnThis();
 const mockBatchDelete = vi.fn();
 const mockAdd = vi.fn().mockResolvedValue({ id: 'new-doc-id' });
 const mockBatchCommit = vi.fn().mockResolvedValue({});
+const mockRecursiveDelete = vi.fn().mockResolvedValue({});
 
 const mockDocInstance = {
     delete: mockDelete,
@@ -75,6 +77,7 @@ vi.mock('firebase-admin', () => {
         collection: mockCollection,
         collectionGroup: mockCollection,
         batch: batch,
+        recursiveDelete: mockRecursiveDelete,
     }), {
         FieldValue: {
             delete: vi.fn().mockReturnValue('delete-sentinel'),
@@ -144,9 +147,9 @@ import {
     validateOAuth2State,
     removeDuplicateConnections,
 } from './OAuth2';
+import { TokenNotFoundError } from './utils';
 import * as admin from 'firebase-admin';
 import { getTokenData } from './tokens';
-import { getServiceAdapter } from './auth/factory';
 
 describe('OAuth2', () => {
     describe('getServiceConfig', () => {
@@ -191,10 +194,12 @@ describe('OAuth2', () => {
                 },
                 expired: () => false,
                 refresh: () => Promise.resolve({ token: {} }),
-            };
+                revoke: vi.fn(),
+                revokeAll: vi.fn(),
+            } as unknown as AccessToken;
 
             const result = convertAccessTokenResponseToServiceToken(
-                mockResponse as any,
+                mockResponse,
                 ServiceNames.SuuntoApp
             );
 
@@ -203,7 +208,7 @@ describe('OAuth2', () => {
             expect(result.refreshToken).toBe('suunto-refresh-token');
             expect(result.tokenType).toBe('Bearer');
             expect(result.scope).toBe('workout');
-            expect((result as any).userName).toBe('suunto-user-123');
+            expect((result as unknown as { userName: string }).userName).toBe('suunto-user-123');
             expect(result.dateCreated).toBeDefined();
             expect(result.dateRefreshed).toBeDefined();
             expect(result.expiresAt).toBeGreaterThan(Date.now());
@@ -221,10 +226,12 @@ describe('OAuth2', () => {
                 },
                 expired: () => false,
                 refresh: () => Promise.resolve({ token: {} }),
-            };
+                revoke: vi.fn(),
+                revokeAll: vi.fn(),
+            } as unknown as AccessToken;
 
             const result = convertAccessTokenResponseToServiceToken(
-                mockResponse as any,
+                mockResponse,
                 ServiceNames.COROSAPI,
                 'coros-open-id-456'  // Pass openId as uniqueId parameter
             );
@@ -233,7 +240,7 @@ describe('OAuth2', () => {
             expect(result.accessToken).toBe('coros-access-token');
             expect(result.refreshToken).toBe('coros-refresh-token');
             expect(result.tokenType).toBe('bearer');
-            expect((result as any).openId).toBe('coros-open-id-456');
+            expect((result as unknown as { openId: string }).openId).toBe('coros-open-id-456');
             expect(result.dateCreated).toBeDefined();
             expect(result.dateRefreshed).toBeDefined();
         });
@@ -253,10 +260,12 @@ describe('OAuth2', () => {
                 },
                 expired: () => false,
                 refresh: () => Promise.resolve({ token: {} }),
-            };
+                revoke: vi.fn(),
+                revokeAll: vi.fn(),
+            } as unknown as AccessToken;
 
             const result = convertAccessTokenResponseToServiceToken(
-                mockResponse as any,
+                mockResponse,
                 ServiceNames.SuuntoApp
             );
 
@@ -279,10 +288,12 @@ describe('OAuth2', () => {
                 },
                 expired: () => false,
                 refresh: () => Promise.resolve({ token: {} }),
-            };
+                revoke: vi.fn(),
+                revokeAll: vi.fn(),
+            } as unknown as AccessToken;
 
             const result = convertAccessTokenResponseToServiceToken(
-                mockResponse as any,
+                mockResponse,
                 ServiceNames.COROSAPI
             );
 
@@ -300,7 +311,7 @@ describe('OAuth2', () => {
             vi.clearAllMocks();
             mockGet.mockReset();
             mockDelete.mockReset();
-            (getTokenData as any).mockReset();
+            (getTokenData as Mock).mockReset();
 
             // Default: 1 token found
             const mockTokenDoc = {
@@ -314,18 +325,19 @@ describe('OAuth2', () => {
                 empty: false,
                 size: 1,
                 docs: [mockTokenDoc],
-            }).mockResolvedValueOnce({
+            } as unknown as admin.firestore.QuerySnapshot).mockResolvedValueOnce({
                 empty: true,
                 size: 0,
                 docs: [],
-            });
+            } as unknown as admin.firestore.QuerySnapshot);
 
             mockDelete.mockResolvedValue({});
+            mockRecursiveDelete.mockResolvedValue({});
 
-            (getTokenData as any).mockResolvedValue({ accessToken: 'mock-access' });
-            (requestPromise.get as any).mockResolvedValue({});
-            (requestPromise.post as any).mockResolvedValue({}); // For COROS
-            (requestPromise.delete as any).mockResolvedValue({}); // For Garmin
+            (getTokenData as Mock).mockResolvedValue({ accessToken: 'mock-access' });
+            (requestPromise.get as Mock).mockResolvedValue({});
+            (requestPromise.post as Mock).mockResolvedValue({}); // For COROS
+            (requestPromise.delete as Mock).mockResolvedValue({}); // For Garmin
         });
 
         it('should deauthorize and delete records successfully', async () => {
@@ -333,8 +345,8 @@ describe('OAuth2', () => {
 
             expect(getTokenData).toHaveBeenCalled();
             expect(requestPromise.get).toHaveBeenCalled();
-            expect(mockDelete).toHaveBeenCalled(); // Once for token, once for user doc
-            expect(mockDelete).toHaveBeenCalledTimes(2);
+            expect(mockDelete).toHaveBeenCalled(); // For token
+            expect(mockRecursiveDelete).toHaveBeenCalled(); // For user doc cleanup
         });
 
         it('should make correct Suunto API call for deauthorization', async () => {
@@ -356,8 +368,8 @@ describe('OAuth2', () => {
 
         it('should NOT delete local records if getTokenData fails with 500', async () => {
             const error500 = new Error('Server error');
-            (error500 as any).statusCode = 500;
-            (getTokenData as any).mockRejectedValueOnce(error500);
+            (error500 as unknown as { statusCode: number }).statusCode = 500;
+            (getTokenData as Mock).mockRejectedValueOnce(error500);
 
             // Partial Success: Should NOT throw, but also NOT delete the token
             await expect(deauthorizeServiceForUser(userID, serviceName)).resolves.not.toThrow();
@@ -367,8 +379,8 @@ describe('OAuth2', () => {
 
         it('should NOT delete local records if getTokenData fails with 502', async () => {
             const error502 = new Error('Bad Gateway');
-            (error502 as any).statusCode = 502;
-            (getTokenData as any).mockRejectedValueOnce(error502);
+            (error502 as unknown as { statusCode: number }).statusCode = 502;
+            (getTokenData as Mock).mockRejectedValueOnce(error502);
 
             // Partial Success: Should NOT throw, but also NOT delete the token
             await expect(deauthorizeServiceForUser(userID, serviceName)).resolves.not.toThrow();
@@ -377,12 +389,13 @@ describe('OAuth2', () => {
         });
 
         it('should still delete local records if Suunto API deauthorization fails', async () => {
-            (requestPromise.get as any).mockRejectedValueOnce(new Error('API Failure'));
+            (requestPromise.get as Mock).mockRejectedValueOnce(new Error('API Failure'));
 
             await deauthorizeServiceForUser(userID, serviceName);
 
             // Should still delete token and parent doc even if API fails
-            expect(mockDelete).toHaveBeenCalledTimes(2);
+            expect(mockDelete).toHaveBeenCalled();
+            expect(mockRecursiveDelete).toHaveBeenCalled();
         });
 
         /*
@@ -407,19 +420,19 @@ describe('OAuth2', () => {
                     empty: false,
                     size: 2,
                     docs: [token1, token2],
-                })
+                } as unknown as admin.firestore.QuerySnapshot)
                 .mockResolvedValueOnce({
                     empty: false,
                     size: 1,
                     docs: [token2], // After T1 delete, T2 remains
-                });
+                } as unknown as admin.firestore.QuerySnapshot);
 
             // Mock getTokenData to succeed for token1 but fail for token2
-            (getTokenData as any)
+            (getTokenData as Mock)
                 .mockResolvedValueOnce({ accessToken: 't1' }) // first call success
                 .mockRejectedValueOnce({ statusCode: 500, message: 'Server Error' }); // second call failure
 
-            (requestPromise.get as any).mockResolvedValue({});
+            (requestPromise.get as Mock).mockResolvedValue({});
 
             await deauthorizeServiceForUser(userID, serviceName);
 
@@ -442,22 +455,35 @@ describe('OAuth2', () => {
             mockGet.mockImplementation(async () => {
                 getCallCount++;
 
-                if (getCallCount === 1) return { empty: false, size: 2, docs: [token1, token2] };
-                if (getCallCount === 2) return { empty: false, size: 1, docs: [token2] };
-                if (getCallCount === 3) return { empty: true, size: 0, docs: [] };
+                if (getCallCount === 1) return { empty: false, size: 2, docs: [token1, token2] } as unknown as admin.firestore.QuerySnapshot;
+                if (getCallCount === 2) return { empty: false, size: 1, docs: [token2] } as unknown as admin.firestore.QuerySnapshot;
+                if (getCallCount === 3) return { empty: true, size: 0, docs: [] } as unknown as admin.firestore.QuerySnapshot;
 
-                return { empty: true, size: 0, docs: [] };
+                return { empty: true, size: 0, docs: [] } as unknown as admin.firestore.QuerySnapshot;
             });
 
-            (getTokenData as any).mockImplementation(async (_doc: any) => {
+            (getTokenData as Mock).mockImplementation(async () => {
                 return { accessToken: 'valid' };
             });
-            (requestPromise.get as any).mockResolvedValue({});
+            (requestPromise.get as Mock).mockResolvedValue({});
 
             await deauthorizeServiceForUser(userID, serviceName);
 
-            // Expect 3 deletions: token1, token2, and parent user doc
-            expect(mockDelete).toHaveBeenCalledTimes(3);
+            // Expect 2 normal deletes (tokens) and 1 recursive delete (parent user doc)
+            expect(mockDelete).toHaveBeenCalledTimes(2);
+            expect(mockRecursiveDelete).toHaveBeenCalledTimes(1);
+        });
+
+        it('should clean up ORPHANED documents (existing parent but no tokens) using recursiveDelete', async () => {
+            mockGet.mockReset();
+            mockGet.mockImplementation(() => Promise.resolve({ empty: true, size: 0, docs: [] } as unknown as admin.firestore.QuerySnapshot));
+            mockRecursiveDelete.mockReset();
+            mockRecursiveDelete.mockResolvedValue({});
+
+            await expect(deauthorizeServiceForUser(userID, serviceName)).rejects.toThrow(TokenNotFoundError);
+
+            // Should have called recursiveDelete to clean up the orphaned parent document
+            expect(mockRecursiveDelete).toHaveBeenCalledTimes(1);
         });
 
     });
@@ -501,14 +527,14 @@ describe('OAuth2', () => {
         it('should delete parent document if no tokens remain', async () => {
             await deleteLocalServiceToken(userID, serviceName, tokenID);
             expect(tokenDeleteSpy).toHaveBeenCalled();
-            expect(parentDeleteSpy).toHaveBeenCalled();
+            expect(mockRecursiveDelete).toHaveBeenCalled();
         });
 
         it('should NOT delete parent document if tokens remain', async () => {
             mockGet.mockResolvedValue({ empty: false });
             await deleteLocalServiceToken(userID, serviceName, tokenID);
             expect(tokenDeleteSpy).toHaveBeenCalled();
-            expect(parentDeleteSpy).not.toHaveBeenCalled();
+            expect(mockRecursiveDelete).not.toHaveBeenCalled();
         });
     });
 
@@ -633,7 +659,7 @@ describe('OAuth2', () => {
             };
 
             const result = convertAccessTokenResponseToServiceToken(
-                mockResponse as ReturnType<typeof vi.fn>,
+                mockResponse as unknown as AccessToken,
                 ServiceNames.GarminAPI
             );
 
@@ -657,7 +683,7 @@ describe('OAuth2', () => {
             };
 
             const result = convertAccessTokenResponseToServiceToken(
-                mockResponse as ReturnType<typeof vi.fn>,
+                mockResponse as unknown as AccessToken,
                 ServiceNames.GarminAPI,
                 'override-user-id'
             );
@@ -678,7 +704,7 @@ describe('OAuth2', () => {
             };
 
             const result = convertAccessTokenResponseToServiceToken(
-                mockResponse as ReturnType<typeof vi.fn>,
+                mockResponse as unknown as AccessToken,
                 ServiceNames.GarminAPI,
                 'user-id'
             );
@@ -696,7 +722,7 @@ describe('OAuth2', () => {
 
             expect(() => {
                 convertAccessTokenResponseToServiceToken(
-                    mockResponse as ReturnType<typeof vi.fn>,
+                    mockResponse as unknown as AccessToken,
                     'UnsupportedService' as ServiceNames
                 );
             }).toThrow(/Auth adapter not implemented/);
@@ -780,7 +806,7 @@ describe('OAuth2', () => {
 
             // Simulate 500 error from API
             const error500 = new Error('Internal Server Error');
-            (error500 as ReturnType<typeof vi.fn>).statusCode = 500;
+            (error500 as any).statusCode = 500;
             (requestPromise.get as ReturnType<typeof vi.fn>).mockRejectedValue(error500);
 
             await deauthorizeServiceForUser(userID, ServiceNames.SuuntoApp);
@@ -809,7 +835,7 @@ describe('OAuth2', () => {
 
             // Simulate 502 error from API
             const error502 = new Error('Bad Gateway');
-            (error502 as ReturnType<typeof vi.fn>).statusCode = 502;
+            (error502 as any).statusCode = 502;
             (requestPromise.get as ReturnType<typeof vi.fn>).mockRejectedValue(error502);
 
             await deauthorizeServiceForUser(userID, ServiceNames.SuuntoApp);
@@ -839,7 +865,7 @@ describe('OAuth2', () => {
 
             // Simulate 404 error from API
             const error404 = new Error('Not Found');
-            (error404 as ReturnType<typeof vi.fn>).statusCode = 404;
+            (error404 as any).statusCode = 404;
             (requestPromise.get as ReturnType<typeof vi.fn>).mockRejectedValue(error404);
 
             await deauthorizeServiceForUser(userID, ServiceNames.SuuntoApp);

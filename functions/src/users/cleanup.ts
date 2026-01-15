@@ -15,18 +15,9 @@ async function deleteTokenDocumentWithSubcollections(collectionName: string, uid
     const db = admin.firestore();
     const userDocRef = db.collection(collectionName).doc(uid);
 
-    // First, delete all documents in the 'tokens' subcollection
-    const tokensSnapshot = await userDocRef.collection('tokens').get();
-    if (!tokensSnapshot.empty) {
-        const batch = db.batch();
-        tokensSnapshot.docs.forEach(doc => batch.delete(doc.ref));
-        await batch.commit();
-        logger.info(`[Cleanup] Deleted ${tokensSnapshot.size} token(s) from ${collectionName}/${uid}/tokens`);
-    }
-
-    // Then delete the parent document
-    await userDocRef.delete();
-    logger.info(`[Cleanup] Deleted parent doc ${collectionName}/${uid}`);
+    // Using recursiveDelete to delete the parent document and all its subcollections (e.g. 'tokens')
+    await admin.firestore().recursiveDelete(userDocRef);
+    logger.info(`[Cleanup] Recursively deleted parent doc and all subcollections for ${collectionName}/${uid}`);
 }
 
 // Define cleanup configuration for services
@@ -46,20 +37,21 @@ async function safeDeauthorizeAndCleanup(uid: string, config: ServiceCleanupConf
     try {
         logger.info(`[Cleanup] Deauthorizing ${config.name} for user ${uid}`);
         await config.deauthFn(uid);
-    } catch (e: any) {
-        if (e.name === 'TokenNotFoundError') {
+    } catch (e: unknown) {
+        const error = e as Error;
+        if (error.name === 'TokenNotFoundError') {
             logger.info(`[Cleanup] No ${config.name} token found for ${uid}, skipping deauthorization.`);
         } else {
             // Log error but continue to forced cleanup
-            logger.error(`[Cleanup] Error deauthorizing ${config.name} for ${uid}`, e);
+            logger.error(`[Cleanup] Error deauthorizing ${config.name} for ${uid}`, error);
         }
     }
 
     // 2. Local Cleanup (Mandatory)
     try {
         await deleteTokenDocumentWithSubcollections(config.collectionName, uid);
-    } catch (e: any) {
-        logger.error(`[Cleanup] Error deleting ${config.name} tokens for ${uid}`, e);
+    } catch (e: unknown) {
+        logger.error(`[Cleanup] Error deleting ${config.name} tokens for ${uid}`, e as Error);
     }
 }
 
