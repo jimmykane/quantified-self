@@ -486,6 +486,8 @@ describe('OAuth2', () => {
             expect(mockRecursiveDelete).toHaveBeenCalledTimes(1);
         });
 
+
+
     });
 
     describe('deleteLocalServiceToken', () => {

@@ -7,6 +7,7 @@ import * as admin from 'firebase-admin';
 export const TTL_CONFIG = {
     MAIL_IN_DAYS: 90,
     QUEUE_ITEM_IN_DAYS: 7,
+    ORPHANED_TOKEN_IN_DAYS: 90,
 } as const;
 
 

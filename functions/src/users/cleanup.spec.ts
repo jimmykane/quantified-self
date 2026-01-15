@@ -4,12 +4,13 @@ import * as functions from 'firebase-functions/v1';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 
 // Hoist mocks
-const { authBuilderMock, deauthorizeServiceMock, firestoreMock, getServiceConfigMock, batchMock, whereMock, recursiveDeleteMock } = vi.hoisted(() => {
+const { authBuilderMock, deauthorizeServiceMock, firestoreMock, getServiceConfigMock, batchMock, whereMock, recursiveDeleteMock, tokensGetMock, setMock } = vi.hoisted(() => {
     const onDeleteMock = vi.fn((handler) => handler);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const userMock = vi.fn((_id?: string) => ({ onDelete: onDeleteMock }));
 
     const deleteMock = vi.fn().mockResolvedValue({});
+    const setMock = vi.fn().mockResolvedValue({});
 
     // Mock for tokens subcollection - returns empty by default
     const tokensGetMock = vi.fn().mockResolvedValue({ empty: true, docs: [] });
@@ -18,7 +19,8 @@ const { authBuilderMock, deauthorizeServiceMock, firestoreMock, getServiceConfig
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const docMock = vi.fn((_id?: string) => ({
         delete: deleteMock,
-        collection: tokensCollectionMock  // Support for subcollection queries
+        collection: tokensCollectionMock,  // Support for subcollection queries
+        set: setMock
     }));
 
     // Define mocks first
@@ -53,11 +55,22 @@ const { authBuilderMock, deauthorizeServiceMock, firestoreMock, getServiceConfig
 
     const recursiveDeleteMock = vi.fn().mockResolvedValue({});
 
-    const firestore = vi.fn(() => ({
+    // Timestamp mock
+    const mockTimestamp = {
+        toMillis: () => 1700000000000
+    };
+
+    const firestore = Object.assign(vi.fn(() => ({
         collection: collectionMock,
         batch: vi.fn(() => batchMock),
         recursiveDelete: recursiveDeleteMock
-    }));
+    })), {
+        Timestamp: {
+            now: vi.fn(() => mockTimestamp),
+            fromMillis: vi.fn((ms) => ({ seconds: Math.floor(ms / 1000), nanoseconds: 0 })),
+            fromDate: vi.fn((date) => ({ seconds: Math.floor(date.getTime() / 1000), nanoseconds: 0 }))
+        }
+    });
 
     return {
         authBuilderMock: { user: userMock },
@@ -67,7 +80,9 @@ const { authBuilderMock, deauthorizeServiceMock, firestoreMock, getServiceConfig
         getServiceConfigMock: vi.fn(),
         batchMock,
         whereMock,
-        recursiveDeleteMock
+        recursiveDeleteMock,
+        tokensGetMock,
+        setMock
     };
 });
 
@@ -93,7 +108,7 @@ vi.mock('../OAuth2', () => ({
 
 
 // Import function under test
-import { cleanupUserAccounts } from './cleanup';
+import { cleanupUserAccounts, ORPHANED_SERVICE_TOKENS_COLLECTION_NAME } from './cleanup';
 
 const testEnv = functionsTest();
 
@@ -285,5 +300,121 @@ describe('cleanupUserAccounts', () => {
         expect(firestoreMock().collection).toHaveBeenCalledWith('mockCollection');
         expect(firestoreMock().collection('mockCollection').doc).toHaveBeenCalledWith('testUser123');
         expect(recursiveDeleteMock).toHaveBeenCalled();
+    });
+
+    it('should handle TokenNotFoundError gracefully', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        // Throw TokenNotFoundError for Suunto
+        const tokenNotFoundError = new Error('No token found');
+        tokenNotFoundError.name = 'TokenNotFoundError';
+        deauthorizeServiceMock.mockRejectedValueOnce(tokenNotFoundError);
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        // Should still process other services
+        expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.COROSAPI);
+        expect(deauthorizeServiceMock).toHaveBeenCalledWith('testUser123', ServiceNames.GarminAPI);
+        expect(recursiveDeleteMock).toHaveBeenCalled();
+    });
+
+    it('should archive remaining tokens when they exist after deauthorization', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        // Make tokens subcollection return some remaining tokens
+        tokensGetMock.mockResolvedValue({
+            empty: false,
+            size: 2,
+            docs: [
+                { id: 'orphaned-token-1', data: () => ({ accessToken: 'tok1' }) },
+                { id: 'orphaned-token-2', data: () => ({ accessToken: 'tok2' }) }
+            ]
+        });
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        // Verify it called the correct collection
+        expect(firestoreMock().collection).toHaveBeenCalledWith(ORPHANED_SERVICE_TOKENS_COLLECTION_NAME);
+
+        // Should have called set to archive the orphaned tokens
+        // 3 services x 2 tokens each = 6 archive calls
+        expect(setMock).toHaveBeenCalled();
+
+        // Verify archive data structure
+        expect(setMock).toHaveBeenCalledWith(expect.objectContaining({
+            serviceName: expect.any(String),
+            uid: 'testUser123',
+            originalTokenId: expect.stringContaining('orphaned-token'),
+            token: expect.any(Object),
+            archivedAt: expect.any(Object),
+            expireAt: expect.any(Object),
+            lastError: expect.stringContaining('Cleanup: Token remained after deauthorization attempts')
+        }));
+    });
+
+    it('should handle archive failure gracefully and continue cleanup', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        // Make tokens subcollection return a remaining token
+        tokensGetMock.mockResolvedValue({
+            empty: false,
+            size: 1,
+            docs: [
+                { id: 'failing-token', data: () => ({ accessToken: 'fail' }) }
+            ]
+        });
+
+        // Make set fail for archiving
+        setMock.mockRejectedValue(new Error('Firestore write failed'));
+
+        // Should not throw, just log and continue
+        await expect(wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext)).resolves.not.toThrow();
+
+        // Should still call recursiveDelete
+        expect(recursiveDeleteMock).toHaveBeenCalled();
+    });
+
+    it('should skip archiving when no tokens remain', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        // Tokens subcollection returns empty (default)
+        tokensGetMock.mockResolvedValue({ empty: true, size: 0, docs: [] });
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        // Set should NOT be called for archiving
+        expect(setMock).not.toHaveBeenCalled();
+    });
+
+    it('should handle null email correctly and skip email query', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+        // User without email - only uid query should run
+
+        const getMock = vi.fn().mockResolvedValue({ docs: [] });
+        whereMock.mockReturnValue({ get: getMock });
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        // Should only query by toUids, not by email
+        expect(whereMock).toHaveBeenCalledWith('toUids', 'array-contains', 'testUser123');
+    });
+
+    it('should log when no email documents found', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123', email: 'test@test.com' });
+
+        // Both queries return empty
+        const getMock = vi.fn().mockResolvedValue({ docs: [] });
+        whereMock.mockReturnValue({ get: getMock });
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        // No batch commit since no emails
+        expect(batchMock.commit).not.toHaveBeenCalled();
     });
 });

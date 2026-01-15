@@ -12,6 +12,7 @@ import { getTokenData } from './tokens';
 import { TokenNotFoundError } from './utils';
 import { getServiceAdapter } from './auth/factory';
 
+
 export async function removeDuplicateConnections(currentUserID: string, serviceName: ServiceNames, externalUserId: string) {
   const adapter = getServiceAdapter(serviceName);
   const query: admin.firestore.Query = adapter.getDuplicateConnectionQuery(externalUserId);
