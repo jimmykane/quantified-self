@@ -359,6 +359,19 @@ describe('tokens', () => {
 
             expect(mockDoc.ref.delete).not.toHaveBeenCalled();
         });
+
+        it('should NOT delete token on 502 error', async () => {
+            mockToken.expired.mockReturnValue(true);
+            const error: any = new Error('Bad Gateway');
+            error.statusCode = 502;
+            mockToken.refresh.mockRejectedValue(error);
+
+            await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
+                .rejects.toThrow('Bad Gateway');
+
+            expect(mockDoc.ref.delete).not.toHaveBeenCalled();
+            expect(deleteLocalServiceToken).not.toHaveBeenCalled();
+        });
     });
 
     describe('refreshTokens', () => {

@@ -361,6 +361,17 @@ describe('OAuth2', () => {
             expect(mockDelete).not.toHaveBeenCalled();
         });
 
+        it('should NOT delete local records if getTokenData fails with 502', async () => {
+            const error502 = new Error('Bad Gateway');
+            (error502 as any).statusCode = 502;
+            (getTokenData as any).mockRejectedValueOnce(error502);
+
+            // Partial Success: Should NOT throw, but also NOT delete the token
+            await expect(deauthorizeServiceForUser(userID, serviceName)).resolves.not.toThrow();
+
+            expect(mockDelete).not.toHaveBeenCalled();
+        });
+
         it('should still delete local records if Suunto API deauthorization fails', async () => {
             (requestPromise.get as any).mockRejectedValueOnce(new Error('API Failure'));
 
@@ -771,6 +782,35 @@ describe('OAuth2', () => {
             await deauthorizeServiceForUser(userID, ServiceNames.SuuntoApp);
 
             // Token should NOT be deleted when API returns 500
+            expect(mockDelete).not.toHaveBeenCalled();
+        });
+
+        it('should preserve token when API deauthorization fails with 502', async () => {
+            const mockTokenDoc = {
+                id: 'token-doc-id',
+                ref: { delete: mockDelete },
+            };
+
+            mockGet.mockResolvedValueOnce({
+                empty: false,
+                size: 1,
+                docs: [mockTokenDoc],
+            }).mockResolvedValue({
+                empty: true,
+                size: 0,
+                docs: [],
+            });
+
+            (getTokenData as ReturnType<typeof vi.fn>).mockResolvedValue({ accessToken: 'mock-token' });
+
+            // Simulate 502 error from API
+            const error502 = new Error('Bad Gateway');
+            (error502 as ReturnType<typeof vi.fn>).statusCode = 502;
+            (requestPromise.get as ReturnType<typeof vi.fn>).mockRejectedValue(error502);
+
+            await deauthorizeServiceForUser(userID, ServiceNames.SuuntoApp);
+
+            // Token should NOT be deleted when API returns 502
             expect(mockDelete).not.toHaveBeenCalled();
         });
 

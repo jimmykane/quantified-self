@@ -58,8 +58,8 @@ export const getGarminAPIAuthRequestTokenRedirectURI = functions.region('europe-
       redirect_uri: url,
     });
   } catch (e: any) {
-    logger.error(e);
-    res.status(500).send('Internal Server Error');
+    const status = e.statusCode || (e.output && e.output.statusCode) || 500;
+    res.status(status).send(status === 502 ? 'Garmin service is temporarily unavailable' : 'Internal Server Error');
   }
 });
 
@@ -111,7 +111,8 @@ export const requestAndSetGarminAPIAccessToken = functions.region('europe-west2'
     res.send();
   } catch (e: any) {
     logger.error(e);
-    res.status(500).send('Could not get access token for user');
+    const status = e.statusCode || (e.output && e.output.statusCode) || 500;
+    res.status(status).send(status === 502 ? 'Garmin service is temporarily unavailable' : 'Could not get access token for user');
   }
 });
 

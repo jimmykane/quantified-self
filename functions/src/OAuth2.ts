@@ -188,8 +188,8 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, false);
     } catch (e: any) {
       const statusCode = e.statusCode || (e.output && e.output.statusCode);
-      if (statusCode === 500) {
-        logger.error(`Refreshing token failed with 500 for ${tokenQueryDocumentSnapshot.id}. Preserving local token.`);
+      if (statusCode === 500 || statusCode === 502) {
+        logger.error(`Refreshing token failed with ${statusCode} for ${tokenQueryDocumentSnapshot.id}. Preserving local token.`);
         shouldDeleteToken = false;
       } else {
         logger.warn(`Refreshing token failed for ${tokenQueryDocumentSnapshot.id} (${statusCode || 'unknown error'}). Proceeding with local cleanup.`);
@@ -202,8 +202,8 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
         logger.info(`Deauthorized ${serviceName} token ${tokenQueryDocumentSnapshot.id} for ${userID}`);
       } catch (apiError: any) {
         const statusCode = apiError.statusCode || (apiError.output && apiError.output.statusCode);
-        if (statusCode === 500) {
-          logger.error(`${serviceName} API deauthorization failed with 500 for ${userID}. Preserving local token.`);
+        if (statusCode === 500 || statusCode === 502) {
+          logger.error(`${serviceName} API deauthorization failed with ${statusCode} for ${userID}. Preserving local token.`);
           shouldDeleteToken = false;
         } else {
           logger.warn(`Failed to deauthorize on ${serviceName} API for ${userID}: ${apiError.message}. Proceeding with local cleanup.`);
@@ -222,14 +222,16 @@ export async function deauthorizeServiceForUser(userID: string, serviceName: Ser
 }
 
 export async function deleteLocalServiceToken(userID: string, serviceName: ServiceNames, tokenID: string) {
+  logger.info(`Starting delete for local token ${tokenID} for ${userID} and serviceName ${serviceName}`);
   const adapter = getServiceAdapter(serviceName);
   const userDocRef = admin.firestore().collection(adapter.tokenCollectionName).doc(userID);
 
   await userDocRef.collection('tokens').doc(tokenID).delete();
-
   // Check if any tokens remain
   const remainingTokens = await userDocRef.collection('tokens').limit(1).get();
+  logger.info(`Remaining tokens for ${userID}: ${remainingTokens.size}`);
   if (remainingTokens.empty) {
+    logger.info(`No remaining tokens for ${userID}. Deleting parent document.`);
     await userDocRef.delete();
   }
 }

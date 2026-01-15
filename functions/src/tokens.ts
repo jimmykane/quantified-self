@@ -106,8 +106,8 @@ export async function getTokenData(doc: QueryDocumentSnapshot, serviceName: Serv
     const statusCode = e.statusCode || (e.output && e.output.statusCode);
     const errorDescription = e.message || (e.error && (e.error.error_description || e.error.error));
 
-    // Suppress logging for 400/401/500 as these are expected during cleanup or due to partner issues
-    if (statusCode === 401 || statusCode === 400 || statusCode === 500) {
+    // Suppress logging for 400/401/500/502 as these are expected during cleanup or due to partner issues
+    if (statusCode === 401 || statusCode === 400 || statusCode === 500 || statusCode === 502) {
       // Do not log the full stack trace for these known errors during cleanup
       logger.warn(`Token refresh for user ${doc.id} failed (${statusCode}): ${errorDescription}`);
     } else {
