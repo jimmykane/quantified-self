@@ -14,6 +14,7 @@ import { AppEventService } from '../../../services/app.event.service';
 import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
+import { AppDeepLinkService } from '../../../services/app.deeplink.service';
 import { LoggerService } from '../../../services/logger.service';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 
@@ -46,6 +47,7 @@ describe('ServicesGarminComponent', () => {
                 { provide: AppAuthService, useValue: { user$: { pipe: () => ({ subscribe: () => { } }) } } },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppWindowService, useValue: { currentDomain: 'http://localhost', windowRef: { location: { href: '' } } } },
+                { provide: AppDeepLinkService, useValue: { openGarminConnectApp: vi.fn() } },
                 { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } }
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
