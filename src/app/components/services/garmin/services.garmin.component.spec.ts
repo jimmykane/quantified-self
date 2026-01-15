@@ -5,7 +5,7 @@ import { ServicesGarminComponent } from './services.garmin.component';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { RouterTestingModule } from '@angular/router/testing';
 import { AppFileService } from '../../../services/app.file.service';
 import { Analytics } from '@angular/fire/analytics';
@@ -24,7 +24,8 @@ describe('ServicesGarminComponent', () => {
     beforeEach(async () => {
         mockUserService = {
             isAdmin: vi.fn(),
-            requestAndSetCurrentUserGarminAccessToken: vi.fn()
+            requestAndSetCurrentUserGarminAccessToken: vi.fn(),
+            getCurrentUserServiceTokenAndRedirectURI: vi.fn(),
         };
 
         await TestBed.configureTestingModule({
@@ -43,7 +44,7 @@ describe('ServicesGarminComponent', () => {
                 { provide: AppEventService, useValue: {} },
                 { provide: AppAuthService, useValue: { user$: { pipe: () => ({ subscribe: () => { } }) } } },
                 { provide: AppUserService, useValue: mockUserService },
-                { provide: AppWindowService, useValue: { currentDomain: 'http://localhost' } },
+                { provide: AppWindowService, useValue: { currentDomain: 'http://localhost', windowRef: { location: { href: '' } } } },
                 { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } }
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
@@ -101,6 +102,29 @@ describe('ServicesGarminComponent', () => {
 
             expect(card.classList).toContain('unlocked');
             expect(lockOverlay).toBeFalsy();
+        });
+    });
+
+    describe('Connection Logic', () => {
+        it('should display partner-specific message on 502 error', async () => {
+            const snackBar = TestBed.inject(MatSnackBar);
+            const snackBarSpy = vi.spyOn(snackBar, 'open');
+
+            // Mock 502 error
+            const error502 = { status: 502, message: 'Bad Gateway' };
+            mockUserService.getCurrentUserServiceTokenAndRedirectURI.mockRejectedValue(error502);
+
+            component.hasProAccess = true; // Ensure connection logic proceeds
+            fixture.detectChanges();
+
+            // Execute the connection logic (inherited from abstract directive)
+            await component.connectWithService(new MouseEvent('click'));
+
+            expect(snackBarSpy).toHaveBeenCalledWith(
+                'Garmin is temporarily unavailable. Please try again later.',
+                undefined,
+                expect.objectContaining({ duration: 5000 })
+            );
         });
     });
 });
