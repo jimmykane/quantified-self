@@ -87,6 +87,11 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     return requiredPermissions.filter(p => !token.permissions.includes(p));
   }
 
+  get hasPermissionsLoaded(): boolean {
+    const token = (this.serviceTokens as any[])?.[0];
+    return !!token && Array.isArray(token.permissions);
+  }
+
   getPermissionLabel(permission: string): string {
     return this.permissionLabels[permission] || permission;
   }

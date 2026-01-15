@@ -126,5 +126,38 @@ describe('ServicesGarminComponent', () => {
                 expect.objectContaining({ duration: 5000 })
             );
         });
+
+        it('should show syncing state when forceConnected is true but tokens are not yet loaded', () => {
+            component.forceConnected = true;
+            component.serviceTokens = undefined;
+            component.hasProAccess = true;
+            fixture.detectChanges();
+
+            const syncingText = fixture.nativeElement.textContent;
+            expect(syncingText).toContain('Syncing connection details...');
+
+            // Should NOT show the account circle icon (part of the connected list)
+            const accountIcon = fixture.nativeElement.querySelector('mat-icon[matListItemIcon]');
+            expect(accountIcon).toBeFalsy();
+        });
+
+        it('should show syncing state when tokens are loaded but permissions are missing from the token', () => {
+            // Mock token without permissions array
+            component.serviceTokens = [{
+                accessToken: 'test-token',
+                userID: 'test-user-123',
+                // permissions property missing
+            } as any];
+            component.hasProAccess = true;
+            fixture.detectChanges();
+
+            // Verify syncing state
+            const syncingText = fixture.nativeElement.textContent;
+            expect(syncingText).toContain('Syncing connection details...');
+
+            // Verify connected list is NOT shown
+            const accountIcon = fixture.nativeElement.querySelector('mat-icon[matListItemIcon]');
+            expect(accountIcon).toBeFalsy();
+        });
     });
 });

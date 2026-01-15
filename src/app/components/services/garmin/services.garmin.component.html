@@ -35,6 +35,13 @@
         <mat-progress-bar mode="indeterminate" *ngIf="isLoading"></mat-progress-bar>
 
         @if (isConnectedToService()) {
+        @if (!garminUserID || !hasPermissionsLoaded) {
+        <div
+          style="display: flex; align-items: center; justify-content: center; padding: 24px; flex-direction: column; opacity: 0.7;">
+          <mat-spinner diameter="30" color="accent" style="margin-bottom: 12px;"></mat-spinner>
+          <div style="font-size: 0.9rem;">Syncing connection details...</div>
+        </div>
+        } @else {
         <mat-list style="width: 100%; padding: 0;">
           <mat-list-item style="height: auto; padding: 8px 0;">
             <mat-icon matListItemIcon style="margin-right: 8px;">account_circle</mat-icon>
@@ -79,6 +86,7 @@
             </p>
           </div>
         </div>
+        }
         }
 
         <div style="margin-top: auto; padding-top: 16px;">
