@@ -12,6 +12,7 @@ import {
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
   getAndSetServiceOAuth2AccessTokenForUser,
   deauthorizeServiceForUser,
+  deleteLocalServiceToken,
   validateOAuth2State
 } from '../../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
@@ -181,18 +182,18 @@ export const receiveGarminAPIDeregistration = functions.region('europe-west2').h
         .get();
 
       if (tokenQuerySnapshot.empty) {
-        logger.info(`No active session found for Garmin User ID ${garminUserId}`);
+        logger.info(`No active tokens found for Garmin User ID ${garminUserId}`);
         continue;
       }
 
       for (const tokenDoc of tokenQuerySnapshot.docs) {
         const firebaseUserID = tokenDoc.ref.parent.parent?.id;
         if (firebaseUserID) {
-          logger.info(`Deauthorizing Firebase User ${firebaseUserID} (Garmin ID: ${garminUserId})`);
+          logger.info(`Processing deregistration for Firebase User ${firebaseUserID} (Garmin ID: ${garminUserId})`);
           try {
-            await deauthorizeServiceForUser(firebaseUserID, ServiceNames.GarminAPI);
+            await deleteLocalServiceToken(firebaseUserID, ServiceNames.GarminAPI, tokenDoc.id);
           } catch (e) {
-            logger.error(`Failed to deauthorize user ${firebaseUserID}`, e);
+            logger.error(`Failed to process deregistration for Firebase User ${firebaseUserID} (Garmin ID: ${garminUserId})`, e);
           }
         }
       }
