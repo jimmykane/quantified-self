@@ -40,12 +40,5 @@ export const environment = {
     deauthorizeCOROSAPI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/deauthorizeCOROSAPI',
     COROSAPIHistoryImportURI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/addCOROSAPIHistoryToQueue',
     deleteSelf: 'https://europe-west2-quantified-self-io.cloudfunctions.net/deleteSelf',
-    listUsers: 'https://europe-west2-quantified-self-io.cloudfunctions.net/listUsers',
-    getQueueStats: 'https://europe-west2-quantified-self-io.cloudfunctions.net/getQueueStats',
-    getUserCount: 'https://europe-west2-quantified-self-io.cloudfunctions.net/getUserCount',
-    setMaintenanceMode: 'https://europe-west2-quantified-self-io.cloudfunctions.net/setMaintenanceMode',
-    getMaintenanceStatus: 'https://europe-west2-quantified-self-io.cloudfunctions.net/getMaintenanceStatus',
-    impersonateUser: 'https://europe-west2-quantified-self-io.cloudfunctions.net/impersonateUser',
-    getFinancialStats: 'https://europe-west2-quantified-self-io.cloudfunctions.net/getFinancialStats',
   }
 };
