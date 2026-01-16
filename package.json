@@ -18,6 +18,7 @@
     "test:rules": "npx firebase emulators:exec --project demo-test --only firestore 'npx vitest run --config vitest.rules.config.ts'",
     "test-coverage": "vitest run --coverage",
     "lint": "ng lint",
+    "sentry:upload-sourcemaps": "sentry-cli sourcemaps upload --org sports-alliance --project quantified-self dist",
     "e2e": "ng e2e"
   },
   "private": true,
@@ -70,6 +71,7 @@
     "@angular/cli": "^20.3.13",
     "@angular/compiler-cli": "20.3.15",
     "@firebase/rules-unit-testing": "^5.0.0",
+    "@sentry/cli": "^3.1.0",
     "@types/express": "^5.0.6",
     "@types/leaflet": "^1.7.5",
     "@types/leaflet-providers": "^1.2.1",
