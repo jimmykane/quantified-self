@@ -48,16 +48,7 @@ jobs:
       - name: Install, clean and build
         run: |
           npm ci
-          npm run clean
           npm run build-beta
-
-      - name: Upload sourcemaps to Sentry
-        run: npm run sentry:upload-sourcemaps
-        env:
-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-
-      - name: Remove sourcemaps
-        run: find dist -name "*.map" -delete
 
       - name: Create SA key
         run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "${{ runner.temp }}/firebase_service_account.json"
