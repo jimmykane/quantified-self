@@ -37,10 +37,3 @@ mat-form-field {
     flex: 1;
     min-width: 200px;
 }
-
-.service-logo {
-    height: 20px;
-    width: auto;
-    margin-left: 8px;
-    opacity: 0.8;
-}

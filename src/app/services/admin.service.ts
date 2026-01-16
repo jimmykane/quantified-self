@@ -1,9 +1,8 @@
 import { inject, Injectable, EnvironmentInjector } from '@angular/core';
 import { Firestore } from '@angular/fire/firestore';
-import { Functions, httpsCallableFromURL } from '@angular/fire/functions';
 import { from, Observable } from 'rxjs';
-import { map, switchMap } from 'rxjs/operators';
-import { environment } from '../../environments/environment';
+import { map } from 'rxjs/operators';
+import { AppFunctionsService } from './app.functions.service';
 
 export interface AdminUser {
     uid: string;
@@ -100,33 +99,12 @@ export interface FinancialStats {
     providedIn: 'root'
 })
 export class AdminService {
-    private functions = inject(Functions);
+    private functionsService = inject(AppFunctionsService);
     private firestore = inject(Firestore);
-
-    private listUsersFn = httpsCallableFromURL<ListUsersParams, ListUsersResponse>(
-        this.functions,
-        environment.functions.listUsers
-    );
-
-    private getQueueStatsFn = httpsCallableFromURL<{ includeAnalysis?: boolean }, QueueStats>(
-        this.functions,
-        environment.functions.getQueueStats
-    );
-
     private injector = inject(EnvironmentInjector);
 
-    private getUserCountFn = httpsCallableFromURL<void, { count: number; total: number; pro: number; basic: number; free: number; providers: Record<string, number> }>(
-        this.functions,
-        environment.functions.getUserCount
-    );
-
-    private getFinancialStatsFn = httpsCallableFromURL<void, FinancialStats>(
-        this.functions,
-        environment.functions.getFinancialStats
-    );
-
     getUsers(params: ListUsersParams = {}): Observable<ListUsersResponse> {
-        return from(this.listUsersFn({
+        return from(this.functionsService.call<ListUsersParams, ListUsersResponse>('listUsers', {
             page: params.page ?? 0,
             pageSize: params.pageSize ?? 25,
             searchTerm: params.searchTerm,
@@ -139,17 +117,13 @@ export class AdminService {
     }
 
     getQueueStats(includeAnalysis = true): Observable<QueueStats> {
-        return from(this.getQueueStatsFn({ includeAnalysis })).pipe(
+        return from(this.functionsService.call<{ includeAnalysis?: boolean }, QueueStats>('getQueueStats', { includeAnalysis })).pipe(
             map(result => result.data)
         );
     }
 
-
-
-
-
     getTotalUserCount(): Observable<{ total: number; pro: number; basic: number; free: number; providers: Record<string, number> }> {
-        return from(this.getUserCountFn()).pipe(
+        return from(this.functionsService.call<void, { count: number; total: number; pro: number; basic: number; free: number; providers: Record<string, number> }>('getUserCount')).pipe(
             map(result => ({
                 total: result.data.total ?? result.data.count, // Fallback for safety
                 pro: result.data.pro ?? 0,
@@ -161,33 +135,16 @@ export class AdminService {
     }
 
     getFinancialStats(): Observable<FinancialStats> {
-        return from(this.getFinancialStatsFn()).pipe(
+        return from(this.functionsService.call<void, FinancialStats>('getFinancialStats')).pipe(
             map(result => result.data)
         );
     }
 
-    // Maintenance mode
-    private setMaintenanceModeFn = httpsCallableFromURL<
-        { enabled: boolean; message?: string; env?: 'prod' | 'beta' | 'dev' },
-        { success: boolean; enabled: boolean; message: string; env: 'prod' | 'beta' | 'dev' }
-    >(this.functions, environment.functions.setMaintenanceMode);
-
-    private getMaintenanceStatusFn = httpsCallableFromURL<
-        void,
-        {
-            prod: { enabled: boolean; message: string; updatedAt?: unknown; updatedBy?: string };
-            beta: { enabled: boolean; message: string; updatedAt?: unknown; updatedBy?: string };
-            dev: { enabled: boolean; message: string; updatedAt?: unknown; updatedBy?: string };
-        }
-    >(this.functions, environment.functions.getMaintenanceStatus);
-
-    private impersonateUserFn = httpsCallableFromURL<
-        { uid: string },
-        { token: string }
-    >(this.functions, environment.functions.impersonateUser);
-
     setMaintenanceMode(enabled: boolean, message: string, env: 'prod' | 'beta' | 'dev'): Observable<{ success: boolean; enabled: boolean; message: string; env: 'prod' | 'beta' | 'dev' }> {
-        return from(this.setMaintenanceModeFn({ enabled, message, env })).pipe(
+        return from(this.functionsService.call<
+            { enabled: boolean; message?: string; env?: 'prod' | 'beta' | 'dev' },
+            { success: boolean; enabled: boolean; message: string; env: 'prod' | 'beta' | 'dev' }
+        >('setMaintenanceMode', { enabled, message, env })).pipe(
             map(result => result.data)
         );
     }
@@ -197,13 +154,13 @@ export class AdminService {
         beta: { enabled: boolean; message: string; updatedAt?: unknown; updatedBy?: string };
         dev: { enabled: boolean; message: string; updatedAt?: unknown; updatedBy?: string };
     }> {
-        return from(this.getMaintenanceStatusFn()).pipe(
+        return from(this.functionsService.call<void, any>('getMaintenanceStatus')).pipe(
             map(result => result.data)
         );
     }
 
     impersonateUser(uid: string): Observable<{ token: string }> {
-        return from(this.impersonateUserFn({ uid })).pipe(
+        return from(this.functionsService.call<{ uid: string }, { token: string }>('impersonateUser', { uid })).pipe(
             map(result => result.data)
         );
     }

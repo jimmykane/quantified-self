@@ -42,7 +42,6 @@
 
         <!-- Chart Section -->
         @if (event() && targetUserID() && currentUser()) {
-        <mat-divider></mat-divider>
         @if (selectedActivitiesDebounced().length > 0) {
         <app-event-card-chart [showAllData]="showAllData()" [showLaps]="showChartLaps()"
           [useAnimations]="useChartAnimations()" [disableGrouping]="chartDisableGrouping()"

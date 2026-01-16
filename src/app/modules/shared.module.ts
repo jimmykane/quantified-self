@@ -18,6 +18,7 @@ import { ActivityTypesMultiSelectComponent } from '../components/activity-types-
 import { ActivityTypeIconComponent } from '../components/activity-type-icon/activity-type-icon.component';
 
 import { ServiceSyncingStateComponent } from '../components/shared/service-syncing-state/service-syncing-state.component';
+import { ServiceSourceIconComponent } from '../components/event-summary/service-source-icon/service-source-icon.component';
 
 @NgModule({
     imports: [
@@ -40,6 +41,7 @@ import { ServiceSyncingStateComponent } from '../components/shared/service-synci
         ActivityTypeIconComponent,
         AppSkeletonComponent,
         ServiceSyncingStateComponent,
+        ServiceSourceIconComponent,
     ],
     providers: [],
     exports: [
@@ -60,8 +62,10 @@ import { ServiceSyncingStateComponent } from '../components/shared/service-synci
         ActivityTypesMultiSelectComponent,
         ActivityTypeIconComponent,
         ServiceSyncingStateComponent,
+        ServiceSourceIconComponent,
     ]
 })
+
 
 export class SharedModule {
 }

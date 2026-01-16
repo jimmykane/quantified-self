@@ -61,7 +61,11 @@
               ],
               "optimization": true,
               "outputHashing": "all",
-              "sourceMap": false,
+              "sourceMap": {
+                "scripts": true,
+                "styles": false,
+                "hidden": true
+              },
               "namedChunks": false,
               "extractLicenses": true,
               "fileReplacements": [
@@ -80,6 +84,11 @@
                   "maximumWarning": "6kb"
                 }
               ],
+              "sourceMap": {
+                "scripts": true,
+                "styles": false,
+                "hidden": true
+              },
               "fileReplacements": [
                 {
                   "replace": "src/environments/environment.ts",

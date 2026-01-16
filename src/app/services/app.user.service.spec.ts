@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { AppUserService } from './app.user.service';
 import { Auth, authState } from '@angular/fire/auth';
 import { Firestore, docData, setDoc, updateDoc } from '@angular/fire/firestore';
-import { Functions } from '@angular/fire/functions';
+
 import { HttpClient } from '@angular/common/http';
 import { AppEventService } from './app.event.service';
 import { AppWindowService } from './app.window.service';
@@ -24,23 +24,31 @@ vi.mock('@angular/fire/firestore', async (importOriginal) => {
         ...actual,
         doc: vi.fn().mockReturnValue({}),
         docData: vi.fn(),
-        setDoc: vi.fn(),
-        updateDoc: vi.fn(),
+        setDoc: vi.fn().mockResolvedValue(undefined),
+        updateDoc: vi.fn().mockResolvedValue(undefined),
     };
 });
+
+import { AppFunctionsService } from './app.functions.service';
 
 describe('AppUserService', () => {
     let service: AppUserService;
     let mockAuth: any;
+    let mockFunctionsService: any;
 
     beforeEach(() => {
         mockAuth = {
             currentUser: {
-                getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} })
-            }
+                getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} }),
+                uid: 'u1'
+            },
+            signOut: vi.fn().mockResolvedValue(undefined)
         };
 
-        // authState(this.auth) returns the user object
+        mockFunctionsService = {
+            call: vi.fn().mockResolvedValue({ success: true })
+        };
+
         (authState as any).mockReturnValue(of(mockAuth.currentUser));
 
         TestBed.configureTestingModule({
@@ -48,7 +56,7 @@ describe('AppUserService', () => {
                 AppUserService,
                 { provide: Auth, useValue: mockAuth },
                 { provide: Firestore, useValue: {} },
-                { provide: Functions, useValue: {} },
+                { provide: AppFunctionsService, useValue: mockFunctionsService },
                 { provide: HttpClient, useValue: {} },
                 { provide: AppEventService, useValue: {} },
                 { provide: AppWindowService, useValue: {} }
@@ -179,6 +187,31 @@ describe('AppUserService', () => {
                 { displayName: 'New Name' }
             );
         });
+
+        it('should strip restricted legal fields from update', async () => {
+            const user = { uid: 'test-uid' } as AppUserInterface;
+            const propertiesToUpdate = {
+                displayName: 'New Name',
+                acceptedMarketingPolicy: true,       // Allowed
+                acceptedPrivacyPolicy: true,         // Restricted (should be stripped)
+                acceptedDataPolicy: true             // Restricted (should be stripped)
+            };
+
+            await service.updateUserProperties(user, propertiesToUpdate);
+
+            // Should write ONLY allowed legal fields to legal/agreements
+            expect(setDoc).toHaveBeenCalledWith(
+                expect.anything(), // doc ref
+                { acceptedMarketingPolicy: true },
+                { merge: true }
+            );
+
+            // Should update main user doc WITHOUT restricted fields
+            expect(updateDoc).toHaveBeenCalledWith(
+                expect.anything(), // doc ref
+                { displayName: 'New Name' }
+            );
+        });
     });
 
     describe('static user role checks', () => {
@@ -265,6 +298,23 @@ describe('AppUserService', () => {
                 const user = { ...mockUser, stripeRole: 'free' };
                 expect(AppUserService.hasPaidAccessUser(user)).toBe(false);
             });
+        });
+    });
+    describe('deleteAllUserData', () => {
+        it('should call deleteSelf cloud function and sign out', async () => {
+            await service.deleteAllUserData({ uid: 'u1' } as any);
+
+            expect(mockFunctionsService.call).toHaveBeenCalledWith('deleteSelf');
+            expect(mockAuth.signOut).toHaveBeenCalled();
+        });
+
+        it('should handle errors', async () => {
+            const error = new Error('Delete failed');
+            mockFunctionsService.call.mockRejectedValue(error);
+            const loggerSpy = vi.spyOn((service as any).logger, 'error');
+
+            await expect(service.deleteAllUserData({ uid: 'u1' } as any)).rejects.toThrow(error);
+            expect(loggerSpy).toHaveBeenCalledWith(error);
         });
     });
 });

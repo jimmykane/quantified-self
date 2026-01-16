@@ -32,6 +32,7 @@ trigger: always_on
 ### Styling
 - Use **SCSS** for component styling.
 - Follow **Angular Material** theming conventions.
+- Use `app-service-source-icon` for displaying service logos (Garmin, Suunto, COROS) to ensure they are theme-aware (using `mat-icon` and `svgIcon`).
 - interactive maps use **Leaflet**.
 
 ### General

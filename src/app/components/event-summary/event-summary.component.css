@@ -226,18 +226,11 @@
     flex-shrink: 0;
   }
 
-  .activity-main-icon {
-    font-size: 24px;
-    width: 24px;
-    height: 24px;
-  }
-
   .text-stack {
     gap: 4px;
   }
 
   .top-meta {
-    font-size: 1rem;
     flex-direction: column;
     gap: 0;
   }
@@ -294,6 +287,7 @@
     font-size: 0.65rem;
   }
 }
+
 
 /* Stats Grid Action Buttons */
 .devices-item,

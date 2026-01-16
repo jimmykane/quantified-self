@@ -12,7 +12,7 @@ import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
 import { provideAuth, getAuth, connectAuthEmulator } from '@angular/fire/auth';
 import { provideFirestore, initializeFirestore } from '@angular/fire/firestore';
 import { getApp } from '@angular/fire/app';
-import { provideFunctions, getFunctions, httpsCallable } from '@angular/fire/functions';
+import { provideFunctions, getFunctions, httpsCallable, connectFunctionsEmulator } from '@angular/fire/functions';
 import { providePerformance, getPerformance } from '@angular/fire/performance';
 import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService, setAnalyticsCollectionEnabled } from '@angular/fire/analytics';
 import { provideRemoteConfig, getRemoteConfig } from '@angular/fire/remote-config';
@@ -95,7 +95,13 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
       });
     }),
     provideStorage(() => getStorage()),
-    provideFunctions(() => getFunctions(undefined, 'europe-west2')),
+    provideFunctions(() => {
+      const functions = getFunctions(undefined, 'europe-west2');
+      if (environment.localhost) {
+        // connectFunctionsEmulator(functions, 'localhost', 5001); // Temp disable for now
+      }
+      return functions;
+    }),
     providePerformance(() => getPerformance()),
     provideAnalytics(() => {
       const analytics = getAnalytics();

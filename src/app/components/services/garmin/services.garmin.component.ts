@@ -11,6 +11,7 @@ import { AppAuthService } from '../../../authentication/app.auth.service';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
+import { AppDeepLinkService } from '../../../services/app.deeplink.service';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
 import { GARMIN_REQUIRED_PERMISSIONS } from '../../../../../functions/src/garmin/constants';
 
@@ -50,6 +51,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     protected userService: AppUserService,
     protected route: ActivatedRoute,
     protected windowService: AppWindowService,
+    protected deepLinkService: AppDeepLinkService,
     protected snackBar: MatSnackBar) {
     super(http, fileService, eventService, authService, userService, route, windowService, snackBar);
   }
@@ -102,22 +104,8 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
 
   /**
    * Attempts to open Garmin Connect mobile app, falls back to web
-   * iOS uses gcm-ciq:// scheme, Android may not support deeplinks to settings
    */
   openGarminConnectApp(): void {
-    const webUrl = 'https://connect.garmin.com/modern/account';
-    const iosScheme = 'gcm-ciq://';
-
-    // Try iOS deeplink first (will do nothing on desktop/Android)
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = iosScheme;
-    document.body.appendChild(iframe);
-
-    // Fallback to web after a short delay
-    setTimeout(() => {
-      document.body.removeChild(iframe);
-      window.open(webUrl, '_blank');
-    }, 500);
+    this.deepLinkService.openGarminConnectApp();
   }
 }
