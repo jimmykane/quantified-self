@@ -407,12 +407,10 @@ export class UserSettingsComponent implements OnChanges {
       });
       this.analyticsService.logEvent('user_settings_update');
     } catch (e) {
-
+      this.logger.error('[UserSettingsComponent] onSubmit FAILED. Error details:', e);
       this.snackBar.open('Could not update user', undefined, {
         duration: 2000,
       });
-      this.logger.error(e);
-      // @todo add logging
     } finally {
       this.isSaving = false;
     }

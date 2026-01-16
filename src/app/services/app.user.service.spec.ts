@@ -24,8 +24,8 @@ vi.mock('@angular/fire/firestore', async (importOriginal) => {
         ...actual,
         doc: vi.fn().mockReturnValue({}),
         docData: vi.fn(),
-        setDoc: vi.fn(),
-        updateDoc: vi.fn(),
+        setDoc: vi.fn().mockResolvedValue(undefined),
+        updateDoc: vi.fn().mockResolvedValue(undefined),
     };
 });
 
@@ -174,6 +174,31 @@ describe('AppUserService', () => {
             );
 
             // Should update remaining propeties on user doc
+            expect(updateDoc).toHaveBeenCalledWith(
+                expect.anything(), // doc ref
+                { displayName: 'New Name' }
+            );
+        });
+
+        it('should strip restricted legal fields from update', async () => {
+            const user = { uid: 'test-uid' } as AppUserInterface;
+            const propertiesToUpdate = {
+                displayName: 'New Name',
+                acceptedMarketingPolicy: true,       // Allowed
+                acceptedPrivacyPolicy: true,         // Restricted (should be stripped)
+                acceptedDataPolicy: true             // Restricted (should be stripped)
+            };
+
+            await service.updateUserProperties(user, propertiesToUpdate);
+
+            // Should write ONLY allowed legal fields to legal/agreements
+            expect(setDoc).toHaveBeenCalledWith(
+                expect.anything(), // doc ref
+                { acceptedMarketingPolicy: true },
+                { merge: true }
+            );
+
+            // Should update main user doc WITHOUT restricted fields
             expect(updateDoc).toHaveBeenCalledWith(
                 expect.anything(), // doc ref
                 { displayName: 'New Name' }

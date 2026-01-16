@@ -580,28 +580,56 @@ export class AppUserService implements OnDestroy {
     return runInInjectionContext(this.injector, async () => {
       const promises = [];
       if (propertiesToUpdate.settings) {
-        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), propertiesToUpdate.settings, { merge: true }));
+        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/config/settings`), propertiesToUpdate.settings, { merge: true })
+          .catch(err => {
+            this.logger.error('[AppUserService] Settings update FAILED', err);
+            throw err;
+          })
+        );
         delete propertiesToUpdate.settings;
       }
 
       // Handle legal fields separately
       const legalUpdates: any = {};
+      const allowedLegalUpdates = ['acceptedTrackingPolicy', 'acceptedMarketingPolicy'];
+
+      // First strip all legal fields from propertiesToUpdate to ensure they don't land in the main doc
       AppUserService.legalFields.forEach(field => {
         if (field in propertiesToUpdate) {
-          legalUpdates[field] = propertiesToUpdate[field];
+          // Only allow specific legal fields to be updated via this method
+          if (allowedLegalUpdates.includes(field)) {
+            legalUpdates[field] = propertiesToUpdate[field];
+          } else {
+            this.logger.warn(`[AppUserService] Stripping restricted legal field '${field}' from update payload.`);
+          }
           delete propertiesToUpdate[field];
         }
       });
 
       if (Object.keys(legalUpdates).length > 0) {
-        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/legal/agreements`), legalUpdates, { merge: true }));
+        promises.push(setDoc(doc(this.firestore, `users/${user.uid}/legal/agreements`), legalUpdates, { merge: true })
+          .catch(err => {
+            this.logger.error('[AppUserService] Legal update FAILED', err);
+            throw err;
+          })
+        );
       }
 
       if (Object.keys(propertiesToUpdate).length > 0) {
-        promises.push(updateDoc(doc(this.firestore, 'users', user.uid), propertiesToUpdate));
+        promises.push(updateDoc(doc(this.firestore, 'users', user.uid), propertiesToUpdate)
+          .catch(err => {
+            this.logger.error('[AppUserService] Main user doc update FAILED', err);
+            throw err;
+          })
+        );
       }
 
-      await Promise.all(promises);
+      try {
+        await Promise.all(promises);
+      } catch (e) {
+        this.logger.error('[AppUserService] One or more updates failed', e);
+        throw e;
+      }
     });
   }
 
