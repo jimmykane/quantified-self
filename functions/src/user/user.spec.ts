@@ -87,7 +87,8 @@ describe('deleteSelf Cloud Function', () => {
             auth: {
                 uid,
                 token: {}
-            }
+            },
+            app: { appId: 'mock-app-id' }
         };
 
         const deleteUserMock = admin.auth().deleteUser as any; // Type assertion for mock
@@ -105,7 +106,8 @@ describe('deleteSelf Cloud Function', () => {
             auth: {
                 uid,
                 token: {}
-            }
+            },
+            app: { appId: 'mock-app-id' }
         };
 
         const deleteUserMock = admin.auth().deleteUser as any;
