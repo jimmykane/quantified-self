@@ -117,12 +117,16 @@ export class ChartsIntensityZonesComponent extends DashboardChartAbstractDirecti
       categoryLabel.label.hideOversized = false;
       categoryLabel.label.fontSize = '0.75em';
       categoryLabel.label.dy = -10;
-      categoryLabel.label.padding(1, 2, 0, 2);
+      categoryLabel.label.fill = this.core.color('#ffffff');
+      categoryLabel.label.padding(1, 4, 1, 4);
 
       categoryLabel.label.background = new this.core.RoundedRectangle();
 
       categoryLabel.label.background.fillOpacity = 1;
       categoryLabel.label.background.strokeOpacity = 1;
+      categoryLabel.label.background.adapter.add('fill', (fill, target) => {
+        return target.dataItem && target.dataItem.dataContext ? this.eventColorService.getColorForZone(target.dataItem.dataContext['zone']) : null;
+      });
       categoryLabel.label.background.adapter.add('stroke', (stroke, target) => {
         return target.dataItem && target.dataItem.dataContext ? this.eventColorService.getColorForZone(target.dataItem.dataContext['zone']) : null;
       });

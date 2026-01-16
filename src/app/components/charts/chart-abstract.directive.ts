@@ -125,8 +125,8 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
         if (target.className === 'AxisLabelCircular' || (target.className === 'Label' && target.parent?.className === 'Grid')) {
           target.fill = am4core.color("#ffffff");
         }
-        // Fix legend labels
-        if (target.className === 'Label' && target.parent?.className === 'LegendDataItem') {
+        // Fix legend and bullet labels
+        if (target.className === 'Label' && (target.parent?.className === 'LegendDataItem' || target.parent?.className === 'LabelBullet' || target.parent?.className === 'Label')) {
           target.fill = am4core.color("#ffffff");
         }
       };

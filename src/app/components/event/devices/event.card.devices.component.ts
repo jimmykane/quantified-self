@@ -63,6 +63,7 @@ export class EventCardDevicesComponent implements OnChanges {
         'Type': device.type,
         'Name': device.name,
         'Battery Status': device.batteryStatus,
+        'Battery Level': device.batteryLevel,
         'Battery Voltage': device.batteryVoltage,
         'Manufacturer': device.manufacturer,
         'Serial Number': device.serialNumber,
@@ -78,7 +79,7 @@ export class EventCardDevicesComponent implements OnChanges {
 
       deviceDataArray.push(deviceObject);
       return deviceDataArray;
-    }, []);
+    }, [] as any[]);
   }
 
   getDataSource(activity: ActivityInterface): MatTableDataSource<any> | undefined {
