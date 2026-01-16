@@ -1,5 +1,3 @@
-@if (serviceLogo === 'upload_file') {
-<mat-icon class="service-logo" [matTooltip]="'Source: ' + serviceName">upload_file</mat-icon>
-} @else if (serviceLogo) {
+@if (serviceLogo) {
 <mat-icon [svgIcon]="serviceLogo" class="service-logo" [matTooltip]="'Synced from ' + serviceName"></mat-icon>
 }

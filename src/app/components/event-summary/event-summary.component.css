@@ -80,7 +80,7 @@
 
 .top-meta {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 6px;
   color: var(--mat-app-on-surface);
   font-size: 1.1rem;

@@ -40,7 +40,7 @@ export class ServiceSourceIconComponent implements OnChanges {
                 } else if (keys.includes(ServiceNames.GarminAPI)) {
                     this.serviceName = ServiceNames.GarminAPI;
                 } else {
-                    this.serviceName = 'Manual' as ServiceNames;
+                    this.serviceName = null;
                 }
 
                 if (this.serviceName) {
@@ -49,19 +49,11 @@ export class ServiceSourceIconComponent implements OnChanges {
                     this.serviceLogo = null;
                 }
                 this.cd.markForCheck();
-            } else {
-                // No keys means manual upload
-                this.serviceName = 'Manual' as ServiceNames;
-                this.serviceLogo = 'upload_file';
-                this.cd.markForCheck();
             }
         });
     }
 
     private getServiceLogo(serviceName: ServiceNames): string {
-        if (serviceName === ('Manual' as ServiceNames)) {
-            return 'upload_file';
-        }
         switch (serviceName) {
             case ServiceNames.COROSAPI:
                 return 'coros';
