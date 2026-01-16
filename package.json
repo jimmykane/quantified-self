@@ -18,7 +18,7 @@
     "test:rules": "npx firebase emulators:exec --project demo-test --only firestore 'npx vitest run --config vitest.rules.config.ts'",
     "test-coverage": "vitest run --coverage",
     "lint": "ng lint",
-    "sentry:upload-sourcemaps": "sentry-cli sourcemaps upload --org sports-alliance --project quantified-self dist",
+    "sentry:upload-sourcemaps": "sentry-cli sourcemaps upload --org dimitrios-kanellopoulos --project quantified-self dist",
     "e2e": "ng e2e"
   },
   "private": true,
