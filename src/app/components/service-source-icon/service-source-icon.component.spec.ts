@@ -78,4 +78,34 @@ describe('ServiceSourceIconComponent', () => {
         expect(component.serviceName).toBe(ServiceNames.COROSAPI);
         expect(component.serviceLogo).toBe('coros');
     });
+
+    it('should fallback to Manual for unknown sources', () => {
+        const user = { getID: () => 'user-1' } as any as User;
+        const event = { getID: () => 'event-1' } as any as EventInterface;
+        eventService.getEventMetaDataKeys.mockReturnValue(of(['unknown_key']));
+
+        component.user = user;
+        component.event = event;
+        component.ngOnChanges({
+            event: { currentValue: event, previousValue: null, firstChange: true, isFirstChange: () => true }
+        });
+
+        expect(component.serviceName).toBe('Manual');
+        expect(component.serviceLogo).toBe('cloud_upload');
+    });
+
+    it('should fallback to Manual if no keys are returned', () => {
+        const user = { getID: () => 'user-1' } as any as User;
+        const event = { getID: () => 'event-1' } as any as EventInterface;
+        eventService.getEventMetaDataKeys.mockReturnValue(of([]));
+
+        component.user = user;
+        component.event = event;
+        component.ngOnChanges({
+            event: { currentValue: event, previousValue: null, firstChange: true, isFirstChange: () => true }
+        });
+
+        expect(component.serviceName).toBe('Manual');
+        expect(component.serviceLogo).toBe('cloud_upload');
+    });
 });
