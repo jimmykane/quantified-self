@@ -84,11 +84,6 @@
                   "maximumWarning": "6kb"
                 }
               ],
-              "sourceMap": {
-                "scripts": true,
-                "styles": false,
-                "hidden": true
-              },
               "fileReplacements": [
                 {
                   "replace": "src/environments/environment.ts",
