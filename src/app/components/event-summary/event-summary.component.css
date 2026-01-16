@@ -226,12 +226,6 @@
     flex-shrink: 0;
   }
 
-  .activity-main-icon {
-    font-size: 24px;
-    width: 24px;
-    height: 24px;
-  }
-
   .text-stack {
     gap: 4px;
   }

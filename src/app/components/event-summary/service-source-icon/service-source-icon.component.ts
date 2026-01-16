@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnChanges, SimpleChanges } from '@angular/core';
 import { EventInterface, ServiceNames, User } from '@sports-alliance/sports-lib';
-import { AppEventService } from '../../services/app.event.service';
+import { AppEventService } from '../../../services/app.event.service';
 
 @Component({
     selector: 'app-service-source-icon',

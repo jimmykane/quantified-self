@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ServiceSourceIconComponent } from './service-source-icon.component';
-import { AppEventService } from '../../services/app.event.service';
+import { AppEventService } from '../../../services/app.event.service';
 import { of } from 'rxjs';
 import { EventInterface, ServiceNames, User } from '@sports-alliance/sports-lib';
 import { MatIconModule } from '@angular/material/icon';
