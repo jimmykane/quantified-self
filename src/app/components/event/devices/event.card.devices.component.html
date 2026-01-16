@@ -10,7 +10,18 @@
       <ng-container [matColumnDef]="column">
         <mat-header-cell *matHeaderCellDef><app-data-type-icon
             [dataType]="column"></app-data-type-icon></mat-header-cell>
-        <mat-cell *matCellDef="let row">{{ row[column] }}</mat-cell>
+        <mat-cell *matCellDef="let row">
+          @if (column === 'Battery Level') {
+          <div class="battery-cell" [ngClass]="getBatteryColorClass(row[column])">
+            <mat-icon>{{ getBatteryIcon(row[column]) }}</mat-icon>
+            <span>{{ row[column] }}%</span>
+          </div>
+          } @else if (column === 'Battery Voltage') {
+          {{ row[column] | number:'1.1-2' }} V
+          } @else {
+          {{ row[column] }}
+          }
+        </mat-cell>
       </ng-container>
       }
       <mat-header-row *matHeaderRowDef="getColumns(activity)"></mat-header-row>

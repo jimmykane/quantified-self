@@ -17,7 +17,7 @@ mat-header-cell,
 mat-cell {
   padding-right: 24px;
   min-width: 80px;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   box-sizing: border-box;
   white-space: nowrap;
 }
@@ -40,4 +40,48 @@ mat-cell:first-of-type {
 .table-container {
   overflow-x: auto;
   width: 100%;
+}
+
+/* Center align specific metric columns */
+.mat-column-Battery-Level,
+.mat-column-Battery-Voltage,
+.mat-column-Product-ID,
+.mat-column-Serial-Number,
+.mat-column-Manufacturer {
+  justify-content: center;
+  text-align: center;
+}
+
+.battery-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.battery-cell mat-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  /* Rotate vertical battery icons to be horizontal if preferred, 
+     but standard material battery icons are vertical or horizontal depending on set. 
+     Usually 'battery_full' is vertical. Let's rotate it 90deg? 
+     Actually standard is vertical. Let's keep it vertical or rotate 90deg to look like a standard bar.
+     Let's rotate 90deg for a horizontal look. */
+  transform: rotate(90deg);
+}
+
+.battery-good {
+  color: var(--mat-sys-primary);
+  /* Or a specific green if primary isn't suitable */
+  /* If checking for successful/good state, maybe a green variable */
+  color: #4caf50;
+}
+
+.battery-medium {
+  color: #ff9800;
+}
+
+.battery-low {
+  color: #f44336;
 }
