@@ -4,7 +4,7 @@
         <span class="banner-text">
             Your Pro plan has ended. You have until <strong>{{ gracePeriodUntil | date }}</strong> before your device
             sync
-            is disconnected and your activities are reduced to 10. Newest activities will be deleted first.
+            is disconnected and your activities are reduced to 10. Oldest activities will be deleted first.
             <a routerLink="/pricing" color="accent">Upgrade now</a> to keep your data.
         </span>
         <button mat-icon-button class="banner-close-btn" aria-label="Dismiss notification" (click)="dismiss()">
