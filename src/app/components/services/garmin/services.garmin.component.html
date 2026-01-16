@@ -140,7 +140,7 @@
         </p>
         @if (hasProAccess) {
         <app-history-import-form [serviceName]="serviceName" [userMetaForService]="serviceMeta"
-          [missingPermissions]="missingPermissions"
+          [missingPermissions]="missingPermissions" [isLoadingParent]="isLoading"
           (importInitiated)="onHistoryImportInitiated()"></app-history-import-form>
         }
       </div>

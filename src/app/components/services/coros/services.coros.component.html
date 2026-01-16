@@ -106,7 +106,7 @@
       <div class="feature-card-content">
         <p class="feature-description" *ngIf="!hasProAccess">Import your full activity history from COROS.</p>
         <app-history-import-form [serviceName]="serviceName" [minDate]="minDate" [userMetaForService]="serviceMeta"
-          (importInitiated)="onHistoryImportInitiated()"></app-history-import-form>
+          [isLoadingParent]="isLoading" (importInitiated)="onHistoryImportInitiated()"></app-history-import-form>
       </div>
     </mat-card>
 
