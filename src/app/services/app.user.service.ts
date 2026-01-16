@@ -82,7 +82,7 @@ import { DataPeakEPOC } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc, getDoc } from '@angular/fire/firestore';
-import { httpsCallableFromURL, Functions } from '@angular/fire/functions';
+import { AppFunctionsService } from './app.functions.service';
 
 
 /**
@@ -95,7 +95,7 @@ export class AppUserService implements OnDestroy {
 
   private firestore = inject(Firestore);
   private auth = inject(Auth);
-  private functions = inject(Functions);
+  private functionsService = inject(AppFunctionsService);
   private injector = inject(EnvironmentInjector);
 
   static getDefaultChartTheme(): ChartThemes {
@@ -813,8 +813,7 @@ export class AppUserService implements OnDestroy {
 
   public async deleteAllUserData(user: User) {
     try {
-      const deleteSelf = httpsCallableFromURL(this.functions, environment.functions.deleteSelf);
-      await deleteSelf();
+      await this.functionsService.call('deleteSelf');
       await this.auth.signOut();
     } catch (e) {
       this.logger.error(e);

@@ -46,6 +46,6 @@ export const environment = {
     requestAndSetCOROSAPIAccessToken: 'https://europe-west2-quantified-self-io.cloudfunctions.net/requestAndSetCOROSAPIAccessToken',
     deauthorizeCOROSAPI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/deauthorizeCOROSAPI',
     COROSAPIHistoryImportURI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/addCOROSAPIHistoryToQueue',
-    deleteSelf: 'https://europe-west2-quantified-self-io.cloudfunctions.net/deleteSelf',
+
   }
 };

@@ -7,7 +7,10 @@ export const FUNCTIONS_MANIFEST = {
     setMaintenanceMode: { name: 'setMaintenanceMode', region: 'europe-west2' },
     getMaintenanceStatus: { name: 'getMaintenanceStatus', region: 'europe-west2' },
     impersonateUser: { name: 'impersonateUser', region: 'europe-west2' },
-    getFinancialStats: { name: 'getFinancialStats', region: 'europe-west2' }
+    getFinancialStats: { name: 'getFinancialStats', region: 'europe-west2' },
+
+    // User Functions
+    deleteSelf: { name: 'deleteSelf', region: 'europe-west2' }
 } as const;
 
 export type FunctionName = keyof typeof FUNCTIONS_MANIFEST;
