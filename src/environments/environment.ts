@@ -23,7 +23,7 @@ export const environment = {
     messagingSenderId: '242713487388',
     appId: '1:242713487388:web:df287e1940b40a90',
     measurementId: 'G-6YE27NNKDT',
-    recaptchaSiteKey: '6LfOOS0sAAAAAOqqukfJOPGUGC-h5REYwGTqPGpM'
+    recaptchaSiteKey: '6Lfi_EwsAAAAACWwUUff0cd4E-92EJnXEwFuOSzz'
   },
   functions: {
     createPortalLink: 'https://europe-west3-quantified-self-io.cloudfunctions.net/ext-firestore-stripe-payments-createPortalLink',
