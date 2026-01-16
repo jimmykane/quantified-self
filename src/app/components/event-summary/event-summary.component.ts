@@ -15,7 +15,8 @@ import {
   RPEBorgCR10SCale,
   ActivityTypes,
   ActivityTypesHelper,
-  ActivityTypeGroups
+  ActivityTypeGroups,
+  ServiceNames,
 } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -170,4 +171,8 @@ export class EventSummaryComponent implements OnChanges {
     };
     return emojiMap[f] || '';
   }
+
+
+
+
 }

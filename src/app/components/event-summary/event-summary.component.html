@@ -15,6 +15,7 @@
           <span class="date"><b>{{ event.startDate | date:"d MMM yyyy" }}</b></span>
           <span class="time-separator">at</span>
           <span class="time">{{ event.startDate | date:"shortTime" }}</span>
+          <app-service-source-icon [event]="event" [user]="user"></app-service-source-icon>
         </div>
         <div class="chips-row">
           <span class="chip activity-chip">{{ mainActivityType }}</span>

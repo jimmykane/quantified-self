@@ -3,9 +3,7 @@ import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bott
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppEventService } from '../../../services/app.event.service';
 import { DataFeeling, DataRPE, EventInterface, Feelings, isNumber, RPEBorgCR10SCale, User } from '@sports-alliance/sports-lib';
-import { ServiceNames } from '@sports-alliance/sports-lib';
 import { EnumeratorHelpers } from '../../../helpers/enumerator-helpers';
-import { AppEventInterface } from '../../../../../functions/src/shared/app-event.interface';
 
 @Component({
     selector: 'app-event-details-summary-bottom-sheet',
@@ -21,8 +19,6 @@ export class EventDetailsSummaryBottomSheetComponent implements OnInit {
     rpe!: RPEBorgCR10SCale;
     feelings = EnumeratorHelpers.getNumericEnumKeyValue(Feelings);
     rpeBorgCR10SCale = EnumeratorHelpers.getNumericEnumKeyValue(RPEBorgCR10SCale);
-    serviceName: ServiceNames | null = null;
-    serviceLogo: string | null = null;
 
     constructor(
         @Inject(MAT_BOTTOM_SHEET_DATA) public data: { event: EventInterface, user: User },
@@ -41,23 +37,6 @@ export class EventDetailsSummaryBottomSheetComponent implements OnInit {
         if (this.event.getStat(DataRPE.type)) {
             this.rpe = (<DataRPE>this.event.getStat(DataRPE.type)).getValue();
         }
-
-        this.eventService.getEventMetaDataKeys(this.user, this.event.getID()!).subscribe(keys => {
-            if (keys && keys.length > 0) {
-                // Check for known services
-                if (keys.includes(ServiceNames.COROSAPI)) {
-                    this.serviceName = ServiceNames.COROSAPI;
-                } else if (keys.includes(ServiceNames.SuuntoApp)) {
-                    this.serviceName = ServiceNames.SuuntoApp;
-                } else if (keys.includes(ServiceNames.GarminAPI)) {
-                    this.serviceName = ServiceNames.GarminAPI;
-                }
-
-                if (this.serviceName) {
-                    this.serviceLogo = this.getServiceLogo(this.serviceName);
-                }
-            }
-        });
     }
 
     returnZero() {
@@ -95,18 +74,5 @@ export class EventDetailsSummaryBottomSheetComponent implements OnInit {
         this.event.addStat(new DataRPE(this.rpe));
         await this.eventService.writeAllEventData(this.user, this.event);
         this.snackBar.open('RPE saved', undefined, { duration: 2000 });
-    }
-
-    private getServiceLogo(serviceName: ServiceNames): string {
-        switch (serviceName) {
-            case ServiceNames.COROSAPI:
-                return 'assets/logos/coros.svg';
-            case ServiceNames.SuuntoApp:
-                return 'assets/logos/suunto-logo.svg';
-            case ServiceNames.GarminAPI:
-                return 'assets/logos/garmin.svg';
-            default:
-                return '';
-        }
     }
 }
