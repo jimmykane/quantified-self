@@ -41,10 +41,23 @@ describe('onAdminCall Wrapper', () => {
         const handler = vi.fn();
         const wrapped = onAdminCall({}, handler);
         const request = {
-            auth: { token: { admin: false } }
+            auth: { token: { admin: false } },
+            app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
 
         await expect(wrapped(request)).rejects.toThrow('Only admins can call this function.');
+        expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('should throw "unauthenticated" if request is not App Check verified', async () => {
+        const handler = vi.fn();
+        const wrapped = onAdminCall({}, handler);
+        const request = {
+            auth: { token: { admin: true } },
+            app: undefined
+        } as unknown as CallableRequest<any>;
+
+        await expect(wrapped(request)).rejects.toThrow('The function must be called from an App Check verified app.');
         expect(handler).not.toHaveBeenCalled();
     });
 
@@ -52,7 +65,8 @@ describe('onAdminCall Wrapper', () => {
         const handler = vi.fn().mockResolvedValue({ success: true });
         const wrapped = onAdminCall({}, handler);
         const request = {
-            auth: { token: { admin: true } }
+            auth: { token: { admin: true } },
+            app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
 
         const result = await wrapped(request);
