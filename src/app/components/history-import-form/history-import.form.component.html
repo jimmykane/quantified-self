@@ -1,48 +1,59 @@
 @if (userMetaForService && userMetaForService.didLastHistoryImport && !isAllowedToDoHistoryImport) {
-<mat-card class="status-card">
+<mat-card class="status-card glass-card">
   <mat-card-header>
-    <mat-icon mat-card-avatar>history_toggle_off</mat-icon>
+    <mat-icon mat-card-avatar class="header-icon">history_toggle_off</mat-icon>
     <mat-card-title>Import Status</mat-card-title>
     <mat-card-subtitle>Last import: {{ userMetaForService.didLastHistoryImport | date: 'short' }}</mat-card-subtitle>
   </mat-card-header>
   <mat-card-content>
-    <mat-list role="list">
+    <div class="dashboard-grid">
       @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI) {
-      <mat-list-item role="listitem">
-        <mat-icon matListItemIcon>queue</mat-icon>
-        <div matListItemTitle>Queued Activities</div>
-        <div matListItemLine class="stats-value">{{ userMetaForService.processedActivitiesFromLastHistoryImportCount }}
+      <div class="stat-card">
+        <div class="stat-header">
+          <mat-icon>queue</mat-icon>
+          <span class="stat-label">Queued</span>
         </div>
-      </mat-list-item>
-      <mat-list-item role="listitem">
-        <mat-icon matListItemIcon>info</mat-icon>
-        <div matListItemTitle>Cooldown Period</div>
-        <div matListItemLine>
-          <mat-chip-listbox>
-            <mat-chip-option highlighted color="warn" [selectable]="false">{{ cooldownDays }} days</mat-chip-option>
-          </mat-chip-listbox>
+        <div class="stat-value highlight">{{ userMetaForService.processedActivitiesFromLastHistoryImportCount }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-header">
+          <mat-icon>hourglass_empty</mat-icon>
+          <span class="stat-label">Cooldown</span>
         </div>
-        <p matListItemLine class="mat-caption text-secondary">~{{ activitiesPerDayLimit }} activities/day limit</p>
-      </mat-list-item>
+        <div class="stat-value">
+          <span class="badge warn">{{ cooldownDays }} {{ cooldownDays === 1 ? 'day' : 'days' }}</span>
+        </div>
+        <span class="stat-hint">~{{ activitiesPerDayLimit }} / day</span>
+      </div>
       } @else if (serviceName === serviceNames.GarminAPI) {
-      <mat-list-item role="listitem">
-        <mat-icon matListItemIcon>timer</mat-icon>
-        <div matListItemTitle>Cooldown</div>
-        <div matListItemLine>
-          <mat-chip-listbox>
-            <mat-chip-option highlighted color="accent" [selectable]="false">{{ garminCooldownDays }} days
-              fixed</mat-chip-option>
-          </mat-chip-listbox>
+      <div class="stat-card">
+        <div class="stat-header">
+          <mat-icon>timer</mat-icon>
+          <span class="stat-label">Cooldown</span>
         </div>
-      </mat-list-item>
+        <div class="stat-value">
+          <span class="badge accent">{{ garminCooldownDays }} days</span>
+        </div>
+      </div>
+      <div class="stat-card disabled">
+        <div class="stat-header">
+          <mat-icon>queue</mat-icon>
+          <span class="stat-label">Queued</span>
+        </div>
+        <div class="stat-value">-</div>
+      </div>
       }
-      <mat-divider></mat-divider>
-      <mat-list-item role="listitem">
-        <mat-icon matListItemIcon>event_available</mat-icon>
-        <div matListItemTitle>Next Available Import</div>
-        <div matListItemLine class="date-highlight">{{ nextImportAvailableDate | date: 'medium' }}</div>
-      </mat-list-item>
-    </mat-list>
+
+      <div class="stat-card full-width next-available-card">
+        <div class="stat-row">
+          <mat-icon>event_available</mat-icon>
+          <div class="stat-column">
+            <span class="stat-label">Next Available Import</span>
+            <span class="stat-value date-highlight">{{ nextImportAvailableDate | date: 'medium' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
   </mat-card-content>
 </mat-card>
 }

@@ -2,26 +2,142 @@
 
 .status-card {
   margin-bottom: 24px;
-  background-color: var(--mat-sys-surface-variant);
-  color: var(--mat-sys-on-surface-variant);
 }
 
-.status-card mat-card-content {
-  padding-top: 0;
+.status-card mat-card-header {
+  margin-bottom: 16px;
 }
 
-.stats-value {
-  font-weight: 500;
-  font-size: 1.1em;
-}
-
-.text-secondary {
-  color: var(--mat-sys-outline);
-}
-
-.date-highlight {
+.header-icon {
   color: var(--mat-sys-primary);
-  font-weight: bold;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.stat-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 80px;
+  justify-content: center;
+}
+
+:host-context(.light-theme) .stat-card {
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.stat-card.full-width {
+  grid-column: 1 / -1;
+  width: auto;
+}
+
+.stat-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.stat-header mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  color: var(--mat-sys-on-surface-variant);
+  opacity: 0.7;
+}
+
+.stat-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--mat-sys-on-surface-variant);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.8;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--mat-sys-on-surface);
+  line-height: 1.2;
+}
+
+.stat-value.highlight {
+  color: var(--mat-sys-primary);
+  font-size: 2rem;
+}
+
+.stat-hint {
+  font-size: 0.75rem;
+  color: var(--mat-sys-on-surface-variant);
+  opacity: 0.6;
+  margin-top: 4px;
+}
+
+.badge {
+  display: inline-flex;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge.warn {
+  background-color: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+}
+
+.badge.accent {
+  background-color: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+}
+
+.next-available-card {
+  margin-top: 8px;
+  background: var(--mat-sys-primary-container);
+  color: var(--mat-sys-on-primary-container);
+  border: none;
+}
+
+.stat-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.stat-column {
+  display: flex;
+  flex-direction: column;
+}
+
+.next-available-card mat-icon {
+  color: var(--mat-sys-on-primary-container);
+  opacity: 0.8;
+}
+
+.next-available-card .stat-label {
+  color: var(--mat-sys-on-primary-container);
+  opacity: 0.8;
+}
+
+.next-available-card .stat-value {
+  color: var(--mat-sys-on-primary-container);
+  font-size: 1.1rem;
+}
+
+.stat-card.disabled {
+  opacity: 0.5;
 }
 
 /* Ensure list items wrap properly */
