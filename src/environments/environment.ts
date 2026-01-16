@@ -38,7 +38,7 @@ export const environment = {
     stWorkoutDownloadAsFit: 'https://europe-west2-quantified-self-io.cloudfunctions.net/stWorkoutDownloadAsFit',
     getGarminAPIAuthRequestTokenRedirectURI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/getGarminAPIAuthRequestTokenRedirectURI',
     requestAndSetGarminAPIAccessToken: 'https://europe-west2-quantified-self-io.cloudfunctions.net/requestAndSetGarminAPIAccessToken',
-    backfillHealthAPIActivities: 'https://europe-west2-quantified-self-io.cloudfunctions.net/backfillHealthAPIActivities',
+    backfillGarminAPIActivities: 'https://europe-west2-quantified-self-io.cloudfunctions.net/backfillGarminAPIActivities',
     deauthorizeGarminAPI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/deauthorizeGarminAPI',
     getSuuntoAPIAuthRequestTokenRedirectURI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/getSuuntoAPIAuthRequestTokenRedirectURI',
     requestAndSetSuuntoAPIAccessToken: 'https://europe-west2-quantified-self-io.cloudfunctions.net/requestAndSetSuuntoAPIAccessToken',

@@ -475,7 +475,7 @@ export class AppUserService implements OnDestroy {
     const idToken = await this.auth.currentUser?.getIdToken(true);
     const serviceNamesToFunctionsURI = {
       [ServiceNames.SuuntoApp]: environment.functions.suuntoAPIHistoryImportURI,
-      [ServiceNames.GarminAPI]: environment.functions.backfillHealthAPIActivities,
+      [ServiceNames.GarminAPI]: environment.functions.backfillGarminAPIActivities,
       [ServiceNames.COROSAPI]: environment.functions.COROSAPIHistoryImportURI,
     }
     return this.http.post(
