@@ -79,8 +79,11 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
     provideHttpClient(withInterceptorsFromDi()),
     provideFirebaseApp(() => initializeApp(environment.firebase)),
     provideAppInitializer(() => {
+      if (!environment.production && !environment.beta) {
+        (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+      }
       const provider = new ReCaptchaV3Provider(environment.firebase.recaptchaSiteKey);
-      initializeAppCheck(undefined, { provider, isTokenAutoRefreshEnabled: true });
+      return Promise.resolve(initializeAppCheck(undefined, { provider, isTokenAutoRefreshEnabled: true }));
     }),
     provideAuth(() => {
       const auth = getAuth();
