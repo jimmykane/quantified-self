@@ -8,7 +8,7 @@ import { provideAnimations } from '@angular/platform-browser/animations';
 import { SideNavComponent } from './components/sidenav/sidenav.component';
 import { environment } from '../environments/environment';
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
-import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
+import { provideFirebaseApp, initializeApp, FirebaseApp } from '@angular/fire/app';
 import { provideAuth, getAuth, connectAuthEmulator } from '@angular/fire/auth';
 import { provideFirestore, initializeFirestore } from '@angular/fire/firestore';
 import { getApp } from '@angular/fire/app';
@@ -79,11 +79,12 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
     provideHttpClient(withInterceptorsFromDi()),
     provideFirebaseApp(() => initializeApp(environment.firebase)),
     provideAppInitializer(() => {
+      const app = inject(FirebaseApp);
       if (!environment.production && !environment.beta) {
         (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
       }
       const provider = new ReCaptchaV3Provider(environment.firebase.recaptchaSiteKey);
-      return Promise.resolve(initializeAppCheck(undefined, { provider, isTokenAutoRefreshEnabled: true }));
+      return Promise.resolve(initializeAppCheck(app, { provider, isTokenAutoRefreshEnabled: true }));
     }),
     provideAuth(() => {
       const auth = getAuth();
