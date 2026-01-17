@@ -158,6 +158,106 @@
     gap: 8px;
 }
 
+/* How It Works Section */
+/* How It Works Section */
+.how-it-works {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-top: 2rem;
+    padding: 1rem 0;
+}
+
+.step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.step-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--mat-sys-primary-container, rgba(63, 81, 181, 0.12));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease, background 0.2s ease;
+
+    mat-icon {
+        color: var(--mat-sys-primary, #3f51b5);
+        font-size: 24px;
+        width: 24px;
+        height: 24px;
+    }
+}
+
+.step:hover .step-icon {
+    transform: scale(1.1);
+    background: var(--mat-sys-primary, #3f51b5);
+
+    mat-icon {
+        color: var(--mat-sys-on-primary, #ffffff);
+    }
+}
+
+.step-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--mat-sys-on-surface-variant, rgba(0, 0, 0, 0.6));
+}
+
+.step-arrow {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    margin-top: 15px; // (48px icon height - 18px arrow height) / 2
+    opacity: 0.5;
+}
+
+/* File Format Badges */
+.file-formats {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+}
+
+.format-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 16px;
+    background: var(--mat-sys-surface-variant, rgba(0, 0, 0, 0.04));
+    border: 1px solid var(--mat-sys-outline-variant, rgba(0, 0, 0, 0.12));
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--mat-sys-on-surface-variant, rgba(0, 0, 0, 0.7));
+    transition: all 0.2s ease;
+
+    mat-icon {
+        font-size: 14px;
+        width: 14px;
+        height: 14px;
+    }
+}
+
+.format-badge:hover {
+    background: var(--mat-sys-primary, #3f51b5);
+    color: var(--mat-sys-on-primary, #ffffff);
+    border-color: var(--mat-sys-primary, #3f51b5);
+
+    mat-icon {
+        color: var(--mat-sys-on-primary, #ffffff);
+    }
+}
+
 /* Right Side: Grid Feature List */
 .features-section {
     flex: 1;
