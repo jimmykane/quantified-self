@@ -40,7 +40,8 @@ export class EventCardDevicesComponent implements OnChanges {
       if (data.length > 0) {
         const dataSource = new MatTableDataSource(data);
         this.dataSourcesMap.set(activity.getID(), dataSource);
-        this.columnsMap.set(activity.getID(), this.calculateColumns(dataSource));
+        const columns = this.calculateColumns(dataSource);
+        this.columnsMap.set(activity.getID(), columns);
       }
     });
   }
@@ -51,7 +52,8 @@ export class EventCardDevicesComponent implements OnChanges {
     return allPossibleColumns.filter(column => {
       return dataSource.data.find(row => {
         const val = row[column];
-        return val !== undefined && val !== null && val !== '';
+        const isVisible = val !== undefined && val !== null && val !== '';
+        return isVisible;
       });
     });
   }
@@ -60,13 +62,14 @@ export class EventCardDevicesComponent implements OnChanges {
     return activity.creator.devices.reduce((deviceDataArray, device, index) => {
       const deviceObject = {
         '#': index + 1,
-        'Type': device.type,
+        'Type': device.type === 'Unknown' ? '' : device.type,
         'Name': device.name,
         'Battery Status': device.batteryStatus,
+        'Battery Level': device.batteryLevel,
         'Battery Voltage': device.batteryVoltage,
         'Manufacturer': device.manufacturer,
         'Serial Number': device.serialNumber,
-        'Product I. D.': device.product,
+        'Product ID': device.product,
         'Software Info': device.swInfo,
         'Hardware Info': device.hwInfo,
         'Ant Device Number': device.antDeviceNumber,
@@ -76,9 +79,28 @@ export class EventCardDevicesComponent implements OnChanges {
         'Cumulative Operating Time': device.cumOperatingTime,
       };
 
+
+
       deviceDataArray.push(deviceObject);
       return deviceDataArray;
-    }, []);
+    }, [] as any[]);
+  }
+
+  getBatteryIcon(level: number): string {
+    if (level >= 90) return 'battery_full';
+    if (level >= 80) return 'battery_6_bar';
+    if (level >= 60) return 'battery_5_bar';
+    if (level >= 50) return 'battery_4_bar';
+    if (level >= 30) return 'battery_3_bar';
+    if (level >= 20) return 'battery_2_bar';
+    if (level >= 10) return 'battery_1_bar';
+    return 'battery_alert';
+  }
+
+  getBatteryColorClass(level: number): string {
+    if (level > 50) return 'battery-good';
+    if (level > 20) return 'battery-medium';
+    return 'battery-low';
   }
 
   getDataSource(activity: ActivityInterface): MatTableDataSource<any> | undefined {

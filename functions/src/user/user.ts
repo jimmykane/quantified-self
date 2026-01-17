@@ -24,6 +24,12 @@ export const deleteSelf = functions
                 'The function must be called while authenticated.'
             );
         }
+        if (!context.app) {
+            throw new functions.https.HttpsError(
+                'failed-precondition',
+                'The function must be called from an App Check verified app.'
+            );
+        }
 
         const uid = context.auth.uid;
         logger.info(`Requesting deletion for user: ${uid} `);

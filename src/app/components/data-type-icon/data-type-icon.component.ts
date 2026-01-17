@@ -118,13 +118,34 @@ export class DataTypeIconComponent {
         return 'font_download';
       case 'Name':
       case 'name':
-        return 'title';
+        return 'badge';
       case 'Battery Status':
         return 'battery_unknown';
       case 'Manufacturer':
         return 'business';
       case 'Software Info':
         return 'system_update_alt';
+      case 'Battery Level':
+        return 'battery_full';
+      case 'Battery Voltage':
+        return 'bolt';
+      case 'Product I. D.':
+      case 'Product ID':
+        return 'fingerprint';
+      case 'Serial Number':
+        return 'numbers';
+      case 'Hardware Info':
+        return 'memory';
+      case 'Ant Device Number':
+        return 'settings_input_antenna';
+      case 'Ant Network':
+        return 'hub';
+      case 'Ant Transmission Type':
+        return 'router';
+      case 'Source Type':
+        return 'input';
+      case 'Cumulative Operating Time':
+        return 'timer';
       default:
         return null;
     }

@@ -104,7 +104,8 @@ describe('listUsers Cloud Function - Service Filtering', () => {
 
         const request = {
             data: { filterService: 'garmin' },
-            auth: { uid: 'admin', token: { admin: true } }
+            auth: { uid: 'admin', token: { admin: true } },
+            app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
 
         const result: any = await (listUsers as any)(request);
@@ -129,7 +130,8 @@ describe('listUsers Cloud Function - Service Filtering', () => {
 
         const request = {
             data: { filterService: 'suunto' },
-            auth: { uid: 'admin', token: { admin: true } }
+            auth: { uid: 'admin', token: { admin: true } },
+            app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
 
         const result: any = await (listUsers as any)(request);
@@ -153,7 +155,8 @@ describe('listUsers Cloud Function - Service Filtering', () => {
 
         const request = {
             data: { filterService: 'coros' },
-            auth: { uid: 'admin', token: { admin: true } }
+            auth: { uid: 'admin', token: { admin: true } },
+            app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
 
         const result: any = await (listUsers as any)(request);
@@ -178,7 +181,8 @@ describe('listUsers Cloud Function - Service Filtering', () => {
 
         const request = {
             data: { filterService: 'garmin' },
-            auth: { uid: 'admin', token: { admin: true } }
+            auth: { uid: 'admin', token: { admin: true } },
+            app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
 
         const result: any = await (listUsers as any)(request);

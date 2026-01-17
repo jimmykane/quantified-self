@@ -22,7 +22,7 @@ export const environment = {
     messagingSenderId: '242713487388',
     appId: '1:242713487388:web:df287e1940b40a90',
     measurementId: 'G-6YE27NNKDT',
-    recaptchaSiteKey: '6LfOOS0sAAAAAOqqukfJOPGUGC-h5REYwGTqPGpM'
+    recaptchaSiteKey: '6Lfi_EwsAAAAACWwUUff0cd4E-92EJnXEwFuOSzz'
   },
   functions: {
     createPortalLink: 'https://europe-west3-quantified-self-io.cloudfunctions.net/ext-firestore-stripe-payments-createPortalLink',
@@ -37,7 +37,7 @@ export const environment = {
     stWorkoutDownloadAsFit: 'https://europe-west2-quantified-self-io.cloudfunctions.net/stWorkoutDownloadAsFit',
     getGarminAPIAuthRequestTokenRedirectURI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/getGarminAPIAuthRequestTokenRedirectURI',
     requestAndSetGarminAPIAccessToken: 'https://europe-west2-quantified-self-io.cloudfunctions.net/requestAndSetGarminAPIAccessToken',
-    backfillHealthAPIActivities: 'https://europe-west2-quantified-self-io.cloudfunctions.net/backfillHealthAPIActivities',
+    backfillGarminAPIActivities: 'https://europe-west2-quantified-self-io.cloudfunctions.net/backfillGarminAPIActivities',
     deauthorizeGarminAPI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/deauthorizeGarminAPI',
     getSuuntoAPIAuthRequestTokenRedirectURI: 'https://europe-west2-quantified-self-io.cloudfunctions.net/getSuuntoAPIAuthRequestTokenRedirectURI',
     requestAndSetSuuntoAPIAccessToken: 'https://europe-west2-quantified-self-io.cloudfunctions.net/requestAndSetSuuntoAPIAccessToken',

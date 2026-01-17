@@ -13,6 +13,7 @@ import { provideAuth, getAuth, connectAuthEmulator } from '@angular/fire/auth';
 import { provideFirestore, initializeFirestore } from '@angular/fire/firestore';
 import { getApp } from '@angular/fire/app';
 import { provideFunctions, getFunctions, httpsCallable, connectFunctionsEmulator } from '@angular/fire/functions';
+import { provideAppCheck, initializeAppCheck, ReCaptchaV3Provider } from '@angular/fire/app-check';
 import { providePerformance, getPerformance } from '@angular/fire/performance';
 import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService, setAnalyticsCollectionEnabled } from '@angular/fire/analytics';
 import { provideRemoteConfig, getRemoteConfig } from '@angular/fire/remote-config';
@@ -85,6 +86,10 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
         connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
       }
       return auth;
+    }),
+    provideAppCheck(() => {
+      const provider = new ReCaptchaV3Provider(environment.firebase.recaptchaSiteKey);
+      return initializeAppCheck(undefined, { provider, isTokenAutoRefreshEnabled: true });
     }),
     // Use initializeFirestore with ignoreUndefinedProperties to handle undefined values
     // in activity/event data (e.g., TCX files may have undefined creator.manufacturer).

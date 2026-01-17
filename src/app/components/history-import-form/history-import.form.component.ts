@@ -33,6 +33,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   @Input() userMetaForService: UserServiceMetaInterface;
   @Input() minDate: Date | null = null;
   @Input() missingPermissions: string[] = [];
+  @Input() isLoadingParent = false;
   @Output() importInitiated = new EventEmitter<void>();
 
 

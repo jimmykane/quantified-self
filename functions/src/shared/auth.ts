@@ -26,7 +26,12 @@ export function onAdminCall<T = unknown, R = unknown>(
             throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
         }
 
-        // 2. Check for admin claim
+        // 2. Check App Check
+        if (!request.app) {
+            throw new HttpsError('unauthenticated', 'The function must be called from an App Check verified app.');
+        }
+
+        // 3. Check for admin claim
         if (request.auth.token.admin !== true) {
             throw new HttpsError('permission-denied', 'Only admins can call this function.');
         }

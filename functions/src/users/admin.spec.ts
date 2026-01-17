@@ -175,7 +175,8 @@ describe('listUsers Cloud Function', () => {
 
     it('should throw "permission-denied" if user is not an admin', async () => {
         const request = {
-            auth: { uid: 'user1', token: { admin: false } }
+            auth: { uid: 'user1', token: { admin: false } },
+            app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
         await expect((listUsers as any)(request)).rejects.toThrow('Only admins can call this function.');
     });
@@ -191,7 +192,8 @@ describe('listUsers Cloud Function', () => {
 
         const request = {
             data: { page: 0, pageSize: 2 },
-            auth: { uid: 'admin-uid', token: { admin: true } }
+            auth: { uid: 'admin-uid', token: { admin: true } },
+            app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
 
         const result: any = await (listUsers as any)(request);
@@ -212,7 +214,8 @@ describe('listUsers Cloud Function', () => {
 
         const request = {
             data: { searchTerm: 'alice', page: 0, pageSize: 25 },
-            auth: { uid: 'admin-uid', token: { admin: true } }
+            auth: { uid: 'admin-uid', token: { admin: true } },
+            app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
 
         const result: any = await (listUsers as any)(request);
@@ -230,7 +233,8 @@ describe('listUsers Cloud Function', () => {
 
         const request = {
             data: { sortField: 'email', sortDirection: 'desc', page: 0, pageSize: 25 },
-            auth: { uid: 'admin-uid', token: { admin: true } }
+            auth: { uid: 'admin-uid', token: { admin: true } },
+            app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
 
         const result: any = await (listUsers as any)(request);
@@ -248,7 +252,8 @@ describe('listUsers Cloud Function', () => {
 
         const request = {
             data: { sortField: 'providerIds', sortDirection: 'desc', page: 0, pageSize: 25 },
-            auth: { uid: 'admin-uid', token: { admin: true } }
+            auth: { uid: 'admin-uid', token: { admin: true } },
+            app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
 
         const result: any = await (listUsers as any)(request);
@@ -259,7 +264,8 @@ describe('listUsers Cloud Function', () => {
 
         const requestAsc = {
             data: { sortField: 'providerIds', sortDirection: 'asc', page: 0, pageSize: 25 },
-            auth: { uid: 'admin-uid', token: { admin: true } }
+            auth: { uid: 'admin-uid', token: { admin: true } },
+            app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
 
         const resultAsc: any = await (listUsers as any)(requestAsc);
@@ -279,7 +285,8 @@ describe('listUsers Cloud Function', () => {
 
         const request = {
             data: { page: 0, pageSize: 25 },
-            auth: { uid: 'admin-uid', token: { admin: true } }
+            auth: { uid: 'admin-uid', token: { admin: true } },
+            app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
 
         const result: any = await (listUsers as any)(request);
@@ -302,7 +309,8 @@ describe('impersonateUser Cloud Function', () => {
 
     it('should throw "permission-denied" if user is not an admin', async () => {
         const request = {
-            auth: { uid: 'user1', token: { admin: false } }
+            auth: { uid: 'user1', token: { admin: false } },
+            app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
         await expect((impersonateUser as any)(request)).rejects.toThrow('Only admins can call this function.');
     });
@@ -312,7 +320,8 @@ describe('impersonateUser Cloud Function', () => {
         const adminUid = 'admin-uid';
         const request = {
             data: { uid: targetUid },
-            auth: { uid: adminUid, token: { admin: true } }
+            auth: { uid: adminUid, token: { admin: true } },
+            app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
 
         const result: any = await (impersonateUser as any)(request);
@@ -324,7 +333,8 @@ describe('impersonateUser Cloud Function', () => {
     it('should throw if target uid is missing', async () => {
         const request = {
             data: {},
-            auth: { uid: 'admin-uid', token: { admin: true } }
+            auth: { uid: 'admin-uid', token: { admin: true } },
+            app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
 
         await expect((impersonateUser as any)(request)).rejects.toThrow();
@@ -340,7 +350,8 @@ describe('getQueueStats Cloud Function', () => {
             auth: {
                 uid: 'admin-uid',
                 token: { admin: true }
-            }
+            },
+            app: { appId: 'mock-app-id' }
         };
     });
 
@@ -449,7 +460,8 @@ describe('getQueueStats Cloud Function', () => {
 
     it('should throw "permission-denied" if user is not an admin', async () => {
         const request = {
-            auth: { uid: 'user1', token: { admin: false } }
+            auth: { uid: 'user1', token: { admin: false } },
+            app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
         await expect((getQueueStats as any)(request)).rejects.toThrow('Only admins can call this function.');
     });
@@ -462,7 +474,8 @@ describe('getUserCount Cloud Function', () => {
 
     it('should return total user count with subscription breakdown', async () => {
         const request = {
-            auth: { uid: 'admin-uid', token: { admin: true } }
+            auth: { uid: 'admin-uid', token: { admin: true } },
+            app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
 
         const mockTotalCount = vi.fn().mockResolvedValue({
@@ -519,7 +532,8 @@ describe('getMaintenanceStatus Cloud Function', () => {
             auth: {
                 uid: 'admin-uid',
                 token: { admin: true }
-            }
+            },
+            app: { appId: 'mock-app-id' }
         };
 
         // Reset Remote Config mock
@@ -602,6 +616,7 @@ describe('setMaintenanceMode Cloud Function', () => {
                 uid: 'admin-uid',
                 token: { admin: true }
             },
+            app: { appId: 'mock-app-id' },
             data: {
                 enabled: true,
                 message: 'New Maintenance',
@@ -684,7 +699,8 @@ describe('getFinancialStats Cloud Function', () => {
             auth: {
                 uid: 'admin-uid',
                 token: { admin: true }
-            }
+            },
+            app: { appId: 'mock-app-id' }
         };
         process.env.GCLOUD_PROJECT = 'test-project';
         productsDocs.length = 0;
@@ -715,6 +731,7 @@ describe('getFinancialStats Cloud Function', () => {
 
     it('should throw "permission-denied" if user is not an admin', async () => {
         request.auth = { uid: 'user1', token: { admin: false } };
+        request.app = { appId: 'mock-app-id' };
         await expect((getFinancialStats as any)(request)).rejects.toThrow('Only admins can call this function.');
     });
 

@@ -80,31 +80,25 @@ describe('ServicesGarminComponent', () => {
             expect(card.classList).not.toContain('coming-soon');
         });
 
-        it('should be locked via COMING SOON badge if user has pro access but is not admin', () => {
+        it('should be unlocked/available if user has pro access', () => {
             component.hasProAccess = true;
-            component.isAdmin = false;
+            component.isAdmin = false; // Should work for non-admins to
             fixture.detectChanges();
 
             const card = fixture.nativeElement.querySelectorAll('.feature-card')[1];
             const lockOverlay = card.querySelector('.lock-overlay');
-            const badge = card.querySelector('.pro-badge');
+            const historyForm = card.querySelector('app-history-import-form');
 
-            expect(card.classList).toContain('locked');
-            expect(lockOverlay).toBeTruthy();
-            expect(badge.textContent.trim()).toBe('COMING SOON');
-            expect(card.classList).toContain('coming-soon');
-        });
-
-        it('should be unlocked if user has pro access and is admin', () => {
-            component.hasProAccess = true;
-            component.isAdmin = true;
-            fixture.detectChanges();
-
-            const card = fixture.nativeElement.querySelectorAll('.feature-card')[1];
-            const lockOverlay = card.querySelector('.lock-overlay');
-
-            expect(card.classList).toContain('unlocked');
+            expect(card.classList).not.toContain('locked');
             expect(lockOverlay).toBeFalsy();
+            // Verify the form is actually rendered
+            // We use querySelector on nativeElement because ComponentFixture might not debugElement.query inside standard HTML elements easily in all setups
+            // but let's check expectations. The HTML has <app-history-import-form> inside @if (hasProAccess)
+            // Ideally we'd assert property binding or existence.
+            // expect(card.textContent).toContain('Import your full activity history'); 
+            expect(historyForm).toBeTruthy();
+            // Actually the description *ngIf="!hasProAccess" is hidden.
+            // checking lockOverlay is falsy is the main invers of the first test.
         });
     });
 
