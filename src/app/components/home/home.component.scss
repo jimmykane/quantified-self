@@ -132,9 +132,9 @@
     padding: 1.5rem 2rem;
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    grid-template-rows: repeat(3, auto);
+    grid-auto-rows: auto;
     gap: 1rem;
-    align-content: center;
+    align-content: start;
 }
 
 .feature-card {
@@ -355,16 +355,17 @@
 @media (max-width: 900px) {
     .split-container {
         flex-direction: column;
-        overflow: auto;
+        overflow-x: hidden;
+        width: 100%;
+        max-width: 100vw;
     }
 
     .hero-section {
         flex: 0 0 auto;
         padding: 2rem;
         text-align: center;
-
-        // In mobile, hero might need background if overlaying something? 
-        // Usually fine as transparent/default body bg.
+        width: 100%;
+        box-sizing: border-box;
     }
 
     .cta-container {
@@ -373,16 +374,33 @@
 
     .features-section {
         grid-template-columns: 1fr;
+        width: 100%;
+        box-sizing: border-box;
+        overflow-x: hidden;
+    }
+
+    .feature-card {
+        width: 100%;
+        box-sizing: border-box;
+        overflow: hidden;
     }
 
     .feature-card.full-width {
         grid-column: auto;
         flex-direction: column;
         align-items: flex-start;
+        margin: 0 1rem 1.5rem 1rem;
+        width: calc(100% - 2rem);
+        max-width: calc(100vw - 2rem);
     }
 
     .feature-card.full-width .card-header {
         margin-bottom: 0.5rem;
+    }
+
+    .tag-list {
+        flex-wrap: wrap;
+        max-width: 100%;
     }
 
     // Footer adjustments

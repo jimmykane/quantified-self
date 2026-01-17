@@ -94,33 +94,89 @@
       </div>
     </div>
 
-    <!-- Feature 4 -->
+    <!-- Integration: Garmin -->
     <div class="feature-card glass-card">
       <div class="card-header">
-        <mat-icon class="card-icon" svgIcon="watch-sync"></mat-icon>
-        <h3 class="card-title">Universal Device Sync</h3>
+        <mat-icon class="card-icon" svgIcon="garmin"></mat-icon>
+        <h3 class="card-title">Garmin</h3>
       </div>
       <p class="card-text">
-        Seamlessly integrate with leading fitness ecosystems. Experience blazing fast synchronization.
+        Seamless integration with Garmin Connect for automatic activity synchronization.
       </p>
       <div class="tag-list">
         <span class="tag"
           (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.GarminAPI }});"
           style="cursor: pointer;">
-          <mat-icon svgIcon="garmin"></mat-icon>
-          Garmin
+          <mat-icon>sync</mat-icon>
+          Activity Sync
+        </span>
+        <span class="tag"
+          (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.GarminAPI }});"
+          style="cursor: pointer;">
+          <mat-icon>history</mat-icon>
+          History Import
+        </span>
+      </div>
+    </div>
+
+    <!-- Integration: Suunto -->
+    <div class="feature-card glass-card">
+      <div class="card-header">
+        <mat-icon class="card-icon" svgIcon="suunto"></mat-icon>
+        <h3 class="card-title">Suunto</h3>
+      </div>
+      <p class="card-text">
+        Full Suunto integration with additional features like route upload and link import.
+      </p>
+      <div class="tag-list">
+        <span class="tag"
+          (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.SuuntoApp } });"
+          style="cursor: pointer;">
+          <mat-icon>sync</mat-icon>
+          Activity Sync
         </span>
         <span class="tag"
           (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.SuuntoApp } });"
           style="cursor: pointer;">
-          <mat-icon svgIcon="suunto"></mat-icon>
-          Suunto
+          <mat-icon>history</mat-icon>
+          History Import
+        </span>
+        <span class="tag"
+          (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.SuuntoApp } });"
+          style="cursor: pointer;">
+          <mat-icon>link</mat-icon>
+          Link Import
+        </span>
+        <span class="tag"
+          (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.SuuntoApp } });"
+          style="cursor: pointer;">
+          <mat-icon>route</mat-icon>
+          Route Upload
+        </span>
+      </div>
+    </div>
+
+    <!-- Integration: COROS -->
+    <div class="feature-card glass-card">
+      <div class="card-header">
+        <mat-icon class="card-icon" svgIcon="coros"></mat-icon>
+        <h3 class="card-title">COROS</h3>
+      </div>
+      <p class="card-text">
+        Connect your COROS account for automatic sync and full history access.
+      </p>
+      <div class="tag-list">
+        <span class="tag"
+          (click)="router.navigate(['/services'],{ queryParams: { serviceName: serviceNames.COROSAPI }});"
+          style="cursor: pointer;">
+          <mat-icon>sync</mat-icon>
+          Activity Sync
         </span>
         <span class="tag"
           (click)="router.navigate(['/services'],{ queryParams: { serviceName: serviceNames.COROSAPI }});"
           style="cursor: pointer;">
-          <mat-icon svgIcon="coros"></mat-icon>
-          COROS
+          <mat-icon>history</mat-icon>
+          History Import
         </span>
       </div>
     </div>
