@@ -95,7 +95,8 @@ describe('ServicesGarminComponent', () => {
             // We use querySelector on nativeElement because ComponentFixture might not debugElement.query inside standard HTML elements easily in all setups
             // but let's check expectations. The HTML has <app-history-import-form> inside @if (hasProAccess)
             // Ideally we'd assert property binding or existence.
-            expect(card.textContent).toContain('Import your full activity history'); // Part of description or form? 
+            // expect(card.textContent).toContain('Import your full activity history'); 
+            expect(historyForm).toBeTruthy();
             // Actually the description *ngIf="!hasProAccess" is hidden.
             // checking lockOverlay is falsy is the main invers of the first test.
         });
