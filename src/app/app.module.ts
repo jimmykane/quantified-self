@@ -13,7 +13,7 @@ import { provideAuth, getAuth, connectAuthEmulator } from '@angular/fire/auth';
 import { provideFirestore, initializeFirestore } from '@angular/fire/firestore';
 import { getApp } from '@angular/fire/app';
 import { provideFunctions, getFunctions, httpsCallable, connectFunctionsEmulator } from '@angular/fire/functions';
-import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
+import { provideAppCheck, initializeAppCheck, ReCaptchaV3Provider } from '@angular/fire/app-check';
 import { providePerformance, getPerformance } from '@angular/fire/performance';
 import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService, setAnalyticsCollectionEnabled } from '@angular/fire/analytics';
 import { provideRemoteConfig, getRemoteConfig } from '@angular/fire/remote-config';
@@ -78,13 +78,12 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
     }),
     provideHttpClient(withInterceptorsFromDi()),
     provideFirebaseApp(() => initializeApp(environment.firebase)),
-    provideAppInitializer(() => {
-      const app = inject(FirebaseApp);
+    provideAppCheck(() => {
+      const provider = new ReCaptchaV3Provider(environment.firebase.recaptchaSiteKey);
       if (!environment.production && !environment.beta) {
         (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
       }
-      const provider = new ReCaptchaV3Provider(environment.firebase.recaptchaSiteKey);
-      return Promise.resolve(initializeAppCheck(app, { provider, isTokenAutoRefreshEnabled: true }));
+      return initializeAppCheck(undefined, { provider, isTokenAutoRefreshEnabled: true });
     }),
     provideAuth(() => {
       const auth = getAuth();
