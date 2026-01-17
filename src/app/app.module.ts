@@ -1,10 +1,10 @@
-import { APP_INITIALIZER, ErrorHandler, LOCALE_ID, NgModule } from '@angular/core';
+import { ErrorHandler, LOCALE_ID, NgModule, inject, provideAppInitializer } from '@angular/core';
 import { LoggerService } from './services/logger.service';
 import { GlobalErrorHandler } from './services/global-error-handler.service';
 import { BrowserModule } from '@angular/platform-browser';
 import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app.routing.module';
-import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
+import { provideAnimations } from '@angular/platform-browser/animations';
 import { SideNavComponent } from './components/sidenav/sidenav.component';
 import { environment } from '../environments/environment';
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
@@ -56,7 +56,6 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
   bootstrap: [AppComponent],
   imports: [
     BrowserModule,
-    BrowserAnimationsModule,
     SharedModule,
     AppRoutingModule,
     ClipboardModule,
@@ -66,30 +65,29 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
     MaintenanceComponent
   ],
   providers: [
+    provideAnimations(),
     ScreenTrackingService,
     UserTrackingService,
     {
       provide: ErrorHandler,
       useClass: GlobalErrorHandler,
     },
-    {
-      provide: APP_INITIALIZER,
-      useFactory: initializeRemoteConfig,
-      deps: [AppRemoteConfigService],
-      multi: true
-    },
+    provideAppInitializer(() => {
+      const remoteConfigService = inject(AppRemoteConfigService);
+      return initializeRemoteConfig(remoteConfigService)();
+    }),
     provideHttpClient(withInterceptorsFromDi()),
     provideFirebaseApp(() => initializeApp(environment.firebase)),
+    provideAppCheck(() => {
+      const provider = new ReCaptchaV3Provider(environment.firebase.recaptchaSiteKey);
+      return initializeAppCheck(undefined, { provider, isTokenAutoRefreshEnabled: true });
+    }),
     provideAuth(() => {
       const auth = getAuth();
       if (environment.useAuthEmulator) {
         connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
       }
       return auth;
-    }),
-    provideAppCheck(() => {
-      const provider = new ReCaptchaV3Provider(environment.firebase.recaptchaSiteKey);
-      return initializeAppCheck(undefined, { provider, isTokenAutoRefreshEnabled: true });
     }),
     // Use initializeFirestore with ignoreUndefinedProperties to handle undefined values
     // in activity/event data (e.g., TCX files may have undefined creator.manufacturer).
