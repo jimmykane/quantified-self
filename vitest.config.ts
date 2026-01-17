@@ -9,7 +9,7 @@ export default defineConfig({
     test: {
         server: {
             deps: {
-                inline: ['rxfire', '@angular/fire', 'firebase']
+                inline: ['rxfire', '@angular/fire', 'firebase', '@sports-alliance/sports-lib']
             }
         },
         globals: true,
