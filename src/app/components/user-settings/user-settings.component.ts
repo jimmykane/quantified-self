@@ -64,7 +64,7 @@ export class UserSettingsComponent implements OnChanges {
     },
     {
       name: 'Advanced Data',
-      data: DynamicDataLoader.advancedDataTypes
+      data: DynamicDataLoader.advancedDataTypes.filter(type => !DynamicDataLoader.basicDataTypes.includes(type))
     },
   ];
 

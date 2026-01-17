@@ -144,7 +144,7 @@ describe('UserSettingsComponent', () => {
     it('should save acceptedTrackingPolicy when form is submitted', async () => {
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
-        const analyticsService = TestBed.inject(AppAnalyticsService as any); // Type assertion for mocked service
+        const analyticsService = TestBed.inject(AppAnalyticsService) as any;
         vi.spyOn(analyticsService, 'logEvent');
 
         component.user.acceptedTrackingPolicy = false;
@@ -181,6 +181,36 @@ describe('UserSettingsComponent', () => {
             expect.objectContaining({ uid: 'test-uid' }),
             expect.objectContaining({
                 acceptedMarketingPolicy: true
+            })
+        );
+    });
+
+    it('should correctly save chart settings including visible metrics', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+
+        component.ngOnChanges();
+
+        // Simulate changing visible metrics
+        // Initial state from mockUser is ['altitude']
+        const newMetrics = ['altitude', 'heart_rate', 'speed'];
+        component.userSettingsFormGroup.get('dataTypesToUse').setValue(newMetrics);
+
+        // Submit the form
+        await component.onSubmit(new Event('submit'));
+
+        expect(updateUserPropertiesSpy).toHaveBeenCalledWith(
+            expect.objectContaining({ uid: 'test-uid' }),
+            expect.objectContaining({
+                settings: expect.objectContaining({
+                    chartSettings: expect.objectContaining({
+                        dataTypeSettings: expect.objectContaining({
+                            'altitude': { enabled: true },
+                            'heart_rate': { enabled: true },
+                            'speed': { enabled: true }
+                        })
+                    })
+                })
             })
         );
     });
