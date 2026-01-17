@@ -83,7 +83,7 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
       if (!environment.production && !environment.beta) {
         (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
       }
-      return initializeAppCheck(undefined, { provider, isTokenAutoRefreshEnabled: true });
+      return initializeAppCheck(getApp(), { provider, isTokenAutoRefreshEnabled: true });
     }),
     provideAuth(() => {
       const auth = getAuth();
