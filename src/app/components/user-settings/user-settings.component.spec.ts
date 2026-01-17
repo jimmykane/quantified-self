@@ -193,7 +193,8 @@ describe('UserSettingsComponent', () => {
 
         // Simulate changing visible metrics
         // Initial state from mockUser is ['altitude']
-        const newMetrics = ['altitude', 'heart_rate', 'speed'];
+        // Select only these 3 metrics
+        const newMetrics = ['Altitude', 'Heart Rate', 'Speed'];
         component.userSettingsFormGroup.get('dataTypesToUse').setValue(newMetrics);
 
         // Submit the form
@@ -205,9 +206,11 @@ describe('UserSettingsComponent', () => {
                 settings: expect.objectContaining({
                     chartSettings: expect.objectContaining({
                         dataTypeSettings: expect.objectContaining({
-                            'altitude': { enabled: true },
-                            'heart_rate': { enabled: true },
-                            'speed': { enabled: true }
+                            'Altitude': { enabled: true },
+                            'Heart Rate': { enabled: true },
+                            'Speed': { enabled: true },
+                            // Verify a non-selected item is set to false
+                            'Power': { enabled: false }
                         })
                     })
                 })
