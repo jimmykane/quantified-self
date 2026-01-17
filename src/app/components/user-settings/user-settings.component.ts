@@ -64,7 +64,7 @@ export class UserSettingsComponent implements OnChanges {
     },
     {
       name: 'Advanced Data',
-      data: DynamicDataLoader.advancedDataTypes
+      data: DynamicDataLoader.advancedDataTypes.filter(type => !DynamicDataLoader.basicDataTypes.includes(type))
     },
   ];
 
@@ -332,11 +332,21 @@ export class UserSettingsComponent implements OnChanges {
 
     this.isSaving = true;
     try {
-      const userChartSettings = Array.from(this.userSettingsFormGroup.get('dataTypesToUse').value).reduce((newUserChartSettings: UserChartSettingsInterface, dataTypeToUse: string) => {
-        newUserChartSettings.dataTypeSettings[dataTypeToUse] = { enabled: true };
-        return newUserChartSettings
-      }, {
-        dataTypeSettings: {},
+      const dataTypesToUseValue = this.userSettingsFormGroup.get('dataTypesToUse').value as string[];
+
+      // Get all available data types from both groups
+      const allDataTypes = [...DynamicDataLoader.basicDataTypes, ...DynamicDataLoader.advancedDataTypes];
+      // Create a Set for O(1) lookup of selected types
+      const selectedTypesSet = new Set(dataTypesToUseValue);
+
+      // Build dataTypeSettings with enabled: true for selected, enabled: false for unselected
+      const dataTypeSettings: { [key: string]: { enabled: boolean } } = {};
+      for (const dataType of allDataTypes) {
+        dataTypeSettings[dataType] = { enabled: selectedTypesSet.has(dataType) };
+      }
+
+      const userChartSettings: UserChartSettingsInterface = {
+        dataTypeSettings: dataTypeSettings,
         theme: this.userSettingsFormGroup.get('chartTheme').value,
         useAnimations: this.userSettingsFormGroup.get('useAnimations').value,
         xAxisType: this.userSettingsFormGroup.get('xAxisType').value,
@@ -355,7 +365,7 @@ export class UserSettingsComponent implements OnChanges {
         hideAllSeriesOnInit: this.userSettingsFormGroup.get('chartHideAllSeriesOnInit').value,
         gainAndLossThreshold: this.userSettingsFormGroup.get('chartGainAndLossThreshold').value,
         downSamplingLevel: this.userSettingsFormGroup.get('chartDownSamplingLevel').value,
-      });
+      };
 
       await this.userService.updateUserProperties(this.user, {
         displayName: this.userSettingsFormGroup.get('displayName').value,

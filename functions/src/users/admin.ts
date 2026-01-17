@@ -140,8 +140,8 @@ export const listUsers = onAdminCall<ListUsersRequest, any>({
         const pageSize = data.pageSize ? parseInt(String(data.pageSize)) : 10;
         const page = data.page ? parseInt(String(data.page)) : 0;
         const searchTerm = (data.searchTerm || '').toLowerCase().trim();
-        const sortField = data.sortField || 'email';
-        const sortDirection = data.sortDirection || 'asc';
+        const sortField = data.sortField || 'created';
+        const sortDirection = data.sortDirection || 'desc';
         const filterService = data.filterService;
 
         // Step 0: Get Service User IDs (if filtering)

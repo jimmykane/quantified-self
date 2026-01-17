@@ -90,13 +90,46 @@ describe('processWorkoutTask', () => {
         expect(mockParseWorkoutQueueItemForServiceName).not.toHaveBeenCalled();
     });
 
-    it('should throw if item does not exist (triggers Cloud Task retry)', async () => {
+    it('should NOT throw if item exists in failed_jobs (stops Cloud Task retry loop)', async () => {
         const queueItemId = 'test-id';
         const serviceName = ServiceNames.GarminAPI;
 
-        mockGet.mockResolvedValue({
-            exists: false,
+        mockGet.mockImplementation(() => {
+            // First call (queueDoc.exists)
+            return Promise.resolve({ exists: false });
         });
+
+        // Mock the second .doc().get() call for failed_jobs check
+        // We need to allow the mock implementation to return a different result for the second call
+        // But since we have a chain of mocks, we need to inspect how the mocks are set up in the beforeEach
+        // The mockCollection.doc returns mockDoc. mockDoc.get is what we are mocking.
+
+        // Simulating the sequence:
+        // 1. queueRef.get() -> returns { exists: false }
+        // 2. failedJobRef.get() -> returns { exists: true }
+        mockGet
+            .mockResolvedValueOnce({ exists: false })
+            .mockResolvedValueOnce({ exists: true });
+
+        const request = {
+            data: { queueItemId, serviceName }
+        };
+
+        // Expect success to stop retry loop
+        await expect((processWorkoutTask as any)(request)).resolves.toBeUndefined();
+        expect(mockParseWorkoutQueueItemForServiceName).not.toHaveBeenCalled();
+    });
+
+    it('should throw if item does not exist AND not in failed_jobs (triggers Cloud Task retry)', async () => {
+        const queueItemId = 'test-id';
+        const serviceName = ServiceNames.GarminAPI;
+
+        // Simulating the sequence:
+        // 1. queueRef.get() -> returns { exists: false }
+        // 2. failedJobRef.get() -> returns { exists: false }
+        mockGet
+            .mockResolvedValueOnce({ exists: false })
+            .mockResolvedValueOnce({ exists: false });
 
         const request = {
             data: { queueItemId, serviceName }
