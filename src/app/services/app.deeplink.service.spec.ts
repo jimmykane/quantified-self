@@ -21,7 +21,7 @@ describe('AppDeepLinkService', () => {
             providers: [
                 AppDeepLinkService,
                 { provide: AppWindowService, useValue: mockWindowService },
-                { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } }
+                { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn(), warn: vi.fn() } }
             ]
         });
 
@@ -45,9 +45,27 @@ describe('AppDeepLinkService', () => {
         expect(mockWindowService.windowRef.location.href).toBe('gcm-ciq://');
     });
 
-    it('should use web URL on Desktop', () => {
+    it('should use web URL on Desktop and handle allowed popup', () => {
         mockWindowService.windowRef.navigator.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...';
+        // Mock successful window open
+        mockWindowService.windowRef.open.mockReturnValue({ closed: false });
+
         service.openGarminConnectApp();
-        expect(mockWindowService.windowRef.open).toHaveBeenCalledWith(expect.stringContaining('connect.garmin.com'), '_blank');
+
+        expect(mockWindowService.windowRef.open).toHaveBeenCalledWith(expect.stringContaining('connect.garmin.com/app/settings/accountInformation'), '_blank');
+        // Should NOT fallback
+        expect(mockWindowService.windowRef.location.href).toBe('');
+    });
+
+    it('should fallback to current window if popup blocked on Desktop', () => {
+        mockWindowService.windowRef.navigator.userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) ...';
+        // Mock blocked popup (returns null)
+        mockWindowService.windowRef.open.mockReturnValue(null);
+
+        service.openGarminConnectApp();
+
+        expect(mockWindowService.windowRef.open).toHaveBeenCalledWith(expect.stringContaining('connect.garmin.com/app/settings/accountInformation'), '_blank');
+        // Should fallback
+        expect(mockWindowService.windowRef.location.href).toContain('connect.garmin.com');
     });
 });
