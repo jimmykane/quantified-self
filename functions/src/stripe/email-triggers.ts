@@ -34,7 +34,7 @@
 
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
-import { ROLE_HIERARCHY } from '../shared/pricing';
+import { ROLE_HIERARCHY, ROLE_DISPLAY_NAMES } from '../shared/pricing';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { DocumentData } from 'firebase-admin/firestore';
 
@@ -58,15 +58,7 @@ const formatDate = (timestamp: admin.firestore.Timestamp): string => {
     });
 };
 
-/**
- * Maps internal role keys to display-friendly names for email templates.
- * @internal
- */
-const ROLE_DISPLAY_NAMES: { [key: string]: string } = {
-    'free': 'Free',
-    'basic': 'Basic',
-    'pro': 'Pro'
-};
+
 
 /**
  * Analyzes subscription changes and queues appropriate transactional emails.
@@ -128,6 +120,9 @@ export async function checkAndSendSubscriptionEmails(
     after: DocumentData | undefined,
     eventId: string
 ): Promise<void> {
+    const hierarchy = ROLE_HIERARCHY as Record<string, number>;
+    const displayNames = ROLE_DISPLAY_NAMES as Record<string, string>;
+
 
     // 1. Welcome Email
     // Trigger: New active/trialing subscription.
@@ -151,7 +146,7 @@ export async function checkAndSendSubscriptionEmails(
                     template: {
                         name: 'welcome_email',
                         data: {
-                            role: after.role,
+                            role: displayNames[after.role] || after.role,
                         },
                     },
                     expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
@@ -168,31 +163,33 @@ export async function checkAndSendSubscriptionEmails(
     const newRole = after.role;
 
     if (oldRole && newRole && oldRole !== newRole) {
-        const oldLevel = ROLE_HIERARCHY[oldRole as keyof typeof ROLE_HIERARCHY] || 0;
-        const newLevel = ROLE_HIERARCHY[newRole as keyof typeof ROLE_HIERARCHY] || 0;
 
-        const userRecord = await admin.auth().getUser(uid);
-        if (!userRecord.email) return;
+        const oldLevel = hierarchy[oldRole] || 0;
+        const newLevel = hierarchy[newRole] || 0;
 
         if (newLevel > oldLevel) {
             // Upgrade
             const mailId = `upgrade_${eventId}`;
             const mailRef = admin.firestore().collection('mail').doc(mailId);
             const exists = (await mailRef.get()).exists;
+
             if (!exists) {
-                logger.info(`[checkAndSendSubscriptionEmails] Queuing UPGRADE email for user ${uid}`);
-                await mailRef.set({
-                    to: userRecord.email,
-                    from: 'Quantified Self <hello@quantified-self.io>',
-                    template: {
-                        name: 'subscription_upgrade',
-                        data: {
-                            new_role: ROLE_DISPLAY_NAMES[newRole] || newRole,
-                            old_role: ROLE_DISPLAY_NAMES[oldRole] || oldRole,
-                        }
-                    },
-                    expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
-                });
+                const userRecord = await admin.auth().getUser(uid);
+                if (userRecord.email) {
+                    logger.info(`[checkAndSendSubscriptionEmails] Queuing UPGRADE email for user ${uid}`);
+                    await mailRef.set({
+                        to: userRecord.email,
+                        from: 'Quantified Self <hello@quantified-self.io>',
+                        template: {
+                            name: 'subscription_upgrade',
+                            data: {
+                                new_role: displayNames[newRole] || newRole,
+                                old_role: displayNames[oldRole] || oldRole,
+                            }
+                        },
+                        expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
+                    });
+                }
             }
         } else if (newLevel < oldLevel) {
             // Downgrade
@@ -200,31 +197,34 @@ export async function checkAndSendSubscriptionEmails(
             const mailRef = admin.firestore().collection('mail').doc(mailId);
             const exists = (await mailRef.get()).exists;
             if (!exists) {
-                logger.info(`[checkAndSendSubscriptionEmails] Queuing DOWNGRADE email for user ${uid}`);
-                await mailRef.set({
-                    to: userRecord.email,
-                    from: 'Quantified Self <hello@quantified-self.io>',
-                    template: {
-                        name: 'subscription_downgrade',
-                        data: {
-                            new_role: ROLE_DISPLAY_NAMES[newRole] || newRole,
-                            old_role: ROLE_DISPLAY_NAMES[oldRole] || oldRole,
-                            limit: (newRole === 'basic') ? '100' : '10', // Basic=100, Free=10
-                        }
-                    },
-                    expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
-                });
+                const userRecord = await admin.auth().getUser(uid);
+                if (userRecord.email) {
+                    logger.info(`[checkAndSendSubscriptionEmails] Queuing DOWNGRADE email for user ${uid}`);
+                    await mailRef.set({
+                        to: userRecord.email,
+                        from: 'Quantified Self <hello@quantified-self.io>',
+                        template: {
+                            name: 'subscription_downgrade',
+                            data: {
+                                new_role: displayNames[newRole] || newRole,
+                                old_role: displayNames[oldRole] || oldRole,
+                                limit: (newRole === 'basic') ? '100' : '10', // Basic=100, Free=10
+                            }
+                        },
+                        expireAt: getExpireAtTimestamp(TTL_CONFIG.MAIL_IN_DAYS),
+                    });
+                }
             }
         }
     }
-
-    // 3. Cancellation Logic
+    // 3. Cancellation (Active -> Canceled/Non-renewing)
     // Trigger: cancel_at_period_end goes from false -> true
-    if (!before.cancel_at_period_end && after.cancel_at_period_end) {
+    if (before && after && !before.cancel_at_period_end && after.cancel_at_period_end) {
         const currentPeriodEnd = after.current_period_end;
         if (currentPeriodEnd) {
-            // We use subscriptionId + timestamp to allow for re-cancellation warnings if they renew and cancel again later (different period end)
-            // or just to avoid spamming if they toggle it quickly? 
+            // We use subscriptionId + timestamp to allow for re-cancellation warnings if they renew
+            // and cancel again later (different period end)
+            // or just to avoid spamming if they toggle it quickly?
             // Ideally triggering on the *change* is enough, but using period_end helps uniqueness if they renew/cancel multiple times.
             const mailId = `cancellation_${subscriptionId}_${currentPeriodEnd.seconds}`;
 
@@ -241,7 +241,7 @@ export async function checkAndSendSubscriptionEmails(
                         template: {
                             name: 'subscription_cancellation',
                             data: {
-                                role: ROLE_DISPLAY_NAMES[after.role] || after.role,
+                                role: displayNames[after.role] || after.role,
                                 expiration_date: formatDate(currentPeriodEnd),
                             }
                         },
@@ -252,3 +252,4 @@ export async function checkAndSendSubscriptionEmails(
         }
     }
 }
+

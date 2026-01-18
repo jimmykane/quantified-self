@@ -6,3 +6,9 @@ export const ROLE_HIERARCHY = {
     'basic': 1,
     'pro': 2
 };
+
+export const ROLE_DISPLAY_NAMES: { [key: string]: string } = {
+    'free': 'Free',
+    'basic': 'Basic',
+    'pro': 'Pro'
+};

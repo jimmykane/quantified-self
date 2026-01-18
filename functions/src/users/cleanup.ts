@@ -63,7 +63,7 @@ async function archiveOrphanedToken(
  * Checks for any remaining tokens in the collection. If found, it implies deauthorization failed
  * (or was skipped), so we archive them to 'orphaned_service_tokens' before they get deleted.
  */
-async function archiveRemainingTokens(collectionName: string, uid: string, serviceName: ServiceNames): Promise<void> {
+async function archiveRemainingTokens(collectionName: string, uid: string, serviceName: ServiceNames, originalError?: Error): Promise<void> {
     const db = admin.firestore();
     const userDocRef = db.collection(collectionName).doc(uid);
     const tokensSnapshot = await userDocRef.collection('tokens').get();
@@ -77,8 +77,8 @@ async function archiveRemainingTokens(collectionName: string, uid: string, servi
     const archivePromises = tokensSnapshot.docs.map(async (doc) => {
         const tokenData = doc.data();
         const tokenId = doc.id;
-        // Construct a synthesized error to indicate why we are archiving
-        const errorReason = new Error('Cleanup: Token remained after deauthorization attempts (likely API unavailable or 500/502).');
+        // Construct a synthesized error to indicate why we are archiving, unless we have the original error
+        const errorReason = originalError || new Error('Cleanup: Token remained after deauthorization attempts (likely API unavailable or 500/502).');
 
         return archiveOrphanedToken(uid, serviceName, tokenId, tokenData, errorReason);
     });
@@ -101,6 +101,8 @@ interface ServiceCleanupConfig {
  * 2. Mandatory local token deletion (firestore)
  */
 async function safeDeauthorizeAndCleanup(uid: string, config: ServiceCleanupConfig): Promise<void> {
+    let deauthError: Error | undefined;
+
     // 1. Deauthorize (Best Effort)
     try {
         logger.info(`[Cleanup] Deauthorizing ${config.name} for user ${uid}`);
@@ -112,13 +114,14 @@ async function safeDeauthorizeAndCleanup(uid: string, config: ServiceCleanupConf
         } else {
             // Log error but continue to forced cleanup
             logger.error(`[Cleanup] Error deauthorizing ${config.name} for ${uid}`, error);
+            deauthError = error;
         }
     }
 
     // 2. Local Cleanup (Mandatory)
     try {
         // Archive any tokens that survived deauthorization (likely due to 500/502 errors)
-        await archiveRemainingTokens(config.collectionName, uid, config.serviceName);
+        await archiveRemainingTokens(config.collectionName, uid, config.serviceName, deauthError);
 
         await deleteTokenDocumentWithSubcollections(config.collectionName, uid);
     } catch (e: unknown) {

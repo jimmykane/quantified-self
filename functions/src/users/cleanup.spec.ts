@@ -417,4 +417,29 @@ describe('cleanupUserAccounts', () => {
         // No batch commit since no emails
         expect(batchMock.commit).not.toHaveBeenCalled();
     });
+    it('should handle archiving with non-standard error and empty token data', async () => {
+        const wrapped = cleanupUserAccounts;
+        const user = testEnv.auth.makeUserRecord({ uid: 'testUser123' });
+
+        // Make tokens subcollection return a token with NO data (undefined data())
+        tokensGetMock.mockResolvedValue({
+            empty: false,
+            size: 1,
+            docs: [
+                { id: 'failing-token', data: () => undefined } // Returns undefined tokenData
+            ]
+        });
+
+        // Make deauthorize fail with an object that has no message but has toString
+        const weirdError = { toString: () => 'Weird Error Object' };
+        deauthorizeServiceMock.mockRejectedValueOnce(weirdError);
+
+        await wrapped(user, { eventId: 'eventId' } as unknown as functions.EventContext);
+
+        // Verify set was called with the fallback error string and empty token object
+        expect(setMock).toHaveBeenCalledWith(expect.objectContaining({
+            token: {},
+            lastError: 'Weird Error Object'
+        }));
+    });
 });

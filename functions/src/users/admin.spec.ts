@@ -127,7 +127,16 @@ vi.mock('../utils', () => ({
 
 import { listUsers, getQueueStats, getUserCount, getMaintenanceStatus, setMaintenanceMode, impersonateUser, getFinancialStats } from './admin';
 
+// Helper for authenticated admin requests
+const getAdminRequest = (data: any = {}) => ({
+    data,
+    auth: { uid: 'admin', token: { admin: true } },
+    app: { appId: 'test-app' }
+} as CallableRequest<any>);
+
 describe('listUsers Cloud Function', () => {
+
+
     beforeEach(() => {
         vi.clearAllMocks();
 
@@ -274,32 +283,281 @@ describe('listUsers Cloud Function', () => {
     });
 
     it('should iterate through all pageTokens to fetch all users', async () => {
-        mockListUsers.mockResolvedValueOnce({
-            users: [{ uid: 'user1', email: 'a@test.com', disabled: false, metadata: {}, customClaims: {}, providerData: [] }],
-            pageToken: 'token1'
-        });
-        mockListUsers.mockResolvedValueOnce({
-            users: [{ uid: 'user2', email: 'b@test.com', disabled: false, metadata: {}, customClaims: {}, providerData: [] }],
-            pageToken: undefined
-        });
+        const mockUsersPage1 = [{ uid: 'user1', providerData: [] }];
+        const mockUsersPage2 = [{ uid: 'user2', providerData: [] }];
 
-        const request = {
-            data: { page: 0, pageSize: 25 },
-            auth: { uid: 'admin-uid', token: { admin: true } },
-            app: { appId: 'mock-app-id' }
-        } as unknown as CallableRequest<any>;
+        mockListUsers
+            .mockResolvedValueOnce({ users: mockUsersPage1, pageToken: 'token1' })
+            .mockResolvedValueOnce({ users: mockUsersPage2, pageToken: undefined });
 
-        const result: any = await (listUsers as any)(request);
+        await (listUsers as any)(getAdminRequest());
 
         expect(mockListUsers).toHaveBeenCalledTimes(2);
-        expect(result.totalCount).toBe(2);
+        expect(mockListUsers).toHaveBeenCalledWith(1000, undefined);
+        expect(mockListUsers).toHaveBeenCalledWith(1000, 'token1');
     });
-});
 
-describe('impersonateUser Cloud Function', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockCreateCustomToken.mockResolvedValue('mock-custom-token');
+    it('should filter users by filterService (Garmin)', async () => {
+        // Mock token docs for filtering
+        const mockTokenDocs = [{ id: 'u1' }];
+        const mockSnap = { docs: mockTokenDocs, empty: false };
+
+        // Setup mock for the filter query
+        mockCollection.mockImplementation((path) => {
+            if (path === 'garminAPITokens') {
+                return {
+                    select: vi.fn().mockReturnValue({
+                        get: vi.fn().mockResolvedValue(mockSnap)
+                    })
+                };
+            }
+            // Defaut mock for enrichment
+            return {
+                doc: vi.fn().mockReturnValue({
+                    collection: vi.fn().mockReturnValue({ limit: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ empty: true }) }) }),
+                    get: vi.fn().mockResolvedValue({ empty: true })
+                }),
+                where: vi.fn().mockReturnThis(),
+                get: vi.fn().mockResolvedValue({ empty: true })
+            };
+        });
+
+        // Mock Auth Users
+        const mockUsers = [
+            { uid: 'u1', providerData: [] }, // Should match
+            { uid: 'u2', providerData: [] }  // Should filter out
+        ];
+        mockListUsers.mockResolvedValue({ users: mockUsers, pageToken: undefined });
+
+        const result: any = await (listUsers as any)(getAdminRequest({ filterService: 'garmin' }));
+        expect(result.users).toHaveLength(1);
+        expect(result.users[0].uid).toBe('u1');
+    });
+
+    it('should filter users by filterService (Suunto)', async () => {
+        const mockSnap = { docs: [{ id: 'u1' }], empty: false };
+        mockCollection.mockImplementation((path) => {
+            if (path === 'suuntoAppAccessTokens') {
+                return {
+                    select: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue(mockSnap) })
+                };
+            }
+            return {
+                doc: vi.fn().mockReturnValue({ collection: vi.fn().mockReturnValue({ limit: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ empty: true }) }) }) }),
+                where: vi.fn().mockReturnThis(),
+                get: vi.fn().mockResolvedValue({ empty: true })
+            };
+        });
+        mockListUsers.mockResolvedValue({ users: [{ uid: 'u1', providerData: [] }], pageToken: undefined });
+        const result: any = await (listUsers as any)(getAdminRequest({ filterService: 'suunto' }));
+        expect(result.users).toHaveLength(1);
+    });
+
+    it('should filter users by filterService (COROS)', async () => {
+        const mockSnap = { docs: [{ id: 'u1' }], empty: false };
+        mockCollection.mockImplementation((path) => {
+            if (path === 'COROSAPIAccessTokens') {
+                return {
+                    select: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue(mockSnap) })
+                };
+            }
+            return {
+                doc: vi.fn().mockReturnValue({ collection: vi.fn().mockReturnValue({ limit: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ empty: true }) }) }) }),
+                where: vi.fn().mockReturnThis(),
+                get: vi.fn().mockResolvedValue({ empty: true })
+            };
+        });
+        mockListUsers.mockResolvedValue({ users: [{ uid: 'u1', providerData: [] }], pageToken: undefined });
+        const result: any = await (listUsers as any)(getAdminRequest({ filterService: 'coros' }));
+        expect(result.users).toHaveLength(1);
+    });
+
+    it('should use default sort (email) when sortField is invalid', async () => {
+        const mockUsers = [
+            { uid: 'u1', email: 'b@test.com', providerData: [] },
+            { uid: 'u2', email: 'a@test.com', providerData: [] }
+        ];
+        mockListUsers.mockResolvedValue({ users: mockUsers, pageToken: undefined });
+
+        // invalid_field causes fall through to default which compares by email
+        const result: any = await (listUsers as any)(getAdminRequest({ sortField: 'invalid_field' as any, sortDirection: 'asc' }));
+
+        expect(result.users[0].email).toBe('a@test.com');
+        expect(result.users[1].email).toBe('b@test.com');
+    });
+
+    // -------------------------------------------------------------------------
+    // COVERAGE: ENRICH USERS TESTS
+    // -------------------------------------------------------------------------
+    describe('enrichUsers', () => {
+        // ... (existing enrichment test)
+        it('should enrich users with subscription and connected service valid data', async () => {
+            const mockUsers = [
+                { uid: 'u1', email: 'u1@test.com', displayName: 'U1', disabled: false, metadata: { creationTime: '2024-01-01', lastSignInTime: '2024-01-02' }, customClaims: {}, providerData: [] }
+            ];
+            mockListUsers.mockResolvedValue({ users: mockUsers, pageToken: undefined });
+
+            // Mock Data for Enrichment
+            const mockSubData = { status: 'active', current_period_end: 12345, cancel_at_period_end: false, stripeLink: 'link' };
+            const mockServiceDocTitle = { dateCreated: 999999 };
+
+            const createSnap = (dataOrEmpty: any) => ({
+                empty: !dataOrEmpty,
+                docs: dataOrEmpty ? [{ data: () => dataOrEmpty, createTime: 11111 }] : []
+            });
+
+            // Specific path interception for mocks
+            mockCollection.mockImplementation((path: string) => {
+                if (path === 'customers') {
+                    // db.collection('customers').doc(uid).collection('subscriptions')...
+                    return {
+                        doc: vi.fn().mockReturnValue({
+                            collection: vi.fn().mockReturnValue({
+                                where: vi.fn().mockReturnThis(),
+                                orderBy: vi.fn().mockReturnThis(),
+                                limit: vi.fn().mockReturnValue({
+                                    get: vi.fn().mockResolvedValue(createSnap(mockSubData))
+                                })
+                            })
+                        })
+                    };
+                }
+                if (['garminAPITokens', 'suuntoAppAccessTokens', 'COROSAPIAccessTokens'].includes(path)) {
+                    // db.collection(service).doc(uid).collection('tokens').limit(1).get()
+                    return {
+                        doc: vi.fn().mockReturnValue({
+                            collection: vi.fn().mockReturnValue({
+                                limit: vi.fn().mockReturnValue({
+                                    get: vi.fn().mockResolvedValue(createSnap(mockServiceDocTitle))
+                                })
+                            })
+                        })
+                    };
+                }
+                return {
+                    doc: vi.fn().mockReturnValue({
+                        set: vi.fn().mockResolvedValue({}),
+                        get: vi.fn().mockResolvedValue({ exists: false }),
+                        collection: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ empty: true }) })
+                        })
+                    }),
+                    where: vi.fn().mockReturnThis(),
+                    orderBy: vi.fn().mockReturnThis(),
+                    limit: vi.fn().mockReturnThis(),
+                    get: vi.fn().mockResolvedValue({ empty: true })
+                };
+            });
+
+            const result: any = await (listUsers as any)(getAdminRequest({ page: 0, pageSize: 10 }));
+
+            const user = result.users[0];
+            expect(user.subscription).toEqual(mockSubData);
+            expect(user.connectedServices).toHaveLength(3);
+        });
+    });
+
+    // -------------------------------------------------------------------------
+    // COVERAGE: SORTING TESTS
+    // -------------------------------------------------------------------------
+    describe('listUsers Sorting', () => {
+        // Sort Logic: u1(pro, Aaron), u2(basic, Zack), u3(free, Middle)
+        const usersForSort = [
+            { uid: 'u1', displayName: 'Aaron', email: 'a@test.com', disabled: false, customClaims: { admin: true, stripeRole: 'pro' }, metadata: { creationTime: '2024-01-01', lastSignInTime: '2024-01-01' }, providerData: [{ providerId: 'google.com' }] },
+            { uid: 'u2', displayName: 'Zack', email: 'z@test.com', disabled: true, customClaims: { admin: false, stripeRole: 'basic' }, metadata: { creationTime: '2024-02-01', lastSignInTime: '2024-02-01' }, providerData: [] },
+            { uid: 'u3', displayName: 'Middle', email: 'm@test.com', disabled: false, customClaims: { admin: false, stripeRole: 'free' }, metadata: { creationTime: '2024-03-01', lastSignInTime: '2024-03-01' }, providerData: [{ providerId: 'facebook.com' }] },
+        ];
+
+        beforeEach(() => {
+            mockListUsers.mockResolvedValue({ users: usersForSort, pageToken: undefined });
+            // Reset mockCollection to simple empty default
+            mockCollection.mockImplementation(() => ({
+                doc: vi.fn().mockReturnValue({ collection: vi.fn().mockReturnValue({ limit: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ empty: true }) }) }) }),
+                where: vi.fn().mockReturnThis(),
+                get: vi.fn().mockResolvedValue({ empty: true })
+            }));
+        });
+
+        it('should sort by displayName desc', async () => {
+            const result: any = await (listUsers as any)(getAdminRequest({ sortField: 'displayName', sortDirection: 'desc' }));
+            expect(result.users.map((u: any) => u.displayName)).toEqual(['Zack', 'Middle', 'Aaron']);
+        });
+
+        it('should sort by email asc', async () => {
+            const result: any = await (listUsers as any)(getAdminRequest({ sortField: 'email', sortDirection: 'asc' }));
+            expect(result.users.map((u: any) => u.email)).toEqual(['a@test.com', 'm@test.com', 'z@test.com']);
+        });
+
+        it('should sort by role asc', async () => {
+            const result: any = await (listUsers as any)(getAdminRequest({ sortField: 'role', sortDirection: 'asc' }));
+            expect(result.users.map((u: any) => u.uid)).toEqual(['u2', 'u3', 'u1']);
+        });
+
+        it('should sort by admin desc', async () => {
+            const result: any = await (listUsers as any)(getAdminRequest({ sortField: 'admin', sortDirection: 'desc' }));
+            expect(result.users[0].uid).toBe('u1');
+        });
+
+        it('should sort by status (disabled) desc', async () => {
+            const result: any = await (listUsers as any)(getAdminRequest({ sortField: 'status', sortDirection: 'desc' }));
+            expect(result.users[0].uid).toBe('u2');
+        });
+
+        it('should sort by lastLogin asc', async () => {
+            const result: any = await (listUsers as any)(getAdminRequest({ sortField: 'lastLogin', sortDirection: 'asc' }));
+            expect(result.users.map((u: any) => u.uid)).toEqual(['u1', 'u2', 'u3']);
+        });
+
+        it('should sort by providerIds asc', async () => {
+            // u1: google, u2: '', u3: facebook
+            // sorted asc: '' (u2), facebook (u3), google (u1)
+            const result: any = await (listUsers as any)(getAdminRequest({ sortField: 'providerIds', sortDirection: 'asc' }));
+            expect(result.users.map((u: any) => u.uid)).toEqual(['u2', 'u3', 'u1']);
+        });
+    });
+
+    // -------------------------------------------------------------------------
+    // COVERAGE: ERROR HANDLING & PROVIDER BREAKDOWN
+    // -------------------------------------------------------------------------
+    describe('Error Handling & Stats', () => {
+        it('listUsers should handle auth listUsers failure', async () => {
+            mockListUsers.mockRejectedValue(new Error('Auth Error'));
+            await expect((listUsers as any)(getAdminRequest())).rejects.toThrow('Auth Error');
+        });
+
+        it('getUserCount should accurately count provider types', async () => {
+            const mockUsers = [
+                { uid: 'u1', providerData: [{ providerId: 'google.com' }] },
+                { uid: 'u2', providerData: [{ providerId: 'password' }] },
+                { uid: 'u3', providerData: [] } // Anonymous/Password fallback logic test line 360-362
+            ];
+            mockListUsers.mockResolvedValue({ users: mockUsers, pageToken: undefined });
+
+            // Mock basic count returns (not important for this test but needed)
+            mockCollection.mockReturnValue({
+                count: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ data: () => ({ count: 100 }) }) }),
+                where: vi.fn().mockReturnThis(),
+                get: vi.fn().mockResolvedValue({ empty: true })
+            });
+
+            const result: any = await (getUserCount as any)(getAdminRequest());
+
+            // u1 -> google.com: 1
+            // u2 -> password: 1
+            // u3 -> no providers -> falls back to password: 1 (total password: 2)
+            expect(result.providers['google.com']).toBe(1);
+            expect(result.providers['password']).toBe(2);
+        });
+
+        it('getUserCount should handle firestore error', async () => {
+            mockCollection.mockReturnValue({
+                count: vi.fn().mockReturnThis(),
+                get: vi.fn().mockRejectedValue(new Error('Count Error')),
+                collectionGroup: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis()
+            });
+            await expect((getUserCount as any)(getAdminRequest())).rejects.toThrow('Failed to get user count');
+        });
     });
 
     it('should throw "unauthenticated" if called without auth', async () => {
@@ -316,6 +574,7 @@ describe('impersonateUser Cloud Function', () => {
     });
 
     it('should create a custom token with impersonatedBy claim', async () => {
+        mockCreateCustomToken.mockResolvedValue('mock-custom-token');
         const targetUid = 'target-user-uid';
         const adminUid = 'admin-uid';
         const request = {
@@ -862,5 +1121,116 @@ describe('getFinancialStats Cloud Function', () => {
         expect(result.cost.billingAccountId).toBeNull();
         expect(result.cost.reportUrl).toBeNull();
     });
+
+    it('should handle specific billing account fetch error', async () => {
+        // Mock success for getProjectBillingInfo but failure for getBillingAccount
+        mockGetProjectBillingInfo.mockResolvedValue([{ billingAccountName: 'billingAccounts/123' }]);
+        mockGetBillingAccount.mockRejectedValue(new Error('Permission denied'));
+        mockStripeClient.invoices.list.mockResolvedValue({ has_more: false, data: [] });
+
+        const result: any = await (getFinancialStats as any)(request);
+        expect(result.cost.billingAccountId).toBe('123'); // Still gets ID
+        // Budget fetch might also fail or be skipped, but function shouldn't throw
+    });
+
+    it('should handle budget list error', async () => {
+        mockGetProjectBillingInfo.mockResolvedValue([{ billingAccountName: 'billingAccounts/123' }]);
+        mockGetBillingAccount.mockResolvedValue([{ currencyCode: 'USD' }]);
+        mockListBudgets.mockRejectedValue(new Error('Budget Error'));
+        mockStripeClient.invoices.list.mockResolvedValue({ has_more: false, data: [] });
+
+        const result: any = await (getFinancialStats as any)(request);
+        // Should just have null budget
+        expect(result.cost.budget).toBeNull();
+    });
+
+    it('should handle BigQuery query error', async () => {
+        mockGetProjectBillingInfo.mockResolvedValue([{ billingAccountName: 'billingAccounts/123' }]);
+        mockGetBillingAccount.mockResolvedValue([{ currencyCode: 'USD' }]);
+        mockListBudgets.mockResolvedValue([]);
+        mockGetTables.mockResolvedValue([[{ id: 'gcp_billing_export_v1_xyz' }]]);
+        mockBigQueryQuery.mockRejectedValue(new Error('Query Failed'));
+        mockStripeClient.invoices.list.mockResolvedValue({ has_more: false, data: [] });
+
+        const result: any = await (getFinancialStats as any)(request);
+        // Total remains null or 0 from initialization
+        expect(result.cost.total).toBeNull();
+    });
+
+    it('should handle missing BigQuery export table', async () => {
+        mockGetProjectBillingInfo.mockResolvedValue([{ billingAccountName: 'billingAccounts/123' }]);
+        mockGetBillingAccount.mockResolvedValue([{ currencyCode: 'USD' }]);
+        mockListBudgets.mockResolvedValue([]);
+        mockGetTables.mockResolvedValue([[]]); // No tables
+        mockStripeClient.invoices.list.mockResolvedValue({ has_more: false, data: [] });
+
+        const result: any = await (getFinancialStats as any)(request);
+        expect(result.cost.total).toBeNull();
+    });
 });
 
+describe('Generic Error Handling', () => {
+    it('getQueueStats should handle generic errors', async () => {
+        const { getQueueStats } = await import('./admin');
+        const req = getAdminRequest();
+        mockFirestore.mockImplementationOnce(() => { throw new Error('Generic Failure'); });
+        await expect((getQueueStats as any)(req)).rejects.toThrow('Generic Failure');
+    });
+
+    it('setMaintenanceMode should handle generic errors', async () => {
+        const { setMaintenanceMode } = await import('./admin');
+        const req = getAdminRequest({ enabled: true });
+        mockFirestore.mockImplementationOnce(() => { throw new Error('Firestore init failed'); });
+        await expect((setMaintenanceMode as any)(req)).rejects.toThrow('Firestore init failed');
+    });
+
+    it('getMaintenanceStatus should handle generic errors', async () => {
+        const { getMaintenanceStatus } = await import('./admin');
+        mockFirestore.mockImplementationOnce(() => { throw new Error('Firestore init failed'); });
+        await expect((getMaintenanceStatus as any)(getAdminRequest())).rejects.toThrow('Firestore init failed');
+    });
+
+    it('impersonateUser should handle generic errors', async () => {
+        const { impersonateUser } = await import('./admin');
+        const req = getAdminRequest({ uid: 'target' });
+        mockCreateCustomToken.mockRejectedValueOnce(new Error('Token Gen Failed'));
+        await expect((impersonateUser as any)(req)).rejects.toThrow('Token Gen Failed');
+    });
+
+    it('getFinancialStats should handle generic errors', async () => {
+        const { getFinancialStats } = await import('./admin');
+        mockFirestore.mockImplementationOnce(() => { throw new Error('Firestore init failed'); });
+        await expect((getFinancialStats as any)(getAdminRequest())).rejects.toThrow('Firestore init failed');
+    });
+
+    it('should fallback to revenue currency for budget when billing currency is missing and budget is set via env', async () => {
+        const { getFinancialStats } = await import('./admin');
+
+        // Setup env var
+        process.env.GCP_BILLING_BUDGET = '500';
+
+        // Mock billing account fetch to fail (so cost.currency remains empty initially)
+        mockGetProjectBillingInfo.mockRejectedValueOnce(new Error('Auth Error'));
+
+        // Mock stripe (revenue currency defaults to 'eur')
+        const stripeMock = await import('../stripe/client');
+        (stripeMock.getStripe as any).mockResolvedValue({
+            invoices: {
+                list: vi.fn().mockResolvedValue({ data: [], has_more: false })
+            }
+        });
+
+        // Mock valid products
+        mockCollection.mockReturnValue({
+            get: vi.fn().mockResolvedValue({ docs: [] })
+        });
+
+        const result = await (getFinancialStats as any)(getAdminRequest());
+
+        expect(result.cost.budget).toEqual({ amount: 500, currency: 'eur' });
+        expect(result.cost.currency).toBe('eur');
+
+        // Cleanup
+        delete process.env.GCP_BILLING_BUDGET;
+    });
+});
