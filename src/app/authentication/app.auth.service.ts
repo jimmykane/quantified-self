@@ -56,17 +56,23 @@ export class AppAuthService {
                   // Handle Firestore Timestamp or Date
                   const claimsUpdatedAt = claimsUpdatedAtUnformatted.toDate ? claimsUpdatedAtUnformatted.toDate() : new Date(claimsUpdatedAtUnformatted.seconds * 1000);
 
-                  // authTime is in seconds string
-                  const authTimeStr = tokenResult.claims['auth_time'] as string;
-                  const authTime_ms = parseInt(authTimeStr, 10) * 1000;
+                  // iat (issued at) is in seconds
+                  const iatClaim = tokenResult.claims['iat'];
+                  const iat = typeof iatClaim === 'number' ? iatClaim : parseInt(String(iatClaim), 10);
+                  const iatMs = iat * 1000;
 
                   // We need a buffer to prevent infinite loops if clocks are slightly off
-                  // If DB update is > authTime + 5 seconds buffer, we refresh.
-                  // Actually, just strictly newer is usually enough, but let's be safe.
-                  if (claimsUpdatedAt.getTime() > authTime_ms + 2000) {
-                    this.logger.log(`[AppAuthService] Claims updated at ${claimsUpdatedAt.toISOString()} vs Token at ${new Date(authTime_ms).toISOString()}. Refreshing token...`);
-                    // Force refresh
-                    await firebaseUser.getIdToken(true);
+                  // If DB update is > iat + 5 seconds buffer, we refresh.
+                  if (claimsUpdatedAt.getTime() > iatMs + 2000) {
+                    this.logger.log(`[AppAuthService] Claims updated at ${claimsUpdatedAt.toISOString()} vs Token issued at ${new Date(iatMs).toISOString()}. Refreshing token...`);
+                    // Force refresh - wrapped in try-catch to handle failures gracefully
+                    try {
+                      await firebaseUser.getIdToken(true);
+                    } catch (e) {
+                      this.logger.error('[AppAuthService] Failed to refresh token', e);
+                      // Return the user anyway with potentially stale claims
+                      return dbUser;
+                    }
                     // The user$ observable will re-emit because the token change triggers auth state change eventually?
                     // Actually, getIdToken(true) does NOT trigger onAuthStateChanged by itself usually unless the user object reference changes.
                     // But we are inside switchMap of user(this.auth).
