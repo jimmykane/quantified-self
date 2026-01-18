@@ -134,9 +134,9 @@ describe('AppAuthService', () => {
     });
 
 
-    it('should refresh token if claimsUpdatedAt is newer than auth_time', async () => {
-        const authTime = new Date();
-        const newerTime = new Date(authTime.getTime() + 50000); // 50 seconds later
+    it('should refresh token if claimsUpdatedAt is newer than iat', async () => {
+        const iat = Math.floor(Date.now() / 1000); // iat in seconds
+        const newerTime = new Date((iat + 50) * 1000); // 50 seconds later
 
         const mockFirebaseUser = {
             uid: 'existing-uid',
@@ -144,10 +144,10 @@ describe('AppAuthService', () => {
             getIdToken: vi.fn(),
         };
 
-        // First call return old token
+        // First call return old token with iat
         mockFirebaseUser.getIdTokenResult.mockResolvedValueOnce({
             claims: {
-                auth_time: (authTime.getTime() / 1000).toString(),
+                iat: iat,
                 stripeRole: 'basic'
             }
         });
@@ -155,7 +155,7 @@ describe('AppAuthService', () => {
         // Second call (after refresh) returns new token with updated role
         mockFirebaseUser.getIdTokenResult.mockResolvedValueOnce({
             claims: {
-                auth_time: (newerTime.getTime() / 1000).toString(), // conceptually newer
+                iat: iat + 60, // newer iat after refresh
                 stripeRole: 'pro'
             }
         });
@@ -163,8 +163,8 @@ describe('AppAuthService', () => {
         const mockDbUser = {
             uid: 'existing-uid',
             claimsUpdatedAt: {
-                // Firestore Timestamp-like object
-                seconds: newerTime.getTime() / 1000,
+                // Firestore Timestamp-like object - newer than iat
+                seconds: iat + 50,
                 nanoseconds: 0,
                 toDate: () => newerTime
             },
