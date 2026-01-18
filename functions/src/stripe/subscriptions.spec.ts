@@ -351,6 +351,20 @@ describe('onSubscriptionUpdated', () => {
 
             await expect(onSubscriptionUpdated(event)).resolves.not.toThrow();
         });
+        it('should handle user without customClaims defined', async () => {
+            const uid = 'no_claims_user';
+            const event = createMockEvent(uid, 'sub_no_claims');
+
+            setupUserExists(true, {});
+            mockReconcileClaims.mockRejectedValue({ code: 'not-found' }); // Force catch block
+
+            authSpy.mockReturnValue({
+                getUser: vi.fn().mockResolvedValue({ customClaims: undefined }), // No claims
+                setCustomUserClaims: vi.fn().mockResolvedValue(undefined)
+            } as unknown as admin.auth.Auth);
+
+            await expect(onSubscriptionUpdated(event)).resolves.not.toThrow();
+        });
     });
 
     // --------------------------------------------------------------------------------

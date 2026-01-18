@@ -156,4 +156,22 @@ describe('cleanupStripeCustomer', () => {
         expect(result.cleaned).toBe(true);
         expect(mockDocRef.update).toHaveBeenCalled();
     });
+    it('should throw HttpsError internal if Stripe verify fails with generic error', async () => {
+        // Mock Firestore finding the ID
+        mockDocSnap.data.mockReturnValue({ stripeId: 'cus_test123' });
+
+        mockStripeRetrieve.mockRejectedValue(new Error('Network Error'));
+
+        const handler = cleanupStripeCustomer as unknown as (req: CallableRequest) => Promise<any>;
+        await expect(handler(mockRequest)).rejects.toThrow('Failed to verify Stripe customer.');
+    });
+
+    it('should wrap non-HttpsError in internal HttpsError', async () => {
+        // Mock Firestore throwing generic error
+        mockDocRef.get.mockRejectedValue(new Error('DB Connection Failed'));
+
+        const handler = cleanupStripeCustomer as unknown as (req: CallableRequest) => Promise<any>;
+
+        await expect(handler(mockRequest)).rejects.toThrow('Cleanup process failed.');
+    });
 });

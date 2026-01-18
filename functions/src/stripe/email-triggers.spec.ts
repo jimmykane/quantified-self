@@ -7,7 +7,16 @@ vi.mock('../shared/pricing', () => ({
     ROLE_HIERARCHY: {
         'free': 0,
         'basic': 1,
-        'pro': 2
+        'pro': 2,
+        'mystery-tier': 0,
+        'hidden_vip': 10,
+        'super_pro': 11
+    },
+    ROLE_DISPLAY_NAMES: {
+        'free': 'Free',
+        'basic': 'Basic',
+        'pro': 'Pro',
+        'super_pro': 'Super Pro'
     }
 }));
 
@@ -85,7 +94,7 @@ describe('checkAndSendSubscriptionEmails', () => {
             to: 'test@example.com',
             template: {
                 name: 'welcome_email',
-                data: { role: 'pro' }
+                data: { role: 'Pro' }
             },
             expireAt: expect.any(Object)
         }));
@@ -284,4 +293,158 @@ describe('checkAndSendSubscriptionEmails', () => {
             expireAt: expect.any(Object)
         }));
     });
+    it('should use raw role name if display name not found (Unknown Role Upgrade)', async () => {
+        const uid = 'user1';
+        const subId = 'sub1';
+        const before = { status: 'active', role: 'basic' };
+        // 'alien-lord' is not in ROLE_HIERARCHY, so level 0. basic is 1.
+        // Wait, if new level is 0 and old is 1, that's a downgrade.
+        // Let's test upgrade with something higher than pro if possible, or just custom logic?
+        // Actually, if it returns 0, it counts as Free.
+        // To test lookup failure but still passing logic, we need to mock ROLE_HIERARCHY to include it but not display name?
+        // The mock in line 7 hardcodes the hierarchy.
+        // Let's test the Display Name fallback specifically.
+
+        // We can't easily change the mocked hierarchy mid-test without re-importing or using doMock.
+        // However, we CAN test the fallback in cancellation which doesn't check hierarchy.
+        const after = {
+            status: 'active',
+            role: 'unknown-role',
+            cancel_at_period_end: true,
+            current_period_end: { seconds: 123, toDate: () => new Date() }
+        };
+        const eventId = 'evt_unknown_1';
+
+        await checkAndSendSubscriptionEmails(uid, subId, before, after, eventId);
+
+        expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+            template: expect.objectContaining({
+                data: expect.objectContaining({
+                    role: 'unknown-role'
+                })
+            })
+        }));
+    });
+
+    it('should use raw role name if display name not found (Downgrade)', async () => {
+        // Mock hierarchy logic implies:
+        // old=basic(1), new=unknown(0). 0 < 1 => Downgrade.
+        const uid = 'user1';
+        const subId = 'sub1';
+        const before = { status: 'active', role: 'basic' };
+        const after = { status: 'active', role: 'unknown-role' };
+        const eventId = 'evt_unknown_2';
+
+        await checkAndSendSubscriptionEmails(uid, subId, before, after, eventId);
+
+        expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+            template: expect.objectContaining({
+                name: 'subscription_downgrade',
+                data: expect.objectContaining({
+                    new_role: 'unknown-role',
+                    limit: '10' // default
+                })
+            })
+        }));
+    });
+    it('should use raw role name for OLD role if display name not found (Upgrade)', async () => {
+        const uid = 'user1';
+        const subId = 'sub1';
+        const before = { status: 'active', role: 'mystery-tier' };
+        const after = { status: 'active', role: 'pro' };
+        const eventId = 'evt_unknown_3';
+
+        await checkAndSendSubscriptionEmails(uid, subId, before, after, eventId);
+
+        expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+            template: expect.objectContaining({
+                name: 'subscription_upgrade',
+                data: expect.objectContaining({
+                    old_role: 'mystery-tier',
+                    new_role: 'Pro'
+                })
+            })
+        }));
+    });
+    it('should use raw string for old_role if high-tier role has no display name (Fallback)', async () => {
+        const uid = 'user_vip';
+        const subId = 'sub_vip';
+        const before = { role: 'hidden_vip' };
+        const after = { role: 'basic' };
+        const eventId = 'evt_fallback_1';
+
+        await checkAndSendSubscriptionEmails(uid, subId, before, after, eventId);
+
+        expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+            template: expect.objectContaining({
+                name: 'subscription_downgrade',
+                data: expect.objectContaining({
+                    old_role: 'hidden_vip', // Fallback!
+                    new_role: 'Basic'
+                })
+            })
+        }));
+    });
+
+    it('should use raw role name if display name not found (Welcome)', async () => {
+        const uid = 'user1';
+        const subId = 'sub1';
+        const before = undefined;
+        const after = { status: 'active', role: 'mystery-tier' };
+        const eventId = 'evt_welcome_unknown';
+
+        await checkAndSendSubscriptionEmails(uid, subId, before, after, eventId);
+
+        expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+            template: expect.objectContaining({
+                name: 'welcome_email',
+                data: { role: 'mystery-tier' }
+            })
+        }));
+    });
+
+    it('should use raw role name for NEW role if display name not found (Upgrade)', async () => {
+        const uid = 'user1';
+        const subId = 'sub1';
+        const before = { status: 'active', role: 'basic' };
+        const after = { status: 'active', role: 'super_pro' };
+        const eventId = 'evt_upgrade_unknown';
+
+        await checkAndSendSubscriptionEmails(uid, subId, before, after, eventId);
+
+        expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
+            template: expect.objectContaining({
+                name: 'subscription_upgrade',
+                data: expect.objectContaining({
+                    old_role: 'Basic',
+                    new_role: 'Super Pro' // In our mock, super_pro has a display name
+                })
+            })
+        }));
+    });
+    it('should NOT queue WELCOME email if user has no email in auth', async () => {
+        vi.mocked(admin.auth().getUser).mockResolvedValueOnce({ uid: 'u1', email: undefined } as any);
+        await checkAndSendSubscriptionEmails('u1', 's1', undefined, { status: 'active', role: 'pro' }, 'e1');
+        expect(setSpy).not.toHaveBeenCalled();
+    });
+
+    it('should NOT queue UPGRADE email if user has no email in auth', async () => {
+        vi.mocked(admin.auth().getUser).mockResolvedValueOnce({ uid: 'u1', email: undefined } as any);
+        await checkAndSendSubscriptionEmails('u1', 's1', { role: 'basic' }, { role: 'pro' }, 'e1');
+        expect(setSpy).not.toHaveBeenCalled();
+    });
+
+    it('should NOT queue DOWNGRADE email if user has no email in auth', async () => {
+        vi.mocked(admin.auth().getUser).mockResolvedValueOnce({ uid: 'u1', email: undefined } as any);
+        await checkAndSendSubscriptionEmails('u1', 's1', { role: 'pro' }, { role: 'basic' }, 'e1');
+        expect(setSpy).not.toHaveBeenCalled();
+    });
+
+    it('should NOT queue CANCELLATION email if user has no email in auth', async () => {
+        vi.mocked(admin.auth().getUser).mockResolvedValueOnce({ uid: 'u1', email: undefined } as any);
+        await checkAndSendSubscriptionEmails('u1', 's1', { cancel_at_period_end: false }, { cancel_at_period_end: true, current_period_end: { seconds: 123 } }, 'e1');
+        expect(setSpy).not.toHaveBeenCalled();
+    });
 });
+
+
