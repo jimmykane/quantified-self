@@ -16,7 +16,7 @@ export class AppDeepLinkService {
      * On Desktop: Opens the Garmin Connect web URL.
      */
     public openGarminConnectApp(): void {
-        const webUrl = 'https://connect.garmin.com/app/settings/accountInformation';
+        const webUrl = 'https://connect.garmin.com/modern/account';
         const iosScheme = 'gcm-ciq://';
         const androidPackage = 'com.garmin.android.apps.connectmobile';
 
@@ -52,13 +52,6 @@ export class AppDeepLinkService {
         }
 
         // Default/Desktop fallback
-        this.logger.log(`[AppDeepLinkService] Opening Garmin Connect Web: ${webUrl}`);
-        const newWindow = this.windowService.windowRef.open(webUrl, '_blank');
-
-        // Check for popup blocker
-        if (!newWindow || newWindow.closed || typeof newWindow.closed == 'undefined') {
-            this.logger.warn('[AppDeepLinkService] Popup blocked, falling back to current window');
-            this.windowService.windowRef.location.href = webUrl;
-        }
+        this.windowService.windowRef.open(webUrl, '_blank');
     }
 }

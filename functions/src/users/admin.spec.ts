@@ -191,7 +191,7 @@ describe('listUsers Cloud Function', () => {
         mockListUsers.mockResolvedValue({ users: mockUsers, pageToken: undefined });
 
         const request = {
-            data: { page: 0, pageSize: 2, sortDirection: 'asc' },
+            data: { page: 0, pageSize: 2 },
             auth: { uid: 'admin-uid', token: { admin: true } },
             app: { appId: 'mock-app-id' }
         } as unknown as CallableRequest<any>;
