@@ -433,7 +433,8 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
                     next: async (res) => {
                         this.logger.log('Impersonation token received. Switching user...', res);
                         await this.authService.loginWithCustomToken(res.token);
-                        this.router.navigate(['/']);
+                        // Force a full page reload to clear any stale states/services
+                        window.location.href = '/dashboard';
                     },
                     error: (err) => {
                         this.logger.error('Impersonation failed', err);
