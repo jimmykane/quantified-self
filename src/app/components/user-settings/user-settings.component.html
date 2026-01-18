@@ -303,7 +303,7 @@
             <mat-select formControlName="dataTypesToUse" multiple>
               @for (group of dataGroups; track group.name) {
               <mat-optgroup [label]="group.name">
-                @for (data of group.data; track $index) {
+                @for (data of group.data; track data) {
                 <mat-option [value]="data">{{data}}</mat-option>
                 }
               </mat-optgroup>

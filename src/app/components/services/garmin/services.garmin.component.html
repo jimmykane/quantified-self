@@ -60,18 +60,15 @@
               </li>
             </ul>
             <p style="margin-top: 8px;"><strong>To update permissions:</strong></p>
-            <div style="margin-top: 8px; margin-bottom: 8px;">
-              <a (click)="openGarminConnectApp(); $event.preventDefault()" href="javascript:void(0)"
-                style="cursor: pointer; font-weight: 500; text-decoration: underline;">Open Garmin Connect</a>
-            </div>
-
-            <p style="margin-bottom: 4px;"><strong>Navigate to:</strong></p>
-            <ul style="margin-top: 0;">
+            <ul>
               <li>
-                <strong>Web:</strong> Account Information → Connected Apps
+                <a href="https://connect.garmin.com/modern/account" target="_blank" rel="noopener">Garmin Connect
+                  Web</a>
+                → Account Information → Connected Apps
               </li>
               <li>
-                <strong>App:</strong> More → Settings → Connected Apps
+                <a (click)="openGarminConnectApp()" style="cursor: pointer;">Open Garmin Connect App</a>
+                → More → Settings → Connected Apps
               </li>
             </ul>
             <p style="margin-top: 4px; opacity: 0.7; font-size: 0.8rem;">

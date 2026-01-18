@@ -27,15 +27,6 @@ export const processWorkoutTask = onTaskDispatched({
     const queueDoc = await queueRef.get();
 
     if (!queueDoc.exists) {
-        // Check if the item is in the Dead Letter Queue (failed_jobs)
-        // This handles cases where the task retry loop continues even after the item was securely moved to DLQ
-        const failedJobDoc = await admin.firestore().collection('failed_jobs').doc(queueItemId).get();
-
-        if (failedJobDoc.exists) {
-            logger.warn(`[TaskWorker] Queue item ${queueItemId} not found in ${collectionName} but exists in failed_jobs. Stopping retry.`);
-            return;
-        }
-
         // Throw error so Cloud Tasks retries with exponential backoff.
         // This handles race conditions where the task executes before Firestore write propagates.
         throw new Error(`[TaskWorker] Queue item ${queueItemId} not found in ${collectionName}`);

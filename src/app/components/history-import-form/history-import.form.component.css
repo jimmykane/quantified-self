@@ -65,7 +65,7 @@
 }
 
 .stat-value {
-  font-size: 1.1rem;
+  font-size: 1.5rem;
   font-weight: 600;
   color: var(--mat-sys-on-surface);
   line-height: 1.2;
