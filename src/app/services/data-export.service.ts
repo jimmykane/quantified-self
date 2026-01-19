@@ -100,9 +100,9 @@ export class DataExportService {
         const headerCells = columns.map(col => {
             const displayName = this.getColumnHeaderName(col);
             const color = getColumnColor(col);
-            // Use font tag for better spreadsheet compatibility
+            // Use span with inline style for colors
             const coloredContent = color
-                ? `<font color="${color}">${escapeHtml(displayName)}</font>`
+                ? `<span style="color: ${color}">${escapeHtml(displayName)}</span>`
                 : escapeHtml(displayName);
             return `<th style="color: white; border: 1px solid white;">${coloredContent}</th>`;
         }).join('');
