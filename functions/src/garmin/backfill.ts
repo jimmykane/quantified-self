@@ -119,9 +119,10 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
     throw new Error('Missing required Garmin permissions (Historical Data Export, Activity Export). Please reconnect your Garmin account and ensure all permissions are granted.');
   }
 
-  // We need to break down the requests to multiple of 90 days max. 7776000s
-  // So if the date range the user sent is 179 days we need to send 2 request with the respective ranges
-  const maxDeltaInMS = 7776000000;
+  // Garmin API limits backfill requests to 90 days (7776000 seconds) maximum per request.
+  // We break down larger ranges into multiple batches.
+  // Use slightly under 90 days (89 days) to ensure we never exceed the limit due to rounding.
+  const maxDeltaInMS = 89 * 24 * 60 * 60 * 1000; // 89 days in milliseconds
   logger.info(`Starting backfill for Garmin User ID: ${(serviceToken as any).userID}`);
   const batchCount = Math.ceil((+endDate - +startDate) / maxDeltaInMS);
 
@@ -135,7 +136,7 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
         headers: {
           'Authorization': `Bearer ${serviceToken.accessToken}`,
         },
-        url: `${GARMIN_ACTIVITIES_BACKFILL_URI}?summaryStartTimeInSeconds=${Math.floor(batchStartDate.getTime() / 1000)}&summaryEndTimeInSeconds=${Math.ceil(batchEndDate.getTime() / 1000)}`,
+        url: `${GARMIN_ACTIVITIES_BACKFILL_URI}?summaryStartTimeInSeconds=${Math.floor(batchStartDate.getTime() / 1000)}&summaryEndTimeInSeconds=${Math.floor(batchEndDate.getTime() / 1000)}`,
       });
     } catch (e: any) {
       // Log the full error for debugging

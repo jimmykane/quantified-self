@@ -34,6 +34,7 @@
         <div class="stat-value">
           <span class="badge accent">{{ garminCooldownDays }} days</span>
         </div>
+        <span class="stat-hint">Garmin API limit</span>
       </div>
       <div class="stat-card">
         <div class="stat-header">
@@ -41,6 +42,7 @@
           <span class="stat-label">Status</span>
         </div>
         <div class="stat-value">Requested</div>
+        <span class="stat-hint">Activities arrive via push</span>
       </div>
       }
 
@@ -68,6 +70,18 @@
       <strong>Missing Permissions</strong>
       <p>
         Export permissions are required for history import. Please reconnect to Garmin and grant all permissions.
+      </p>
+    </div>
+  </div>
+  }
+  @if (serviceName === serviceNames.GarminAPI) {
+  <div class="limit-info">
+    <mat-icon>info</mat-icon>
+    <div class="limit-text">
+      <span class="limit-title">{{garminCooldownDays}}-Day Cooldown</span>
+      <p class="limit-description">
+        Garmin's API limits history imports to once per month. This is enforced by Garmin to prevent overloading their
+        servers.
       </p>
     </div>
   </div>
@@ -105,7 +119,7 @@
         I understand this may take hours to days.
         }
         @if (serviceName === serviceNames.GarminAPI) {
-        I understand I can only import every 3 days.
+        I understand I can only import once every {{garminCooldownDays}} days (Garmin API limit).
         }
       </span>
     </mat-checkbox>
