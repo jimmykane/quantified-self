@@ -131,7 +131,10 @@ export class DataExportService {
         html += '</tbody></table>';
 
         // 3. Write to Clipboard using Navigator API if available
-        if (navigator.clipboard && navigator.clipboard.write) {
+        // iOS Safari's ClipboardItem support is unreliable (permission/timing issues),
+        // so we skip the rich copy path on iOS and use the fallback instead.
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        if (navigator.clipboard && navigator.clipboard.write && !isIOS) {
             try {
                 // Create blobs for both formats
                 const textBlob = new Blob([tsv], { type: 'text/plain' });
