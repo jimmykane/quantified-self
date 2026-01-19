@@ -88,7 +88,7 @@ describe('onAdminCall Wrapper', () => {
             expect.objectContaining({
                 memory: '512MiB',
                 region: 'us-central1',
-                cors: true
+                cors: ['*']
             }),
             expect.any(Function)
         );

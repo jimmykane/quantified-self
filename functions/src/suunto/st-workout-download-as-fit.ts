@@ -1,12 +1,12 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import fetch from 'node-fetch';
-import { enforceAppCheck } from '../utils';
+import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 
 export const stWorkoutDownloadAsFit = onCall({
   region: FUNCTIONS_MANIFEST.stWorkoutDownloadAsFit.region,
-  cors: true,
+  cors: ALLOWED_CORS_ORIGINS,
   timeoutSeconds: 300,
 }, async (request) => {
   if (!request.auth) {

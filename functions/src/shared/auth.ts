@@ -1,5 +1,5 @@
 import { onCall, HttpsError, CallableOptions, CallableRequest } from 'firebase-functions/v2/https';
-import { enforceAppCheck } from '../utils';
+import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 
 /**
  * Higher-order function that wraps an onCall handler with admin authorization checks.
@@ -19,7 +19,7 @@ export function onAdminCall<T = unknown, R = unknown>(
 ) {
     return onCall({
         ...options,
-        cors: true,
+        cors: ALLOWED_CORS_ORIGINS,
     }, async (request) => {
         // 1. Check authentication
         if (!request.auth) {

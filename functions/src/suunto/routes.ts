@@ -15,14 +15,14 @@ import { config } from '../config';
  */
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
-import { enforceAppCheck } from '../utils';
+import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 
 /**
  * Uploads a route to the Suunto app
  */
 export const importRouteToSuuntoApp = onCall({
   region: FUNCTIONS_MANIFEST.importRouteToSuuntoApp.region,
-  cors: true,
+  cors: ALLOWED_CORS_ORIGINS,
   timeoutSeconds: 300,
   maxInstances: 10,
 }, async (request) => {
