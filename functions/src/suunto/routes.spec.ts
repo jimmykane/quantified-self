@@ -59,6 +59,7 @@ vi.mock('firebase-functions/v2/https', () => {
 vi.mock('firebase-admin', () => {
     const getMock = vi.fn();
     const updateMock = vi.fn();
+    const setMock = vi.fn();
     const collectionMock: any = vi.fn();
     const docMock: any = vi.fn();
 
@@ -67,7 +68,8 @@ vi.mock('firebase-admin', () => {
         collection: collectionMock,
         get: getMock,
         data: () => ({ uploadedRoutesCount: 0 }),
-        ref: { update: updateMock }
+        ref: { update: updateMock },
+        set: setMock,
     };
 
     collectionMock.mockReturnValue({ doc: docMock, get: getMock });
@@ -267,5 +269,29 @@ describe('importRouteToSuuntoApp', () => {
         } catch (e: any) {
             expect(e.code).toBe('unauthenticated');
         }
+    });
+
+    it('should succeed even if metadata update fails', async () => {
+        const gpxContent = '<gpx>...</gpx>';
+
+        // Mock request success
+        requestMocks.post.mockResolvedValue(JSON.stringify({
+            id: 'route-id',
+        }));
+
+        // Mock Firestore set to fail
+        const admin = await import('firebase-admin');
+        const setMock = vi.fn().mockRejectedValue(new Error('Firestore error'));
+        vi.spyOn(admin.firestore().collection('users').doc('test-user-id').collection('meta').doc('SuuntoApp'), 'set').mockImplementation(setMock as any);
+
+        const compressedBase64 = Buffer.from(zlib.gzipSync(gpxContent)).toString('base64');
+        const request = createMockRequest({
+            data: { file: compressedBase64 }
+        });
+
+        const result = await importRouteToSuuntoApp(request as any);
+
+        expect(requestMocks.post).toHaveBeenCalled();
+        expect(result).toEqual({ status: 'success' });
     });
 });

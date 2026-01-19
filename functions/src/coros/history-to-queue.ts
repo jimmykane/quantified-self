@@ -5,9 +5,8 @@ import * as logger from 'firebase-functions/logger';
 import { isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
 import { SERVICE_NAME } from './constants';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../shared/history-import.constants';
-import { addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
+import { HistoryImportResult, addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
-
 
 interface HistoryToQueueRequest {
   startDate: string;
@@ -16,6 +15,7 @@ interface HistoryToQueueRequest {
 
 interface HistoryToQueueResponse {
   result: string;
+  stats?: HistoryImportResult;
 }
 
 /**
@@ -78,6 +78,13 @@ export const addCOROSAPIHistoryToQueue = functions
     const maxDeltaInMS = 2592000000;
     const batchCount = Math.ceil((+endDate - +startDate) / maxDeltaInMS);
 
+    const totalStats: HistoryImportResult = {
+      successCount: 0,
+      failureCount: 0,
+      processedBatches: 0,
+      failedBatches: 0,
+    };
+
     for (let i = 0; i < batchCount; i++) {
       const batchStartDate = new Date(startDate.getTime() + (i * maxDeltaInMS));
       const batchEndDate = batchStartDate.getTime() + (maxDeltaInMS) >= endDate.getTime() ?
@@ -86,6 +93,11 @@ export const addCOROSAPIHistoryToQueue = functions
 
       try {
         const stats = await addHistoryToQueue(userID, SERVICE_NAME, batchStartDate, batchEndDate);
+
+        totalStats.successCount += stats.successCount;
+        totalStats.failureCount += stats.failureCount;
+        totalStats.processedBatches += stats.processedBatches;
+        totalStats.failedBatches += stats.failedBatches;
 
         if (stats.successCount === 0 && stats.failureCount > 0) {
           throw new Error(`Failed to import all ${stats.failureCount} items in batch.`);
@@ -100,5 +112,5 @@ export const addCOROSAPIHistoryToQueue = functions
       }
     }
 
-    return { result: 'History items added to queue' };
+    return { result: 'History items added to queue', stats: totalStats };
   });

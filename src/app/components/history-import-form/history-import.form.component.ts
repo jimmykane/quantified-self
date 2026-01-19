@@ -142,12 +142,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
     try {
       this.analyticsService.logEvent('imported_history', { method: this.serviceName });
-      await this.userService.importServiceHistoryForCurrentUser(
+      const result = await this.userService.importServiceHistoryForCurrentUser(
         this.serviceName,
         dayjs(this.formGroup.get('startDate')?.value).toDate(),
         dayjs(this.formGroup.get('endDate')?.value).toDate()
       );
-      this.importInitiated.emit();
+      this.importInitiated.emit(result);
       this.snackBar.open('History import has been queued', undefined, {
         duration: 2000,
       });

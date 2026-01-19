@@ -4,10 +4,9 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { isProUser, PRO_REQUIRED_MESSAGE, enforceAppCheck } from '../utils';
 import { SERVICE_NAME } from './constants';
-import { addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
+import { HistoryImportResult, addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS } from '../utils';
-
 
 interface HistoryToQueueRequest {
   startDate: string;
@@ -16,6 +15,7 @@ interface HistoryToQueueRequest {
 
 interface HistoryToQueueResponse {
   result: string;
+  stats?: HistoryImportResult;
 }
 
 /**
@@ -57,8 +57,9 @@ export const addSuuntoAppHistoryToQueue = onCall({
     throw new HttpsError('permission-denied', 'History import is not allowed');
   }
 
+  let stats: HistoryImportResult;
   try {
-    const stats = await addHistoryToQueue(userID, SERVICE_NAME, startDate, endDate);
+    stats = await addHistoryToQueue(userID, SERVICE_NAME, startDate, endDate);
 
     if (stats.successCount === 0 && stats.failureCount > 0) {
       throw new Error(`Failed to import all ${stats.failureCount} items.`);
@@ -72,5 +73,5 @@ export const addSuuntoAppHistoryToQueue = onCall({
     throw new HttpsError('internal', e.message);
   }
 
-  return { result: 'History items added to queue' };
+  return { result: 'History items added to queue', stats };
 });

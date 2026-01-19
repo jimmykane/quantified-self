@@ -80,7 +80,10 @@ describe('Suunto History to Queue', () => {
                 expect.any(Date),
                 expect.any(Date)
             );
-            expect(result).toEqual({ result: 'History items added to queue' });
+            expect(result).toEqual({
+                result: 'History items added to queue',
+                stats: { successCount: 1, failureCount: 0, processedBatches: 1, failedBatches: 0 }
+            });
         });
 
         it('should throw error during queue processing', async () => {

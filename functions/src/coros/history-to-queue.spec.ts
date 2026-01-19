@@ -75,7 +75,10 @@ describe('COROS History to Queue', () => {
                 expect.any(Date),
                 expect.any(Date)
             );
-            expect(result).toEqual({ result: 'History items added to queue' });
+            expect(result).toEqual({
+                result: 'History items added to queue',
+                stats: { successCount: 1, failureCount: 0, processedBatches: 1, failedBatches: 0 }
+            });
         });
 
         it('should batch requests if range > 30 days', async () => {
@@ -129,7 +132,10 @@ describe('COROS History to Queue', () => {
             expect(history.addHistoryToQueue).toHaveBeenCalled();
             const callArgs = (history.addHistoryToQueue as any).mock.calls[0];
             expect(callArgs[2].getTime()).toBeGreaterThanOrEqual(limitDate.getTime());
-            expect(result).toEqual({ result: 'History items added to queue' });
+            expect(result).toEqual({
+                result: 'History items added to queue',
+                stats: { successCount: 4, failureCount: 0, processedBatches: 4, failedBatches: 0 }
+            });
         });
 
         it('should throw error if App Check fails', async () => {
