@@ -31,6 +31,11 @@ export const FUNCTIONS_MANIFEST = {
     backfillGarminAPIActivities: { name: 'backfillGarminAPIActivities', region: 'europe-west2' },
     receiveGarminAPIDeregistration: { name: 'receiveGarminAPIDeregistration', region: 'europe-west2' },
     receiveGarminAPIUserPermissions: { name: 'receiveGarminAPIUserPermissions', region: 'europe-west2' },
+    // Stripe Functions
+    restoreUserClaims: { name: 'restoreUserClaims', region: 'europe-west2' },
+    linkExistingStripeCustomer: { name: 'linkExistingStripeCustomer', region: 'europe-west2' },
+    cleanupStripeCustomer: { name: 'cleanupStripeCustomer', region: 'europe-west2' },
+    createPortalLink: { name: 'ext-firestore-stripe-payments-createPortalLink', region: 'europe-west3' },
 } as const;
 
 export type FunctionName = keyof typeof FUNCTIONS_MANIFEST;

@@ -238,13 +238,18 @@ describe('linkExistingStripeCustomer', () => {
     });
 
     it('should throw unauthenticated error if no auth context', async () => {
-        const req = { auth: null } as any;
+        const req = { auth: null, app: { appId: 'test' } } as any;
         await expect((linkExistingStripeCustomer as any)(req)).rejects.toThrow('The function must be called while authenticated');
+    });
+
+    it('should throw failed-precondition error if no app context', async () => {
+        const req = { auth: { uid: 'user1' }, app: null } as any;
+        await expect((linkExistingStripeCustomer as any)(req)).rejects.toThrow('The function must be called from an App Check verified app');
     });
 
     it('should return linked: false if user has no email', async () => {
         mockAuth.getUser.mockResolvedValue({ customClaims: {}, email: null });
-        const req = { auth: { uid: 'userNoEmail' } } as any;
+        const req = { auth: { uid: 'userNoEmail' }, app: { appId: 'test' } } as any;
 
         const result = await (linkExistingStripeCustomer as any)(req);
         expect(result).toEqual({ linked: false });
@@ -252,7 +257,7 @@ describe('linkExistingStripeCustomer', () => {
 
     it('should return linked: false if no Stripe customer found', async () => {
         mockStripeCustomersSearch.mockResolvedValue({ data: [] });
-        const req = { auth: { uid: 'user1' } } as any;
+        const req = { auth: { uid: 'user1' }, app: { appId: 'test' } } as any;
 
         const result = await (linkExistingStripeCustomer as any)(req);
         expect(result).toEqual({ linked: false });
@@ -270,7 +275,7 @@ describe('linkExistingStripeCustomer', () => {
             }]
         });
 
-        const req = { auth: { uid: 'user1' } } as any;
+        const req = { auth: { uid: 'user1' }, app: { appId: 'test' } } as any;
         const result = await (linkExistingStripeCustomer as any)(req);
         expect(result).toEqual({ linked: true, role: 'basic' });
         expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', expect.objectContaining({ stripeRole: 'basic' }));
@@ -278,7 +283,7 @@ describe('linkExistingStripeCustomer', () => {
 
     it('should handle internal errors gracefully by rethrowing generic HttpsError', async () => {
         mockAuth.getUser.mockRejectedValue(new Error('Auth Down'));
-        const req = { auth: { uid: 'user1' } } as any;
+        const req = { auth: { uid: 'user1' }, app: { appId: 'test' } } as any;
 
         await expect((linkExistingStripeCustomer as any)(req)).rejects.toThrow('Auth Down');
     });
@@ -292,7 +297,7 @@ describe('linkExistingStripeCustomer', () => {
         const httpsError = new HttpsError('permission-denied', 'Test Error');
         mockAuth.getUser.mockRejectedValue(httpsError);
 
-        const req = { auth: { uid: 'user1' } } as any;
+        const req = { auth: { uid: 'user1' }, app: { appId: 'test' } } as any;
         await expect((linkExistingStripeCustomer as any)(req)).rejects.toThrow('Test Error');
     });
 
@@ -300,7 +305,7 @@ describe('linkExistingStripeCustomer', () => {
         // Mock getUser to throw an empty object-like error (no message)
         mockAuth.getUser.mockRejectedValue({});
 
-        const req = { auth: { uid: 'user1' } } as any;
+        const req = { auth: { uid: 'user1' }, app: { appId: 'test' } } as any;
         await expect((linkExistingStripeCustomer as any)(req)).rejects.toThrow('Failed to check for existing subscription');
     });
 });
@@ -312,8 +317,13 @@ describe('restoreUserClaims', () => {
     });
 
     it('should throw unauthenticated error if no auth context', async () => {
-        const req = { auth: null } as any;
+        const req = { auth: null, app: { appId: 'test' } } as any;
         await expect((restoreUserClaims as any)(req)).rejects.toThrow('The function must be called while authenticated');
+    });
+
+    it('should throw failed-precondition error if no app context', async () => {
+        const req = { auth: { uid: 'user1' }, app: null } as any;
+        await expect((restoreUserClaims as any)(req)).rejects.toThrow('The function must be called from an App Check verified app');
     });
 
     it('should call reconcileClaims and return result', async () => {
@@ -323,7 +333,7 @@ describe('restoreUserClaims', () => {
             docs: [{ data: () => ({ status: 'active', role: 'pro' }) }]
         });
 
-        const req = { auth: { uid: 'user1' } } as any;
+        const req = { auth: { uid: 'user1' }, app: { appId: 'test' } } as any;
         const result = await (restoreUserClaims as any)(req);
 
         expect(result).toEqual({ success: true, role: 'pro' });
@@ -334,7 +344,7 @@ describe('restoreUserClaims', () => {
         // Mock get/limit chain to throw using mockImplementationOnce
         mockCollection.mockImplementationOnce(() => { throw new Error('DB Fail'); });
 
-        const req = { auth: { uid: 'user1' } } as any;
+        const req = { auth: { uid: 'user1' }, app: { appId: 'test' } } as any;
         await expect((restoreUserClaims as any)(req)).rejects.toThrow('DB Fail');
     });
 
@@ -343,7 +353,7 @@ describe('restoreUserClaims', () => {
         mockGet.mockResolvedValue({ empty: true });
         mockStripeCustomersSearch.mockResolvedValue({ data: [] });
 
-        const req = { auth: { uid: 'user1' } } as any;
+        const req = { auth: { uid: 'user1' }, app: { appId: 'test' } } as any;
         await expect((restoreUserClaims as any)(req)).rejects.toThrow('No active subscription found');
     });
 
@@ -351,7 +361,7 @@ describe('restoreUserClaims', () => {
         // Mock to throw an object without message
         mockCollection.mockImplementationOnce(() => { throw {}; });
 
-        const req = { auth: { uid: 'user1' } } as any;
+        const req = { auth: { uid: 'user1' }, app: { appId: 'test' } } as any;
         await expect((restoreUserClaims as any)(req)).rejects.toThrow('Failed to reconcile claims');
     });
 });
