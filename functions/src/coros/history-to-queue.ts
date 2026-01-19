@@ -6,6 +6,7 @@ import { isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
 import { SERVICE_NAME } from './constants';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../shared/history-import.constants';
 import { addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
+import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 
 
 interface HistoryToQueueRequest {
@@ -22,7 +23,7 @@ interface HistoryToQueueResponse {
  */
 export const addCOROSAPIHistoryToQueue = functions
   .runWith({ memory: '256MB' })
-  .region('europe-west2')
+  .region(FUNCTIONS_MANIFEST.addCOROSAPIHistoryToQueue.region)
   .https.onCall(async (data: HistoryToQueueRequest, context): Promise<HistoryToQueueResponse> => {
     // App Check verification
     if (!context.app) {

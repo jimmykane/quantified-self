@@ -4,13 +4,14 @@ import * as admin from 'firebase-admin';
 
 
 import { isCorsAllowed } from '../utils';
+import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 
 export const deleteSelf = functions
     .runWith({
         timeoutSeconds: 540,
         memory: '256MB'
     })
-    .region('europe-west2')
+    .region(FUNCTIONS_MANIFEST.deleteSelf.region)
     .https.onCall(async (data, context) => {
         if (!isCorsAllowed(context.rawRequest)) {
             throw new functions.https.HttpsError(

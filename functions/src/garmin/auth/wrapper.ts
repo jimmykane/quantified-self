@@ -12,6 +12,7 @@ import {
   validateOAuth2State
 } from '../../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { FUNCTIONS_MANIFEST } from '../../../../src/shared/functions-manifest';
 import * as admin from 'firebase-admin';
 
 const SERVICE_NAME = ServiceNames.GarminAPI;
@@ -27,7 +28,7 @@ interface SetAccessTokenRequest {
   redirectUri: string;
 }
 
-export const getGarminAPIAuthRequestTokenRedirectURI = functions.region('europe-west2').https.onCall(async (data: GetAuthRedirectURIRequest, context) => {
+export const getGarminAPIAuthRequestTokenRedirectURI = functions.region(FUNCTIONS_MANIFEST.getGarminAPIAuthRequestTokenRedirectURI.region).https.onCall(async (data: GetAuthRedirectURIRequest, context) => {
   // 1. App Check Verification
   if (context.app == undefined) {
     throw new functions.https.HttpsError(
@@ -75,7 +76,7 @@ export const getGarminAPIAuthRequestTokenRedirectURI = functions.region('europe-
   }
 });
 
-export const requestAndSetGarminAPIAccessToken = functions.region('europe-west2').https.onCall(async (data: SetAccessTokenRequest, context) => {
+export const requestAndSetGarminAPIAccessToken = functions.region(FUNCTIONS_MANIFEST.requestAndSetGarminAPIAccessToken.region).https.onCall(async (data: SetAccessTokenRequest, context) => {
   // 1. App Check Verification
   if (context.app == undefined) {
     throw new functions.https.HttpsError(
@@ -126,7 +127,7 @@ export const requestAndSetGarminAPIAccessToken = functions.region('europe-west2'
 });
 
 
-export const deauthorizeGarminAPI = functions.region('europe-west2').https.onCall(async (data: any, context) => {
+export const deauthorizeGarminAPI = functions.region(FUNCTIONS_MANIFEST.deauthorizeGarminAPI.region).https.onCall(async (data: any, context) => {
   // 1. App Check Verification
   if (context.app == undefined) {
     throw new functions.https.HttpsError(
@@ -159,7 +160,7 @@ export const deauthorizeGarminAPI = functions.region('europe-west2').https.onCal
 });
 
 // Webhook for Garmin Deregistration
-export const receiveGarminAPIDeregistration = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const receiveGarminAPIDeregistration = functions.region(FUNCTIONS_MANIFEST.receiveGarminAPIDeregistration.region).https.onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
     return;
@@ -230,7 +231,7 @@ export const receiveGarminAPIDeregistration = functions.region('europe-west2').h
 // Webhook for Garmin User Permission Changes
 // Per Section 2.6.3: Users can opt out of data sharing by turning off certain permissions.
 // This webhook notifies us if those permissions change post-connection.
-export const receiveGarminAPIUserPermissions = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const receiveGarminAPIUserPermissions = functions.region(FUNCTIONS_MANIFEST.receiveGarminAPIUserPermissions.region).https.onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
     return;

@@ -10,6 +10,7 @@ import { getCloudTaskQueueDepth } from '../utils';
 import { GARMIN_API_TOKENS_COLLECTION_NAME, GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../garmin/constants';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME, SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME, COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
+import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 
 /**
  * Normalizes error messages by replacing dynamic values (numbers, IDs) with placeholders.
@@ -131,7 +132,7 @@ async function enrichUsers(
  * - For pageSize=10: ~40 Firestore reads total
  */
 export const listUsers = onAdminCall<ListUsersRequest, any>({
-    region: 'europe-west2',
+    region: FUNCTIONS_MANIFEST.listUsers.region,
     memory: '256MiB',
     timeoutSeconds: 120,
 }, async (request) => {
@@ -317,7 +318,7 @@ export const listUsers = onAdminCall<ListUsersRequest, any>({
  * Uses optimized Aggregation Queries.
  */
 export const getUserCount = onAdminCall<void, any>({
-    region: 'europe-west2',
+    region: FUNCTIONS_MANIFEST.getUserCount.region,
     memory: '256MiB',
 }, async () => {
     try {
@@ -388,7 +389,7 @@ export const getUserCount = onAdminCall<void, any>({
  * Uses efficient Firestore count() queries.
  */
 export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
-    region: 'europe-west2',
+    region: FUNCTIONS_MANIFEST.getQueueStats.region,
     memory: '256MiB',
 }, async (request) => {
     const includeAnalysis = request.data?.includeAnalysis ?? false;
@@ -560,7 +561,7 @@ interface SetMaintenanceModeRequest {
  * This is used instead of Remote Config to allow admin-controlled updates.
  */
 export const setMaintenanceMode = onAdminCall<SetMaintenanceModeRequest, any>({
-    region: 'europe-west2',
+    region: FUNCTIONS_MANIFEST.setMaintenanceMode.region,
     memory: '256MiB',
 }, async (request) => {
     try {
@@ -634,7 +635,7 @@ export const setMaintenanceMode = onAdminCall<SetMaintenanceModeRequest, any>({
  * Gets the current maintenance mode status from Firestore.
  */
 export const getMaintenanceStatus = onAdminCall<void, any>({
-    region: 'europe-west2',
+    region: FUNCTIONS_MANIFEST.getMaintenanceStatus.region,
     memory: '256MiB',
 }, async () => {
     try {
@@ -677,7 +678,7 @@ export const getMaintenanceStatus = onAdminCall<void, any>({
  * SECURITY: Critical function. Only strictly verified admins can call this.
  */
 export const impersonateUser = onAdminCall<{ uid: string }, { token: string }>({
-    region: 'europe-west2',
+    region: FUNCTIONS_MANIFEST.impersonateUser.region,
     memory: '256MiB',
 }, async (request) => {
     const targetUid = request.data.uid;
@@ -713,7 +714,7 @@ export const impersonateUser = onAdminCall<{ uid: string }, { token: string }>({
  * - Cost: Links to GCP Cloud Billing Report (since API doesn't provide live spend safely)
  */
 export const getFinancialStats = onAdminCall<void, any>({
-    region: 'europe-west2',
+    region: FUNCTIONS_MANIFEST.getFinancialStats.region,
     memory: '256MiB',
 }, async () => {
     try {

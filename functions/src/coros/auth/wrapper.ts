@@ -10,6 +10,7 @@ import {
   validateOAuth2State,
 } from '../../OAuth2';
 import { SERVICE_NAME } from '../constants';
+import { FUNCTIONS_MANIFEST } from '../../../../src/shared/functions-manifest';
 
 
 interface GetAuthRedirectURIRequest {
@@ -22,7 +23,7 @@ interface GetAuthRedirectURIResponse {
 
 export const getCOROSAPIAuthRequestTokenRedirectURI = functions
   .runWith({ memory: '256MB' })
-  .region('europe-west2')
+  .region(FUNCTIONS_MANIFEST.getCOROSAPIAuthRequestTokenRedirectURI.region)
   .https.onCall(async (data: GetAuthRedirectURIRequest, context): Promise<GetAuthRedirectURIResponse> => {
     // App Check verification
     if (!context.app) {
@@ -61,7 +62,7 @@ interface SetAccessTokenRequest {
 
 export const requestAndSetCOROSAPIAccessToken = functions
   .runWith({ memory: '256MB' })
-  .region('europe-west2')
+  .region(FUNCTIONS_MANIFEST.requestAndSetCOROSAPIAccessToken.region)
   .https.onCall(async (data: SetAccessTokenRequest, context): Promise<void> => {
     // App Check verification
     if (!context.app) {
@@ -114,7 +115,7 @@ interface DeauthorizeResponse {
  */
 export const deauthorizeCOROSAPI = functions
   .runWith({ memory: '256MB' })
-  .region('europe-west2')
+  .region(FUNCTIONS_MANIFEST.deauthorizeCOROSAPI.region)
   .https.onCall(async (_data: unknown, context): Promise<DeauthorizeResponse> => {
     // App Check verification
     if (!context.app) {

@@ -20,7 +20,9 @@ interface BackfillRequest {
   endDate: string;
 }
 
-export const backfillGarminAPIActivities = functions.region('europe-west2').runWith({
+import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
+
+export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.backfillGarminAPIActivities.region).runWith({
   timeoutSeconds: TIMEOUT_IN_SECONDS,
   memory: MEMORY,
 }).https.onCall(async (data: BackfillRequest, context) => {

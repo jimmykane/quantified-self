@@ -10,6 +10,7 @@ import {
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
   validateOAuth2State,
 } from '../../OAuth2';
+import { FUNCTIONS_MANIFEST } from '../../../../src/shared/functions-manifest';
 
 const SERVICE_NAME = ServiceNames.SuuntoApp;
 
@@ -24,7 +25,7 @@ interface GetAuthRedirectURIResponse {
 
 export const getSuuntoAPIAuthRequestTokenRedirectURI = functions
   .runWith({ memory: '256MB' })
-  .region('europe-west2')
+  .region(FUNCTIONS_MANIFEST.getSuuntoAPIAuthRequestTokenRedirectURI.region)
   .https.onCall(async (data: GetAuthRedirectURIRequest, context): Promise<GetAuthRedirectURIResponse> => {
     // App Check verification
     if (!context.app) {
@@ -63,7 +64,7 @@ interface SetAccessTokenRequest {
 
 export const requestAndSetSuuntoAPIAccessToken = functions
   .runWith({ memory: '256MB' })
-  .region('europe-west2')
+  .region(FUNCTIONS_MANIFEST.requestAndSetSuuntoAPIAccessToken.region)
   .https.onCall(async (data: SetAccessTokenRequest, context): Promise<void> => {
     // App Check verification
     if (!context.app) {
@@ -116,7 +117,7 @@ interface DeauthorizeResponse {
  */
 export const deauthorizeSuuntoApp = functions
   .runWith({ memory: '256MB' })
-  .region('europe-west2')
+  .region(FUNCTIONS_MANIFEST.deauthorizeSuuntoApp.region)
   .https.onCall(async (_data: unknown, context): Promise<DeauthorizeResponse> => {
     // App Check verification
     if (!context.app) {
