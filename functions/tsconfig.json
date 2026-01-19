@@ -18,7 +18,8 @@
   "compileOnSave": true,
   "include": [
     "src",
-    "src/**/*.json"
+    "src/**/*.json",
+    "../src/shared/**/*"
   ],
   "exclude": [
     "node_modules",

@@ -2,7 +2,7 @@
 
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
-import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, isProUser, PRO_REQUIRED_MESSAGE } from '../../utils';
+import { isProUser, PRO_REQUIRED_MESSAGE } from '../../utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   deauthorizeServiceForUser,
@@ -10,138 +10,133 @@ import {
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
   validateOAuth2State,
 } from '../../OAuth2';
-import { determineRedirectURI } from '../../utils';
+import { FUNCTIONS_MANIFEST } from '../../../../src/shared/functions-manifest';
 
 const SERVICE_NAME = ServiceNames.SuuntoApp;
 
-export const getSuuntoAPIAuthRequestTokenRedirectURI = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  // Directly set the CORS header
-  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    logger.error('Not allowed');
-    res.status(403);
-    res.send('Unauthorized');
-    return;
-  }
 
-  setAccessControlHeadersOnResponse(req, res);
+interface GetAuthRedirectURIRequest {
+  redirectUri: string;
+}
 
-  if (req.method === 'OPTIONS') {
-    res.status(200);
-    res.send();
-    return;
-  }
+interface GetAuthRedirectURIResponse {
+  redirect_uri: string;
+}
 
-  const userID = await getUserIDFromFirebaseToken(req);
-  if (!userID) {
-    res.status(403).send('Unauthorized');
-    return;
-  }
+export const getSuuntoAPIAuthRequestTokenRedirectURI = functions
+  .runWith({ memory: '256MB' })
+  .region(FUNCTIONS_MANIFEST.getSuuntoAPIAuthRequestTokenRedirectURI.region)
+  .https.onCall(async (data: GetAuthRedirectURIRequest, context): Promise<GetAuthRedirectURIResponse> => {
+    // App Check verification
+    if (!context.app) {
+      throw new functions.https.HttpsError('failed-precondition', 'App Check verification failed.');
+    }
 
-  // Enforce Pro Access
-  if (!(await isProUser(userID))) {
-    logger.warn(`Blocking Suunto Auth for non-pro user ${userID}`);
-    res.status(403).send(PRO_REQUIRED_MESSAGE);
-    return;
-  }
+    // Auth verification
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
+    }
 
-  const redirectURI = determineRedirectURI(req);
-  if (!redirectURI) {
-    res.status(400).send('Missing redirect_uri');
-    return;
-  }
+    const userID = context.auth.uid;
 
-  res.send({
-    redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectURI),
+    // Enforce Pro Access
+    if (!(await isProUser(userID))) {
+      logger.warn(`Blocking Suunto Auth for non-pro user ${userID}`);
+      throw new functions.https.HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
+    }
+
+    const redirectURI = data.redirectUri;
+    if (!redirectURI) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing redirect_uri');
+    }
+
+    return {
+      redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectURI),
+    };
   });
-});
 
 
-export const requestAndSetSuuntoAPIAccessToken = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  // Directly set the CORS header
-  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    logger.error('Not allowed');
-    res.status(403);
-    res.send('Unauthorized');
-    return;
-  }
+interface SetAccessTokenRequest {
+  state: string;
+  code: string;
+  redirectUri: string;
+}
 
-  setAccessControlHeadersOnResponse(req, res);
+export const requestAndSetSuuntoAPIAccessToken = functions
+  .runWith({ memory: '256MB' })
+  .region(FUNCTIONS_MANIFEST.requestAndSetSuuntoAPIAccessToken.region)
+  .https.onCall(async (data: SetAccessTokenRequest, context): Promise<void> => {
+    // App Check verification
+    if (!context.app) {
+      throw new functions.https.HttpsError('failed-precondition', 'App Check verification failed.');
+    }
 
-  if (req.method === 'OPTIONS') {
-    res.status(200);
-    res.send();
-    return;
-  }
+    // Auth verification
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
+    }
 
-  const userID = await getUserIDFromFirebaseToken(req);
-  if (!userID) {
-    res.status(403).send('Unauthorized');
-    return;
-  }
+    const userID = context.auth.uid;
 
-  // Enforce Pro Access
-  if (!(await isProUser(userID))) {
-    logger.warn(`Blocking Suunto Token Set for non-pro user ${userID}`);
-    res.status(403).send(PRO_REQUIRED_MESSAGE);
-    return;
-  }
+    // Enforce Pro Access
+    if (!(await isProUser(userID))) {
+      logger.warn(`Blocking Suunto Token Set for non-pro user ${userID}`);
+      throw new functions.https.HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
+    }
 
-  const state = req.body.state;
-  const code = req.body.code;
-  const redirectUri = determineRedirectURI(req);
+    const { state, code, redirectUri } = data;
 
-  if (!state || !code || !redirectUri) {
-    logger.error('Missing state or code or redirectUri');
-    res.status(400).send('Bad Request');
-    return;
-  }
+    if (!state || !code || !redirectUri) {
+      logger.error('Missing state or code or redirectUri');
+      throw new functions.https.HttpsError('invalid-argument', 'Missing state, code, or redirectUri');
+    }
 
-  if (!await validateOAuth2State(userID, SERVICE_NAME, state)) {
-    res.status(403).send('Unauthorized');
-    return;
-  }
-  try {
-    await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code);
-  } catch (e: any) {
-    logger.error(e);
-    const status = e.statusCode || (e.output && e.output.statusCode) || 500;
-    res.status(status).send(status === 502 ? 'Suunto service is temporarily unavailable' : 'Authorization code flow error');
-  }
-  res.status(200).send();
-});
+    if (!await validateOAuth2State(userID, SERVICE_NAME, state)) {
+      throw new functions.https.HttpsError('permission-denied', 'Invalid OAuth state');
+    }
 
+    try {
+      await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code);
+    } catch (e: any) {
+      logger.error(e);
+      const status = e.statusCode || (e.output && e.output.statusCode) || 500;
+      if (status === 502) {
+        throw new functions.https.HttpsError('unavailable', 'Suunto service is temporarily unavailable');
+      }
+      throw new functions.https.HttpsError('internal', 'Authorization code flow error');
+    }
+  });
+
+
+interface DeauthorizeResponse {
+  result: string;
+}
 
 /**
  * Deauthorizes a Suunto app account upon user request
  */
-export const deauthorizeSuuntoApp = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  // Directly set the CORS header
-  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    logger.error('Not allowed');
-    res.status(403);
-    res.send('Unauthorized');
-    return;
-  }
+export const deauthorizeSuuntoApp = functions
+  .runWith({ memory: '256MB' })
+  .region(FUNCTIONS_MANIFEST.deauthorizeSuuntoApp.region)
+  .https.onCall(async (_data: unknown, context): Promise<DeauthorizeResponse> => {
+    // App Check verification
+    if (!context.app) {
+      throw new functions.https.HttpsError('failed-precondition', 'App Check verification failed.');
+    }
 
-  setAccessControlHeadersOnResponse(req, res);
+    // Auth verification
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
+    }
 
-  if (req.method === 'OPTIONS') {
-    res.status(200);
-    res.send();
-    return;
-  }
+    const userID = context.auth.uid;
 
-  const userID = await getUserIDFromFirebaseToken(req);
-  if (!userID) {
-    res.status(403).send('Unauthorized');
-    return;
-  }
+    try {
+      await deauthorizeServiceForUser(userID, SERVICE_NAME);
+    } catch (e: any) {
+      logger.error(e);
+      throw new functions.https.HttpsError('internal', 'Deauthorization Error');
+    }
 
-  try {
-    await deauthorizeServiceForUser(userID, SERVICE_NAME);
-  } catch (e: any) {
-    logger.error(e);
-    res.status(500).send('Deauthorization Error');
-  }
-  res.status(200).send({ result: 'Deauthorized' });
-});
+    return { result: 'Deauthorized' };
+  });

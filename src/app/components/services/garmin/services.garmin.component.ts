@@ -60,7 +60,7 @@ export class ServicesGarminComponent extends ServicesAbstractComponentDirective 
     const state = this.route.snapshot.queryParamMap.get('state');
     const code = this.route.snapshot.queryParamMap.get('code');
     if (state && code) {
-      await this.userService.requestAndSetCurrentUserGarminAccessToken(state, code);
+      await this.userService.requestAndSetCurrentUserGarminAPIAccessToken(state, code);
     }
   }
 

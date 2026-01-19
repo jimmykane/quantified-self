@@ -8,15 +8,27 @@ import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../shared/history-import.cons
 vi.mock('firebase-functions/v1', () => ({
     region: () => ({
         https: {
-            onRequest: (handler: any) => handler
+            onCall: (handler: any) => handler
         }
-    })
+    }),
+    runWith: () => ({
+        region: () => ({
+            https: {
+                onCall: (handler: any) => handler
+            }
+        })
+    }),
+    https: {
+        HttpsError: class HttpsError extends Error {
+            constructor(public code: string, message: string) {
+                super(message);
+                this.name = 'HttpsError';
+            }
+        }
+    }
 }));
 
 vi.mock('../utils', () => ({
-    isCorsAllowed: vi.fn().mockReturnValue(true),
-    setAccessControlHeadersOnResponse: vi.fn(),
-    getUserIDFromFirebaseToken: vi.fn().mockResolvedValue('testUserID'),
     isProUser: vi.fn().mockResolvedValue(true),
     PRO_REQUIRED_MESSAGE: 'Service sync is a Pro feature.'
 }));
@@ -30,12 +42,11 @@ vi.mock('../history', () => ({
 import { addCOROSAPIHistoryToQueue } from './history-to-queue';
 
 describe('COROS History to Queue', () => {
-    let req: any;
-    let res: any;
+    let context: any;
+    let data: any;
 
     beforeEach(() => {
         vi.clearAllMocks();
-        (utils.getUserIDFromFirebaseToken as any).mockResolvedValue('testUserID');
         (utils.isProUser as any).mockResolvedValue(true);
         (history.isAllowedToDoHistoryImport as any).mockResolvedValue(true);
 
@@ -43,22 +54,19 @@ describe('COROS History to Queue', () => {
         recentDate.setDate(recentDate.getDate() - 7); // 7 days ago
         const endDate = new Date();
 
-        req = {
-            method: 'POST',
-            body: {
-                startDate: recentDate.toISOString(),
-                endDate: endDate.toISOString()
-            }
+        context = {
+            app: { appId: 'test-app' },
+            auth: { uid: 'testUserID' }
         };
-        res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn().mockReturnThis()
+        data = {
+            startDate: recentDate.toISOString(),
+            endDate: endDate.toISOString()
         };
     });
 
     describe('addCOROSAPIHistoryToQueue', () => {
-        it('should add history to queue and return 200', async () => {
-            await addCOROSAPIHistoryToQueue(req, res);
+        it('should add history to queue and return success', async () => {
+            const result = await addCOROSAPIHistoryToQueue(data, context);
 
             expect(history.isAllowedToDoHistoryImport).toHaveBeenCalledWith('testUserID', SERVICE_NAME);
             expect(history.addHistoryToQueue).toHaveBeenCalledWith(
@@ -67,47 +75,41 @@ describe('COROS History to Queue', () => {
                 expect.any(Date),
                 expect.any(Date)
             );
-            expect(res.status).toHaveBeenCalledWith(200);
-            expect(res.send).toHaveBeenCalledWith({ result: 'History items added to queue' });
+            expect(result).toEqual({ result: 'History items added to queue' });
         });
 
         it('should batch requests if range > 30 days', async () => {
             const startDate = new Date();
             startDate.setDate(startDate.getDate() - 40); // 40 days ago
-            req.body = {
+            data = {
                 startDate: startDate.toISOString(),
-                endDate: new Date().toISOString() // 40 days range
+                endDate: new Date().toISOString()
             };
 
-            await addCOROSAPIHistoryToQueue(req, res);
+            await addCOROSAPIHistoryToQueue(data, context);
 
             // 40 days / 30 days batches = 2 batches
             expect(history.addHistoryToQueue).toHaveBeenCalledTimes(2);
-            expect(res.status).toHaveBeenCalledWith(200);
         });
 
-        it('should handle errors during batch processing', async () => {
+        it('should throw error during batch processing', async () => {
             (history.addHistoryToQueue as any).mockRejectedValueOnce(new Error('Queue failure'));
 
-            await addCOROSAPIHistoryToQueue(req, res);
-
-            expect(res.status).toHaveBeenCalledWith(500);
-            expect(res.send).toHaveBeenCalledWith('Queue failure');
+            await expect(addCOROSAPIHistoryToQueue(data, context))
+                .rejects.toThrow('Queue failure');
         });
 
-        it('should reject if end date is older than the limit', async () => {
+        it('should throw error if end date is older than the limit', async () => {
             const olderThanLimit = new Date();
             olderThanLimit.setMonth(olderThanLimit.getMonth() - (COROS_HISTORY_IMPORT_LIMIT_MONTHS + 1));
 
-            req.body = {
+            data = {
                 startDate: new Date(olderThanLimit.getTime() - 86400000).toISOString(),
                 endDate: olderThanLimit.toISOString()
             };
 
-            await addCOROSAPIHistoryToQueue(req, res);
-
-            expect(res.status).toHaveBeenCalledWith(400);
-            expect(res.send).toHaveBeenCalledWith(`COROS API limits history to the last ${COROS_HISTORY_IMPORT_LIMIT_MONTHS} months.`);
+            await expect(addCOROSAPIHistoryToQueue(data, context))
+                .rejects.toThrow(`COROS API limits history to the last ${COROS_HISTORY_IMPORT_LIMIT_MONTHS} months.`);
         });
 
         it('should clamp start date if it is older than the limit', async () => {
@@ -117,19 +119,38 @@ describe('COROS History to Queue', () => {
 
             const olderThanLimit = new Date(limitDate.getTime() - 86400000); // 1 day older
 
-            req.body = {
+            data = {
                 startDate: olderThanLimit.toISOString(),
                 endDate: new Date().toISOString()
             };
 
-            await addCOROSAPIHistoryToQueue(req, res);
+            const result = await addCOROSAPIHistoryToQueue(data, context);
 
             expect(history.addHistoryToQueue).toHaveBeenCalled();
-            // The first call (or only call if range is small) should use the limitDate as startDate
             const callArgs = (history.addHistoryToQueue as any).mock.calls[0];
-            // callArgs[2] is startDate
             expect(callArgs[2].getTime()).toBeGreaterThanOrEqual(limitDate.getTime());
-            expect(res.status).toHaveBeenCalledWith(200);
+            expect(result).toEqual({ result: 'History items added to queue' });
+        });
+
+        it('should throw error if App Check fails', async () => {
+            context.app = null;
+
+            await expect(addCOROSAPIHistoryToQueue(data, context))
+                .rejects.toThrow('App Check verification failed.');
+        });
+
+        it('should throw error if not authenticated', async () => {
+            context.auth = null;
+
+            await expect(addCOROSAPIHistoryToQueue(data, context))
+                .rejects.toThrow('User must be authenticated.');
+        });
+
+        it('should throw error for non-pro user', async () => {
+            (utils.isProUser as any).mockResolvedValue(false);
+
+            await expect(addCOROSAPIHistoryToQueue(data, context))
+                .rejects.toThrow('Service sync is a Pro feature.');
         });
     });
 });

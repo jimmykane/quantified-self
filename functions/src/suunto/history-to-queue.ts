@@ -2,68 +2,65 @@
 
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
-import {
-  getUserIDFromFirebaseToken,
-  isCorsAllowed,
-  setAccessControlHeadersOnResponse,
-  isProUser,
-  PRO_REQUIRED_MESSAGE,
-} from '../utils';
+import { isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
 import { SERVICE_NAME } from './constants';
 import { addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
+import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
+
+
+interface HistoryToQueueRequest {
+  startDate: string;
+  endDate: string;
+}
+
+interface HistoryToQueueResponse {
+  result: string;
+}
 
 /**
  * Add to the workout queue the workouts of a user for a selected date range
  */
-export const addSuuntoAppHistoryToQueue = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  // Directly set the CORS header
-  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    logger.error('Not allowed');
-    res.status(403);
-    res.send();
-    return;
-  }
+export const addSuuntoAppHistoryToQueue = functions
+  .runWith({ memory: '256MB' })
+  .region(FUNCTIONS_MANIFEST.addSuuntoAppHistoryToQueue.region)
+  .https.onCall(async (data: HistoryToQueueRequest, context): Promise<HistoryToQueueResponse> => {
+    // App Check verification
+    if (!context.app) {
+      throw new functions.https.HttpsError('failed-precondition', 'App Check verification failed.');
+    }
 
-  setAccessControlHeadersOnResponse(req, res);
+    // Auth verification
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
+    }
 
-  if (req.method === 'OPTIONS') {
-    res.status(200);
-    res.send();
-    return;
-  }
+    const userID = context.auth.uid;
 
-  const userID = await getUserIDFromFirebaseToken(req);
-  if (!userID) {
-    res.status(403).send('Unauthorized');
-    return;
-  }
+    // Enforce Pro Access
+    if (!(await isProUser(userID))) {
+      logger.warn(`Blocking history import for non-pro user ${userID}`);
+      throw new functions.https.HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
+    }
 
-  if (!(await isProUser(userID))) {
-    logger.warn(`Blocking history import for non-pro user ${userID}`);
-    res.status(403).send(PRO_REQUIRED_MESSAGE);
-    return;
-  }
+    const startDate = new Date(data.startDate);
+    const endDate = new Date(data.endDate);
 
+    if (!startDate || isNaN(startDate.getTime()) || !endDate || isNaN(endDate.getTime())) {
+      throw new functions.https.HttpsError('invalid-argument', 'No start and/or end date');
+    }
 
-  const startDate = new Date(req.body.startDate);
-  const endDate = new Date(req.body.endDate);
+    // First check last history import
+    if (!(await isAllowedToDoHistoryImport(userID, SERVICE_NAME))) {
+      logger.error(`User ${userID} tried todo history import while not allowed`);
+      throw new functions.https.HttpsError('permission-denied', 'History import is not allowed');
+    }
 
-  if (!startDate || isNaN(startDate.getTime()) || !endDate || isNaN(endDate.getTime())) {
-    res.status(500).send('No start and/or end date');
-    return;
-  }
+    try {
+      await addHistoryToQueue(userID, SERVICE_NAME, startDate, endDate);
+    } catch (e: any) {
+      logger.error(e);
+      throw new functions.https.HttpsError('internal', e.message);
+    }
 
-  // First check last history import
-  if (!(await isAllowedToDoHistoryImport(userID, SERVICE_NAME))) {
-    logger.error(`User ${userID} tried todo history import while not allowed`);
-    res.status(403);
-    res.send('History import is not allowed');
-    return;
-  }
-
-  await addHistoryToQueue(userID, SERVICE_NAME, startDate, endDate);
-
-  // Respond
-  res.status(200);
-  res.send({ result: 'History items added to queue' });
-});
+    return { result: 'History items added to queue' };
+  });

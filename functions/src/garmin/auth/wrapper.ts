@@ -1,12 +1,8 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import {
-  isCorsAllowed,
-  setAccessControlHeadersOnResponse,
-  getUserIDFromFirebaseToken,
   isProUser,
-  PRO_REQUIRED_MESSAGE,
-  determineRedirectURI
+  PRO_REQUIRED_MESSAGE
 } from '../../utils';
 import {
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
@@ -16,143 +12,155 @@ import {
   validateOAuth2State
 } from '../../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { FUNCTIONS_MANIFEST } from '../../../../src/shared/functions-manifest';
 import * as admin from 'firebase-admin';
 
 const SERVICE_NAME = ServiceNames.GarminAPI;
 
-export const getGarminAPIAuthRequestTokenRedirectURI = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    logger.error('Not allowed');
-    res.status(403).send('Unauthorized');
-    return;
+// Define Interfaces for Type Safety
+interface GetAuthRedirectURIRequest {
+  redirectUri: string;
+}
+
+interface SetAccessTokenRequest {
+  code: string;
+  state: string;
+  redirectUri: string;
+}
+
+export const getGarminAPIAuthRequestTokenRedirectURI = functions.region(FUNCTIONS_MANIFEST.getGarminAPIAuthRequestTokenRedirectURI.region).https.onCall(async (data: GetAuthRedirectURIRequest, context) => {
+  // 1. App Check Verification
+  if (context.app == undefined) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'The function must be called from an App Check verified app.'
+    );
   }
 
-  setAccessControlHeadersOnResponse(req, res);
-
-  if (req.method === 'OPTIONS') {
-    res.status(200).send();
-    return;
+  // 2. Auth Verification
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      'unauthenticated',
+      'The function must be called while authenticated.'
+    );
   }
 
-  const userID = await getUserIDFromFirebaseToken(req);
-  if (!userID) {
-    res.status(403).send('Unauthorized');
-    return;
-  }
+  const userID = context.auth.uid;
 
-  // Enforce Pro Access
+  // 3. Enforce Pro Access
   if (!(await isProUser(userID))) {
     logger.warn(`Blocking Garmin Auth for non-pro user ${userID}`);
-    res.status(403).send(PRO_REQUIRED_MESSAGE);
-    return;
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      PRO_REQUIRED_MESSAGE
+    );
   }
 
-  const redirectURI = determineRedirectURI(req);
+  const redirectURI = data.redirectUri;
   if (!redirectURI) {
-    res.status(400).send('Missing redirect_uri');
-    return;
+    throw new functions.https.HttpsError('invalid-argument', 'Missing redirect_uri');
   }
 
   try {
     const url = await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectURI);
-    res.send({
+    return {
       redirect_uri: url,
-    });
+    };
   } catch (e: any) {
-    const status = e.statusCode || (e.output && e.output.statusCode) || 500;
-    res.status(status).send(status === 502 ? 'Garmin service is temporarily unavailable' : 'Internal Server Error');
+    logger.error('Error getting Garmin redirect URI:', e);
+    const status = e.statusCode || 500;
+    if (status === 502) {
+      throw new functions.https.HttpsError('unavailable', 'Garmin service is temporarily unavailable');
+    }
+    throw new functions.https.HttpsError('internal', 'Internal Server Error');
   }
 });
 
-export const requestAndSetGarminAPIAccessToken = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    logger.error('Not allowed');
-    res.status(403).send('Unauthorized');
-    return;
+export const requestAndSetGarminAPIAccessToken = functions.region(FUNCTIONS_MANIFEST.requestAndSetGarminAPIAccessToken.region).https.onCall(async (data: SetAccessTokenRequest, context) => {
+  // 1. App Check Verification
+  if (context.app == undefined) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'The function must be called from an App Check verified app.'
+    );
   }
 
-  setAccessControlHeadersOnResponse(req, res);
-
-  if (req.method === 'OPTIONS') {
-    res.status(200).send();
-    return;
+  // 2. Auth Verification
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      'unauthenticated',
+      'The function must be called while authenticated.'
+    );
   }
 
-  const userID = await getUserIDFromFirebaseToken(req);
-  if (!userID) {
-    res.status(403).send('Unauthorized');
-    return;
-  }
+  const userID = context.auth.uid;
 
-  // Enforce Pro Access
+  // 3. Enforce Pro Access
   if (!(await isProUser(userID))) {
     logger.warn(`Blocking Garmin Token Set for non-pro user ${userID}`);
-    res.status(403).send(PRO_REQUIRED_MESSAGE);
-    return;
+    throw new functions.https.HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }
 
-  const code = req.body.code;
-  const state = req.body.state;
-  const redirectUri = determineRedirectURI(req);
+  const { code, state, redirectUri } = data;
 
   if (!code || !state || !redirectUri) {
     logger.error('Missing code, state, or redirectUri');
-    res.status(400).send('Bad Request');
-    return;
+    throw new functions.https.HttpsError('invalid-argument', 'Missing code, state, or redirectUri');
   }
 
   if (!await validateOAuth2State(userID, SERVICE_NAME, state)) {
     logger.error(`Invalid state ${state} for user ${userID}`);
-    res.status(403).send('Unauthorized');
-    return;
+    throw new functions.https.HttpsError('permission-denied', 'Invalid state');
   }
 
   try {
     await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code);
-    res.send();
+    return; // Success (return void/empty)
   } catch (e: any) {
-    logger.error(e);
-    const status = e.statusCode || (e.output && e.output.statusCode) || 500;
-    res.status(status).send(status === 502 ? 'Garmin service is temporarily unavailable' : 'Could not get access token for user');
+    logger.error('Error exchanging Garmin token:', e);
+    const status = e.statusCode || 500;
+    if (status === 502) {
+      throw new functions.https.HttpsError('unavailable', 'Garmin service is temporarily unavailable');
+    }
+    throw new functions.https.HttpsError('internal', 'Could not get access token for user');
   }
 });
 
 
-export const deauthorizeGarminAPI = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    logger.error('Not allowed');
-    res.status(403).send('Unauthorized');
-    return;
+export const deauthorizeGarminAPI = functions.region(FUNCTIONS_MANIFEST.deauthorizeGarminAPI.region).https.onCall(async (data: any, context) => {
+  // 1. App Check Verification
+  if (context.app == undefined) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'The function must be called from an App Check verified app.'
+    );
   }
 
-  setAccessControlHeadersOnResponse(req, res);
-
-  if (req.method === 'OPTIONS') {
-    res.status(200).send();
-    return;
+  // 2. Auth Verification
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      'unauthenticated',
+      'The function must be called while authenticated.'
+    );
   }
 
-  const userID = await getUserIDFromFirebaseToken(req);
-  if (!userID) {
-    res.status(403).send('Unauthorized');
-    return;
-  }
+  const userID = context.auth.uid;
 
   try {
     await deauthorizeServiceForUser(userID, SERVICE_NAME);
-    res.status(200).send();
+    return { success: true };
   } catch (e: any) {
     if (e.name === 'TokenNotFoundError') {
-      res.status(404).send('Token not found');
+      throw new functions.https.HttpsError('not-found', 'Token not found');
     } else {
-      logger.error(e);
-      res.status(500).send('Bad request or internal error');
+      logger.error('Error deauthorizing Garmin:', e);
+      throw new functions.https.HttpsError('internal', 'Bad request or internal error');
     }
   }
 });
 
 // Webhook for Garmin Deregistration
-export const receiveGarminAPIDeregistration = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const receiveGarminAPIDeregistration = functions.region(FUNCTIONS_MANIFEST.receiveGarminAPIDeregistration.region).https.onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
     return;
@@ -223,7 +231,7 @@ export const receiveGarminAPIDeregistration = functions.region('europe-west2').h
 // Webhook for Garmin User Permission Changes
 // Per Section 2.6.3: Users can opt out of data sharing by turning off certain permissions.
 // This webhook notifies us if those permissions change post-connection.
-export const receiveGarminAPIUserPermissions = functions.region('europe-west2').https.onRequest(async (req, res) => {
+export const receiveGarminAPIUserPermissions = functions.region(FUNCTIONS_MANIFEST.receiveGarminAPIUserPermissions.region).https.onRequest(async (req, res) => {
   if (req.method !== 'POST') {
     res.status(405).send('Method Not Allowed');
     return;

@@ -40,6 +40,7 @@ describe('AppUserService', () => {
         mockAuth = {
             currentUser: {
                 getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} }),
+                getIdToken: vi.fn().mockResolvedValue('test-token'),
                 uid: 'u1'
             },
             signOut: vi.fn().mockResolvedValue(undefined)
@@ -315,6 +316,133 @@ describe('AppUserService', () => {
 
             await expect(service.deleteAllUserData({ uid: 'u1' } as any)).rejects.toThrow(error);
             expect(loggerSpy).toHaveBeenCalledWith(error);
+        });
+    });
+
+    describe('Service Integrations', () => {
+        const startDate = new Date('2023-01-01');
+        const endDate = new Date('2023-01-31');
+
+        describe('importServiceHistoryForCurrentUser', () => {
+            it('should call cloud function for COROS', async () => {
+                const serviceName = 'COROS API' as any; // Matches encoded value
+                await service.importServiceHistoryForCurrentUser(serviceName, startDate, endDate);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('addCOROSAPIHistoryToQueue', {
+                    startDate,
+                    endDate
+                });
+            });
+
+            it('should call cloud function for Suunto', async () => {
+                const serviceName = 'Suunto app' as any; // Matches encoded value
+                await service.importServiceHistoryForCurrentUser(serviceName, startDate, endDate);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('addSuuntoAppHistoryToQueue', {
+                    startDate: startDate.toISOString(),
+                    endDate: endDate.toISOString()
+                });
+            });
+
+            it('should call cloud function for Garmin', async () => {
+                const serviceName = 'Garmin API' as any;
+                await service.importServiceHistoryForCurrentUser(serviceName, startDate, endDate);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('backfillGarminAPIActivities', {
+                    startDate: startDate.toISOString(),
+                    endDate: endDate.toISOString()
+                });
+            });
+        });
+
+        describe('deauthorizeService', () => {
+            it('should call cloud function for COROS', async () => {
+                const serviceName = 'COROS API' as any;
+                await service.deauthorizeService(serviceName);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('deauthorizeCOROSAPI');
+            });
+
+            it('should call cloud function for Suunto', async () => {
+                const serviceName = 'Suunto app' as any;
+                await service.deauthorizeService(serviceName);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('deauthorizeSuuntoApp');
+            });
+
+            it('should call cloud function for Garmin', async () => {
+                const serviceName = 'Garmin API' as any;
+                await service.deauthorizeService(serviceName);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('deauthorizeGarminAPI');
+            });
+        });
+
+        describe('getCurrentUserServiceTokenAndRedirectURI', () => {
+            it('should call cloud function for COROS', async () => {
+                const serviceName = 'COROS API' as any;
+
+                await service.getCurrentUserServiceTokenAndRedirectURI(serviceName);
+
+                // Check for substrings since full URL depends on encoded spaces
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('getCOROSAPIAuthRequestTokenRedirectURI', {
+                    redirectUri: expect.stringMatching(/COROS%20API/)
+                });
+            });
+
+            it('should call cloud function for Suunto', async () => {
+                const serviceName = 'Suunto app' as any;
+                await service.getCurrentUserServiceTokenAndRedirectURI(serviceName);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('getSuuntoAPIAuthRequestTokenRedirectURI', {
+                    redirectUri: expect.stringMatching(/Suunto%20app/)
+                });
+            });
+
+            it('should call cloud function for Garmin', async () => {
+                const serviceName = 'Garmin API' as any;
+                await service.getCurrentUserServiceTokenAndRedirectURI(serviceName);
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('getGarminAPIAuthRequestTokenRedirectURI', {
+                    redirectUri: expect.stringMatching(/Garmin%20API/)
+                });
+            });
+        });
+
+        describe('requestAndSetCurrentUserCOROSAPIAccessToken', () => {
+            it('should call cloud function', async () => {
+                await service.requestAndSetCurrentUserCOROSAPIAccessToken('state', 'code');
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('requestAndSetCOROSAPIAccessToken', {
+                    state: 'state',
+                    code: 'code',
+                    redirectUri: expect.stringMatching(/COROS%20API/)
+                });
+            });
+        });
+
+        describe('requestAndSetCurrentUserSuuntoAppAccessToken', () => {
+            it('should call cloud function', async () => {
+                await service.requestAndSetCurrentUserSuuntoAppAccessToken('state', 'code');
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('requestAndSetSuuntoAPIAccessToken', {
+                    state: 'state',
+                    code: 'code',
+                    redirectUri: expect.stringMatching(/Suunto%20app/)
+                });
+            });
+        });
+
+        describe('requestAndSetCurrentUserGarminAPIAccessToken', () => {
+            it('should call cloud function', async () => {
+                await service.requestAndSetCurrentUserGarminAPIAccessToken('state', 'code');
+
+                expect(mockFunctionsService.call).toHaveBeenCalledWith('requestAndSetGarminAPIAccessToken', {
+                    state: 'state',
+                    code: 'code',
+                    redirectUri: expect.stringMatching(/Garmin%20API/)
+                });
+            });
         });
     });
 });
