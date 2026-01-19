@@ -85,7 +85,15 @@ export const addCOROSAPIHistoryToQueue = functions
         new Date(batchStartDate.getTime() + maxDeltaInMS);
 
       try {
-        await addHistoryToQueue(userID, SERVICE_NAME, batchStartDate, batchEndDate);
+        const stats = await addHistoryToQueue(userID, SERVICE_NAME, batchStartDate, batchEndDate);
+
+        if (stats.successCount === 0 && stats.failureCount > 0) {
+          throw new Error(`Failed to import all ${stats.failureCount} items in batch.`);
+        }
+
+        if (stats.failureCount > 0) {
+          logger.warn(`Partial import success in batch: ${stats.successCount} imported, ${stats.failureCount} failed.`);
+        }
       } catch (e: any) {
         logger.error(e);
         throw new functions.https.HttpsError('internal', e.message);

@@ -31,7 +31,7 @@ vi.mock('../utils', async (importOriginal) => {
 });
 
 vi.mock('../history', () => ({
-    addHistoryToQueue: vi.fn().mockResolvedValue({}),
+    addHistoryToQueue: vi.fn().mockResolvedValue({ successCount: 1, failureCount: 0, processedBatches: 1, failedBatches: 0 }),
     isAllowedToDoHistoryImport: vi.fn().mockResolvedValue(true)
 }));
 

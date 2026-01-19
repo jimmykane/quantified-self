@@ -106,7 +106,7 @@ describe('history', () => {
                 ]
             }));
 
-            await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
+            const result = await history.addHistoryToQueue('uid', ServiceNames.SuuntoApp, new Date(), new Date());
 
             expect(tokens.getTokenData).toHaveBeenCalled();
             expect(requestHelper.get).toHaveBeenCalledWith(expect.objectContaining({
@@ -114,6 +114,14 @@ describe('history', () => {
             }));
             expect(firestore.batch).toHaveBeenCalled();
             expect(firestore.batch().commit).toHaveBeenCalled();
+
+            // Assert return value
+            expect(result).toEqual({
+                successCount: 2,
+                failureCount: 0,
+                processedBatches: 1,
+                failedBatches: 0
+            });
         });
     });
 });

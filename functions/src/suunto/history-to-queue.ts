@@ -57,7 +57,15 @@ export const addSuuntoAppHistoryToQueue = onCall({
   }
 
   try {
-    await addHistoryToQueue(userID, SERVICE_NAME, startDate, endDate);
+    const stats = await addHistoryToQueue(userID, SERVICE_NAME, startDate, endDate);
+
+    if (stats.successCount === 0 && stats.failureCount > 0) {
+      throw new Error(`Failed to import all ${stats.failureCount} items.`);
+    }
+
+    if (stats.failureCount > 0) {
+      logger.warn(`Partial import success: ${stats.successCount} imported, ${stats.failureCount} failed.`);
+    }
   } catch (e: any) {
     logger.error(e);
     throw new HttpsError('internal', e.message);
