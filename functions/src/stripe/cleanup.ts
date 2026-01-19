@@ -20,7 +20,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
-import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
+import { enforceAppCheck } from '../utils';
 import { getStripe } from './client';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 
@@ -65,7 +65,7 @@ import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 export const cleanupStripeCustomer = onCall({
 
     region: FUNCTIONS_MANIFEST.cleanupStripeCustomer.region,
-    cors: ALLOWED_CORS_ORIGINS,
+    cors: true,
     minInstances: 0,
     maxInstances: 10,
     // secrets: ['STRIPE_API_KEY'] // Using process.env from .env file instead

@@ -31,7 +31,6 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
-import { ALLOWED_CORS_ORIGINS } from '../utils';
 import { getStripe } from './client';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 import { enforceAppCheck } from '../utils';
@@ -204,7 +203,7 @@ async function findAndLinkStripeCustomerByEmail(
  */
 export const restoreUserClaims = onCall({
     region: FUNCTIONS_MANIFEST.restoreUserClaims.region,
-    cors: ALLOWED_CORS_ORIGINS
+    cors: true
 }, async (request) => {
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
@@ -353,7 +352,7 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
  */
 export const linkExistingStripeCustomer = onCall({
     region: FUNCTIONS_MANIFEST.linkExistingStripeCustomer.region,
-    cors: ALLOWED_CORS_ORIGINS
+    cors: true
 }, async (request) => {
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');

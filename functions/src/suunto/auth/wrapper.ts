@@ -2,7 +2,7 @@
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
-import { isProUser, PRO_REQUIRED_MESSAGE, ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../../utils';
+import { isProUser, PRO_REQUIRED_MESSAGE, enforceAppCheck } from '../../utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   deauthorizeServiceForUser,
@@ -25,7 +25,7 @@ interface GetAuthRedirectURIResponse {
 
 export const getSuuntoAPIAuthRequestTokenRedirectURI = onCall({
   region: FUNCTIONS_MANIFEST.getSuuntoAPIAuthRequestTokenRedirectURI.region,
-  cors: ALLOWED_CORS_ORIGINS,
+  cors: true,
   memory: '256MiB',
   maxInstances: 10
 }, async (request): Promise<GetAuthRedirectURIResponse> => {
@@ -64,7 +64,7 @@ interface SetAccessTokenRequest {
 
 export const requestAndSetSuuntoAPIAccessToken = onCall({
   region: FUNCTIONS_MANIFEST.requestAndSetSuuntoAPIAccessToken.region,
-  cors: ALLOWED_CORS_ORIGINS,
+  cors: true,
   memory: '256MiB',
   maxInstances: 10
 }, async (request): Promise<void> => {
@@ -117,7 +117,7 @@ interface DeauthorizeResponse {
  */
 export const deauthorizeSuuntoApp = onCall({
   region: FUNCTIONS_MANIFEST.deauthorizeSuuntoApp.region,
-  cors: ALLOWED_CORS_ORIGINS,
+  cors: true,
   memory: '256MiB',
   maxInstances: 10
 }, async (request): Promise<DeauthorizeResponse> => {

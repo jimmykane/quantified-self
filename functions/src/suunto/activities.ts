@@ -15,14 +15,14 @@ import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
  */
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
-import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
+import { enforceAppCheck } from '../utils';
 
 /**
  * Uploads an activity to Suunto app
  */
 export const importActivityToSuuntoApp = onCall({
   region: FUNCTIONS_MANIFEST.importActivityToSuuntoApp.region,
-  cors: ALLOWED_CORS_ORIGINS,
+  cors: true,
   timeoutSeconds: 300,
   maxInstances: 10,
 }, async (request) => {

@@ -6,7 +6,6 @@ import { isProUser, PRO_REQUIRED_MESSAGE, enforceAppCheck } from '../utils';
 import { SERVICE_NAME } from './constants';
 import { addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
-import { ALLOWED_CORS_ORIGINS } from '../utils';
 
 
 interface HistoryToQueueRequest {
@@ -23,7 +22,7 @@ interface HistoryToQueueResponse {
  */
 export const addSuuntoAppHistoryToQueue = onCall({
   region: FUNCTIONS_MANIFEST.addSuuntoAppHistoryToQueue.region,
-  cors: ALLOWED_CORS_ORIGINS,
+  cors: true,
   memory: '256MiB',
   maxInstances: 10
 }, async (request): Promise<HistoryToQueueResponse> => {
