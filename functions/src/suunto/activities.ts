@@ -158,6 +158,17 @@ export const importActivityToSuuntoApp = onCall({
       );
       // Return the result from the callback (including ALREADY_EXISTS)
       if (result) {
+        if (result.status === 'success' || result.code === 'ALREADY_EXISTS') {
+          try {
+            const SERVICE_NAME = (await import('./constants')).SERVICE_NAME;
+            const userServiceMetaDocumentSnapshot = admin.firestore().collection('users').doc(userID).collection('meta').doc(SERVICE_NAME);
+            await userServiceMetaDocumentSnapshot.set({
+              uploadedActivitiesCount: admin.firestore.FieldValue.increment(1),
+            }, { merge: true });
+          } catch (e: unknown) {
+            logger.error('Could not update uploadedActivities count', e);
+          }
+        }
         return result;
       }
     } catch (e: unknown) {

@@ -181,6 +181,11 @@
           <mat-icon>cloud_upload</mat-icon>
           <span>Upload FIT Activity</span>
         </mat-card-subtitle>
+        @if (serviceMeta && serviceMeta.uploadedActivitiesCount && serviceMeta.uploadedActivitiesCount > 0) {
+        <mat-card-subtitle class="smaller">
+          {{serviceMeta.uploadedActivitiesCount}} uploaded
+        </mat-card-subtitle>
+        }
       </mat-card-header>
       <mat-divider></mat-divider>
 
@@ -203,7 +208,7 @@
           <mat-icon svgIcon="route"></mat-icon>
           <span>Upload GPX Route</span>
         </mat-card-subtitle>
-        @if (serviceMeta && serviceMeta.uploadedRoutesCount && serviceMeta.uploadedRoutesCount > 3) {
+        @if (serviceMeta && serviceMeta.uploadedRoutesCount && serviceMeta.uploadedRoutesCount > 0) {
         <mat-card-subtitle class="smaller">
           {{serviceMeta.uploadedRoutesCount}} uploaded
         </mat-card-subtitle>
