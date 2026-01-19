@@ -100,9 +100,9 @@ export class DataExportService {
         const headerCells = columns.map(col => {
             const displayName = this.getColumnHeaderName(col);
             const color = getColumnColor(col);
-            // Use font tag for better spreadsheet compatibility
+            // Use span with inline style for colors
             const coloredContent = color
-                ? `<font color="${color}">${escapeHtml(displayName)}</font>`
+                ? `<span style="color: ${color}">${escapeHtml(displayName)}</span>`
                 : escapeHtml(displayName);
             return `<th style="color: white; border: 1px solid white;">${coloredContent}</th>`;
         }).join('');
@@ -131,17 +131,14 @@ export class DataExportService {
         html += '</tbody></table>';
 
         // 3. Write to Clipboard using Navigator API if available
-        // iOS Safari's ClipboardItem support is unreliable (permission/timing issues),
-        // so we skip the rich copy path on iOS and use the fallback instead.
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-        if (navigator.clipboard && navigator.clipboard.write && !isIOS) {
+        if (navigator.clipboard && navigator.clipboard.write) {
             try {
-                // Create blobs for both formats
-                const textBlob = new Blob([tsv], { type: 'text/plain' });
-                const htmlBlob = new Blob([html], { type: 'text/html' });
+                // Use Promises for the Blobs inside ClipboardItem.
+                // This pattern is required by iOS Safari to reliably maintain user gesture activation
+                // during the asynchronous clipboard write operation.
                 const item = new ClipboardItem({
-                    'text/plain': textBlob,
-                    'text/html': htmlBlob
+                    'text/plain': Promise.resolve(new Blob([tsv], { type: 'text/plain' })),
+                    'text/html': Promise.resolve(new Blob([html], { type: 'text/html' }))
                 });
 
                 await navigator.clipboard.write([item]);

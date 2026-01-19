@@ -67,13 +67,14 @@ vi.mock('firebase-functions/v2/https', () => {
 // Mock firebase-admin
 vi.mock('firebase-admin', () => {
     const getMock = vi.fn();
+    const setMock = vi.fn();
 
     // Create a recursive mock structure
     const collectionMock: any = vi.fn();
     const docMock: any = vi.fn();
 
-    const colObj = { doc: docMock, get: getMock };
-    const docObj = { collection: collectionMock, get: getMock };
+    const colObj = { doc: docMock, get: getMock, set: setMock };
+    const docObj = { collection: collectionMock, get: getMock, set: setMock };
 
     collectionMock.mockReturnValue(colObj);
     docMock.mockReturnValue(docObj);
@@ -90,7 +91,11 @@ vi.mock('firebase-admin', () => {
     };
 
     return {
-        firestore: () => firestoreMock,
+        firestore: Object.assign(() => firestoreMock, {
+            FieldValue: {
+                increment: vi.fn((val) => ({ val, type: 'increment' }))
+            }
+        }),
         initializeApp: vi.fn(),
     };
 });
@@ -330,4 +335,38 @@ describe('importActivityToSuuntoApp', () => {
             expect(e.code).toBe('internal');
         }
     });
+
+    it('should increment uploadedActivitiesCount on successful upload', async () => {
+        // Setup Mocks
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+
+        // Mock init upload (POST)
+        requestMocks.post.mockResolvedValue(JSON.stringify({
+            id: 'test-upload-id',
+            url: 'https://storage.suunto.com/upload-url',
+            headers: {}
+        }));
+
+        // Mock binary upload (PUT)
+        requestMocks.put.mockResolvedValue({});
+
+        // Mock status check (GET)
+        requestMocks.get.mockResolvedValue(JSON.stringify({ status: 'PROCESSED', workoutKey: 'test-workout-key' }));
+
+        const fileContent = Buffer.from('data');
+        const base64File = fileContent.toString('base64');
+
+        const request = createMockRequest({
+            data: { file: base64File }
+        });
+
+        await importActivityToSuuntoApp(request as any);
+
+        // Verification of Firestore call
+        const admin = await import('firebase-admin');
+        const setMock = admin.firestore().collection('users').doc('test-user-id').collection('meta').doc('SuuntoApp').set;
+        expect(setMock).toHaveBeenCalledWith(expect.objectContaining({
+            uploadedActivitiesCount: expect.any(Object)
+        }), expect.objectContaining({ merge: true }));
+    }, 30000);
 });

@@ -238,11 +238,11 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
 
   abstract requestAndSetToken(params: ParamMap)
 
-  onHistoryImportInitiated() {
+  onHistoryImportInitiated(stats?: any) {
     this.serviceMeta = {
       ...this.serviceMeta,
       didLastHistoryImport: new Date().getTime(),
-      processedActivitiesFromLastHistoryImportCount: 0 // Optimistically set to 0, or could be kept undefined until backend updates
+      processedActivitiesFromLastHistoryImportCount: stats?.stats?.successCount || 0
     };
     this.changeDetectorRef.detectChanges();
   }

@@ -103,19 +103,16 @@ export const importRouteToSuuntoApp = onCall({
       logger.error(`Could upload route for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error`, result.error);
       continue;
     }
+
+    successCount++;
+
     try {
-      const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(userID).collection('meta').doc(SERVICE_NAME).get();
-      const data = userServiceMetaDocumentSnapshot.data();
-      let uploadedRoutesCount = 0;
-      if (data) {
-        uploadedRoutesCount = data.uploadedRoutesCount || uploadedRoutesCount;
-      }
-      await userServiceMetaDocumentSnapshot.ref.update({
-        uploadedRoutesCount: uploadedRoutesCount + 1,
-      });
-      successCount++;
+      const userServiceMetaDocumentSnapshot = admin.firestore().collection('users').doc(userID).collection('meta').doc(SERVICE_NAME);
+      await userServiceMetaDocumentSnapshot.set({
+        uploadedRoutesCount: admin.firestore.FieldValue.increment(1),
+      }, { merge: true });
     } catch (e: unknown) {
-      logger.error('Could not update uploadedRoutes count');
+      logger.error('Could not update uploadedRoutes count', e);
     }
   }
 

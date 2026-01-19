@@ -31,7 +31,7 @@ vi.mock('../utils', async (importOriginal) => {
 });
 
 vi.mock('../history', () => ({
-    addHistoryToQueue: vi.fn().mockResolvedValue({}),
+    addHistoryToQueue: vi.fn().mockResolvedValue({ successCount: 1, failureCount: 0, processedBatches: 1, failedBatches: 0 }),
     isAllowedToDoHistoryImport: vi.fn().mockResolvedValue(true)
 }));
 
@@ -80,7 +80,10 @@ describe('Suunto History to Queue', () => {
                 expect.any(Date),
                 expect.any(Date)
             );
-            expect(result).toEqual({ result: 'History items added to queue' });
+            expect(result).toEqual({
+                result: 'History items added to queue',
+                stats: { successCount: 1, failureCount: 0, processedBatches: 1, failedBatches: 0 }
+            });
         });
 
         it('should throw error during queue processing', async () => {

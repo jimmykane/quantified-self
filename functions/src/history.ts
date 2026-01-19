@@ -24,7 +24,15 @@ import { getExpireAtTimestamp, TTL_CONFIG } from './shared/ttl-config';
 
 const BATCH_SIZE = 450;
 
-export async function addHistoryToQueue(userID: string, serviceName: ServiceNames, startDate: Date, endDate: Date) {
+// Define result interface
+export interface HistoryImportResult {
+  successCount: number;
+  failureCount: number;
+  processedBatches: number;
+  failedBatches: number;
+}
+
+export async function addHistoryToQueue(userID: string, serviceName: ServiceNames, startDate: Date, endDate: Date): Promise<HistoryImportResult> {
   const serviceConfig = getServiceConfig(serviceName);
   const tokenQuerySnapshots = await admin.firestore().collection(serviceConfig.tokenCollectionName).doc(userID).collection('tokens').get();
 
@@ -32,7 +40,10 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
 
   // Get the history for those tokens
   let totalProcessedWorkoutsCount = 0;
+  let totalFailedWorkoutsCount = 0;
   let processedBatchesCount = 0;
+  let failedBatchesCount = 0;
+
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     const serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName, false);
 
@@ -41,6 +52,10 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
       workoutQueueItems = await getWorkoutQueueItems(serviceName, serviceToken as any, startDate, endDate);
     } catch (e: any) {
       logger.info(`Could not get history for token ${tokenQueryDocumentSnapshot.id} for user ${userID} due to service error: ${e}`);
+      // If we can't even get the items, that's a failure for this token
+      // But we don't know the count. 
+      // Let's re-throw for now as the original logic did?
+      // Original logic threw: "throw e;" (line 44)
       throw e;
     }
 
@@ -80,28 +95,37 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
       }
       // Try to commit it
       try {
-        processedBatchesCount++;
-        totalProcessedWorkoutsCount += processedWorkoutsCount;
+
         batch.set(
           admin.firestore().collection('users').doc(userID).collection('meta').doc(serviceName),
           <UserServiceMetaInterface>{
             didLastHistoryImport: (new Date()).getTime(),
-            processedActivitiesFromLastHistoryImportCount: totalProcessedWorkoutsCount,
+            processedActivitiesFromLastHistoryImportCount: totalProcessedWorkoutsCount + processedWorkoutsCount,
           }, { merge: true });
 
         await batch.commit();
 
+        processedBatchesCount++;
+        totalProcessedWorkoutsCount += processedWorkoutsCount;
+
         logger.info(`Batch #${processedBatchesCount} with ${processedWorkoutsCount} activities saved for token ${tokenQueryDocumentSnapshot.id} and user ${userID} `);
       } catch (e: any) {
-        logger.error(`Could not save batch ${processedBatchesCount} for token ${tokenQueryDocumentSnapshot.id} and user ${userID} due to service error aborting`, e);
-        processedBatchesCount--;
-        totalProcessedWorkoutsCount -= processedWorkoutsCount;
-        continue; // Unnecessary but clear to the dev that it will continue
+        logger.error(`Could not save batch for token ${tokenQueryDocumentSnapshot.id} and user ${userID}`, e);
+        failedBatchesCount++;
+        totalFailedWorkoutsCount += processedWorkoutsCount; // These failed to save
+        continue;
       }
     }
   }
 
-  logger.info(`Total: ${totalProcessedWorkoutsCount} workouts via ${processedBatchesCount} batches added to queue for user ${userID}`);
+  logger.info(`Total: ${totalProcessedWorkoutsCount} workouts via ${processedBatchesCount} batches added to queue for user ${userID}. Failed: ${totalFailedWorkoutsCount} via ${failedBatchesCount} batches.`);
+
+  return {
+    successCount: totalProcessedWorkoutsCount,
+    failureCount: totalFailedWorkoutsCount,
+    processedBatches: processedBatchesCount,
+    failedBatches: failedBatchesCount
+  };
 }
 
 export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceToken: COROSAPIAuth2ServiceTokenInterface | SuuntoAPIAuth2ServiceTokenInterface, startDate: Date, endDate: Date): Promise<SuuntoAppWorkoutQueueItemInterface | COROSAPIWorkoutQueueItemInterface[]> {
