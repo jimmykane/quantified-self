@@ -132,8 +132,6 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.required,
         // Validators.minLength(4),
       ]),
-      brandText: new UntypedFormControl({ value: this.user.brandText, disabled: true }, [
-      ]),
       dataTypesToUse: new UntypedFormControl(dataTypesToUse, [
         Validators.required,
         // Validators.minLength(1),
@@ -309,11 +307,6 @@ export class UserSettingsComponent implements OnChanges {
 
     });
 
-    this.userService.isBranded(this.user).then((isBranded) => {
-      if (isBranded) {
-        this.userSettingsFormGroup.get('brandText').enable();
-      }
-    });
   }
 
   hasError(field?: string) {
@@ -371,7 +364,6 @@ export class UserSettingsComponent implements OnChanges {
         displayName: this.userSettingsFormGroup.get('displayName').value,
         privacy: this.userSettingsFormGroup.get('privacy').value,
         description: this.userSettingsFormGroup.get('description').value,
-        brandText: this.userSettingsFormGroup.get('brandText').value || null,
         acceptedTrackingPolicy: this.userSettingsFormGroup.get('acceptedTrackingPolicy').value,
         acceptedMarketingPolicy: this.userSettingsFormGroup.get('acceptedMarketingPolicy').value,
         settings: <UserSettingsInterface>{

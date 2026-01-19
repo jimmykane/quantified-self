@@ -154,11 +154,6 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // @todo perhaps restrict to user ID
-    match /userAccountPrivileges/{document=**} {
-      allow write: if false;
-      allow read: if true;
-    }
 
     match /failed_jobs/{document=**} {
       allow read: if isAdmin();

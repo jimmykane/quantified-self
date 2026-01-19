@@ -709,15 +709,6 @@ export class AppUserService implements OnDestroy {
     });
   }
 
-  public async isBranded(user: User): Promise<boolean> {
-    const privDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'userAccountPrivileges', user.uid));
-    return firstValueFrom(from(runInInjectionContext(this.injector, () => getDoc(privDoc))).pipe(map((doc) => {
-      if (!doc.exists()) {
-        return false;
-      }
-      return doc.data()['isBranded'];
-    })));
-  }
 
 
   // ...
