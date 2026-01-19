@@ -13,7 +13,7 @@ import { AppWindowService } from '../../../services/app.window.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { EventImporterFIT, ActivityParsingOptions } from '@sports-alliance/sports-lib';
 import { environment } from '../../../../environments/environment';
-import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface } from '@sports-alliance/sports-lib';
+import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface, UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
 import { AppFunctionsService } from '../../../services/app.functions.service';
 
@@ -31,6 +31,10 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
   public isDownloading = false;
   public isImporting = false;
   clicks = 0;
+
+  get suuntoServiceMeta(): UserServiceMetaInterface & { uploadedActivitiesCount?: number } | undefined {
+    return this.serviceMeta;
+  }
 
   constructor(protected http: HttpClient,
     protected fileService: AppFileService,

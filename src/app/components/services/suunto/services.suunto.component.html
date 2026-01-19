@@ -181,9 +181,10 @@
           <mat-icon>cloud_upload</mat-icon>
           <span>Upload FIT Activity</span>
         </mat-card-subtitle>
-        @if (serviceMeta && serviceMeta.uploadedActivitiesCount && serviceMeta.uploadedActivitiesCount > 0) {
+        @if (suuntoServiceMeta && suuntoServiceMeta.uploadedActivitiesCount && suuntoServiceMeta.uploadedActivitiesCount
+        > 0) {
         <mat-card-subtitle class="smaller">
-          {{serviceMeta.uploadedActivitiesCount}} uploaded
+          {{suuntoServiceMeta.uploadedActivitiesCount}} uploaded
         </mat-card-subtitle>
         }
       </mat-card-header>
@@ -208,9 +209,9 @@
           <mat-icon svgIcon="route"></mat-icon>
           <span>Upload GPX Route</span>
         </mat-card-subtitle>
-        @if (serviceMeta && serviceMeta.uploadedRoutesCount && serviceMeta.uploadedRoutesCount > 0) {
+        @if (suuntoServiceMeta && suuntoServiceMeta.uploadedRoutesCount && suuntoServiceMeta.uploadedRoutesCount > 0) {
         <mat-card-subtitle class="smaller">
-          {{serviceMeta.uploadedRoutesCount}} uploaded
+          {{suuntoServiceMeta.uploadedRoutesCount}} uploaded
         </mat-card-subtitle>
         }
       </mat-card-header>
