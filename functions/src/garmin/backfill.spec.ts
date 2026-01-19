@@ -39,19 +39,25 @@ collectionMock.mockReturnValue(collectionObj); // collection() -> collection
 
 vi.mock('firebase-admin', () => ({
     firestore: () => ({
-        collection: collectionMock
+        collection: collectionMock,
+        collectionGroup: vi.fn() // added collectionGroup if needed
     })
 }));
 
-vi.mock('firebase-functions/v1', () => ({
-    region: () => ({
-        runWith: () => ({
-            https: {
-                onRequest: (handler: any) => handler
-            }
+vi.mock('firebase-functions/v1', async () => {
+    const actual = await vi.importActual('firebase-functions/v1');
+    return {
+        ...actual,
+        region: () => ({
+            runWith: () => ({
+                https: {
+                    onCall: (handler: any) => handler,
+                    onRequest: (handler: any) => handler
+                }
+            })
         })
-    })
-}));
+    };
+});
 
 vi.mock('../utils', () => ({
     getUserIDFromFirebaseToken: vi.fn(),
@@ -77,8 +83,7 @@ vi.mock('../tokens', () => ({
 import * as tokens from '../tokens';
 
 describe('Garmin Backfill', () => {
-    let req: any;
-    let res: any;
+    let context: any;
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -109,7 +114,7 @@ describe('Garmin Backfill', () => {
                             limit: vi.fn().mockReturnValue({ // .limit(1)
                                 get: vi.fn().mockResolvedValue({ // .get() -> tokens
                                     empty: false,
-                                    docs: [{ data: () => ({ accessToken: 't', refreshToken: 'r', userID: 'u' }) }]
+                                    docs: [{ data: () => ({ accessToken: 't', refreshToken: 'r', userID: 'u' }), id: 'tokenId', ref: { parent: { parent: { id: 'u' } } } }]
                                 })
                             })
                         }),
@@ -124,7 +129,8 @@ describe('Garmin Backfill', () => {
                             if (subName === 'meta') {
                                 return {
                                     doc: vi.fn().mockReturnValue({ // .doc(id)
-                                        get: vi.fn().mockResolvedValue({ exists: false }) // Default: meta not found
+                                        get: vi.fn().mockResolvedValue({ exists: false }), // Default: meta not found
+                                        set: setMock
                                     })
                                 };
                             }
@@ -136,23 +142,36 @@ describe('Garmin Backfill', () => {
             return collectionObj; // Fallback
         });
 
-        req = {
-            method: 'POST',
-            body: { startDate: '2023-01-01', endDate: '2023-01-10' }
-        };
-        res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn().mockReturnThis()
+        context = {
+            auth: { uid: 'testUserID' },
+            app: { appId: 'testAppId' }
         };
     });
 
-    it('should trigger backfill and return 200', async () => {
-        await backfillGarminAPIActivities(req, res);
-        expect(res.status).toHaveBeenCalledWith(200);
+    it('should trigger backfill and return void on success', async () => {
+        const data = { startDate: '2023-01-01', endDate: '2023-01-10' };
+
+        await (backfillGarminAPIActivities as any)(data, context);
+
         expect(requestHelper.get).toHaveBeenCalled();
+        // onCall functions return data directly or void, status is handled by framework
+        // We verify side effects (setMock for updating timestamp)
+        expect(setMock).toHaveBeenCalled();
     });
 
-    it('should return 403 if throttled', async () => {
+    it('should throw failed-precondition if app is undefined', async () => {
+        context.app = undefined;
+        const data = { startDate: '2023-01-01', endDate: '2023-01-10' };
+        await expect((backfillGarminAPIActivities as any)(data, context)).rejects.toThrow('The function must be called from an App Check verified app.');
+    });
+
+    it('should throw unauthenticated if auth is undefined', async () => {
+        context.auth = undefined;
+        const data = { startDate: '2023-01-01', endDate: '2023-01-10' };
+        await expect((backfillGarminAPIActivities as any)(data, context)).rejects.toThrow('The function must be called while authenticated.');
+    });
+
+    it('should throw permission-denied if throttled', async () => {
         // Override for throttling
         collectionMock.mockImplementation((name) => {
             if (name === 'users') {
@@ -169,38 +188,33 @@ describe('Garmin Backfill', () => {
                     })
                 };
             }
-            return collectionObj; // Need to ensure tokens still work? 
-            // The code pulls user ID first, then tokens.
-            // If we only override users, others might default to 'collectionObj' return from TOP level mock.
-            // But we overwrote the implementation!
-            // We must support 'garminAPITokens' too.
+            if (name === 'garminAPITokens') return collectionObj; // fallback for tokens lookups that happen later
+            return collectionObj;
         });
 
-        // Wait, rewriting implementation entirely is risky. 
-        // Better to use stateful mocks or distinct spies.
-        // But for this test, if it fails throttling, it never reaches tokens.
-
-        await backfillGarminAPIActivities(req, res);
-        expect(res.status).toHaveBeenCalledWith(403);
+        const data = { startDate: '2023-01-01', endDate: '2023-01-10' };
+        await expect((backfillGarminAPIActivities as any)(data, context)).rejects.toThrow('History import cannot happen');
     });
 
     it('should batch requests if range > 90 days', async () => {
-        req.body = { startDate: '2023-01-01', endDate: '2023-04-10' };
+        const data = { startDate: '2023-01-01', endDate: '2023-04-10' };
 
-        // Restore default implementation (set in beforeEach) which has valid tokens
-        // But we need to verify 'garminAPITokens' works.
-        // beforeEach sets it up.
+        // We rely on the default mock implementation in beforeEach which has valid tokens/meta
 
-        await backfillGarminAPIActivities(req, res);
+        await (backfillGarminAPIActivities as any)(data, context);
         expect(requestHelper.get).toHaveBeenCalledTimes(2);
     });
 
-    it('should return 409 if Garmin returns Conflict', async () => {
-        const error: any = new Error('Conflict');
+    it('should throw already-exists if Garmin returns Conflict', async () => {
+        const error: any = new Error('Duplicate backfill detected');
+        error.message = 'Duplicate backfill detected'; // Matches code check
         error.statusCode = 409;
         (requestHelper.get as any).mockRejectedValue(error);
 
-        await backfillGarminAPIActivities(req, res);
-        expect(res.status).toHaveBeenCalledWith(409);
+        const data = { startDate: '2023-01-01', endDate: '2023-01-10' };
+        // The implementation wraps errors. e.statusCode=409 -> throws 'Duplicate backfill detected...'
+        // then the onCall wrapper catches it and rethrows HttpsError('already-exists', ...)
+
+        await expect((backfillGarminAPIActivities as any)(data, context)).rejects.toThrow('Duplicate backfill detected');
     });
 });

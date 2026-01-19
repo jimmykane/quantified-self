@@ -7,17 +7,28 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 vi.mock('firebase-functions/v1', () => ({
     region: () => ({
         https: {
-            onRequest: (handler: any) => handler
+            onCall: (handler: any) => handler
         }
-    })
+    }),
+    runWith: () => ({
+        region: () => ({
+            https: {
+                onCall: (handler: any) => handler
+            }
+        })
+    }),
+    https: {
+        HttpsError: class HttpsError extends Error {
+            constructor(public code: string, message: string) {
+                super(message);
+                this.name = 'HttpsError';
+            }
+        }
+    }
 }));
 
 vi.mock('../../utils', () => ({
-    isCorsAllowed: vi.fn().mockReturnValue(true),
-    setAccessControlHeadersOnResponse: vi.fn(),
-    getUserIDFromFirebaseToken: vi.fn().mockResolvedValue('testUserID'),
     isProUser: vi.fn().mockResolvedValue(true),
-    determineRedirectURI: vi.fn((req) => req.body?.redirectUri || req.query?.redirect_uri),
     PRO_REQUIRED_MESSAGE: 'Service sync is a Pro feature.'
 }));
 
@@ -36,29 +47,25 @@ import {
 } from './wrapper';
 
 describe('Suunto Auth Wrapper', () => {
-    let req: any;
-    let res: any;
+    let context: any;
+    let data: any;
 
     beforeEach(() => {
         vi.clearAllMocks();
         (utils.isProUser as any).mockResolvedValue(true);
-        (utils.getUserIDFromFirebaseToken as any).mockResolvedValue('testUserID');
 
-        req = {
-            method: 'POST',
-            body: {
-                redirectUri: 'https://app.com/callback'
-            }
+        context = {
+            app: { appId: 'test-app' },
+            auth: { uid: 'testUserID' }
         };
-        res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn().mockReturnThis()
+        data = {
+            redirectUri: 'https://app.com/callback'
         };
     });
 
     describe('getSuuntoAPIAuthRequestTokenRedirectURI', () => {
         it('should return redirect URI for pro user', async () => {
-            await getSuuntoAPIAuthRequestTokenRedirectURI(req, res);
+            const result = await getSuuntoAPIAuthRequestTokenRedirectURI(data, context);
 
             expect(utils.isProUser).toHaveBeenCalledWith('testUserID');
             expect(oauth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith(
@@ -66,28 +73,42 @@ describe('Suunto Auth Wrapper', () => {
                 ServiceNames.SuuntoApp,
                 'https://app.com/callback'
             );
-            expect(res.send).toHaveBeenCalledWith({ redirect_uri: 'https://mock-redirect.com' });
+            expect(result).toEqual({ redirect_uri: 'https://mock-redirect.com' });
         });
 
-        it('should return 403 for non-pro user', async () => {
+        it('should throw error for non-pro user', async () => {
             (utils.isProUser as any).mockResolvedValue(false);
 
-            await getSuuntoAPIAuthRequestTokenRedirectURI(req, res);
+            await expect(getSuuntoAPIAuthRequestTokenRedirectURI(data, context))
+                .rejects.toThrow('Service sync is a Pro feature.');
+        });
 
-            expect(res.status).toHaveBeenCalledWith(403);
-            expect(res.send).toHaveBeenCalledWith('Service sync is a Pro feature.');
+        it('should throw error if App Check fails', async () => {
+            context.app = null;
+
+            await expect(getSuuntoAPIAuthRequestTokenRedirectURI(data, context))
+                .rejects.toThrow('App Check verification failed.');
+        });
+
+        it('should throw error if not authenticated', async () => {
+            context.auth = null;
+
+            await expect(getSuuntoAPIAuthRequestTokenRedirectURI(data, context))
+                .rejects.toThrow('User must be authenticated.');
         });
     });
 
     describe('requestAndSetSuuntoAPIAccessToken', () => {
-        it('should validate state and set tokens', async () => {
-            req.body = {
+        beforeEach(() => {
+            data = {
                 state: 'validState',
                 code: 'validCode',
                 redirectUri: 'https://app.com/callback'
             };
+        });
 
-            await requestAndSetSuuntoAPIAccessToken(req, res);
+        it('should validate state and set tokens', async () => {
+            await requestAndSetSuuntoAPIAccessToken(data, context);
 
             expect(oauth2.validateOAuth2State).toHaveBeenCalledWith('testUserID', ServiceNames.SuuntoApp, 'validState');
             expect(oauth2.getAndSetServiceOAuth2AccessTokenForUser).toHaveBeenCalledWith(
@@ -96,25 +117,43 @@ describe('Suunto Auth Wrapper', () => {
                 'https://app.com/callback',
                 'validCode'
             );
-            expect(res.status).toHaveBeenCalledWith(200);
         });
 
-        it('should return 403 if state is invalid', async () => {
+        it('should throw error if state is invalid', async () => {
             (oauth2.validateOAuth2State as any).mockResolvedValue(false);
-            req.body = { state: 'invalid', code: 'c', redirectUri: 'r' };
 
-            await requestAndSetSuuntoAPIAccessToken(req, res);
+            await expect(requestAndSetSuuntoAPIAccessToken(data, context))
+                .rejects.toThrow('Invalid OAuth state');
+        });
 
-            expect(res.status).toHaveBeenCalledWith(403);
+        it('should throw error if App Check fails', async () => {
+            context.app = null;
+
+            await expect(requestAndSetSuuntoAPIAccessToken(data, context))
+                .rejects.toThrow('App Check verification failed.');
         });
     });
 
     describe('deauthorizeSuuntoApp', () => {
-        it('should call deauthorize and return 200', async () => {
-            await deauthorizeSuuntoApp(req, res);
+        it('should call deauthorize and return result', async () => {
+            const result = await deauthorizeSuuntoApp({}, context);
 
             expect(oauth2.deauthorizeServiceForUser).toHaveBeenCalledWith('testUserID', ServiceNames.SuuntoApp);
-            expect(res.status).toHaveBeenCalledWith(200);
+            expect(result).toEqual({ result: 'Deauthorized' });
+        });
+
+        it('should throw error if App Check fails', async () => {
+            context.app = null;
+
+            await expect(deauthorizeSuuntoApp({}, context))
+                .rejects.toThrow('App Check verification failed.');
+        });
+
+        it('should throw error on deauthorization failure', async () => {
+            (oauth2.deauthorizeServiceForUser as any).mockRejectedValue(new Error('API Error'));
+
+            await expect(deauthorizeSuuntoApp({}, context))
+                .rejects.toThrow('Deauthorization Error');
         });
     });
 });

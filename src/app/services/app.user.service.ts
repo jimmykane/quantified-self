@@ -83,6 +83,7 @@ import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc, getDoc } from '@angular/fire/firestore';
 import { AppFunctionsService } from './app.functions.service';
+import { FunctionName } from '../../shared/functions-manifest';
 
 
 /**
@@ -472,108 +473,103 @@ export class AppUserService implements OnDestroy {
 
 
   async importServiceHistoryForCurrentUser(serviceName: ServiceNames, startDate: Date, endDate: Date) {
-    const idToken = await this.auth.currentUser?.getIdToken(true);
-    const serviceNamesToFunctionsURI = {
-      [ServiceNames.SuuntoApp]: environment.functions.suuntoAPIHistoryImportURI,
-      [ServiceNames.GarminAPI]: environment.functions.backfillGarminAPIActivities,
-      [ServiceNames.COROSAPI]: environment.functions.COROSAPIHistoryImportURI,
+    let functionName: FunctionName;
+    let payload: any;
+
+    switch (serviceName) {
+      case ServiceNames.COROSAPI:
+        functionName = 'addCOROSAPIHistoryToQueue';
+        payload = { startDate, endDate };
+        break;
+      case ServiceNames.GarminAPI:
+        functionName = 'backfillGarminAPIActivities';
+        payload = { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
+        break;
+      case ServiceNames.SuuntoApp:
+        functionName = 'addSuuntoAppHistoryToQueue';
+        payload = { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
+        break;
+      default:
+        throw new Error(`Service ${serviceName} not supported for history import`);
     }
-    return this.http.post(
-      serviceNamesToFunctionsURI[serviceName], {
-      startDate: startDate,
-      endDate: endDate
-    },
-      {
-        headers:
-          new HttpHeaders({
-            'Authorization': `Bearer ${idToken}`
-          })
-      }).toPromise();
+
+    const result = await this.functionsService.call(functionName, payload);
+    return result.data;
   }
 
-  public async deauthorizeService(serviceName: ServiceNames) {
-    const idToken = await this.auth.currentUser?.getIdToken(true);
-    const serviceNamesToFunctionsURI = {
-      [ServiceNames.SuuntoApp]: environment.functions.deauthorizeSuuntoApp,
-      [ServiceNames.GarminAPI]: environment.functions.deauthorizeGarminAPI,
-      [ServiceNames.COROSAPI]: environment.functions.deauthorizeCOROSAPI,
+  async deauthorizeService(serviceName: ServiceNames): Promise<any> {
+    let functionName: FunctionName;
+
+    switch (serviceName) {
+      case ServiceNames.GarminAPI:
+        functionName = 'deauthorizeGarminAPI';
+        break;
+      case ServiceNames.COROSAPI:
+        functionName = 'deauthorizeCOROSAPI';
+        break;
+      case ServiceNames.SuuntoApp:
+        functionName = 'deauthorizeSuuntoApp';
+        break;
+      default:
+        throw new Error(`Service ${serviceName} not supported for deauthorization`);
     }
-    return this.http.post(
-      serviceNamesToFunctionsURI[serviceName],
-      {},
-      {
-        headers:
-          new HttpHeaders({
-            'Authorization': `Bearer ${idToken}`
-          })
-      }).toPromise();
+
+    const result = await this.functionsService.call(functionName);
+    return result.data;
   }
 
-  public async getCurrentUserServiceTokenAndRedirectURI(serviceName: ServiceNames): Promise<{ redirect_uri: string } | { redirect_uri: string, state: string, oauthToken: string }> {
-    const serviceNamesToFunctionsURI = {
-      [ServiceNames.SuuntoApp]: environment.functions.getSuuntoAPIAuthRequestTokenRedirectURI,
-      [ServiceNames.GarminAPI]: environment.functions.getGarminAPIAuthRequestTokenRedirectURI,
-      [ServiceNames.COROSAPI]: environment.functions.getCOROSAPIAuthRequestTokenRedirectURI
+  async getCurrentUserServiceTokenAndRedirectURI(serviceName: ServiceNames): Promise<{ redirect_uri: string }> {
+    const currentDomain = this.windowService.currentDomain;
+    const redirectUri = encodeURI(`${currentDomain}/services?serviceName=${serviceName}&connect=1`);
+    let functionName: FunctionName;
+
+    switch (serviceName) {
+      case ServiceNames.GarminAPI:
+        functionName = 'getGarminAPIAuthRequestTokenRedirectURI';
+        break;
+      case ServiceNames.COROSAPI:
+        functionName = 'getCOROSAPIAuthRequestTokenRedirectURI';
+        break;
+      case ServiceNames.SuuntoApp:
+        functionName = 'getSuuntoAPIAuthRequestTokenRedirectURI';
+        break;
+      default:
+        throw new Error(`Service ${serviceName} not supported for auth redirect`);
     }
-    const idToken = await this.auth.currentUser?.getIdToken(true);
-    return <Promise<{ redirect_uri: string }>>this.http.post(
-      serviceNamesToFunctionsURI[serviceName], {
-      redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${serviceName}&connect=1`)
-    },
-      {
-        headers:
-          new HttpHeaders({
-            'Authorization': `Bearer ${idToken}`
-          })
-      }).toPromise();
+
+    const result = await this.functionsService.call<{ redirectUri: string }, { redirect_uri: string }>(functionName, { redirectUri });
+    return result.data;
   }
 
-  public async requestAndSetCurrentUserGarminAccessToken(state: string, code: string) {
-    const idToken = await this.auth.currentUser?.getIdToken(true);
-    return this.http.post(
-      environment.functions.requestAndSetGarminAPIAccessToken, {
-      state: state,
-      code: code,
-      redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.GarminAPI}&connect=1`)
-    },
-      {
-        headers:
-          new HttpHeaders({
-            'Authorization': `Bearer ${idToken}`
-          })
-      }).toPromise();
+  public async requestAndSetCurrentUserGarminAPIAccessToken(state: string, code: string) {
+    const currentDomain = this.windowService.currentDomain;
+    const redirectUri = encodeURI(`${currentDomain}/services?serviceName=${ServiceNames.GarminAPI}&connect=1`);
+    const result = await this.functionsService.call('requestAndSetGarminAPIAccessToken', {
+      state,
+      code,
+      redirectUri,
+    });
+    return result.data;
   }
 
   public async requestAndSetCurrentUserSuuntoAppAccessToken(state: string, code: string) {
-    const idToken = await this.auth.currentUser?.getIdToken(true);
-    return this.http.post(
-      environment.functions.requestAndSetSuuntoAPIAccessToken, {
-      state: state,
-      code: code,
-      redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.SuuntoApp}&connect=1`)
-    },
-      {
-        headers:
-          new HttpHeaders({
-            'Authorization': `Bearer ${idToken}`
-          })
-      }).toPromise();
+    const currentDomain = this.windowService.currentDomain;
+    const redirectUri = encodeURI(`${currentDomain}/services?serviceName=${ServiceNames.SuuntoApp}&connect=1`);
+    const result = await this.functionsService.call<{ state: string; code: string; redirectUri: string }, void>(
+      'requestAndSetSuuntoAPIAccessToken',
+      { state, code, redirectUri }
+    );
+    return result.data;
   }
 
   public async requestAndSetCurrentUserCOROSAPIAccessToken(state: string, code: string) {
-    const idToken = await this.auth.currentUser?.getIdToken(true);
-    return this.http.post(
-      environment.functions.requestAndSetCOROSAPIAccessToken, {
-      state: state,
-      code: code,
-      redirectUri: encodeURI(`${this.windowService.currentDomain}/services?serviceName=${ServiceNames.COROSAPI}&connect=1`)
-    },
-      {
-        headers:
-          new HttpHeaders({
-            'Authorization': `Bearer ${idToken}`
-          })
-      }).toPromise();
+    const currentDomain = this.windowService.currentDomain;
+    const redirectUri = encodeURI(`${currentDomain}/services?serviceName=${ServiceNames.COROSAPI}&connect=1`);
+    const result = await this.functionsService.call<{ state: string; code: string; redirectUri: string }, void>(
+      'requestAndSetCOROSAPIAccessToken',
+      { state, code, redirectUri }
+    );
+    return result.data;
   }
 
   public async updateUserProperties(user: AppUserInterface, propertiesToUpdate: any) {

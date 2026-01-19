@@ -2,143 +2,138 @@
 
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
-import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, isProUser, PRO_REQUIRED_MESSAGE } from '../../utils';
+import { isProUser, PRO_REQUIRED_MESSAGE } from '../../utils';
 import {
   deauthorizeServiceForUser,
   getAndSetServiceOAuth2AccessTokenForUser,
   getServiceOAuth2CodeRedirectAndSaveStateToUser,
   validateOAuth2State,
 } from '../../OAuth2';
-import { determineRedirectURI } from '../../utils';
 import { SERVICE_NAME } from '../constants';
 
 
-export const getCOROSAPIAuthRequestTokenRedirectURI = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  // Directly set the CORS header
-  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    logger.error('Not allowed');
-    res.status(403);
-    res.send('Unauthorized');
-    return;
-  }
+interface GetAuthRedirectURIRequest {
+  redirectUri: string;
+}
 
-  setAccessControlHeadersOnResponse(req, res);
+interface GetAuthRedirectURIResponse {
+  redirect_uri: string;
+}
 
-  if (req.method === 'OPTIONS') {
-    res.status(200);
-    res.send();
-    return;
-  }
+export const getCOROSAPIAuthRequestTokenRedirectURI = functions
+  .runWith({ memory: '256MB' })
+  .region('europe-west2')
+  .https.onCall(async (data: GetAuthRedirectURIRequest, context): Promise<GetAuthRedirectURIResponse> => {
+    // App Check verification
+    if (!context.app) {
+      throw new functions.https.HttpsError('failed-precondition', 'App Check verification failed.');
+    }
 
-  const userID = await getUserIDFromFirebaseToken(req);
-  if (!userID) {
-    res.status(403).send('Unauthorized');
-    return;
-  }
+    // Auth verification
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
+    }
 
-  // Enforce Pro Access
-  if (!(await isProUser(userID))) {
-    logger.warn(`Blocking COROS Auth for non-pro user ${userID}`);
-    res.status(403).send(PRO_REQUIRED_MESSAGE);
-    return;
-  }
+    const userID = context.auth.uid;
 
-  const redirectURI = determineRedirectURI(req);
-  if (!redirectURI) {
-    res.status(400).send('Missing redirect_uri');
-    return;
-  }
-  res.send({
-    redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectURI),
+    // Enforce Pro Access
+    if (!(await isProUser(userID))) {
+      logger.warn(`Blocking COROS Auth for non-pro user ${userID}`);
+      throw new functions.https.HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
+    }
+
+    const redirectURI = data.redirectUri;
+    if (!redirectURI) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing redirect_uri');
+    }
+
+    return {
+      redirect_uri: await getServiceOAuth2CodeRedirectAndSaveStateToUser(userID, SERVICE_NAME, redirectURI),
+    };
   });
-});
 
-export const requestAndSetCOROSAPIAccessToken = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  // Directly set the CORS header
-  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    logger.error('Not allowed');
-    res.status(403);
-    res.send('Unauthorized');
-    return;
-  }
 
-  setAccessControlHeadersOnResponse(req, res);
+interface SetAccessTokenRequest {
+  state: string;
+  code: string;
+  redirectUri: string;
+}
 
-  if (req.method === 'OPTIONS') {
-    res.status(200);
-    res.send();
-    return;
-  }
+export const requestAndSetCOROSAPIAccessToken = functions
+  .runWith({ memory: '256MB' })
+  .region('europe-west2')
+  .https.onCall(async (data: SetAccessTokenRequest, context): Promise<void> => {
+    // App Check verification
+    if (!context.app) {
+      throw new functions.https.HttpsError('failed-precondition', 'App Check verification failed.');
+    }
 
-  const userID = await getUserIDFromFirebaseToken(req);
-  if (!userID) {
-    res.status(403).send('Unauthorized');
-    return;
-  }
+    // Auth verification
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
+    }
 
-  // Enforce Pro Access
-  if (!(await isProUser(userID))) {
-    logger.warn(`Blocking COROS Token Set for non-pro user ${userID}`);
-    res.status(403).send(PRO_REQUIRED_MESSAGE);
-    return;
-  }
+    const userID = context.auth.uid;
 
-  const state = req.body.state;
-  const code = req.body.code;
-  const redirectUri = determineRedirectURI(req);
+    // Enforce Pro Access
+    if (!(await isProUser(userID))) {
+      logger.warn(`Blocking COROS Token Set for non-pro user ${userID}`);
+      throw new functions.https.HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
+    }
 
-  if (!state || !code || !redirectUri) {
-    logger.error('Missing state or code or redirectUri');
-    res.status(400).send('Bad Request');
-    return;
-  }
+    const { state, code, redirectUri } = data;
 
-  if (!await validateOAuth2State(userID, SERVICE_NAME, state)) {
-    res.status(403).send('Unauthorized');
-    return;
-  }
-  try {
-    await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code);
-  } catch (e: any) {
-    logger.error(e);
-    const status = e.statusCode || (e.output && e.output.statusCode) || 500;
-    res.status(status).send(status === 502 ? 'COROS service is temporarily unavailable' : 'Authorization code flow error');
-  }
-  res.status(200).send();
-});
+    if (!state || !code || !redirectUri) {
+      logger.error('Missing state or code or redirectUri');
+      throw new functions.https.HttpsError('invalid-argument', 'Missing state, code, or redirectUri');
+    }
 
+    if (!await validateOAuth2State(userID, SERVICE_NAME, state)) {
+      throw new functions.https.HttpsError('permission-denied', 'Invalid OAuth state');
+    }
+
+    try {
+      await getAndSetServiceOAuth2AccessTokenForUser(userID, SERVICE_NAME, redirectUri, code);
+    } catch (e: any) {
+      logger.error(e);
+      const status = e.statusCode || (e.output && e.output.statusCode) || 500;
+      if (status === 502) {
+        throw new functions.https.HttpsError('unavailable', 'COROS service is temporarily unavailable');
+      }
+      throw new functions.https.HttpsError('internal', 'Authorization code flow error');
+    }
+  });
+
+
+interface DeauthorizeResponse {
+  result: string;
+}
 
 /**
  * Deauthorizes a COROS account
  */
-export const deauthorizeCOROSAPI = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  // Directly set the CORS header
-  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    logger.error('Not allowed');
-    res.status(403);
-    res.send('Unauthorized');
-    return;
-  }
+export const deauthorizeCOROSAPI = functions
+  .runWith({ memory: '256MB' })
+  .region('europe-west2')
+  .https.onCall(async (_data: unknown, context): Promise<DeauthorizeResponse> => {
+    // App Check verification
+    if (!context.app) {
+      throw new functions.https.HttpsError('failed-precondition', 'App Check verification failed.');
+    }
 
-  setAccessControlHeadersOnResponse(req, res);
+    // Auth verification
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated.');
+    }
 
-  if (req.method === 'OPTIONS') {
-    res.status(200);
-    res.send();
-    return;
-  }
+    const userID = context.auth.uid;
 
-  const userID = await getUserIDFromFirebaseToken(req);
-  if (!userID) {
-    res.status(403).send('Unauthorized');
-    return;
-  }
+    try {
+      await deauthorizeServiceForUser(userID, SERVICE_NAME);
+    } catch (e: any) {
+      logger.error(e);
+      throw new functions.https.HttpsError('internal', 'Deauthorization Error');
+    }
 
-  try {
-    await deauthorizeServiceForUser(userID, SERVICE_NAME);
-  } catch (e: any) {
-    logger.error(e);
-    res.status(500).send('Deauthorization Error');
-  }
-  res.status(200).send({ result: 'Deauthorized' });
-});
+    return { result: 'Deauthorized' };
+  });

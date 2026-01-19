@@ -1,6 +1,6 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
-import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
+import { isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
 
 import * as requestPromise from '../request-helper';
 import * as admin from 'firebase-admin';
@@ -15,69 +15,61 @@ const GARMIN_ACTIVITIES_BACKFILL_URI = 'https://apis.garmin.com/wellness-api/res
 const TIMEOUT_IN_SECONDS = 300;
 const MEMORY = '256MB';
 
+interface BackfillRequest {
+  startDate: string; // ISO Dates
+  endDate: string;
+}
+
 export const backfillGarminAPIActivities = functions.region('europe-west2').runWith({
   timeoutSeconds: TIMEOUT_IN_SECONDS,
   memory: MEMORY,
-}).https.onRequest(async (req, res) => {
-  // Directly set the CORS header
-  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    logger.error('Not allowed');
-    res.status(403);
-    res.send('Unauthorized');
-    return;
+}).https.onCall(async (data: BackfillRequest, context) => {
+  // 1. App Check Verification
+  if (context.app == undefined) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'The function must be called from an App Check verified app.'
+    );
   }
 
-  setAccessControlHeadersOnResponse(req, res);
-
-  if (req.method === 'OPTIONS') {
-    res.status(200);
-    res.send();
-    return;
+  // 2. Auth Verification
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      'unauthenticated',
+      'The function must be called while authenticated.'
+    );
   }
 
-  const userID = await getUserIDFromFirebaseToken(req);
-  if (!userID) {
-    res.status(403).send('Unauthorized');
-    return;
-  }
+  const userID = context.auth.uid;
 
   if (!(await isProUser(userID))) {
     logger.warn(`Blocking history import for non-pro user ${userID}`);
-    res.status(403).send(PRO_REQUIRED_MESSAGE);
-    return;
+    throw new functions.https.HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }
 
-  const startDate = new Date(req.body.startDate);
-  const endDate = new Date(req.body.endDate);
+  const startDate = new Date(data.startDate);
+  const endDate = new Date(data.endDate);
 
   if (!startDate || !endDate) {
-    res.status(500).send('No start and/or end date');
-    return;
+    throw new functions.https.HttpsError('invalid-argument', 'No start and/or end date');
   }
 
   if (startDate > endDate) {
-    res.status(500).send('Start date if after the end date');
-    return;
+    throw new functions.https.HttpsError('invalid-argument', 'Start date if after the end date');
   }
 
   try {
     await processGarminBackfill(userID, startDate, endDate);
   } catch (e: any) {
     if (e.message.includes('History import cannot happen')) {
-      res.status(403).send(e.message);
-      return;
+      throw new functions.https.HttpsError('permission-denied', e.message);
     }
     if (e.message.includes('Duplicate backfill detected')) {
-      res.status(409).send(e.message);
-      return;
+      throw new functions.https.HttpsError('already-exists', e.message);
     }
-    logger.error(e);
-    res.status(e.statusCode || 500).send(e.message);
-    return;
+    logger.error('Error backfilling Garmin:', e);
+    throw new functions.https.HttpsError('internal', e.message);
   }
-
-  res.status(200);
-  res.send();
 });
 
 export async function processGarminBackfill(userID: string, startDate: Date, endDate: Date) {
