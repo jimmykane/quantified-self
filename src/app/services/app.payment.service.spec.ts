@@ -6,6 +6,7 @@ import { Functions } from '@angular/fire/functions';
 import { MatDialog } from '@angular/material/dialog';
 import { FirebaseApp } from '@angular/fire/app';
 import { AppWindowService } from './app.window.service';
+import { AppFunctionsService } from './app.functions.service';
 import { of } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
@@ -77,6 +78,9 @@ const mockAuth = {
 };
 const mockFunctions = {};
 const mockDialog = { open: () => ({ afterClosed: () => of(true) }) };
+const mockFunctionsService = {
+    call: vi.fn().mockResolvedValue({ data: {} })
+};
 
 describe('AppPaymentService', () => {
     let service: AppPaymentService;
@@ -98,7 +102,8 @@ describe('AppPaymentService', () => {
                 { provide: Firestore, useValue: mockFirestore },
                 { provide: Auth, useValue: mockAuth },
                 { provide: Functions, useValue: mockFunctions },
-                { provide: MatDialog, useValue: mockDialog }
+                { provide: MatDialog, useValue: mockDialog },
+                { provide: AppFunctionsService, useValue: mockFunctionsService }
             ]
         });
         service = TestBed.inject(AppPaymentService);
@@ -171,12 +176,12 @@ describe('AppPaymentService', () => {
     describe('restorePurchases', () => {
         it('should return the role from the cloud function response', async () => {
             // Mock the callable function to return specific data
-            mockHttpsCallableFromURL.mockReturnValue(() => Promise.resolve({ data: { success: true, role: 'pro' } }));
+            mockFunctionsService.call.mockResolvedValue({ data: { success: true, role: 'pro' } });
 
             const role = await service.restorePurchases();
 
             expect(role).toBe('pro');
-            expect(mockHttpsCallableFromURL).toHaveBeenCalled();
+            expect(mockFunctionsService.call).toHaveBeenCalledWith('restoreUserClaims');
         });
     });
 });

@@ -7,13 +7,13 @@ import { AppUserService } from '../../../services/app.user.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { LoggerService } from '../../../services/logger.service';
 import { environment } from '../../../../environments/environment';
-import { HttpClient, HttpHeaders, HttpEventType } from '@angular/common/http';
 import { Auth, getIdToken } from '@angular/fire/auth';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { FileInterface } from '../file.interface';
 import { AppProcessingService } from '../../../services/app.processing.service';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getSize } from '@sports-alliance/sports-lib';
+import { AppFunctionsService } from '../../../services/app.functions.service';
 
 
 @Component({
@@ -35,7 +35,8 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
   private eventService = inject(AppEventService);
   private userService = inject(AppUserService);
   private analyticsService = inject(AppAnalyticsService);
-  private http = inject(HttpClient);
+
+  private functionsService = inject(AppFunctionsService);
   private serviceName: ServiceNames = ServiceNames.SuuntoApp;
 
   constructor() {
@@ -69,42 +70,35 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
             throw new Error(`Cannot upload route because the size is greater than 10MB`);
           }
 
-          this.http.post(environment.functions.uploadActivity,
-            fileReader.result,
-            {
-              headers: new HttpHeaders({
-                'Authorization': `Bearer ${idToken} `,
-                'Content-Type': 'application/octet-stream'
-              }),
-              reportProgress: true,
-              observe: 'events'
-            }).subscribe({
-              next: (event: any) => {
-                if (event.type === HttpEventType.UploadProgress) {
-                  const percentDone = Math.round((100 * event.loaded) / event.total);
-                  if (file.jobId) {
-                    this.processingService.updateJob(file.jobId, { progress: percentDone });
-                  }
-                } else if (event.type === HttpEventType.Response) {
-                  const body = event.body;
-                  if (body && body.code === 'ALREADY_EXISTS') {
-                    if (file.jobId) {
-                      this.processingService.updateJob(file.jobId, { status: 'duplicate', details: 'Activity already exists in Suunto' });
-                    }
-                    this.snackBar.open(`Activity already exists in Suunto: ${file.filename}.${file.extension}`, 'OK', { duration: 5000 });
-                    resolve(true); // Still resolve as true since it's not a failure
-                  } else {
-                    resolve(true);
-                  }
-                }
-              },
-              error: (e: any) => {
-                this.logger.error(e);
-                const errorMessage = typeof e.error === 'string' ? e.error : e.message;
-                this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${errorMessage} `, 'OK', { duration: 10000 });
-                reject(e);
+          // Convert ArrayBuffer to Base64
+          const base64String = btoa(new Uint8Array(fileReader.result as ArrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+
+          if (file.jobId) {
+            this.processingService.updateJob(file.jobId, { progress: 50 });
+          }
+
+          this.functionsService.call<any, { status: string; code?: string; message?: string }>(
+            'importActivityToSuuntoApp',
+            { file: base64String }
+          ).then((response) => {
+            if (file.jobId) {
+              this.processingService.updateJob(file.jobId, { progress: 100 });
+            }
+            if (response.data.code === 'ALREADY_EXISTS') {
+              if (file.jobId) {
+                this.processingService.updateJob(file.jobId, { status: 'duplicate', details: 'Activity already exists in Suunto' });
               }
-            });
+              this.snackBar.open(`Activity already exists in Suunto: ${file.filename}.${file.extension}`, 'OK', { duration: 5000 });
+              resolve(true);
+            } else {
+              resolve(true);
+            }
+          }).catch((e) => {
+            this.logger.error(e);
+            const errorMessage = e.message || 'Unknown error';
+            this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${errorMessage} `, 'OK', { duration: 10000 });
+            reject(e);
+          });
 
         } catch (e: any) {
           this.logger.error(e);

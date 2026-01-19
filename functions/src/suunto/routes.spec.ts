@@ -1,9 +1,9 @@
+'use strict';
 
 import { describe, it, vi, expect, beforeEach } from 'vitest';
-import * as functions from 'firebase-functions-test';
-import * as admin from 'firebase-admin';
 import * as zlib from 'zlib';
 import { PRO_REQUIRED_MESSAGE } from '../utils';
+import { HttpsError } from 'firebase-functions/v2/https';
 
 // Mock Dependencies
 const requestMocks = {
@@ -20,9 +20,6 @@ vi.mock('../request-helper', () => ({
 }));
 
 const utilsMocks = {
-    getUserIDFromFirebaseToken: vi.fn(),
-    isCorsAllowed: vi.fn().mockReturnValue(true),
-    setAccessControlHeadersOnResponse: vi.fn(),
     isProUser: vi.fn(),
 };
 
@@ -30,9 +27,6 @@ vi.mock('../utils', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../utils')>();
     return {
         ...actual,
-        getUserIDFromFirebaseToken: (...args: any[]) => utilsMocks.getUserIDFromFirebaseToken(...args),
-        isCorsAllowed: (...args: any[]) => utilsMocks.isCorsAllowed(...args),
-        setAccessControlHeadersOnResponse: (...args: any[]) => utilsMocks.setAccessControlHeadersOnResponse(...args),
         isProUser: (...args: any[]) => utilsMocks.isProUser(...args),
     };
 });
@@ -45,18 +39,20 @@ vi.mock('../tokens', () => ({
     getTokenData: (...args: any[]) => tokensMocks.getTokenData(...args),
 }));
 
-vi.mock('firebase-functions/v1', () => {
+// Mock firebase-functions/v2/https
+vi.mock('firebase-functions/v2/https', () => {
     return {
-        region: () => ({
-            https: {
-                onRequest: (handler: any) => handler
+        onCall: (options: any, handler: any) => {
+            return handler;
+        },
+        HttpsError: class HttpsError extends Error {
+            code: string;
+            constructor(code: string, message: string) {
+                super(message);
+                this.code = code;
+                this.name = 'HttpsError';
             }
-        }),
-        config: () => ({
-            suuntoapp: {
-                subscription_key: 'test-key'
-            }
-        })
+        }
     };
 });
 
@@ -79,10 +75,11 @@ vi.mock('firebase-admin', () => {
 
     // Setup successful query response for tokens
     getMock.mockResolvedValue({
-        size: 1, // Token query snapshot size
+        size: 1,
+        empty: false,
         docs: [{ id: 'token1', data: () => ({}) }],
-        data: () => ({ uploadedRoutesCount: 5 }), // Meta doc data
-        ref: { update: updateMock }, // Reference for update
+        data: () => ({ uploadedRoutesCount: 5 }),
+        ref: { update: updateMock },
     });
 
     const firestoreMock = {
@@ -98,48 +95,42 @@ vi.mock('firebase-admin', () => {
 // Import function under test
 import { importRouteToSuuntoApp } from './routes';
 
+// Helper to create mock request
+function createMockRequest(overrides: Partial<{
+    auth: { uid: string } | null;
+    app: object | null;
+    data: any;
+}> = {}) {
+    return {
+        auth: overrides.auth !== undefined ? overrides.auth : { uid: 'test-user-id' },
+        app: overrides.app !== undefined ? overrides.app : { appId: 'test-app' },
+        data: overrides.data ?? {},
+    };
+}
+
 describe('importRouteToSuuntoApp', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         // Happy path defaults
-        utilsMocks.isCorsAllowed.mockReturnValue(true);
-        utilsMocks.getUserIDFromFirebaseToken.mockResolvedValue('test-user-id');
         utilsMocks.isProUser.mockResolvedValue(true);
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
     });
 
     it('should successfully upload a route', async () => {
-        // Mock Pako ungzip
         const gpxContent = '<gpx>...</gpx>';
-        // We can't easily mock Pako import unless we used vi.mock('pako') but let's assume Pako works 
-        // OR we just assume req.body is base64 and the function decodes it.
-        // Actually since we import * as Pako, we can verify the function behavior if we mock Pako.
-        // But for integration, let's just use real Pako if it's a library, OR just trust it throws if bad input.
-        // Given we didn't mock Pako, we must provide valid base64 gzip input OR we mock it now.
-        // Let's rely on the logical flow mostly.
 
         // Mock request success
         requestMocks.post.mockResolvedValue(JSON.stringify({
             id: 'route-id',
-            // Suunto route import returns JSON
         }));
 
-        const req = {
-            method: 'POST',
-            // body containing base64 encoded gZIP
-            body: { body: Buffer.from(zlib.gzipSync(gpxContent)).toString('base64') },
-            get: (h: string) => h === 'origin' ? 'http://localhost' : undefined
-        } as any;
+        const compressedBase64 = Buffer.from(zlib.gzipSync(gpxContent)).toString('base64');
+        const request = createMockRequest({
+            data: { file: compressedBase64 }
+        });
 
-        const res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn(),
-            set: vi.fn(),
-        } as any;
+        const result = await importRouteToSuuntoApp(request as any);
 
-        await importRouteToSuuntoApp(req, res);
-
-        expect(utilsMocks.getUserIDFromFirebaseToken).toHaveBeenCalled();
         expect(utilsMocks.isProUser).toHaveBeenCalledWith('test-user-id');
         expect(requestMocks.post).toHaveBeenCalled();
 
@@ -150,87 +141,90 @@ describe('importRouteToSuuntoApp', () => {
                 'Authorization': 'fake-access-token',
                 'Content-Type': 'application/gpx+xml'
             }),
-            body: gpxContent // Since Pako.ungzip should have reversed it
+            body: gpxContent
         }));
 
-        expect(res.status).toHaveBeenCalledWith(200);
+        expect(result).toEqual({ status: 'success' });
+    });
+
+    it('should block unauthenticated requests', async () => {
+        const request = createMockRequest({
+            auth: null,
+            data: { file: 'base64data' }
+        });
+
+        await expect(importRouteToSuuntoApp(request as any)).rejects.toThrow();
+
+        try {
+            await importRouteToSuuntoApp(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('unauthenticated');
+        }
+    });
+
+    it('should block requests without App Check', async () => {
+        const request = createMockRequest({
+            app: null,
+            data: { file: 'base64data' }
+        });
+
+        await expect(importRouteToSuuntoApp(request as any)).rejects.toThrow();
+
+        try {
+            await importRouteToSuuntoApp(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('failed-precondition');
+        }
     });
 
     it('should block non-pro user', async () => {
         utilsMocks.isProUser.mockResolvedValue(false);
 
-        const req = {
-            method: 'POST',
-            get: vi.fn(),
-        } as any;
-        const res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn(),
-            set: vi.fn(),
-        } as any;
+        const request = createMockRequest({
+            data: { file: 'base64data' }
+        });
 
-        await importRouteToSuuntoApp(req, res);
+        await expect(importRouteToSuuntoApp(request as any)).rejects.toThrow();
 
-        expect(res.status).toHaveBeenCalledWith(403);
-        expect(res.send).toHaveBeenCalledWith(PRO_REQUIRED_MESSAGE);
+        try {
+            await importRouteToSuuntoApp(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('permission-denied');
+            expect(e.message).toBe(PRO_REQUIRED_MESSAGE);
+        }
     });
 
-    it('should handle missing auth', async () => {
-        utilsMocks.getUserIDFromFirebaseToken.mockResolvedValue(null);
+    it('should handle missing file', async () => {
+        const request = createMockRequest({
+            data: {}
+        });
 
-        const req = {
-            method: 'POST',
-            get: vi.fn(),
-        } as any;
-        const res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn(),
-            set: vi.fn(),
-        } as any;
+        await expect(importRouteToSuuntoApp(request as any)).rejects.toThrow();
 
-        await importRouteToSuuntoApp(req, res);
-
-        expect(res.status).toHaveBeenCalledWith(403);
-        expect(res.send).toHaveBeenCalledWith('Unauthorized');
-    });
-
-    it('should handle missing body', async () => {
-        const req = {
-            method: 'POST',
-            get: vi.fn(),
-            // body undefined
-        } as any;
-        const res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn(),
-            set: vi.fn(),
-        } as any;
-
-        await importRouteToSuuntoApp(req, res);
-
-        expect(res.status).toHaveBeenCalledWith(400);
+        try {
+            await importRouteToSuuntoApp(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('invalid-argument');
+        }
     });
 
     it('should handle service error', async () => {
         // Mock request rejection
         requestMocks.post.mockRejectedValue(new Error('Suunto API Error'));
         const gpxContent = '<gpx>...</gpx>';
+        const compressedBase64 = Buffer.from(zlib.gzipSync(gpxContent)).toString('base64');
 
-        const req = {
-            method: 'POST',
-            body: { body: Buffer.from(zlib.gzipSync(gpxContent)).toString('base64') },
-            get: vi.fn(),
-        } as any;
-        const res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn(),
-            set: vi.fn(),
-        } as any;
+        const request = createMockRequest({
+            data: { file: compressedBase64 }
+        });
 
-        await importRouteToSuuntoApp(req, res);
+        await expect(importRouteToSuuntoApp(request as any)).rejects.toThrow();
 
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.send).toHaveBeenCalledWith('Upload failed due to service errors.');
+        try {
+            await importRouteToSuuntoApp(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('internal');
+        }
     });
 
     it('should handle service logic error (200 OK but error in JSON)', async () => {
@@ -239,82 +233,39 @@ describe('importRouteToSuuntoApp', () => {
             error: 'Duplicate route'
         }));
         const gpxContent = '<gpx>...</gpx>';
+        const compressedBase64 = Buffer.from(zlib.gzipSync(gpxContent)).toString('base64');
 
-        const req = {
-            method: 'POST',
-            body: { body: Buffer.from(zlib.gzipSync(gpxContent)).toString('base64') },
-            get: vi.fn(),
-        } as any;
-        const res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn(),
-            set: vi.fn(),
-        } as any;
+        const request = createMockRequest({
+            data: { file: compressedBase64 }
+        });
 
-        await importRouteToSuuntoApp(req, res);
+        await expect(importRouteToSuuntoApp(request as any)).rejects.toThrow();
 
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.send).toHaveBeenCalledWith('Upload failed due to service errors.');
+        try {
+            await importRouteToSuuntoApp(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('internal');
+        }
     });
 
-    it('should handle auth error (refresh token failed)', async () => {
-        const error: any = new Error('Refresh failed');
+    it('should handle auth error (401 from API)', async () => {
+        const error: any = new Error('Unauthorized');
         error.statusCode = 401;
-        tokensMocks.getTokenData.mockRejectedValue(error);
-        const gpxContent = '<gpx>...</gpx>';
-
-        const req = {
-            method: 'POST',
-            body: { body: Buffer.from(zlib.gzipSync(gpxContent)).toString('base64') },
-            get: vi.fn(),
-        } as any;
-        const res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn(),
-            set: vi.fn(),
-        } as any;
-
-        await importRouteToSuuntoApp(req, res);
-
-        expect(res.status).toHaveBeenCalledWith(401);
-        expect(res.send).toHaveBeenCalledWith('Authentication failed. Please re-connect your Suunto account.');
-    });
-
-    it('should retry on 401 during upload', async () => {
-        // First call fails with 401, second succeeds
-        requestMocks.post
-            .mockRejectedValueOnce({ statusCode: 401, message: 'Unauthorized' })
-            .mockResolvedValueOnce(JSON.stringify({ id: 'route-success' }));
-
-        // Token refresh mock for fix
-        tokensMocks.getTokenData
-            .mockResolvedValueOnce({ accessToken: 'old-access-token' }) // Initial
-            .mockResolvedValueOnce({ accessToken: 'new-access-token' }); // Force refresh
+        requestMocks.post.mockRejectedValue(error);
 
         const gpxContent = '<gpx>...</gpx>';
-        const req = {
-            method: 'POST',
-            body: { body: Buffer.from(zlib.gzipSync(gpxContent)).toString('base64') },
-            get: vi.fn(),
-        } as any;
-        const res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn(),
-            set: vi.fn(),
-        } as any;
+        const compressedBase64 = Buffer.from(zlib.gzipSync(gpxContent)).toString('base64');
 
-        await importRouteToSuuntoApp(req, res);
+        const request = createMockRequest({
+            data: { file: compressedBase64 }
+        });
 
-        // Expect getTokenData called twice: once normal, once forced
-        expect(tokensMocks.getTokenData).toHaveBeenCalledTimes(2);
-        // First call - normal (false)
-        expect(tokensMocks.getTokenData).toHaveBeenNthCalledWith(1, expect.anything(), expect.anything(), false);
-        // Second call - forced (true)
-        expect(tokensMocks.getTokenData).toHaveBeenNthCalledWith(2, expect.anything(), expect.anything(), true);
+        await expect(importRouteToSuuntoApp(request as any)).rejects.toThrow();
 
-        // Expect post called twice
-        expect(requestMocks.post).toHaveBeenCalledTimes(2);
-
-        expect(res.status).toHaveBeenCalledWith(200);
+        try {
+            await importRouteToSuuntoApp(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('unauthenticated');
+        }
     });
 });

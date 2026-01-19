@@ -1,11 +1,10 @@
 'use strict';
 
-import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import * as requestPromise from '../request-helper';
 import { executeWithTokenRetry } from './retry-helper';
-import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
+import { isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
 import * as zlib from 'zlib';
 import { SERVICE_NAME, SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import { config } from '../config';
@@ -14,61 +13,41 @@ import { config } from '../config';
 /**
  * Uploads a route to the Suunto app
  */
-export const importRouteToSuuntoApp = functions.region('europe-west2').https.onRequest(async (req, res) => {
-  // Directly set the CORS header
-  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    logger.error('Not allowed');
-    res.status(403);
-    res.send('Unauthorized');
-    return;
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
+import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
+
+/**
+ * Uploads a route to the Suunto app
+ */
+export const importRouteToSuuntoApp = onCall({
+  region: FUNCTIONS_MANIFEST.importRouteToSuuntoApp.region,
+  cors: ALLOWED_CORS_ORIGINS,
+  timeoutSeconds: 300,
+  maxInstances: 10,
+}, async (request) => {
+
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
   }
 
-  setAccessControlHeadersOnResponse(req, res);
+  enforceAppCheck(request);
 
-  if (req.method === 'OPTIONS') {
-    res.status(200);
-    res.send();
-    return;
-  }
-
-  const userID = await getUserIDFromFirebaseToken(req);
-  if (!userID) {
-    res.status(403).send('Unauthorized');
-    return;
-  }
+  const userID = request.auth.uid;
 
   if (!(await isProUser(userID))) {
     logger.warn(`Blocking route upload for non-pro user ${userID}`);
-    res.status(403).send(PRO_REQUIRED_MESSAGE);
-    return;
+    throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }
 
-  let compressedData: Buffer;
+  const base64File = request.data.file;
 
-  // Check if it's a JSON body with a 'body' field
-  if (req.body && req.body.body) {
-    compressedData = Buffer.from(req.body.body, 'base64');
-  } else if (req.rawBody && Buffer.isBuffer(req.rawBody) && req.rawBody.length > 0) {
-    // If it's a JSON string in rawBody (case where body-parser didn't run or we want to be safe)
-    if (req.rawBody[0] === 0x7b) { // '{' character
-      try {
-        const parsed = JSON.parse(req.rawBody.toString());
-        if (parsed.body) {
-          compressedData = Buffer.from(parsed.body, 'base64');
-        } else {
-          compressedData = req.rawBody; // Fallback to raw if JSON but no 'body'
-        }
-      } catch (e) {
-        compressedData = req.rawBody; // Not JSON, use raw
-      }
-    } else {
-      compressedData = req.rawBody;
-    }
-  } else {
-    logger.error('No compressed body found (checked rawBody and body.body)');
-    res.status(400).send('No compressed body found');
-    return;
+  if (!base64File) {
+    logger.error('No file provided');
+    throw new HttpsError('invalid-argument', 'File content missing');
   }
+
+  const compressedData = Buffer.from(base64File, 'base64');
 
   const tokenQuerySnapshots = await admin.firestore().collection(SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME).doc(userID).collection('tokens').get();
   logger.info(`Found ${tokenQuerySnapshots.size} tokens for user ${userID}`);
@@ -77,8 +56,7 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
   let authFailures = 0;
 
   if (tokenQuerySnapshots.empty) {
-    res.status(401).send('No connected Suunto account found');
-    return;
+    throw new HttpsError('unauthenticated', 'No connected Suunto account found');
   }
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
@@ -142,10 +120,10 @@ export const importRouteToSuuntoApp = functions.region('europe-west2').https.onR
   }
 
   if (successCount > 0) {
-    res.status(200).send();
+    return { status: 'success' };
   } else if (authFailures > 0) {
-    res.status(401).send('Authentication failed. Please re-connect your Suunto account.');
+    throw new HttpsError('unauthenticated', 'Authentication failed. Please re-connect your Suunto account.');
   } else {
-    res.status(500).send('Upload failed due to service errors.');
+    throw new HttpsError('internal', 'Upload failed due to service errors.');
   }
 });

@@ -33,6 +33,8 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { ALLOWED_CORS_ORIGINS } from '../utils';
 import { getStripe } from './client';
+import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
+import { enforceAppCheck } from '../utils';
 
 /**
  * Result of attempting to find and link a Stripe customer by email.
@@ -201,12 +203,14 @@ async function findAndLinkStripeCustomerByEmail(
  * @see reconcileClaims - The underlying function that performs the claim sync
  */
 export const restoreUserClaims = onCall({
-    region: 'europe-west2',
+    region: FUNCTIONS_MANIFEST.restoreUserClaims.region,
     cors: ALLOWED_CORS_ORIGINS
 }, async (request) => {
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
     }
+
+    enforceAppCheck(request);
 
     try {
         const { role } = await reconcileClaims(request.auth.uid);
@@ -348,12 +352,14 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
  * @see findAndLinkStripeCustomerByEmail - The underlying helper that performs the lookup
  */
 export const linkExistingStripeCustomer = onCall({
-    region: 'europe-west2',
+    region: FUNCTIONS_MANIFEST.linkExistingStripeCustomer.region,
     cors: ALLOWED_CORS_ORIGINS
 }, async (request) => {
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
     }
+
+    enforceAppCheck(request);
 
     const uid = request.auth.uid;
 

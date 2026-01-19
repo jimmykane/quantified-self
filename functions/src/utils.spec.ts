@@ -4,6 +4,8 @@ import {
     generateIDFromPartsOld,
     isCorsAllowed,
     determineRedirectURI,
+    enforceAppCheck,
+    ENFORCE_APP_CHECK,
 } from './utils';
 
 async function tryCatch(fn: () => Promise<unknown>) {
@@ -275,6 +277,38 @@ describe('utils', () => {
                 query: { redirect_uri: 'https://quantified-self.io.evil.com/callback' },
             } as unknown as Parameters<typeof determineRedirectURI>[0];
             expect(determineRedirectURI(mockReq)).toBe('');
+        });
+    });
+
+    describe('enforceAppCheck', () => {
+        it('should not throw when app context is present', () => {
+            const request = { app: { appId: 'test-app' } };
+            expect(() => enforceAppCheck(request)).not.toThrow();
+        });
+
+        it('should throw HttpsError when app context is missing', () => {
+            const request = { app: undefined };
+            expect(() => enforceAppCheck(request)).toThrow('App Check verification failed.');
+        });
+
+        it('should throw HttpsError when app context is null', () => {
+            const request = { app: null };
+            expect(() => enforceAppCheck(request)).toThrow('App Check verification failed.');
+        });
+
+        it('should throw HttpsError when app context is empty object', () => {
+            // Empty object is truthy, so should pass
+            const request = { app: {} };
+            expect(() => enforceAppCheck(request)).not.toThrow();
+        });
+
+        it('should throw when no app property exists', () => {
+            const request = {};
+            expect(() => enforceAppCheck(request)).toThrow('App Check verification failed.');
+        });
+
+        it('ENFORCE_APP_CHECK constant should be defined and be a boolean', () => {
+            expect(typeof ENFORCE_APP_CHECK).toBe('boolean');
         });
     });
 

@@ -23,6 +23,10 @@ export const FUNCTIONS_MANIFEST = {
     requestAndSetSuuntoAPIAccessToken: { name: 'requestAndSetSuuntoAPIAccessToken', region: 'europe-west2' },
     deauthorizeSuuntoApp: { name: 'deauthorizeSuuntoApp', region: 'europe-west2' },
     addSuuntoAppHistoryToQueue: { name: 'addSuuntoAppHistoryToQueue', region: 'europe-west2' },
+    importRouteToSuuntoApp: { name: 'importRouteToSuuntoApp', region: 'europe-west2' },
+    importActivityToSuuntoApp: { name: 'importActivityToSuuntoApp', region: 'europe-west2' },
+    getSuuntoFITFile: { name: 'getSuuntoFITFile', region: 'europe-west2' },
+    stWorkoutDownloadAsFit: { name: 'stWorkoutDownloadAsFit', region: 'europe-west2' },
 
     // Garmin Functions
     getGarminAPIAuthRequestTokenRedirectURI: { name: 'getGarminAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },
@@ -31,6 +35,11 @@ export const FUNCTIONS_MANIFEST = {
     backfillGarminAPIActivities: { name: 'backfillGarminAPIActivities', region: 'europe-west2' },
     receiveGarminAPIDeregistration: { name: 'receiveGarminAPIDeregistration', region: 'europe-west2' },
     receiveGarminAPIUserPermissions: { name: 'receiveGarminAPIUserPermissions', region: 'europe-west2' },
+    // Stripe Functions
+    restoreUserClaims: { name: 'restoreUserClaims', region: 'europe-west2' },
+    linkExistingStripeCustomer: { name: 'linkExistingStripeCustomer', region: 'europe-west2' },
+    cleanupStripeCustomer: { name: 'cleanupStripeCustomer', region: 'europe-west2' },
+    createPortalLink: { name: 'ext-firestore-stripe-payments-createPortalLink', region: 'europe-west3' },
 } as const;
 
 export type FunctionName = keyof typeof FUNCTIONS_MANIFEST;

@@ -3,7 +3,6 @@ import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { environment } from '../../environments/environment';
 import { Firestore, collection, collectionData, addDoc, doc, docData, query, where } from '@angular/fire/firestore';
-import { Functions, httpsCallableFromURL } from '@angular/fire/functions';
 
 // ... (other imports)
 
@@ -12,6 +11,7 @@ import { Auth } from '@angular/fire/auth';
 import { Observable, from, switchMap, filter, take, map, timeout } from 'rxjs';
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
+import { AppFunctionsService } from './app.functions.service';
 
 export interface StripeProduct {
     id: string;
@@ -54,8 +54,8 @@ export interface StripeSubscription {
 })
 export class AppPaymentService {
     private firestore = inject(Firestore);
-    private functions = inject(Functions);
     private auth = inject(Auth);
+    private functionsService = inject(AppFunctionsService);
     private dialog = inject(MatDialog);
     private injector = inject(Injector);
 
@@ -178,11 +178,7 @@ export class AppPaymentService {
         // Pre-checkout check: Link existing Stripe customer if found
         // This prevents duplicate subscriptions for recreated users
         try {
-            const linkExistingStripeCustomer = httpsCallableFromURL<void, { linked: boolean, role?: string }>(
-                this.functions,
-                environment.functions.linkExistingStripeCustomer
-            );
-            const result = await linkExistingStripeCustomer();
+            const result = await this.functionsService.call<void, { linked: boolean, role?: string }>('linkExistingStripeCustomer');
 
             if (result.data.linked) {
                 this.logger.log(`Existing subscription found and linked. Role: ${result.data.role}. Skipping checkout.`);
@@ -313,12 +309,7 @@ export class AppPaymentService {
                         if (session.error.message?.includes('No such customer')) {
                             this.logger.log('Detected stale Stripe customer ID. Clearing and retrying...');
 
-                            const cleanupStripeCustomer = httpsCallableFromURL<void, { success: boolean, cleaned: boolean }>(
-                                this.functions,
-                                environment.functions.cleanupStripeCustomer
-                            );
-
-                            await cleanupStripeCustomer();
+                            await this.functionsService.call<void, { success: boolean, cleaned: boolean }>('cleanupStripeCustomer');
 
                             // Retry the specific checkout session creation
                             return this.appendCheckoutSession(priceId, success, cancel);
@@ -397,13 +388,8 @@ export class AppPaymentService {
     async manageSubscriptions(): Promise<void> {
         const returnUrl = `${this.windowService.currentDomain}/pricing`;
 
-        const createPortalLink = httpsCallableFromURL<{ returnUrl: string }, { url: string }>(
-            this.functions,
-            environment.functions.createPortalLink
-        );
-
         try {
-            const result = await createPortalLink({ returnUrl });
+            const result = await this.functionsService.call<{ returnUrl: string }, { url: string }>('createPortalLink', { returnUrl });
             window.location.assign(result.data.url);
         } catch (error) {
             this.logger.error('Error creating portal link:', error);
@@ -415,13 +401,8 @@ export class AppPaymentService {
      * Restores purchases by force-refreshing the user's claims.
      */
     async restorePurchases(): Promise<string> {
-        const restoreUserClaims = httpsCallableFromURL<void, { success: boolean, role: string }>(
-            this.functions,
-            environment.functions.restoreUserClaims
-        );
-
         try {
-            const result = await restoreUserClaims();
+            const result = await this.functionsService.call<void, { success: boolean, role: string }>('restoreUserClaims');
             // Force token refresh to pick up new claims
             const user = this.auth.currentUser;
             if (user) {

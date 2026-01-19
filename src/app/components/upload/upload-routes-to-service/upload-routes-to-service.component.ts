@@ -5,7 +5,6 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { LoggerService } from '../../../services/logger.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { environment } from '../../../../environments/environment';
-import { HttpClient, HttpHeaders, HttpEventType } from '@angular/common/http';
 import { Auth, getIdToken } from '@angular/fire/auth';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
 import { FileInterface } from '../file.interface';
@@ -13,6 +12,7 @@ import { AppProcessingService } from '../../../services/app.processing.service';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { getSize } from '@sports-alliance/sports-lib';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
+import { AppFunctionsService } from '../../../services/app.functions.service';
 
 
 
@@ -27,7 +27,8 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
   private analyticsService = inject(AppAnalyticsService);
   private auth = inject(Auth);
   private compatibilityService = inject(BrowserCompatibilityService);
-  private http = inject(HttpClient);
+
+  private functionsService = inject(AppFunctionsService);
 
   public data: any = inject(MAT_DIALOG_DATA, { optional: true });
   public dialogRef = inject(MatDialogRef<UploadRoutesToServiceComponent>, { optional: true });
@@ -86,34 +87,28 @@ export class UploadRoutesToServiceComponent extends UploadAbstractDirective {
           return;
         }
 
-        this.http.post(environment.functions.uploadRoute,
-          compressedBuffer,
-          {
-            headers:
-              new HttpHeaders({
-                'Authorization': `Bearer ${idToken} `,
-                'Content-Type': 'application/octet-stream'
-              }),
-            reportProgress: true,
-            observe: 'events'
-          }).subscribe({
-            next: (event: any) => {
-              if (event.type === HttpEventType.UploadProgress) {
-                const percentDone = Math.round((100 * event.loaded) / event.total);
-                if (file.jobId) {
-                  this.processingService.updateJob(file.jobId, { progress: percentDone });
-                }
-              } else if (event.type === HttpEventType.Response) {
-                resolve(true);
-              }
-            },
-            error: (e: any) => {
-              this.logger.error(e);
-              const errorMessage = e.error?.message || e.error || e.message;
-              this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${errorMessage} `, 'OK', { duration: 10000 });
-              reject(e);
-            }
-          });
+
+        // Convert compressed ArrayBuffer to Base64
+        const base64String = btoa(new Uint8Array(compressedBuffer).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+
+        if (file.jobId) {
+          this.processingService.updateJob(file.jobId, { progress: 50 });
+        }
+
+        this.functionsService.call<any, { status: string }>(
+          'importRouteToSuuntoApp',
+          { file: base64String }
+        ).then(() => {
+          if (file.jobId) {
+            this.processingService.updateJob(file.jobId, { progress: 100 });
+          }
+          resolve(true);
+        }).catch((e) => {
+          this.logger.error(e);
+          const errorMessage = e.message || 'Unknown error';
+          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${errorMessage} `, 'OK', { duration: 10000 });
+          reject(e);
+        });
       }
 
       // Read it depending on the extension

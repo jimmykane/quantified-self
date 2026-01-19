@@ -20,7 +20,12 @@ vi.mock('firebase-functions/v2/https', () => ({
 }));
 
 vi.mock('../utils', () => ({
-    ALLOWED_CORS_ORIGINS: ['*']
+    ALLOWED_CORS_ORIGINS: ['*'],
+    enforceAppCheck: vi.fn((request: { app?: unknown }) => {
+        if (!request.app) {
+            throw new Error('App Check verification failed.');
+        }
+    })
 }));
 
 describe('onAdminCall Wrapper', () => {
@@ -57,7 +62,7 @@ describe('onAdminCall Wrapper', () => {
             app: undefined
         } as unknown as CallableRequest<any>;
 
-        await expect(wrapped(request)).rejects.toThrow('The function must be called from an App Check verified app.');
+        await expect(wrapped(request)).rejects.toThrow('App Check verification failed.');
         expect(handler).not.toHaveBeenCalled();
     });
 

@@ -65,7 +65,8 @@ vi.mock('./client', () => ({
 const mockRequest = {
     auth: {
         uid: 'test-user-uid'
-    }
+    },
+    app: { appId: 'test-app-id' } // Mock App Check
 } as CallableRequest;
 
 // Assuming process.env is handled by environment or set here
@@ -88,7 +89,12 @@ describe('cleanupStripeCustomer', () => {
 
     it('should throw if unauthenticated', async () => {
         const handler = cleanupStripeCustomer as unknown as (req: Partial<CallableRequest>) => Promise<unknown>;
-        await expect(handler({})).rejects.toThrow('The function must be called while authenticated.');
+        await expect(handler({ app: { appId: 'test' } })).rejects.toThrow('The function must be called while authenticated.');
+    });
+
+    it('should throw if failed-precondition (no app check)', async () => {
+        const handler = cleanupStripeCustomer as unknown as (req: Partial<CallableRequest>) => Promise<unknown>;
+        await expect(handler({ auth: { uid: 'test' } })).rejects.toThrow('App Check verification failed.');
     });
 
     it('should return error if no customer record found in Firestore', async () => {

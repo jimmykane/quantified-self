@@ -104,6 +104,30 @@ export const ALLOWED_CORS_ORIGINS: (string | RegExp)[] = [
   /https?:\/\/localhost:\d+/
 ];
 
+/**
+ * Global toggle for App Check enforcement.
+ * Set to `false` to disable App Check verification for all functions.
+ * This is useful for local development or testing.
+ * 
+ * WARNING: Always keep this `true` in production!
+ */
+export const ENFORCE_APP_CHECK = true;
+
+import { HttpsError } from 'firebase-functions/v2/https';
+
+/**
+ * Enforces App Check verification if ENFORCE_APP_CHECK is enabled.
+ * Throws an HttpsError if verification fails.
+ * 
+ * @param request - The callable request object containing app verification
+ * @throws HttpsError with 'failed-precondition' code if App Check fails
+ */
+export function enforceAppCheck(request: { app?: unknown }): void {
+  if (ENFORCE_APP_CHECK && !request.app) {
+    throw new HttpsError('failed-precondition', 'App Check verification failed.');
+  }
+}
+
 export function isCorsAllowed(req: Request) {
   const origin = <string>req.get('origin') || '';
   logger.info(`CORS check for origin: ${origin}`);

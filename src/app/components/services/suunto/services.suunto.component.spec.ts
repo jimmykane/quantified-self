@@ -15,6 +15,7 @@ import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { LoggerService } from '../../../services/logger.service';
+import { AppFunctionsService } from '../../../services/app.functions.service';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 
 describe('ServicesSuuntoComponent', () => {
@@ -45,7 +46,8 @@ describe('ServicesSuuntoComponent', () => {
                 { provide: AppAuthService, useValue: { user$: { pipe: () => ({ subscribe: () => { } }) } } },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppWindowService, useValue: { currentDomain: 'http://localhost', windowRef: { location: { href: '' } } } },
-                { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } }
+                { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } },
+                { provide: AppFunctionsService, useValue: { call: vi.fn().mockResolvedValue({ data: { file: '' } }) } }
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
         }).compileComponents();

@@ -20,8 +20,9 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
-import { ALLOWED_CORS_ORIGINS } from '../utils';
+import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 import { getStripe } from './client';
+import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 
 /**
  * Cloud Function: cleanupStripeCustomer
@@ -63,7 +64,7 @@ import { getStripe } from './client';
  */
 export const cleanupStripeCustomer = onCall({
 
-    region: 'europe-west2',
+    region: FUNCTIONS_MANIFEST.cleanupStripeCustomer.region,
     cors: ALLOWED_CORS_ORIGINS,
     minInstances: 0,
     maxInstances: 10,
@@ -73,6 +74,8 @@ export const cleanupStripeCustomer = onCall({
     if (!request.auth) {
         throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
     }
+
+    enforceAppCheck(request);
 
     const uid = request.auth.uid;
     const db = admin.firestore();
