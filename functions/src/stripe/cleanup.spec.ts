@@ -94,7 +94,7 @@ describe('cleanupStripeCustomer', () => {
 
     it('should throw if failed-precondition (no app check)', async () => {
         const handler = cleanupStripeCustomer as unknown as (req: Partial<CallableRequest>) => Promise<unknown>;
-        await expect(handler({ auth: { uid: 'test' } })).rejects.toThrow('The function must be called from an App Check verified app.');
+        await expect(handler({ auth: { uid: 'test' } })).rejects.toThrow('App Check verification failed.');
     });
 
     it('should return error if no customer record found in Firestore', async () => {

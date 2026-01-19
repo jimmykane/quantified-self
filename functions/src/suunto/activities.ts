@@ -15,7 +15,7 @@ import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
  */
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
-import { ALLOWED_CORS_ORIGINS } from '../utils';
+import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 
 /**
  * Uploads an activity to Suunto app
@@ -32,9 +32,7 @@ export const importActivityToSuuntoApp = onCall({
     throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
   }
 
-  if (!request.app) {
-    throw new HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
-  }
+  enforceAppCheck(request);
 
   const userID = request.auth.uid;
 

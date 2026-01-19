@@ -38,7 +38,8 @@ vi.mock('@google-cloud/billing-budgets', () => ({ BudgetServiceClient: vi.fn() }
 vi.mock('@google-cloud/bigquery', () => ({ BigQuery: vi.fn() }));
 vi.mock('../utils', () => ({
     ALLOWED_CORS_ORIGINS: ['*'],
-    getCloudTaskQueueDepth: vi.fn()
+    getCloudTaskQueueDepth: vi.fn(),
+    enforceAppCheck: vi.fn() // No-op for tests
 }));
 
 vi.mock('firebase-admin', () => ({

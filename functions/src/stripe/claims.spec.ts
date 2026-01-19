@@ -244,7 +244,7 @@ describe('linkExistingStripeCustomer', () => {
 
     it('should throw failed-precondition error if no app context', async () => {
         const req = { auth: { uid: 'user1' }, app: null } as any;
-        await expect((linkExistingStripeCustomer as any)(req)).rejects.toThrow('The function must be called from an App Check verified app');
+        await expect((linkExistingStripeCustomer as any)(req)).rejects.toThrow('App Check verification failed.');
     });
 
     it('should return linked: false if user has no email', async () => {
@@ -323,7 +323,7 @@ describe('restoreUserClaims', () => {
 
     it('should throw failed-precondition error if no app context', async () => {
         const req = { auth: { uid: 'user1' }, app: null } as any;
-        await expect((restoreUserClaims as any)(req)).rejects.toThrow('The function must be called from an App Check verified app');
+        await expect((restoreUserClaims as any)(req)).rejects.toThrow('App Check verification failed.');
     });
 
     it('should call reconcileClaims and return result', async () => {

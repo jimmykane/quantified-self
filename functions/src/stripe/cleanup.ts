@@ -20,7 +20,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
-import { ALLOWED_CORS_ORIGINS } from '../utils';
+import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 import { getStripe } from './client';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 
@@ -75,9 +75,7 @@ export const cleanupStripeCustomer = onCall({
         throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
     }
 
-    if (!request.app) {
-        throw new HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
-    }
+    enforceAppCheck(request);
 
     const uid = request.auth.uid;
     const db = admin.firestore();

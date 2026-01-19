@@ -2,7 +2,7 @@
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
-import { isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
+import { isProUser, PRO_REQUIRED_MESSAGE, enforceAppCheck } from '../utils';
 import { SERVICE_NAME } from './constants';
 import { addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
@@ -28,9 +28,7 @@ export const addSuuntoAppHistoryToQueue = onCall({
   maxInstances: 10
 }, async (request): Promise<HistoryToQueueResponse> => {
   // App Check verification
-  if (!request.app) {
-    throw new HttpsError('failed-precondition', 'App Check verification failed.');
-  }
+  enforceAppCheck(request);
 
   // Auth verification
   if (!request.auth) {

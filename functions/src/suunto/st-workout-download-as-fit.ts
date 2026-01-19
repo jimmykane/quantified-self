@@ -1,7 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import fetch from 'node-fetch';
-import { ALLOWED_CORS_ORIGINS } from '../utils';
+import { ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../utils';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 
 export const stWorkoutDownloadAsFit = onCall({
@@ -13,9 +13,7 @@ export const stWorkoutDownloadAsFit = onCall({
     throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
   }
 
-  if (!request.app) {
-    throw new HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
-  }
+  enforceAppCheck(request);
 
   const activityID = request.data.activityID;
 

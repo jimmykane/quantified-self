@@ -2,7 +2,7 @@
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
-import { isProUser, PRO_REQUIRED_MESSAGE, ALLOWED_CORS_ORIGINS } from '../../utils';
+import { isProUser, PRO_REQUIRED_MESSAGE, ALLOWED_CORS_ORIGINS, enforceAppCheck } from '../../utils';
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import {
   deauthorizeServiceForUser,
@@ -30,9 +30,7 @@ export const getSuuntoAPIAuthRequestTokenRedirectURI = onCall({
   maxInstances: 10
 }, async (request): Promise<GetAuthRedirectURIResponse> => {
   // App Check verification
-  if (!request.app) {
-    throw new HttpsError('failed-precondition', 'App Check verification failed.');
-  }
+  enforceAppCheck(request);
 
   // Auth verification
   if (!request.auth) {
@@ -71,9 +69,7 @@ export const requestAndSetSuuntoAPIAccessToken = onCall({
   maxInstances: 10
 }, async (request): Promise<void> => {
   // App Check verification
-  if (!request.app) {
-    throw new HttpsError('failed-precondition', 'App Check verification failed.');
-  }
+  enforceAppCheck(request);
 
   // Auth verification
   if (!request.auth) {
@@ -126,9 +122,7 @@ export const deauthorizeSuuntoApp = onCall({
   maxInstances: 10
 }, async (request): Promise<DeauthorizeResponse> => {
   // App Check verification
-  if (!request.app) {
-    throw new HttpsError('failed-precondition', 'App Check verification failed.');
-  }
+  enforceAppCheck(request);
 
   // Auth verification
   if (!request.auth) {

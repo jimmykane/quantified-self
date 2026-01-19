@@ -122,7 +122,8 @@ vi.mock('firebase-functions/v2/https', () => ({
 
 vi.mock('../utils', () => ({
     ALLOWED_CORS_ORIGINS: ['*'],
-    getCloudTaskQueueDepth: mockGetCloudTaskQueueDepth
+    getCloudTaskQueueDepth: mockGetCloudTaskQueueDepth,
+    enforceAppCheck: vi.fn() // No-op for tests
 }));
 
 import { listUsers, getQueueStats, getUserCount, getMaintenanceStatus, setMaintenanceMode, impersonateUser, getFinancialStats } from './admin';
