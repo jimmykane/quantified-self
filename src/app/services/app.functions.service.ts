@@ -22,6 +22,8 @@ export class AppFunctionsService {
         return callable(data);
     }
 
+
+
     private getFunctionsInstance(region: string): Functions {
         return getFunctions(this.app, region);
     }

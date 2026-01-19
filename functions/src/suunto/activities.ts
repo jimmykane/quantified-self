@@ -1,12 +1,11 @@
 'use strict';
 
-import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import { config } from '../config';
 import * as admin from 'firebase-admin';
 import * as requestPromise from '../request-helper';
 import { executeWithTokenRetry } from './retry-helper';
-import { getUserIDFromFirebaseToken, isCorsAllowed, setAccessControlHeadersOnResponse, isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
+import { isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 
 
@@ -14,52 +13,50 @@ import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 /**
  * Uploads an activity to Suunto app
  */
-export const importActivityToSuuntoApp = functions.region('europe-west2').https.onRequest(async (req, res) => {
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
+import { ALLOWED_CORS_ORIGINS } from '../utils';
+
+/**
+ * Uploads an activity to Suunto app
+ */
+export const importActivityToSuuntoApp = onCall({
+  region: FUNCTIONS_MANIFEST.importActivityToSuuntoApp.region,
+  cors: ALLOWED_CORS_ORIGINS,
+  timeoutSeconds: 300,
+  maxInstances: 10,
+}, async (request) => {
   logger.info('START importActivityToSuuntoApp v_POLLING_FIX_1765906212');
-  // Directly set the CORS header
-  if (!isCorsAllowed(req) || (req.method !== 'OPTIONS' && req.method !== 'POST')) {
-    logger.error(`Not allowed. Method: ${req.method}`);
-    res.status(403);
-    res.send('Unauthorized');
-    return;
+
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
   }
 
-  setAccessControlHeadersOnResponse(req, res);
-
-  if (req.method === 'OPTIONS') {
-    res.status(200);
-    res.send();
-    return;
+  if (!request.app) {
+    throw new HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
   }
 
-  const userID = await getUserIDFromFirebaseToken(req);
-  if (!userID) {
-    res.status(403).send('Unauthorized');
-    return;
-  }
+  const userID = request.auth.uid;
 
   if (!(await isProUser(userID))) {
     logger.warn(`Blocking activity upload for non-pro user ${userID}`);
-    res.status(403).send(PRO_REQUIRED_MESSAGE);
-    return;
+    throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }
 
-  if (!req.body) {
-    logger.error('No file provided\'');
-    res.status(500);
-    res.send();
-    return;
+  const base64File = request.data.file;
+
+  if (!base64File) {
+    logger.error('No file provided');
+    throw new HttpsError('invalid-argument', 'File content missing');
   }
 
-  // Debugging file content
-  const isBuffer = Buffer.isBuffer(req.rawBody);
-  const size = isBuffer ? req.rawBody.length : 0;
-  logger.info(`Received upload request. rawBody isBuffer=${isBuffer}, size=${size} bytes`);
+  const fileBuffer = Buffer.from(base64File, 'base64');
+  const size = fileBuffer.length;
+  logger.info(`Received upload request. size=${size} bytes`);
 
-  if (!isBuffer || size === 0) {
-    logger.error('File content is empty or not a buffer');
-    res.status(400).send('File content missing or invalid');
-    return;
+  if (size === 0) {
+    logger.error('File content is empty');
+    throw new HttpsError('invalid-argument', 'File content is empty');
   }
 
   const tokenQuerySnapshots = await admin.firestore().collection(SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME).doc(userID).collection('tokens').get();
@@ -67,7 +64,7 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
 
   for (const tokenQueryDocumentSnapshot of tokenQuerySnapshots.docs) {
     try {
-      await executeWithTokenRetry(
+      const result = await executeWithTokenRetry(
         tokenQueryDocumentSnapshot,
         async (accessToken) => {
           // Initialize the upload
@@ -105,7 +102,7 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
               headers: result.headers || {},
               json: false,
               url,
-              body: req.rawBody,
+              body: fileBuffer,
             });
             logger.info(`PUT response for user ${userID}: ${JSON.stringify(result)}`);
           } catch (e: any) {
@@ -138,47 +135,40 @@ export const importActivityToSuuntoApp = functions.region('europe-west2').https.
 
               if (status === 'PROCESSED') {
                 logger.info(`Successfully processed activity for user ${userID}. WorkoutKey: ${statusJson.workoutKey}`);
-                res.status(200).json({ status: 'success', message: 'Activity uploaded to Suunto', workoutKey: statusJson.workoutKey });
-                return; // Success
+                return { status: 'success', message: 'Activity uploaded to Suunto', workoutKey: statusJson.workoutKey };
               } else if (status === 'ERROR') {
                 if (statusJson.message === 'Already exists') {
                   logger.info(`Activity already exists in Suunto for user ${userID}.`);
-                  res.status(200).json({ status: 'info', code: 'ALREADY_EXISTS', message: 'Activity already exists in Suunto' });
-                  return; // Success
+                  return { status: 'info', code: 'ALREADY_EXISTS', message: 'Activity already exists in Suunto' };
                 }
-                throw new Error(`Suunto processing failed: ${statusJson.message}`);
+                throw new HttpsError('internal', `Suunto processing failed: ${statusJson.message}`);
               }
             } catch (e: unknown) {
               const errorMessage = e instanceof Error ? e.message : String(e);
               logger.error(`Could not check upload status for ${uploadId} for user ${userID} (attempt ${attempts})`, errorMessage);
-              // If it's a 401 during polling, throwing allows retry-helper to refresh and restart the WHOLE process.
-              // If it's unrelated, we might want to continue polling?
-              // But requestPromise throws on error status.
-              // If we throw here, the while loop exits and retry-helper catches it.
               throw e;
             }
           }
 
           if (status !== 'PROCESSED') {
-            throw new Error(`Upload timed out or failed with status ${status}`);
+            throw new HttpsError('deadline-exceeded', `Upload timed out or failed with status ${status}`);
           }
+          // Shouldn't reach here as PROCESSED is handled in the loop
+          return { status: 'success' };
         },
         `Upload activity for user ${userID}`
       );
+      // Return the result from the callback (including ALREADY_EXISTS)
+      if (result) {
+        return result;
+      }
     } catch (e: unknown) {
       // Final catch after retries failed
       logger.error(`Failed to handle activity upload for token ${tokenQueryDocumentSnapshot.id}`, e);
-      // Continue to next token, but maybe return 500 if all fail? 
-      // Original code returned 500 immediately on error. 
-      // We should probably accumulate errors or return 500 if ALL fail.
-      // Original code: `return` immediately on error.
-      // Let's stick to original behavior: if one token fails completely, return 500.
-      // Wait, original: loop continues if `getTokenData` fails. But if `requestPromise` fails, it does `res.status(500); return;`.
-      // So it stops on first API failure.
-      res.status(500);
-      res.send((e as Error).message);
-      return;
+      // We throw a standardized error if everything fails, or we could handle partial failures if we looped multiple tokens (but here we just iterate).
+      // Since standard HttpsError is required for onCall:
+      throw new HttpsError('internal', (e as Error).message);
     }
   }
-  res.status(200).json({ status: 'success' });
+  return { status: 'success' };
 });

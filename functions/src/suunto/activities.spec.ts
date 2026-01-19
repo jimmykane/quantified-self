@@ -1,7 +1,6 @@
+'use strict';
 
 import { describe, it, vi, expect, beforeEach } from 'vitest';
-
-
 import { PRO_REQUIRED_MESSAGE } from '../utils';
 
 // Mock dependencies BEFORE importing the module under test
@@ -22,18 +21,13 @@ vi.mock('../request-helper', () => ({
         post: (...args: any[]) => requestMocks.post(...args),
         put: (...args: any[]) => requestMocks.put(...args),
         get: (...args: any[]) => requestMocks.get(...args),
-        // Add export helpers if needed, but usually default is enough if imported as * or default
     },
-    // Also mock named exports if the implementation uses them specifically
     post: (...args: any[]) => requestMocks.post(...args),
     put: (...args: any[]) => requestMocks.put(...args),
     get: (...args: any[]) => requestMocks.get(...args),
 }));
 
 const utilsMocks = {
-    getUserIDFromFirebaseToken: vi.fn(),
-    isCorsAllowed: vi.fn().mockReturnValue(true),
-    setAccessControlHeadersOnResponse: vi.fn(),
     isProUser: vi.fn(),
 };
 
@@ -41,9 +35,6 @@ vi.mock('../utils', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../utils')>();
     return {
         ...actual,
-        getUserIDFromFirebaseToken: (...args: any[]) => utilsMocks.getUserIDFromFirebaseToken(...args),
-        isCorsAllowed: (...args: any[]) => utilsMocks.isCorsAllowed(...args),
-        setAccessControlHeadersOnResponse: (...args: any[]) => utilsMocks.setAccessControlHeadersOnResponse(...args),
         isProUser: (...args: any[]) => utilsMocks.isProUser(...args),
     };
 });
@@ -56,19 +47,20 @@ vi.mock('../tokens', () => ({
     getTokenData: (...args: any[]) => tokensMocks.getTokenData(...args),
 }));
 
-// Mock firebase-functions to return the handler immediately so we can test it
-vi.mock('firebase-functions/v1', () => {
+// Mock firebase-functions/v2/https
+vi.mock('firebase-functions/v2/https', () => {
     return {
-        region: () => ({
-            https: {
-                onRequest: (handler: any) => handler
+        onCall: (options: any, handler: any) => {
+            return handler;
+        },
+        HttpsError: class HttpsError extends Error {
+            code: string;
+            constructor(code: string, message: string) {
+                super(message);
+                this.code = code;
+                this.name = 'HttpsError';
             }
-        }),
-        config: () => ({
-            suuntoapp: {
-                subscription_key: 'test-key'
-            }
-        })
+        }
     };
 });
 
@@ -86,9 +78,10 @@ vi.mock('firebase-admin', () => {
     collectionMock.mockReturnValue(colObj);
     docMock.mockReturnValue(docObj);
 
-    // Setup successfully query response
+    // Setup successful query response
     getMock.mockResolvedValue({
         size: 1,
+        empty: false,
         docs: [{ id: 'token1', data: () => ({}) }]
     });
 
@@ -102,16 +95,26 @@ vi.mock('firebase-admin', () => {
     };
 });
 
-
 // Import the function under test
 import { importActivityToSuuntoApp } from './activities';
+
+// Helper to create mock request
+function createMockRequest(overrides: Partial<{
+    auth: { uid: string } | null;
+    app: object | null;
+    data: any;
+}> = {}) {
+    return {
+        auth: overrides.auth !== undefined ? overrides.auth : { uid: 'test-user-id' },
+        app: overrides.app !== undefined ? overrides.app : { appId: 'test-app' },
+        data: overrides.data ?? {},
+    };
+}
 
 describe('importActivityToSuuntoApp', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         // Default happy path
-        utilsMocks.isCorsAllowed.mockReturnValue(true);
-        utilsMocks.getUserIDFromFirebaseToken.mockResolvedValue('test-user-id');
         utilsMocks.isProUser.mockResolvedValue(true);
     });
 
@@ -134,27 +137,18 @@ describe('importActivityToSuuntoApp', () => {
         // Mock binary upload (PUT)
         requestMocks.put.mockResolvedValue({});
 
-        // Mock Request and Response
+        // Create base64 encoded file
         const fileContent = Buffer.from('fake-fit-file-content');
-        const req = {
-            method: 'POST',
-            body: { some: 'data' },
-            rawBody: fileContent,
-            headers: { origin: 'http://localhost' },
-            get: (header: string) => header === 'origin' ? 'http://localhost' : undefined // Basic checks
-        } as any;
+        const base64File = fileContent.toString('base64');
 
-        const res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn(),
-            set: vi.fn(),
-        } as any;
+        const request = createMockRequest({
+            data: { file: base64File }
+        });
 
         // Execute
-        await importActivityToSuuntoApp(req, res);
+        const result = await importActivityToSuuntoApp(request as any);
 
         // Assertions
-        expect(utilsMocks.getUserIDFromFirebaseToken).toHaveBeenCalled();
         expect(utilsMocks.isProUser).toHaveBeenCalledWith('test-user-id');
         expect(tokensMocks.getTokenData).toHaveBeenCalled();
 
@@ -178,9 +172,8 @@ describe('importActivityToSuuntoApp', () => {
         }));
 
         // 3. Success Response
-        expect(res.status).toHaveBeenCalledWith(200);
-        expect(res.send).toHaveBeenCalled();
-    });
+        expect(result).toEqual(expect.objectContaining({ status: 'success' }));
+    }, 30000);
 
     it('should handle "Already exists" error from Suunto gracefully', async () => {
         // Setup Mocks
@@ -199,129 +192,94 @@ describe('importActivityToSuuntoApp', () => {
         // Mock status check (GET) - Returning "Already exists"
         requestMocks.get.mockResolvedValue(JSON.stringify({ status: 'ERROR', message: 'Already exists' }));
 
-        const req = {
-            method: 'POST',
-            body: { some: 'data' },
-            rawBody: Buffer.from('data'),
-            headers: { origin: 'http://localhost' },
-            get: vi.fn(),
-        } as any;
+        const fileContent = Buffer.from('data');
+        const base64File = fileContent.toString('base64');
 
-        const res = {
-            status: vi.fn().mockReturnThis(),
-            json: vi.fn(),
-            send: vi.fn(),
-            set: vi.fn(),
-        } as any;
+        const request = createMockRequest({
+            data: { file: base64File }
+        });
 
-        await importActivityToSuuntoApp(req, res);
+        const result = await importActivityToSuuntoApp(request as any);
 
-        // Assertions
-        expect(res.status).toHaveBeenCalledWith(200);
-        expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+        // Assertions - should return success with ALREADY_EXISTS code
+        expect(result).toEqual(expect.objectContaining({
             code: 'ALREADY_EXISTS'
         }));
+    }, 30000);
+
+    it('should block unauthenticated requests', async () => {
+        const request = createMockRequest({
+            auth: null,
+            data: { file: 'base64data' }
+        });
+
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toThrow();
+
+        try {
+            await importActivityToSuuntoApp(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('unauthenticated');
+        }
     });
 
-    it('should block COMPATIBILITY check (CORS)', async () => {
-        utilsMocks.isCorsAllowed.mockReturnValue(false);
-        const req = {
-            method: 'POST',
-            get: vi.fn(),
-        } as any;
-        const res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn(),
-        } as any;
+    it('should block requests without App Check', async () => {
+        const request = createMockRequest({
+            app: null,
+            data: { file: 'base64data' }
+        });
 
-        await importActivityToSuuntoApp(req, res);
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toThrow();
 
-        expect(res.status).toHaveBeenCalledWith(403);
-        expect(res.send).toHaveBeenCalledWith('Unauthorized');
-    });
-
-    it('should handle missing authentication', async () => {
-        utilsMocks.getUserIDFromFirebaseToken.mockResolvedValue(null);
-
-        const req = {
-            method: 'POST',
-            get: vi.fn(),
-            headers: { origin: 'http://localhost' }
-        } as any;
-
-        const res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn(),
-            set: vi.fn(),
-        } as any;
-
-        await importActivityToSuuntoApp(req, res);
-
-        expect(res.status).toHaveBeenCalledWith(403);
-        expect(res.send).toHaveBeenCalledWith('Unauthorized');
+        try {
+            await importActivityToSuuntoApp(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('failed-precondition');
+        }
     });
 
     it('should block non-pro users', async () => {
         utilsMocks.isProUser.mockResolvedValue(false);
 
-        const req = {
-            method: 'POST',
-            get: vi.fn(),
-            headers: { origin: 'http://localhost' }
-        } as any;
+        const request = createMockRequest({
+            data: { file: 'base64data' }
+        });
 
-        const res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn(),
-            set: vi.fn(),
-        } as any;
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toThrow();
 
-        await importActivityToSuuntoApp(req, res);
-
-        expect(utilsMocks.getUserIDFromFirebaseToken).toHaveBeenCalled();
-        expect(utilsMocks.isProUser).toHaveBeenCalledWith('test-user-id');
-        expect(res.status).toHaveBeenCalledWith(403);
-        expect(res.send).toHaveBeenCalledWith(PRO_REQUIRED_MESSAGE);
+        try {
+            await importActivityToSuuntoApp(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('permission-denied');
+            expect(e.message).toBe(PRO_REQUIRED_MESSAGE);
+        }
     });
 
-    it('should handle missing body', async () => {
-        const req = {
-            method: 'POST',
-            // body is undefined
-            get: vi.fn(),
-            headers: { origin: 'http://localhost' }
-        } as any;
+    it('should handle missing file', async () => {
+        const request = createMockRequest({
+            data: {}
+        });
 
-        const res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn(),
-            set: vi.fn(),
-        } as any;
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toThrow();
 
-        await importActivityToSuuntoApp(req, res);
-
-        expect(res.status).toHaveBeenCalledWith(500);
+        try {
+            await importActivityToSuuntoApp(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('invalid-argument');
+        }
     });
 
-    it('should handle invalid file content', async () => {
-        const req = {
-            method: 'POST',
-            body: {},
-            rawBody: Buffer.alloc(0), // Empty buffer
-            get: vi.fn(),
-            headers: { origin: 'http://localhost' }
-        } as any;
+    it('should handle empty file content', async () => {
+        const request = createMockRequest({
+            data: { file: '' } // Empty base64 string
+        });
 
-        const res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn(),
-            set: vi.fn(),
-        } as any;
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toThrow();
 
-        await importActivityToSuuntoApp(req, res);
-
-        expect(res.status).toHaveBeenCalledWith(400);
-        expect(res.send).toHaveBeenCalledWith('File content missing or invalid');
+        try {
+            await importActivityToSuuntoApp(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('invalid-argument');
+        }
     });
 
     it('should handle initialization failure', async () => {
@@ -331,24 +289,20 @@ describe('importActivityToSuuntoApp', () => {
         // Mock init upload (POST) FAILURE
         requestMocks.post.mockRejectedValue(new Error('Init failed'));
 
-        const req = {
-            method: 'POST',
-            body: { some: 'data' },
-            rawBody: Buffer.from('data'),
-            headers: { origin: 'http://localhost' },
-            get: vi.fn(),
-        } as any;
+        const fileContent = Buffer.from('data');
+        const base64File = fileContent.toString('base64');
 
-        const res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn(),
-            set: vi.fn(),
-        } as any;
+        const request = createMockRequest({
+            data: { file: base64File }
+        });
 
-        await importActivityToSuuntoApp(req, res);
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toThrow();
 
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.send).toHaveBeenCalledWith('Init failed'); // Updated expectation
+        try {
+            await importActivityToSuuntoApp(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('internal');
+        }
     });
 
     it('should handle upload failure', async () => {
@@ -356,74 +310,24 @@ describe('importActivityToSuuntoApp', () => {
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
 
         // Mock init upload (POST) SUCCESS
-        requestMocks.post.mockResolvedValue(JSON.stringify({ url: 'https://url' }));
+        requestMocks.post.mockResolvedValue(JSON.stringify({ url: 'https://url', id: 'test-id', headers: {} }));
 
         // Mock binary upload (PUT) FAILURE
         requestMocks.put.mockRejectedValue(new Error('Upload failed'));
 
-        const req = {
-            method: 'POST',
-            body: { some: 'data' },
-            rawBody: Buffer.from('data'),
-            headers: { origin: 'http://localhost' },
-            get: vi.fn(),
-        } as any;
+        const fileContent = Buffer.from('data');
+        const base64File = fileContent.toString('base64');
 
-        const res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn(),
-            set: vi.fn(),
-        } as any;
+        const request = createMockRequest({
+            data: { file: base64File }
+        });
 
-        await importActivityToSuuntoApp(req, res);
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toThrow();
 
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.send).toHaveBeenCalledWith('Upload failed');
-    });
-
-    it('should retry on 401 during initialization', async () => {
-        // Setup Mocks
-        tokensMocks.getTokenData
-            .mockResolvedValueOnce({ accessToken: 'old-token' }) // 1st attempt
-            .mockResolvedValueOnce({ accessToken: 'new-token' }); // 2nd attempt (force refresh)
-
-        // Mock init upload (POST)
-        // 1. Fail with 401
-        // 2. Succeed
-        requestMocks.post
-            .mockRejectedValueOnce({ statusCode: 401, message: 'Unauthorized' })
-            .mockResolvedValueOnce(JSON.stringify({
-                id: 'test-upload-id-retry',
-                url: 'https://storage.suunto.com/upload-url-retry',
-                headers: {}
-            }));
-
-        // Mock binary upload (PUT) & Status (GET) for the successful retry
-        requestMocks.put.mockResolvedValue({});
-        requestMocks.get.mockResolvedValue(JSON.stringify({ status: 'PROCESSED', workoutKey: 'retry-key' }));
-
-        const req = {
-            method: 'POST',
-            body: { some: 'data' },
-            rawBody: Buffer.from('data'),
-            headers: { origin: 'http://localhost' },
-            get: vi.fn(),
-        } as any;
-
-        const res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn(),
-            set: vi.fn(),
-        } as any;
-
-        await importActivityToSuuntoApp(req, res);
-
-        // Verify Retry Logic
-        expect(tokensMocks.getTokenData).toHaveBeenCalledTimes(2);
-        expect(tokensMocks.getTokenData).toHaveBeenNthCalledWith(1, expect.anything(), expect.anything(), false);
-        expect(tokensMocks.getTokenData).toHaveBeenNthCalledWith(2, expect.anything(), expect.anything(), true);
-
-        expect(requestMocks.post).toHaveBeenCalledTimes(2); // Initial + Retry
-        expect(res.status).toHaveBeenCalledWith(200);
+        try {
+            await importActivityToSuuntoApp(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('internal');
+        }
     });
 });

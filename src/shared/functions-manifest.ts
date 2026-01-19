@@ -23,6 +23,10 @@ export const FUNCTIONS_MANIFEST = {
     requestAndSetSuuntoAPIAccessToken: { name: 'requestAndSetSuuntoAPIAccessToken', region: 'europe-west2' },
     deauthorizeSuuntoApp: { name: 'deauthorizeSuuntoApp', region: 'europe-west2' },
     addSuuntoAppHistoryToQueue: { name: 'addSuuntoAppHistoryToQueue', region: 'europe-west2' },
+    importRouteToSuuntoApp: { name: 'importRouteToSuuntoApp', region: 'europe-west2' },
+    importActivityToSuuntoApp: { name: 'importActivityToSuuntoApp', region: 'europe-west2' },
+    getSuuntoFITFile: { name: 'getSuuntoFITFile', region: 'europe-west2' },
+    stWorkoutDownloadAsFit: { name: 'stWorkoutDownloadAsFit', region: 'europe-west2' },
 
     // Garmin Functions
     getGarminAPIAuthRequestTokenRedirectURI: { name: 'getGarminAPIAuthRequestTokenRedirectURI', region: 'europe-west2' },

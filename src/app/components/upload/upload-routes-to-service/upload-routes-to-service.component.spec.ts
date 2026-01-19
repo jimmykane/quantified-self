@@ -15,6 +15,7 @@ import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
+import { AppFunctionsService } from '../../../services/app.functions.service';
 
 
 class MockCompressionStream {
@@ -45,12 +46,13 @@ describe('UploadRoutesToServiceComponent', () => {
     const mockSnackBar = { open: vi.fn() };
     const mockDialog = {};
     const mockDialogRef = {};
-    const mockProcessingService = {};
+    const mockProcessingService = { updateJob: vi.fn() };
     const mockRouter = {};
     const mockLogger = { error: vi.fn() };
     const mockAnalytics = { logEvent: vi.fn() };
     const mockAuth = { currentUser: { getIdToken: () => Promise.resolve('token') } };
     const mockCompatibility = { checkCompressionSupport: vi.fn().mockReturnValue(true) };
+    const mockFunctionsService = { call: vi.fn().mockResolvedValue({ data: { status: 'OK' } }) };
 
     beforeAll(() => {
         // Mock ReadableStream if missing
@@ -113,7 +115,9 @@ describe('UploadRoutesToServiceComponent', () => {
                 { provide: LoggerService, useValue: mockLogger },
                 { provide: AppAnalyticsService, useValue: mockAnalytics },
                 { provide: Auth, useValue: mockAuth },
+                { provide: Auth, useValue: mockAuth },
                 { provide: BrowserCompatibilityService, useValue: mockCompatibility },
+                { provide: AppFunctionsService, useValue: mockFunctionsService },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();
@@ -147,14 +151,15 @@ describe('UploadRoutesToServiceComponent', () => {
         // Wait for async file reading and compression
         await new Promise(resolve => setTimeout(resolve, 100));
 
-        const req = httpMock.expectOne(environment.functions.uploadRoute);
-        expect(req.request.method).toBe('POST');
-        expect(req.request.headers.get('Content-Type')).toBe('application/octet-stream');
-        expect(req.request.body).toBeTruthy();
-        expect(req.request.body.byteLength).toBeGreaterThan(0);
+        expect(mockFunctionsService.call).toHaveBeenCalledWith(
+            'importRouteToSuuntoApp',
+            expect.objectContaining({ file: expect.any(String) })
+        );
 
-        // Respond with success
-        req.flush({ status: 'OK' });
+        // Verify base64 string
+        const callArgs = mockFunctionsService.call.mock.calls[0];
+        const sentData = callArgs[1];
+        expect(sentData.file.length).toBeGreaterThan(0);
 
         await promise;
     });

@@ -15,6 +15,7 @@ import { EventImporterFIT, ActivityParsingOptions } from '@sports-alliance/sport
 import { environment } from '../../../../environments/environment';
 import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
+import { AppFunctionsService } from '../../../services/app.functions.service';
 
 
 @Component({
@@ -38,7 +39,8 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     protected userService: AppUserService,
     protected route: ActivatedRoute,
     protected windowService: AppWindowService,
-    protected snackBar: MatSnackBar) {
+    protected snackBar: MatSnackBar,
+    protected functionsService: AppFunctionsService) {
     super(http, fileService, eventService, authService, userService, route, windowService, snackBar);
   }
 
@@ -96,17 +98,22 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
       const parts = this.suuntoAppLinkFormGroup.get('input')?.value.split('?')[0].split('/');
       const activityID = parts[parts.length - 1] === '' ? parts[parts.length - 2] : parts[parts.length - 1];
 
-      const result = await firstValueFrom(this.http.get(
-        environment.functions.stWorkoutDownloadAsFit, {
-        params: {
-          activityID: activityID
-        },
-        responseType: 'arraybuffer',
-      }));
+      const functionResult = await this.functionsService.call<{ activityID: string }, { file: string }>('stWorkoutDownloadAsFit', {
+        activityID: activityID
+      });
 
-      if (!result) {
+      if (!functionResult.data || !functionResult.data.file) {
         throw new Error('No data received');
       }
+
+      // Decode Base64 to ArrayBuffer
+      const binaryString = atob(functionResult.data.file);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const result = bytes.buffer;
 
       if (!shouldImportAndOpen) {
         this.fileService.downloadFile(new Blob([new Uint8Array(result)]), activityID, 'fit');

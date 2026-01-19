@@ -1,53 +1,53 @@
-'use strict';
-
-import * as functions from 'firebase-functions/v1';
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
-import cors from 'cors';
-
-import { ALLOWED_CORS_ORIGINS } from '../utils';
-
-const corsRequest = cors({ origin: ALLOWED_CORS_ORIGINS });
-
 import fetch from 'node-fetch';
+import { ALLOWED_CORS_ORIGINS } from '../utils';
+import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 
-export const stWorkoutDownloadAsFit = functions.region('europe-west2').https.onRequest((req, res) => {
-  corsRequest(req, res, () => {
-    logger.info('Query:', req.query);
-    logger.info('Body:', req.body);
+export const stWorkoutDownloadAsFit = onCall({
+  region: FUNCTIONS_MANIFEST.stWorkoutDownloadAsFit.region,
+  cors: ALLOWED_CORS_ORIGINS,
+  timeoutSeconds: 300,
+}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
+  }
 
-    let activityID = req.query.activityID;
+  if (!request.app) {
+    throw new HttpsError('failed-precondition', 'The function must be called from an App Check verified app.');
+  }
 
-    if (!activityID) {
-      activityID = req.body.activityID;
+  const activityID = request.data.activityID;
+
+  if (!activityID) {
+    throw new HttpsError('invalid-argument', 'No activity ID provided.');
+  }
+
+  const url = `https://api.sports-tracker.com/apiserver/v1/workout/exportFit/${activityID}?autogeneraterecords=true&generatefillerlaps=true&removesinglelocation=true&removerecordsduringpauses=true&reducepoolswimminglaptypes=true`;
+  const opts = {
+    method: 'GET',
+    headers: {
+      'STTAuthorization': '42v8ds44tsim65b4bfog3e8jvfl2u9bj',
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.131 Safari/537.36',
+    },
+  };
+
+  try {
+    const response = await fetch(url, opts);
+    if (!response.ok) {
+      throw new HttpsError('internal', `Sports Tracker API returned ${response.status}`);
     }
 
-    logger.info(activityID);
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const base64 = buffer.toString('base64');
 
-    if (!activityID) {
-      res.status(403).send('No activity ID provided.');
-      return;
+    return { file: base64 };
+  } catch (error) {
+    logger.error('Error downloading FIT file:', error);
+    if (error instanceof HttpsError) {
+      throw error;
     }
-
-    const url = `https://api.sports-tracker.com/apiserver/v1/workout/exportFit/${activityID}?autogeneraterecords=true&generatefillerlaps=true&removesinglelocation=true&removerecordsduringpauses=true&reducepoolswimminglaptypes=true`;
-    const opts = {
-      method: 'GET',
-      headers: {
-        'Content-Type': req.get('Content-Type'),
-        'STTAuthorization': '42v8ds44tsim65b4bfog3e8jvfl2u9bj',
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_3) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.131 Safari/537.36',
-      },
-    };
-    logger.info('Request:', url);
-    logger.info('opts:', opts);
-
-
-    fetch(url, opts as any)
-      .then((r: any) => {
-        if (!r.ok) {
-          res.status(500);
-        }
-        return r.buffer();
-      })
-      .then((body: any) => res.send(body));
-  });
+    throw new HttpsError('internal', 'Failed to download FIT file');
+  }
 });

@@ -1,4 +1,7 @@
+'use strict';
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 // Mock node-fetch BEFORE importing the module
 vi.mock('node-fetch', () => {
     const fetchMock = vi.fn();
@@ -8,101 +11,129 @@ vi.mock('node-fetch', () => {
     };
 });
 
+// Mock firebase-functions/v2/https
+vi.mock('firebase-functions/v2/https', () => {
+    return {
+        onCall: (options: any, handler: any) => {
+            return handler;
+        },
+        HttpsError: class HttpsError extends Error {
+            code: string;
+            constructor(code: string, message: string) {
+                super(message);
+                this.code = code;
+                this.name = 'HttpsError';
+            }
+        }
+    };
+});
+
 import { stWorkoutDownloadAsFit } from './st-workout-download-as-fit';
 import fetch from 'node-fetch';
 
-describe('stWorkoutDownloadAsFit', () => {
-    let req: any;
-    let res: any;
+// Helper to create mock request
+function createMockRequest(overrides: Partial<{
+    auth: { uid: string } | null;
+    app: object | null;
+    data: any;
+}> = {}) {
+    return {
+        auth: overrides.auth !== undefined ? overrides.auth : { uid: 'test-user-id' },
+        app: overrides.app !== undefined ? overrides.app : { appId: 'test-app' },
+        data: overrides.data ?? {},
+    };
+}
 
+describe('stWorkoutDownloadAsFit', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        req = {
-            query: {},
-            body: {},
-            headers: {
-                'origin': 'http://localhost:4200' // Allowed origin
-            },
-            get: vi.fn().mockImplementation((header) => {
-                if (header === 'origin') return 'http://localhost:4200';
-                return 'application/json';
-            })
-        };
-        res = {
-            status: vi.fn().mockReturnThis(),
-            send: vi.fn().mockReturnThis(),
-            setHeader: vi.fn().mockReturnThis(),
-            getHeader: vi.fn().mockReturnValue(undefined)
-        };
     });
 
-    it('should NOT allow requests from disallowed origins', async () => {
-        req.headers.origin = 'http://evil.com';
-        req.get.mockImplementation((header: string) => {
-            if (header === 'origin') return 'http://evil.com';
-            return 'application/json';
+    it('should block unauthenticated requests', async () => {
+        const request = createMockRequest({
+            auth: null,
+            data: { activityID: '123' }
         });
 
-        // The cors middleware will not call the next() callback if origin is not allowed?
-        // Actually, the 'cors' package usually proceeds but doesn't set the Access-Control-Allow-Origin header if the origin is not allowed.
-        // Or if options.origin is a function/array, it might block?
-        // Let's see how 'cors' behaves. If it's just setting headers, the function body will still run, but the browser would block the response.
-        // However, standard `cors` middleware implementation often just sets headers.
+        await expect(stWorkoutDownloadAsFit(request as any)).rejects.toThrow();
 
-        await stWorkoutDownloadAsFit(req, res);
-
-        // If the origin is not allowed, the CORS middleware should NOT set the Access-Control-Allow-Origin header
-        expect(res.setHeader).not.toHaveBeenCalledWith('Access-Control-Allow-Origin', 'http://evil.com');
+        try {
+            await stWorkoutDownloadAsFit(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('unauthenticated');
+        }
     });
 
-    it('should return 403 if activityID is missing', async () => {
-        await stWorkoutDownloadAsFit(req, res);
-        expect(res.status).toHaveBeenCalledWith(403);
-        expect(res.send).toHaveBeenCalledWith('No activity ID provided.');
+    it('should block requests without App Check', async () => {
+        const request = createMockRequest({
+            app: null,
+            data: { activityID: '123' }
+        });
+
+        await expect(stWorkoutDownloadAsFit(request as any)).rejects.toThrow();
+
+        try {
+            await stWorkoutDownloadAsFit(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('failed-precondition');
+        }
     });
 
-    it('should fetch from sports-tracker and return binary data', async () => {
-        req.query.activityID = '123';
+    it('should throw error if activityID is missing', async () => {
+        const request = createMockRequest({
+            data: {}
+        });
+
+        await expect(stWorkoutDownloadAsFit(request as any)).rejects.toThrow();
+
+        try {
+            await stWorkoutDownloadAsFit(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('invalid-argument');
+            expect(e.message).toBe('No activity ID provided.');
+        }
+    });
+
+    it('should fetch from sports-tracker and return base64 data', async () => {
         const mockBuffer = Buffer.from('mock fit data');
         (fetch as any).mockResolvedValue({
             ok: true,
-            buffer: () => Promise.resolve(mockBuffer)
+            arrayBuffer: () => Promise.resolve(mockBuffer.buffer.slice(
+                mockBuffer.byteOffset,
+                mockBuffer.byteOffset + mockBuffer.byteLength
+            ))
         });
 
-        // Use a promise to wait for res.send
-        const sendPromise = new Promise(resolve => {
-            res.send.mockImplementation(() => {
-                resolve(null);
-                return res;
-            });
+        const request = createMockRequest({
+            data: { activityID: '123' }
         });
 
-        await stWorkoutDownloadAsFit(req, res);
-        await sendPromise;
+        const result = await stWorkoutDownloadAsFit(request as any);
 
         expect(fetch).toHaveBeenCalledWith(expect.stringContaining('123'), expect.any(Object));
-        expect(res.send).toHaveBeenCalledWith(mockBuffer);
+        expect(result).toHaveProperty('file');
+        expect(typeof result.file).toBe('string');
+        // Verify it's base64
+        expect(() => Buffer.from(result.file, 'base64')).not.toThrow();
     });
 
-    it('should set 500 status if fetch fails but still return body', async () => {
-        req.body.activityID = '456';
-        const mockBuffer = Buffer.from('error body');
+    it('should throw error if fetch fails', async () => {
         (fetch as any).mockResolvedValue({
             ok: false,
-            buffer: () => Promise.resolve(mockBuffer)
+            status: 500,
+            arrayBuffer: () => Promise.resolve(new ArrayBuffer(0))
         });
 
-        const sendPromise = new Promise(resolve => {
-            res.send.mockImplementation(() => {
-                resolve(null);
-                return res;
-            });
+        const request = createMockRequest({
+            data: { activityID: '456' }
         });
 
-        await stWorkoutDownloadAsFit(req, res);
-        await sendPromise;
+        await expect(stWorkoutDownloadAsFit(request as any)).rejects.toThrow();
 
-        expect(res.status).toHaveBeenCalledWith(500);
-        expect(res.send).toHaveBeenCalledWith(mockBuffer);
+        try {
+            await stWorkoutDownloadAsFit(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('internal');
+        }
     });
 });
