@@ -133,12 +133,12 @@ export class DataExportService {
         // 3. Write to Clipboard using Navigator API if available
         if (navigator.clipboard && navigator.clipboard.write) {
             try {
-                // Create blobs for both formats
-                const textBlob = new Blob([tsv], { type: 'text/plain' });
-                const htmlBlob = new Blob([html], { type: 'text/html' });
+                // Use Promises for the Blobs inside ClipboardItem.
+                // This pattern is required by iOS Safari to reliably maintain user gesture activation
+                // during the asynchronous clipboard write operation.
                 const item = new ClipboardItem({
-                    'text/plain': textBlob,
-                    'text/html': htmlBlob
+                    'text/plain': Promise.resolve(new Blob([tsv], { type: 'text/plain' })),
+                    'text/html': Promise.resolve(new Blob([html], { type: 'text/html' }))
                 });
 
                 await navigator.clipboard.write([item]);
