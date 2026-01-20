@@ -26,14 +26,13 @@ mat-sidenav {
 }
 
 /* Top Navigation Bar Styling */
-nav[mat-tab-nav-bar] {
+.custom-header {
   display: flex !important;
   /* Force flex */
   align-items: center;
   height: 64px;
   /* Standard toolbar height */
   padding: 0 16px;
-  // background-color: #ffffff;
   background-color: #ffffff;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
   /* Subtle shadow for depth */
@@ -44,17 +43,6 @@ nav[mat-tab-nav-bar] {
   z-index: 1001;
   /* Above sidenav backdrop (z-index: 1000) */
   overflow: visible !important;
-
-  ::ng-deep .mat-mdc-tab-header,
-  ::ng-deep .mat-mdc-tab-header-pagination,
-  ::ng-deep .mat-mdc-tab-link-container,
-  ::ng-deep .mat-mdc-tab-list,
-  ::ng-deep .mat-tab-header,
-  ::ng-deep .mat-tab-header-pagination,
-  ::ng-deep .mat-tab-link-container,
-  ::ng-deep .mat-tab-list {
-    overflow: visible !important;
-  }
 }
 
 /* Navigation Items */
@@ -97,6 +85,11 @@ mat-icon.header-logo {
 }
 
 
+
+
+.no-margin-top {
+  margin-top: 0 !important;
+}
 
 /* Utilities */
 .fill-space {
@@ -180,7 +173,7 @@ mat-progress-bar {
 
 /* Dark Theme Overrides */
 :host-context(.dark-theme) {
-  nav[mat-tab-nav-bar] {
+  .custom-header {
     background-color: #424242;
     /* Standard Material Dark Surface */
     border-bottom: 1px solid rgba(255, 255, 255, 0.12);

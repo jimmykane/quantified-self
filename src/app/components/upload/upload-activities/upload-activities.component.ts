@@ -1,4 +1,4 @@
-import { Component, inject, OnInit } from '@angular/core';
+import { Component, inject, OnInit, Input } from '@angular/core';
 import { Router } from '@angular/router';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppFileService } from '../../../services/app.file.service';
@@ -22,6 +22,8 @@ import { LoggerService } from '../../../services/logger.service';
 
 import { EventJSONSanitizer } from '../../../utils/event-json-sanitizer';
 
+import { AppAuthService } from '../../../authentication/app.auth.service';
+
 @Component({
   selector: 'app-upload-activities',
   templateUrl: './upload-activities.component.html',
@@ -29,12 +31,15 @@ import { EventJSONSanitizer } from '../../../utils/event-json-sanitizer';
   standalone: false
 })
 export class UploadActivitiesComponent extends UploadAbstractDirective implements OnInit {
+  @Input() isHandset: boolean = false;
+
   protected bottomSheet = inject(MatBottomSheet);
   protected overlay = inject(Overlay);
   protected eventService = inject(AppEventService);
   protected fileService = inject(AppFileService);
   protected userService = inject(AppUserService);
   protected analyticsService = inject(AppAnalyticsService);
+  protected authService = inject(AppAuthService);
 
   public uploadCount: number | null = null;
   public uploadLimit: number | null = null;
@@ -45,6 +50,10 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
   }
 
   async ngOnInit() {
+    const user = await this.authService.getUser();
+    if (user) {
+      this.user = user;
+    }
     super.ngOnInit();
     await this.calculateRemainingUploads();
   }

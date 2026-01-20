@@ -7,11 +7,13 @@ import {
   OnInit,
   ViewChild,
   afterNextRender,
+  inject,
 } from '@angular/core';
-import { MatIconRegistry } from '@angular/material/icon';
 import { MatSidenav } from '@angular/material/sidenav';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { Observable, Subscription } from 'rxjs';
+import { map } from 'rxjs/operators';
 import {
   NavigationEnd,
   Router,
@@ -21,13 +23,7 @@ import { AppAuthService } from './authentication/app.auth.service';
 import { AppUserService } from './services/app.user.service';
 import { AppSideNavService } from './services/side-nav/app-side-nav.service';
 import { AppRemoteConfigService } from './services/app.remote-config.service';
-import { DomSanitizer } from '@angular/platform-browser';
 import { slideInAnimation } from './animations/animations';
-
-import * as firebase from 'firebase/app'
-import { AppWindowService } from './services/app.window.service';
-
-declare function require(moduleName: string): any;
 
 
 import { LoggerService } from './services/logger.service';
@@ -46,7 +42,7 @@ import { AppThemeService } from './services/app.theme.service';
   standalone: false
 })
 
-export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterViewChecked {
+export class AppComponent implements OnInit, OnDestroy {
   @ViewChild('sidenav') set sidenav(sidenav: MatSidenav) {
     if (sidenav) {
       this.sideNavService.setSidenav(sidenav);
@@ -62,15 +58,17 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   public onboardingCompleted = true; // Default to true to avoid hiding chrome of non-authenticated users prematurely
   public maintenanceMode$!: Observable<boolean>;
   public maintenanceMessage$!: Observable<string>;
-  private currentUser: any = null;
+  public currentUser: any = null;
   public isAdminUser = false;
-
   public currentTheme$: Observable<any>;
 
   // Circular reveal animation state
   public themeOverlayActive = false;
   public themeOverlayClass = '';
   public themeOverlayStyle: { [key: string]: string } = {};
+
+  private breakpointObserver = inject(BreakpointObserver);
+  public isHandset = toSignal(this.breakpointObserver.observe(Breakpoints.Handset).pipe(map(result => result.matches)), { initialValue: false });
 
   constructor(
     public authService: AppAuthService,
@@ -144,6 +142,10 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     return this.router.url.includes('/admin');
   }
 
+  get showUploadActivities(): boolean {
+    return (this.isDashboardRoute || this.isAdminRoute) && !!this.currentUser;
+  }
+
   private updateOnboardingState() {
     const user = this.currentUser;
     const url = this.router.url;
@@ -202,10 +204,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     this.sideNavService.toggle();
   }
 
-  ngAfterViewInit() {
-
-  }
-
   dismissGracePeriodBanner() {
     this.bannerHeight = 0;
     this.hasBanner = false;
@@ -222,10 +220,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       return null;
     }
     return outlet && outlet.activatedRouteData && outlet.activatedRouteData['animation'];
-  }
-
-  ngAfterViewChecked() {
-    // Reserved for future use
   }
 
   private triggerCircularReveal(x: number, y: number, theme: any) {

@@ -1,11 +1,5 @@
 <button mat-icon-button [matMenuTriggerFor]="jobsMenu" *ngIf="hasActiveJobs$ | async" class="indicator-button">
-    <div class="spinner-container">
-        <mat-progress-spinner [diameter]="24" [mode]="(activeJobsProgress$ | async) ? 'determinate' : 'indeterminate'"
-            [value]="activeJobsProgress$ | async">
-        </mat-progress-spinner>
-        <mat-icon class="center-icon">sync</mat-icon>
-    </div>
-    <span class="badge" *ngIf="(activeJobs$ | async)?.length as count">{{count}}</span>
+    <mat-spinner diameter="24"></mat-spinner>
 </button>
 
 <mat-menu #jobsMenu="matMenu" class="jobs-menu">

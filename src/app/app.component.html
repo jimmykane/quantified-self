@@ -10,23 +10,9 @@
 
       <app-route-loader></app-route-loader>
 
-      <style>
-        .no-margin-top {
-          margin-top: 0 !important;
-        }
 
-        .fill-space {
-          flex: 1 1 auto;
-        }
-
-        .right {
-          margin-left: 10px;
-        }
-      </style>
-
-      <!-- Only show navigation if onboarding is completed OR user is not logged in -->
-      <nav *ngIf="showNavigation" mat-tab-nav-bar [tabPanel]="tabPanel" class="mat-typography custom-nav-bar"
-        [style.top.px]="bannerHeight">
+      <!-- New Header Layout -->
+      <nav *ngIf="showNavigation" class="custom-header mat-typography" [style.top.px]="bannerHeight">
         <button mat-icon-button (click)="toggleSidenav()" class="hamburger-link">
           <mat-icon class="larger_icon">menu</mat-icon>
         </button>
@@ -41,14 +27,16 @@
         </button>
         }
         @if (authState === true && !isDashboardRoute) {
-        <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);">
-          Dashboard
+        <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);"
+          [matTooltip]="isHandset() ? 'Dashboard' : ''">
+          <mat-icon *ngIf="isHandset()">dashboard</mat-icon>
+          <span *ngIf="!isHandset()">Dashboard</span>
         </button>
         }
 
-        @if (isDashboardRoute && authService.user$ | async; as user) {
+        @if (showUploadActivities) {
         <app-processing-indicator class="right"></app-processing-indicator>
-        <app-upload-activities class="right" [user]="user">
+        <app-upload-activities class="right" [isHandset]="isHandset()">
         </app-upload-activities>
         }
 
@@ -74,11 +62,9 @@
         </mat-sidenav>
 
         <mat-sidenav-content>
-          <mat-tab-nav-panel #tabPanel>
-            <div class="router-outlet-container" [@routeAnimations]="prepareRoute(outlet)">
-              <router-outlet #outlet="outlet"></router-outlet>
-            </div>
-          </mat-tab-nav-panel>
+          <div class="router-outlet-container" [@routeAnimations]="prepareRoute(outlet)">
+            <router-outlet #outlet="outlet"></router-outlet>
+          </div>
         </mat-sidenav-content>
       </mat-sidenav-container>
     </div>

@@ -1,3 +1,9 @@
+/* Host element should be inline-flex to stay in header row */
+:host {
+    display: inline-flex;
+    align-items: center;
+}
+
 .job-item {
     display: flex;
     align-items: center;
