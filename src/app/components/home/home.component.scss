@@ -5,6 +5,11 @@
     flex-direction: column;
     min-height: 100vh;
     overflow-x: hidden;
+
+    // Service Brand Colors
+    --brand-garmin: #007cc3;
+    --brand-suunto: #e53935;
+    --brand-coros: #d4a853;
 }
 
 // Mobile-specific footer styles
@@ -64,7 +69,7 @@
     margin: 0 auto;
     width: 100%;
     flex-wrap: wrap;
-    gap: 1rem;
+    gap: 0;
 }
 
 /* Left Side: Hero content */
@@ -285,7 +290,7 @@
 /* Last card spans full width */
 .feature-card.full-width {
     width: calc(100% - 4rem);
-    margin: 0 2rem 1.5rem 2rem;
+    margin: 1.5rem 2rem 1.5rem 2rem;
     grid-column: span 2;
     flex-direction: row;
     align-items: center;
@@ -311,29 +316,29 @@
 
 // Service-branded hover effects
 .feature-card.service-garmin:hover {
-    border-left-color: #007cc3; // Garmin Blue
-    box-shadow: 0 4px 20px rgba(0, 124, 195, 0.2);
+    border-left-color: var(--brand-garmin);
+    box-shadow: 0 4px 20px rgba(0, 124, 195, 0.2); // Keep specific opacity shadow
 
     .card-icon {
-        color: #007cc3;
+        color: var(--brand-garmin);
     }
 }
 
 .feature-card.service-suunto:hover {
-    border-left-color: #e53935; // Suunto Red
+    border-left-color: var(--brand-suunto);
     box-shadow: 0 4px 20px rgba(229, 57, 53, 0.2);
 
     .card-icon {
-        color: #e53935;
+        color: var(--brand-suunto);
     }
 }
 
 .feature-card.service-coros:hover {
-    border-left-color: #d4a853; // COROS Gold
+    border-left-color: var(--brand-coros);
     box-shadow: 0 4px 20px rgba(212, 168, 83, 0.2);
 
     .card-icon {
-        color: #d4a853;
+        color: var(--brand-coros);
     }
 }
 
@@ -526,8 +531,9 @@
     .hero-section {
         flex: 0 0 auto;
         padding: 2rem;
+        margin: 0.5rem 0.5rem 1rem 0.5rem;
         text-align: center;
-        width: 100%;
+        width: auto;
         box-sizing: border-box;
     }
 
