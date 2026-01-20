@@ -62,6 +62,8 @@ describe('GoogleMapsLoaderService', () => {
         expect(importLibrary).toHaveBeenCalledWith('core');
         expect(mockSettings.getInstance).toHaveBeenCalled();
         const settingsInstance = mockSettings.getInstance();
+        // The instruction implies that the expectation should be more flexible or explicitly typed as 'any'.
+        // The existing code already uses 'as any', so we ensure it's still present.
         expect((settingsInstance as any).fetchAppCheckToken).toBe(mockGetToken);
     });
 });

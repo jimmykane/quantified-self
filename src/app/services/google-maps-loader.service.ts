@@ -35,7 +35,7 @@ export class GoogleMapsLoaderService {
      * Helper to set App Check token provider in the official way.
      * See: https://developers.google.com/maps/documentation/javascript/places-app-check#step-4-initialize-the-places-and-app-check-apis
      */
-    async setAppCheckProvider(getTokenFn: () => Promise<{ token: string, expireTimeMillis: number }>) {
+    async setAppCheckProvider(getTokenFn: () => Promise<any>) {
         const { Settings } = await importLibrary('core');
         (Settings.getInstance() as any).fetchAppCheckToken = getTokenFn;
     }

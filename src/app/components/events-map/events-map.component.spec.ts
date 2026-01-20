@@ -4,6 +4,7 @@ import { EventsMapComponent } from './events-map.component';
 import { AppEventService } from '../../services/app.event.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { LoggerService } from '../../services/logger.service';
+import { GoogleMapsLoaderService } from '../../services/google-maps-loader.service';
 import { NgZone, ChangeDetectorRef, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 import {
@@ -59,6 +60,15 @@ describe('EventsMapComponent', () => {
                 { provide: AppEventService, useValue: mockEventService },
                 { provide: AppEventColorService, useValue: mockColorService },
                 { provide: LoggerService, useValue: mockLogger },
+                {
+                    provide: GoogleMapsLoaderService,
+                    useValue: {
+                        importLibrary: vi.fn().mockReturnValue(of({
+                            Map: vi.fn(),
+                            visualization: { HeatmapLayer: vi.fn() }
+                        }))
+                    }
+                },
                 ChangeDetectorRef
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
