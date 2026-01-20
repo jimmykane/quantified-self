@@ -1439,18 +1439,139 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       return;
     }
     this.zoomOrSelectButton.label.text = this.chart.cursor.behavior === ChartCursorBehaviours.SelectX ? 'Selecting' : 'Zooming';
+    // Update icon based on mode
+    if (this.zoomOrSelectButton.icon) {
+      this.zoomOrSelectButton.icon.path = this.chart.cursor.behavior === ChartCursorBehaviours.SelectX
+        ? 'M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 10H3V8h2v4h2V8h2v4h2V8h2v4h2V8h2v4h2V8h2v8z' // Ruler/Range icon (straighten)
+        : 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z'; // Zoom icon
+    }
+  }
+
+  /**
+   * Reads a CSS variable value from the document root.
+   */
+  /**
+   * Reads a CSS variable value from the document root or body.
+   */
+  private getCssVariable(name: string, fallback: string = ''): string {
+    return getComputedStyle(document.body).getPropertyValue(name).trim() ||
+      getComputedStyle(document.documentElement).getPropertyValue(name).trim() ||
+      fallback;
+  }
+
+  /**
+   * Applies Material Design 3 styling to an AMCharts button.
+   */
+  private applyMaterialButtonStyle(button: am4core.Button, options: {
+    fontSize?: string;
+    paddingV?: number;
+    paddingH?: number;
+    cornerRadius?: number;
+    showShadow?: boolean;
+  } = {}): void {
+    const {
+      fontSize = '0.85em',
+      paddingV = 8,
+      paddingH = 16,
+      cornerRadius = 20,
+      showShadow = true
+    } = options;
+
+    // Get theme colors from CSS variables
+    // Get theme colors from CSS variables
+    // Use surface-container-high for better visibility/contrast on the chart
+    // We try 'mat-sys-surface-container-high' (standard) and fallback to 'mat-sys-surface' if needed
+    let surfaceColor = this.getCssVariable('--mat-sys-surface-container-high');
+    if (!surfaceColor) {
+      surfaceColor = this.getCssVariable('--mat-sys-surface', '#ffffff');
+    }
+    const onSurfaceColor = this.getCssVariable('--mat-sys-on-surface', '#000000');
+
+    // Background styling
+    button.background.fill = this.core.color(surfaceColor);
+    button.background.fillOpacity = 1;
+    button.background.cornerRadius(cornerRadius, cornerRadius, cornerRadius, cornerRadius);
+
+    // Add subtle border
+    button.background.stroke = this.core.color(onSurfaceColor);
+    button.background.strokeOpacity = 0.12;
+    button.background.strokeWidth = 1;
+
+    // Shadow for elevation (Material Design elevation level 2)
+    if (showShadow) {
+      button.background.filters.push(new this.core.DropShadowFilter());
+      const shadow = button.background.filters.getIndex(0) as am4core.DropShadowFilter;
+      if (shadow) {
+        shadow.dx = 0;
+        shadow.dy = 2;
+        shadow.blur = 4;
+        shadow.opacity = 0.2;
+      }
+    }
+
+    // Text/icon styling
+    button.label.fill = this.core.color(onSurfaceColor);
+    button.label.fontSize = fontSize;
+    button.label.fontWeight = '500';
+    button.label.valign = 'middle'; // Ensure text is vertically centered
+    button.contentValign = 'middle'; // Ensure all content is centered
+
+    if (button.icon) {
+      button.icon.fill = this.core.color(onSurfaceColor);
+      button.icon.stroke = this.core.color(onSurfaceColor);
+      button.icon.strokeWidth = 0;
+      button.icon.align = 'center';
+      button.icon.valign = 'middle';
+      // M3 standard icon size is 24px.
+      // User requested "smaller" button. Removing explicit dimensions and reverting scale.
+      button.icon.scale = 0.7; // Revert to 0.7 per user request
+    }
+
+    // Padding and sizing
+    button.padding(paddingV, paddingH, paddingV, paddingH);
+
+    // Hover state - No opacity change needed if base is 1.
+    // We could add a slight shadow increase or color tint here if desired, 
+    // but for now we basically disable the opacity-on-hover effect.
+    const hoverState = button.background.states.create('hover');
+    hoverState.properties.fillOpacity = 1;
+
+    // Active/down state
+    const downState = button.background.states.create('down');
+    downState.properties.fillOpacity = 1;
   }
 
   private addZoomOrSelectButton(chart: am4charts.XYChart): am4core.Button {
     const button = chart.plotContainer.createChild(this.core.Button);
 
     button.id = 'zoomOrSelectButton';
-    button.label.text = chart.cursor.behavior === ChartCursorBehaviours.SelectX ? 'Selecting' : 'Zooming';
-    button.padding(12, 12, 12, 12);
-    button.fontSize = '1.1em';
     button.align = 'right';
-    button.opacity = 0.8;
     button.zIndex = 20;
+    button.marginRight = 8;
+    // Explicit y position for stacking
+    button.y = 40;
+
+    // Add icon
+    button.icon = new this.core.Sprite();
+    button.icon.marginRight = 8;
+    button.icon.path = chart.cursor.behavior === ChartCursorBehaviours.SelectX
+      ? 'M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 10H3V8h2v4h2V8h2v4h2V8h2v4h2V8h2v4h2V8h2v8z' // Ruler/Range icon (straighten)
+      : 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z'; // Zoom icon
+
+    // Set label
+    button.label.text = chart.cursor.behavior === ChartCursorBehaviours.SelectX ? 'Selecting' : 'Zooming';
+
+    // Apply Material styling
+    this.applyMaterialButtonStyle(button, {
+      fontSize: '0.85em',
+      paddingV: 4,
+      paddingH: 14,
+      cornerRadius: 20
+    });
+
+
+
+    // Click handler
     button.events.on('hit', () => {
       const newBehavior = chart.cursor.behavior === ChartCursorBehaviours.SelectX
         ? ChartCursorBehaviours.ZoomX
@@ -1467,25 +1588,37 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     const button = chart.plotContainer.createChild(this.core.Button);
 
     button.id = 'clearSelectionButton';
-    // button.label.text = 'Clear';
-    button.padding(12, 12, 12, 12);
-    button.y = 60;
-    button.dx = -0;
-    button.fontSize = '1.0em';
     button.align = 'right';
-    // button.marginLeft = 25;
     button.zIndex = 30;
-    button.opacity = 0.8;
+    button.marginRight = 8;
+    // Stack immediately below the zoom button (40px + height)
+    button.y = 80;
+
+    // Add close icon (Material Design close icon)
     button.icon = new this.core.Sprite();
+    button.icon.marginRight = 8;
     button.icon.path = 'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z';
 
+    // Set label
+    button.label.text = 'Clear';
+
+    // Apply Material styling
+    this.applyMaterialButtonStyle(button, {
+      fontSize: '0.85em',
+      paddingV: 4,
+      paddingH: 14,
+      cornerRadius: 20
+    });
 
 
-    button.events.on('hit', (ev) => {
+
+    // Click handler
+    button.events.on('hit', () => {
       this.disposeRangeLabelsContainer(chart);
       this.disposeCursorSelection(chart);
       this.disposeClearSelectionButton(chart);
     });
+
     this.clearSelectionButton = button;
     return button;
   }
