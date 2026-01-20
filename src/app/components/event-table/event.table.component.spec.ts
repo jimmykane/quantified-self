@@ -187,6 +187,7 @@ describe('EventTableComponent', () => {
                 { provide: AppFileService, useValue: mockFileService },
                 { provide: AppProcessingService, useValue: mockProcessingService },
                 { provide: Firestore, useValue: {} },
+                { provide: AppEventUtilities, useValue: { mergeEventsWithId: vi.fn() } },
                 DatePipe
             ],
             schemas: [NO_ERRORS_SCHEMA]
@@ -221,7 +222,8 @@ describe('EventTableComponent', () => {
         fixture.detectChanges();
 
         // Spy on AppEventUtilities.mergeEventsWithId
-        vi.spyOn(AppEventUtilities, 'mergeEventsWithId').mockReturnValue(new MockEvent('merged_event') as any);
+        const appEventUtilities = TestBed.inject(AppEventUtilities);
+        vi.spyOn(appEventUtilities, 'mergeEventsWithId').mockReturnValue(new MockEvent('merged_event') as any);
     });
 
     it('should create', () => {

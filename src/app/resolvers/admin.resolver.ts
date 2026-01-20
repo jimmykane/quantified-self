@@ -1,6 +1,7 @@
 import { inject } from '@angular/core';
 import { ResolveFn } from '@angular/router';
 import { AdminService, AdminUser, ListUsersParams } from '../services/admin.service';
+import { LoggerService } from '../services/logger.service';
 import { forkJoin, of } from 'rxjs';
 import { map, catchError } from 'rxjs/operators';
 
@@ -11,6 +12,7 @@ export interface AdminResolverData {
 
 export const adminResolver: ResolveFn<AdminResolverData> = (route, state) => {
     const adminService = inject(AdminService);
+    const logger = inject(LoggerService);
 
     // Initial load parameters
     const initialParams: ListUsersParams = {
@@ -23,13 +25,13 @@ export const adminResolver: ResolveFn<AdminResolverData> = (route, state) => {
     return forkJoin({
         usersData: adminService.getUsers(initialParams).pipe(
             catchError(error => {
-                console.error('AdminResolver: Failed to load users', error);
+                logger.error('AdminResolver: Failed to load users', error);
                 return of({ users: [], totalCount: 0 });
             })
         ),
         userStats: adminService.getTotalUserCount().pipe(
             catchError(error => {
-                console.error('AdminResolver: Failed to load stats', error);
+                logger.error('AdminResolver: Failed to load stats', error);
                 return of(null);
             })
         )

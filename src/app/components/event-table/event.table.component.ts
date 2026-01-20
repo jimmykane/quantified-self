@@ -94,6 +94,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     private router: Router, private datePipe: DatePipe,
     private logger: LoggerService,
     private processingService: AppProcessingService,
+    private appEventUtilities: AppEventUtilities,
     private breakpointObserver: BreakpointObserver) {
     super(changeDetector);
   }
@@ -272,7 +273,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
     });
 
-    const mergedEvent = AppEventUtilities.mergeEventsWithId(
+    const mergedEvent = this.appEventUtilities.mergeEventsWithId(
       events,
       () => doc(collection(this.firestore, 'users')).id
     ) as AppEventInterface;

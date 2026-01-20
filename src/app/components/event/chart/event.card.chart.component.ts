@@ -863,7 +863,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
         // DEBUG: Check what units are actually configured
         if (this.showAllData) {
-          console.log('[EventCardChart] userUnitSettings:', this.userUnitSettings);
+          this.logger.log('[EventCardChart] userUnitSettings:', this.userUnitSettings);
         }
 
         const whitelistedUnitTypes = DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(
@@ -873,7 +873,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         );
 
         if (this.showAllData) {
-          console.log('[EventCardChart] whitelistedUnitTypes:', whitelistedUnitTypes);
+          this.logger.log('[EventCardChart] whitelistedUnitTypes:', whitelistedUnitTypes);
         }
 
         // Gather all "known" unit variants to identify what we should potentially hide

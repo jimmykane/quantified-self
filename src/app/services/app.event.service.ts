@@ -52,6 +52,7 @@ export class AppEventService implements OnDestroy {
   private injector = inject(Injector);
   private fileService = inject(AppFileService);
   private logger = inject(LoggerService);
+  private appEventUtilities = inject(AppEventUtilities);
   private static reportedUnknownTypes = new Set<string>();
 
   constructor(
@@ -659,7 +660,7 @@ export class AppEventService implements OnDestroy {
         if (!skipEnrichment) {
           newEvent.getActivities().forEach(activity => {
             try {
-              AppEventUtilities.enrich(activity, ['Time', 'Duration']);
+              this.appEventUtilities.enrich(activity, ['Time', 'Duration']);
             } catch (e) {
               // Ignore duplicate stream errors as it means the stream already exists (possibly due to caching)
               if (e.message && e.message.indexOf('Duplicate type of stream') > -1) {

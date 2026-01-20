@@ -1,11 +1,29 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AppEventUtilities } from './app.event.utilities';
-import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { LoggerService } from '../services/logger.service';
+import { TestBed } from '@angular/core/testing';
 
 describe('AppEventUtilities', () => {
     let mockActivity: any;
+    let service: AppEventUtilities;
+    let loggerMock: any;
 
     beforeEach(() => {
+        loggerMock = {
+            warn: vi.fn(),
+            error: vi.fn(),
+            log: vi.fn()
+        };
+
+        TestBed.configureTestingModule({
+            providers: [
+                AppEventUtilities,
+                { provide: LoggerService, useValue: loggerMock }
+            ]
+        });
+
+        service = TestBed.inject(AppEventUtilities);
+
         // Create a mock object with necessary methods
         mockActivity = {
             hasStreamData: vi.fn(),
@@ -26,7 +44,7 @@ describe('AppEventUtilities', () => {
                 const mockStream = { type: 'Time' };
                 mockActivity.generateTimeStream.mockReturnValue(mockStream);
 
-                AppEventUtilities.enrich(mockActivity, ['Time']);
+                service.enrich(mockActivity, ['Time']);
 
                 expect(mockActivity.generateTimeStream).toHaveBeenCalled();
                 expect(mockActivity.addStream).toHaveBeenCalledWith(mockStream);
@@ -36,7 +54,7 @@ describe('AppEventUtilities', () => {
                 // Setup: Time stream exists
                 mockActivity.hasStreamData.mockReturnValue(true);
 
-                AppEventUtilities.enrich(mockActivity, ['Time']);
+                service.enrich(mockActivity, ['Time']);
 
                 expect(mockActivity.generateTimeStream).not.toHaveBeenCalled();
                 expect(mockActivity.addStream).not.toHaveBeenCalled();
@@ -49,7 +67,8 @@ describe('AppEventUtilities', () => {
                 });
 
                 // Should not throw
-                expect(() => AppEventUtilities.enrich(mockActivity, ['Time'])).not.toThrow();
+                expect(() => service.enrich(mockActivity, ['Time'])).not.toThrow();
+                expect(loggerMock.error).toHaveBeenCalled();
             });
         });
 
@@ -62,7 +81,7 @@ describe('AppEventUtilities', () => {
                 const mockStream = { type: 'Duration' };
                 mockActivity.generateDurationStream.mockReturnValue(mockStream);
 
-                AppEventUtilities.enrich(mockActivity, ['Duration']);
+                service.enrich(mockActivity, ['Duration']);
 
                 expect(mockActivity.generateDurationStream).toHaveBeenCalled();
                 expect(mockActivity.addStream).toHaveBeenCalledWith(mockStream);
@@ -72,7 +91,7 @@ describe('AppEventUtilities', () => {
                 // Setup: Duration stream exists
                 mockActivity.hasStreamData.mockReturnValue(true);
 
-                AppEventUtilities.enrich(mockActivity, ['Duration']);
+                service.enrich(mockActivity, ['Duration']);
 
                 expect(mockActivity.generateDurationStream).not.toHaveBeenCalled();
                 expect(mockActivity.addStream).not.toHaveBeenCalled();
@@ -84,7 +103,8 @@ describe('AppEventUtilities', () => {
                 });
 
                 // Should not throw
-                expect(() => AppEventUtilities.enrich(mockActivity, ['Duration'])).not.toThrow();
+                expect(() => service.enrich(mockActivity, ['Duration'])).not.toThrow();
+                expect(loggerMock.error).toHaveBeenCalled();
             });
         });
     });

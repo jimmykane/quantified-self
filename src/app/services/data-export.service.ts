@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppEventColorService } from './color/app.event.color.service';
+import { LoggerService } from './logger.service';
 
 @Injectable({
     providedIn: 'root'
@@ -11,7 +12,8 @@ export class DataExportService {
     constructor(
         private clipboard: Clipboard,
         private snackBar: MatSnackBar,
-        private appEventColorService: AppEventColorService
+        private appEventColorService: AppEventColorService,
+        private logger: LoggerService
     ) { }
 
     /**
@@ -146,7 +148,7 @@ export class DataExportService {
                     duration: 3000,
                 });
             } catch (err) {
-                console.error('DataExportService: Rich copy failed, falling back to basic copy', err);
+                this.logger.error('DataExportService: Rich copy failed, falling back to basic copy', err);
                 // Fallback to simple text copy
                 this.fallbackCopy(tsv, 'Sheets (Text only)');
             }

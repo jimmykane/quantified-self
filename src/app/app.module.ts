@@ -25,6 +25,7 @@ import { MAT_DIALOG_DEFAULT_OPTIONS } from '@angular/material/dialog';
 import { ServiceWorkerModule } from '@angular/service-worker';
 import { UploadActivitiesComponent } from './components/upload/upload-activities/upload-activities.component';
 import { GoogleMapsLoaderService } from './services/google-maps-loader.service';
+import { LoggerService } from './services/logger.service';
 
 import { AppUpdateService } from './services/app.update.service';
 import { OnboardingComponent } from './components/onboarding/onboarding.component';
@@ -125,15 +126,16 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
       const remoteConfigService = inject(AppRemoteConfigService);
       const appCheck = inject(AppCheck);
       const mapsLoader = inject(GoogleMapsLoaderService);
+      const logger = inject(LoggerService);
 
       // Initialize Remote Config (blocks bootstrap if it returns a Promise/Observable)
       initializeRemoteConfig(remoteConfigService)();
 
       // Connect App Check to Google Maps Loader
       mapsLoader.setAppCheckProvider(() => {
-        console.log('[GoogleMaps] Fetching App Check token...');
+        logger.log('[GoogleMaps] Fetching App Check token...');
         return getToken(appCheck).then((tokenResult) => {
-          console.log('[GoogleMaps] App Check token received.');
+          logger.log('[GoogleMaps] App Check token received.');
           return { token: tokenResult.token };
         });
       });
