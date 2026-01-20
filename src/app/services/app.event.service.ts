@@ -870,6 +870,16 @@ export class AppEventService implements OnDestroy {
     }
     return results;
   }
+  /**
+   * Uses Firestore Aggregation Queries to count events efficiently.
+   *
+   * Cost Efficiency:
+   * - Does NOT read actual documents, only scans the index.
+   * - Cost is 1 document read per 1,000 index entries.
+   * - Example: 5,000 events = 5 billable reads.
+   *
+   * @todo Cache this result (e.g., in a Signal or BehaviorSubject) to avoid unnecessary server calls on every navigation.
+   */
   public async getEventCount(user: User): Promise<number> {
     const eventsRef = collection(this.firestore, `users/${user.uid}/events`);
     const snapshot = await runInInjectionContext(this.injector, () => getCountFromServer(query(eventsRef)));
