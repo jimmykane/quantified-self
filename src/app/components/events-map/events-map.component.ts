@@ -23,6 +23,8 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DatePipe } from '@angular/common';
 import { User } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
+import { GoogleMapsLoaderService } from '../../services/google-maps-loader.service';
+
 import { take } from 'rxjs/operators';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib';
@@ -70,12 +72,20 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     private changeDetectorRef: ChangeDetectorRef,
     private eventColorService: AppEventColorService,
     private eventService: AppEventService,
+    private mapsLoader: GoogleMapsLoaderService,
     protected logger: LoggerService) {
     super(changeDetectorRef, logger);
   }
 
   ngOnInit(): void {
-    this.loadGoogleMaps();
+    this.mapsLoader.importLibrary('maps').subscribe();
+    this.mapsLoader.importLibrary('visualization').subscribe(async () => {
+      this.apiLoaded = true;
+      this.changeDetectorRef.markForCheck();
+      if (this.nativeMap) {
+        this.initMapData();
+      }
+    });
   }
 
   ngAfterViewInit() {
@@ -174,61 +184,6 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     }
   }
 
-  private loadGoogleMaps() {
-    if (typeof google === 'object' && typeof google.maps === 'object') {
-      this.apiLoaded = true;
-      this.changeDetectorRef.markForCheck();
-      return;
-    }
-
-    const scriptSrc = `https://maps.googleapis.com/maps/api/js?key=${environment.firebase.apiKey}&libraries=visualization`;
-    if (document.querySelector(`script[src="${scriptSrc}"]`)) {
-      // Script is already loading or loaded, but 'google' object might not be ready yet.
-      // We can poll or wait. Simpler approach for now is to trust that if script is there, it will load.
-      // But since we need to flip apiLoaded to true, we should probably attach a listener if possible,
-      // or just rely on a simple interval check if we can't easily hook into the existing script tag's onload.
-      // However, a better way is to attach a new load listener to the existing script element.
-      const existingScript = document.querySelector(`script[src="${scriptSrc}"]`) as HTMLScriptElement;
-
-      if (!existingScript.getAttribute('data-loaded')) {
-        const originalOnLoad = existingScript.onload;
-        existingScript.onload = (e) => {
-          if (originalOnLoad) {
-            (originalOnLoad as any)(e);
-          }
-          this.zone.run(() => {
-            this.apiLoaded = true;
-            this.changeDetectorRef.markForCheck();
-            if (this.nativeMap) {
-              this.initMapData();
-            }
-          });
-        };
-      } else {
-        this.apiLoaded = true;
-        this.changeDetectorRef.markForCheck();
-      }
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = scriptSrc;
-    script.async = true;
-    script.defer = true;
-    document.body.appendChild(script);
-    script.onload = () => {
-      script.setAttribute('data-loaded', 'true');
-      this.zone.run(() => {
-        this.apiLoaded = true;
-        this.changeDetectorRef.markForCheck();
-        // If map was already ready (e.g. somehow), init data. 
-        // Realistically onMapReady triggers initMapData, but if API loads LATE, we need to trigger it if map is ready.
-        if (this.nativeMap) {
-          this.initMapData();
-        }
-      });
-    }
-  }
 
   getStartPositionsFromEvents(events: EventInterface[]): DataPositionInterface[] {
     return events.reduce((positionsArray, event) => {

@@ -32,6 +32,8 @@ import { DataLatitudeDegrees } from '@sports-alliance/sports-lib';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib';
 import { environment } from '../../../../environments/environment';
 import { LoggerService } from '../../../services/logger.service';
+import { GoogleMapsLoaderService } from '../../../services/google-maps-loader.service';
+
 
 @Component({
   selector: 'app-event-card-map',
@@ -93,6 +95,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     private userService: AppUserService,
     private activityCursorService: AppActivityCursorService,
     public eventColorService: AppEventColorService,
+    private mapsLoader: GoogleMapsLoaderService,
     protected logger: LoggerService) {
     super(changeDetectorRef, logger);
   }
@@ -101,55 +104,15 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     if (!this.targetUserID || !this.event) {
       throw new Error('Component needs events and userID');
     }
-    this.loadGoogleMaps();
-  }
-
-  private loadGoogleMaps() {
-    if (typeof google === 'object' && typeof google.maps === 'object') {
+    // Load 'maps' and 'visualization' libraries (visualization was in the previous scriptSrc)
+    this.mapsLoader.importLibrary('maps').subscribe();
+    this.mapsLoader.importLibrary('visualization').subscribe(async () => {
       this.apiLoaded = true;
-      this.changeDetectorRef.markForCheck();
-      // Apply theme styles if map is already ready roughly
       this.mapOptions = { ...this.mapOptions, styles: this.getStyles(this.theme) };
-      return;
-    }
-
-    const scriptSrc = `https://maps.googleapis.com/maps/api/js?key=${environment.firebase.apiKey}&libraries=visualization`;
-    if (document.querySelector(`script[src="${scriptSrc}"]`)) {
-      const existingScript = document.querySelector(`script[src="${scriptSrc}"]`) as HTMLScriptElement;
-      if (!existingScript.getAttribute('data-loaded')) {
-        const originalOnLoad = existingScript.onload;
-        existingScript.onload = (e) => {
-          if (originalOnLoad) {
-            (originalOnLoad as any)(e);
-          }
-          this.zone.run(() => {
-            this.apiLoaded = true;
-            this.mapOptions = { ...this.mapOptions, styles: this.getStyles(this.theme) };
-            this.changeDetectorRef.markForCheck();
-          });
-        };
-      } else {
-        this.apiLoaded = true;
-        this.mapOptions = { ...this.mapOptions, styles: this.getStyles(this.theme) };
-        this.changeDetectorRef.markForCheck();
-      }
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = scriptSrc;
-    script.async = true;
-    script.defer = true;
-    document.body.appendChild(script);
-    script.onload = () => {
-      script.setAttribute('data-loaded', 'true');
-      this.zone.run(() => {
-        this.apiLoaded = true;
-        this.mapOptions = { ...this.mapOptions, styles: this.getStyles(this.theme) };
-        this.changeDetectorRef.markForCheck();
-      });
-    }
+      this.changeDetectorRef.markForCheck();
+    });
   }
+
 
   ngAfterViewInit(): void {
     // Subscribe to cursor changes from chart
