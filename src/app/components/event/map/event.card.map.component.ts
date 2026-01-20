@@ -5,35 +5,26 @@ import {
   Component,
   HostListener,
   Input,
+  NgZone,
   OnChanges,
   OnDestroy,
   OnInit,
+  SimpleChanges,
   ViewChild,
-  NgZone,
-  SimpleChanges
+  signal,
 } from '@angular/core';
-import { GoogleMap, MapPolyline, MapMarker } from '@angular/google-maps';
+import { GoogleMap } from '@angular/google-maps';
+import { throttleTime } from 'rxjs/operators';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { EventInterface } from '@sports-alliance/sports-lib';
-import { ActivityInterface } from '@sports-alliance/sports-lib';
-import { LapInterface } from '@sports-alliance/sports-lib';
+import { EventInterface, ActivityInterface, LapInterface, User, LapTypes, GeoLibAdapter, DataLatitudeDegrees, DataLongitudeDegrees } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../../services/app.event.service';
-import { Subject, Subscription } from 'rxjs';
-import { User } from '@sports-alliance/sports-lib';
-import { LapTypes } from '@sports-alliance/sports-lib';
-import { MapThemes } from '@sports-alliance/sports-lib';
+import { Subject, Subscription, asyncScheduler } from 'rxjs';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
-import { GeoLibAdapter } from '@sports-alliance/sports-lib';
-import { debounceTime, throttleTime } from 'rxjs/operators';
-import { asyncScheduler } from 'rxjs';
 import { MapAbstractDirective } from '../../map/map-abstract.directive';
-import { DataLatitudeDegrees } from '@sports-alliance/sports-lib';
-import { DataLongitudeDegrees } from '@sports-alliance/sports-lib';
 import { environment } from '../../../../environments/environment';
 import { LoggerService } from '../../../services/logger.service';
 import { GoogleMapsLoaderService } from '../../../services/google-maps-loader.service';
-
 
 @Component({
   selector: 'app-event-card-map',
@@ -48,7 +39,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   @Input() targetUserID: string;
   @Input() user: User;
   @Input() selectedActivities: ActivityInterface[];
-  @Input() theme: MapThemes;
   @Input() showLaps: boolean;
   @Input() showPoints: boolean;
   @Input() showArrows: boolean;
@@ -59,32 +49,33 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   public noMapData = false;
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
-  public mapTypeId: google.maps.MapTypeId = 'roadmap' as any as google.maps.MapTypeId;
+  public mapTypeId = signal<google.maps.MapTypeId>('roadmap' as google.maps.MapTypeId);
   public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
+  public mapCenter = signal<google.maps.LatLngLiteral>({ lat: 0, lng: 0 });
+  public mapZoom = signal(12);
 
   // Map options
-  public mapOptions: google.maps.MapOptions = {
-    gestureHandling: 'cooperative',
-    scrollwheel: true,
-    tilt: 45,
-    controlSize: 32,
-    disableDefaultUI: true,
-    fullscreenControl: true,
-    scaleControl: true,
-    rotateControl: true,
-    zoomControl: true,
-    streetViewControl: true,
-    mapTypeControl: true,
-  };
-
-  public mapCenter: google.maps.LatLngLiteral = { lat: 0, lng: 0 };
-  public mapZoom = 12;
+  public get mapOptions(): google.maps.MapOptions {
+    return {
+      gestureHandling: 'cooperative',
+      scrollwheel: true,
+      controlSize: 32,
+      disableDefaultUI: true,
+      fullscreenControl: true,
+      scaleControl: true,
+      rotateControl: true,
+      zoomControl: true,
+      streetViewControl: true,
+      mapTypeControl: true,
+      mapId: environment.googleMapsMapId,
+    };
+  }
 
   private activitiesCursorSubscription: Subscription;
   private lineMouseMoveSubject: Subject<{ event: google.maps.MapMouseEvent, activityMapData: MapData }> = new Subject();
   private lineMouseMoveSubscription: Subscription;
 
-  public apiLoaded = false;
+  public apiLoaded = signal(false);
   private processSequence = 0;
   private pendingFitBoundsTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -100,18 +91,21 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     super(changeDetectorRef, logger);
   }
 
-  ngOnInit() {
+  async ngOnInit() {
     if (!this.targetUserID || !this.event) {
       throw new Error('Component needs events and userID');
     }
     // Load 'maps' library
-    this.mapsLoader.importLibrary('maps').subscribe(async () => {
-      this.apiLoaded = true;
-      this.mapOptions = { ...this.mapOptions, styles: this.getStyles(this.theme) };
-      this.changeDetectorRef.markForCheck();
-    });
-  }
+    await this.mapsLoader.importLibrary('maps');
+    await this.mapsLoader.importLibrary('marker');
 
+    if (this.user?.settings?.mapSettings?.mapType) {
+      this.mapTypeId.set(this.user.settings.mapSettings.mapType as unknown as google.maps.MapTypeId);
+    }
+
+    this.apiLoaded.set(true);
+    this.changeDetectorRef.markForCheck();
+  }
 
   ngAfterViewInit(): void {
     // Subscribe to cursor changes from chart
@@ -147,10 +141,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   ngOnChanges(simpleChanges: SimpleChanges) {
-    if (simpleChanges.theme) {
-      this.mapOptions = { ...this.mapOptions, styles: this.getStyles(this.theme) };
-    }
-
     if (
       (simpleChanges.selectedActivities && !simpleChanges.selectedActivities.firstChange) ||
       (simpleChanges.showLaps && !simpleChanges.showLaps.firstChange) ||
@@ -163,94 +153,103 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     }
   }
 
-  async onMapReady(map: google.maps.Map) {
+  async onMapReady(_map: google.maps.Map) {
     this.mapActivities(++this.processSequence);
   }
 
-  openLapMarkerInfoWindow(lap) {
+  openLapMarkerInfoWindow(lap: LapInterface) {
     this.openedLapMarkerInfoWindow = lap;
     this.openedActivityStartMarkerInfoWindow = void 0;
   }
 
-  openActivityStartMarkerInfoWindow(activity) {
+  openActivityStartMarkerInfoWindow(activity: ActivityInterface) {
     this.openedActivityStartMarkerInfoWindow = activity;
     this.openedLapMarkerInfoWindow = void 0;
   }
 
-  getMarkerOptions(activity: ActivityInterface, color: string): google.maps.MarkerOptions {
+  getMarkerOptions(_activity: ActivityInterface, color: string): google.maps.marker.AdvancedMarkerElementOptions {
+    const div = document.createElement('div');
+    div.innerHTML = `
+        <svg width="24" height="24" viewBox="0 -24 24 24">
+          <path d="M22-48h-44v43h16l6 5 6-5h16z" fill="${color}" stroke="#FFF" stroke-width="0.5" transform="scale(0.5) translate(22, 48)" />
+        </svg>`;
     return {
-      icon: {
-        path: 'M22-48h-44v43h16l6 5 6-5h16z',
-        fillColor: color,
-        fillOpacity: 1,
-        strokeColor: '#FFF',
-        strokeWeight: 0.5,
-        scale: 0.5,
-        labelOrigin: new google.maps.Point(0, -24)
-      }
+      content: div,
+      gmpClickable: true
     };
   }
 
-  getHomeMarkerOptions(activity: ActivityInterface, color: string): google.maps.MarkerOptions {
+  getHomeMarkerOptions(_activity: ActivityInterface, color: string): google.maps.marker.AdvancedMarkerElementOptions {
+    const div = document.createElement('div');
+    // M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z is a house icon
+    div.innerHTML = `
+        <svg width="24" height="24" viewBox="0 0 24 24">
+          <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" fill="${color}" stroke="#FFF" stroke-width="0.8" />
+        </svg>`;
     return {
-      icon: {
-        path: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
-        fillColor: color,
-        fillOpacity: 1,
-        strokeColor: '#FFF',
-        strokeWeight: 0.8,
-        scale: 1.2,
-        anchor: new google.maps.Point(12, 12)
-      }
+      content: div,
+      title: 'Start',
+      zIndex: 100
     };
   }
 
-  getFlagMarkerOptions(activity: ActivityInterface, color: string): google.maps.MarkerOptions {
+  getFlagMarkerOptions(_activity: ActivityInterface, color: string): google.maps.marker.AdvancedMarkerElementOptions {
+    const div = document.createElement('div');
+    div.innerHTML = `
+        <svg width="24" height="24" viewBox="0 0 24 24">
+          <path d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z" fill="${color}" stroke="#FFF" stroke-width="0.8" />
+        </svg>`;
     return {
-      icon: {
-        path: 'M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z',
-        fillColor: color,
-        fillOpacity: 1,
-        strokeColor: '#FFF',
-        strokeWeight: 0.8,
-        scale: 1,
-        anchor: new google.maps.Point(6, 24)
-      }
+      content: div
     };
   }
 
-  getCursorMarkerOptions(activity: ActivityInterface, color: string): google.maps.MarkerOptions {
+  getCursorMarkerOptions(_activity: ActivityInterface, color: string): google.maps.marker.AdvancedMarkerElementOptions {
+    const div = document.createElement('div');
+    div.innerHTML = `
+        <svg width="24" height="24" viewBox="0 0 24 24">
+          <path d="M5 15H3v4c0 1.1.9 2 2 2h4v-2H5v-4zM5 5h4V3H5c-1.1 0-2 .9-2 2v4h2V5zm14-2h-4v2h4v4h2V5c0-1.1-.9-2-2-2zm0 16h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zM12 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" fill="${color}" stroke="#FFF" stroke-width="1" />
+        </svg>`;
     return {
-      icon: {
-        path: 'M5 15H3v4c0 1.1.9 2 2 2h4v-2H5v-4zM5 5h4V3H5c-1.1 0-2 .9-2 2v4h2V5zm14-2h-4v2h4v4h2V5c0-1.1-.9-2-2-2zm0 16h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zM12 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z',
-        fillColor: color,
-        fillOpacity: 1,
-        strokeColor: '#FFF',
-        strokeWeight: 1,
-        scale: 1.2,
-        anchor: new google.maps.Point(12, 12)
-      }
+      content: div,
+      zIndex: 200
     };
   }
 
-  getLapMarkerOptions(activity: ActivityInterface, color: string, lapIndex: number): google.maps.MarkerOptions {
+  getLapMarkerOptions(_activity: ActivityInterface, color: string, lapIndex: number): google.maps.marker.AdvancedMarkerElementOptions {
+    const div = document.createElement('div');
+    div.innerHTML = `
+          <svg width="24" height="29" viewBox="-23 -49 46 54" style="overflow: visible;">
+             <defs>
+               <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+                 <feGaussianBlur in="SourceAlpha" stdDeviation="1" />
+                 <feOffset dx="0" dy="1" />
+                 <feComponentTransfer><feFuncA type="linear" slope="0.5"/></feComponentTransfer>
+                 <feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge>
+               </filter>
+             </defs>
+             <path d="M22-48h-44v43h16l6 5 6-5h16z" fill="${color}" stroke="#FFF" stroke-width="2" filter="url(#shadow)" />
+             <text x="0" y="-26.5" dominant-baseline="central" text-anchor="middle" fill="white" 
+                   style="font-family: 'Roboto', 'Inter', sans-serif; font-size: 16px; font-weight: 800; pointer-events: none;">
+               ${lapIndex + 1}
+             </text>
+          </svg>
+        `;
+
     return {
-      icon: {
-        path: 'M22-48h-44v43h16l6 5 6-5h16z',
-        fillColor: color,
-        fillOpacity: 1,
-        strokeColor: '#FFF',
-        strokeWeight: 0.5,
-        scale: 0.5,
-        labelOrigin: new google.maps.Point(0, -24)
-      },
-      label: {
-        color: 'white',
-        fontSize: '14px',
-        text: (lapIndex + 1).toString()
-      },
+      content: div,
       zIndex: lapIndex + 1
     };
+  }
+
+  pointMarkerContent(color: string): Node {
+    const div = document.createElement('div');
+    div.innerHTML = `
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <circle cx="5" cy="5" r="4" fill="${color}" stroke="#FFF" stroke-width="0.8" />
+        </svg>
+      `;
+    return div;
   }
 
   getPolylineOptions(activityMapData: MapData): google.maps.PolylineOptions {
@@ -317,13 +316,13 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     });
   }
 
-  getMapValuesAsArray<K, V>(map: Map<K, V>): V[] {
-    return Array.from(map.values());
+  getMapValuesAsArray<K, V>(_map: Map<K, V>): V[] {
+    return Array.from(_map.values());
   }
 
   async changeMapType(mapType: google.maps.MapTypeId) {
     if (!this.user) return;
-    this.mapTypeId = mapType;
+    this.mapTypeId.set(mapType);
     this.user.settings.mapSettings.mapType = mapType as any;
     await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
   }
@@ -398,10 +397,10 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
     // Set initial center if we have data
     if (this.activitiesMapData.length > 0 && this.activitiesMapData[0].positions.length > 0) {
-      this.mapCenter = {
+      this.mapCenter.set({
         lat: this.activitiesMapData[0].positions[0].latitudeDegrees,
         lng: this.activitiesMapData[0].positions[0].longitudeDegrees
-      };
+      });
     }
 
     // Fit bounds after a short delay to ensure map is ready and container has size

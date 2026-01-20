@@ -1,4 +1,6 @@
 import { inject, Injectable, OnDestroy, EnvironmentInjector, runInInjectionContext } from '@angular/core';
+
+
 import { Observable, from, firstValueFrom, of, combineLatest, distinctUntilChanged } from 'rxjs';
 import { StripeRole } from '../models/stripe-role.model';
 import { User } from '@sports-alliance/sports-lib';
@@ -107,9 +109,6 @@ export class AppUserService implements OnDestroy {
     return AppThemes.Normal;
   }
 
-  static getDefaultMapTheme(): MapThemes {
-    return MapThemes.Normal;
-  }
 
   static getDefaultChartCursorBehaviour(): ChartCursorBehaviours {
     return ChartCursorBehaviours.ZoomX;
@@ -153,7 +152,7 @@ export class AppUserService implements OnDestroy {
       order: 0,
       type: TileTypes.Map,
       mapType: MapTypes.Terrain,
-      mapTheme: MapThemes.MidnightCommander,
+      mapTheme: MapThemes.Normal,
       showHeatMap: true,
       clusterMarkers: true,
       size: { columns: 1, rows: 1 },
@@ -166,7 +165,7 @@ export class AppUserService implements OnDestroy {
       order: 0,
       type: TileTypes.Map,
       mapType: MapTypes.RoadMap,
-      mapTheme: MapThemes.MidnightCommander,
+      mapTheme: MapThemes.Normal,
       showHeatMap: true,
       clusterMarkers: true,
       size: { columns: 1, rows: 1 },
@@ -903,7 +902,7 @@ export class AppUserService implements OnDestroy {
     settings.summariesSettings.removeAscentForEventTypes = settings.summariesSettings.removeAscentForEventTypes || AppUserService.getDefaultActivityTypesToRemoveAscentFromSummaries();
     // Map
     settings.mapSettings = settings.mapSettings || <UserMapSettingsInterface>{};
-    settings.mapSettings.theme = settings.mapSettings.theme || AppUserService.getDefaultMapTheme();
+    settings.mapSettings.theme = settings.mapSettings.theme || MapThemes.Normal;
     settings.mapSettings.showLaps = settings.mapSettings.showLaps !== false;
     settings.mapSettings.showPoints = settings.mapSettings.showPoints === true;
     settings.mapSettings.showArrows = settings.mapSettings.showArrows !== false;

@@ -14,12 +14,10 @@ import { TileAbstractDirective } from '../tile-abstract.directive';
 })
 
 export class TileMapComponent extends TileAbstractDirective {
-  @Input() mapType: MapTypes;
-  @Input() mapTheme: MapThemes;
-  @Input() showActions: boolean;
-  @Input() clusterMarkers: boolean;
+  @Input() mapType!: MapTypes;
+  @Input() showActions!: boolean;
+  @Input() clusterMarkers!: boolean;
   @Input() events: EventInterface[] = [];
 
   public mapTypes = MapTypes;
-  public mapThemes = MapThemes;
 }

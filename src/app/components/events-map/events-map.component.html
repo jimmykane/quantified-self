@@ -42,9 +42,9 @@
 
 <!-- Google Map -->
 <!-- Google Map -->
-@if (apiLoaded) {
-<google-map height="100%" width="100%" [center]="mapCenter" [zoom]="mapZoom" [mapTypeId]="mapTypeId"
-  [options]="mapOptions" (mapInitialized)="onMapReady($event)">
+@if (apiLoaded()) {
+<google-map height="100%" width="100%" [center]="mapCenter()" [zoom]="mapZoom()" [mapTypeId]="mapTypeId()"
+  [options]="mapOptions" (mapInitialized)="onMapReady($event)" (mapTypeIdChange)="changeMapType($any($event))">
 
   <!-- Polylines for selected event activities -->
   @if (selectedEventPositionsByActivity) {

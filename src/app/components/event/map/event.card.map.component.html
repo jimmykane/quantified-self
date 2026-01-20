@@ -11,7 +11,7 @@
   <section class="container">
     @if (googleMap && event.getActivities().length > 1) {
     <mat-card class="map-legend mat-elevation-z0">
-      @for (activity of event.getActivities(); track activity) {
+      @for (activity of event.getActivities(); track activity.getID()) {
       <app-activity-toggle [activity]="activity" [event]="event" [showActions]="false" [showToggle]="false"
         [showStats]="false" [showDate]="false" [selectedActivities]="selectedActivities">
       </app-activity-toggle>
@@ -26,23 +26,23 @@
     }
 
     <!-- Google Map -->
-    @if (activitiesMapData.length > 0 && apiLoaded) {
-    <google-map height="100%" width="100%" [center]="mapCenter" [zoom]="mapZoom" [mapTypeId]="mapTypeId"
-      [options]="mapOptions" (mapInitialized)="onMapReady($event)">
-      @for (activityMapData of activitiesMapData; track activityMapData) {
+    @if (activitiesMapData.length > 0 && apiLoaded()) {
+    <google-map height="100%" width="100%" [center]="mapCenter()" [zoom]="mapZoom()" [mapTypeId]="mapTypeId()"
+      [options]="mapOptions" (mapInitialized)="onMapReady($event)" (mapTypeIdChange)="changeMapType($any($event))">
+      @for (activityMapData of activitiesMapData; track activityMapData.activity.getID()) {
       <!-- Start Marker -->
       @if (activityMapData.positions.length > 0) {
-      <map-marker
+      <map-advanced-marker
         [position]="{lat: activityMapData.positions[0].latitudeDegrees, lng: activityMapData.positions[0].longitudeDegrees}"
         [options]="getHomeMarkerOptions(activityMapData.activity, activityMapData.strokeColor)">
-      </map-marker>
+      </map-advanced-marker>
       }
       <!-- Cursor Marker -->
       @if (activitiesCursors.get(activityMapData.activity.getID())) {
-      <map-marker
+      <map-advanced-marker
         [position]="{lat: activitiesCursors.get(activityMapData.activity.getID()).latitudeDegrees, lng: activitiesCursors.get(activityMapData.activity.getID()).longitudeDegrees}"
         [options]="getCursorMarkerOptions(activityMapData.activity, activityMapData.strokeColor)">
-      </map-marker>
+      </map-advanced-marker>
       }
       <!-- Activity Polyline -->
       <map-polyline [path]="getPolylinePath(activityMapData)" [options]="getPolylineOptions(activityMapData)"
@@ -50,23 +50,23 @@
       </map-polyline>
       <!-- End Marker -->
       @if (activityMapData.positions.length > 0) {
-      <map-marker
+      <map-advanced-marker
         [position]="{lat: activityMapData.positions[activityMapData.positions.length - 1].latitudeDegrees, lng: activityMapData.positions[activityMapData.positions.length - 1].longitudeDegrees}"
         [options]="getFlagMarkerOptions(activityMapData.activity, activityMapData.strokeColor)">
-      </map-marker>
+      </map-advanced-marker>
       }
       <!-- Lap Markers -->
-      @for (lap of activityMapData.laps; track lap; let i = $index) {
-      <map-marker [position]="{lat: lap.lapPosition.latitudeDegrees, lng: lap.lapPosition.longitudeDegrees}"
+      @for (lap of activityMapData.laps; track lap.lap.startDate.getTime(); let i = $index) {
+      <map-advanced-marker [position]="{lat: lap.lapPosition.latitudeDegrees, lng: lap.lapPosition.longitudeDegrees}"
         [options]="getLapMarkerOptions(activityMapData.activity, activityMapData.strokeColor, i)">
-      </map-marker>
+      </map-advanced-marker>
       }
       <!-- Point Markers (optional) -->
       @if (showPoints) {
-      @for (position of activityMapData.positions; track position) {
-      <map-marker [position]="{lat: position.latitudeDegrees, lng: position.longitudeDegrees}"
-        [options]="{icon: {path: 0, fillColor: activityMapData.strokeColor, fillOpacity: 1, strokeColor: '#FFF', strokeWeight: 0.8, scale: 1.2}}">
-      </map-marker>
+      @for (position of activityMapData.positions; track position.time) {
+      <map-advanced-marker [position]="{lat: position.latitudeDegrees, lng: position.longitudeDegrees}"
+        [content]="pointMarkerContent(activityMapData.strokeColor)">
+      </map-advanced-marker>
       }
       }
       }

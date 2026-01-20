@@ -1,34 +1,35 @@
-import { ChangeDetectorRef, Directive, Inject } from '@angular/core';
+import { ChangeDetectorRef, Directive, inject, computed, Signal } from '@angular/core';
+import { DataPositionInterface, AppThemes } from '@sports-alliance/sports-lib';
 import { LoadingAbstractDirective } from '../loading/loading-abstract.directive';
-import { DataPositionInterface } from '@sports-alliance/sports-lib';
-import { MapThemes } from '@sports-alliance/sports-lib';
-// import LatLngBoundsLiteral = google.maps.LatLngBoundsLiteral;
 import { LoggerService } from '../../services/logger.service';
+import { AppThemeService } from '../../services/app.theme.service';
 
-declare function require(moduleName: string): any;
-
-const mapStyles = require('./map-styles.json');
-
-export interface LiteralBounds {
-  east: number;
-  west: number;
-  north: number;
-  south: number;
-}
 
 @Directive()
 export abstract class MapAbstractDirective extends LoadingAbstractDirective {
+
+  protected themeService = inject(AppThemeService);
+
+  /**
+   * Signal that tracks the current application theme.
+   */
+  public appTheme: Signal<AppThemes> = this.themeService.appTheme;
+
+  /**
+   * Computed signal that derives the map color scheme (LIGHT/DARK) from the app theme.
+   */
+  public mapColorScheme = computed(() => this.appTheme() === AppThemes.Dark ? 'DARK' : 'LIGHT');
 
   constructor(changeDetector: ChangeDetectorRef, protected logger: LoggerService) {
     super(changeDetector)
   }
 
-  getBounds(positions: DataPositionInterface[]): LiteralBounds {
+  getBounds(positions: DataPositionInterface[]): google.maps.LatLngBoundsLiteral {
     // Filter out potential 0,0 points which are often GPS noise/start-up errors
     const validPositions = positions.filter(p => p.latitudeDegrees !== 0 || p.longitudeDegrees !== 0);
 
     if (!validPositions.length) {
-      return <LiteralBounds>{
+      return <google.maps.LatLngBoundsLiteral>{
         east: 0,
         west: 0,
         north: 0,
@@ -50,7 +51,7 @@ export abstract class MapAbstractDirective extends LoadingAbstractDirective {
       return (acc.latitudeDegrees > latLongPair.latitudeDegrees) ? latLongPair : acc;
     });
 
-    const bounds = <LiteralBounds>{
+    const bounds = <google.maps.LatLngBoundsLiteral>{
       east: mostEast.longitudeDegrees,
       west: mostWest.longitudeDegrees,
       north: mostNorth.latitudeDegrees,
@@ -58,10 +59,5 @@ export abstract class MapAbstractDirective extends LoadingAbstractDirective {
     };
     this.logger.log('[MapAbstractDirective] getBounds result:', bounds, 'from', validPositions.length, 'valid points');
     return bounds;
-  }
-
-  getStyles(mapTheme: MapThemes) {
-    // If the theme is not found try to find the Dark theme or else return the default
-    return mapStyles[mapTheme] || mapStyles['Dark'] || [];
   }
 }

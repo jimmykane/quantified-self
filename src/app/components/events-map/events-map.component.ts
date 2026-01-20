@@ -8,7 +8,8 @@ import {
   OnChanges,
   SimpleChanges,
   ViewChild,
-  OnInit
+  OnInit,
+  signal,
 } from '@angular/core';
 import { GoogleMap, MapMarker } from '@angular/google-maps';
 import { EventInterface } from '@sports-alliance/sports-lib';
@@ -23,6 +24,7 @@ import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { DatePipe } from '@angular/common';
 import { User } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
+import { AppUserService } from '../../services/app.user.service';
 import { GoogleMapsLoaderService } from '../../services/google-maps-loader.service';
 
 import { take } from 'rxjs/operators';
@@ -42,25 +44,29 @@ import { environment } from '../../../environments/environment';
 export class EventsMapComponent extends MapAbstractDirective implements OnChanges, AfterViewInit, OnInit {
   @ViewChild(GoogleMap) googleMap: GoogleMap;
   @Input() events: EventInterface[];
-  @Input() theme: MapThemes;
   @Input() type: MapTypes;
   @Input() user: User;
   @Input() clusterMarkers: boolean;
 
   public latLngArray: google.maps.LatLng[] = [];
-  public markers: google.maps.Marker[] = [];
+  public markers: google.maps.marker.AdvancedMarkerElement[] = [];
   public selectedEvent: EventInterface;
   public selectedEventPositionsByActivity: { activity: ActivityInterface, color: string, positions: DataPositionInterface[] }[];
 
-  public mapOptions: google.maps.MapOptions = {
-    controlSize: 32,
-    disableDefaultUI: true,
-    backgroundColor: 'transparent'
-  };
-  public mapCenter: google.maps.LatLngLiteral = { lat: 0, lng: 0 };
-  public mapZoom = 3;
-  public mapTypeId: google.maps.MapTypeId = 'roadmap' as any as google.maps.MapTypeId;
-  public apiLoaded = false;
+  public mapCenter = signal<google.maps.LatLngLiteral>({ lat: 0, lng: 0 });
+  public mapZoom = signal(3);
+  public mapTypeId = signal<google.maps.MapTypeId>('roadmap' as any);
+  public apiLoaded = signal(false);
+
+  public get mapOptions(): google.maps.MapOptions {
+    return {
+      controlSize: 32,
+      disableDefaultUI: true,
+      backgroundColor: 'transparent',
+      mapId: environment.googleMapsMapId,
+      colorScheme: this.mapColorScheme() as any
+    };
+  }
 
   private nativeMap: google.maps.Map;
   private markerClusterer: MarkerClusterer;
@@ -70,19 +76,37 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     private changeDetectorRef: ChangeDetectorRef,
     private eventColorService: AppEventColorService,
     private eventService: AppEventService,
+    private userService: AppUserService,
     private mapsLoader: GoogleMapsLoaderService,
     protected logger: LoggerService) {
     super(changeDetectorRef, logger);
   }
 
-  ngOnInit(): void {
-    this.mapsLoader.importLibrary('maps').subscribe(async () => {
-      this.apiLoaded = true;
-      this.changeDetectorRef.markForCheck();
-      if (this.nativeMap) {
-        this.initMapData();
-      }
-    });
+  // Class property to hold the loaded class
+  private AdvancedMarkerElement: typeof google.maps.marker.AdvancedMarkerElement = null;
+
+  async changeMapType(mapType: google.maps.MapTypeId) {
+    if (!this.user) return;
+    this.mapTypeId.set(mapType);
+    this.user.settings.mapSettings.mapType = mapType as any;
+    await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
+  }
+
+  async ngOnInit(): Promise<void> {
+    const mapsLib = await this.mapsLoader.importLibrary('maps');
+    const markerLib = await this.mapsLoader.importLibrary('marker');
+
+    this.AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
+
+    if (this.user?.settings?.mapSettings?.mapType) {
+      this.mapTypeId.set(this.user.settings.mapSettings.mapType as any);
+    }
+
+    this.apiLoaded.set(true);
+    this.changeDetectorRef.markForCheck();
+    if (this.nativeMap) {
+      this.initMapData();
+    }
   }
 
   ngAfterViewInit() {
@@ -93,17 +117,20 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     this.zone.runOutsideAngular(() => {
       this.nativeMap = map;
 
-      // Apply theme styles
-      if (this.theme) {
-        map.setOptions({ styles: this.getStyles(this.theme) });
-      }
+      this.zone.runOutsideAngular(() => {
+        this.nativeMap = map;
 
-      // Set map type
-      if (this.type) {
-        this.mapTypeId = this.type as any as google.maps.MapTypeId;
-      }
+        // Set map type
+        if (this.type) {
+          this.mapTypeId.set(this.type as any as google.maps.MapTypeId);
+        }
 
-      if (this.apiLoaded) {
+        if (this.apiLoaded()) {
+          this.initMapData();
+        }
+      });
+
+      if (this.apiLoaded()) {
         this.initMapData();
       }
     });
@@ -111,7 +138,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (!this.nativeMap || !this.apiLoaded) return;
+    if (!this.nativeMap || !this.apiLoaded()) return;
 
     this.zone.runOutsideAngular(() => {
       this.initMapData();
@@ -125,14 +152,19 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     if (this.events?.length) {
       // Clear existing markers
       if (this.markers) {
-        this.markers.forEach(m => m.setMap(null));
+        this.markers.forEach(m => m.map = null);
       }
       if (this.markerClusterer) {
         this.markerClusterer.clearMarkers();
       }
 
       this.markers = this.getMarkersFromEvents(this.events);
-      this.markers.forEach(marker => marker.setMap(this.nativeMap));
+      // for AdvancedMarkerElement, setting map via constructor is enough, or set properties.
+      // But standard way is map. But we might use clusterer.
+      // If using clusterer, we add to clusterer. If not, we add to map.
+      if (!this.clusterMarkers) {
+        this.markers.forEach(marker => marker.map = this.nativeMap);
+      }
 
       if (this.clusterMarkers) {
         if (!this.markerClusterer) {
@@ -141,13 +173,21 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
             markers: this.markers,
             renderer: {
               render: ({ count, position }) => {
-                return new google.maps.Marker({
-                  label: { text: String(count), color: "white" },
+                const content = document.createElement('div');
+                content.style.background = '#4285F4'; // Google Blue
+                content.style.color = 'white';
+                content.style.padding = '8px';
+                content.style.borderRadius = '50%';
+                content.style.width = '30px';
+                content.style.height = '30px';
+                content.style.display = 'flex';
+                content.style.alignItems = 'center';
+                content.style.justifyContent = 'center';
+                content.textContent = String(count);
+
+                return new google.maps.marker.AdvancedMarkerElement({
                   position,
-                  icon: {
-                    url: '/assets/icons/heatmap/m1.png', // Fallback or logic to choose distinct icons
-                  },
-                  // adjust options as needed for match existing style
+                  content,
                   zIndex: Number(google.maps.Marker.MAX_ZINDEX) + count,
                 });
               }
@@ -193,24 +233,27 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     };
   }
 
-  private getMarkersFromEvents(events: EventInterface[]): google.maps.Marker[] {
-    return events.reduce((markersArray: google.maps.Marker[], event: EventInterface) => {
+  private getMarkersFromEvents(events: EventInterface[]): google.maps.marker.AdvancedMarkerElement[] {
+    return events.reduce((markersArray: google.maps.marker.AdvancedMarkerElement[], event: EventInterface) => {
       const eventStartPositionStat = <DataStartPosition>event.getStat(DataStartPosition.type);
       if (eventStartPositionStat) {
         const location = eventStartPositionStat.getValue();
-        const marker = new google.maps.Marker({
+
+        // Create SVG content
+        const svgContainer = document.createElement('div');
+        const color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(
+          event.getActivityTypesAsArray().length > 1 ? ActivityTypes.Multisport : ActivityTypes[event.getActivityTypesAsArray()[0]]
+        );
+        svgContainer.innerHTML = `
+          <svg width="20" height="20" viewBox="0 0 20 20">
+             <circle cx="10" cy="10" r="8" fill="${color}" stroke="black" stroke-width="1" />
+          </svg>
+        `;
+
+        const marker = new this.AdvancedMarkerElement({
           position: { lat: location.latitudeDegrees, lng: location.longitudeDegrees },
           title: `${event.getActivityTypesAsString()} for ${event.getDuration().getDisplayValue(false, false)} and ${event.getDistance().getDisplayValue()}`,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            fillOpacity: 1,
-            fillColor: this.eventColorService.getColorForActivityTypeByActivityTypeGroup(
-              event.getActivityTypesAsArray().length > 1 ? ActivityTypes.Multisport : ActivityTypes[event.getActivityTypesAsArray()[0]]
-            ),
-            strokeWeight: 1,
-            strokeColor: 'black',
-            scale: 10,
-          }
+          content: svgContainer
         });
         markersArray.push(marker);
 

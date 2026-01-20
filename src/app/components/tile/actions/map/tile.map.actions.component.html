@@ -54,18 +54,6 @@
       </mat-form-field>
     </section>
 
-    <section mat-menu-item>
-      <mat-form-field>
-        <mat-label>Map Theme</mat-label>
-        <mat-select placeholder="Map theme" [value]="mapTheme" (selectionChange)="changeMapTheme($event)">
-          @for (mapTheme of mapThemes | keyvalue; track mapTheme) {
-          <mat-option [value]="mapTheme.value">
-            {{mapTheme.key}}
-          </mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
-    </section>
 
     <section mat-menu-item>
       <mat-form-field>

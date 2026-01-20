@@ -193,7 +193,6 @@ describe('EventCardComponent', () => {
     it('should get theme signals from theme service', () => {
         expect(component.chartTheme()).toBe(ChartThemes.Material);
         expect(component.appTheme()).toBe(AppThemes.Normal);
-        expect(component.mapTheme()).toBe(MapThemes.Normal);
     });
 
     describe('computed flags with activities that have data', () => {

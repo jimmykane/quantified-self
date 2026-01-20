@@ -12,13 +12,11 @@ import { TileMapSettingsInterface } from '@sports-alliance/sports-lib';
   standalone: false
 })
 export class TileMapActionsComponent extends TileActionsAbstractDirective implements OnInit, OnChanges {
-  @Input() mapType: MapTypes;
-  @Input() mapTheme: MapThemes;
-  @Input() clusterMarkers: boolean;
+  @Input() mapType!: MapTypes;
+  @Input() clusterMarkers!: boolean;
 
   public mapTypes = MapTypes;
-  public mapThemes = MapThemes;
-  public iconColor: string;
+  public iconColor: string = '';
 
   constructor(
     userService: AppUserService) {
@@ -33,38 +31,26 @@ export class TileMapActionsComponent extends TileActionsAbstractDirective implem
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    switch (this.mapTheme) {
-      case MapThemes.Desert:
-      case MapThemes.Dark:
-      case MapThemes.Black:
-      case MapThemes.MidnightCommander:
-      case MapThemes.Night:
-      case MapThemes.DarkElectric:
-        this.iconColor = '#FFFFFF';
-        break;
-      default:
-        this.iconColor = '#000000'
-        break;
-    }
   }
 
-  async changeMapType(event) {
+  async changeMapType(event: any) {
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeMapType' });
-    (<TileMapSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).mapType = event.value;
-    return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
-  }
-
-  async changeMapTheme(event) {
-    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeMapTheme' });
-    (<TileMapSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).mapTheme = event.value;
-    return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
+    const tile = <TileMapSettingsInterface>this.user?.settings.dashboardSettings.tiles.find(tile => tile.order === this.order);
+    if (tile) {
+      tile.mapType = event.value;
+    }
+    return this.userService.updateUserProperties(this.user!, { settings: this.user!.settings })
   }
 
 
-  async switchClusterMarkers(event) {
+
+  async switchClusterMarkers(event: any) {
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'switchClusterMarkers' });
-    (<TileMapSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).clusterMarkers = this.clusterMarkers;
-    return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
+    const tile = <TileMapSettingsInterface>this.user?.settings.dashboardSettings.tiles.find(tile => tile.order === this.order);
+    if (tile) {
+      tile.clusterMarkers = this.clusterMarkers;
+    }
+    return this.userService.updateUserProperties(this.user!, { settings: this.user!.settings })
   }
 
 }

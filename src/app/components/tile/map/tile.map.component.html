@@ -1,11 +1,11 @@
 <section>
   @if (showActions) {
   <app-tile-map-actions class="actions" [user]="user" [order]="order" [size]="size" [type]="type" [mapType]="mapType"
-    [mapTheme]="mapTheme" [clusterMarkers]="clusterMarkers">
+    [clusterMarkers]="clusterMarkers">
   </app-tile-map-actions>
   }
   @if (events) {
-  <app-events-map [user]="user" [events]="events" [isLoading]="isLoading" [theme]="mapTheme" [type]="mapType"
+  <app-events-map [user]="user" [events]="events" [isLoading]="isLoading" [type]="mapType"
     [clusterMarkers]="clusterMarkers">
   </app-events-map>
   }

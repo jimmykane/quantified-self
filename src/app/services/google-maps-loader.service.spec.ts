@@ -31,20 +31,15 @@ describe('GoogleMapsLoaderService', () => {
 
     it('should call importLibrary when importLibrary is called', async () => {
         const libraryName = 'maps';
-        service.importLibrary(libraryName).subscribe((lib) => {
-            expect(lib).toBeDefined();
-        });
+        const lib = await service.importLibrary(libraryName);
+        expect(lib).toBeDefined();
 
         expect(importLibrary).toHaveBeenCalledWith(libraryName);
     });
 
     it('should run outside angular zone when mapping library', async () => {
-        await new Promise<void>((resolve) => {
-            service.importLibrary('core').subscribe(() => {
-                expect(mockNgZone.runOutsideAngular).toHaveBeenCalled();
-                resolve();
-            });
-        });
+        await service.importLibrary('core');
+        expect(mockNgZone.runOutsideAngular).toHaveBeenCalled();
     });
 
     it('should allow setting app check provider via settings instance', async () => {
