@@ -131,7 +131,9 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
 
       // Connect App Check to Google Maps Loader
       mapsLoader.setAppCheckProvider(() => {
+        console.log('[GoogleMaps] Fetching App Check token...');
         return getToken(appCheck).then((tokenResult) => {
+          console.log('[GoogleMaps] App Check token received.');
           return { token: tokenResult.token };
         });
       });

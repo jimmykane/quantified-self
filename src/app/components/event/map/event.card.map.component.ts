@@ -104,9 +104,8 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     if (!this.targetUserID || !this.event) {
       throw new Error('Component needs events and userID');
     }
-    // Load 'maps' and 'visualization' libraries (visualization was in the previous scriptSrc)
-    this.mapsLoader.importLibrary('maps').subscribe();
-    this.mapsLoader.importLibrary('visualization').subscribe(async () => {
+    // Load 'maps' library
+    this.mapsLoader.importLibrary('maps').subscribe(async () => {
       this.apiLoaded = true;
       this.mapOptions = { ...this.mapOptions, styles: this.getStyles(this.theme) };
       this.changeDetectorRef.markForCheck();

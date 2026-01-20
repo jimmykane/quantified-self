@@ -65,7 +65,6 @@ describe('EventsMapComponent', () => {
                     useValue: {
                         importLibrary: vi.fn().mockReturnValue(of({
                             Map: vi.fn(),
-                            visualization: { HeatmapLayer: vi.fn() }
                         }))
                     }
                 },
@@ -104,12 +103,6 @@ describe('EventsMapComponent', () => {
                     setTitle: vi.fn()
                 })),
                 SymbolPath: { CIRCLE: 'CIRCLE' },
-                visualization: {
-                    HeatmapLayer: class {
-                        setData = vi.fn();
-                        setMap = vi.fn();
-                    }
-                },
                 LatLngBounds: vi.fn().mockImplementation(() => ({
                     extend: vi.fn()
                 })),

@@ -45,7 +45,6 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   @Input() theme: MapThemes;
   @Input() type: MapTypes;
   @Input() user: User;
-  @Input() showHeatMap: boolean;
   @Input() clusterMarkers: boolean;
 
   public latLngArray: google.maps.LatLng[] = [];
@@ -64,7 +63,6 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   public apiLoaded = false;
 
   private nativeMap: google.maps.Map;
-  private heatMap: google.maps.visualization.HeatmapLayer;
   private markerClusterer: MarkerClusterer;
 
   constructor(
@@ -78,8 +76,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   }
 
   ngOnInit(): void {
-    this.mapsLoader.importLibrary('maps').subscribe();
-    this.mapsLoader.importLibrary('visualization').subscribe(async () => {
+    this.mapsLoader.importLibrary('maps').subscribe(async () => {
       this.apiLoaded = true;
       this.changeDetectorRef.markForCheck();
       if (this.nativeMap) {
@@ -123,20 +120,6 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
 
   private initMapData() {
     if (!this.nativeMap) return;
-
-    // Update heatmap data
-    if (this.showHeatMap && this.events?.length) {
-      this.latLngArray = this.getLatLngArray(this.events);
-      if (!this.heatMap) {
-        this.heatMap = new google.maps.visualization.HeatmapLayer({
-          map: this.nativeMap,
-          data: this.latLngArray,
-          radius: 50,
-        });
-      } else {
-        this.heatMap.setData(this.latLngArray);
-      }
-    }
 
     // Create and add markers
     if (this.events?.length) {
@@ -278,17 +261,6 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
         });
       }
       return markersArray;
-    }, []);
-  }
-
-  private getLatLngArray(events: EventInterface[]): google.maps.LatLng[] {
-    return events.reduce((latLngArray: google.maps.LatLng[], event: EventInterface) => {
-      const eventStartPositionStat = <DataStartPosition>event.getStat(DataStartPosition.type);
-      if (eventStartPositionStat) {
-        const location = eventStartPositionStat.getValue();
-        latLngArray.push(new google.maps.LatLng(location.latitudeDegrees, location.longitudeDegrees));
-      }
-      return latLngArray;
     }, []);
   }
 }

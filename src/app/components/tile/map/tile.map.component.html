@@ -1,25 +1,12 @@
 <section>
   @if (showActions) {
-    <app-tile-map-actions class="actions"
-      [user]="user"
-      [order]="order"
-      [size]="size"
-      [type]="type"
-      [mapType]="mapType"
-      [mapTheme]="mapTheme"
-      [showHeatMap]="showHeatMap"
-      [clusterMarkers]="clusterMarkers">
-    </app-tile-map-actions>
+  <app-tile-map-actions class="actions" [user]="user" [order]="order" [size]="size" [type]="type" [mapType]="mapType"
+    [mapTheme]="mapTheme" [clusterMarkers]="clusterMarkers">
+  </app-tile-map-actions>
   }
   @if (events) {
-    <app-events-map
-      [user]="user"
-      [events]="events"
-      [isLoading]="isLoading"
-      [theme]="mapTheme"
-      [type]="mapType"
-      [showHeatMap]="showHeatMap"
-      [clusterMarkers]="clusterMarkers">
-    </app-events-map>
+  <app-events-map [user]="user" [events]="events" [isLoading]="isLoading" [theme]="mapTheme" [type]="mapType"
+    [clusterMarkers]="clusterMarkers">
+  </app-events-map>
   }
 </section>

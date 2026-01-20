@@ -3,144 +3,128 @@
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #menu="matMenu">
-  @if (user.settings.dashboardSettings.tiles.length <= 11) {
-    <section class="first">
-      <button mat-menu-item class="big" (click)="addNewTile($event)">
-        <mat-icon>add</mat-icon>
-        <span>Add new</span>
-        <mat-icon class="toolTip" matTooltip="This will copy the current tile and create a new one">info</mat-icon>
-      </button>
+  @if (user.settings.dashboardSettings.tiles.length <= 11) { <section class="first">
+    <button mat-menu-item class="big" (click)="addNewTile($event)">
+      <mat-icon>add</mat-icon>
+      <span>Add new</span>
+      <mat-icon class="toolTip" matTooltip="This will copy the current tile and create a new one">info</mat-icon>
+    </button>
     </section>
-  }
-  <section mat-menu-item>
-    <mat-form-field>
-      <mat-label>Type {{type}}</mat-label>
-      <mat-select placeholder="Type of tile" [value]="type" (selectionChange)="changeTileType($event)">
-        <mat-select-trigger>
-          @if (type === tileTypes.Map) {
+    }
+    <section mat-menu-item>
+      <mat-form-field>
+        <mat-label>Type {{type}}</mat-label>
+        <mat-select placeholder="Type of tile" [value]="type" (selectionChange)="changeTileType($event)">
+          <mat-select-trigger>
+            @if (type === tileTypes.Map) {
             <span>
               <mat-icon>map</mat-icon>&nbsp;{{tileTypes.Map}}
             </span>
-          }
-          @if (type === tileTypes.Chart) {
+            }
+            @if (type === tileTypes.Chart) {
             <span>
               <mat-icon>show_chart</mat-icon>&nbsp;{{tileTypes.Chart}}
             </span>
-          }
-        </mat-select-trigger>
-        @for (tileType of tileTypes | keyvalue; track tileType) {
+            }
+          </mat-select-trigger>
+          @for (tileType of tileTypes | keyvalue; track tileType) {
           <mat-option [value]="tileType.value">
             @if (tileType.key === tileTypes.Map) {
-              <mat-icon>map</mat-icon>
+            <mat-icon>map</mat-icon>
             }
             @if (tileType.key === tileTypes.Chart) {
-              <mat-icon>show_chart</mat-icon>
+            <mat-icon>show_chart</mat-icon>
             }
             {{tileType.value}}
           </mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-  </section>
-  <section mat-menu-item>
-    <mat-form-field>
-      <mat-label>Map Type</mat-label>
-      <mat-select placeholder="Map type" [value]="mapType" (selectionChange)="changeMapType($event)">
-        @for (mapType of mapTypes | keyvalue; track mapType) {
+          }
+        </mat-select>
+      </mat-form-field>
+    </section>
+    <section mat-menu-item>
+      <mat-form-field>
+        <mat-label>Map Type</mat-label>
+        <mat-select placeholder="Map type" [value]="mapType" (selectionChange)="changeMapType($event)">
+          @for (mapType of mapTypes | keyvalue; track mapType) {
           <mat-option [value]="mapType.value">
             {{mapType.key}}
           </mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-  </section>
+          }
+        </mat-select>
+      </mat-form-field>
+    </section>
 
-  <section mat-menu-item>
-    <mat-form-field>
-      <mat-label>Map Theme</mat-label>
-      <mat-select placeholder="Map theme" [value]="mapTheme" (selectionChange)="changeMapTheme($event)">
-        @for (mapTheme of mapThemes | keyvalue; track mapTheme) {
+    <section mat-menu-item>
+      <mat-form-field>
+        <mat-label>Map Theme</mat-label>
+        <mat-select placeholder="Map theme" [value]="mapTheme" (selectionChange)="changeMapTheme($event)">
+          @for (mapTheme of mapThemes | keyvalue; track mapTheme) {
           <mat-option [value]="mapTheme.value">
             {{mapTheme.key}}
           </mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-  </section>
+          }
+        </mat-select>
+      </mat-form-field>
+    </section>
 
-  <section mat-menu-item>
-    <mat-form-field>
-      <mat-label>Column Size</mat-label>
-      <mat-select placeholder="Size" [value]="size.columns"
-        (selectionChange)="changeTileColumnSize($event)">
-        <section>
-          <mat-option [value]="1">
-            Single
-          </mat-option>
-          <mat-option [value]="2">
-            Double
-          </mat-option>
-          <mat-option [value]="3">
-            Triple
-          </mat-option>
-          <mat-option [value]="4">
-            Quad
-          </mat-option>
-        </section>
-      </mat-select>
-    </mat-form-field>
-  </section>
-  <section mat-menu-item>
-    <mat-form-field>
-      <mat-label>Row Size</mat-label>
-      <mat-select placeholder="Size" [value]="size.rows"
-        (selectionChange)="changeTileRowSize($event)">
-        <section>
-          <mat-option [value]="1">
-            Single
-          </mat-option>
-          <mat-option [value]="2">
-            Double
-          </mat-option>
-          <mat-option [value]="3">
-            Triple
-          </mat-option>
-          <mat-option [value]="4">
-            Quad
-          </mat-option>
-        </section>
-      </mat-select>
-    </mat-form-field>
-  </section>
-
-  <section mat-menu-item>
-    <mat-slide-toggle
-      [color]="'accent'"
-      (change)="switchHeatMap($event)"
-      [(ngModel)]="showHeatMap">
-      <span matTooltip="If you want a heatmap overlay">
-        HeatMap
-      </span>
-    </mat-slide-toggle>
-  </section>
-
-  <section mat-menu-item>
-    <mat-slide-toggle
-      [color]="'accent'"
-      (change)="switchClusterMarkers($event)"
-      [(ngModel)]="clusterMarkers">
-      <span matTooltip="If you want clusters of markers">
-        Clusters
-      </span>
-    </mat-slide-toggle>
-  </section>
+    <section mat-menu-item>
+      <mat-form-field>
+        <mat-label>Column Size</mat-label>
+        <mat-select placeholder="Size" [value]="size.columns" (selectionChange)="changeTileColumnSize($event)">
+          <section>
+            <mat-option [value]="1">
+              Single
+            </mat-option>
+            <mat-option [value]="2">
+              Double
+            </mat-option>
+            <mat-option [value]="3">
+              Triple
+            </mat-option>
+            <mat-option [value]="4">
+              Quad
+            </mat-option>
+          </section>
+        </mat-select>
+      </mat-form-field>
+    </section>
+    <section mat-menu-item>
+      <mat-form-field>
+        <mat-label>Row Size</mat-label>
+        <mat-select placeholder="Size" [value]="size.rows" (selectionChange)="changeTileRowSize($event)">
+          <section>
+            <mat-option [value]="1">
+              Single
+            </mat-option>
+            <mat-option [value]="2">
+              Double
+            </mat-option>
+            <mat-option [value]="3">
+              Triple
+            </mat-option>
+            <mat-option [value]="4">
+              Quad
+            </mat-option>
+          </section>
+        </mat-select>
+      </mat-form-field>
+    </section>
 
 
-  @if (user.settings.dashboardSettings.tiles.length > 1) {
+    <section mat-menu-item>
+      <mat-slide-toggle [color]="'accent'" (change)="switchClusterMarkers($event)" [(ngModel)]="clusterMarkers">
+        <span matTooltip="If you want clusters of markers">
+          Clusters
+        </span>
+      </mat-slide-toggle>
+    </section>
+
+
+    @if (user.settings.dashboardSettings.tiles.length > 1) {
     <section>
       <button class="big" mat-menu-item (click)="deleteTile($event)">
         <mat-icon>delete_outline</mat-icon>
       </button>
     </section>
-  }
+    }
 </mat-menu>

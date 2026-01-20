@@ -14,7 +14,6 @@ import { TileMapSettingsInterface } from '@sports-alliance/sports-lib';
 export class TileMapActionsComponent extends TileActionsAbstractDirective implements OnInit, OnChanges {
   @Input() mapType: MapTypes;
   @Input() mapTheme: MapThemes;
-  @Input() showHeatMap: boolean;
   @Input() clusterMarkers: boolean;
 
   public mapTypes = MapTypes;
@@ -61,11 +60,6 @@ export class TileMapActionsComponent extends TileActionsAbstractDirective implem
     return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
   }
 
-  async switchHeatMap(event) {
-    this.analyticsService.logEvent('dashboard_tile_action', { method: 'switchHeatmap' });
-    (<TileMapSettingsInterface>this.user.settings.dashboardSettings.tiles.find(tile => tile.order === this.order)).showHeatMap = this.showHeatMap;
-    return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
-  }
 
   async switchClusterMarkers(event) {
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'switchClusterMarkers' });
