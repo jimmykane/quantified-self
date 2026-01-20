@@ -148,6 +148,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   private rangeLabelsContainer: am4core.Container | undefined;
   private clearSelectionButton: am4core.Button | undefined;
+  private zoomOrSelectButton: am4core.Button | undefined;
 
   constructor(changeDetector: ChangeDetectorRef,
     protected zone: NgZone,
@@ -1097,7 +1098,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
         // Re-enable cursor behavior after zoom is stable
         if (this.chart.cursor) {
-          this.chart.cursor.behavior = this.chartCursorBehaviour;
+          this.setCursorBehavior(this.chartCursorBehaviour);
           // Re-enable snapping after zoom is stable
           if (this.xAxisType === XAxisTypes.Distance) {
             this.chart.cursor.snapToSeries = this.chart.series.values;
@@ -1417,28 +1418,48 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     return label;
   }
 
+  /**
+   * Sets the cursor behavior and syncs the zoom/select button label.
+   * Use this method instead of directly setting chart.cursor.behavior
+   * to ensure the button label stays in sync.
+   */
+  private setCursorBehavior(behavior: ChartCursorBehaviours): void {
+    if (!this.chart?.cursor) {
+      return;
+    }
+    this.chart.cursor.behavior = behavior;
+    this.updateZoomOrSelectButtonLabel();
+  }
+
+  /**
+   * Updates the zoom/select button label to reflect the current cursor behavior.
+   */
+  private updateZoomOrSelectButtonLabel(): void {
+    if (!this.zoomOrSelectButton || !this.chart?.cursor) {
+      return;
+    }
+    this.zoomOrSelectButton.label.text = this.chart.cursor.behavior === ChartCursorBehaviours.SelectX ? 'Selecting' : 'Zooming';
+  }
+
   private addZoomOrSelectButton(chart: am4charts.XYChart): am4core.Button {
     const button = chart.plotContainer.createChild(this.core.Button);
 
     button.id = 'zoomOrSelectButton';
-    button.label.text = chart.cursor.behavior === 'selectX' ? ' Selecting' : ' Zooming';
+    button.label.text = chart.cursor.behavior === ChartCursorBehaviours.SelectX ? 'Selecting' : 'Zooming';
     button.padding(12, 12, 12, 12);
-    // button.width = 20;
     button.fontSize = '1.1em';
     button.align = 'right';
-    // button.y = -2;
-    // button.dx = -68;
     button.opacity = 0.8;
-    // button.icon = new am4core.Sprite();
-    // button.icon.path = chart.cursor.behavior === ChartCursorBehaviours.SelectX ?
-    //   'm3 5h2v-2c-1.1 0-2 .9-2 2zm0 8h2v-2h-2zm4 8h2v-2h-2zm-4-12h2v-2h-2zm10-6h-2v2h2zm6 0v2h2c0-1.1-.9-2-2-2zm-14 18v-2h-2c0 1.1.9 2 2 2zm-2-4h2v-2h-2zm6-14h-2v2h2zm2 18h2v-2h-2zm8-8h2v-2h-2zm0 8c1.1 0 2-.9 2-2h-2zm0-12h2v-2h-2zm0 8h2v-2h-2zm-4 4h2v-2h-2zm0-16h2v-2h-2zm-8 12h10v-10h-10zm2-8h6v6h-6z"'
-    //   : 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z';
-    // button.icon.marginRight = 10;
     button.zIndex = 20;
-    button.events.on('hit', (ev) => {
-      chart.cursor.behavior = chart.cursor.behavior === ChartCursorBehaviours.SelectX ? ChartCursorBehaviours.ZoomX : ChartCursorBehaviours.SelectX;
-      ev.target.label.text = chart.cursor.behavior === ChartCursorBehaviours.SelectX ? 'Selecting' : 'Zooming';
+    button.events.on('hit', () => {
+      const newBehavior = chart.cursor.behavior === ChartCursorBehaviours.SelectX
+        ? ChartCursorBehaviours.ZoomX
+        : ChartCursorBehaviours.SelectX;
+      this.setCursorBehavior(newBehavior);
     });
+
+    // Store reference so we can update the label when cursor behavior changes
+    this.zoomOrSelectButton = button;
     return button;
   }
 
