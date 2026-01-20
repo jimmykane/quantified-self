@@ -75,6 +75,7 @@
     flex-direction: column;
     position: relative;
     overflow: hidden;
+    margin: 1.5rem 0 0 1.5rem;
 
     // Animated gradient background
     &::before {
@@ -91,7 +92,7 @@
         background-size: 200% 200%;
         animation: gradientShift 8s ease-in-out infinite;
         z-index: -1;
-        border-radius: 0 24px 24px 0;
+        border-radius: 24px;
     }
 }
 
@@ -283,8 +284,8 @@
 
 /* Last card spans full width */
 .feature-card.full-width {
-    width: 100%;
-    margin: 0 1rem;
+    width: calc(100% - 4rem);
+    margin: 0 2rem 1.5rem 2rem;
     grid-column: span 2;
     flex-direction: row;
     align-items: center;
