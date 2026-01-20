@@ -80,9 +80,11 @@ describe('ServicesGarminComponent', () => {
             expect(card.classList).not.toContain('coming-soon');
         });
 
-        it('should be unlocked/available if user has pro access', () => {
+        it('should be unlocked/available if user has pro access AND is connected', () => {
             component.hasProAccess = true;
-            component.isAdmin = false; // Should work for non-admins to
+            component.isAdmin = false;
+            // Mock connected state
+            component.serviceTokens = [{ accessToken: 'token', permissions: [] } as any];
             fixture.detectChanges();
 
             const card = fixture.nativeElement.querySelectorAll('.feature-card')[1];
@@ -91,14 +93,21 @@ describe('ServicesGarminComponent', () => {
 
             expect(card.classList).not.toContain('locked');
             expect(lockOverlay).toBeFalsy();
-            // Verify the form is actually rendered
-            // We use querySelector on nativeElement because ComponentFixture might not debugElement.query inside standard HTML elements easily in all setups
-            // but let's check expectations. The HTML has <app-history-import-form> inside @if (hasProAccess)
-            // Ideally we'd assert property binding or existence.
-            // expect(card.textContent).toContain('Import your full activity history'); 
             expect(historyForm).toBeTruthy();
-            // Actually the description *ngIf="!hasProAccess" is hidden.
-            // checking lockOverlay is falsy is the main invers of the first test.
+        });
+
+        it('should show connect message if user has pro access but is NOT connected', () => {
+            component.hasProAccess = true;
+            component.serviceTokens = []; // Not connected
+            fixture.detectChanges();
+
+            const card = fixture.nativeElement.querySelectorAll('.feature-card')[1];
+            const historyForm = card.querySelector('app-history-import-form');
+            // We look for the text content since we don't have a specific class on the new div
+            const cardContent = card.textContent;
+
+            expect(historyForm).toBeFalsy();
+            expect(cardContent).toContain('Connect Account First');
         });
     });
 
