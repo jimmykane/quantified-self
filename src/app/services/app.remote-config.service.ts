@@ -5,7 +5,8 @@ import { AppWindowService } from './app.window.service';
 import { AppUserService } from './app.user.service';
 import { environment } from '../../environments/environment';
 import { LoggerService } from './logger.service';
-import { RemoteConfig, fetchAndActivate, getString } from '@angular/fire/remote-config';
+import { RemoteConfig } from '@angular/fire/remote-config';
+import { fetchAndActivate, getString } from 'firebase/remote-config';
 
 
 /**
