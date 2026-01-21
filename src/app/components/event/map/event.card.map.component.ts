@@ -73,6 +73,9 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       zoomControl: true,
       streetViewControl: true,
       mapTypeControl: true,
+      mapTypeControlOptions: {
+        mapTypeIds: ['roadmap', 'hybrid', 'terrain']
+      },
       mapId: environment.googleMapsMapId,
       colorScheme: this.mapColorScheme()
     };
