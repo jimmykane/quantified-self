@@ -557,8 +557,9 @@ interface SetMaintenanceModeRequest {
 }
 
 /**
- * Sets the maintenance mode status using Firebase Remote Config.
+ * Sets the maintenance mode status using Firebase Remote Config Parameter Groups.
  * Remote Config is the single source of truth for maintenance state.
+ * Each environment (prod, beta, dev) has its own parameters within the 'maintenance' group.
  */
 export const setMaintenanceMode = onAdminCall<SetMaintenanceModeRequest, any>({
     region: FUNCTIONS_MANIFEST.setMaintenanceMode.region,
@@ -566,38 +567,51 @@ export const setMaintenanceMode = onAdminCall<SetMaintenanceModeRequest, any>({
 }, async (request) => {
     try {
         const data = request.data;
-        const env = data.env || 'prod'; // Default to prod for safety/legacy
+        const env = data.env || 'prod';
         const msg = data.message || "";
 
-        // Update Firebase Remote Config (single source of truth)
         const rc = admin.remoteConfig();
         const template = await rc.getTemplate();
 
-        template.parameters = template.parameters || {};
+        // Initialize parameterGroups if not exists
+        template.parameterGroups = template.parameterGroups || {};
 
-        const configKey = 'maintenance_config';
-        let currentConfig: any = {};
-
-        const defaultConfigValue = template.parameters[configKey]?.defaultValue as any;
-        if (defaultConfigValue?.value) {
-            try {
-                currentConfig = JSON.parse(defaultConfigValue.value);
-            } catch (e) {
-                logger.warn('Failed to parse existing maintenance_config, starting fresh.', e);
-            }
+        // Create or get the 'maintenance' parameter group
+        const groupKey = 'maintenance';
+        if (!template.parameterGroups[groupKey]) {
+            template.parameterGroups[groupKey] = {
+                description: 'Maintenance mode settings for each environment',
+                parameters: {}
+            };
         }
 
-        // Update the specific environment in the JSON with metadata
-        currentConfig[env] = {
-            enabled: data.enabled,
-            message: msg,
-            updatedAt: { _seconds: Math.floor(Date.now() / 1000), _nanoseconds: 0 },
-            updatedBy: request.auth!.uid
+        const group = template.parameterGroups[groupKey];
+
+        // Set the enabled parameter for this environment
+        group.parameters[`${env}_enabled`] = {
+            defaultValue: { value: String(data.enabled) },
+            description: `Maintenance mode enabled for ${env}`,
+            valueType: 'BOOLEAN' as any
         };
 
-        template.parameters[configKey] = {
-            defaultValue: { value: JSON.stringify(currentConfig) },
-            valueType: 'JSON' as any
+        // Set the message parameter for this environment
+        group.parameters[`${env}_message`] = {
+            defaultValue: { value: msg },
+            description: `Maintenance message for ${env}`,
+            valueType: 'STRING' as any
+        };
+
+        // Set metadata parameters
+        group.parameters[`${env}_updatedAt`] = {
+            defaultValue: { value: String(Math.floor(Date.now() / 1000)) },
+            description: `Last update timestamp for ${env}`,
+            valueType: 'NUMBER' as any
+        };
+
+        group.parameters[`${env}_updatedBy`] = {
+            defaultValue: { value: request.auth!.uid },
+            description: `Last updated by for ${env}`,
+            valueType: 'STRING' as any
         };
 
         // Validate and publish
@@ -618,10 +632,8 @@ export const setMaintenanceMode = onAdminCall<SetMaintenanceModeRequest, any>({
         throw new HttpsError('internal', errorMessage);
     }
 });
-
-
 /**
- * Gets the current maintenance mode status from Firestore.
+ * Gets the current maintenance mode status from Remote Config Parameter Groups.
  */
 export const getMaintenanceStatus = onAdminCall<void, any>({
     region: FUNCTIONS_MANIFEST.getMaintenanceStatus.region,
@@ -629,45 +641,48 @@ export const getMaintenanceStatus = onAdminCall<void, any>({
 }, async () => {
     try {
         const rc = admin.remoteConfig();
-
-        // 1. Fetch Remote Config JSON (Strict source of truth)
         const template = await rc.getTemplate();
 
-        interface MaintenanceConfigEntry {
-            enabled: boolean;
-            message?: string;
-            updatedAt?: { _seconds: number; _nanoseconds: number };
-            updatedBy?: string;
-        }
-
-        interface MaintenanceConfig {
-            [key: string]: MaintenanceConfigEntry | undefined;
-            default?: MaintenanceConfigEntry;
-        }
-
-        let remoteConfigJson: MaintenanceConfig = {};
-        const configKey = 'maintenance_config';
-        const parameter = template.parameters[configKey];
-        const defaultConfigValue = parameter?.defaultValue;
-
-        if (defaultConfigValue && 'value' in defaultConfigValue) {
-            try {
-                remoteConfigJson = JSON.parse(defaultConfigValue.value);
-            } catch (e) {
-                logger.warn('Failed to parse maintenance_config JSON in getMaintenanceStatus', e);
-            }
-        }
+        // Read from the 'maintenance' parameter group
+        const groupKey = 'maintenance';
+        const group = template.parameterGroups?.[groupKey];
+        const params = group?.parameters || {};
 
         const getStatusData = (env: string) => {
-            const config = remoteConfigJson[env] || remoteConfigJson['default'];
+            const enabledParam = params[`${env}_enabled`];
+            const messageParam = params[`${env}_message`];
+            const updatedAtParam = params[`${env}_updatedAt`];
+            const updatedByParam = params[`${env}_updatedBy`];
 
-            return {
-                enabled: config?.enabled ?? false,
-                message: config?.message || "",
-                // Metadata is now only returned if it exists in the JSON itself
-                updatedAt: config?.updatedAt || null,
-                updatedBy: config?.updatedBy || null
-            };
+            // Get enabled value (supports both 'true' string and boolean-like values)
+            let enabled = false;
+            if (enabledParam?.defaultValue && 'value' in enabledParam.defaultValue) {
+                const val = enabledParam.defaultValue.value;
+                enabled = val === 'true';
+            }
+
+            // Get message
+            let message = "";
+            if (messageParam?.defaultValue && 'value' in messageParam.defaultValue) {
+                message = messageParam.defaultValue.value || "";
+            }
+
+            // Get updatedAt (stored as seconds timestamp string)
+            let updatedAt = null;
+            if (updatedAtParam?.defaultValue && 'value' in updatedAtParam.defaultValue) {
+                const seconds = parseInt(updatedAtParam.defaultValue.value, 10);
+                if (!isNaN(seconds)) {
+                    updatedAt = { _seconds: seconds, _nanoseconds: 0 };
+                }
+            }
+
+            // Get updatedBy
+            let updatedBy = null;
+            if (updatedByParam?.defaultValue && 'value' in updatedByParam.defaultValue) {
+                updatedBy = updatedByParam.defaultValue.value || null;
+            }
+
+            return { enabled, message, updatedAt, updatedBy };
         };
 
         return {
@@ -681,6 +696,7 @@ export const getMaintenanceStatus = onAdminCall<void, any>({
         throw new HttpsError('internal', errorMessage);
     }
 });
+
 
 /**
  * Impersonates a user by generating a custom token.

@@ -796,17 +796,18 @@ describe('getMaintenanceStatus Cloud Function', () => {
             app: { appId: 'mock-app-id' }
         };
 
-        // Reset Remote Config mock
+        // Reset Remote Config mock with parameterGroups structure
         mockRemoteConfig.mockReturnValue({
             getTemplate: vi.fn().mockResolvedValue({
-                parameters: {
-                    maintenance_config: {
-                        defaultValue: {
-                            value: JSON.stringify({
-                                prod: { enabled: true, message: 'RC Prod Msg' },
-                                beta: { enabled: false, message: 'RC Beta Msg' },
-                                default: { enabled: false, message: 'RC Default Msg' }
-                            })
+                parameterGroups: {
+                    maintenance: {
+                        parameters: {
+                            prod_enabled: { defaultValue: { value: 'true' } },
+                            prod_message: { defaultValue: { value: 'RC Prod Msg' } },
+                            beta_enabled: { defaultValue: { value: 'false' } },
+                            beta_message: { defaultValue: { value: 'RC Beta Msg' } },
+                            dev_enabled: { defaultValue: { value: 'false' } },
+                            dev_message: { defaultValue: { value: 'RC Dev Msg' } }
                         }
                     }
                 }
@@ -814,22 +815,21 @@ describe('getMaintenanceStatus Cloud Function', () => {
         });
     });
 
-    it('should return status for all environments from Remote Config JSON', async () => {
+    it('should return status for all environments from Remote Config parameterGroups', async () => {
         const result: any = await (getMaintenanceStatus as any)(request);
 
         expect(result.prod.enabled).toBe(true);
         expect(result.prod.message).toBe('RC Prod Msg');
         expect(result.beta.enabled).toBe(false);
         expect(result.beta.message).toBe('RC Beta Msg');
-        // Dev should fallback to default in the mock set in beforeEach
         expect(result.dev.enabled).toBe(false);
-        expect(result.dev.message).toBe('RC Default Msg');
+        expect(result.dev.message).toBe('RC Dev Msg');
     });
 
-    it('should return default (off) if Remote Config JSON is empty or missing', async () => {
+    it('should return default (off) if parameterGroups is empty or missing', async () => {
         mockRemoteConfig.mockReturnValue({
             getTemplate: vi.fn().mockResolvedValue({
-                parameters: {}
+                parameterGroups: {}
             })
         });
 
@@ -866,7 +866,7 @@ describe('setMaintenanceMode Cloud Function', () => {
     });
 
     it('should update Remote Config with maintenance status and metadata', async () => {
-        const template: any = { parameters: {} };
+        const template: any = { parameterGroups: {} };
         mockRemoteConfig.mockReturnValue({
             getTemplate: vi.fn().mockResolvedValue(template),
             validateTemplate: vi.fn(),
@@ -880,20 +880,19 @@ describe('setMaintenanceMode Cloud Function', () => {
         expect(result.message).toBe('New Maintenance');
         expect(result.env).toBe('beta');
 
-        // Verify Remote Config JSON update
-        expect(template.parameters['maintenance_config']).toBeDefined();
-        const config = JSON.parse(template.parameters['maintenance_config'].defaultValue.value);
-        expect(config.beta).toBeDefined();
-        expect(config.beta.enabled).toBe(true);
-        expect(config.beta.message).toBe('New Maintenance');
-        expect(config.beta.updatedAt).toBeDefined();
-        expect(config.beta.updatedBy).toBe('admin-uid');
+        // Verify Remote Config parameterGroups update
+        expect(template.parameterGroups['maintenance']).toBeDefined();
+        const group = template.parameterGroups['maintenance'];
+        expect(group.parameters['beta_enabled'].defaultValue.value).toBe('true');
+        expect(group.parameters['beta_message'].defaultValue.value).toBe('New Maintenance');
+        expect(group.parameters['beta_updatedAt']).toBeDefined();
+        expect(group.parameters['beta_updatedBy'].defaultValue.value).toBe('admin-uid');
     });
 
 
-    it('should update maintenance_config JSON when environment is prod', async () => {
+    it('should update parameterGroups when environment is prod', async () => {
         request.data.env = 'prod';
-        const template: any = { parameters: {} };
+        const template: any = { parameterGroups: {} };
         mockRemoteConfig.mockReturnValue({
             getTemplate: vi.fn().mockResolvedValue(template),
             validateTemplate: vi.fn(),
@@ -902,15 +901,14 @@ describe('setMaintenanceMode Cloud Function', () => {
 
         await (setMaintenanceMode as any)(request);
 
-        expect(template.parameters['maintenance_config']).toBeDefined();
-        const config = JSON.parse(template.parameters['maintenance_config'].defaultValue.value);
-        expect(config.prod).toBeDefined();
-        expect(config.prod.enabled).toBe(true);
+        expect(template.parameterGroups['maintenance']).toBeDefined();
+        const group = template.parameterGroups['maintenance'];
+        expect(group.parameters['prod_enabled'].defaultValue.value).toBe('true');
     });
 
-    it('should update maintenance_config JSON when environment is beta', async () => {
+    it('should update parameterGroups when environment is beta', async () => {
         request.data.env = 'beta';
-        const template: any = { parameters: {} };
+        const template: any = { parameterGroups: {} };
         mockRemoteConfig.mockReturnValue({
             getTemplate: vi.fn().mockResolvedValue(template),
             validateTemplate: vi.fn(),
@@ -919,10 +917,9 @@ describe('setMaintenanceMode Cloud Function', () => {
 
         await (setMaintenanceMode as any)(request);
 
-        expect(template.parameters['maintenance_config']).toBeDefined();
-        const config = JSON.parse(template.parameters['maintenance_config'].defaultValue.value);
-        expect(config.beta).toBeDefined();
-        expect(config.beta.enabled).toBe(true);
+        expect(template.parameterGroups['maintenance']).toBeDefined();
+        const group = template.parameterGroups['maintenance'];
+        expect(group.parameters['beta_enabled'].defaultValue.value).toBe('true');
     });
 });
 

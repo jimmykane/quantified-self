@@ -7,17 +7,6 @@ import { environment } from '../../environments/environment';
 import { LoggerService } from './logger.service';
 import { RemoteConfig, fetchAndActivate, getString } from '@angular/fire/remote-config';
 
-interface MaintenanceConfigEntry {
-    enabled: boolean;
-    message?: string;
-    updatedAt?: { _seconds: number; _nanoseconds: number };
-    updatedBy?: string;
-}
-
-interface MaintenanceConfig {
-    [key: string]: MaintenanceConfigEntry | undefined;
-    default?: MaintenanceConfigEntry;
-}
 
 /**
  * Remote Config Service
@@ -115,29 +104,23 @@ export class AppRemoteConfigService {
 
     private updateMaintenanceState(): void {
         try {
-            const configKey = 'maintenance_config';
-            const configValue = getString(this.remoteConfig, configKey);
-
-            if (!configValue) {
-                this.logger.log('[RemoteConfig] No maintenance_config found, using defaults');
-                return;
-            }
-
-            const config: MaintenanceConfig = JSON.parse(configValue);
             const env = this.environmentName;
 
-            // Resolve config: env-specific -> default
-            const maintenance = config[env] || config['default'];
+            // Read from parameterGroups structure: {env}_enabled, {env}_message
+            const enabledValue = getString(this.remoteConfig, `${env}_enabled`);
+            const messageValue = getString(this.remoteConfig, `${env}_message`);
 
-            if (maintenance) {
-                this._maintenanceModeRaw.set(!!maintenance.enabled);
-                this._maintenanceMessageRaw.set(maintenance.message || '');
-                this.logger.log(`[RemoteConfig] Maintenance Mode (${env}):`, maintenance.enabled);
-            }
+            const enabled = enabledValue === 'true';
+            const message = messageValue || '';
+
+            this._maintenanceModeRaw.set(enabled);
+            this._maintenanceMessageRaw.set(message);
+            this.logger.log(`[RemoteConfig] Maintenance Mode (${env}):`, enabled);
         } catch (err) {
-            this.logger.warn('[RemoteConfig] Failed to parse maintenance_config', err);
+            this.logger.warn('[RemoteConfig] Failed to read maintenance config', err);
         }
     }
+
 
     private get environmentName(): string {
         if (environment.production) {
