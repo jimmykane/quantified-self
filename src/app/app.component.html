@@ -11,73 +11,75 @@
     <app-route-loader></app-route-loader>
 
 
-    <!-- Maintenance Overlay - Hidden independent of route flow (except home/onboarding) -->
-    <!-- Positioned here to overlay app-layout-wrapper/custom-header -->
-    <app-maintenance *ngIf="maintenanceMode() && !isHomeRoute && !isOnboardingRoute" [message]="maintenanceMessage()">
-    </app-maintenance>
+    <!-- Maintenance & Replacement Logic -->
+    <ng-container *ngIf="maintenanceMode() && !isHomeRoute && !isOnboardingRoute; else appLayout">
+      <app-maintenance [message]="maintenanceMessage()"></app-maintenance>
+    </ng-container>
 
-    <!-- New Header Layout -->
-    <nav *ngIf="showNavigation" class="custom-header mat-typography" [style.top.px]="bannerHeight">
-      <button mat-icon-button (click)="toggleSidenav()" class="hamburger-link">
-        <mat-icon class="larger_icon">menu</mat-icon>
-      </button>
+    <ng-template #appLayout>
+      <!-- New Header Layout -->
+      <nav *ngIf="showNavigation" class="custom-header mat-typography" [style.top.px]="bannerHeight">
+        <button mat-icon-button (click)="toggleSidenav()" class="hamburger-link">
+          <mat-icon class="larger_icon">menu</mat-icon>
+        </button>
 
-      <mat-icon class="app-icon header-logo" svgIcon="logo" (click)="onLogoClick()"></mat-icon>
+        <mat-icon class="app-icon header-logo" svgIcon="logo" (click)="onLogoClick()"></mat-icon>
 
-      <span class="fill-space"></span>
+        <span class="fill-space"></span>
 
-      @if (authState === null && !isDashboardRoute && !isLoginRoute) {
-      <button mat-flat-button class="right" color="accent" disabled>
-        Loading
-      </button>
-      }
-      @if (authState === true && !isDashboardRoute) {
-      <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);"
-        [matTooltip]="isHandset() ? 'Dashboard' : ''">
-        <mat-icon *ngIf="isHandset()">dashboard</mat-icon>
-        <span *ngIf="!isHandset()">Dashboard</span>
-      </button>
-      }
+        @if (authState === null && !isDashboardRoute && !isLoginRoute) {
+        <button mat-flat-button class="right" color="accent" disabled>
+          Loading
+        </button>
+        }
+        @if (authState === true && !isDashboardRoute) {
+        <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);"
+          [matTooltip]="isHandset() ? 'Dashboard' : ''">
+          <mat-icon *ngIf="isHandset()">dashboard</mat-icon>
+          <span *ngIf="!isHandset()">Dashboard</span>
+        </button>
+        }
 
-      @if (showUploadActivities) {
-      <app-processing-indicator class="right"></app-processing-indicator>
-      <app-upload-activities class="right" [isHandset]="isHandset()">
-      </app-upload-activities>
-      }
+        @if (showUploadActivities) {
+        <app-processing-indicator class="right"></app-processing-indicator>
+        <app-upload-activities class="right" [isHandset]="isHandset()">
+        </app-upload-activities>
+        }
 
-      @if (isAdminUser && !isAdminRoute) {
-      <button mat-icon-button class="right admin-button" matTooltip="Admin Dashboard"
-        (click)="router.navigate(['/admin']);">
-        <mat-icon>admin_panel_settings</mat-icon>
-      </button>
-      }
+        @if (isAdminUser && !isAdminRoute) {
+        <button mat-icon-button class="right admin-button" matTooltip="Admin Dashboard"
+          (click)="router.navigate(['/admin']);">
+          <mat-icon>admin_panel_settings</mat-icon>
+        </button>
+        }
 
-      @if (authState === false && !isLoginRoute) {
-      <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/login']);">
-        Login or Register
-      </button>
-      }
-    </nav>
+        @if (authState === false && !isLoginRoute) {
+        <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/login']);">
+          Login or Register
+        </button>
+        }
+      </nav>
 
-    <mat-sidenav-container class="app-sidenav-container" [class.no-margin-top]="!onboardingCompleted"
-      [style.margin-top.px]="bannerHeight + 64">
-      <mat-sidenav #sidenav [mode]="'over'" *ngIf="showNavigation" [fixedInViewport]="true"
-        [fixedTopGap]="bannerHeight + 64" [autoFocus]="false">
-        <app-sidenav></app-sidenav>
-      </mat-sidenav>
+      <mat-sidenav-container class="app-sidenav-container" [class.no-margin-top]="!onboardingCompleted"
+        [style.margin-top.px]="bannerHeight + 64">
+        <mat-sidenav #sidenav [mode]="'over'" *ngIf="showNavigation" [fixedInViewport]="true"
+          [fixedTopGap]="bannerHeight + 64" [autoFocus]="false">
+          <app-sidenav></app-sidenav>
+        </mat-sidenav>
 
-      <mat-sidenav-content>
-        <div class="router-outlet-container" [@routeAnimations]="prepareRoute(outlet)">
-          <div *ngIf="maintenanceLoading()" class="loading-overlay">
-            <div class="logo-spinner">
-              <mat-icon svgIcon="qs-logo"></mat-icon>
+        <mat-sidenav-content>
+          <div class="router-outlet-container" [@routeAnimations]="prepareRoute(outlet)">
+            <div *ngIf="maintenanceLoading()" class="loading-overlay">
+              <div class="logo-spinner">
+                <mat-icon svgIcon="qs-logo"></mat-icon>
+              </div>
             </div>
-          </div>
 
-          <router-outlet #outlet="outlet"></router-outlet>
-        </div>
-      </mat-sidenav-content>
-    </mat-sidenav-container>
+            <router-outlet #outlet="outlet"></router-outlet>
+          </div>
+        </mat-sidenav-content>
+      </mat-sidenav-container>
+    </ng-template>
   </div>
 </ng-container>
 
