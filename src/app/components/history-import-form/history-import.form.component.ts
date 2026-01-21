@@ -40,7 +40,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public formGroup: UntypedFormGroup;
   public isAllowedToDoHistoryImport = false;
   public nextImportAvailableDate: Date;
-  public isLoading: boolean;
+  public isSubmitting = false;
   public serviceNames = ServiceNames
   public isPro = false;
   public corosHistoryLimitMonths = COROS_HISTORY_IMPORT_LIMIT_MONTHS;
@@ -88,11 +88,9 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   private processChanges() {
-    this.isLoading = true;
     if (!this.userMetaForService || !this.userMetaForService.didLastHistoryImport) {
       this.isAllowedToDoHistoryImport = true;
       (this.isAllowedToDoHistoryImport && !this.isMissingGarminPermissions) ? this.formGroup.enable() : this.formGroup.disable();
-      this.isLoading = false;
       return;
     }
 
@@ -109,7 +107,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
           this.nextImportAvailableDate < (new Date())
           || this.userMetaForService.processedActivitiesFromLastHistoryImportCount === 0;
         break;
-        break;
       case ServiceNames.GarminAPI:
         this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + (GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000));
         this.isAllowedToDoHistoryImport = this.nextImportAvailableDate < new Date()
@@ -124,8 +121,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         break;
     }
     (this.isAllowedToDoHistoryImport && !this.isMissingGarminPermissions) ? this.formGroup.enable() : this.formGroup.disable();
-    // Set this to done loading
-    this.isLoading = false;
   }
 
   async onSubmit(event: Event) {
@@ -135,33 +130,43 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       return;
     }
 
-    if (this.isLoading) {
+    if (this.isSubmitting) {
       return;
     }
 
-    this.isLoading = true;
+    this.isSubmitting = true;
+
+    // Explicitly disable the form to force UI state update
+    this.formGroup.disable({ emitEvent: false });
     this.changeDetectorRef.detectChanges();
+
+    // Force UI render cycle
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     try {
       this.analyticsService.logEvent('imported_history', { method: this.serviceName });
+
       const result = await this.userService.importServiceHistoryForCurrentUser(
         this.serviceName,
         dayjs(this.formGroup.get('startDate')?.value).toDate(),
         dayjs(this.formGroup.get('endDate')?.value).toDate()
       );
       this.importInitiated.emit(result);
+
       this.snackBar.open('History import has been queued', undefined, {
         duration: 2000,
       });
     } catch (e: any) {
-      // debugger;
       this.logger.error(e);
 
       this.snackBar.open(`Could not import history for ${this.serviceName} due to ${e.message}`, undefined, {
         duration: 2000,
       });
     } finally {
-      this.isLoading = false;
+      this.isSubmitting = false;
+      // Re-evaluate form state
+      this.processChanges();
+      this.changeDetectorRef.detectChanges();
     }
   }
 
