@@ -4,7 +4,7 @@ import { ActivityParsingOptions } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, of, zip } from 'rxjs';
 import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, doc, docData, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, CollectionReference, getCountFromServer } from '@angular/fire/firestore';
-import { catchError, map, switchMap, take } from 'rxjs/operators';
+import { catchError, map, switchMap, take, distinctUntilChanged } from 'rxjs/operators';
 import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
@@ -97,26 +97,55 @@ export class AppEventService implements OnDestroy {
           return event;
         })),
       this.getActivities(user, eventID),
-    ]).pipe(catchError((error) => {
-      if (error && error.code && error.code === 'permission-denied') {
-        return of([null, null] as [AppEventInterface | null, ActivityInterface[] | null]);
-      }
-      this.logger.error('Error fetching event or activities:', error);
+    ]).pipe(
+      distinctUntilChanged((prev, curr) => {
+        const prevEvent = prev[0];
+        const prevActivities = prev[1];
+        const currEvent = curr[0];
+        const currActivities = curr[1];
 
-      return of([null, null] as [AppEventInterface | null, ActivityInterface[] | null]); // @todo fix this
-    })).pipe(map(([event, activities]: [AppEventInterface, ActivityInterface[]]) => {
-      if (!event) {
-        return null;
-      }
-      event.clearActivities();
-      event.addActivities(activities);
-      return event;
-    })).pipe(catchError((error) => {
-      // debugger;
-      this.logger.error('Error adding activities to event:', error);
+        // Check Event ID Equality
+        if (prevEvent?.getID() !== currEvent?.getID()) {
+          return false;
+        }
 
-      return of(null); // @todo is this the best we can do?
-    }))
+        // Check Activities Length Equality
+        if (prevActivities?.length !== currActivities?.length) {
+          return false;
+        }
+
+        // Check Activities IDs Equality
+        // We assume order is consistent (which it generally is for combineLatest emitting same array ref or Firestore query)
+        // A safer bet is to check every ID.
+        if (prevActivities && currActivities) {
+          for (let i = 0; i < prevActivities.length; i++) {
+            if (prevActivities[i].getID() !== currActivities[i].getID()) {
+              return false;
+            }
+          }
+        }
+        return true;
+      }),
+      catchError((error) => {
+        if (error && error.code && error.code === 'permission-denied') {
+          return of([null, null] as [AppEventInterface | null, ActivityInterface[] | null]);
+        }
+        this.logger.error('Error fetching event or activities:', error);
+
+        return of([null, null] as [AppEventInterface | null, ActivityInterface[] | null]); // @todo fix this
+      })).pipe(map(([event, activities]: [AppEventInterface, ActivityInterface[]]) => {
+        if (!event) {
+          return null;
+        }
+        event.clearActivities();
+        event.addActivities(activities);
+        return event;
+      })).pipe(catchError((error) => {
+        // debugger;
+        this.logger.error('Error adding activities to event:', error);
+
+        return of(null); // @todo is this the best we can do?
+      }))
   }
 
   public getEventsBy(user: User, where: { fieldPath: string | any, opStr: any, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {

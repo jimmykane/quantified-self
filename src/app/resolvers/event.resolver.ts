@@ -12,7 +12,7 @@ import {
     DynamicDataLoader
 } from '@sports-alliance/sports-lib';
 import { map, switchMap, catchError, take } from 'rxjs/operators';
-import { of, EMPTY } from 'rxjs';
+import { of, EMPTY, Observable } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { LoggerService } from '../services/logger.service';
@@ -73,13 +73,11 @@ export const eventResolver: ResolveFn<EventResolverData> = (
         }),
         map(({ event, user }) => {
             if (event) {
+                // Determine layout mode based on event data
                 return { event, user };
             } else {
                 snackBar.open('Event not found', 'Close', { duration: 3000 });
                 router.navigate(['/dashboard']);
-                // We must return something that matches the signature or throw, but since we navigated, EMPTY is safe logic-wise, 
-                // but typescript might want the return type. 
-                // In a resolver, returning EMPTY keeps the navigation hanging or cancels it.
                 return null;
             }
         }),
@@ -93,7 +91,6 @@ export const eventResolver: ResolveFn<EventResolverData> = (
             router.navigate(['/dashboard']);
             return EMPTY;
         }),
-        // Cast the final output to ensure it matches ResolveFn<EventResolverData>
         map(result => result as EventResolverData)
     );
 };
