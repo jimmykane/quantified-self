@@ -1,4 +1,4 @@
-import { Component, Inject, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, inject, Output, EventEmitter } from '@angular/core';
+import { Component, Inject, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, inject, Output, EventEmitter, ChangeDetectorRef } from '@angular/core';
 import {
   AbstractControl,
   UntypedFormArray,
@@ -51,6 +51,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private analyticsService = inject(AppAnalyticsService);
   private logger = inject(LoggerService);
   private snackBar = inject(MatSnackBar);
+  private changeDetectorRef = inject(ChangeDetectorRef);
 
   async ngOnInit() {
     this.formGroup = new UntypedFormGroup({
@@ -139,6 +140,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     }
 
     this.isLoading = true;
+    this.changeDetectorRef.detectChanges();
 
     try {
       this.analyticsService.logEvent('imported_history', { method: this.serviceName });
