@@ -1,40 +1,17 @@
-import { Component, OnInit, ViewChild, AfterViewInit, OnDestroy } from '@angular/core';
-import { AdminService, AdminUser, ListUsersParams, QueueStats, FinancialStats } from '../../../services/admin.service';
+import { Component, OnInit, OnDestroy } from '@angular/core';
+import { AdminService, QueueStats, FinancialStats } from '../../../services/admin.service';
+import { RouterModule } from '@angular/router';
 
-import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { AppAuthService } from '../../../authentication/app.auth.service';
-import { AppThemeService } from '../../../services/app.theme.service';
-import { AdminResolverData } from '../../../resolvers/admin.resolver';
-import { AppThemes } from '@sports-alliance/sports-lib';
-
-import { MatSort, Sort } from '@angular/material/sort';
-import { MatPaginator, PageEvent } from '@angular/material/paginator';
 import { Subject } from 'rxjs';
-import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
+import { takeUntil } from 'rxjs/operators';
 
 import { CommonModule } from '@angular/common';
-import { MatTableModule } from '@angular/material/table';
-import { MatPaginatorModule } from '@angular/material/paginator';
-import { MatSortModule } from '@angular/material/sort';
-import { MatSnackBar } from '@angular/material/snack-bar';
-import { MatInputModule } from '@angular/material/input';
-import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatButtonModule } from '@angular/material/button';
-// import { MatSlideToggleModule } from '@angular/material/slide-toggle'; // Removed
-import { MatExpansionModule } from '@angular/material/expansion';
-import { MatDialog, MatDialogModule } from '@angular/material/dialog';
-import { MatTooltipModule } from '@angular/material/tooltip';
-import { FormsModule } from '@angular/forms';
 import { LoggerService } from '../../../services/logger.service';
-import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
-import { BaseChartDirective } from 'ng2-charts';
-import { ChartConfiguration, ChartOptions } from 'chart.js';
-import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
 import { AdminFinancialsComponent } from '../admin-financials/admin-financials.component';
 import { AdminQueueStatsComponent } from '../admin-queue-stats/admin-queue-stats.component';
-import { AdminUserManagementComponent, UserStats } from '../admin-user-management/admin-user-management.component';
 
 @Component({
     selector: 'app-admin-dashboard',
@@ -43,231 +20,48 @@ import { AdminUserManagementComponent, UserStats } from '../admin-user-managemen
     standalone: true,
     imports: [
         CommonModule,
-        FormsModule,
-        MatTableModule,
-        MatPaginatorModule,
-        MatSortModule,
-        MatInputModule,
-        MatFormFieldModule,
         MatIconModule,
         MatProgressSpinnerModule,
         MatButtonModule,
-        // MatSlideToggleModule, // Removed
-
-        MatExpansionModule,
-        MatDialogModule,
-        MatTooltipModule,
         RouterModule,
         AdminFinancialsComponent,
-        AdminQueueStatsComponent,
-        AdminUserManagementComponent
-    ],
-    providers: [provideCharts(withDefaultRegisterables())]
+        AdminQueueStatsComponent
+    ]
 })
-export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy {
-    displayedColumns: string[] = [
-        'photoURL', 'email', 'providerIds', 'displayName', 'role', 'subscription',
-        'services', 'created', 'lastLogin', 'status', 'actions'
-    ];
-
-    // Data
-    users: AdminUser[] = [];
-    totalCount = 0;
-
-    // Pagination state
-    currentPage = 0;
-    pageSize = 10;
-    pageSizeOptions = [10, 25, 50];
-
-    // Search state
-    searchTerm = '';
-    private searchSubject = new Subject<string>();
-
-    // Sort state
-    sortField = 'email';
-    sortDirection: 'asc' | 'desc' = 'asc';
-
-    // Filter Service state
-    filterService: 'garmin' | 'suunto' | 'coros' | undefined = undefined;
-
-    isLoading = true;
-    error: string | null = null;
-
+export class AdminDashboardComponent implements OnInit, OnDestroy {
     // Queue stats
     queueStats: QueueStats | null = null;
     isLoadingStats = true;
-    userStats: { total: number; pro: number; basic: number; free: number; providers: Record<string, number> } | null = null;
 
     // Financial stats
     financialStats: FinancialStats | null = null;
     isLoadingFinancials = true;
 
-    // Auth Chart
-    public authPieChartData: ChartConfiguration<'pie'>['data'] = {
-        labels: [],
-        datasets: [{
-            data: [],
-            backgroundColor: [
-                'rgba(255, 99, 132, 0.6)',
-                'rgba(54, 162, 235, 0.6)',
-                'rgba(255, 206, 86, 0.6)',
-                'rgba(75, 192, 192, 0.6)',
-                'rgba(153, 102, 255, 0.6)',
-                'rgba(255, 159, 64, 0.6)'
-            ],
-            borderColor: 'transparent'
-        }]
-    };
-    public authPieChartOptions: ChartConfiguration<'pie'>['options'] = {
-        responsive: true,
-        plugins: {
-            legend: {
-                position: 'right',
-                labels: {
-                    color: 'rgba(255, 255, 255, 0.8)',
-                    font: {
-                        size: 12
-                    }
-                }
-            }
-        },
-        maintainAspectRatio: false
-    };
-
-    // Color constants for theme switching
-    private readonly CHART_TEXT_DARK = 'rgba(255, 255, 255, 0.8)';
-    private readonly CHART_TEXT_LIGHT = 'rgba(0, 0, 0, 0.8)';
-    private readonly CHART_GRID_DARK = 'rgba(255, 255, 255, 0.1)';
-    // Charts
-    // Configuration moved to AdminQueueStatsComponent
-
-    // Maintenance mode removed (moved to AdminMaintenanceComponent)
-
-
     // Cleanup
     private destroy$ = new Subject<void>();
 
-    @ViewChild(MatPaginator) paginator!: MatPaginator;
-    @ViewChild(MatSort) sort!: MatSort;
-
     constructor(
         private adminService: AdminService,
-        private authService: AppAuthService,
-        private appThemeService: AppThemeService,
-        private router: Router,
-        private snackBar: MatSnackBar,
-        private logger: LoggerService,
-        private dialog: MatDialog,
-        private route: ActivatedRoute
+        private logger: LoggerService
     ) { }
 
     ngOnInit(): void {
-        // Setup debounced search
-        this.searchSubject.pipe(
-            debounceTime(300),
-            distinctUntilChanged(),
-            takeUntil(this.destroy$)
-        ).subscribe(term => {
-            this.searchTerm = term;
-            this.currentPage = 0; // Reset to first page on search
-            this.fetchUsers();
-        });
-
-        // Handle theme changes for charts - Logic moved to AdminQueueStatsComponent
-        // Theme subscription kept if needed for other things, but chart specific logic removed.
-        // Actually, since this component no longer has charts, we might not need this subscription at all
-        // unless other parts use it. For now, removing the chart update block.
-        this.appThemeService.getAppTheme().pipe(takeUntil(this.destroy$)).subscribe(theme => {
-            // No local charts to update theme for
-        });
-
-        // Use resolved data
-        const resolvedData = this.route.snapshot.data['adminData'] as AdminResolverData;
-        if (resolvedData) {
-            this.users = resolvedData.usersData.users;
-            this.totalCount = resolvedData.usersData.totalCount;
-            this.userStats = resolvedData.userStats;
-            this.isLoading = false;
-            if (this.userStats) {
-                this.updateAuthChart(this.userStats.providers);
-            }
-        } else {
-            // Fallback if no resolver (though with guard it shouldn't happen)
-            this.fetchUsers();
-            this.adminService.getTotalUserCount().subscribe(stats => {
-                this.userStats = stats;
-                this.updateAuthChart(stats.providers);
-            });
-        }
-
-        // Stats and Maintenance are "secondary" data, can fetch separately or via resolver if improved later.
-        // For now, let's keep them async or we could have added them to resolver.
-        // Given "Resolvers for Layout", the user list is the layout. Queue stats are a widget.
         this.fetchQueueStats();
         this.fetchFinancialStats();
-        // this.fetchMaintenanceStatus(); // Removed
-
-    }
-
-    updateAuthChart(providers: Record<string, number>): void {
-        if (!providers) return;
-
-        const labels = Object.keys(providers).map(label => {
-            // Prettify label
-            if (label === 'google.com') return 'Google';
-            if (label === 'password') return 'Email';
-            if (label === 'apple.com') return 'Apple';
-            if (label === 'facebook.com') return 'Facebook';
-            if (label === 'github.com') return 'GitHub';
-            return label;
-        });
-        const data = Object.values(providers);
-
-        this.authPieChartData = {
-            labels,
-            datasets: [{
-                ...this.authPieChartData.datasets[0],
-                data
-            }]
-        };
     }
 
     fetchQueueStats(): void {
         this.isLoadingStats = true;
-        // Fetch full stats (with analysis) once
         this.adminService.getQueueStats(true).pipe(takeUntil(this.destroy$)).subscribe({
             next: (stats) => {
-                this.updateQueueStatsUI(stats);
+                this.queueStats = stats;
                 this.isLoadingStats = false;
             },
             error: (err) => {
-                this.logger.error('Failed to load initial queue stats:', err);
+                this.logger.error('Failed to load queue stats:', err);
                 this.isLoadingStats = false;
             }
         });
-    }
-
-    private updateQueueStatsUI(stats: QueueStats, isPartial = false): void {
-        if (isPartial && this.queueStats) {
-            // Merge basic stats into existing stats to preserve analysis data (dlq, topErrors, etc.)
-            this.queueStats = {
-                ...this.queueStats,
-                pending: stats.pending,
-                succeeded: stats.succeeded,
-                stuck: stats.stuck,
-                cloudTasks: stats.cloudTasks ?? this.queueStats.cloudTasks,
-                providers: stats.providers,
-                advanced: this.queueStats.advanced ? {
-                    ...this.queueStats.advanced,
-                    throughput: stats.advanced?.throughput ?? this.queueStats.advanced.throughput,
-                    maxLagMs: stats.advanced?.maxLagMs ?? this.queueStats.advanced.maxLagMs,
-                    retryHistogram: stats.advanced?.retryHistogram ?? this.queueStats.advanced.retryHistogram
-                } : stats.advanced
-            };
-        } else {
-            this.queueStats = stats;
-        }
-        // Chart update logic moved to AdminQueueStatsComponent ngOnChanges
     }
 
     fetchFinancialStats(): void {
@@ -284,178 +78,8 @@ export class AdminDashboardComponent implements OnInit, AfterViewInit, OnDestroy
         });
     }
 
-    ngAfterViewInit(): void {
-        // MatSort is available after view init
-        if (this.sort) {
-            this.sort.sortChange.pipe(takeUntil(this.destroy$)).subscribe((sortState: Sort) => {
-                this.onSortChange(sortState);
-            });
-        }
-    }
-
     ngOnDestroy(): void {
         this.destroy$.next();
         this.destroy$.complete();
-    }
-
-    fetchUsers(): void {
-        this.isLoading = true;
-        this.error = null;
-
-        const params: ListUsersParams = {
-            page: this.currentPage,
-            pageSize: this.pageSize,
-            searchTerm: this.searchTerm || undefined,
-            sortField: this.sortField,
-            sortDirection: this.sortDirection,
-            filterService: this.filterService
-        };
-
-        this.adminService.getUsers(params).subscribe({
-            next: (response) => {
-                const users = response.users;
-
-                this.users = users;
-                this.totalCount = response.totalCount;
-                this.isLoading = false;
-            },
-            error: (err) => {
-                this.error = 'Failed to load users. ' + (err.message || '');
-                this.isLoading = false;
-                this.logger.error('AdminDashboard error:', err);
-            }
-        });
-    }
-
-    onPageChange(event: PageEvent): void {
-        this.currentPage = event.pageIndex;
-        this.pageSize = event.pageSize;
-        this.fetchUsers();
-    }
-
-    onSortChange(sort: Sort): void {
-        this.sortField = sort.active || 'email';
-        this.sortDirection = (sort.direction as 'asc' | 'desc') || 'asc';
-        this.currentPage = 0; // Reset to first page on sort change
-        this.fetchUsers();
-    }
-
-    onSearchInput(event: Event): void {
-        const value = (event.target as HTMLInputElement).value;
-        this.searchSubject.next(value);
-    }
-
-    clearSearch(): void {
-        this.searchTerm = '';
-        this.searchSubject.next('');
-    }
-
-    onSearchChange(term: string): void {
-        this.searchTerm = term;
-        this.currentPage = 0;
-        this.fetchUsers();
-    }
-
-    onFilterServiceChange(service: 'garmin' | 'suunto' | 'coros' | undefined): void {
-        this.filterService = service;
-        this.currentPage = 0; // Reset to first page
-        this.fetchUsers();
-    }
-
-    // Helper methods
-
-
-    formatConnectionDate(timestamp: any): string {
-        if (!timestamp) return 'Time unknown';
-        const date = new Date(timestamp.seconds ? timestamp.seconds * 1000 : timestamp);
-        return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-    }
-
-    getRole(user: AdminUser): string {
-        return user.customClaims?.stripeRole || 'free';
-    }
-
-    isAdmin(user: AdminUser): boolean {
-        return user.customClaims?.admin === true;
-    }
-
-    getSubscriptionDetails(user: AdminUser): string {
-        if (!user.subscription) return '-';
-
-        let details = user.subscription.status.toUpperCase();
-
-        if (user.subscription.cancel_at_period_end && user.subscription.current_period_end) {
-            const date = this.formatDate(user.subscription.current_period_end);
-            details += ` (Ends ${date})`;
-        }
-
-        return details;
-    }
-
-    private formatDate(timestamp: any): string {
-        if (!timestamp) return '';
-        const date = new Date(timestamp.seconds ? timestamp.seconds * 1000 : timestamp);
-        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    }
-
-    // Helper methods
-    // getServiceLogo is still needed for User Management table
-    getServiceLogo(provider: string): string {
-        switch (provider.toLowerCase()) {
-            case 'garmin': return 'assets/logos/garmin.svg';
-            case 'suunto': return 'assets/logos/suunto.svg';
-            case 'coros': return 'assets/logos/coros.svg';
-            default: return '';
-        }
-    }
-    // formatDuration moved to AdminQueueStatsComponent
-    // formatCurrency and openExternalLink moved to AdminFinancialsComponent
-
-    // Maintenance mode methods removed (moved to AdminMaintenanceComponent)
-
-
-    onImpersonate(user: AdminUser): void {
-        const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-            width: '400px',
-            data: {
-                title: 'Impersonate User?',
-                message: `Are you sure you want to impersonate ${user.email}? You will be logged out of your admin account and logged in as this user.`,
-                confirmText: 'Impersonate',
-                cancelText: 'Cancel',
-                isDangerous: true
-            }
-        });
-
-        dialogRef.afterClosed().subscribe(confirmed => {
-            if (confirmed) {
-                this.isLoading = true;
-                this.adminService.impersonateUser(user.uid).subscribe({
-                    next: async (res) => {
-                        this.logger.log('Impersonation token received. Switching user...', res);
-                        await this.authService.loginWithCustomToken(res.token);
-                        // Force a full page reload to clear any stale states/services
-                        window.location.href = '/dashboard';
-                    },
-                    error: (err) => {
-                        this.logger.error('Impersonation failed', err);
-                        this.isLoading = false;
-
-                        let errorMessage = 'Impersonation failed. ';
-                        if (err.message && err.message.includes('CORS')) {
-                            errorMessage += 'This usually happens if the backend function is not deployed or accessible.';
-                        } else if (err.status === 0 || (err.name && err.name === 'FirebaseError' && err.code === 'internal')) {
-                            errorMessage += 'Network or Server Error. Please ensure the backend is deployed.';
-                        } else {
-                            errorMessage += err.message || 'Unknown error';
-                        }
-
-                        this.snackBar.open(errorMessage, 'Close', {
-                            duration: 5000,
-                            panelClass: ['error-snackbar']
-                        });
-                    }
-                });
-            }
-        });
     }
 }

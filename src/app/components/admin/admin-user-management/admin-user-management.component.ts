@@ -1,5 +1,6 @@
-import { Component, Input, Output, EventEmitter, ViewChild, OnInit, OnDestroy, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatButtonModule } from '@angular/material/button';
@@ -10,14 +11,20 @@ import { MatSortModule, Sort, MatSort } from '@angular/material/sort';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { BaseChartDirective } from 'ng2-charts';
 import { ChartConfiguration, ChartOptions } from 'chart.js';
 import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
 
-import { AdminUser } from '../../../services/admin.service';
+import { AdminService, AdminUser, ListUsersParams } from '../../../services/admin.service';
 import { AppThemeService } from '../../../services/app.theme.service';
+import { AppAuthService } from '../../../authentication/app.auth.service';
+import { LoggerService } from '../../../services/logger.service';
+import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
+import { AdminResolverData } from '../../../resolvers/admin.resolver';
 import { AppThemes } from '@sports-alliance/sports-lib';
 
 export interface UserStats {
@@ -35,6 +42,7 @@ export interface UserStats {
     standalone: true,
     imports: [
         CommonModule,
+        RouterModule,
         MatIconModule,
         MatProgressSpinnerModule,
         MatButtonModule,
@@ -45,37 +53,46 @@ export interface UserStats {
         MatInputModule,
         MatFormFieldModule,
         MatSelectModule,
+        MatDialogModule,
+        MatSnackBarModule,
         BaseChartDirective
     ],
     providers: [provideCharts(withDefaultRegisterables())]
 })
-export class AdminUserManagementComponent implements OnInit, OnChanges, OnDestroy {
+export class AdminUserManagementComponent implements OnInit, OnDestroy {
     @ViewChild(MatSort) sort!: MatSort;
 
-    // Inputs
-    @Input() users: AdminUser[] = [];
-    @Input() userStats: UserStats | null = null;
-    @Input() isLoading = false;
-    @Input() error: string | null = null;
-    @Input() totalCount = 0;
-    @Input() currentPage = 0;
-    @Input() pageSize = 10;
-    @Input() pageSizeOptions: number[] = [5, 10, 25, 50];
-    @Input() filterService: 'garmin' | 'suunto' | 'coros' | undefined = undefined;
+    // Injected services
+    private adminService = inject(AdminService);
+    private appThemeService = inject(AppThemeService);
+    private authService = inject(AppAuthService);
+    private route = inject(ActivatedRoute);
+    private router = inject(Router);
+    private dialog = inject(MatDialog);
+    private snackBar = inject(MatSnackBar);
+    private logger = inject(LoggerService);
 
-    // Outputs
-    @Output() pageChange = new EventEmitter<PageEvent>();
-    @Output() sortChange = new EventEmitter<Sort>();
-    @Output() searchChange = new EventEmitter<string>();
-    @Output() filterServiceChange = new EventEmitter<'garmin' | 'suunto' | 'coros' | undefined>();
-    @Output() impersonate = new EventEmitter<AdminUser>();
+    // Data state
+    users: AdminUser[] = [];
+    userStats: UserStats | null = null;
+    isLoading = true;
+    error: string | null = null;
+    totalCount = 0;
+    currentPage = 0;
+    pageSize = 10;
+    pageSizeOptions: number[] = [10, 25, 50];
+    filterService: 'garmin' | 'suunto' | 'coros' | undefined = undefined;
+
+    // Search and sort state
+    searchTerm = '';
+    sortField = 'email';
+    sortDirection: 'asc' | 'desc' = 'asc';
 
     displayedColumns: string[] = [
         'photoURL', 'email', 'providerIds', 'displayName', 'role', 'subscription',
         'services', 'created', 'lastLogin', 'status', 'actions'
     ];
 
-    searchTerm = '';
     private searchSubject = new Subject<string>();
     private destroy$ = new Subject<void>();
 
@@ -95,8 +112,6 @@ export class AdminUserManagementComponent implements OnInit, OnChanges, OnDestro
     private readonly CHART_TEXT_DARK = 'rgba(255, 255, 255, 0.8)';
     private readonly CHART_TEXT_LIGHT = 'rgba(0, 0, 0, 0.8)';
 
-    constructor(private appThemeService: AppThemeService) { }
-
     ngOnInit(): void {
         // Handle search debounce
         this.searchSubject.pipe(
@@ -104,24 +119,68 @@ export class AdminUserManagementComponent implements OnInit, OnChanges, OnDestro
             distinctUntilChanged(),
             takeUntil(this.destroy$)
         ).subscribe(term => {
-            this.searchChange.emit(term);
+            this.searchTerm = term;
+            this.currentPage = 0;
+            this.fetchUsers();
         });
 
         // Handle theme changes for chart
         this.appThemeService.getAppTheme().pipe(takeUntil(this.destroy$)).subscribe(theme => {
             this.updateChartTheme(theme);
         });
-    }
 
-    ngOnChanges(changes: SimpleChanges): void {
-        if (changes['userStats'] && this.userStats?.providers) {
-            this.updateAuthChart(this.userStats.providers);
+        // Use resolved data if available
+        const resolvedData = this.route.snapshot.data['adminData'] as AdminResolverData;
+        if (resolvedData) {
+            this.users = resolvedData.usersData.users;
+            this.totalCount = resolvedData.usersData.totalCount;
+            this.userStats = resolvedData.userStats;
+            this.isLoading = false;
+            if (this.userStats?.providers) {
+                this.updateAuthChart(this.userStats.providers);
+            }
+        } else {
+            // Fallback: fetch data directly
+            this.fetchUsers();
+            this.adminService.getTotalUserCount().pipe(takeUntil(this.destroy$)).subscribe(stats => {
+                this.userStats = stats;
+                if (stats.providers) {
+                    this.updateAuthChart(stats.providers);
+                }
+            });
         }
     }
 
     ngOnDestroy(): void {
         this.destroy$.next();
         this.destroy$.complete();
+    }
+
+    fetchUsers(): void {
+        this.isLoading = true;
+        this.error = null;
+
+        const params: ListUsersParams = {
+            page: this.currentPage,
+            pageSize: this.pageSize,
+            searchTerm: this.searchTerm || undefined,
+            sortField: this.sortField,
+            sortDirection: this.sortDirection,
+            filterService: this.filterService
+        };
+
+        this.adminService.getUsers(params).pipe(takeUntil(this.destroy$)).subscribe({
+            next: (response) => {
+                this.users = response.users;
+                this.totalCount = response.totalCount;
+                this.isLoading = false;
+            },
+            error: (err) => {
+                this.error = 'Failed to load users. ' + (err.message || '');
+                this.isLoading = false;
+                this.logger.error('AdminUserManagement error:', err);
+            }
+        });
     }
 
     private updateAuthChart(providers: Record<string, number>): void {
@@ -167,16 +226,20 @@ export class AdminUserManagementComponent implements OnInit, OnChanges, OnDestro
     }
 
     onPageChange(event: PageEvent): void {
-        this.pageChange.emit(event);
+        this.currentPage = event.pageIndex;
+        this.pageSize = event.pageSize;
+        this.fetchUsers();
     }
 
     onSortChange(sort: Sort): void {
-        this.sortChange.emit(sort);
+        this.sortField = sort.active || 'email';
+        this.sortDirection = (sort.direction as 'asc' | 'desc') || 'asc';
+        this.currentPage = 0;
+        this.fetchUsers();
     }
 
     onSearchInput(event: Event): void {
         const value = (event.target as HTMLInputElement).value;
-        this.searchTerm = value;
         this.searchSubject.next(value);
     }
 
@@ -186,11 +249,53 @@ export class AdminUserManagementComponent implements OnInit, OnChanges, OnDestro
     }
 
     onFilterServiceChange(service: 'garmin' | 'suunto' | 'coros' | undefined): void {
-        this.filterServiceChange.emit(service);
+        this.filterService = service;
+        this.currentPage = 0;
+        this.fetchUsers();
     }
 
     onImpersonate(user: AdminUser): void {
-        this.impersonate.emit(user);
+        const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+            width: '400px',
+            data: {
+                title: 'Impersonate User?',
+                message: `Are you sure you want to impersonate ${user.email}? You will be logged out of your admin account and logged in as this user.`,
+                confirmText: 'Impersonate',
+                cancelText: 'Cancel',
+                isDangerous: true
+            }
+        });
+
+        dialogRef.afterClosed().subscribe(confirmed => {
+            if (!confirmed) return;
+
+            this.isLoading = true;
+            this.adminService.impersonateUser(user.uid).subscribe({
+                next: async (res) => {
+                    this.logger.log('Impersonation token received. Switching user...', res);
+                    await this.authService.loginWithCustomToken(res.token);
+                    window.location.href = '/dashboard';
+                },
+                error: (err) => {
+                    this.logger.error('Impersonation failed', err);
+                    this.isLoading = false;
+
+                    let errorMessage = 'Impersonation failed. ';
+                    if (err.message && err.message.includes('CORS')) {
+                        errorMessage += 'This usually happens if the backend function is not deployed or accessible.';
+                    } else if (err.status === 0 || (err.name && err.name === 'FirebaseError' && err.code === 'internal')) {
+                        errorMessage += 'Network or Server Error. Please ensure the backend is deployed.';
+                    } else {
+                        errorMessage += err.message || 'Unknown error';
+                    }
+
+                    this.snackBar.open(errorMessage, 'Close', {
+                        duration: 5000,
+                        panelClass: ['error-snackbar']
+                    });
+                }
+            });
+        });
     }
 
     // Helper methods

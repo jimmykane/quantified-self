@@ -1,5 +1,47 @@
 @use '../../../../styles/breakpoints' as bp;
 
+.admin-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+    animation: fadeIn 0.5s ease-out;
+
+    @include bp.xsmall {
+        padding: 1rem;
+    }
+}
+
+.header-container {
+    margin-bottom: 2rem;
+}
+
+.header-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+
+    h1 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 300;
+        letter-spacing: -0.02em;
+
+        @include bp.xsmall {
+            font-size: 1.5rem;
+        }
+    }
+}
+
+.premium-subtitle {
+    margin: 0.5rem 0 0 0;
+    color: var(--mat-sys-on-surface-variant, rgba(0, 0, 0, 0.6));
+    font-size: 1rem;
+
+    :host-context(.dark-theme) & {
+        color: rgba(255, 255, 255, 0.6);
+    }
+}
+
 .dashboard-section {
     margin-bottom: 2rem;
     animation: fadeIn 0.5s ease-out;
