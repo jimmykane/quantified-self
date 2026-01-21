@@ -113,7 +113,7 @@ describe('UploadActivitiesToServiceComponent', () => {
     });
 
     it('should handle ALREADY_EXISTS response', async () => {
-        mockFunctionsService.call.mockResolvedValueOnce({ data: { result: { status: 'info', code: 'ALREADY_EXISTS', message: 'Activity already exists in Suunto' } } });
+        mockFunctionsService.call.mockResolvedValueOnce({ data: { status: 'info', code: 'ALREADY_EXISTS', message: 'Activity already exists in Suunto' } });
         const file = {
             file: new File(['<fit></fit>'], 'activity.fit', { type: 'application/octet-stream' }),
             filename: 'activity',
@@ -125,43 +125,14 @@ describe('UploadActivitiesToServiceComponent', () => {
             jobId: '1'
         };
 
-        await component.processAndUploadFile(file);
+        const result = await component.processAndUploadFile(file);
 
         expect(mockProcessingService.updateJob).toHaveBeenCalledWith(
             '1',
             expect.objectContaining({ status: 'duplicate' })
         );
-        expect(mockSnackBar.open).toHaveBeenCalledWith(
-            expect.stringContaining('Activity already exists'),
-            'OK',
-            expect.any(Object)
-        );
-    });
-
-    it('should handle ALREADY_EXISTS in nested result structure', async () => {
-        // This mimics the actual Suunto API response structure: { result: { status: 'info', code: 'ALREADY_EXISTS', message: '...' } }
-        mockFunctionsService.call.mockResolvedValueOnce({ data: { result: { status: 'info', code: 'ALREADY_EXISTS', message: 'Activity already exists in Suunto' } } });
-        const file = {
-            file: new File(['<fit></fit>'], 'activity.fit', { type: 'application/octet-stream' }),
-            filename: 'activity',
-            extension: 'fit',
-            data: null,
-            id: '1',
-            name: 'activity.fit',
-            status: UPLOAD_STATUS.PROCESSING,
-            jobId: '1'
-        };
-
-        await component.processAndUploadFile(file);
-
-        expect(mockProcessingService.updateJob).toHaveBeenCalledWith(
-            '1',
-            expect.objectContaining({ status: 'duplicate' })
-        );
-        expect(mockSnackBar.open).toHaveBeenCalledWith(
-            expect.stringContaining('Activity already exists'),
-            'OK',
-            expect.any(Object)
-        );
+        // Snackbar is now shown by parent abstract directive, we just verify the result
+        expect(result).toEqual({ success: true, duplicate: true });
     });
 });
+

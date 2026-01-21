@@ -53,7 +53,7 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
    */
   async processAndUploadFile(file: FileInterface) {
     this.analyticsService.logEvent('upload_activity_to_service', { service: ServiceNames.SuuntoApp });
-    return new Promise<boolean>((resolve, reject) => {
+    return new Promise<{ success: boolean; duplicate: boolean }>((resolve, reject) => {
       const fileReader = new FileReader();
       fileReader.onload = async () => {
         if (!(fileReader.result instanceof ArrayBuffer) || file.extension !== 'fit') {
@@ -87,14 +87,13 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
             // Log for debugging - helps identify response structure issues
             this.logger.info('Suunto upload response:', response.data);
 
-            if (response.data.result?.code === 'ALREADY_EXISTS') {
+            if (response.data.code === 'ALREADY_EXISTS') {
               if (file.jobId) {
                 this.processingService.updateJob(file.jobId, { status: 'duplicate', details: 'Activity already exists in Suunto' });
               }
-              this.snackBar.open(`Activity already exists in Suunto: ${file.filename}.${file.extension}`, 'OK', { duration: 5000 });
-              resolve(true);
+              resolve({ success: true, duplicate: true });
             } else {
-              resolve(true);
+              resolve({ success: true, duplicate: false });
             }
           }).catch((e) => {
             this.logger.error(e);

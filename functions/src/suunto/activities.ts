@@ -158,7 +158,7 @@ export const importActivityToSuuntoApp = onCall({
       );
       // Return the result from the callback (including ALREADY_EXISTS)
       if (result) {
-        if (result.status === 'success' || result.code === 'ALREADY_EXISTS') {
+        if (result.status === 'success') {
           try {
             const SERVICE_NAME = (await import('./constants')).SERVICE_NAME;
             const userServiceMetaDocumentSnapshot = admin.firestore().collection('users').doc(userID).collection('meta').doc(SERVICE_NAME);
