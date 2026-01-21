@@ -11,9 +11,9 @@ import {
   OnInit,
   signal,
 } from '@angular/core';
-import { GoogleMap, MapMarker } from '@angular/google-maps';
+import { GoogleMap } from '@angular/google-maps';
 import { EventInterface } from '@sports-alliance/sports-lib';
-import { MapThemes, MapTypes } from '@sports-alliance/sports-lib';
+import { MapTypes } from '@sports-alliance/sports-lib';
 import { DataPositionInterface } from '@sports-alliance/sports-lib';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
 import { MapAbstractDirective } from '../map/map-abstract.directive';
@@ -26,6 +26,7 @@ import { User } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
 import { AppUserService } from '../../services/app.user.service';
 import { GoogleMapsLoaderService } from '../../services/google-maps-loader.service';
+import { MarkerFactoryService } from '../../services/map/marker-factory.service';
 
 import { take } from 'rxjs/operators';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
@@ -78,12 +79,14 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     private eventService: AppEventService,
     private userService: AppUserService,
     private mapsLoader: GoogleMapsLoaderService,
+    private markerFactory: MarkerFactoryService,
     protected logger: LoggerService) {
     super(changeDetectorRef, logger);
   }
 
   // Class property to hold the loaded class
-  private AdvancedMarkerElement: typeof google.maps.marker.AdvancedMarkerElement = null;
+  // Class property to hold the loaded class
+  private AdvancedMarkerElement: typeof google.maps.marker.AdvancedMarkerElement | null = null;
 
   async changeMapType(mapType: google.maps.MapTypeId) {
     if (!this.user) return;
@@ -117,18 +120,10 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     this.zone.runOutsideAngular(() => {
       this.nativeMap = map;
 
-      this.zone.runOutsideAngular(() => {
-        this.nativeMap = map;
-
-        // Set map type
-        if (this.type) {
-          this.mapTypeId.set(this.type as any as google.maps.MapTypeId);
-        }
-
-        if (this.apiLoaded()) {
-          this.initMapData();
-        }
-      });
+      // Set map type
+      if (this.type) {
+        this.mapTypeId.set(this.type as any as google.maps.MapTypeId);
+      }
 
       if (this.apiLoaded()) {
         this.initMapData();
@@ -173,21 +168,9 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
             markers: this.markers,
             renderer: {
               render: ({ count, position }) => {
-                const content = document.createElement('div');
-                content.style.background = '#4285F4'; // Google Blue
-                content.style.color = 'white';
-                content.style.padding = '8px';
-                content.style.borderRadius = '50%';
-                content.style.width = '30px';
-                content.style.height = '30px';
-                content.style.display = 'flex';
-                content.style.alignItems = 'center';
-                content.style.justifyContent = 'center';
-                content.textContent = String(count);
-
                 return new google.maps.marker.AdvancedMarkerElement({
                   position,
-                  content,
+                  content: this.markerFactory.createClusterMarker(count),
                   zIndex: Number(google.maps.Marker.MAX_ZINDEX) + count,
                 });
               }
@@ -239,21 +222,14 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       if (eventStartPositionStat) {
         const location = eventStartPositionStat.getValue();
 
-        // Create SVG content
-        const svgContainer = document.createElement('div');
         const color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(
           event.getActivityTypesAsArray().length > 1 ? ActivityTypes.Multisport : ActivityTypes[event.getActivityTypesAsArray()[0]]
         );
-        svgContainer.innerHTML = `
-          <svg width="20" height="20" viewBox="0 0 20 20">
-             <circle cx="10" cy="10" r="8" fill="${color}" stroke="black" stroke-width="1" />
-          </svg>
-        `;
 
-        const marker = new this.AdvancedMarkerElement({
+        const marker = new this.AdvancedMarkerElement!({
           position: { lat: location.latitudeDegrees, lng: location.longitudeDegrees },
           title: `${event.getActivityTypesAsString()} for ${event.getDuration().getDisplayValue(false, false)} and ${event.getDistance().getDisplayValue()}`,
-          content: svgContainer
+          content: this.markerFactory.createEventMarker(color)
         });
         markersArray.push(marker);
 

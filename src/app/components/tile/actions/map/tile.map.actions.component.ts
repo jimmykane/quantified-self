@@ -11,7 +11,7 @@ import { TileMapSettingsInterface } from '@sports-alliance/sports-lib';
   providers: [],
   standalone: false
 })
-export class TileMapActionsComponent extends TileActionsAbstractDirective implements OnInit, OnChanges {
+export class TileMapActionsComponent extends TileActionsAbstractDirective implements OnInit {
   @Input() mapType!: MapTypes;
   @Input() clusterMarkers!: boolean;
 
@@ -28,9 +28,6 @@ export class TileMapActionsComponent extends TileActionsAbstractDirective implem
     if (!this.user) {
       throw new Error('Component needs user');
     }
-  }
-
-  ngOnChanges(changes: SimpleChanges): void {
   }
 
   async changeMapType(event: any) {

@@ -25,6 +25,7 @@ import { MapAbstractDirective } from '../../map/map-abstract.directive';
 import { environment } from '../../../../environments/environment';
 import { LoggerService } from '../../../services/logger.service';
 import { GoogleMapsLoaderService } from '../../../services/google-maps-loader.service';
+import { MarkerFactoryService } from '../../../services/map/marker-factory.service';
 
 @Component({
   selector: 'app-event-card-map',
@@ -68,6 +69,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       streetViewControl: true,
       mapTypeControl: true,
       mapId: environment.googleMapsMapId,
+      colorScheme: this.mapColorScheme() as any
     };
   }
 
@@ -87,6 +89,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     private activityCursorService: AppActivityCursorService,
     public eventColorService: AppEventColorService,
     private mapsLoader: GoogleMapsLoaderService,
+    private markerFactory: MarkerFactoryService,
     protected logger: LoggerService) {
     super(changeDetectorRef, logger);
   }
@@ -168,88 +171,42 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   getMarkerOptions(_activity: ActivityInterface, color: string): google.maps.marker.AdvancedMarkerElementOptions {
-    const div = document.createElement('div');
-    div.innerHTML = `
-        <svg width="24" height="24" viewBox="0 -24 24 24">
-          <path d="M22-48h-44v43h16l6 5 6-5h16z" fill="${color}" stroke="#FFF" stroke-width="0.5" transform="scale(0.5) translate(22, 48)" />
-        </svg>`;
     return {
-      content: div,
+      content: this.markerFactory.createPinMarker(color),
       gmpClickable: true
     };
   }
 
   getHomeMarkerOptions(_activity: ActivityInterface, color: string): google.maps.marker.AdvancedMarkerElementOptions {
-    const div = document.createElement('div');
-    // M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z is a house icon
-    div.innerHTML = `
-        <svg width="24" height="24" viewBox="0 0 24 24">
-          <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" fill="${color}" stroke="#FFF" stroke-width="0.8" />
-        </svg>`;
     return {
-      content: div,
+      content: this.markerFactory.createHomeMarker(color),
       title: 'Start',
       zIndex: 100
     };
   }
 
   getFlagMarkerOptions(_activity: ActivityInterface, color: string): google.maps.marker.AdvancedMarkerElementOptions {
-    const div = document.createElement('div');
-    div.innerHTML = `
-        <svg width="24" height="24" viewBox="0 0 24 24">
-          <path d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z" fill="${color}" stroke="#FFF" stroke-width="0.8" />
-        </svg>`;
     return {
-      content: div
+      content: this.markerFactory.createFlagMarker(color)
     };
   }
 
   getCursorMarkerOptions(_activity: ActivityInterface, color: string): google.maps.marker.AdvancedMarkerElementOptions {
-    const div = document.createElement('div');
-    div.innerHTML = `
-        <svg width="24" height="24" viewBox="0 0 24 24">
-          <path d="M5 15H3v4c0 1.1.9 2 2 2h4v-2H5v-4zM5 5h4V3H5c-1.1 0-2 .9-2 2v4h2V5zm14-2h-4v2h4v4h2V5c0-1.1-.9-2-2-2zm0 16h-4v2h4c1.1 0 2-.9 2-2v-4h-2v4zM12 9c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" fill="${color}" stroke="#FFF" stroke-width="1" />
-        </svg>`;
     return {
-      content: div,
+      content: this.markerFactory.createCursorMarker(color),
       zIndex: 200
     };
   }
 
   getLapMarkerOptions(_activity: ActivityInterface, color: string, lapIndex: number): google.maps.marker.AdvancedMarkerElementOptions {
-    const div = document.createElement('div');
-    div.innerHTML = `
-          <svg width="24" height="29" viewBox="-23 -49 46 54" style="overflow: visible;">
-             <defs>
-               <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-                 <feGaussianBlur in="SourceAlpha" stdDeviation="1" />
-                 <feOffset dx="0" dy="1" />
-                 <feComponentTransfer><feFuncA type="linear" slope="0.5"/></feComponentTransfer>
-                 <feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge>
-               </filter>
-             </defs>
-             <path d="M22-48h-44v43h16l6 5 6-5h16z" fill="${color}" stroke="#FFF" stroke-width="2" filter="url(#shadow)" />
-             <text x="0" y="-26.5" dominant-baseline="central" text-anchor="middle" fill="white" 
-                   style="font-family: 'Roboto', 'Inter', sans-serif; font-size: 16px; font-weight: 800; pointer-events: none;">
-               ${lapIndex + 1}
-             </text>
-          </svg>
-        `;
-
     return {
-      content: div,
+      content: this.markerFactory.createLapMarker(color, lapIndex),
       zIndex: lapIndex + 1
     };
   }
 
   pointMarkerContent(color: string): Node {
-    const div = document.createElement('div');
-    div.innerHTML = `
-        <svg width="10" height="10" viewBox="0 0 10 10">
-          <circle cx="5" cy="5" r="4" fill="${color}" stroke="#FFF" stroke-width="0.8" />
-        </svg>
-      `;
-    return div;
+    return this.markerFactory.createPointMarker(color);
   }
 
   getPolylineOptions(activityMapData: MapData): google.maps.PolylineOptions {
@@ -348,7 +305,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     this.logger.log(`[EventCardMap] mapActivities started for ${this.selectedActivities.length} activities (seq: ${seq})`);
     this.loading();
     this.noMapData = false;
-    this.activitiesMapData = [];
     this.activitiesMapData = [];
 
     if (!this.selectedActivities?.length) {
