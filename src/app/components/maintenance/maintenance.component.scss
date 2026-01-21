@@ -29,3 +29,28 @@
     opacity: 0.7;
     line-height: 1.6;
 }
+
+/* Overlay styles for non-blocking mode */
+:host(.maintenance-overlay) {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+    background: var(--mat-sys-background);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}

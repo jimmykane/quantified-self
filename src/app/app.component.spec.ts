@@ -59,7 +59,8 @@ describe('AppComponent', () => {
 
     const mockRemoteConfigService = {
         getMaintenanceMode: vi.fn().mockReturnValue(of(false)),
-        getMaintenanceMessage: vi.fn().mockReturnValue(of(''))
+        getMaintenanceMessage: vi.fn().mockReturnValue(of('')),
+        getIsLoading: vi.fn().mockReturnValue(of(false))
     };
 
     const mockSeoService = {
@@ -173,5 +174,20 @@ describe('AppComponent', () => {
     it('should return true for isAdminRoute when url includes admin', () => {
         mockRouter.url = '/admin';
         expect(component.isAdminRoute).toBe(true);
+    });
+
+    it('should return true for isHomeRoute when url is /', () => {
+        mockRouter.url = '/';
+        expect(component.isHomeRoute).toBe(true);
+    });
+
+    it('should return true for isHomeRoute when url is /?param=value', () => {
+        mockRouter.url = '/?param=value';
+        expect(component.isHomeRoute).toBe(true);
+    });
+
+    it('should return false for isHomeRoute when url is /dashboard', () => {
+        mockRouter.url = '/dashboard';
+        expect(component.isHomeRoute).toBe(false);
     });
 });

@@ -58,6 +58,7 @@ export class AppComponent implements OnInit, OnDestroy {
   public onboardingCompleted = true; // Default to true to avoid hiding chrome of non-authenticated users prematurely
   public maintenanceMode$!: Observable<boolean>;
   public maintenanceMessage$!: Observable<string>;
+  public maintenanceLoading!: Observable<boolean>;
   public currentUser: any = null;
   public isAdminUser = false;
   public currentTheme$: Observable<any>;
@@ -99,6 +100,7 @@ export class AppComponent implements OnInit, OnDestroy {
   async ngOnInit() {
     this.maintenanceMode$ = this.remoteConfigService.getMaintenanceMode();
     this.maintenanceMessage$ = this.remoteConfigService.getMaintenanceMessage();
+    this.maintenanceLoading = this.remoteConfigService.getIsLoading();
     this.seoService.init(); // Initialize SEO service
 
     this.authService.user$.subscribe(async user => {
@@ -140,6 +142,10 @@ export class AppComponent implements OnInit, OnDestroy {
 
   get isAdminRoute(): boolean {
     return this.router.url.includes('/admin');
+  }
+
+  get isHomeRoute(): boolean {
+    return this.router.url === '/' || this.router.url.split('?')[0] === '/';
   }
 
   get showUploadActivities(): boolean {

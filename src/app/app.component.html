@@ -1,79 +1,79 @@
-<ng-container *ngIf="(maintenanceMode$ | async) !== true; else maintenanceTemplate">
-  <ng-container *ngIf="authState !== null; else loadingApp">
-    <!-- Circular Reveal Theme Overlay -->
-    <div *ngIf="themeOverlayActive" class="theme-reveal-overlay" [ngClass]="themeOverlayClass"
-      [ngStyle]="themeOverlayStyle">
-    </div>
-
-    <div [class.has-banner]="hasBanner" class="app-layout-wrapper">
-      <app-grace-period-banner (heightChanged)="onBannerHeightChanged($event)"></app-grace-period-banner>
-
-      <app-route-loader></app-route-loader>
+<ng-container *ngIf="authState !== null; else loadingApp">
+  <!-- Circular Reveal Theme Overlay -->
+  <div *ngIf="themeOverlayActive" class="theme-reveal-overlay" [ngClass]="themeOverlayClass"
+    [ngStyle]="themeOverlayStyle">
+  </div>
 
 
-      <!-- New Header Layout -->
-      <nav *ngIf="showNavigation" class="custom-header mat-typography" [style.top.px]="bannerHeight">
-        <button mat-icon-button (click)="toggleSidenav()" class="hamburger-link">
-          <mat-icon class="larger_icon">menu</mat-icon>
-        </button>
+  <div [class.has-banner]="hasBanner" class="app-layout-wrapper">
+    <app-grace-period-banner (heightChanged)="onBannerHeightChanged($event)"></app-grace-period-banner>
 
-        <mat-icon class="app-icon header-logo" svgIcon="logo" (click)="onLogoClick()"></mat-icon>
+    <app-route-loader></app-route-loader>
 
-        <span class="fill-space"></span>
 
-        @if (authState === null && !isDashboardRoute && !isLoginRoute) {
-        <button mat-flat-button class="right" color="accent" disabled>
-          Loading
-        </button>
-        }
-        @if (authState === true && !isDashboardRoute) {
-        <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);"
-          [matTooltip]="isHandset() ? 'Dashboard' : ''">
-          <mat-icon *ngIf="isHandset()">dashboard</mat-icon>
-          <span *ngIf="!isHandset()">Dashboard</span>
-        </button>
-        }
+    <!-- New Header Layout -->
+    <nav *ngIf="showNavigation" class="custom-header mat-typography" [style.top.px]="bannerHeight">
+      <button mat-icon-button (click)="toggleSidenav()" class="hamburger-link">
+        <mat-icon class="larger_icon">menu</mat-icon>
+      </button>
 
-        @if (showUploadActivities) {
-        <app-processing-indicator class="right"></app-processing-indicator>
-        <app-upload-activities class="right" [isHandset]="isHandset()">
-        </app-upload-activities>
-        }
+      <mat-icon class="app-icon header-logo" svgIcon="logo" (click)="onLogoClick()"></mat-icon>
 
-        @if (isAdminUser && !isAdminRoute) {
-        <button mat-icon-button class="right admin-button" matTooltip="Admin Dashboard"
-          (click)="router.navigate(['/admin']);">
-          <mat-icon>admin_panel_settings</mat-icon>
-        </button>
-        }
+      <span class="fill-space"></span>
 
-        @if (authState === false && !isLoginRoute) {
-        <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/login']);">
-          Login or Register
-        </button>
-        }
-      </nav>
+      @if (authState === null && !isDashboardRoute && !isLoginRoute) {
+      <button mat-flat-button class="right" color="accent" disabled>
+        Loading
+      </button>
+      }
+      @if (authState === true && !isDashboardRoute) {
+      <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);"
+        [matTooltip]="isHandset() ? 'Dashboard' : ''">
+        <mat-icon *ngIf="isHandset()">dashboard</mat-icon>
+        <span *ngIf="!isHandset()">Dashboard</span>
+      </button>
+      }
 
-      <mat-sidenav-container class="app-sidenav-container" [class.no-margin-top]="!onboardingCompleted"
-        [style.margin-top.px]="bannerHeight + 64">
-        <mat-sidenav #sidenav [mode]="'over'" *ngIf="showNavigation" [fixedInViewport]="true"
-          [fixedTopGap]="bannerHeight + 64" [autoFocus]="false">
-          <app-sidenav></app-sidenav>
-        </mat-sidenav>
+      @if (showUploadActivities) {
+      <app-processing-indicator class="right"></app-processing-indicator>
+      <app-upload-activities class="right" [isHandset]="isHandset()">
+      </app-upload-activities>
+      }
 
-        <mat-sidenav-content>
-          <div class="router-outlet-container" [@routeAnimations]="prepareRoute(outlet)">
-            <router-outlet #outlet="outlet"></router-outlet>
-          </div>
-        </mat-sidenav-content>
-      </mat-sidenav-container>
-    </div>
-  </ng-container>
+      @if (isAdminUser && !isAdminRoute) {
+      <button mat-icon-button class="right admin-button" matTooltip="Admin Dashboard"
+        (click)="router.navigate(['/admin']);">
+        <mat-icon>admin_panel_settings</mat-icon>
+      </button>
+      }
+
+      @if (authState === false && !isLoginRoute) {
+      <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/login']);">
+        Login or Register
+      </button>
+      }
+    </nav>
+
+    <mat-sidenav-container class="app-sidenav-container" [class.no-margin-top]="!onboardingCompleted"
+      [style.margin-top.px]="bannerHeight + 64">
+      <mat-sidenav #sidenav [mode]="'over'" *ngIf="showNavigation" [fixedInViewport]="true"
+        [fixedTopGap]="bannerHeight + 64" [autoFocus]="false">
+        <app-sidenav></app-sidenav>
+      </mat-sidenav>
+
+      <mat-sidenav-content>
+        <div class="router-outlet-container" [@routeAnimations]="prepareRoute(outlet)">
+          <router-outlet #outlet="outlet"></router-outlet>
+        </div>
+      </mat-sidenav-content>
+    </mat-sidenav-container>
+  </div>
 </ng-container>
 
-<ng-template #maintenanceTemplate>
-  <app-maintenance [message]="(maintenanceMessage$ | async) || ''"></app-maintenance>
-</ng-template>
+
+<ng-container *ngIf="(maintenanceMode$ | async) === true && !isHomeRoute">
+  <app-maintenance [message]="(maintenanceMessage$ | async) || ''" class="maintenance-overlay"></app-maintenance>
+</ng-container>
 
 <ng-template #loadingApp>
   <div class="spinner-container">

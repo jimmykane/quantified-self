@@ -25,6 +25,7 @@ export class AppRemoteConfigService {
 
     readonly maintenanceMode$: Observable<boolean>;
     readonly maintenanceMessage$: Observable<string>;
+    readonly isLoading: Observable<boolean>;
 
     constructor(
         private windowService: AppWindowService,
@@ -73,8 +74,17 @@ export class AppRemoteConfigService {
             shareReplay(1)
         );
 
+        this.isLoading = this.configLoaded$.pipe(
+            map(loaded => !loaded),
+            shareReplay(1)
+        );
+
         this.initializeConfig();
     }
+
+    // ... (existing methods)
+
+
 
     /**
      * Check if current user is admin
@@ -198,5 +208,9 @@ export class AppRemoteConfigService {
 
     getMaintenanceMessage(): Observable<string> {
         return this.maintenanceMessage$;
+    }
+
+    getIsLoading(): Observable<boolean> {
+        return this.isLoading;
     }
 }

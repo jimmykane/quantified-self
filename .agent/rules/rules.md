@@ -23,6 +23,8 @@ trigger: always_on
   - Preferred for New Code: `inject()` function.
 - **Signals**:
   - Adopt Angular Signals for local component state where possible.
+- **Naming Conventions**:
+  - **Observables**: Do **NOT** use the `$` suffix for Observables (e.g., use `isLoading`, not `isLoading$`). This is a strict rule to avoid "Swiss cheese" code style.
 
 ### Firebase
 - Use **Modular SDK** (`@angular/fire` v20+, `firebase` v9+).

@@ -36,11 +36,6 @@ import { ProcessingIndicatorComponent } from './components/notifications/process
 import { AppRemoteConfigService } from './services/app.remote-config.service';
 import { firstValueFrom } from 'rxjs';
 
-// Factory function that blocks until Remote Config is initialized
-export function initializeRemoteConfig(remoteConfigService: AppRemoteConfigService) {
-  return () => firstValueFrom(remoteConfigService.getMaintenanceMode());
-}
-
 import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/date-locale.config';
 import { APP_STORAGE } from './services/storage/app.storage.token';
 
@@ -129,7 +124,8 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
       const logger = inject(LoggerService);
 
       // Initialize Remote Config (blocks bootstrap if it returns a Promise/Observable)
-      initializeRemoteConfig(remoteConfigService)();
+      // Remote Config is initialized in AppRemoteConfigService constructor
+      // It no longer blocks app bootstrap - maintenance is enforced via overlay
 
       // Connect App Check to Google Maps Loader
       mapsLoader.setAppCheckProvider(() => {
