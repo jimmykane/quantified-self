@@ -1,16 +1,18 @@
 import { APP_STORAGE } from './storage/app.storage.token';
 import { Inject, PLATFORM_ID, Injectable } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { Observable, BehaviorSubject, combineLatest } from 'rxjs';
-import { map, filter, shareReplay } from 'rxjs/operators';
+import { Observable, BehaviorSubject, combineLatest, from } from 'rxjs';
+import { map, filter, shareReplay, catchError, tap } from 'rxjs/operators';
 import { AppWindowService } from './app.window.service';
 import { AppUserService } from './app.user.service';
 import { environment } from '../../environments/environment';
 import { LoggerService } from './logger.service';
+import { RemoteConfig, fetchAndActivate, getAll, getValue } from '@angular/fire/remote-config';
 
 /**
- * Remote Config Service - Bypasses Firebase SDK completely due to persistent bugs.
- * Uses Firebase Remote Config REST API directly.
+ * Remote Config Service
+ * Uses AngularFire SDK to fetch maintenance mode configuration.
+ * Initialization is non-blocking to ensure fast app startup.
  * 
  * Admin users automatically bypass maintenance mode.
  */
@@ -32,7 +34,8 @@ export class AppRemoteConfigService {
         private userService: AppUserService,
         private logger: LoggerService,
         @Inject(APP_STORAGE) private storage: Storage,
-        @Inject(PLATFORM_ID) private platformId: object
+        @Inject(PLATFORM_ID) private platformId: object,
+        private remoteConfig: RemoteConfig
     ) {
         // Check admin status initially
         this.checkAdminStatus();
@@ -82,9 +85,9 @@ export class AppRemoteConfigService {
         this.initializeConfig();
     }
 
-    // ... (existing methods)
-
-
+    getIsLoading(): Observable<boolean> {
+        return this.isLoading;
+    }
 
     /**
      * Check if current user is admin
@@ -102,89 +105,49 @@ export class AppRemoteConfigService {
 
     async initializeConfig(): Promise<boolean> {
         try {
-            this.logger.log('[RemoteConfig] Fetching config...');
+            this.logger.log('[RemoteConfig] Fetching config via SDK...');
 
-            const projectId = environment.firebase.projectId;
-            const apiKey = environment.firebase.apiKey;
-            const appId = environment.firebase.appId;
+            // Set settings (optional, e.g. minimumFetchIntervalMillis)
+            // this.remoteConfig.settings.minimumFetchIntervalMillis = 3600000; 
 
-            // Firebase Remote Config v1 REST endpoint
-            const url = `https://firebaseremoteconfig.googleapis.com/v1/projects/${projectId}/namespaces/firebase:fetch?key=${apiKey}`;
+            const activated = await fetchAndActivate(this.remoteConfig);
+            this.logger.log('[RemoteConfig] Activated:', activated);
 
-            const response = await fetch(url, {
-                method: 'POST',
-                cache: 'no-store', // Prevent browser caching
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    appId: appId,
-                    appInstanceId: this.getOrCreateInstanceId(),
-                })
-            });
+            const allConfigs = getAll(this.remoteConfig);
 
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+            let envSuffix: 'prod' | 'beta' | 'dev' = 'beta';
+            if (environment.production) envSuffix = 'prod';
+            else if (environment.beta) envSuffix = 'beta';
+            else if (environment.localhost) envSuffix = 'dev';
+
+            const modeKey = `maintenance_mode_${envSuffix}`;
+            const messageKey = `maintenance_message_${envSuffix}`;
+
+            // Try environment specific first
+            if (allConfigs[modeKey]) {
+                const value = allConfigs[modeKey].asBoolean();
+                this.maintenanceModeValue = value;
+                this.logger.log(`[RemoteConfig] ${modeKey}:`, this.maintenanceModeValue);
+            } else if (allConfigs['maintenance_mode']) {
+                // Fallback to legacy
+                const value = allConfigs['maintenance_mode'].asBoolean();
+                this.maintenanceModeValue = value;
+                this.logger.log('[RemoteConfig] maintenance_mode (fallback):', this.maintenanceModeValue);
             }
 
-            const data = await response.json();
-            this.logger.log('[RemoteConfig] Response:', data.state);
-
-            if (data.entries) {
-                let envSuffix: 'prod' | 'beta' | 'dev' = 'beta';
-                if (environment.production) envSuffix = 'prod';
-                else if (environment.beta) envSuffix = 'beta';
-                else if (environment.localhost) envSuffix = 'dev';
-
-                const modeKey = `maintenance_mode_${envSuffix}`;
-                const messageKey = `maintenance_message_${envSuffix}`;
-
-                // Try environment specific first
-                if (modeKey in data.entries) {
-                    const value = data.entries[modeKey];
-                    this.maintenanceModeValue = value === 'true' || value === true;
-                    this.logger.log(`[RemoteConfig] ${modeKey}:`, this.maintenanceModeValue);
-                } else if ('maintenance_mode' in data.entries) {
-                    // Fallback to legacy
-                    const value = data.entries.maintenance_mode;
-                    this.maintenanceModeValue = value === 'true' || value === true;
-                    this.logger.log('[RemoteConfig] maintenance_mode (fallback):', this.maintenanceModeValue);
-                }
-
-                if (messageKey in data.entries) {
-                    this.maintenanceMessageValue = data.entries[messageKey];
-                } else if ('maintenance_message' in data.entries) {
-                    this.maintenanceMessageValue = data.entries.maintenance_message;
-                }
+            if (allConfigs[messageKey]) {
+                this.maintenanceMessageValue = allConfigs[messageKey].asString();
+            } else if (allConfigs['maintenance_message']) {
+                this.maintenanceMessageValue = allConfigs['maintenance_message'].asString();
             }
 
             this.configLoaded$.next(true);
             return true;
         } catch (e) {
             this.logger.error('[RemoteConfig] Fetch failed:', e);
-            this.configLoaded$.next(true);
+            this.configLoaded$.next(true); // Still mark as loaded to allow app to proceed/hide loading state
             return false;
         }
-    }
-
-    private getOrCreateInstanceId(): string {
-        const key = 'rc_instance_id';
-        let id = this.storage.getItem(key);
-        if (!id) {
-            // crypto.randomUUID() is only available in secure contexts (HTTPS/localhost)
-            if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-                id = crypto.randomUUID();
-            } else {
-                // Fallback for insecure contexts or older browsers
-                id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-                    const r = Math.random() * 16 | 0;
-                    const v = c === 'x' ? r : (r & 0x3 | 0x8);
-                    return v.toString(16);
-                });
-            }
-            this.storage.setItem(key, id);
-        }
-        return id;
     }
 
     private isBypassEnabled(): boolean {
@@ -208,9 +171,5 @@ export class AppRemoteConfigService {
 
     getMaintenanceMessage(): Observable<string> {
         return this.maintenanceMessage$;
-    }
-
-    getIsLoading(): Observable<boolean> {
-        return this.isLoading;
     }
 }
