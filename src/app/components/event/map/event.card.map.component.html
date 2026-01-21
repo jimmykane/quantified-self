@@ -4,7 +4,8 @@
       <mat-icon>map</mat-icon>
     </div>
     <div class="map-header-actions">
-      <app-map-actions [(showLaps)]="showLaps" [(showArrows)]="showArrows" [user]="user">
+      <app-map-actions [showLaps]="showLaps" [showArrows]="showArrows" [user]="user"
+        (showLapsChange)="onShowLapsChange($event)" (showArrowsChange)="onShowArrowsChange($event)">
       </app-map-actions>
     </div>
   </div>
@@ -29,7 +30,8 @@
     @defer (on viewport) {
     @if (activitiesMapData.length > 0 && apiLoaded()) {
     <google-map height="100%" width="100%" [center]="mapCenter()" [zoom]="mapZoom()" [mapTypeId]="mapTypeId()"
-      [options]="mapOptions" (mapInitialized)="onMapReady($event)">
+      [options]="mapOptions()" (mapInitialized)="onMapReady($event)" (zoomChanged)="onZoomChanged()"
+      (centerChanged)="onCenterChanged()">
       @for (activityMapData of activitiesMapData; track activityMapData.activity.getID()) {
       <!-- Start Marker -->
       @if (activityMapData.positions.length > 0) {

@@ -44,7 +44,8 @@
 @defer (on viewport) {
 @if (apiLoaded()) {
 <google-map height="100%" width="100%" [center]="mapCenter()" [zoom]="mapZoom()" [mapTypeId]="mapTypeId()"
-  [options]="mapOptions" (mapInitialized)="onMapReady($event)" (mapTypeIdChange)="changeMapType($any($event))">
+  [options]="mapOptions()" (mapInitialized)="onMapReady($event)" (mapTypeIdChange)="changeMapType($any($event))"
+  (zoomChanged)="onZoomChanged()" (centerChanged)="onCenterChanged()">
 
   <!-- Polylines for selected event activities -->
   @if (selectedEventPositionsByActivity) {

@@ -12,6 +12,7 @@ import {
   SimpleChanges,
   ViewChild,
   signal,
+  computed,
 } from '@angular/core';
 import { GoogleMap } from '@angular/google-maps';
 import { throttleTime } from 'rxjs/operators';
@@ -57,29 +58,29 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
   public mapTypeId = signal<google.maps.MapTypeId>('roadmap' as google.maps.MapTypeId);
   public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
-  public mapCenter = signal<google.maps.LatLngLiteral>({ lat: 0, lng: 0 });
+  public mapCenter = signal<google.maps.LatLngLiteral>({ lat: 0, lng: 0 }, {
+    equal: (a, b) => a.lat === b.lat && a.lng === b.lng
+  });
   public mapZoom = signal(12);
 
   // Map options
-  public get mapOptions(): google.maps.MapOptions {
-    return {
-      gestureHandling: 'cooperative',
-      scrollwheel: true,
-      controlSize: 32,
-      disableDefaultUI: true,
-      fullscreenControl: true,
-      scaleControl: true,
-      rotateControl: true,
-      zoomControl: true,
-      streetViewControl: true,
-      mapTypeControl: true,
-      mapTypeControlOptions: {
-        mapTypeIds: ['roadmap', 'hybrid', 'terrain']
-      },
-      mapId: environment.googleMapsMapId,
-      colorScheme: this.mapColorScheme()
-    };
-  }
+  public mapOptions = computed<google.maps.MapOptions>(() => ({
+    gestureHandling: 'cooperative',
+    scrollwheel: true,
+    controlSize: 32,
+    disableDefaultUI: true,
+    fullscreenControl: true,
+    scaleControl: true,
+    rotateControl: true,
+    zoomControl: true,
+    streetViewControl: true,
+    mapTypeControl: true,
+    mapTypeControlOptions: {
+      mapTypeIds: ['roadmap', 'hybrid', 'terrain']
+    },
+    mapId: environment.googleMapsMapId,
+    colorScheme: this.mapColorScheme()
+  }));
 
   private activitiesCursorSubscription: Subscription;
   private lineMouseMoveSubject: Subject<{ event: google.maps.MapMouseEvent, activityMapData: MapData }> = new Subject();
@@ -158,7 +159,47 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       (simpleChanges.strokeWidth && !simpleChanges.strokeWidth.firstChange) ||
       (simpleChanges.showPoints && !simpleChanges.showPoints.firstChange)
     ) {
-      this.mapActivities(++this.processSequence);
+      // Only re-fit bounds if the selected activities changed
+      const shouldFitBounds = !!simpleChanges.selectedActivities;
+      this.mapActivities(++this.processSequence, shouldFitBounds);
+    }
+  }
+
+  onZoomChanged() {
+    if (this.googleMap) {
+      const newZoom = this.googleMap.getZoom();
+      if (newZoom !== undefined && newZoom !== this.mapZoom()) {
+        this.mapZoom.set(newZoom);
+      }
+    }
+  }
+
+  onCenterChanged() {
+    if (this.googleMap) {
+      const center = this.googleMap.getCenter();
+      if (center) {
+        const newCenter = { lat: center.lat(), lng: center.lng() };
+        const currentCenter = this.mapCenter();
+        if (newCenter.lat !== currentCenter.lat || newCenter.lng !== currentCenter.lng) {
+          this.mapCenter.set(newCenter);
+        }
+      }
+    }
+  }
+
+  onShowLapsChange(value: boolean) {
+    this.showLaps = value;
+    if (this.nativeMap) {
+      this.mapActivities(++this.processSequence, false);
+      this.changeDetectorRef.markForCheck();
+    }
+  }
+
+  onShowArrowsChange(value: boolean) {
+    this.showArrows = value;
+    if (this.nativeMap) {
+      this.mapActivities(++this.processSequence, false);
+      this.changeDetectorRef.markForCheck();
     }
   }
 
@@ -326,7 +367,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     }
   }
 
-  private mapActivities(sequence: number) {
+  private mapActivities(sequence: number, shouldFitBounds = true) {
     if (this.processSequence !== sequence) {
       return;
     }
@@ -376,24 +417,25 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
     this.loaded();
 
+    if (shouldFitBounds) {
+      // Set initial center if we have data (only on initial load or activity changes)
+      if (this.activitiesMapData.length > 0 && this.activitiesMapData[0].positions.length > 0) {
+        this.mapCenter.set({
+          lat: this.activitiesMapData[0].positions[0].latitudeDegrees,
+          lng: this.activitiesMapData[0].positions[0].longitudeDegrees
+        });
+      }
 
-    // Set initial center if we have data
-    if (this.activitiesMapData.length > 0 && this.activitiesMapData[0].positions.length > 0) {
-      this.mapCenter.set({
-        lat: this.activitiesMapData[0].positions[0].latitudeDegrees,
-        lng: this.activitiesMapData[0].positions[0].longitudeDegrees
-      });
+      // Fit bounds after a short delay to ensure map is ready and container has size
+      // Cancel any pending fitBounds to prevent duplicate calls
+      if (this.pendingFitBoundsTimeout) {
+        clearTimeout(this.pendingFitBoundsTimeout);
+      }
+      this.pendingFitBoundsTimeout = setTimeout(() => {
+        this.pendingFitBoundsTimeout = null;
+        this.fitBoundsToActivities();
+      }, 500);
     }
-
-    // Fit bounds after a short delay to ensure map is ready and container has size
-    // Cancel any pending fitBounds to prevent duplicate calls
-    if (this.pendingFitBoundsTimeout) {
-      clearTimeout(this.pendingFitBoundsTimeout);
-    }
-    this.pendingFitBoundsTimeout = setTimeout(() => {
-      this.pendingFitBoundsTimeout = null;
-      this.fitBoundsToActivities();
-    }, 500);
   }
 
   private fitBoundsToActivities() {

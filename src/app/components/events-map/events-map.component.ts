@@ -10,6 +10,7 @@ import {
   ViewChild,
   OnInit,
   signal,
+  computed,
 } from '@angular/core';
 import { GoogleMap } from '@angular/google-maps';
 import { EventInterface } from '@sports-alliance/sports-lib';
@@ -54,23 +55,44 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   public selectedEvent: EventInterface;
   public selectedEventPositionsByActivity: { activity: ActivityInterface, color: string, positions: DataPositionInterface[] }[];
 
-  public mapCenter = signal<google.maps.LatLngLiteral>({ lat: 0, lng: 0 });
+  public mapCenter = signal<google.maps.LatLngLiteral>({ lat: 0, lng: 0 }, {
+    equal: (a, b) => a.lat === b.lat && a.lng === b.lng
+  });
   public mapZoom = signal(3);
   public mapTypeId = signal<google.maps.MapTypeId>('roadmap' as any);
-  public apiLoaded = signal(false);
+  public apiLoaded = signal(false); // Map options
+  public mapOptions = computed<google.maps.MapOptions>(() => ({
+    controlSize: 32,
+    disableDefaultUI: true,
+    backgroundColor: 'transparent',
+    mapTypeControl: true,
+    mapTypeControlOptions: {
+      mapTypeIds: ['roadmap', 'hybrid', 'terrain']
+    },
+    mapId: environment.googleMapsMapId,
+    colorScheme: this.mapColorScheme()
+  }));
 
-  public get mapOptions(): google.maps.MapOptions {
-    return {
-      controlSize: 32,
-      disableDefaultUI: true,
-      backgroundColor: 'transparent',
-      mapTypeControl: true,
-      mapTypeControlOptions: {
-        mapTypeIds: ['roadmap', 'hybrid', 'terrain']
-      },
-      mapId: environment.googleMapsMapId,
-      colorScheme: this.mapColorScheme()
-    };
+  onZoomChanged() {
+    if (this.googleMap) {
+      const newZoom = this.googleMap.getZoom();
+      if (newZoom !== undefined && newZoom !== this.mapZoom()) {
+        this.mapZoom.set(newZoom);
+      }
+    }
+  }
+
+  onCenterChanged() {
+    if (this.googleMap) {
+      const center = this.googleMap.getCenter();
+      if (center) {
+        const newCenter = { lat: center.lat(), lng: center.lng() };
+        const currentCenter = this.mapCenter();
+        if (newCenter.lat !== currentCenter.lat || newCenter.lng !== currentCenter.lng) {
+          this.mapCenter.set(newCenter);
+        }
+      }
+    }
   }
 
   private nativeMap: google.maps.Map;
