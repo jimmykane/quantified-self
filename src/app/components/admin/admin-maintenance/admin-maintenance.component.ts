@@ -61,6 +61,7 @@ export class AdminMaintenanceComponent implements OnInit, OnDestroy {
     fetchMaintenanceStatus(): void {
         this.adminService.getMaintenanceStatus().pipe(takeUntil(this.destroy$)).subscribe({
             next: (status) => {
+                this.logger.log('[AdminMaintenance] Fetched Status:', status);
                 this.prodMaintenance = {
                     enabled: status.prod.enabled,
                     message: status.prod.message || "",

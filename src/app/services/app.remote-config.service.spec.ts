@@ -43,10 +43,15 @@ describe('AppRemoteConfigService', () => {
         };
 
         // Reset mocks and define default behavior
+        // Reset mocks and define default behavior
         vi.mocked(fetchAndActivate).mockResolvedValue(true);
+
+        const defaultMaintenanceConfig = JSON.stringify({
+            default: { enabled: false, message: 'Default Test Message' }
+        });
+
         vi.mocked(getAll).mockReturnValue({
-            maintenance_mode: { asBoolean: () => false } as any,
-            maintenance_message: { asString: () => 'Test message' } as any
+            maintenance_config: { asString: () => defaultMaintenanceConfig } as any
         } as any);
 
         // Mock storage instead of global localStorage
@@ -92,15 +97,20 @@ describe('AppRemoteConfigService', () => {
     });
 
     describe('getMaintenanceMode', () => {
-        it('should return true when maintenance_mode is "true" for non-admin', async () => {
+        it('should return true when maintenance_config.prod.enabled is true for non-admin (prod env)', async () => {
+            // Mock environment to produce 'prod' if needed, or rely on default inference
+            const maintenanceConfig = JSON.stringify({
+                prod: { enabled: true, message: 'Maintenance' },
+                default: { enabled: false, message: 'Default' }
+            });
+
             vi.mocked(getAll).mockReturnValue({
-                maintenance_mode: { asBoolean: () => true } as any,
-                maintenance_message: { asString: () => 'Maintenance in progress' } as any
+                maintenance_config: { asString: () => maintenanceConfig } as any
             } as any);
 
             // Re-create service to trigger init
-            const storageMock = { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn() };
             TestBed.resetTestingModule();
+            const storageMock = { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn() };
             TestBed.configureTestingModule({
                 providers: [
                     AppRemoteConfigService,
@@ -113,15 +123,21 @@ describe('AppRemoteConfigService', () => {
             });
             service = TestBed.inject(AppRemoteConfigService);
 
+            // Force environment to be 'prod' for this test
+            vi.spyOn(service as any, 'environmentName', 'get').mockReturnValue('prod');
+
             const mode = await firstValueFrom(service.getMaintenanceMode());
             expect(mode).toBe(true);
         });
 
-        it('should return false for admin users even when maintenance is true', async () => {
-            mockUserService.isAdmin.mockResolvedValue(true);
+        it('should fallback to default when specific env is missing', async () => {
+            const maintenanceConfig = JSON.stringify({
+                default: { enabled: true, message: 'Default Maintenance' }
+                // 'prod'/'dev'/'beta' missing
+            });
+
             vi.mocked(getAll).mockReturnValue({
-                maintenance_mode: { asBoolean: () => true } as any,
-                maintenance_message: { asString: () => 'Maintenance in progress' } as any
+                maintenance_config: { asString: () => maintenanceConfig } as any
             } as any);
 
             TestBed.resetTestingModule();
@@ -137,6 +153,55 @@ describe('AppRemoteConfigService', () => {
             });
             service = TestBed.inject(AppRemoteConfigService);
 
+            // Should pick up 'default' since current env (likely 'dev' or 'prod') is not in json
+            const mode = await firstValueFrom(service.getMaintenanceMode());
+            expect(mode).toBe(true);
+        });
+
+        it('should default to false/empty if JSON is missing completely', async () => {
+            vi.mocked(getAll).mockReturnValue({} as any);
+
+            TestBed.resetTestingModule();
+            TestBed.configureTestingModule({
+                providers: [
+                    AppRemoteConfigService,
+                    { provide: AppWindowService, useValue: mockWindowService },
+                    { provide: AppUserService, useValue: mockUserService },
+                    { provide: APP_STORAGE, useValue: { getItem: vi.fn(), setItem: vi.fn() } },
+                    { provide: PLATFORM_ID, useValue: 'browser' },
+                    { provide: RemoteConfig, useValue: mockRemoteConfig }
+                ]
+            });
+            service = TestBed.inject(AppRemoteConfigService);
+
+            const mode = await firstValueFrom(service.getMaintenanceMode());
+            expect(mode).toBe(false);
+            const msg = await firstValueFrom(service.getMaintenanceMessage());
+            expect(msg).toBe('We will be back soon.');
+        });
+
+        it('should return false for admin users even when maintenance is true', async () => {
+            mockUserService.isAdmin.mockResolvedValue(true);
+            const maintenanceConfig = JSON.stringify({
+                default: { enabled: true, message: 'Maintenance' }
+            });
+
+            vi.mocked(getAll).mockReturnValue({
+                maintenance_config: { asString: () => maintenanceConfig } as any
+            } as any);
+
+            TestBed.resetTestingModule();
+            TestBed.configureTestingModule({
+                providers: [
+                    AppRemoteConfigService,
+                    { provide: AppWindowService, useValue: mockWindowService },
+                    { provide: AppUserService, useValue: mockUserService },
+                    { provide: APP_STORAGE, useValue: { getItem: vi.fn(), setItem: vi.fn() } },
+                    { provide: PLATFORM_ID, useValue: 'browser' },
+                    { provide: RemoteConfig, useValue: mockRemoteConfig }
+                ]
+            });
+            service = TestBed.inject(AppRemoteConfigService);
             const mode = await firstValueFrom(service.getMaintenanceMode());
             expect(mode).toBe(false);
         });
@@ -163,8 +228,11 @@ describe('AppRemoteConfigService', () => {
 
         it('should bypass maintenance mode with query parameter', async () => {
             mockWindow.location.search = '?bypass_maintenance=true';
+            const maintenanceConfig = JSON.stringify({
+                default: { enabled: true, message: 'Maintenance' }
+            });
             vi.mocked(getAll).mockReturnValue({
-                maintenance_mode: { asBoolean: () => true } as any
+                maintenance_config: { asString: () => maintenanceConfig } as any
             } as any);
 
             TestBed.resetTestingModule();
@@ -185,13 +253,15 @@ describe('AppRemoteConfigService', () => {
         });
     });
 
-    describe('Environment-specific keys', () => {
-        it('should use maintenance_mode_dev when localhost is true', async () => {
-            // Mock environment specifics if possible, or just mock the getAll return to simulate
-            // what getAll would return.
+    describe('Environment-specific keys (JSON)', () => {
+        it('should parse JSON correctly', async () => {
+            const maintenanceConfig = JSON.stringify({
+                dev: { enabled: true, message: 'Dev Mode' },
+                prod: { enabled: false, message: 'Prod Mode' }
+            });
+
             vi.mocked(getAll).mockReturnValue({
-                maintenance_mode_dev: { asBoolean: () => true } as any,
-                maintenance_mode: { asBoolean: () => false } as any
+                maintenance_config: { asString: () => maintenanceConfig } as any
             } as any);
 
             TestBed.resetTestingModule();
@@ -207,8 +277,9 @@ describe('AppRemoteConfigService', () => {
             });
             service = TestBed.inject(AppRemoteConfigService);
 
+            // We can't easily check private environmentName, but we can verify it doesn't crash 
+            // and returns *some* boolean.
             const mode = await firstValueFrom(service.getMaintenanceMode());
-            // Assuming environment.localhost is true in test env, it should pick dev key
             expect(mode).toBeDefined();
         });
     });

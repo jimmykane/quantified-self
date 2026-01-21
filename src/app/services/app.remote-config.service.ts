@@ -1,13 +1,23 @@
 import { APP_STORAGE } from './storage/app.storage.token';
-import { Inject, PLATFORM_ID, Injectable } from '@angular/core';
+import { Inject, PLATFORM_ID, Injectable, inject, signal, Signal, computed } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
-import { Observable, BehaviorSubject, combineLatest, from } from 'rxjs';
-import { map, filter, shareReplay, catchError, tap } from 'rxjs/operators';
 import { AppWindowService } from './app.window.service';
 import { AppUserService } from './app.user.service';
 import { environment } from '../../environments/environment';
 import { LoggerService } from './logger.service';
-import { RemoteConfig, fetchAndActivate, getAll, getValue } from '@angular/fire/remote-config';
+import { RemoteConfig, fetchAndActivate, getString } from '@angular/fire/remote-config';
+
+interface MaintenanceConfigEntry {
+    enabled: boolean;
+    message?: string;
+    updatedAt?: { _seconds: number; _nanoseconds: number };
+    updatedBy?: string;
+}
+
+interface MaintenanceConfig {
+    [key: string]: MaintenanceConfigEntry | undefined;
+    default?: MaintenanceConfigEntry;
+}
 
 /**
  * Remote Config Service
@@ -20,134 +30,129 @@ import { RemoteConfig, fetchAndActivate, getAll, getValue } from '@angular/fire/
     providedIn: 'root'
 })
 export class AppRemoteConfigService {
-    private configLoaded$ = new BehaviorSubject<boolean>(false);
-    private isAdmin$ = new BehaviorSubject<boolean | null>(null);
-    private maintenanceModeValue = false;
-    private maintenanceMessageValue = "";
+    private readonly remoteConfig = inject(RemoteConfig);
+    private readonly windowService = inject(AppWindowService);
+    private readonly userService = inject(AppUserService);
+    private readonly logger = inject(LoggerService);
+    private readonly storage = inject(APP_STORAGE);
+    private readonly platformId = inject(PLATFORM_ID);
 
-    readonly maintenanceMode$: Observable<boolean>;
-    readonly maintenanceMessage$: Observable<string>;
-    readonly isLoading: Observable<boolean>;
+    // Signals for state management
+    private readonly _configLoaded = signal<boolean>(false);
+    private readonly _isAdmin = signal<boolean | null>(null);
+    private readonly _maintenanceModeRaw = signal<boolean>(false);
+    private readonly _maintenanceMessageRaw = signal<string>('');
 
-    constructor(
-        private windowService: AppWindowService,
-        private userService: AppUserService,
-        private logger: LoggerService,
-        @Inject(APP_STORAGE) private storage: Storage,
-        @Inject(PLATFORM_ID) private platformId: object,
-        private remoteConfig: RemoteConfig
-    ) {
-        // Check admin status initially
+    // Public signals
+    readonly configLoaded: Signal<boolean> = this._configLoaded.asReadonly();
+    readonly maintenanceMessage: Signal<string> = this._maintenanceMessageRaw.asReadonly();
+
+    /**
+     * Computed maintenance mode status.
+     * Takes into account admin status and bypass flags.
+     */
+    readonly maintenanceMode = computed(() => {
+        const loaded = this._configLoaded();
+        const isAdmin = this._isAdmin();
+        const rawMode = this._maintenanceModeRaw();
+
+        if (!loaded) return false;
+
+        // Not in maintenance? Return false immediately.
+        if (!rawMode) return false;
+
+        // In maintenance? We must wait for admin check to complete.
+        if (isAdmin === null) return null;
+
+        // Admin? Bypass.
+        if (isAdmin) {
+            this.logger.log('[RemoteConfig] Admin user - bypassing maintenance mode');
+            return false;
+        }
+
+        // URL bypass?
+        if (this.isBypassEnabled()) {
+            this.logger.log('[RemoteConfig] URL bypass enabled');
+            return false;
+        }
+
+        // Strictly in maintenance mode for regular user
+        return true;
+    });
+
+    readonly isLoading = computed(() => !this._configLoaded());
+
+    constructor() {
         this.checkAdminStatus();
-
-        this.maintenanceMode$ = combineLatest([
-            this.configLoaded$.pipe(filter(loaded => loaded)),
-            this.isAdmin$
-        ]).pipe(
-            map(([_, isAdmin]) => {
-                // Not in maintenance? Return false immediately, no need to wait for admin check.
-                if (!this.maintenanceModeValue) return false;
-
-                // In maintenance? We must wait for admin check to complete.
-                if (isAdmin === null) return null;
-
-                // Admin? Bypass.
-                if (isAdmin) {
-                    this.logger.log('[RemoteConfig] Admin user - bypassing maintenance mode');
-                    return false;
-                }
-
-                // URL bypass?
-                if (this.isBypassEnabled()) {
-                    this.logger.log('[RemoteConfig] URL bypass enabled');
-                    return false;
-                }
-
-                // Strictly in maintenance mode for regular user
-                return true;
-            }),
-            // Filter out pending states (null)
-            filter((mode): mode is boolean => mode !== null),
-            shareReplay(1)
-        );
-
-        this.maintenanceMessage$ = this.configLoaded$.pipe(
-            filter(loaded => loaded),
-            map(() => this.maintenanceMessageValue),
-            shareReplay(1)
-        );
-
-        this.isLoading = this.configLoaded$.pipe(
-            map(loaded => !loaded),
-            shareReplay(1)
-        );
-
         this.initializeConfig();
     }
 
-    getIsLoading(): Observable<boolean> {
-        return this.isLoading;
-    }
-
-    /**
-     * Check if current user is admin
-     */
     private async checkAdminStatus(): Promise<void> {
         try {
             const isAdmin = await this.userService.isAdmin();
             this.logger.log('[RemoteConfig] Admin status:', isAdmin);
-            this.isAdmin$.next(isAdmin);
+            this._isAdmin.set(isAdmin);
         } catch (e) {
             this.logger.log('[RemoteConfig] Could not check admin status:', e);
-            this.isAdmin$.next(false);
+            this._isAdmin.set(false);
         }
     }
 
-    async initializeConfig(): Promise<boolean> {
-        try {
-            this.logger.log('[RemoteConfig] Fetching config via SDK...');
-
-            // Set settings (optional, e.g. minimumFetchIntervalMillis)
-            // this.remoteConfig.settings.minimumFetchIntervalMillis = 3600000; 
-
-            const activated = await fetchAndActivate(this.remoteConfig);
-            this.logger.log('[RemoteConfig] Activated:', activated);
-
-            const allConfigs = getAll(this.remoteConfig);
-
-            let envSuffix: 'prod' | 'beta' | 'dev' = 'beta';
-            if (environment.production) envSuffix = 'prod';
-            else if (environment.beta) envSuffix = 'beta';
-            else if (environment.localhost) envSuffix = 'dev';
-
-            const modeKey = `maintenance_mode_${envSuffix}`;
-            const messageKey = `maintenance_message_${envSuffix}`;
-
-            // Try environment specific first
-            if (allConfigs[modeKey]) {
-                const value = allConfigs[modeKey].asBoolean();
-                this.maintenanceModeValue = value;
-                this.logger.log(`[RemoteConfig] ${modeKey}:`, this.maintenanceModeValue);
-            } else if (allConfigs['maintenance_mode']) {
-                // Fallback to legacy
-                const value = allConfigs['maintenance_mode'].asBoolean();
-                this.maintenanceModeValue = value;
-                this.logger.log('[RemoteConfig] maintenance_mode (fallback):', this.maintenanceModeValue);
-            }
-
-            if (allConfigs[messageKey]) {
-                this.maintenanceMessageValue = allConfigs[messageKey].asString();
-            } else if (allConfigs['maintenance_message']) {
-                this.maintenanceMessageValue = allConfigs['maintenance_message'].asString();
-            }
-
-            this.configLoaded$.next(true);
-            return true;
-        } catch (e) {
-            this.logger.error('[RemoteConfig] Fetch failed:', e);
-            this.configLoaded$.next(true); // Still mark as loaded to allow app to proceed/hide loading state
-            return false;
+    private async initializeConfig(): Promise<void> {
+        if (!isPlatformBrowser(this.platformId)) {
+            return;
         }
+
+        try {
+            await fetchAndActivate(this.remoteConfig);
+            this.updateMaintenanceState();
+            this._configLoaded.set(true);
+            this.logger.log('[RemoteConfig] Configuration initialized');
+        } catch (err) {
+            this.logger.error('[RemoteConfig] Failed to fetch remote config', err);
+        }
+    }
+
+    private updateMaintenanceState(): void {
+        try {
+            const configKey = 'maintenance_config';
+            const configValue = getString(this.remoteConfig, configKey);
+
+            if (!configValue) {
+                this.logger.log('[RemoteConfig] No maintenance_config found, using defaults');
+                return;
+            }
+
+            const config: MaintenanceConfig = JSON.parse(configValue);
+            const env = this.environmentName;
+
+            // Resolve config: env-specific -> default
+            const maintenance = config[env] || config['default'];
+
+            if (maintenance) {
+                this._maintenanceModeRaw.set(!!maintenance.enabled);
+                this._maintenanceMessageRaw.set(maintenance.message || '');
+                this.logger.log(`[RemoteConfig] Maintenance Mode (${env}):`, maintenance.enabled);
+            }
+        } catch (err) {
+            this.logger.warn('[RemoteConfig] Failed to parse maintenance_config', err);
+        }
+    }
+
+    private get environmentName(): string {
+        if (environment.production) {
+            return 'prod';
+        }
+
+        if (environment.beta) {
+            return 'beta';
+        }
+
+        if (environment.localhost) {
+            return 'dev';
+        }
+
+        throw new Error('[RemoteConfig] Unknown environment - cannot determine maintenance key');
     }
 
     private isBypassEnabled(): boolean {
@@ -163,13 +168,5 @@ export class AppRemoteConfigService {
         }
 
         return this.storage.getItem(STORAGE_KEY) === 'true';
-    }
-
-    getMaintenanceMode(): Observable<boolean> {
-        return this.maintenanceMode$;
-    }
-
-    getMaintenanceMessage(): Observable<string> {
-        return this.maintenanceMessage$;
     }
 }

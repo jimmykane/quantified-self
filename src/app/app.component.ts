@@ -56,9 +56,11 @@ export class AppComponent implements OnInit, OnDestroy {
   public isOnboardingRoute = false;
   private isFirstLoad = true;
   public onboardingCompleted = true; // Default to true to avoid hiding chrome of non-authenticated users prematurely
-  public maintenanceMode$!: Observable<boolean>;
-  public maintenanceMessage$!: Observable<string>;
-  public maintenanceLoading!: Observable<boolean>;
+  private remoteConfigService = inject(AppRemoteConfigService);
+  public maintenanceMode = this.remoteConfigService.maintenanceMode;
+  public maintenanceMessage = this.remoteConfigService.maintenanceMessage;
+  public maintenanceLoading = this.remoteConfigService.isLoading;
+  public configLoaded = this.remoteConfigService.configLoaded;
   public currentUser: any = null;
   public isAdminUser = false;
   public currentTheme$: Observable<any>;
@@ -77,7 +79,6 @@ export class AppComponent implements OnInit, OnDestroy {
     public router: Router,
     private changeDetectorRef: ChangeDetectorRef,
     public sideNavService: AppSideNavService,
-    private remoteConfigService: AppRemoteConfigService,
     private logger: LoggerService,
     private analyticsService: AppAnalyticsService,
     private seoService: SeoService,
@@ -98,9 +99,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
-    this.maintenanceMode$ = this.remoteConfigService.getMaintenanceMode();
-    this.maintenanceMessage$ = this.remoteConfigService.getMaintenanceMessage();
-    this.maintenanceLoading = this.remoteConfigService.getIsLoading();
+    this.seoService.init(); // Initialize SEO service
     this.seoService.init(); // Initialize SEO service
 
     this.authService.user$.subscribe(async user => {

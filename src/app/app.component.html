@@ -63,6 +63,16 @@
 
       <mat-sidenav-content>
         <div class="router-outlet-container" [@routeAnimations]="prepareRoute(outlet)">
+          <div *ngIf="maintenanceLoading()" class="loading-overlay">
+            <div class="logo-spinner">
+              <mat-icon svgIcon="qs-logo"></mat-icon>
+            </div>
+          </div>
+
+          <!-- Maintenance Overlay -->
+          <app-maintenance *ngIf="maintenanceMode()" [message]="maintenanceMessage()">
+          </app-maintenance>
+
           <router-outlet #outlet="outlet"></router-outlet>
         </div>
       </mat-sidenav-content>
@@ -70,10 +80,6 @@
   </div>
 </ng-container>
 
-
-<ng-container *ngIf="(maintenanceMode$ | async) === true && !isHomeRoute">
-  <app-maintenance [message]="(maintenanceMessage$ | async) || ''" class="maintenance-overlay"></app-maintenance>
-</ng-container>
 
 <ng-template #loadingApp>
   <div class="spinner-container">

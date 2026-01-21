@@ -557,8 +557,8 @@ interface SetMaintenanceModeRequest {
 }
 
 /**
- * Sets the maintenance mode status using a Firestore document.
- * This is used instead of Remote Config to allow admin-controlled updates.
+ * Sets the maintenance mode status using Firebase Remote Config.
+ * Remote Config is the single source of truth for maintenance state.
  */
 export const setMaintenanceMode = onAdminCall<SetMaintenanceModeRequest, any>({
     region: FUNCTIONS_MANIFEST.setMaintenanceMode.region,
@@ -568,55 +568,43 @@ export const setMaintenanceMode = onAdminCall<SetMaintenanceModeRequest, any>({
         const data = request.data;
         const env = data.env || 'prod'; // Default to prod for safety/legacy
         const msg = data.message || "";
-        const db = admin.firestore();
 
-        // 1. Update Firestore (for admin dashboard source of truth)
-        const docId = `maintenance_${env}`;
-        const maintenanceDoc = db.collection('config').doc(docId);
-
-        await maintenanceDoc.set({
-            enabled: data.enabled,
-            message: msg,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            updatedBy: request.auth!.uid,
-        });
-
-        // 2. Update Firebase Remote Config (for client source of truth)
+        // Update Firebase Remote Config (single source of truth)
         const rc = admin.remoteConfig();
         const template = await rc.getTemplate();
 
         template.parameters = template.parameters || {};
 
-        const modeKey = `maintenance_mode_${env}`;
-        const messageKey = `maintenance_message_${env}`;
+        const configKey = 'maintenance_config';
+        let currentConfig: any = {};
 
-        template.parameters[modeKey] = {
-            defaultValue: { value: String(data.enabled) },
-            valueType: 'BOOLEAN' as any
-        };
-
-        template.parameters[messageKey] = {
-            defaultValue: { value: msg },
-            valueType: 'STRING' as any
-        };
-
-        // Also update legacy keys if env is prod for backward compatibility with old clients
-        if (env === 'prod') {
-            template.parameters['maintenance_mode'] = {
-                defaultValue: { value: String(data.enabled) },
-                valueType: 'BOOLEAN' as any
-            };
-            template.parameters['maintenance_message'] = {
-                defaultValue: { value: msg },
-                valueType: 'STRING' as any
-            };
+        const defaultConfigValue = template.parameters[configKey]?.defaultValue as any;
+        if (defaultConfigValue?.value) {
+            try {
+                currentConfig = JSON.parse(defaultConfigValue.value);
+            } catch (e) {
+                logger.warn('Failed to parse existing maintenance_config, starting fresh.', e);
+            }
         }
+
+        // Update the specific environment in the JSON with metadata
+        currentConfig[env] = {
+            enabled: data.enabled,
+            message: msg,
+            updatedAt: { _seconds: Math.floor(Date.now() / 1000), _nanoseconds: 0 },
+            updatedBy: request.auth!.uid
+        };
+
+        template.parameters[configKey] = {
+            defaultValue: { value: JSON.stringify(currentConfig) },
+            valueType: 'JSON' as any
+        };
 
         // Validate and publish
         await rc.validateTemplate(template);
         await rc.publishTemplate(template);
 
-        logger.info(`Maintenance mode [${env}] ${data.enabled ? 'ENABLED' : 'DISABLED'} by ${request.auth!.uid} (Synced to Remote Config)`);
+        logger.info(`Maintenance mode [${env}] ${data.enabled ? 'ENABLED' : 'DISABLED'} by ${request.auth!.uid}`);
 
         return {
             success: true,
@@ -631,6 +619,7 @@ export const setMaintenanceMode = onAdminCall<SetMaintenanceModeRequest, any>({
     }
 });
 
+
 /**
  * Gets the current maintenance mode status from Firestore.
  */
@@ -639,31 +628,53 @@ export const getMaintenanceStatus = onAdminCall<void, any>({
     memory: '256MiB',
 }, async () => {
     try {
-        const db = admin.firestore();
-        const [prodDoc, betaDoc, devDoc, legacyDoc] = await Promise.all([
-            db.collection('config').doc('maintenance_prod').get(),
-            db.collection('config').doc('maintenance_beta').get(),
-            db.collection('config').doc('maintenance_dev').get(),
-            db.collection('config').doc('maintenance').get()
-        ]);
+        const rc = admin.remoteConfig();
 
-        const getStatusData = (doc: admin.firestore.DocumentSnapshot) => {
-            if (!doc.exists) return null;
-            const data = doc.data();
+        // 1. Fetch Remote Config JSON (Strict source of truth)
+        const template = await rc.getTemplate();
+
+        interface MaintenanceConfigEntry {
+            enabled: boolean;
+            message?: string;
+            updatedAt?: { _seconds: number; _nanoseconds: number };
+            updatedBy?: string;
+        }
+
+        interface MaintenanceConfig {
+            [key: string]: MaintenanceConfigEntry | undefined;
+            default?: MaintenanceConfigEntry;
+        }
+
+        let remoteConfigJson: MaintenanceConfig = {};
+        const configKey = 'maintenance_config';
+        const parameter = template.parameters[configKey];
+        const defaultConfigValue = parameter?.defaultValue;
+
+        if (defaultConfigValue && 'value' in defaultConfigValue) {
+            try {
+                remoteConfigJson = JSON.parse(defaultConfigValue.value);
+            } catch (e) {
+                logger.warn('Failed to parse maintenance_config JSON in getMaintenanceStatus', e);
+            }
+        }
+
+        const getStatusData = (env: string) => {
+            const config = remoteConfigJson[env] || remoteConfigJson['default'];
+
             return {
-                enabled: data?.enabled || false,
-                message: data?.message || "",
-                updatedAt: data?.updatedAt,
-                updatedBy: data?.updatedBy
+                enabled: config?.enabled ?? false,
+                message: config?.message || "",
+                // Metadata is now only returned if it exists in the JSON itself
+                updatedAt: config?.updatedAt || null,
+                updatedBy: config?.updatedBy || null
             };
         };
 
-        // Fallback: If prod is missing, use legacy
-        const prod = getStatusData(prodDoc) || getStatusData(legacyDoc) || { enabled: false, message: "" };
-        const beta = getStatusData(betaDoc) || { enabled: false, message: "" };
-        const dev = getStatusData(devDoc) || { enabled: false, message: "" };
-
-        return { prod, beta, dev };
+        return {
+            prod: getStatusData('prod'),
+            beta: getStatusData('beta'),
+            dev: getStatusData('dev')
+        };
     } catch (error: unknown) {
         logger.error('Error getting maintenance status:', error);
         const errorMessage = error instanceof Error ? error.message : 'Failed to get maintenance status';
