@@ -49,4 +49,4 @@ Always strive to create tests that not only verify current functionality but als
 
 - **Vitest**: Use `context7` to find documentation for Vitest configuration, assertions, and mocking utilities.
 - **Angular Testing Library**: Use `context7` for Angular Testing Library best practices if applicable.
-- **Jasmine/Karma Migration**: Use `context7` to research migration strategies from Jasmine/Karma to Vitest if needed.
+
