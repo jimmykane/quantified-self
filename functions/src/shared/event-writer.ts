@@ -50,6 +50,34 @@ export class EventWriter {
         this.logger = logger || consoleLogAdapter;
     }
 
+    /**
+     * Writes event data, activities, and original file(s) to Firestore and Storage.
+     * 
+     * ## Original File Storage Strategy
+     * 
+     * This method implements a dual-field strategy for storing original file metadata:
+     * 
+     * - **`originalFiles`** (array): The canonical field. Always stored as an array, even for
+     *   single file uploads. This supports merged events (multiple source files) and provides
+     *   a consistent data structure for the reader.
+     * 
+     * - **`originalFile`** (object): Legacy/convenience field. Always points to the first file
+     *   in the array. Provides backwards compatibility with older code and simpler access
+     *   for single-file cases.
+     * 
+     * ### Write Behavior
+     * - Single file passed → Normalized to array internally → Both fields written
+     * - Array of files passed → Both fields written (originalFile = first element)
+     * - No files passed → Preserves existing metadata from event object
+     * 
+     * ### Read Behavior (in AppEventService)
+     * - Readers should check `originalFiles` first (canonical source)
+     * - Fall back to `originalFile` only for events written before this normalization
+     * 
+     * @param userID - The user's Firebase UID
+     * @param event - The event to write (must have activities attached)
+     * @param originalFiles - Optional original file(s) to upload to Storage
+     */
     public async writeAllEventData(userID: string, event: AppEventInterface, originalFiles?: OriginalFile[] | OriginalFile): Promise<void> {
         this.logger.info('writeAllEventData called', { userID, eventID: event.getID(), adapterPresent: !!this.storageAdapter });
         const writePromises: Promise<void>[] = [];
@@ -136,11 +164,13 @@ export class EventWriter {
 
                 this.logger.info('Upload complete. Adding metadata to eventJSON');
 
-                // Write 'originalFiles' array and 'originalFile' legacy
+                // Dual-field strategy: Write both originalFiles (canonical) and originalFile (legacy)
+                // See method JSDoc for full explanation of this pattern
                 if (uploadedFilesMetadata.length > 0) {
                     this.logger.info('Assigning metadata to eventJSON:', uploadedFilesMetadata.length);
+                    // Canonical: Always an array, even for single files
                     eventJSON.originalFiles = uploadedFilesMetadata;
-                    // Always set primary legacy pointer to the first file
+                    // Legacy: Always points to first file for backwards compatibility
                     eventJSON.originalFile = uploadedFilesMetadata[0];
                 } else {
                     this.logger.info('No metadata to assign (uploadedFilesMetadata empty)');

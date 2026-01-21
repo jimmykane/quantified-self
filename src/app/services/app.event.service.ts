@@ -482,9 +482,19 @@ export class AppEventService implements OnDestroy {
    * @private
    */
   public attachStreamsToEventWithActivities(user: User, event: AppEventInterface, streamTypes?: string[], merge: boolean = true, skipEnrichment: boolean = false): Observable<EventInterface> {
-    // Check if we have an original file to parse instead of fetching from Firestore
+    // Original File Reading Strategy:
+    // ---------------------------------
+    // Events store original file metadata in two fields (written by EventWriter):
+    //   - originalFiles (array): Canonical source, always an array even for single files
+    //   - originalFile (object): Legacy pointer to first file, for backwards compatibility
+    //
+    // Priority: Check originalFiles first (handles both merged events and normalized single-file cases)
+    // Fallback: Check originalFile only for older events written before the normalization was added
+    //
+    // See EventWriter.writeAllEventData() JSDoc for the full dual-field strategy explanation.
     this.logger.log(`[AppEventService] attachStreams for ${event.getID()}. originalFile: ${!!event.originalFile}, originalFiles: ${!!event.originalFiles}`);
 
+    // Primary path: Use originalFiles array (canonical source)
     if (event.originalFiles && event.originalFiles.length > 0) {
       this.logger.log('[AppEventService] Using client-side parsing for (Multiple)', event.getID());
       return from(this.calculateStreamsFromWithOrchestration(event, skipEnrichment)).pipe(
@@ -514,6 +524,7 @@ export class AppEventService implements OnDestroy {
       );
     }
 
+    // Legacy fallback: Use originalFile for events written before dual-field normalization
     if (event.originalFile && event.originalFile.path) {
       this.logger.log('[AppEventService] Using client-side parsing for (Single)', event.getID());
       return from(this.calculateStreamsFromWithOrchestration(event, skipEnrichment)).pipe(
