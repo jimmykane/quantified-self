@@ -145,6 +145,11 @@ export class EventCardComponent implements OnInit {
     this.currentUser()?.settings?.chartSettings?.hideAllSeriesOnInit ?? false
   );
 
+  public mapType = computed(() => {
+    const type = this.currentUser()?.settings?.mapSettings?.mapType;
+    return type ?? AppUserService.getDefaultMapType();
+  });
+
   public showMapArrows = computed(() =>
     this.currentUser()?.settings?.mapSettings?.showArrows ?? true
   );

@@ -45,6 +45,11 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   @Input() showArrows: boolean;
   @Input() strokeWidth: number;
   @Input() lapTypes: LapTypes[] = [];
+  @Input() set mapType(type: google.maps.MapTypeId | string) {
+    if (type) {
+      this.mapTypeId.set(type as google.maps.MapTypeId);
+    }
+  }
 
   public activitiesMapData: MapData[] = [];
   public noMapData = false;
@@ -76,6 +81,8 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   private activitiesCursorSubscription: Subscription;
   private lineMouseMoveSubject: Subject<{ event: google.maps.MapMouseEvent, activityMapData: MapData }> = new Subject();
   private lineMouseMoveSubscription: Subscription;
+  private nativeMap!: google.maps.Map;
+  private mapListener!: google.maps.MapsEventListener;
 
   public apiLoaded = signal(false);
   private processSequence = 0;
@@ -101,10 +108,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     // Load 'maps' library
     await this.mapsLoader.importLibrary('maps');
     await this.mapsLoader.importLibrary('marker');
-
-    if (this.user?.settings?.mapSettings?.mapType) {
-      this.mapTypeId.set(this.user.settings.mapSettings.mapType as unknown as google.maps.MapTypeId);
-    }
 
     this.apiLoaded.set(true);
     this.changeDetectorRef.markForCheck();
@@ -156,8 +159,22 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     }
   }
 
-  async onMapReady(_map: google.maps.Map) {
+  async onMapReady(map: google.maps.Map) {
+    this.nativeMap = map;
     this.mapActivities(++this.processSequence);
+
+    // Add native listener for map type changes from Google controls
+    if (this.mapListener) {
+      this.mapListener.remove();
+    }
+    this.mapListener = this.nativeMap.addListener('maptypeid_changed', () => {
+      const newType = this.nativeMap.getMapTypeId();
+      // Only trigger change if the type is actually different from what's in user settings
+      // to avoid infinite loops between signal updates and native events.
+      if (this.user?.settings?.mapSettings?.mapType?.toString() !== newType?.toString()) {
+        this.changeMapType(newType as google.maps.MapTypeId);
+      }
+    });
   }
 
   openLapMarkerInfoWindow(lap: LapInterface) {
@@ -278,10 +295,19 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   async changeMapType(mapType: google.maps.MapTypeId) {
-    if (!this.user) return;
+    if (!this.user || this.user.settings?.mapSettings?.mapType?.toString() === mapType?.toString()) return;
     this.mapTypeId.set(mapType);
-    this.user.settings.mapSettings.mapType = mapType as any;
-    await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
+
+    // Create a copy of the settings to update, avoiding direct mutation of the input
+    const updatedSettings = {
+      ...this.user.settings,
+      mapSettings: {
+        ...this.user.settings.mapSettings,
+        mapType: mapType as any
+      }
+    };
+
+    await this.userService.updateUserProperties(this.user, { settings: updatedSettings });
   }
 
   @HostListener('window:resize')
@@ -297,12 +323,10 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     }
   }
 
-  private mapActivities(seq: number) {
-    if (seq !== this.processSequence) {
-      this.logger.warn(`[EventCardMap] mapActivities aborted BEFORE starting (seq mismatch: ${seq} !== ${this.processSequence})`);
+  private mapActivities(sequence: number) {
+    if (this.processSequence !== sequence) {
       return;
     }
-    this.logger.log(`[EventCardMap] mapActivities started for ${this.selectedActivities.length} activities (seq: ${seq})`);
     this.loading();
     this.noMapData = false;
     this.activitiesMapData = [];
@@ -310,7 +334,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     if (!this.selectedActivities?.length) {
       this.noMapData = true;
       this.loaded();
-      this.logger.log(`[EventCardMap] mapActivities stopped: no activities selected (seq: ${seq})`);
       return;
     }
 
@@ -349,7 +372,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     });
 
     this.loaded();
-    this.logger.log(`[EventCardMap] mapActivities completed (seq: ${seq})`);
+
 
     // Set initial center if we have data
     if (this.activitiesMapData.length > 0 && this.activitiesMapData[0].positions.length > 0) {
@@ -372,24 +395,14 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
   private fitBoundsToActivities() {
     if (!this.googleMap?.googleMap || !this.activitiesMapData.length) {
-      this.logger.log('[EventCardMapComponent] Skipping fitBounds. mapReady:', !!this.googleMap?.googleMap, 'dataLength:', this.activitiesMapData.length);
       return;
     }
 
     const allPositions = this.activitiesMapData.reduce((arr, data) => arr.concat(data.positions), []);
-    this.logger.log('[EventCardMapComponent] fitBoundsToActivities called for', allPositions.length, 'total positions across', this.activitiesMapData.length, 'activities');
-
     if (allPositions.length === 0) return;
 
     const bounds = this.getBounds(allPositions);
-    this.logger.log('[EventCardMapComponent] Computed bounds:', JSON.stringify(bounds));
-
     this.googleMap.googleMap.fitBounds(bounds);
-
-    // Log final zoom after a short delay to see what Google decided
-    setTimeout(() => {
-      this.logger.log('[EventCardMapComponent] Final zoom after fitBounds:', this.googleMap.googleMap.getZoom());
-    }, 200);
   }
 
   private unSubscribeFromAll() {
