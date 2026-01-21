@@ -12,7 +12,7 @@ import { provideAuth, getAuth, connectAuthEmulator } from '@angular/fire/auth';
 import { provideFirestore, initializeFirestore } from '@angular/fire/firestore';
 import { getApp } from '@angular/fire/app';
 import { provideFunctions, getFunctions } from '@angular/fire/functions';
-import { provideAppCheck, initializeAppCheck, ReCaptchaV3Provider, AppCheck, getToken } from '@angular/fire/app-check';
+import { provideAppCheck, initializeAppCheck, ReCaptchaV3Provider, AppCheck } from '@angular/fire/app-check';
 import { providePerformance, getPerformance } from '@angular/fire/performance';
 import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService, setAnalyticsCollectionEnabled } from '@angular/fire/analytics';
 import { provideRemoteConfig, getRemoteConfig } from '@angular/fire/remote-config';
@@ -119,23 +119,9 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
     },
     provideAppInitializer(() => {
       const remoteConfigService = inject(AppRemoteConfigService);
-      const appCheck = inject(AppCheck);
-      const mapsLoader = inject(GoogleMapsLoaderService);
-      const logger = inject(LoggerService);
-
-      // Initialize Remote Config (blocks bootstrap if it returns a Promise/Observable)
-      // Remote Config is initialized in AppRemoteConfigService constructor
-      // It no longer blocks app bootstrap - maintenance is enforced via overlay
-
-      // Connect App Check to Google Maps Loader
-      mapsLoader.setAppCheckProvider(() => {
-        return getToken(appCheck).then((tokenResult) => {
-          return { token: tokenResult.token };
-        }).catch((error) => {
-          logger.error('[GoogleMaps] App Check token fetch failed:', error);
-          throw error;
-        });
-      });
+      // Just inject to ensure initialization
+      inject(GoogleMapsLoaderService);
+      inject(AppUpdateService); // Check if we can move this from constructor
     }),
   ]
 })
