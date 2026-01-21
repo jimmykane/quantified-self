@@ -34,7 +34,7 @@
         }
         @if (authState === true && !isDashboardRoute) {
         <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);"
-          [matTooltip]="isHandset() ? 'Dashboard' : ''">
+          [matTooltip]="isHandset() ? 'Dashboard' : ''" [class.icon-only]="isHandset()">
           <mat-icon *ngIf="isHandset()">dashboard</mat-icon>
           <span *ngIf="!isHandset()">Dashboard</span>
         </button>
@@ -54,8 +54,10 @@
         }
 
         @if (authState === false && !isLoginRoute) {
-        <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/login']);">
-          Login or Register
+        <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/login']);"
+          [matTooltip]="isHandset() ? 'Login or Register' : ''" [class.icon-only]="isHandset()">
+          <mat-icon *ngIf="isHandset()">login</mat-icon>
+          <span *ngIf="!isHandset()">Login or Register</span>
         </button>
         }
       </nav>
