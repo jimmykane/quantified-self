@@ -1,4 +1,4 @@
-import { AppEventInterface } from './app-event.interface';
+import { AppEventInterface, FirestoreActivityJSON, FirestoreEventJSON } from './app-event.interface';
 
 /**
  * Logger adapter interface for cross-environment compatibility.
@@ -94,17 +94,16 @@ export class EventWriter {
                     activity.setID(this.adapter.generateID());
                 }
 
-                const activityJSON = activity.toJSON();
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                delete (activityJSON as any).streams;
+                const activityJSON = activity.toJSON() as unknown as FirestoreActivityJSON;
+                delete (activityJSON as Record<string, unknown>).streams;
 
                 // Write Activity
-                // Add flat structure metadata
-                (activityJSON as any).userID = userID;
-                (activityJSON as any).eventID = event.getID();
+                // Add flat structure metadata for Firestore querying
+                activityJSON.userID = userID;
+                activityJSON.eventID = event.getID() as string;
                 // Ensure eventStartDate is present for sorting
                 if (event.startDate) {
-                    (activityJSON as any).eventStartDate = event.startDate;
+                    activityJSON.eventStartDate = event.startDate;
                 }
 
 
@@ -118,9 +117,8 @@ export class EventWriter {
             }
 
             // Write Event
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const eventJSON: any = event.toJSON();
-            delete eventJSON.activities;
+            const eventJSON = event.toJSON() as unknown as FirestoreEventJSON;
+            delete (eventJSON as Record<string, unknown>).activities;
 
             // Normalize input to array or single
             let filesToUpload: { data: unknown, extension: string, startDate: Date, originalFilename?: string }[] = [];
@@ -172,8 +170,6 @@ export class EventWriter {
                     eventJSON.originalFiles = uploadedFilesMetadata;
                     // Legacy: Always points to first file for backwards compatibility
                     eventJSON.originalFile = uploadedFilesMetadata[0];
-                } else {
-                    this.logger.info('No metadata to assign (uploadedFilesMetadata empty)');
                 }
 
             } else {
