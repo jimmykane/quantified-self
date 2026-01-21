@@ -203,7 +203,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       const eventDate = this.fileService.toDate(this.event.startDate);
       const eventId = this.event.getID ? this.event.getID() : undefined;
 
-      if (eventAny.originalFiles && eventAny.originalFiles.length > 0) {
+      if (eventAny.originalFiles && eventAny.originalFiles.length > 1) {
         // Multiple files -> ZIP
         const filesToZip: { data: ArrayBuffer, fileName: string }[] = [];
         const totalFiles = eventAny.originalFiles.length;
@@ -224,10 +224,12 @@ export class EventActionsComponent implements OnInit, OnDestroy {
         await this.fileService.downloadAsZip(filesToZip, zipFileName);
         this.analyticsService.logEvent('downloaded_original_files_zip');
 
-      } else if (eventAny.originalFile && eventAny.originalFile.path) {
+      } else if ((eventAny.originalFiles && eventAny.originalFiles.length === 1) ||
+        (eventAny.originalFile && eventAny.originalFile.path)) {
         // Single file -> Direct download
-        const arrayBuffer = await this.eventService.downloadFile(eventAny.originalFile.path);
-        const extension = this.fileService.getExtensionFromPath(eventAny.originalFile.path);
+        const fileMeta = eventAny.originalFiles?.[0] || eventAny.originalFile;
+        const arrayBuffer = await this.eventService.downloadFile(fileMeta.path);
+        const extension = this.fileService.getExtensionFromPath(fileMeta.path);
         const fileName = this.fileService.generateDateBasedFilename(eventDate, extension, undefined, undefined, eventId);
         const blob = new Blob([arrayBuffer]);
         // Download with basename (without extension) and extension separately

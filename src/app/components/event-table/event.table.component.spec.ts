@@ -131,6 +131,7 @@ describe('EventTableComponent', () => {
 
         mockFileService = {
             downloadAsZip: vi.fn().mockReturnValue(Promise.resolve()),
+            downloadFile: vi.fn(),
             toDate: vi.fn((rawDate: any) => {
                 if (!rawDate) return null;
                 if (rawDate instanceof Date) return rawDate;
@@ -284,7 +285,7 @@ describe('EventTableComponent', () => {
             expect(mockProcessingService.completeJob).toHaveBeenCalledWith(expect.any(String), 'Downloaded 2 files');
         });
 
-        it('should download and zip files from events with legacy originalFile', async () => {
+        it('should download single file directly from events with legacy originalFile', async () => {
             const e1 = new MockEvent('event1');
             e1.startDate = new Date('2024-12-15');
             e1.originalFiles = [];
@@ -294,8 +295,9 @@ describe('EventTableComponent', () => {
             await component.downloadOriginals();
 
             expect(mockEventService.downloadFile).toHaveBeenCalledWith('users/123/files/legacy.fit');
-            expect(mockFileService.downloadAsZip).toHaveBeenCalled();
-            expect(mockProcessingService.completeJob).toHaveBeenCalledWith(expect.any(String), 'Downloaded 1 files');
+            expect(mockFileService.downloadFile).toHaveBeenCalled();
+            expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
+            expect(mockProcessingService.completeJob).toHaveBeenCalledWith(expect.any(String), 'Downloaded 1 file');
         });
 
         it('should generate correct ZIP filename from date range', async () => {
@@ -340,7 +342,7 @@ describe('EventTableComponent', () => {
             );
         });
 
-        it('should name files using event date format', async () => {
+        it('should name single file using event date format and download directly', async () => {
             const e1 = new MockEvent('event1');
             e1.startDate = new Date('2024-12-15T08:30:00');
             e1.originalFiles = [{ path: 'users/123/files/activity.fit' }];
@@ -348,16 +350,16 @@ describe('EventTableComponent', () => {
 
             await component.downloadOriginals();
 
-            // Verify the file is named with date format: 2024-12-15_08-30.fit
-            expect(mockFileService.downloadAsZip).toHaveBeenCalledWith(
-                expect.arrayContaining([
-                    expect.objectContaining({ fileName: '2024-12-15_08-30.fit' })
-                ]),
-                expect.any(String)
-            );
+            // Single file should be downloaded directly, not zipped
+            expect(mockFileService.downloadFile).toHaveBeenCalled();
+            expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
+            // Check that the filename was generated correctly (basename without extension)
+            const args = mockFileService.downloadFile.mock.calls[0];
+            expect(args[1]).toBe('2024-12-15_08-30'); // basename
+            expect(args[2]).toBe('fit'); // extension
         });
 
-        it('should handle Firestore Timestamp objects', async () => {
+        it('should handle Firestore Timestamp objects with single file direct download', async () => {
             const e1 = new MockEvent('event1');
             // Simulate Firestore Timestamp with toDate() method
             (e1 as any).startDate = {
@@ -368,15 +370,15 @@ describe('EventTableComponent', () => {
 
             await component.downloadOriginals();
 
-            expect(mockFileService.downloadAsZip).toHaveBeenCalledWith(
-                expect.arrayContaining([
-                    expect.objectContaining({ fileName: '2024-12-20_14-45.fit' })
-                ]),
-                expect.any(String)
-            );
+            // Single file should be downloaded directly
+            expect(mockFileService.downloadFile).toHaveBeenCalled();
+            expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
+            const args = mockFileService.downloadFile.mock.calls[0];
+            expect(args[1]).toBe('2024-12-20_14-45'); // basename
+            expect(args[2]).toBe('fit'); // extension
         });
 
-        it('should use event ID as fallback when date is missing', async () => {
+        it('should use event ID as fallback for single file when date is missing', async () => {
             const e1 = new MockEvent('test-event-id');
             (e1 as any).startDate = null;
             e1.originalFiles = [{ path: 'users/123/files/activity.fit' }];
@@ -384,15 +386,15 @@ describe('EventTableComponent', () => {
 
             await component.downloadOriginals();
 
-            expect(mockFileService.downloadAsZip).toHaveBeenCalledWith(
-                expect.arrayContaining([
-                    expect.objectContaining({ fileName: 'test-event-id.fit' })
-                ]),
-                expect.any(String)
-            );
+            // Single file should be downloaded directly
+            expect(mockFileService.downloadFile).toHaveBeenCalled();
+            expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
+            const args = mockFileService.downloadFile.mock.calls[0];
+            expect(args[1]).toBe('test-event-id'); // basename falls back to event ID
+            expect(args[2]).toBe('fit'); // extension
         });
 
-        it('should handle download errors gracefully and continue with other files', async () => {
+        it('should handle download errors gracefully and download single remaining file directly', async () => {
             const e1 = new MockEvent('event1');
             e1.startDate = new Date('2024-12-01T10:30:00');
             e1.originalFiles = [
@@ -408,12 +410,10 @@ describe('EventTableComponent', () => {
 
             await component.downloadOriginals();
 
-            // Filename should be date-based with index: 2024-12-01_10-30_1.fit
-            expect(mockFileService.downloadAsZip).toHaveBeenCalledWith(
-                expect.arrayContaining([expect.objectContaining({ fileName: expect.stringMatching(/2024-12-01.*\.fit/) })]),
-                expect.any(String)
-            );
-            expect(mockProcessingService.completeJob).toHaveBeenCalledWith(expect.any(String), 'Downloaded 1 files');
+            // Only 1 file succeeded, so it should be downloaded directly (not zipped)
+            expect(mockFileService.downloadFile).toHaveBeenCalled();
+            expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
+            expect(mockProcessingService.completeJob).toHaveBeenCalledWith(expect.any(String), 'Downloaded 1 file');
         });
     });
 
@@ -542,7 +542,7 @@ describe('EventTableComponent', () => {
     });
 
     describe('downloadOriginals - Compression Handling', () => {
-        it('should correctly name downloaded .gz files with base extension', async () => {
+        it('should correctly name downloaded .gz files with base extension and download directly', async () => {
             const e1 = new MockEvent('event1');
             e1.startDate = new Date('2024-12-15T10:00:00');
             e1.originalFiles = [
@@ -555,13 +555,11 @@ describe('EventTableComponent', () => {
 
             await component.downloadOriginals();
 
-            // Verify file is named with json extension, not json.gz
-            expect(mockFileService.downloadAsZip).toHaveBeenCalledWith(
-                expect.arrayContaining([
-                    expect.objectContaining({ fileName: expect.stringMatching(/\.json$/) })
-                ]),
-                expect.any(String)
-            );
+            // Single file should be downloaded directly with json extension
+            expect(mockFileService.downloadFile).toHaveBeenCalled();
+            expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
+            const args = mockFileService.downloadFile.mock.calls[0];
+            expect(args[2]).toBe('json'); // extension should be json, not json.gz
         });
 
         it('should handle deeply nested paths', async () => {
