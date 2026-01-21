@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Directive, Input } from '@angular/core';
-import { MapThemes, MapTypes } from '@sports-alliance/sports-lib';
+import { MapTypes } from '@sports-alliance/sports-lib';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { LoadingAbstractDirective } from '../../loading/loading-abstract.directive';
 import { User } from '@sports-alliance/sports-lib';

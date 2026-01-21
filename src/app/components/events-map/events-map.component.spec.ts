@@ -14,7 +14,6 @@ import { NgZone, ChangeDetectorRef, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core
 import { of } from 'rxjs';
 import {
     EventInterface,
-    MapThemes,
     MapTypes,
     User,
     ActivityInterface,

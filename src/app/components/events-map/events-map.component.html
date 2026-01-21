@@ -41,7 +41,7 @@
 }
 
 <!-- Google Map -->
-<!-- Google Map -->
+@defer (on viewport) {
 @if (apiLoaded()) {
 <google-map height="100%" width="100%" [center]="mapCenter()" [zoom]="mapZoom()" [mapTypeId]="mapTypeId()"
   [options]="mapOptions" (mapInitialized)="onMapReady($event)" (mapTypeIdChange)="changeMapType($any($event))">
@@ -55,4 +55,10 @@
   }
   }
 </google-map>
+}
+} @placeholder {
+<div
+  style="height: 100%; width: 100%; display: flex; align-items: center; justify-content: center; background-color: rgba(0,0,0,0.05);">
+  <p>Loading map...</p>
+</div>
 }

@@ -65,7 +65,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       disableDefaultUI: true,
       backgroundColor: 'transparent',
       mapId: environment.googleMapsMapId,
-      colorScheme: this.mapColorScheme() as any
+      colorScheme: this.mapColorScheme()
     };
   }
 

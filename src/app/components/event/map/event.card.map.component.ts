@@ -69,7 +69,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       streetViewControl: true,
       mapTypeControl: true,
       mapId: environment.googleMapsMapId,
-      colorScheme: this.mapColorScheme() as any
+      colorScheme: this.mapColorScheme()
     };
   }
 

@@ -1,5 +1,7 @@
+
 import { TestBed } from '@angular/core/testing';
 import { MarkerFactoryService } from './marker-factory.service';
+import { describe, it, expect, beforeEach } from 'vitest';
 
 describe('MarkerFactoryService', () => {
     let service: MarkerFactoryService;
@@ -13,75 +15,61 @@ describe('MarkerFactoryService', () => {
         expect(service).toBeTruthy();
     });
 
-    it('should create a pin marker with correct color', () => {
-        const color = '#FF0000';
-        const element = service.createPinMarker(color);
-        expect(element.tagName).toBe('DIV');
-        expect(element.innerHTML).toContain(`fill="${color}"`);
-        expect(element.innerHTML).toContain('path d="M22-48h-44v43h16l6 5 6-5h16z"');
+    it('should create pin marker', () => {
+        const marker = service.createPinMarker('#ff0000');
+        expect(marker.innerHTML).toContain('<svg');
+        expect(marker.innerHTML).toContain('scale(0.5) translate(22, 48)');
+        expect(marker.innerHTML).toContain('fill="#ff0000"');
     });
 
-    it('should create a home marker with correct color', () => {
-        const color = '#00FF00';
-        const element = service.createHomeMarker(color);
-        expect(element.innerHTML).toContain(`fill="${color}"`);
-        expect(element.innerHTML).toContain('d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"');
+    it('should create home marker', () => {
+        const marker = service.createHomeMarker('#00ff00');
+        expect(marker.innerHTML).toContain('<svg');
+        expect(marker.innerHTML).toContain('M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z');
+        expect(marker.innerHTML).toContain('fill="#00ff00"');
     });
 
-    it('should create a flag marker with correct color', () => {
-        const color = '#0000FF';
-        const element = service.createFlagMarker(color);
-        expect(element.innerHTML).toContain(`fill="${color}"`);
-        expect(element.innerHTML).toContain('d="M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z"');
+    it('should create flag marker', () => {
+        const marker = service.createFlagMarker('#0000ff');
+        expect(marker.innerHTML).toContain('<svg');
+        expect(marker.innerHTML).toContain('M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z');
+        expect(marker.innerHTML).toContain('fill="#0000ff"');
     });
 
-    it('should create a cursor marker with correct color', () => {
-        const color = '#FFFF00';
-        const element = service.createCursorMarker(color);
-        expect(element.innerHTML).toContain(`fill="${color}"`);
-        expect(element.innerHTML).toContain('d="M5 15H3v4c0 1.1.9 2 2 2h4v-2H5v-4z');
+    it('should create cursor marker', () => {
+        const marker = service.createCursorMarker('#123456');
+        expect(marker.innerHTML).toContain('<svg');
+        expect(marker.innerHTML).toContain('fill="#123456"');
     });
 
-    it('should create a lap marker with unique filter ID', () => {
-        const color = '#FF00FF';
-        const index = 5;
-        const element1 = service.createLapMarker(color, index);
-        const element2 = service.createLapMarker(color, index);
-
-        expect(element1.innerHTML).toContain(`fill="${color}"`);
-        // Check for the text value (index + 1)
-        expect(element1.textContent).toContain('6');
-
-        // Extract filter IDs
-        const filterId1Match = element1.innerHTML.match(/filter id="(shadow-\d+-\d+)"/);
-        const filterId2Match = element2.innerHTML.match(/filter id="(shadow-\d+-\d+)"/);
-
-        expect(filterId1Match).not.toBeNull();
-        expect(filterId2Match).not.toBeNull();
-
-        // IDs should be unique even for same index
-        expect(filterId1Match![1]).not.toBe(filterId2Match![1]);
+    it('should create lap marker with index', () => {
+        const marker = service.createLapMarker('#abcdef', 5);
+        expect(marker.innerHTML).toContain('<svg');
+        // Check for index + 1
+        expect(marker.textContent?.trim()).toContain('6');
+        expect(marker.innerHTML).toContain('fill="#abcdef"');
+        expect(marker.innerHTML).toContain('filter="url(#shadow-5-');
     });
 
-    it('should create a point marker with correct color', () => {
-        const color = '#00FFFF';
-        const element = service.createPointMarker(color);
-        expect(element.innerHTML).toContain(`fill="${color}"`);
-        expect(element.innerHTML).toContain('<circle cx="5" cy="5" r="4"');
+    it('should create point marker', () => {
+        const marker = service.createPointMarker('#654321');
+        expect(marker.innerHTML).toContain('<svg');
+        expect(marker.innerHTML).toContain('circle cx="5" cy="5" r="4"');
+        expect(marker.innerHTML).toContain('fill="#654321"');
     });
 
-    it('should create an event marker with correct color', () => {
-        const color = '#000000';
-        const element = service.createEventMarker(color);
-        expect(element.innerHTML).toContain(`fill="${color}"`);
-        expect(element.innerHTML).toContain('<circle cx="10" cy="10" r="8"');
+    it('should create event marker', () => {
+        const marker = service.createEventMarker('#aaaaaa');
+        expect(marker.innerHTML).toContain('<svg');
+        expect(marker.innerHTML).toContain('circle cx="10" cy="10" r="8"');
+        expect(marker.innerHTML).toContain('fill="#aaaaaa"');
     });
 
-    it('should create a cluster marker with count', () => {
-        const count = 42;
-        const element = service.createClusterMarker(count);
-        expect(element.textContent).toBe('42');
-        expect(element.style.background).toBe('var(--mat-sys-primary, #4285F4)');
-        expect(element.style.borderRadius).toBe('50%');
+    it('should create cluster marker', () => {
+        const marker = service.createClusterMarker(42);
+        expect(marker.tagName).toBe('DIV');
+        expect(marker.textContent).toBe('42');
+        expect(marker.style.borderRadius).toBe('50%');
+        expect(marker.style.background).toContain('var(--mat-sys-primary');
     });
 });

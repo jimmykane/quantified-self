@@ -1,7 +1,7 @@
 import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
 import { AppUserService } from '../../../../services/app.user.service';
 import { TileActionsAbstractDirective } from '../tile-actions-abstract.directive';
-import { MapThemes, MapTypes } from '@sports-alliance/sports-lib';
+import { MapTypes } from '@sports-alliance/sports-lib';
 import { TileMapSettingsInterface } from '@sports-alliance/sports-lib';
 
 @Component({

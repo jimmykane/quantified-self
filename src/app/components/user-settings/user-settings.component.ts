@@ -31,7 +31,6 @@ import { LapTypesHelper } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import {
-  MapThemes,
   MapTypes,
   UserMapSettingsInterface
 } from '@sports-alliance/sports-lib';
