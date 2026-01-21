@@ -8,23 +8,15 @@ trigger: always_on
 - **Framework**: Angular v20+
 - **Language**: TypeScript (Loose strictness)
 - **Styling**: SCSS, Angular Material, Leaftlet for maps
-- **State Management**: RxJS (Observables, Subjects), some Signals usage encouraged for new code
-- **Backend/Services**: Firebase (Modular SDK), Google Maps
-
-## Code Style & Conventions
-
-### Angular
-- **Architecture**:
-  - Use **NgModules** (Current project structure heavily relies on them).
-  - Use `standalone: false` for components unless creating a solitary utility.
-  - **OnPush** Change Detection is preferred but not strictly enforced in legacy components.
+- **State Management**: 
+  - **MANDATORY**: Use **Angular Signals** for local component state and service-level state where possible.
+  - Use RxJS (Observables, Subjects) ONLY when necessary for asynchronous streams or complex event handling.
 - **Dependency Injection**:
   - Supported: Constructor Injection (Legacy/Current).
   - Preferred for New Code: `inject()` function.
-- **Signals**:
-  - Adopt Angular Signals for local component state where possible.
-- **Naming Conventions**:
-  - **Observables**: Do **NOT** use the `$` suffix for Observables (e.g., use `isLoading`, not `isLoading$`). This is a strict rule to avoid "Swiss cheese" code style.
+- **Signals & Observables Naming**:
+  - **STRICT RULE**: Do **NOT** use the `$` suffix for Observables or Signals (e.g., use `isLoading`, not `isLoading$`). This applies to all variables.
+  - Reason: Consistency and readability, avoiding "Swiss cheese" code style.
 
 ### Firebase
 - Use **Modular SDK** (`@angular/fire` v20+, `firebase` v9+).
