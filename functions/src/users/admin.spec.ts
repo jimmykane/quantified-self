@@ -885,8 +885,6 @@ describe('setMaintenanceMode Cloud Function', () => {
         const group = template.parameterGroups['maintenance'];
         expect(group.parameters['beta_enabled'].defaultValue.value).toBe('true');
         expect(group.parameters['beta_message'].defaultValue.value).toBe('New Maintenance');
-        expect(group.parameters['beta_updatedAt']).toBeDefined();
-        expect(group.parameters['beta_updatedBy'].defaultValue.value).toBe('admin-uid');
     });
 
 

@@ -72,6 +72,13 @@ export class AppRemoteConfigService {
     readonly isLoading = computed(() => !this._configLoaded());
 
     constructor() {
+        // Set minimum fetch interval:
+        // - Production: 1 hour (3,600,000ms) - balance between freshness and throttle limits
+        // - Dev/Beta: 5 minutes (300,000ms) - faster updates for testing
+        const fiveMinutes = 300000;
+        const oneHour = 3600000;
+        this.remoteConfig.settings.minimumFetchIntervalMillis = environment.production ? oneHour : fiveMinutes;
+
         this.checkAdminStatus();
         this.initializeConfig();
     }

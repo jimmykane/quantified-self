@@ -601,18 +601,7 @@ export const setMaintenanceMode = onAdminCall<SetMaintenanceModeRequest, any>({
             valueType: 'STRING' as any
         };
 
-        // Set metadata parameters
-        group.parameters[`${env}_updatedAt`] = {
-            defaultValue: { value: String(Math.floor(Date.now() / 1000)) },
-            description: `Last update timestamp for ${env}`,
-            valueType: 'NUMBER' as any
-        };
 
-        group.parameters[`${env}_updatedBy`] = {
-            defaultValue: { value: request.auth!.uid },
-            description: `Last updated by for ${env}`,
-            valueType: 'STRING' as any
-        };
 
         // Validate and publish
         await rc.validateTemplate(template);
@@ -651,14 +640,11 @@ export const getMaintenanceStatus = onAdminCall<void, any>({
         const getStatusData = (env: string) => {
             const enabledParam = params[`${env}_enabled`];
             const messageParam = params[`${env}_message`];
-            const updatedAtParam = params[`${env}_updatedAt`];
-            const updatedByParam = params[`${env}_updatedBy`];
 
-            // Get enabled value (supports both 'true' string and boolean-like values)
+            // Get enabled value
             let enabled = false;
             if (enabledParam?.defaultValue && 'value' in enabledParam.defaultValue) {
-                const val = enabledParam.defaultValue.value;
-                enabled = val === 'true';
+                enabled = enabledParam.defaultValue.value === 'true';
             }
 
             // Get message
@@ -667,22 +653,7 @@ export const getMaintenanceStatus = onAdminCall<void, any>({
                 message = messageParam.defaultValue.value || "";
             }
 
-            // Get updatedAt (stored as seconds timestamp string)
-            let updatedAt = null;
-            if (updatedAtParam?.defaultValue && 'value' in updatedAtParam.defaultValue) {
-                const seconds = parseInt(updatedAtParam.defaultValue.value, 10);
-                if (!isNaN(seconds)) {
-                    updatedAt = { _seconds: seconds, _nanoseconds: 0 };
-                }
-            }
-
-            // Get updatedBy
-            let updatedBy = null;
-            if (updatedByParam?.defaultValue && 'value' in updatedByParam.defaultValue) {
-                updatedBy = updatedByParam.defaultValue.value || null;
-            }
-
-            return { enabled, message, updatedAt, updatedBy };
+            return { enabled, message };
         };
 
         return {

@@ -11,6 +11,11 @@
     <app-route-loader></app-route-loader>
 
 
+    <!-- Maintenance Overlay - Hidden independent of route flow (except home/onboarding) -->
+    <!-- Positioned here to overlay app-layout-wrapper/custom-header -->
+    <app-maintenance *ngIf="maintenanceMode() && !isHomeRoute && !isOnboardingRoute" [message]="maintenanceMessage()">
+    </app-maintenance>
+
     <!-- New Header Layout -->
     <nav *ngIf="showNavigation" class="custom-header mat-typography" [style.top.px]="bannerHeight">
       <button mat-icon-button (click)="toggleSidenav()" class="hamburger-link">
@@ -68,10 +73,6 @@
               <mat-icon svgIcon="qs-logo"></mat-icon>
             </div>
           </div>
-
-          <!-- Maintenance Overlay -->
-          <app-maintenance *ngIf="maintenanceMode()" [message]="maintenanceMessage()">
-          </app-maintenance>
 
           <router-outlet #outlet="outlet"></router-outlet>
         </div>

@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, HostBinding } from '@angular/core';
 import { CommonModule } from '@angular/common';
 
 @Component({
@@ -10,4 +10,7 @@ import { CommonModule } from '@angular/common';
 })
 export class MaintenanceComponent {
     @Input() message: string = '';
+
+    // Apply overlay class to host element for fixed positioning
+    @HostBinding('class.maintenance-overlay') readonly overlayClass = true;
 }
