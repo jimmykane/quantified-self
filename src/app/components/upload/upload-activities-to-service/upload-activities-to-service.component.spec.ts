@@ -25,7 +25,7 @@ describe('UploadActivitiesToServiceComponent', () => {
     const mockDialogRef = {};
     const mockProcessingService = { updateJob: vi.fn() };
     const mockRouter = {};
-    const mockLogger = { error: vi.fn() };
+    const mockLogger = { error: vi.fn(), info: vi.fn() };
     const mockAnalytics = { logEvent: vi.fn() };
     const mockAuth = { currentUser: { getIdToken: () => Promise.resolve('token') } };
     const mockFunctionsService = { call: vi.fn().mockResolvedValue({ data: { status: 'OK' } }) };
@@ -113,7 +113,34 @@ describe('UploadActivitiesToServiceComponent', () => {
     });
 
     it('should handle ALREADY_EXISTS response', async () => {
-        mockFunctionsService.call.mockResolvedValueOnce({ data: { code: 'ALREADY_EXISTS' } });
+        mockFunctionsService.call.mockResolvedValueOnce({ data: { result: { status: 'info', code: 'ALREADY_EXISTS', message: 'Activity already exists in Suunto' } } });
+        const file = {
+            file: new File(['<fit></fit>'], 'activity.fit', { type: 'application/octet-stream' }),
+            filename: 'activity',
+            extension: 'fit',
+            data: null,
+            id: '1',
+            name: 'activity.fit',
+            status: UPLOAD_STATUS.PROCESSING,
+            jobId: '1'
+        };
+
+        await component.processAndUploadFile(file);
+
+        expect(mockProcessingService.updateJob).toHaveBeenCalledWith(
+            '1',
+            expect.objectContaining({ status: 'duplicate' })
+        );
+        expect(mockSnackBar.open).toHaveBeenCalledWith(
+            expect.stringContaining('Activity already exists'),
+            'OK',
+            expect.any(Object)
+        );
+    });
+
+    it('should handle ALREADY_EXISTS in nested result structure', async () => {
+        // This mimics the actual Suunto API response structure: { result: { status: 'info', code: 'ALREADY_EXISTS', message: '...' } }
+        mockFunctionsService.call.mockResolvedValueOnce({ data: { result: { status: 'info', code: 'ALREADY_EXISTS', message: 'Activity already exists in Suunto' } } });
         const file = {
             file: new File(['<fit></fit>'], 'activity.fit', { type: 'application/octet-stream' }),
             filename: 'activity',

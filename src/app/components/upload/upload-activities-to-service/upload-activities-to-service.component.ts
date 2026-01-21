@@ -77,14 +77,17 @@ export class UploadActivitiesToServiceComponent extends UploadAbstractDirective 
             this.processingService.updateJob(file.jobId, { progress: 50 });
           }
 
-          this.functionsService.call<any, { status: string; code?: string; message?: string }>(
+          this.functionsService.call<any, { status: string; code?: string; message?: string; result?: { status: string; code?: string; message?: string } }>(
             'importActivityToSuuntoApp',
             { file: base64String }
           ).then((response) => {
             if (file.jobId) {
               this.processingService.updateJob(file.jobId, { progress: 100 });
             }
-            if (response.data.code === 'ALREADY_EXISTS') {
+            // Log for debugging - helps identify response structure issues
+            this.logger.info('Suunto upload response:', response.data);
+
+            if (response.data.result?.code === 'ALREADY_EXISTS') {
               if (file.jobId) {
                 this.processingService.updateJob(file.jobId, { status: 'duplicate', details: 'Activity already exists in Suunto' });
               }
