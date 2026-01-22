@@ -62,7 +62,7 @@ export class AppEventService implements OnDestroy {
   public getEventAndActivities(user: User, eventID: string): Observable<AppEventInterface> {
     // See
     // https://stackoverflow.com/questions/42939978/avoiding-nested-subscribes-with-combine-latest-when-one-observable-depends-on-th
-    const eventDoc = doc(this.firestore, 'users', user.uid, 'events', eventID);
+    const eventDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID));
     return combineLatest([
       runInInjectionContext(this.injector, () => docData(eventDoc)).pipe(
         map(eventSnapshot => {
@@ -221,7 +221,7 @@ export class AppEventService implements OnDestroy {
   }
 
   public getActivities(user: User, eventID: string): Observable<ActivityInterface[]> {
-    const activitiesCollection = collection(this.firestore, 'users', user.uid, 'activities');
+    const activitiesCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'activities'));
     const q = query(activitiesCollection, where('eventID', '==', eventID));
     return (runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })) as Observable<any[]>).pipe(
       map((activitySnapshots: any[]) => {
@@ -275,7 +275,7 @@ export class AppEventService implements OnDestroy {
    */
   public getAllStreams(user: User, eventID: string, activityID: string): Observable<StreamInterface[]> {
     this.logger.warn('[AppEventService] getAllStreams is deprecated and will likely return empty results.');
-    const streamsCollection = collection(this.firestore, 'users', user.uid, 'activities', activityID, 'streams');
+    const streamsCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'activities', activityID, 'streams'));
     return from(runInInjectionContext(this.injector, () => getDocs(streamsCollection))) // @todo replace with snapshot changes I suppose when @https://github.com/angular/angularfire2/issues/1552 is fixed
       .pipe(map((querySnapshot) => {
         return querySnapshot.docs.map(queryDocumentSnapshot => this.processStreamQueryDocumentSnapshot(queryDocumentSnapshot))
@@ -304,7 +304,7 @@ export class AppEventService implements OnDestroy {
       all[ch] = [].concat((all[ch] || []), one);
       return all
     }, []).map((typesBatch) => {
-      const streamsCollection = collection(this.firestore, 'users', userID, 'activities', activityID, 'streams');
+      const streamsCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', userID, 'activities', activityID, 'streams'));
       const q = query(streamsCollection, where('type', 'in', typesBatch));
       return from(runInInjectionContext(this.injector, () => getDocs(q)))
         .pipe(map((documentSnapshots) => {
@@ -471,7 +471,7 @@ export class AppEventService implements OnDestroy {
   }
 
   public async deleteAllStreams(user: User, eventID: string, activityID: string): Promise<number> {
-    const streamsCollection = collection(this.firestore, 'users', user.uid, 'activities', activityID, 'streams');
+    const streamsCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'activities', activityID, 'streams'));
     const numberOfStreamsDeleted = await this.deleteAllDocsFromCollections([streamsCollection]);
 
     return numberOfStreamsDeleted
@@ -834,7 +834,7 @@ export class AppEventService implements OnDestroy {
   }
 
   private getEventQueryForUser(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any) {
-    const eventsRef = collection(this.firestore, `users/${user.uid}/events`);
+    const eventsRef = runInInjectionContext(this.injector, () => collection(this.firestore, `users/${user.uid}/events`));
     const constraints: any[] = [];
 
     // Replicate legacy logic for startDate ordering when filtering
@@ -922,7 +922,7 @@ export class AppEventService implements OnDestroy {
    * @todo Cache this result (e.g., in a Signal or BehaviorSubject) to avoid unnecessary server calls on every navigation.
    */
   public async getEventCount(user: User): Promise<number> {
-    const eventsRef = collection(this.firestore, `users/${user.uid}/events`);
+    const eventsRef = runInInjectionContext(this.injector, () => collection(this.firestore, `users/${user.uid}/events`));
     const snapshot = await runInInjectionContext(this.injector, () => getCountFromServer(query(eventsRef)));
     return snapshot.data().count;
   }
