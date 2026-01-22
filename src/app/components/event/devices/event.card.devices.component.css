@@ -3,7 +3,7 @@
   width: 100%;
 }
 
-.mat-column-Manufacturer {
+.mat-column-manufacturer {
   text-transform: capitalize;
 }
 
@@ -28,7 +28,7 @@ mat-cell:first-of-type {
 }
 
 /* Make the index column smaller */
-.mat-column-\# {
+.mat-column-id {
   min-width: 50px;
   justify-content: center;
 }
@@ -43,11 +43,11 @@ mat-cell:first-of-type {
 }
 
 /* Center align specific metric columns */
-.mat-column-Battery-Level,
-.mat-column-Battery-Voltage,
-.mat-column-Product-ID,
-.mat-column-Serial-Number,
-.mat-column-Manufacturer {
+.mat-column-batteryLevel,
+.mat-column-batteryVoltage,
+.mat-column-productId,
+.mat-column-serialNumber,
+.mat-column-manufacturer {
   justify-content: center;
   text-align: center;
 }

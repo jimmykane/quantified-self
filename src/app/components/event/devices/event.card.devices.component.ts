@@ -2,10 +2,28 @@ import { ChangeDetectionStrategy, Component, Input, OnChanges } from '@angular/c
 import { MatTableDataSource } from '@angular/material/table';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
-import { DataDistance } from '@sports-alliance/sports-lib';
-import { DataAscent } from '@sports-alliance/sports-lib';
-import { DataDescent } from '@sports-alliance/sports-lib';
-import { DataHeartRateAvg } from '@sports-alliance/sports-lib';
+
+/**
+ * Maps safe column keys (used for matColumnDef and CSS) to display names (used for labels and icons).
+ */
+const COLUMN_MAPPING: Record<string, string> = {
+  id: '#',
+  type: 'Type',
+  name: 'Name',
+  batteryStatus: 'Battery Status',
+  batteryLevel: 'Battery Level',
+  batteryVoltage: 'Battery Voltage',
+  manufacturer: 'Manufacturer',
+  serialNumber: 'Serial Number',
+  productId: 'Product ID',
+  softwareInfo: 'Software Info',
+  hardwareInfo: 'Hardware Info',
+  antDeviceNumber: 'Ant Device Number',
+  antTransmissionType: 'Ant Transmission Type',
+  antNetwork: 'Ant Network',
+  sourceType: 'Source Type',
+  cumulativeOperatingTime: 'Cumulative Operating Time',
+};
 
 @Component({
   selector: 'app-event-card-devices',
@@ -61,29 +79,34 @@ export class EventCardDevicesComponent implements OnChanges {
   private generateDeviceData(activity: ActivityInterface) {
     return activity.creator.devices.reduce((deviceDataArray, device, index) => {
       const deviceObject = {
-        '#': index + 1,
-        'Type': device.type === 'Unknown' ? '' : device.type,
-        'Name': device.name,
-        'Battery Status': device.batteryStatus,
-        'Battery Level': device.batteryLevel,
-        'Battery Voltage': device.batteryVoltage,
-        'Manufacturer': device.manufacturer,
-        'Serial Number': device.serialNumber,
-        'Product ID': device.product,
-        'Software Info': device.swInfo,
-        'Hardware Info': device.hwInfo,
-        'Ant Device Number': device.antDeviceNumber,
-        'Ant Transmission Type': device.antTransmissionType,
-        'Ant Network': device.antNetwork,
-        'Source Type': device.sourceType,
-        'Cumulative Operating Time': device.cumOperatingTime,
+        id: index + 1,
+        type: device.type === 'Unknown' ? '' : device.type,
+        name: device.name,
+        batteryStatus: device.batteryStatus,
+        batteryLevel: device.batteryLevel,
+        batteryVoltage: device.batteryVoltage,
+        manufacturer: device.manufacturer,
+        serialNumber: device.serialNumber,
+        productId: device.product,
+        softwareInfo: device.swInfo,
+        hardwareInfo: device.hwInfo,
+        antDeviceNumber: device.antDeviceNumber,
+        antTransmissionType: device.antTransmissionType,
+        antNetwork: device.antNetwork,
+        sourceType: device.sourceType,
+        cumulativeOperatingTime: device.cumOperatingTime,
       };
-
-
 
       deviceDataArray.push(deviceObject);
       return deviceDataArray;
     }, [] as any[]);
+  }
+
+  /**
+   * Returns the display label for a column key.
+   */
+  getColumnLabel(columnKey: string): string {
+    return COLUMN_MAPPING[columnKey] || columnKey;
   }
 
   getBatteryIcon(level: number): string {

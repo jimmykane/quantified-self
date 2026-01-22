@@ -9,14 +9,14 @@
       @for (column of getColumns(activity); track column) {
       <ng-container [matColumnDef]="column">
         <mat-header-cell *matHeaderCellDef><app-data-type-icon
-            [dataType]="column"></app-data-type-icon></mat-header-cell>
+            [dataType]="getColumnLabel(column)"></app-data-type-icon></mat-header-cell>
         <mat-cell *matCellDef="let row">
-          @if (column === 'Battery Level') {
+          @if (column === 'batteryLevel') {
           <div class="battery-cell" [ngClass]="getBatteryColorClass(row[column])">
             <mat-icon>{{ getBatteryIcon(row[column]) }}</mat-icon>
             <span>{{ row[column] }}%</span>
           </div>
-          } @else if (column === 'Battery Voltage') {
+          } @else if (column === 'batteryVoltage') {
           {{ row[column] | number:'1.1-2' }} V
           } @else {
           {{ row[column] }}
