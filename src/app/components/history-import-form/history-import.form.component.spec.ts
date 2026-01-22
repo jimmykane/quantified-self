@@ -249,6 +249,42 @@ describe('HistoryImportFormComponent', () => {
             );
         });
 
+        it('should show error when start date is after end date', () => {
+            // Valid simple form
+            component.serviceName = ServiceNames.GarminAPI;
+            component.userMetaForService = {} as UserServiceMetaInterface;
+            (component as any).processChanges();
+            component.formGroup.enable();
+
+            const startDate = new Date();
+            const endDate = new Date(startDate.getTime() - 86400000); // Yesterday
+
+            component.formGroup.patchValue({
+                startDate: startDate,
+                endDate: endDate,
+                accepted: true
+            });
+
+            expect(component.formGroup.valid).toBe(false);
+            expect(component.formGroup.errors?.['dateRangeInvalid']).toBe(true);
+        });
+
+        it('should enforce COROS 3-month limit on minDate', () => {
+            component.serviceName = ServiceNames.COROSAPI;
+            component.userMetaForService = {} as UserServiceMetaInterface;
+
+            // Trigger logic
+            (component as any).processChanges();
+
+            expect(component.minDate).toBeTruthy();
+            const expectedMinDate = new Date();
+            expectedMinDate.setMonth(expectedMinDate.getMonth() - component.corosHistoryLimitMonths);
+
+            // Check roughly equal (within slightly different execution times)
+            expect(component.minDate!.getDate()).toBe(expectedMinDate.getDate());
+            expect(component.minDate!.getMonth()).toBe(expectedMinDate.getMonth());
+        });
+
         it('should NOT be set to true if import fails', async () => {
             // Setup component for allowed import
             component.serviceName = ServiceNames.SuuntoApp;

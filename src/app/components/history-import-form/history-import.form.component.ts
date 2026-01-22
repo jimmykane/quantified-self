@@ -5,6 +5,8 @@ import {
   UntypedFormControl,
   UntypedFormGroup,
   Validators,
+  ValidatorFn,
+  ValidationErrors,
 } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppEventService } from '../../services/app.event.service';
@@ -78,7 +80,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       accepted: new UntypedFormControl(false, [
         Validators.requiredTrue,
       ]),
-    });
+    }, { validators: this.dateRangeValidator });
 
     this.formGroup.disable();
 
@@ -86,6 +88,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
     this.processChanges();
   }
+
+  dateRangeValidator: ValidatorFn = (group: AbstractControl): ValidationErrors | null => {
+    const start = group.get('startDate')?.value;
+    const end = group.get('endDate')?.value;
+    return start && end && new Date(start) > new Date(end) ? { dateRangeInvalid: true } : null;
+  };
 
   get isMissingGarminPermissions(): boolean {
     return this.serviceName === ServiceNames.GarminAPI &&
@@ -105,6 +113,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     if (!this.userMetaForService || !this.userMetaForService.didLastHistoryImport) {
       this.isAllowedToDoHistoryImport = true;
       (this.isAllowedToDoHistoryImport && !this.isMissingGarminPermissions) ? this.formGroup.enable() : this.formGroup.disable();
+      // Set min date for COROS if no previous import
+      if (this.serviceName === ServiceNames.COROSAPI) {
+        const limitDate = new Date();
+        limitDate.setMonth(limitDate.getMonth() - this.corosHistoryLimitMonths);
+        this.minDate = limitDate;
+      }
       return;
     }
 
@@ -114,12 +128,24 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         if (!this.userMetaForService.processedActivitiesFromLastHistoryImportCount) {
           this.isAllowedToDoHistoryImport = true;
           this.formGroup.enable();
+          // Set min date for COROS
+          if (this.serviceName === ServiceNames.COROSAPI) {
+            const limitDate = new Date();
+            limitDate.setMonth(limitDate.getMonth() - this.corosHistoryLimitMonths);
+            this.minDate = limitDate;
+          }
           break;
         }
         this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + ((this.userMetaForService.processedActivitiesFromLastHistoryImportCount / HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT) * 24 * 60 * 60 * 1000)) // 7 days for  285,7142857143 per day
         this.isAllowedToDoHistoryImport =
           this.nextImportAvailableDate < (new Date())
           || this.userMetaForService.processedActivitiesFromLastHistoryImportCount === 0;
+        // Set min date for COROS
+        if (this.serviceName === ServiceNames.COROSAPI) {
+          const limitDate = new Date();
+          limitDate.setMonth(limitDate.getMonth() - this.corosHistoryLimitMonths);
+          this.minDate = limitDate;
+        }
         break;
       case ServiceNames.GarminAPI:
         this.nextImportAvailableDate = new Date(this.userMetaForService.didLastHistoryImport + (GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000));
