@@ -42,6 +42,7 @@ describe('EventWriter', () => {
             setID: vi.fn(),
             getActivities: vi.fn().mockReturnValue([activityMock]),
             toJSON: vi.fn().mockReturnValue({ id: 'event-1', activities: [] }),
+            startDate: new Date(),
         };
     });
 
@@ -107,6 +108,68 @@ describe('EventWriter', () => {
                         originalFilename: 'test.fit',
                     })
                 ])
+            })
+        );
+    });
+
+    it('should upload multiple files with indexed naming', async () => {
+        const file1: any = { data: 'data1', extension: 'fit', startDate: new Date() };
+        const file2: any = { data: 'data2', extension: 'gpx', startDate: new Date() };
+
+        await writer.writeAllEventData('user-1', eventMock, [file1, file2]);
+
+        // Check first file upload
+        expect(storageAdapter.uploadFile).toHaveBeenCalledWith(
+            'users/user-1/events/event-1/original_0.fit',
+            'data1'
+        );
+        // Check second file upload
+        expect(storageAdapter.uploadFile).toHaveBeenCalledWith(
+            'users/user-1/events/event-1/original_1.gpx',
+            'data2'
+        );
+
+        const setDocFn = adapter.setDoc as any;
+        expect(setDocFn).toHaveBeenCalledWith(
+            expect.any(Array),
+            expect.objectContaining({
+                originalFiles: expect.arrayContaining([
+                    expect.objectContaining({ path: 'users/user-1/events/event-1/original_0.fit' }),
+                    expect.objectContaining({ path: 'users/user-1/events/event-1/original_1.gpx' })
+                ])
+            })
+        );
+    });
+
+    it('should preserve existing originalFile/originalFiles metadata when not uploading new files', async () => {
+        const existingOriginalFile = {
+            path: 'path/to/existing.fit',
+            bucket: 'bucket',
+            startDate: new Date(),
+            originalFilename: 'existing.fit'
+        };
+        const existingOriginalFiles = [existingOriginalFile];
+
+        eventMock.toJSON.mockReturnValue({
+            id: 'event-1',
+            originalFile: existingOriginalFile,
+            originalFiles: existingOriginalFiles,
+            activities: []
+        });
+
+        // Mock accessing properties on the event object itself as well (since the writer checks event.originalFiles)
+        eventMock.originalFile = existingOriginalFile;
+        eventMock.originalFiles = existingOriginalFiles;
+
+        await writer.writeAllEventData('user-1', eventMock);
+        // Important: Pass undefined for originalFiles argument
+
+        const setDocFn = adapter.setDoc as any;
+        expect(setDocFn).toHaveBeenCalledWith(
+            ['users', 'user-1', 'events', 'event-1'],
+            expect.objectContaining({
+                originalFile: existingOriginalFile,
+                originalFiles: existingOriginalFiles
             })
         );
     });

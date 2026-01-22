@@ -116,6 +116,10 @@ export class AppAuthService {
       }),
       shareReplay(1)
     );
+    this.user$.subscribe({
+      error: err => console.error('[AppAuthService] user$ stream ERROR:', err),
+      complete: () => console.warn('[AppAuthService] user$ stream COMPLETED')
+    });
   }
 
   /*

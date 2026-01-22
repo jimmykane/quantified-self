@@ -1,7 +1,9 @@
 import { Injectable, inject } from '@angular/core';
-import { Analytics, logEvent as firebaseLogEvent, setAnalyticsCollectionEnabled } from '@angular/fire/analytics';
+import { Analytics } from '@angular/fire/analytics';
+import { logEvent, setAnalyticsCollectionEnabled } from 'firebase/analytics';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { LoggerService } from './logger.service';
 
 import { environment } from '../../environments/environment';
 
@@ -9,6 +11,7 @@ import { environment } from '../../environments/environment';
 export class AppAnalyticsService {
     private analytics = inject(Analytics, { optional: true });
     private authService = inject(AppAuthService);
+    private logger = inject(LoggerService);
     private hasConsent = false;
 
     constructor() {
@@ -31,7 +34,7 @@ export class AppAnalyticsService {
             try {
                 setAnalyticsCollectionEnabled(this.analytics, enabled);
             } catch (error) {
-                console.warn('Analytics error:', error);
+                this.logger.warn('Analytics error:', error);
             }
         }
     }
@@ -40,9 +43,9 @@ export class AppAnalyticsService {
         if (this.hasConsent && this.analytics) {
             try {
                 // Defer to the Firebase SDK
-                firebaseLogEvent(this.analytics, eventName, params);
+                logEvent(this.analytics, eventName, params);
             } catch (error) {
-                console.warn('Analytics logEvent error:', error);
+                this.logger.warn('Analytics logEvent error:', error);
             }
         }
     }

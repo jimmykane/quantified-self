@@ -1,32 +1,24 @@
-<ng-container *ngIf="(maintenanceMode$ | async) !== true; else maintenanceTemplate">
-  <ng-container *ngIf="authState !== null; else loadingApp">
-    <!-- Circular Reveal Theme Overlay -->
-    <div *ngIf="themeOverlayActive" class="theme-reveal-overlay" [ngClass]="themeOverlayClass"
-      [ngStyle]="themeOverlayStyle">
-    </div>
+<ng-container *ngIf="authState !== null; else loadingApp">
+  <!-- Circular Reveal Theme Overlay -->
+  <div *ngIf="themeOverlayActive" class="theme-reveal-overlay" [ngClass]="themeOverlayClass"
+    [ngStyle]="themeOverlayStyle">
+  </div>
 
-    <div [class.has-banner]="hasBanner" class="app-layout-wrapper">
-      <app-grace-period-banner (heightChanged)="onBannerHeightChanged($event)"></app-grace-period-banner>
 
-      <app-route-loader></app-route-loader>
+  <div [class.has-banner]="hasBanner" class="app-layout-wrapper">
+    <app-grace-period-banner (heightChanged)="onBannerHeightChanged($event)"></app-grace-period-banner>
 
-      <style>
-        .no-margin-top {
-          margin-top: 0 !important;
-        }
+    <app-route-loader></app-route-loader>
 
-        .fill-space {
-          flex: 1 1 auto;
-        }
 
-        .right {
-          margin-left: 10px;
-        }
-      </style>
+    <!-- Maintenance & Replacement Logic -->
+    <ng-container *ngIf="maintenanceMode() && !isHomeRoute && !isOnboardingRoute; else appLayout">
+      <app-maintenance [message]="maintenanceMessage()"></app-maintenance>
+    </ng-container>
 
-      <!-- Only show navigation if onboarding is completed OR user is not logged in -->
-      <nav *ngIf="showNavigation" mat-tab-nav-bar [tabPanel]="tabPanel" class="mat-typography custom-nav-bar"
-        [style.top.px]="bannerHeight">
+    <ng-template #appLayout>
+      <!-- New Header Layout -->
+      <nav *ngIf="showNavigation" class="custom-header mat-typography" [style.top.px]="bannerHeight">
         <button mat-icon-button (click)="toggleSidenav()" class="hamburger-link">
           <mat-icon class="larger_icon">menu</mat-icon>
         </button>
@@ -41,14 +33,16 @@
         </button>
         }
         @if (authState === true && !isDashboardRoute) {
-        <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);">
-          Dashboard
+        <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);"
+          [matTooltip]="isHandset() ? 'Dashboard' : ''" [class.icon-only]="isHandset()">
+          <mat-icon *ngIf="isHandset()">dashboard</mat-icon>
+          <span *ngIf="!isHandset()">Dashboard</span>
         </button>
         }
 
-        @if (isDashboardRoute && authService.user$ | async; as user) {
+        @if (showUploadActivities) {
         <app-processing-indicator class="right"></app-processing-indicator>
-        <app-upload-activities class="right" [user]="user">
+        <app-upload-activities class="right" [isHandset]="isHandset()">
         </app-upload-activities>
         }
 
@@ -60,8 +54,10 @@
         }
 
         @if (authState === false && !isLoginRoute) {
-        <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/login']);">
-          Login or Register
+        <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/login']);"
+          [matTooltip]="isHandset() ? 'Login or Register' : ''" [class.icon-only]="isHandset()">
+          <mat-icon *ngIf="isHandset()">login</mat-icon>
+          <span *ngIf="!isHandset()">Login or Register</span>
         </button>
         }
       </nav>
@@ -74,20 +70,21 @@
         </mat-sidenav>
 
         <mat-sidenav-content>
-          <mat-tab-nav-panel #tabPanel>
-            <div class="router-outlet-container" [@routeAnimations]="prepareRoute(outlet)">
-              <router-outlet #outlet="outlet"></router-outlet>
+          <div class="router-outlet-container" [@routeAnimations]="prepareRoute(outlet)">
+            <div *ngIf="maintenanceLoading()" class="loading-overlay">
+              <div class="logo-spinner">
+                <mat-icon svgIcon="qs-logo"></mat-icon>
+              </div>
             </div>
-          </mat-tab-nav-panel>
+
+            <router-outlet #outlet="outlet"></router-outlet>
+          </div>
         </mat-sidenav-content>
       </mat-sidenav-container>
-    </div>
-  </ng-container>
+    </ng-template>
+  </div>
 </ng-container>
 
-<ng-template #maintenanceTemplate>
-  <app-maintenance [message]="(maintenanceMessage$ | async) || ''"></app-maintenance>
-</ng-template>
 
 <ng-template #loadingApp>
   <div class="spinner-container">

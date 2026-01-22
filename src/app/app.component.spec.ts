@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AppComponent } from './app.component';
 import { AppAuthService } from './authentication/app.auth.service';
@@ -58,8 +59,10 @@ describe('AppComponent', () => {
     };
 
     const mockRemoteConfigService = {
-        getMaintenanceMode: vi.fn().mockReturnValue(of(false)),
-        getMaintenanceMessage: vi.fn().mockReturnValue(of(''))
+        maintenanceMode: signal(false),
+        maintenanceMessage: signal(''),
+        isLoading: signal(false),
+        configLoaded: signal(true)
     };
 
     const mockSeoService = {
@@ -173,5 +176,20 @@ describe('AppComponent', () => {
     it('should return true for isAdminRoute when url includes admin', () => {
         mockRouter.url = '/admin';
         expect(component.isAdminRoute).toBe(true);
+    });
+
+    it('should return true for isHomeRoute when url is /', () => {
+        mockRouter.url = '/';
+        expect(component.isHomeRoute).toBe(true);
+    });
+
+    it('should return true for isHomeRoute when url is /?param=value', () => {
+        mockRouter.url = '/?param=value';
+        expect(component.isHomeRoute).toBe(true);
+    });
+
+    it('should return false for isHomeRoute when url is /dashboard', () => {
+        mockRouter.url = '/dashboard';
+        expect(component.isHomeRoute).toBe(false);
     });
 });

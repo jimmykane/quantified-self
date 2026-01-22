@@ -23,7 +23,6 @@ import {
 } from '@sports-alliance/sports-lib';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
-import { MapThemes } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../services/app.user.service';
 import { AppActivitySelectionService } from '../../services/activity-selection-service/app-activity-selection.service';
 import { LapTypes } from '@sports-alliance/sports-lib';
@@ -88,7 +87,6 @@ export class EventCardComponent implements OnInit {
   // Convert theme observables to signals
   public chartTheme = toSignal(this.themeService.getChartTheme(), { initialValue: ChartThemes.Material });
   public appTheme = toSignal(this.themeService.getAppTheme(), { initialValue: AppThemes.Normal });
-  public mapTheme = toSignal(this.themeService.getMapTheme(), { initialValue: MapThemes.Normal });
 
   // User settings (derived from currentUser signal)
   public userUnitSettings = computed(() =>
@@ -146,6 +144,11 @@ export class EventCardComponent implements OnInit {
   public chartHideAllSeriesOnInit = computed(() =>
     this.currentUser()?.settings?.chartSettings?.hideAllSeriesOnInit ?? false
   );
+
+  public mapType = computed(() => {
+    const type = this.currentUser()?.settings?.mapSettings?.mapType;
+    return type ?? AppUserService.getDefaultMapType();
+  });
 
   public showMapArrows = computed(() =>
     this.currentUser()?.settings?.mapSettings?.showArrows ?? true

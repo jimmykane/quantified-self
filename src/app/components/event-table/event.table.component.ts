@@ -94,6 +94,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     private router: Router, private datePipe: DatePipe,
     private logger: LoggerService,
     private processingService: AppProcessingService,
+    private appEventUtilities: AppEventUtilities,
     private breakpointObserver: BreakpointObserver) {
     super(changeDetector);
   }
@@ -272,7 +273,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
     });
 
-    const mergedEvent = AppEventUtilities.mergeEventsWithId(
+    const mergedEvent = this.appEventUtilities.mergeEventsWithId(
       events,
       () => doc(collection(this.firestore, 'users')).id
     ) as AppEventInterface;
@@ -430,16 +431,31 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         return;
       }
 
-      this.processingService.updateJob(jobId, { title: 'Zipping files...', progress: 85 });
+      if (downloadedFiles.length === 1) {
+        // Single file -> Direct download
+        this.processingService.updateJob(jobId, { title: 'Preparing file...', progress: 90 });
+        const file = downloadedFiles[0];
+        const blob = new Blob([file.data]);
+        // Extract extension from fileName (e.g., "2024-01-15.fit" -> "fit")
+        const parts = file.fileName.split('.');
+        const extension = parts.length > 1 ? parts.pop()! : 'fit';
+        const baseNameWithoutExt = parts.join('.');
+        this.fileService.downloadFile(blob, baseNameWithoutExt, extension);
+        this.processingService.completeJob(jobId, 'Downloaded 1 file');
+        this.analyticsService.logEvent('download_originals', { count: 1 });
+      } else {
+        // Multiple files -> ZIP
+        this.processingService.updateJob(jobId, { title: 'Zipping files...', progress: 85 });
 
-      // Generate ZIP filename using shared utility
-      const zipFileName = this.fileService.generateDateRangeZipFilename(minDate, maxDate);
+        // Generate ZIP filename using shared utility
+        const zipFileName = this.fileService.generateDateRangeZipFilename(minDate, maxDate);
 
-      // Create and download ZIP
-      await this.fileService.downloadAsZip(downloadedFiles, zipFileName);
+        // Create and download ZIP
+        await this.fileService.downloadAsZip(downloadedFiles, zipFileName);
 
-      this.processingService.completeJob(jobId, `Downloaded ${downloadedFiles.length} files`);
-      this.analyticsService.logEvent('download_originals', { count: downloadedFiles.length });
+        this.processingService.completeJob(jobId, `Downloaded ${downloadedFiles.length} files`);
+        this.analyticsService.logEvent('download_originals', { count: downloadedFiles.length });
+      }
     } catch (e) {
       this.logger.error('Error downloading originals:', e);
       this.processingService.failJob(jobId, 'Download failed');

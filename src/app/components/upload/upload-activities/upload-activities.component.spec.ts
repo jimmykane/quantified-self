@@ -7,12 +7,14 @@ import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppProcessingService } from '../../../services/app.processing.service';
 import { LoggerService } from '../../../services/logger.service';
 import { Router } from '@angular/router';
+import { AppAuthService } from '../../../authentication/app.auth.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { Overlay } from '@angular/cdk/overlay';
 import { NO_ERRORS_SCHEMA, LOCALE_ID } from '@angular/core';
 import { User } from '@sports-alliance/sports-lib';
+import { of } from 'rxjs';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 describe('UploadActivitiesComponent', () => {
@@ -30,6 +32,7 @@ describe('UploadActivitiesComponent', () => {
     let mockSnackBar: any;
     let mockBottomSheet: any;
     let mockOverlay: any;
+    let mockAuthService: any;
 
     const mockUser = new User('testUser');
 
@@ -70,6 +73,10 @@ describe('UploadActivitiesComponent', () => {
         mockSnackBar = { open: vi.fn() };
         mockBottomSheet = { open: vi.fn() };
         mockOverlay = {};
+        mockAuthService = {
+            user$: of(mockUser),
+            getUser: vi.fn().mockResolvedValue(mockUser)
+        };
 
         await TestBed.configureTestingModule({
             declarations: [UploadActivitiesComponent],
@@ -85,6 +92,7 @@ describe('UploadActivitiesComponent', () => {
                 { provide: MatSnackBar, useValue: mockSnackBar },
                 { provide: MatBottomSheet, useValue: mockBottomSheet },
                 { provide: Overlay, useValue: mockOverlay },
+                { provide: AppAuthService, useValue: mockAuthService },
                 { provide: LOCALE_ID, useValue: 'en-US' }
             ],
             schemas: [NO_ERRORS_SCHEMA]

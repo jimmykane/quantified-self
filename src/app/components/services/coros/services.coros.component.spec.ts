@@ -73,4 +73,32 @@ describe('ServicesCorosComponent', () => {
         const accountIcon = fixture.nativeElement.querySelector('mat-icon[matListItemIcon]');
         expect(accountIcon).toBeFalsy();
     });
+
+    describe('History Import Card', () => {
+        it('should be unlocked/available if user has pro access AND is connected', () => {
+            component.hasProAccess = true;
+            component.isAdmin = false;
+            // Mock connected state
+            component.serviceTokens = [{ accessToken: 'token' } as any];
+            fixture.detectChanges();
+
+            const card = fixture.nativeElement.querySelectorAll('.feature-card')[1]; // History import is the second card
+            const historyForm = card.querySelector('app-history-import-form');
+
+            expect(historyForm).toBeTruthy();
+        });
+
+        it('should show connect message if user has pro access but is NOT connected', () => {
+            component.hasProAccess = true;
+            component.serviceTokens = []; // Not connected
+            fixture.detectChanges();
+
+            const card = fixture.nativeElement.querySelectorAll('.feature-card')[1];
+            const historyForm = card.querySelector('app-history-import-form');
+            const cardContent = card.textContent;
+
+            expect(historyForm).toBeFalsy();
+            expect(cardContent).toContain('Connect Account First');
+        });
+    });
 });

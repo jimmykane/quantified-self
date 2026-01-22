@@ -7,11 +7,13 @@ import {
   OnInit,
   ViewChild,
   afterNextRender,
+  inject,
 } from '@angular/core';
-import { MatIconRegistry } from '@angular/material/icon';
 import { MatSidenav } from '@angular/material/sidenav';
-import { MatSnackBar } from '@angular/material/snack-bar';
+import { BreakpointObserver, Breakpoints } from '@angular/cdk/layout';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { Observable, Subscription } from 'rxjs';
+import { map } from 'rxjs/operators';
 import {
   NavigationEnd,
   Router,
@@ -21,13 +23,7 @@ import { AppAuthService } from './authentication/app.auth.service';
 import { AppUserService } from './services/app.user.service';
 import { AppSideNavService } from './services/side-nav/app-side-nav.service';
 import { AppRemoteConfigService } from './services/app.remote-config.service';
-import { DomSanitizer } from '@angular/platform-browser';
 import { slideInAnimation } from './animations/animations';
-
-import * as firebase from 'firebase/app'
-import { AppWindowService } from './services/app.window.service';
-
-declare function require(moduleName: string): any;
 
 
 import { LoggerService } from './services/logger.service';
@@ -46,7 +42,7 @@ import { AppThemeService } from './services/app.theme.service';
   standalone: false
 })
 
-export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterViewChecked {
+export class AppComponent implements OnInit, OnDestroy {
   @ViewChild('sidenav') set sidenav(sidenav: MatSidenav) {
     if (sidenav) {
       this.sideNavService.setSidenav(sidenav);
@@ -60,11 +56,13 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   public isOnboardingRoute = false;
   private isFirstLoad = true;
   public onboardingCompleted = true; // Default to true to avoid hiding chrome of non-authenticated users prematurely
-  public maintenanceMode$!: Observable<boolean>;
-  public maintenanceMessage$!: Observable<string>;
-  private currentUser: any = null;
+  private remoteConfigService = inject(AppRemoteConfigService);
+  public maintenanceMode = this.remoteConfigService.maintenanceMode;
+  public maintenanceMessage = this.remoteConfigService.maintenanceMessage;
+  public maintenanceLoading = this.remoteConfigService.isLoading;
+  public configLoaded = this.remoteConfigService.configLoaded;
+  public currentUser: any = null;
   public isAdminUser = false;
-
   public currentTheme$: Observable<any>;
 
   // Circular reveal animation state
@@ -72,13 +70,15 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   public themeOverlayClass = '';
   public themeOverlayStyle: { [key: string]: string } = {};
 
+  private breakpointObserver = inject(BreakpointObserver);
+  public isHandset = toSignal(this.breakpointObserver.observe([Breakpoints.XSmall, Breakpoints.Small]).pipe(map(result => result.matches)), { initialValue: false });
+
   constructor(
     public authService: AppAuthService,
     private userService: AppUserService,
     public router: Router,
     private changeDetectorRef: ChangeDetectorRef,
     public sideNavService: AppSideNavService,
-    private remoteConfigService: AppRemoteConfigService,
     private logger: LoggerService,
     private analyticsService: AppAnalyticsService,
     private seoService: SeoService,
@@ -99,8 +99,7 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
   }
 
   async ngOnInit() {
-    this.maintenanceMode$ = this.remoteConfigService.getMaintenanceMode();
-    this.maintenanceMessage$ = this.remoteConfigService.getMaintenanceMessage();
+    this.seoService.init(); // Initialize SEO service
     this.seoService.init(); // Initialize SEO service
 
     this.authService.user$.subscribe(async user => {
@@ -142,6 +141,14 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
 
   get isAdminRoute(): boolean {
     return this.router.url.includes('/admin');
+  }
+
+  get isHomeRoute(): boolean {
+    return this.router.url === '/' || this.router.url.split('?')[0] === '/';
+  }
+
+  get showUploadActivities(): boolean {
+    return (this.isDashboardRoute || this.isAdminRoute) && !!this.currentUser;
   }
 
   private updateOnboardingState() {
@@ -202,10 +209,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
     this.sideNavService.toggle();
   }
 
-  ngAfterViewInit() {
-
-  }
-
   dismissGracePeriodBanner() {
     this.bannerHeight = 0;
     this.hasBanner = false;
@@ -222,10 +225,6 @@ export class AppComponent implements OnInit, AfterViewInit, OnDestroy, AfterView
       return null;
     }
     return outlet && outlet.activatedRouteData && outlet.activatedRouteData['animation'];
-  }
-
-  ngAfterViewChecked() {
-    // Reserved for future use
   }
 
   private triggerCircularReveal(x: number, y: number, theme: any) {

@@ -88,13 +88,19 @@ export abstract class UploadAbstractDirective implements OnInit {
     this.isUploading = true;
     let successfulUploads = 0;
     let failedUploads = 0;
+    let duplicateUploads = 0;
     try {
       for (const fileItem of filesToProcess) {
         this.processingService.updateJob(fileItem.jobId, { status: 'processing', progress: 0 });
         try {
-          await this.processAndUploadFile(fileItem);
+          const result = await this.processAndUploadFile(fileItem);
           this.processingService.completeJob(fileItem.jobId);
-          successfulUploads++;
+          // Check if result indicates a duplicate
+          if (result && typeof result === 'object' && result.duplicate) {
+            duplicateUploads++;
+          } else {
+            successfulUploads++;
+          }
         } catch (e: any) {
           this.logger.error(e);
           this.processingService.failJob(fileItem.jobId, e.message || 'Upload failed');
@@ -105,7 +111,22 @@ export abstract class UploadAbstractDirective implements OnInit {
       this.isUploading = false;
     }
 
-    const message = `Processed ${filesToProcess.length} files: ${successfulUploads} successful, ${failedUploads} failed`;
+    let message = '';
+    if (filesToProcess.length === 1) {
+      if (duplicateUploads === 1) {
+        message = 'Activity already exists';
+      } else if (successfulUploads === 1) {
+        message = 'Successfully uploaded';
+      } else {
+        message = 'Upload failed';
+      }
+    } else {
+      const parts = [];
+      if (successfulUploads > 0) parts.push(`${successfulUploads} successful`);
+      if (duplicateUploads > 0) parts.push(`${duplicateUploads} already exist`);
+      if (failedUploads > 0) parts.push(`${failedUploads} failed`);
+      message = `Processed ${filesToProcess.length} files: ${parts.join(', ')}`;
+    }
     this.snackBar.open(message, 'OK', {
       duration: 5000,
     });

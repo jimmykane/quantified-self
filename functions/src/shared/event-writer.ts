@@ -1,4 +1,4 @@
-import { AppEventInterface } from './app-event.interface';
+import { AppEventInterface, FirestoreActivityJSON, FirestoreEventJSON } from './app-event.interface';
 
 /**
  * Logger adapter interface for cross-environment compatibility.
@@ -50,6 +50,34 @@ export class EventWriter {
         this.logger = logger || consoleLogAdapter;
     }
 
+    /**
+     * Writes event data, activities, and original file(s) to Firestore and Storage.
+     * 
+     * ## Original File Storage Strategy
+     * 
+     * This method implements a dual-field strategy for storing original file metadata:
+     * 
+     * - **`originalFiles`** (array): The canonical field. Always stored as an array, even for
+     *   single file uploads. This supports merged events (multiple source files) and provides
+     *   a consistent data structure for the reader.
+     * 
+     * - **`originalFile`** (object): Legacy/convenience field. Always points to the first file
+     *   in the array. Provides backwards compatibility with older code and simpler access
+     *   for single-file cases.
+     * 
+     * ### Write Behavior
+     * - Single file passed → Normalized to array internally → Both fields written
+     * - Array of files passed → Both fields written (originalFile = first element)
+     * - No files passed → Preserves existing metadata from event object
+     * 
+     * ### Read Behavior (in AppEventService)
+     * - Readers should check `originalFiles` first (canonical source)
+     * - Fall back to `originalFile` only for events written before this normalization
+     * 
+     * @param userID - The user's Firebase UID
+     * @param event - The event to write (must have activities attached)
+     * @param originalFiles - Optional original file(s) to upload to Storage
+     */
     public async writeAllEventData(userID: string, event: AppEventInterface, originalFiles?: OriginalFile[] | OriginalFile): Promise<void> {
         this.logger.info('writeAllEventData called', { userID, eventID: event.getID(), adapterPresent: !!this.storageAdapter });
         const writePromises: Promise<void>[] = [];
@@ -66,17 +94,16 @@ export class EventWriter {
                     activity.setID(this.adapter.generateID());
                 }
 
-                const activityJSON = activity.toJSON();
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                delete (activityJSON as any).streams;
+                const activityJSON = activity.toJSON() as unknown as FirestoreActivityJSON;
+                delete (activityJSON as Record<string, unknown>).streams;
 
                 // Write Activity
-                // Add flat structure metadata
-                (activityJSON as any).userID = userID;
-                (activityJSON as any).eventID = event.getID();
+                // Add flat structure metadata for Firestore querying
+                activityJSON.userID = userID;
+                activityJSON.eventID = event.getID() as string;
                 // Ensure eventStartDate is present for sorting
                 if (event.startDate) {
-                    (activityJSON as any).eventStartDate = event.startDate;
+                    activityJSON.eventStartDate = event.startDate;
                 }
 
 
@@ -90,9 +117,8 @@ export class EventWriter {
             }
 
             // Write Event
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const eventJSON: any = event.toJSON();
-            delete eventJSON.activities;
+            const eventJSON = event.toJSON() as unknown as FirestoreEventJSON;
+            delete (eventJSON as Record<string, unknown>).activities;
 
             // Normalize input to array or single
             let filesToUpload: { data: unknown, extension: string, startDate: Date, originalFilename?: string }[] = [];
@@ -136,14 +162,14 @@ export class EventWriter {
 
                 this.logger.info('Upload complete. Adding metadata to eventJSON');
 
-                // Write 'originalFiles' array and 'originalFile' legacy
+                // Dual-field strategy: Write both originalFiles (canonical) and originalFile (legacy)
+                // See method JSDoc for full explanation of this pattern
                 if (uploadedFilesMetadata.length > 0) {
                     this.logger.info('Assigning metadata to eventJSON:', uploadedFilesMetadata.length);
+                    // Canonical: Always an array, even for single files
                     eventJSON.originalFiles = uploadedFilesMetadata;
-                    // Always set primary legacy pointer to the first file
+                    // Legacy: Always points to first file for backwards compatibility
                     eventJSON.originalFile = uploadedFilesMetadata[0];
-                } else {
-                    this.logger.info('No metadata to assign (uploadedFilesMetadata empty)');
                 }
 
             } else {

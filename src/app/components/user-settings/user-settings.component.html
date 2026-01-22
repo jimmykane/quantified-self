@@ -4,8 +4,7 @@
   <div style="padding: 32px 40px 0 40px; margin: 0 auto;">
     <div class="user-profile-header app-header-card">
       <div class="header-content">
-        <div class="header-avatar"
-          [style.backgroundImage]="'url('+ (user.photoURL ? user.photoURL :  'https://ui-avatars.com/api/?name=' + (this.user.displayName || 'Guest') ) +')'">
+        <div class="header-avatar" [style.backgroundImage]="'url(\'' + userAvatarUrl + '\')'">
         </div>
         <div class="header-info">
           <div class="name-row">
@@ -98,11 +97,6 @@
             <mat-hint>A brief description for your public profile.</mat-hint>
           </mat-form-field>
 
-          <mat-form-field appearance="outline">
-            <mat-label>Custom Branding</mat-label>
-            <input matInput formControlName="brandText">
-            <mat-hint>Personalize your public exported content (Pro feature).</mat-hint>
-          </mat-form-field>
         </div>
       </mat-card>
 
@@ -224,16 +218,7 @@
           <p style="margin: 0; opacity: 0.7; font-size: 1rem;">Configure how your activities are drawn.</p>
         </div>
         <div class="card-content">
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-            <mat-form-field appearance="outline">
-              <mat-label>Map Appearance</mat-label>
-              <mat-select formControlName="mapTheme">
-                @for (theme of mapThemes | keyvalue; track theme) {
-                <mat-option [value]="theme.value">{{theme.key}}</mat-option>
-                }
-              </mat-select>
-            </mat-form-field>
-
+          <div style="display: grid; grid-template-columns: 1fr; gap: 16px;">
             <mat-form-field appearance="outline">
               <mat-label>Map Layer (Default)</mat-label>
               <mat-select formControlName="mapType">

@@ -1,11 +1,11 @@
 ---
 trigger: model_decision
-description: Use this rule for Angular testing best practices, guidelines, and troubleshooting Jasmine/Karma tests.
+description: Use this rule for Angular testing best practices, guidelines, and troubleshooting Vitest tests.
 ---
 
 # Testing Guidelines
 
-You are an expert in testing Angular applications using Jasmine and Karma. Follow these rules when writing or modifying tests.
+You are an expert in testing Angular applications using **Vitest** with `@analogjs/vite-plugin-angular`. Follow these rules when writing or modifying tests.
 
 ## General Principles
 - **Test Behavior, Not Implementation**: Focus on what the component/service does, not how it does it.
@@ -15,9 +15,9 @@ You are an expert in testing Angular applications using Jasmine and Karma. Follo
 
 ## Angular Testing Best Practices
 - **Use `TestBed`**: Always configure the testing module using `TestBed.configureTestingModule`.
-- **Mock Dependencies**: Use `jasmine.createSpyObj` to mock services and dependencies. Avoid using real services in unit tests unless necessary (e.g., for integration tests).
+- **Mock Dependencies**: Use `vi.fn()` and `vi.mock()` to mock services and dependencies. Use `vi.hoisted()` for mock values needed in `vi.mock()` calls.
 - **NO_ERRORS_SCHEMA**: Use `NO_ERRORS_SCHEMA` cautiously. It hides template errors. Prefer mocking child components or using `CUSTOM_ELEMENTS_SCHEMA` if strictly necessary, but better to import necessary modules or mock components.
-- **Async Testing**: Use `fakeAsync` and `tick` for controlling time and asynchronous operations. Avoid `async/await` in tests if `fakeAsync` can be used for better control.
+- **Async Testing**: Use `fakeAsync` and `tick` for controlling time, or native async/await with Vitest.
 - **Change Detection**: Manually trigger change detection with `fixture.detectChanges()` when testing template updates.
 
 ## Naming Conventions
@@ -28,32 +28,36 @@ You are an expert in testing Angular applications using Jasmine and Karma. Follo
 ## Example Structure
 ```typescript
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
 import { MyComponent } from './my.component';
 import { MyService } from '../my.service';
+
+// Hoist mocks for use in vi.mock()
+const mocks = vi.hoisted(() => ({
+  getValue: vi.fn(),
+}));
 
 describe('MyComponent', () => {
   let component: MyComponent;
   let fixture: ComponentFixture<MyComponent>;
-  let myServiceSpy: jasmine.SpyObj<MyService>;
+  const mockService = { getValue: mocks.getValue };
 
   beforeEach(async () => {
-    const spy = jasmine.createSpyObj('MyService', ['getValue']);
-
     await TestBed.configureTestingModule({
-      declarations: [ MyComponent ],
+      declarations: [MyComponent],
       providers: [
-        { provide: MyService, useValue: spy }
+        { provide: MyService, useValue: mockService }
       ]
-    })
-    .compileComponents();
+    }).compileComponents();
 
-    myServiceSpy = TestBed.inject(MyService) as jasmine.SpyObj<MyService>;
-  });
-
-  beforeEach(() => {
     fixture = TestBed.createComponent(MyComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('should create', () => {
@@ -61,16 +65,17 @@ describe('MyComponent', () => {
   });
 
   it('should call service on init', () => {
-    myServiceSpy.getValue.and.returnValue('test value');
+    mocks.getValue.mockReturnValue('test value');
     component.ngOnInit();
-    expect(myServiceSpy.getValue).toHaveBeenCalled();
+    expect(mocks.getValue).toHaveBeenCalled();
   });
 });
 ```
 
 ## CI/CD Integration
-- Tests are run in GitHub Actions using `npm run test` (or `ng test --watch=false --browsers=ChromeHeadless`).
-- Ensure tests pass locally before pushing.
+- Tests are run using `npm test` (Vitest).
+- Coverage: `npm run test-coverage` generates a coverage report.
+- Firestore rules tests: `npm run test:rules` (requires Firebase emulator).
 
 ## Context7 Usage
 

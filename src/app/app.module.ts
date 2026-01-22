@@ -1,5 +1,4 @@
 import { ErrorHandler, LOCALE_ID, NgModule, inject, provideAppInitializer } from '@angular/core';
-import { LoggerService } from './services/logger.service';
 import { GlobalErrorHandler } from './services/global-error-handler.service';
 import { BrowserModule } from '@angular/platform-browser';
 import { AppComponent } from './app.component';
@@ -8,12 +7,12 @@ import { provideAnimations } from '@angular/platform-browser/animations';
 import { SideNavComponent } from './components/sidenav/sidenav.component';
 import { environment } from '../environments/environment';
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
-import { provideFirebaseApp, initializeApp, FirebaseApp } from '@angular/fire/app';
+import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
 import { provideAuth, getAuth, connectAuthEmulator } from '@angular/fire/auth';
 import { provideFirestore, initializeFirestore } from '@angular/fire/firestore';
 import { getApp } from '@angular/fire/app';
-import { provideFunctions, getFunctions, httpsCallable, connectFunctionsEmulator } from '@angular/fire/functions';
-import { provideAppCheck, initializeAppCheck, ReCaptchaV3Provider } from '@angular/fire/app-check';
+import { provideFunctions, getFunctions } from '@angular/fire/functions';
+import { provideAppCheck, initializeAppCheck, ReCaptchaV3Provider, AppCheck } from '@angular/fire/app-check';
 import { providePerformance, getPerformance } from '@angular/fire/performance';
 import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService, setAnalyticsCollectionEnabled } from '@angular/fire/analytics';
 import { provideRemoteConfig, getRemoteConfig } from '@angular/fire/remote-config';
@@ -25,6 +24,8 @@ import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { MAT_DIALOG_DEFAULT_OPTIONS } from '@angular/material/dialog';
 import { ServiceWorkerModule } from '@angular/service-worker';
 import { UploadActivitiesComponent } from './components/upload/upload-activities/upload-activities.component';
+import { GoogleMapsLoaderService } from './services/google-maps-loader.service';
+import { LoggerService } from './services/logger.service';
 
 import { AppUpdateService } from './services/app.update.service';
 import { OnboardingComponent } from './components/onboarding/onboarding.component';
@@ -34,11 +35,6 @@ import { RouteLoaderComponent } from './components/route-loader/route-loader.com
 import { ProcessingIndicatorComponent } from './components/notifications/processing-indicator/processing-indicator.component';
 import { AppRemoteConfigService } from './services/app.remote-config.service';
 import { firstValueFrom } from 'rxjs';
-
-// Factory function that blocks until Remote Config is initialized
-export function initializeRemoteConfig(remoteConfigService: AppRemoteConfigService) {
-  return () => firstValueFrom(remoteConfigService.getMaintenanceMode());
-}
 
 import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/date-locale.config';
 import { APP_STORAGE } from './services/storage/app.storage.token';
@@ -72,10 +68,6 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
       provide: ErrorHandler,
       useClass: GlobalErrorHandler,
     },
-    provideAppInitializer(() => {
-      const remoteConfigService = inject(AppRemoteConfigService);
-      return initializeRemoteConfig(remoteConfigService)();
-    }),
     provideHttpClient(withInterceptorsFromDi()),
     provideFirebaseApp(() => initializeApp(environment.firebase)),
     provideAppCheck(() => {
@@ -124,7 +116,13 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
     {
       provide: APP_STORAGE,
       useFactory: () => localStorage
-    }
+    },
+    provideAppInitializer(() => {
+      const remoteConfigService = inject(AppRemoteConfigService);
+      // Just inject to ensure initialization
+      inject(GoogleMapsLoaderService);
+      inject(AppUpdateService); // Check if we can move this from constructor
+    }),
   ]
 })
 export class AppModule {

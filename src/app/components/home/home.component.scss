@@ -5,6 +5,11 @@
     flex-direction: column;
     min-height: 100vh;
     overflow-x: hidden;
+
+    // Service Brand Colors
+    --brand-garmin: #007cc3;
+    --brand-suunto: #e53935;
+    --brand-coros: #d4a853;
 }
 
 // Mobile-specific footer styles
@@ -63,18 +68,20 @@
     max-width: 1400px;
     margin: 0 auto;
     width: 100%;
-    flex-wrap: wrap;
-    gap: 1rem;
+    flex-wrap: wrap; // Allow wrapping on smaller screens
+    gap: 0;
+    box-sizing: border-box; // Ensure padding doesn't cause overflow
 }
 
 /* Left Side: Hero content */
 .hero-section {
     flex: 0 0 35%;
-    padding: 2rem 3rem;
+    padding: 4rem 4rem;
     display: flex;
     flex-direction: column;
     position: relative;
     overflow: hidden;
+    margin: 1.5rem 0 0 1.5rem;
 
     // Animated gradient background
     &::before {
@@ -91,7 +98,7 @@
         background-size: 200% 200%;
         animation: gradientShift 8s ease-in-out infinite;
         z-index: -1;
-        border-radius: 0 24px 24px 0;
+        border-radius: 24px;
     }
 }
 
@@ -126,30 +133,31 @@
 }
 
 .hero-section h1 {
-    font-size: 2.5rem;
+    font-size: 4rem;
     font-weight: 300;
-    margin: 0 0 1rem;
+    margin: 0 0 1.5rem;
     line-height: 1.1;
 }
 
 .hero-section .subtitle {
-    font-size: 1rem;
+    font-size: 1.35rem;
     opacity: 0.7;
-    margin-bottom: 2rem;
+    margin-bottom: 2.5rem;
     font-weight: 400;
-    line-height: 1.5;
+    line-height: 1.6;
 }
 
 .cta-container {
     display: flex;
     gap: 1rem;
+    justify-content: center;
 }
 
 .btn-large {
-    height: 48px;
-    padding: 0 24px;
-    border-radius: 24px;
-    font-size: 0.9rem;
+    height: 56px;
+    padding: 0 32px;
+    border-radius: 28px;
+    font-size: 1.1rem;
     font-weight: 400;
     text-transform: uppercase;
     letter-spacing: 1.25px;
@@ -177,8 +185,8 @@
 }
 
 .step-icon {
-    width: 48px;
-    height: 48px;
+    width: 64px;
+    height: 64px;
     border-radius: 50%;
     background: var(--mat-sys-primary-container, rgba(63, 81, 181, 0.12));
     display: flex;
@@ -188,9 +196,9 @@
 
     mat-icon {
         color: var(--mat-sys-primary, #3f51b5);
-        font-size: 24px;
-        width: 24px;
-        height: 24px;
+        font-size: 32px;
+        width: 32px;
+        height: 32px;
     }
 }
 
@@ -204,7 +212,7 @@
 }
 
 .step-label {
-    font-size: 0.75rem;
+    font-size: 0.85rem;
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -212,10 +220,10 @@
 }
 
 .step-arrow {
-    font-size: 18px;
-    width: 18px;
-    height: 18px;
-    margin-top: 15px; // (48px icon height - 18px arrow height) / 2
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+    margin-top: 20px; // (64px icon height - 24px arrow height) / 2
     opacity: 0.5;
 }
 
@@ -261,30 +269,32 @@
 /* Right Side: Grid Feature List */
 .features-section {
     flex: 1;
-    padding: 1.5rem 2rem;
+    padding: 2rem 3rem;
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    grid-auto-rows: auto;
-    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); // Flexible columns
+    gap: 2rem;
     align-content: start;
+    box-sizing: border-box;
 }
 
 .feature-card {
     // Glass styles handled by .glass-card
-    padding: 1rem 1.2rem;
+    padding: 2rem;
     border-left: 4px solid transparent;
     transition: all 0.2s ease;
     display: flex;
     flex-direction: column;
     justify-content: flex-start;
+    box-sizing: border-box; // Vital for avoiding overflow
+    height: 100%; // Ensure equal heights
 }
 
 
 
 /* Last card spans full width */
 .feature-card.full-width {
-    width: 100%;
-    margin: 0 1rem;
+    width: calc(100% - 6rem);
+    margin: 3rem auto;
     grid-column: span 2;
     flex-direction: row;
     align-items: center;
@@ -293,8 +303,8 @@
 
 .feature-card.full-width .card-header {
     margin-bottom: 0;
-    margin-right: 2rem;
-    min-width: 200px;
+    margin-right: 4rem;
+    min-width: 240px;
 }
 
 .feature-card.full-width .card-content-wrapper {
@@ -310,29 +320,29 @@
 
 // Service-branded hover effects
 .feature-card.service-garmin:hover {
-    border-left-color: #007cc3; // Garmin Blue
-    box-shadow: 0 4px 20px rgba(0, 124, 195, 0.2);
+    border-left-color: var(--brand-garmin);
+    box-shadow: 0 4px 20px rgba(0, 124, 195, 0.2); // Keep specific opacity shadow
 
     .card-icon {
-        color: #007cc3;
+        color: var(--brand-garmin);
     }
 }
 
 .feature-card.service-suunto:hover {
-    border-left-color: #e53935; // Suunto Red
+    border-left-color: var(--brand-suunto);
     box-shadow: 0 4px 20px rgba(229, 57, 53, 0.2);
 
     .card-icon {
-        color: #e53935;
+        color: var(--brand-suunto);
     }
 }
 
 .feature-card.service-coros:hover {
-    border-left-color: #d4a853; // COROS Gold
+    border-left-color: var(--brand-coros);
     box-shadow: 0 4px 20px rgba(212, 168, 83, 0.2);
 
     .card-icon {
-        color: #d4a853;
+        color: var(--brand-coros);
     }
 }
 
@@ -349,31 +359,37 @@
 
 
 
+.card-title {
+    font-size: 1.5rem;
+    font-weight: 500;
+    margin: 0;
+}
+
 .card-text {
     opacity: 0.7;
-    font-size: 1rem; // Increased from 0.85rem
-    margin-bottom: 0.5rem;
-    line-height: 1.5; // Increased for readability
+    font-size: 1.15rem; // Increased from 1rem
+    margin-bottom: 1.5rem;
+    line-height: 1.6; // Increased for readability
     // Removed line-clamp to show full text
 }
 
 .tag-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 12px;
     margin-top: auto;
 }
 
 .tag {
     background: rgba(0, 0, 0, 0.06);
     opacity: 0.7;
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 0.75rem;
+    padding: 6px 14px;
+    border-radius: 16px;
+    font-size: 1rem;
     font-weight: 400;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
 }
 
 :host-context(.dark-theme) .tag {
@@ -514,66 +530,48 @@
 }
 
 /* Responsive */
+/* Responsive */
 @media (max-width: 900px) {
     .split-container {
         flex-direction: column;
-        overflow-x: hidden;
         width: 100%;
-        max-width: 100vw;
+        max-width: 100%; // Avoid 100vw which includes scrollbar
     }
 
     .hero-section {
         flex: 0 0 auto;
-        padding: 2rem;
+        padding: 2rem 1.5rem; // Reduced padding for mobile
+        margin: 0; // Remove margin causing overflow
         text-align: center;
         width: 100%;
         box-sizing: border-box;
+
+        h1 {
+            font-size: 2.5rem; // Scale down for mobile
+        }
     }
 
-    .cta-container {
-        justify-content: center;
-    }
+
 
     .features-section {
         grid-template-columns: 1fr;
+        padding: 1.5rem;
         width: 100%;
         box-sizing: border-box;
-        overflow-x: hidden;
-    }
-
-    .feature-card {
-        width: 100%;
-        box-sizing: border-box;
-        overflow: hidden;
     }
 
     .feature-card.full-width {
         grid-column: auto;
         flex-direction: column;
         align-items: flex-start;
-        margin: 0 1rem 1.5rem 1rem;
-        width: calc(100% - 2rem);
-        max-width: calc(100vw - 2rem);
+        margin: 0 auto;
+        width: 100%;
+        max-width: none; // Reset max-width
     }
 
     .feature-card.full-width .card-header {
-        margin-bottom: 0.5rem;
-    }
-
-    .tag-list {
-        flex-wrap: wrap;
-        max-width: 100%;
-    }
-
-    // Footer adjustments
-    .ecosystem {
-        flex-direction: column;
-        gap: 1.5rem;
-    }
-
-    .vertical-divider {
-        width: 40px;
-        height: 1px; // Turn into horizontal divider
+        margin-bottom: 1rem;
+        margin-right: 0;
     }
 }
 

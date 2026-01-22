@@ -140,6 +140,22 @@ describe('EventActionsComponent', () => {
             expect(args[1]).toContain('.zip');
         });
 
+        it('should download a single file directly if originalFiles has exactly 1 item', async () => {
+            const mockArrayBuffer = new ArrayBuffer(10);
+            mockEventService.downloadFile.mockResolvedValue(mockArrayBuffer);
+            (component.event as any).originalFiles = [
+                { path: 'path/to/single.fit' }
+            ];
+
+            await component.downloadOriginals();
+
+            expect(mockEventService.downloadFile).toHaveBeenCalledWith('path/to/single.fit');
+            expect(mockFileService.downloadFile).toHaveBeenCalled();
+            expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
+            const args = mockFileService.downloadFile.mock.calls[0];
+            expect(args[2]).toBe('fit');
+        });
+
         it('should show snackbar if no files', async () => {
             (component.event as any).originalFile = undefined;
             (component.event as any).originalFiles = undefined;

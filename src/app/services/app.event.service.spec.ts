@@ -8,6 +8,7 @@ import { AppUserService } from './app.user.service';
 import { LoggerService } from './logger.service';
 import { AppFileService } from './app.file.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
+import { AppEventUtilities } from '../utils/app.event.utilities';
 import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
 import { of } from 'rxjs';
 
@@ -101,6 +102,7 @@ describe('AppEventService', () => {
                 { provide: LoggerService, useValue: mockLogger },
                 { provide: AppFileService, useValue: mockFileService },
                 { provide: BrowserCompatibilityService, useValue: mockCompatibility },
+                { provide: AppEventUtilities, useValue: { enrich: vi.fn() } }
             ]
         });
         service = TestBed.inject(AppEventService);

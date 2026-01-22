@@ -31,7 +31,6 @@ import { LapTypesHelper } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import {
-  MapThemes,
   MapTypes,
   UserMapSettingsInterface
 } from '@sports-alliance/sports-lib';
@@ -70,7 +69,6 @@ export class UserSettingsComponent implements OnChanges {
 
   public appThemes = AppThemes;
   public chartThemes = ChartThemes;
-  public mapThemes = MapThemes;
   public lapTypes = LapTypesHelper.getLapTypesAsUniqueArray();
 
   public eventsPerPage = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000];
@@ -96,6 +94,14 @@ export class UserSettingsComponent implements OnChanges {
 
   get isBasicUser(): boolean {
     return AppUserService.isBasicUser(this.user);
+  }
+
+  get userAvatarUrl(): string {
+    if (this.user?.photoURL) {
+      return this.user.photoURL;
+    }
+    const name = this.user?.displayName || 'Guest';
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random`;
   }
 
   constructor(private authService: AppAuthService,
@@ -131,8 +137,6 @@ export class UserSettingsComponent implements OnChanges {
       description: new UntypedFormControl(this.user.description, [
         // Validators.required,
         // Validators.minLength(4),
-      ]),
-      brandText: new UntypedFormControl({ value: this.user.brandText, disabled: true }, [
       ]),
       dataTypesToUse: new UntypedFormControl(dataTypesToUse, [
         Validators.required,
@@ -267,10 +271,6 @@ export class UserSettingsComponent implements OnChanges {
         // Validators.minLength(1),
       ]),
 
-      mapTheme: new UntypedFormControl(this.user.settings.mapSettings.theme, [
-        // Validators.required,
-        // Validators.minLength(1),
-      ]),
 
       mapType: new UntypedFormControl(this.user.settings.mapSettings.mapType, [
         // Validators.required,
@@ -309,11 +309,6 @@ export class UserSettingsComponent implements OnChanges {
 
     });
 
-    this.userService.isBranded(this.user).then((isBranded) => {
-      if (isBranded) {
-        this.userSettingsFormGroup.get('brandText').enable();
-      }
-    });
   }
 
   hasError(field?: string) {
@@ -371,14 +366,12 @@ export class UserSettingsComponent implements OnChanges {
         displayName: this.userSettingsFormGroup.get('displayName').value,
         privacy: this.userSettingsFormGroup.get('privacy').value,
         description: this.userSettingsFormGroup.get('description').value,
-        brandText: this.userSettingsFormGroup.get('brandText').value || null,
         acceptedTrackingPolicy: this.userSettingsFormGroup.get('acceptedTrackingPolicy').value,
         acceptedMarketingPolicy: this.userSettingsFormGroup.get('acceptedMarketingPolicy').value,
         settings: <UserSettingsInterface>{
           chartSettings: userChartSettings,
           appSettings: <UserAppSettingsInterface>{ theme: this.userSettingsFormGroup.get('appTheme').value },
           mapSettings: <UserMapSettingsInterface>{
-            theme: this.userSettingsFormGroup.get('mapTheme').value,
             showLaps: this.userSettingsFormGroup.get('showMapLaps').value,
             showPoints: this.userSettingsFormGroup.get('showMapPoints').value,
             showArrows: this.userSettingsFormGroup.get('showMapArrows').value,

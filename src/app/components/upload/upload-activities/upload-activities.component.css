@@ -15,6 +15,22 @@ a[mat-flat-button] {
   box-sizing: border-box;
 }
 
+/* Icon-only button for mobile */
+button.icon-only,
+a.icon-only {
+  min-width: 40px;
+  width: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+button.icon-only mat-icon,
+a.icon-only mat-icon {
+  margin: 0;
+}
+
 /*button:hover {*/
 /*  -webkit-transform: rotate(180deg);*/
 /*  transform: rotate(180deg);*/

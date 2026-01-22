@@ -3,17 +3,37 @@ import { AppRemoteConfigService } from './app.remote-config.service';
 import { AppWindowService } from './app.window.service';
 import { AppUserService } from './app.user.service';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { firstValueFrom } from 'rxjs';
 import { APP_STORAGE } from './storage/app.storage.token';
 import { PLATFORM_ID } from '@angular/core';
+import { RemoteConfig } from '@angular/fire/remote-config';
+import { fetchAndActivate, getString } from 'firebase/remote-config';
+
+// Mock the environment
+vi.mock('../../environments/environment', () => ({
+    environment: {
+        production: false,
+        beta: false,
+        localhost: true
+    }
+}));
+
+// Mock firebase/remote-config (not @angular/fire/remote-config)
+vi.mock('firebase/remote-config', () => {
+    return {
+        fetchAndActivate: vi.fn(),
+        getString: vi.fn()
+    };
+});
 
 describe('AppRemoteConfigService', () => {
     let service: AppRemoteConfigService;
     let mockWindowService: any;
     let mockUserService: any;
     let mockWindow: any;
+    let mockRemoteConfig: any;
+    let mockStorage: any;
 
-    beforeEach(() => {
+    beforeEach(async () => {
         mockWindow = {
             location: { search: '' }
         };
@@ -26,21 +46,12 @@ describe('AppRemoteConfigService', () => {
             isAdmin: vi.fn().mockResolvedValue(false)
         };
 
-        // Mock fetch
-        global.fetch = vi.fn().mockResolvedValue({
-            ok: true,
-            json: () => Promise.resolve({
-                entries: {
-                    maintenance_mode: 'false',
-                    maintenance_message: 'Test message'
-                },
-                state: 'UPDATE'
-            })
-        });
+        mockRemoteConfig = {
+            settings: {}
+        };
 
-        // Mock storage instead of global localStorage
-        const storageMock = {
-            getItem: vi.fn().mockReturnValue('test-instance-id'),
+        mockStorage = {
+            getItem: vi.fn().mockReturnValue(null),
             setItem: vi.fn(),
             removeItem: vi.fn(),
             clear: vi.fn(),
@@ -48,24 +59,28 @@ describe('AppRemoteConfigService', () => {
             length: 0
         };
 
-        // Mock crypto.randomUUID
-        Object.defineProperty(global, 'crypto', {
-            value: { randomUUID: () => 'test-uuid' },
-            configurable: true,
-            writable: true
-        });
+        // Reset mocks
+        vi.clearAllMocks();
+        vi.mocked(fetchAndActivate).mockResolvedValue(true);
+
+        // Default: maintenance is off
+        vi.mocked(getString).mockReturnValue('');
 
         TestBed.configureTestingModule({
             providers: [
                 AppRemoteConfigService,
                 { provide: AppWindowService, useValue: mockWindowService },
                 { provide: AppUserService, useValue: mockUserService },
-                { provide: APP_STORAGE, useValue: storageMock },
-                { provide: PLATFORM_ID, useValue: 'browser' }
+                { provide: APP_STORAGE, useValue: mockStorage },
+                { provide: PLATFORM_ID, useValue: 'browser' },
+                { provide: RemoteConfig, useValue: mockRemoteConfig }
             ]
         });
 
         service = TestBed.inject(AppRemoteConfigService);
+
+        // Wait for initialization to complete
+        await new Promise(resolve => setTimeout(resolve, 50));
     });
 
     afterEach(() => {
@@ -76,50 +91,50 @@ describe('AppRemoteConfigService', () => {
         expect(service).toBeTruthy();
     });
 
-    it('should fetch config via REST API', async () => {
-        await firstValueFrom(service.getMaintenanceMode());
-        expect(global.fetch).toHaveBeenCalled();
+    it('should fetch config via Firebase SDK', () => {
+        expect(fetchAndActivate).toHaveBeenCalled();
     });
 
-    describe('getMaintenanceMode', () => {
-        it('should return true when maintenance_mode is "true" for non-admin', async () => {
-            (global.fetch as any).mockResolvedValue({
-                ok: true,
-                json: () => Promise.resolve({
-                    entries: {
-                        maintenance_mode: 'true',
-                        maintenance_message: 'Maintenance in progress'
-                    }
-                })
-            });
+    it('should expose isLoading signal', () => {
+        expect(service.isLoading).toBeDefined();
+    });
 
-            const storageMock = { getItem: vi.fn().mockReturnValue(null), setItem: vi.fn() };
+    it('should expose maintenanceMode signal', () => {
+        expect(service.maintenanceMode).toBeDefined();
+    });
+
+    it('should expose maintenanceMessage signal', () => {
+        expect(service.maintenanceMessage).toBeDefined();
+    });
+
+    describe('maintenanceMode signal', () => {
+        it('should return false when maintenance is disabled', async () => {
+            // getString returns '' for both enabled and message
+            vi.mocked(getString).mockReturnValue('');
+
             TestBed.resetTestingModule();
             TestBed.configureTestingModule({
                 providers: [
                     AppRemoteConfigService,
                     { provide: AppWindowService, useValue: mockWindowService },
                     { provide: AppUserService, useValue: mockUserService },
-                    { provide: APP_STORAGE, useValue: storageMock },
-                    { provide: PLATFORM_ID, useValue: 'browser' }
+                    { provide: APP_STORAGE, useValue: mockStorage },
+                    { provide: PLATFORM_ID, useValue: 'browser' },
+                    { provide: RemoteConfig, useValue: mockRemoteConfig }
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
+            await new Promise(resolve => setTimeout(resolve, 50));
 
-            const mode = await firstValueFrom(service.getMaintenanceMode());
-            expect(mode).toBe(true);
+            expect(service.maintenanceMode()).toBe(false);
         });
 
-        it('should return false for admin users even when maintenance is true', async () => {
-            mockUserService.isAdmin.mockResolvedValue(true);
-            (global.fetch as any).mockResolvedValue({
-                ok: true,
-                json: () => Promise.resolve({
-                    entries: {
-                        maintenance_mode: 'true',
-                        maintenance_message: 'Maintenance in progress'
-                    }
-                })
+        it('should return true when maintenance is enabled for current env', async () => {
+            // Mock getString to return 'true' for dev_enabled (localhost = dev)
+            vi.mocked(getString).mockImplementation((_rc, key) => {
+                if (key === 'dev_enabled') return 'true';
+                if (key === 'dev_message') return 'Dev Maintenance';
+                return '';
             });
 
             TestBed.resetTestingModule();
@@ -128,18 +143,45 @@ describe('AppRemoteConfigService', () => {
                     AppRemoteConfigService,
                     { provide: AppWindowService, useValue: mockWindowService },
                     { provide: AppUserService, useValue: mockUserService },
-                    { provide: APP_STORAGE, useValue: { getItem: vi.fn(), setItem: vi.fn() } },
-                    { provide: PLATFORM_ID, useValue: 'browser' }
+                    { provide: APP_STORAGE, useValue: mockStorage },
+                    { provide: PLATFORM_ID, useValue: 'browser' },
+                    { provide: RemoteConfig, useValue: mockRemoteConfig }
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
+            await new Promise(resolve => setTimeout(resolve, 50));
 
-            const mode = await firstValueFrom(service.getMaintenanceMode());
-            expect(mode).toBe(false);
+            expect(service.maintenanceMode()).toBe(true);
+            expect(service.maintenanceMessage()).toBe('Dev Maintenance');
+        });
+
+        it('should return false for admin users even when maintenance is enabled', async () => {
+            mockUserService.isAdmin.mockResolvedValue(true);
+            vi.mocked(getString).mockImplementation((_rc, key) => {
+                if (key === 'dev_enabled') return 'true';
+                if (key === 'dev_message') return 'Maintenance';
+                return '';
+            });
+
+            TestBed.resetTestingModule();
+            TestBed.configureTestingModule({
+                providers: [
+                    AppRemoteConfigService,
+                    { provide: AppWindowService, useValue: mockWindowService },
+                    { provide: AppUserService, useValue: mockUserService },
+                    { provide: APP_STORAGE, useValue: mockStorage },
+                    { provide: PLATFORM_ID, useValue: 'browser' },
+                    { provide: RemoteConfig, useValue: mockRemoteConfig }
+                ]
+            });
+            service = TestBed.inject(AppRemoteConfigService);
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            expect(service.maintenanceMode()).toBe(false);
         });
 
         it('should return false on fetch error (graceful degradation)', async () => {
-            (global.fetch as any).mockRejectedValue(new Error('Network error'));
+            vi.mocked(fetchAndActivate).mockRejectedValue(new Error('SDK error'));
 
             TestBed.resetTestingModule();
             TestBed.configureTestingModule({
@@ -147,25 +189,23 @@ describe('AppRemoteConfigService', () => {
                     AppRemoteConfigService,
                     { provide: AppWindowService, useValue: mockWindowService },
                     { provide: AppUserService, useValue: mockUserService },
-                    { provide: APP_STORAGE, useValue: { getItem: vi.fn(), setItem: vi.fn() } },
-                    { provide: PLATFORM_ID, useValue: 'browser' }
+                    { provide: APP_STORAGE, useValue: mockStorage },
+                    { provide: PLATFORM_ID, useValue: 'browser' },
+                    { provide: RemoteConfig, useValue: mockRemoteConfig }
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
+            await new Promise(resolve => setTimeout(resolve, 50));
 
-            const mode = await firstValueFrom(service.getMaintenanceMode());
-            expect(mode).toBe(false);
+            expect(service.maintenanceMode()).toBe(false);
         });
 
         it('should bypass maintenance mode with query parameter', async () => {
             mockWindow.location.search = '?bypass_maintenance=true';
-            (global.fetch as any).mockResolvedValue({
-                ok: true,
-                json: () => Promise.resolve({
-                    entries: {
-                        maintenance_mode: 'true'
-                    }
-                })
+            vi.mocked(getString).mockImplementation((_rc, key) => {
+                if (key === 'dev_enabled') return 'true';
+                if (key === 'dev_message') return 'Maintenance';
+                return '';
             });
 
             TestBed.resetTestingModule();
@@ -174,148 +214,23 @@ describe('AppRemoteConfigService', () => {
                     AppRemoteConfigService,
                     { provide: AppWindowService, useValue: mockWindowService },
                     { provide: AppUserService, useValue: mockUserService },
-                    { provide: APP_STORAGE, useValue: { getItem: vi.fn(), setItem: vi.fn() } },
-                    { provide: PLATFORM_ID, useValue: 'browser' }
+                    { provide: APP_STORAGE, useValue: mockStorage },
+                    { provide: PLATFORM_ID, useValue: 'browser' },
+                    { provide: RemoteConfig, useValue: mockRemoteConfig }
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
+            await new Promise(resolve => setTimeout(resolve, 50));
 
-            const mode = await firstValueFrom(service.getMaintenanceMode());
-            expect(mode).toBe(false);
-        });
-    });
-
-    describe('getOrCreateInstanceId', () => {
-        it('should use crypto.randomUUID when available', () => {
-            // This is already mocked in beforeEach
-            // crypto.randomUUID: () => 'test-uuid'
-
-            // Re-inject service to ensure it hits getOrCreateInstanceId with fresh state
-            TestBed.resetTestingModule();
-            const storageMock = {
-                getItem: vi.fn().mockReturnValue(null),
-                setItem: vi.fn()
-            };
-
-            TestBed.configureTestingModule({
-                providers: [
-                    AppRemoteConfigService,
-                    { provide: AppWindowService, useValue: mockWindowService },
-                    { provide: AppUserService, useValue: mockUserService },
-                    { provide: APP_STORAGE, useValue: storageMock },
-                    { provide: PLATFORM_ID, useValue: 'browser' }
-                ]
-            });
-            service = TestBed.inject(AppRemoteConfigService);
-
-            expect(storageMock.setItem).toHaveBeenCalledWith('rc_instance_id', 'test-uuid');
+            expect(service.maintenanceMode()).toBe(false);
         });
 
-        it('should use fallback when crypto.randomUUID is not available', () => {
-            // Mock crypto.randomUUID to be undefined
-            Object.defineProperty(global, 'crypto', {
-                value: { randomUUID: undefined },
-                writable: true
-            });
-
-            // Mock storage
-            const storageMock = {
-                getItem: vi.fn().mockReturnValue(null),
-                setItem: vi.fn()
-            };
-
-            TestBed.resetTestingModule();
-            TestBed.configureTestingModule({
-                providers: [
-                    AppRemoteConfigService,
-                    { provide: AppWindowService, useValue: mockWindowService },
-                    { provide: AppUserService, useValue: mockUserService },
-                    { provide: APP_STORAGE, useValue: storageMock },
-                    { provide: PLATFORM_ID, useValue: 'browser' }
-                ]
-            });
-            service = TestBed.inject(AppRemoteConfigService);
-
-            // Verify a UUID-like string was set
-            const call = storageMock.setItem.mock.calls[0];
-            expect(call[0]).toBe('rc_instance_id');
-            expect(call[1]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
-        });
-
-        it('should return existing id from localStorage if available', () => {
-            const storageMock = {
-                getItem: vi.fn().mockReturnValue('existing-id'),
-                setItem: vi.fn()
-            };
-
-            TestBed.resetTestingModule();
-            TestBed.configureTestingModule({
-                providers: [
-                    AppRemoteConfigService,
-                    { provide: AppWindowService, useValue: mockWindowService },
-                    { provide: AppUserService, useValue: mockUserService },
-                    { provide: APP_STORAGE, useValue: storageMock },
-                    { provide: PLATFORM_ID, useValue: 'browser' }
-                ]
-            });
-            service = TestBed.inject(AppRemoteConfigService);
-
-            expect(storageMock.setItem).not.toHaveBeenCalled();
-        });
-    });
-
-    describe('Environment-specific keys', () => {
-        it('should use maintenance_mode_dev when localhost is true', async () => {
-            // We need to mock environment for this test specifically
-            // Since it's already imported, we might need a workaround or just test the logic
-            // that is already there. The current test environment likely has localhost=true
-            // or we can just verify it picks up WHATEVER the environment specifies.
-
-            (global.fetch as any).mockResolvedValue({
-                ok: true,
-                json: () => Promise.resolve({
-                    entries: {
-                        maintenance_mode: 'false',
-                        maintenance_mode_prod: 'false',
-                        maintenance_mode_beta: 'false',
-                        maintenance_mode_dev: 'true'
-                    }
-                })
-            });
-
-            // Re-initialize service to trigger initializeConfig with new mocks
-            TestBed.resetTestingModule();
-            TestBed.configureTestingModule({
-                providers: [
-                    AppRemoteConfigService,
-                    { provide: AppWindowService, useValue: mockWindowService },
-                    { provide: AppUserService, useValue: mockUserService },
-                    { provide: APP_STORAGE, useValue: { getItem: vi.fn(), setItem: vi.fn() } },
-                    { provide: PLATFORM_ID, useValue: 'browser' }
-                ]
-            });
-            service = TestBed.inject(AppRemoteConfigService);
-
-            // Fetching maintenance mode should trigger initializeConfig
-            const mode = await firstValueFrom(service.getMaintenanceMode());
-
-            // If the test environment is 'dev', it should be true. 
-            // If it's something else, it might be false.
-            // Let's check what the environment actually is in this test.
-            // const env = (service as any).environment;
-
-            // For now, let's just assert that it's NOT throwing and it's doing something sensible
-            expect(mode).toBeDefined();
-        });
-
-        it('should fallback to maintenance_mode if environment-specific key is missing', async () => {
-            (global.fetch as any).mockResolvedValue({
-                ok: true,
-                json: () => Promise.resolve({
-                    entries: {
-                        maintenance_mode: 'true'
-                    }
-                })
+        it('should bypass maintenance mode with localStorage flag', async () => {
+            mockStorage.getItem.mockReturnValue('true');
+            vi.mocked(getString).mockImplementation((_rc, key) => {
+                if (key === 'dev_enabled') return 'true';
+                if (key === 'dev_message') return 'Maintenance';
+                return '';
             });
 
             TestBed.resetTestingModule();
@@ -324,14 +239,15 @@ describe('AppRemoteConfigService', () => {
                     AppRemoteConfigService,
                     { provide: AppWindowService, useValue: mockWindowService },
                     { provide: AppUserService, useValue: mockUserService },
-                    { provide: APP_STORAGE, useValue: { getItem: vi.fn(), setItem: vi.fn() } },
-                    { provide: PLATFORM_ID, useValue: 'browser' }
+                    { provide: APP_STORAGE, useValue: mockStorage },
+                    { provide: PLATFORM_ID, useValue: 'browser' },
+                    { provide: RemoteConfig, useValue: mockRemoteConfig }
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
+            await new Promise(resolve => setTimeout(resolve, 50));
 
-            const mode = await firstValueFrom(service.getMaintenanceMode());
-            expect(mode).toBe(true);
+            expect(service.maintenanceMode()).toBe(false);
         });
     });
 });

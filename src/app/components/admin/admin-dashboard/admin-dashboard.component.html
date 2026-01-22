@@ -1,7 +1,7 @@
 <div class="admin-container">
     <div class="header-container">
         <h1 class="app-text-gradient">Admin Dashboard</h1>
-        <p class="premium-subtitle">Manage users and subscriptions</p>
+        <p class="premium-subtitle">Manage system health and navigate to admin tools</p>
     </div>
 
     <!-- System Maintenance Navigation -->
@@ -18,21 +18,25 @@
         </div>
     </div>
 
+    <!-- User Management Navigation -->
+    <div class="dashboard-section">
+        <div class="section-title">
+            <h2>
+                <mat-icon>people</mat-icon>
+                User Management
+            </h2>
+            <button mat-stroked-button color="primary" routerLink="/admin/users">
+                <mat-icon>manage_accounts</mat-icon>
+                Manage Users
+            </button>
+        </div>
+    </div>
 
     <!-- Financial Overview Section -->
     <app-admin-financials [stats]="financialStats" [loading]="isLoadingFinancials">
     </app-admin-financials>
 
-
     <!-- Queue Status & Health Section -->
     <app-admin-queue-stats [stats]="queueStats" [loading]="isLoadingStats">
     </app-admin-queue-stats>
-
-    <!-- User Management Section -->
-    <app-admin-user-management [users]="users" [userStats]="userStats" [isLoading]="isLoading" [error]="error"
-        [totalCount]="totalCount" [currentPage]="currentPage" [pageSize]="pageSize" [pageSizeOptions]="pageSizeOptions"
-        [filterService]="filterService" (filterServiceChange)="onFilterServiceChange($event)"
-        (pageChange)="onPageChange($event)" (sortChange)="onSortChange($event)" (searchChange)="onSearchChange($event)"
-        (impersonate)="onImpersonate($event)">
-    </app-admin-user-management>
 </div>

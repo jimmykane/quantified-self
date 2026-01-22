@@ -7,7 +7,54 @@ export interface OriginalFileMetaData {
     originalFilename?: string;
 }
 
+/**
+ * Extended event interface that includes original file metadata.
+ * 
+ * ## Dual-Field Strategy for Original Files
+ * 
+ * Events store original file references using two fields for backwards compatibility:
+ * 
+ * - **`originalFiles`**: Canonical field. Always an array, even for single-file uploads.
+ *   Supports merged events (multiple source files) and provides consistent data structure.
+ * 
+ * - **`originalFile`**: Legacy/convenience field. Points to the first file in the array.
+ *   Maintained for backwards compatibility with older code paths.
+ * 
+ * Both fields are written together by `EventWriter.writeAllEventData()`.
+ * Readers should check `originalFiles` first, then fall back to `originalFile`.
+ */
 export interface AppEventInterface extends EventInterface {
+    /** @deprecated Use originalFiles[0] instead. Kept for backwards compatibility. */
     originalFile?: OriginalFileMetaData;
+    /** Canonical source for original file metadata. Always an array. */
     originalFiles?: OriginalFileMetaData[];
 }
+
+/**
+ * Activity JSON structure as stored in Firestore.
+ * Extends sports-lib ActivityJSONInterface with denormalized metadata for querying.
+ */
+export interface FirestoreActivityJSON {
+    /** All fields from ActivityJSONInterface via toJSON() */
+    [key: string]: unknown;
+    /** Denormalized user ID for flat collection querying */
+    userID: string;
+    /** Parent event reference */
+    eventID: string;
+    /** Denormalized event start date for sorting across all user activities */
+    eventStartDate?: Date;
+}
+
+/**
+ * Event JSON structure as stored in Firestore.
+ * Extends sports-lib EventJSONInterface with original file metadata.
+ */
+export interface FirestoreEventJSON {
+    /** All fields from EventJSONInterface via toJSON() */
+    [key: string]: unknown;
+    /** @deprecated Use originalFiles[0] instead */
+    originalFile?: OriginalFileMetaData;
+    /** Canonical source for original file metadata */
+    originalFiles?: OriginalFileMetaData[];
+}
+

@@ -126,8 +126,8 @@
   </div>
   <div class="qs-form-actions">
     <button mat-flat-button color="primary" (click)="onSubmit($event)"
-      [disabled]="!formGroup.valid || isLoading || isLoadingParent || formGroup.disabled">
-      @if (isLoading) {
+      [disabled]="!formGroup.valid || isSubmitting || isLoadingParent || formGroup.disabled">
+      @if (isSubmitting) {
       <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
         color="accent"></mat-spinner>
       Importing History...

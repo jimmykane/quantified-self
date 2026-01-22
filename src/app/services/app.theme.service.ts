@@ -1,10 +1,10 @@
-import { Injectable, OnDestroy } from '@angular/core';
+import { Injectable, OnDestroy, Signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppUserService } from './app.user.service';
 import { User } from '@sports-alliance/sports-lib';
 import { ChartThemes } from '@sports-alliance/sports-lib';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
-import { MapThemes } from '@sports-alliance/sports-lib';
 import { AppAuthService } from '../authentication/app.auth.service';
 
 
@@ -14,8 +14,12 @@ import { AppAuthService } from '../authentication/app.auth.service';
 export class AppThemeService implements OnDestroy {
 
   private chartTheme: BehaviorSubject<ChartThemes | null> = new BehaviorSubject<ChartThemes | null>(null);
-  private appTheme: BehaviorSubject<AppThemes | null> = new BehaviorSubject<AppThemes | null>(null);
-  private mapTheme: BehaviorSubject<MapThemes | null> = new BehaviorSubject<MapThemes | null>(null);
+  private appThemeSubject: BehaviorSubject<AppThemes> = new BehaviorSubject<AppThemes>(AppThemes.Normal);
+
+  /**
+   * Signal that tracks the current application theme.
+   */
+  public appTheme: Signal<AppThemes> = toSignal(this.appThemeSubject, { initialValue: AppThemes.Normal });
 
   private userSubscription: Subscription;
   private readonly MEDIA_QUERY = '(prefers-color-scheme: dark)';
@@ -35,7 +39,6 @@ export class AppThemeService implements OnDestroy {
     this.initializeTheme();
 
     this.setChartTheme(this.getChartThemeFromStorage());
-    this.setMapTheme(this.getMapThemeFromStorage());
     this.userSubscription = this.authService.user$.subscribe(user => {
       this.user = user;
       if (this.user?.settings?.appSettings?.theme) {
@@ -43,9 +46,6 @@ export class AppThemeService implements OnDestroy {
       }
       if (this.user?.settings?.chartSettings?.theme) {
         this.setChartTheme(this.user.settings.chartSettings.theme)
-      }
-      if (this.user?.settings?.mapSettings?.theme) {
-        this.setMapTheme(this.user.settings.mapSettings.theme)
       }
     })
   }
@@ -69,7 +69,6 @@ export class AppThemeService implements OnDestroy {
 
   private async changeTheme(theme: AppThemes) {
     const chartTheme = theme === AppThemes.Normal ? ChartThemes.Material : ChartThemes.Dark;
-    const mapTheme = theme === AppThemes.Normal ? MapThemes.Normal : MapThemes.Dark;
     // Save it to the user if he exists
     if (this.user?.settings) {
       if (this.user.settings.appSettings) {
@@ -78,9 +77,6 @@ export class AppThemeService implements OnDestroy {
       if (this.user.settings.chartSettings) {
         this.user.settings.chartSettings.theme = chartTheme;
       }
-      if (this.user.settings.mapSettings) {
-        this.user.settings.mapSettings.theme = mapTheme;
-      }
       await this.userService.updateUserProperties(this.user, {
         settings: this.user.settings
       });
@@ -88,7 +84,6 @@ export class AppThemeService implements OnDestroy {
       // Save it to local storage to prevent flashes
       this.setAppTheme(theme);
       this.setChartTheme(chartTheme);
-      this.setMapTheme(mapTheme);
     }
   }
 
@@ -101,7 +96,7 @@ export class AppThemeService implements OnDestroy {
     if (saveToStorage) {
       localStorage.setItem('appTheme', appTheme);
     }
-    this.appTheme.next(appTheme);
+    this.appThemeSubject.next(appTheme);
   }
 
   public setChartTheme(chartTheme: ChartThemes) {
@@ -109,22 +104,15 @@ export class AppThemeService implements OnDestroy {
     this.chartTheme.next(chartTheme);
   }
 
-  public setMapTheme(mapTheme: MapThemes) {
-    localStorage.setItem('mapTheme', mapTheme);
-    this.mapTheme.next(mapTheme);
-  }
 
-  public getAppTheme(): Observable<AppThemes | null> {
-    return this.appTheme.asObservable();
+  public getAppTheme(): Observable<AppThemes> {
+    return this.appThemeSubject.asObservable();
   }
 
   public getChartTheme(): Observable<ChartThemes | null> {
     return this.chartTheme.asObservable();
   }
 
-  public getMapTheme(): Observable<MapThemes | null> {
-    return this.mapTheme.asObservable();
-  }
 
   // Subject for theme change animation
   private themeChangeSubject = new BehaviorSubject<{ x: number; y: number; theme: AppThemes } | null>(null);
@@ -132,7 +120,7 @@ export class AppThemeService implements OnDestroy {
 
   public async toggleTheme(event?: MouseEvent) {
     // Toggling implies an explicit action, so we use the current value to determine the next
-    const current = this.appTheme.getValue();
+    const current = this.appThemeSubject.getValue();
     const newTheme = current === AppThemes.Dark ? AppThemes.Normal : AppThemes.Dark;
 
     // Emit animation coordinates if event is provided
@@ -158,16 +146,6 @@ export class AppThemeService implements OnDestroy {
     return null;
   }
 
-  private getMapThemeFromStorage(): MapThemes {
-    const item = localStorage.getItem('mapTheme');
-    if (item !== null) {
-      const key = this.getEnumKeyByEnumValue(MapThemes, item);
-      if (key !== null) {
-        return MapThemes[key];
-      }
-    }
-    return AppUserService.getDefaultMapTheme();
-  }
 
   private getChartThemeFromStorage(): ChartThemes {
     const item = localStorage.getItem('chartTheme');

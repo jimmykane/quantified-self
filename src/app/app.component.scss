@@ -26,14 +26,13 @@ mat-sidenav {
 }
 
 /* Top Navigation Bar Styling */
-nav[mat-tab-nav-bar] {
+.custom-header {
   display: flex !important;
   /* Force flex */
   align-items: center;
   height: 64px;
   /* Standard toolbar height */
   padding: 0 16px;
-  // background-color: #ffffff;
   background-color: #ffffff;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
   /* Subtle shadow for depth */
@@ -44,17 +43,6 @@ nav[mat-tab-nav-bar] {
   z-index: 1001;
   /* Above sidenav backdrop (z-index: 1000) */
   overflow: visible !important;
-
-  ::ng-deep .mat-mdc-tab-header,
-  ::ng-deep .mat-mdc-tab-header-pagination,
-  ::ng-deep .mat-mdc-tab-link-container,
-  ::ng-deep .mat-mdc-tab-list,
-  ::ng-deep .mat-tab-header,
-  ::ng-deep .mat-tab-header-pagination,
-  ::ng-deep .mat-tab-link-container,
-  ::ng-deep .mat-tab-list {
-    overflow: visible !important;
-  }
 }
 
 /* Navigation Items */
@@ -98,6 +86,11 @@ mat-icon.header-logo {
 
 
 
+
+.no-margin-top {
+  margin-top: 0 !important;
+}
+
 /* Utilities */
 .fill-space {
   flex: 1 1 auto;
@@ -128,6 +121,12 @@ nav button[mat-icon-button] {
   justify-content: center;
 }
 
+nav button.icon-only {
+  min-width: 40px;
+  width: 40px;
+  padding: 0;
+}
+
 /* Admin button specific styling */
 nav button.admin-button {
   border-radius: 50%;
@@ -138,6 +137,9 @@ nav button.admin-button {
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   color: white;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
 
   &:hover {
     transform: scale(1.05);
@@ -149,6 +151,18 @@ nav button.admin-button {
     font-size: 22px;
     width: 22px;
     height: 22px;
+    margin: 0;
+  }
+}
+
+/* Icon-only button override (for Dashboard, Login, etc. on mobile) */
+nav button.icon-only {
+  min-width: 40px !important;
+  width: 40px !important;
+  padding: 0 !important;
+
+  mat-icon {
+    margin: 0 !important;
   }
 }
 
@@ -180,7 +194,7 @@ mat-progress-bar {
 
 /* Dark Theme Overrides */
 :host-context(.dark-theme) {
-  nav[mat-tab-nav-bar] {
+  .custom-header {
     background-color: #424242;
     /* Standard Material Dark Surface */
     border-bottom: 1px solid rgba(255, 255, 255, 0.12);

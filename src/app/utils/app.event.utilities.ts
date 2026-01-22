@@ -1,7 +1,14 @@
 
 import { ActivityInterface, EventInterface, EventUtilities } from '@sports-alliance/sports-lib';
+import { LoggerService } from '../services/logger.service';
+import { Injectable } from '@angular/core';
 
+@Injectable({
+    providedIn: 'root'
+})
 export class AppEventUtilities {
+
+    constructor(private logger: LoggerService) { }
 
     /**
      * Merges multiple events into one with a guaranteed unique ID.
@@ -12,7 +19,7 @@ export class AppEventUtilities {
      * @param idGenerator Function that returns a unique ID (e.g., Firestore doc ID generator)
      * @returns Merged event with unique ID
      */
-    static mergeEventsWithId(events: EventInterface[], idGenerator: () => string): EventInterface {
+    mergeEventsWithId(events: EventInterface[], idGenerator: () => string): EventInterface {
         const merged = EventUtilities.mergeEvents(events);
         merged.setID(idGenerator());
         return merged;
@@ -23,7 +30,7 @@ export class AppEventUtilities {
      * @param activity The activity to enrich
      * @param streamsToEnrich List of stream types to attempt to generate (e.g. ['Time', 'Duration'])
      */
-    static enrich(activity: ActivityInterface, streamsToEnrich: string[]) {
+    enrich(activity: ActivityInterface, streamsToEnrich: string[]) {
         if (streamsToEnrich.includes('Time')) {
             this.enrichTimeStream(activity);
         }
@@ -32,7 +39,7 @@ export class AppEventUtilities {
         }
     }
 
-    private static enrichTimeStream(activity: ActivityInterface) {
+    private enrichTimeStream(activity: ActivityInterface) {
         if (activity.hasStreamData('Time')) {
             return;
         }
@@ -45,14 +52,14 @@ export class AppEventUtilities {
                 const timeStream = actAny.generateTimeStream();
                 actAny.addStream(timeStream);
             } else {
-                console.warn(`[AppEventUtilities] Native generateTimeStream not found on activity ${activity.getID()}`);
+                this.logger.warn(`[AppEventUtilities] Native generateTimeStream not found on activity ${activity.getID()}`);
             }
         } catch (e) {
-            console.error(`[AppEventUtilities] Error generating time stream for activity ${activity.getID()}`, e);
+            this.logger.error(`[AppEventUtilities] Error generating time stream for activity ${activity.getID()}`, e);
         }
     }
 
-    private static enrichDurationStream(activity: ActivityInterface) {
+    private enrichDurationStream(activity: ActivityInterface) {
         if (activity.hasStreamData('Duration')) {
             return;
         }
@@ -63,10 +70,10 @@ export class AppEventUtilities {
                 const durationStream = actAny.generateDurationStream();
                 actAny.addStream(durationStream);
             } else {
-                console.warn(`[AppEventUtilities] Native generateDurationStream not found on activity ${activity.getID()}`);
+                this.logger.warn(`[AppEventUtilities] Native generateDurationStream not found on activity ${activity.getID()}`);
             }
         } catch (e) {
-            console.error(`[AppEventUtilities] Error generating duration stream for activity ${activity.getID()}`, e);
+            this.logger.error(`[AppEventUtilities] Error generating duration stream for activity ${activity.getID()}`, e);
         }
     }
 }

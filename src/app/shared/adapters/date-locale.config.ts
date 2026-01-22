@@ -1,6 +1,6 @@
-
-import { Provider } from '@angular/core';
+import { Provider, Optional } from '@angular/core';
 import { MAT_DATE_LOCALE } from '@angular/material/core';
+import { LoggerService } from '../../services/logger.service';
 
 // Day.js Locale Imports
 // We must import these manually to avoid bundling ALL locales (which would be huge).
@@ -48,11 +48,11 @@ export const SUPPORTED_LOCALES = ['en', 'de', 'fr', 'es', 'it', 'nl', 'pl', 'el'
  * IMPORTANT: This function now validates the detected locale against SUPPORTED_LOCALES.
  * If the locale is not supported, it falls back to 'en-US'.
  */
-export function getBrowserLocale(): string {
+export function getBrowserLocale(logger?: LoggerService): string {
     try {
         // Use Intl.DateTimeFormat to get the actual system locale for dates
         const systemLocale = Intl.DateTimeFormat().resolvedOptions().locale;
-        let detected = systemLocale || navigator.language || 'en-US';
+        const detected = systemLocale || navigator.language || 'en-US';
 
         // 1. Try exact match (e.g. 'en-GB') - Logic: some locales might have specific regions we support
         // For now our supported list is mostly language codes, but good to check.
@@ -64,7 +64,11 @@ export function getBrowserLocale(): string {
             return detected; // We use the full locale (e.g. pl-PL) but we know we have data for 'pl'
         }
 
-        console.warn(`[Locale] Unsupported locale detected: ${detected}. Falling back to en-US.`);
+        if (logger) {
+            logger.warn(`[Locale] Unsupported locale detected: ${detected}. Falling back to en-US.`);
+        } else {
+            console.warn(`[Locale] Unsupported locale detected: ${detected}. Falling back to en-US.`);
+        }
         return 'en-US';
 
     } catch {
@@ -78,6 +82,7 @@ export function getBrowserLocale(): string {
  */
 export const MAT_DATE_LOCALE_PROVIDER: Provider = {
     provide: MAT_DATE_LOCALE,
-    useFactory: getBrowserLocale
+    useFactory: getBrowserLocale,
+    deps: [[new Optional(), LoggerService]]
 };
 
