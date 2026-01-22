@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { AppComponent } from './app.component';
 import { AppAuthService } from './authentication/app.auth.service';
@@ -58,9 +59,10 @@ describe('AppComponent', () => {
     };
 
     const mockRemoteConfigService = {
-        getMaintenanceMode: vi.fn().mockReturnValue(of(false)),
-        getMaintenanceMessage: vi.fn().mockReturnValue(of('')),
-        getIsLoading: vi.fn().mockReturnValue(of(false))
+        maintenanceMode: signal(false),
+        maintenanceMessage: signal(''),
+        isLoading: signal(false),
+        configLoaded: signal(true)
     };
 
     const mockSeoService = {

@@ -30,7 +30,7 @@
         <app-event-card-map [selectedActivities]="selectedActivitiesDebounced()" [targetUserID]="targetUserID()"
           [user]="currentUser()!" [event]="event()!" [showLaps]="showMapLaps()" [showPoints]="showMapPoints()"
           [lapTypes]="mapLapTypes()" [showArrows]="showMapArrows()" [strokeWidth]="mapStrokeWidth()"
-          [theme]="mapTheme()">
+          [mapType]="mapType()">
         </app-event-card-map>
         } @else {
         <div class="empty-selection-message">

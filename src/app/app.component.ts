@@ -71,7 +71,7 @@ export class AppComponent implements OnInit, OnDestroy {
   public themeOverlayStyle: { [key: string]: string } = {};
 
   private breakpointObserver = inject(BreakpointObserver);
-  public isHandset = toSignal(this.breakpointObserver.observe(Breakpoints.Handset).pipe(map(result => result.matches)), { initialValue: false });
+  public isHandset = toSignal(this.breakpointObserver.observe([Breakpoints.XSmall, Breakpoints.Small]).pipe(map(result => result.matches)), { initialValue: false });
 
   constructor(
     public authService: AppAuthService,

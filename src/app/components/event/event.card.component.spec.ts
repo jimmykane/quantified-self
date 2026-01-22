@@ -9,7 +9,7 @@ import { AppActivitySelectionService } from '../../services/activity-selection-s
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppThemeService } from '../../services/app.theme.service';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { EventInterface, User, ActivityInterface, ChartThemes, AppThemes, MapThemes, XAxisTypes } from '@sports-alliance/sports-lib';
+import { EventInterface, User, ActivityInterface, ChartThemes, AppThemes, XAxisTypes } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 
@@ -109,7 +109,7 @@ describe('EventCardComponent', () => {
         mockThemeService = {
             getChartTheme: () => of(ChartThemes.Material),
             getAppTheme: () => of(AppThemes.Normal),
-            getMapTheme: () => of(MapThemes.Normal)
+
         };
 
         mockRouter = { navigate: vi.fn() };
@@ -193,7 +193,6 @@ describe('EventCardComponent', () => {
     it('should get theme signals from theme service', () => {
         expect(component.chartTheme()).toBe(ChartThemes.Material);
         expect(component.appTheme()).toBe(AppThemes.Normal);
-        expect(component.mapTheme()).toBe(MapThemes.Normal);
     });
 
     describe('computed flags with activities that have data', () => {

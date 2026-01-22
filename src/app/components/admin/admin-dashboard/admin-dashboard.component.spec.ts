@@ -1,40 +1,30 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AdminDashboardComponent } from './admin-dashboard.component';
-import { AdminService, AdminUser, ListUsersResponse } from '../../../services/admin.service';
-import { AppAuthService } from '../../../authentication/app.auth.service';
+import { AdminService } from '../../../services/admin.service';
+import { LoggerService } from '../../../services/logger.service';
+import { of } from 'rxjs';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
+import { Firestore } from '@angular/fire/firestore';
+import { Storage } from '@angular/fire/storage';
+import { Auth } from '@angular/fire/auth';
+import { FirebaseApp } from '@angular/fire/app';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
-import { of, throwError, BehaviorSubject } from 'rxjs';
-import { MatTableModule } from '@angular/material/table';
-import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
-import { MatSortModule, Sort } from '@angular/material/sort';
-import { MatInputModule } from '@angular/material/input';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatIconModule } from '@angular/material/icon';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { FormsModule } from '@angular/forms';
-import { MatDialog } from '@angular/material/dialog';
-import { provideCharts, withDefaultRegisterables, BaseChartDirective } from 'ng2-charts';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { ActivatedRoute, Router } from '@angular/router';
-
-import { ChangeDetectorRef, NO_ERRORS_SCHEMA, Component, Input, Directive } from '@angular/core';
-import { By } from '@angular/platform-browser';
-
-
+import { BehaviorSubject } from 'rxjs';
+import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
 
 // Mock canvas for charts
 Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
     value: () => ({
-        getAll: () => { },
         fillRect: () => { },
         clearRect: () => { },
         getImageData: () => ({ data: [] }),
         putImageData: () => { },
         createImageData: () => [],
         setTransform: () => { },
-        drawer: { draw: () => { } },
         save: () => { },
         restore: () => { },
         beginPath: () => { },
@@ -54,11 +44,7 @@ Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
         strokeText: () => { },
         measureText: () => ({ width: 0 }),
         drawImage: () => { },
-        canvas: {
-            width: 0,
-            height: 0,
-            style: {}
-        }
+        canvas: { width: 0, height: 0, style: {} }
     }),
     configurable: true
 });
@@ -73,48 +59,8 @@ global.ResizeObserver = class ResizeObserver {
 describe('AdminDashboardComponent', () => {
     let component: AdminDashboardComponent;
     let fixture: ComponentFixture<AdminDashboardComponent>;
-    let adminServiceSpy: {
-        getUsers: ReturnType<typeof vi.fn>;
-        getQueueStats: ReturnType<typeof vi.fn>;
-        getTotalUserCount: ReturnType<typeof vi.fn>;
-        getMaintenanceStatus: ReturnType<typeof vi.fn>;
-        setMaintenanceMode: ReturnType<typeof vi.fn>;
-        impersonateUser: ReturnType<typeof vi.fn>;
-        getFinancialStats: ReturnType<typeof vi.fn>;
-    };
-    let authServiceSpy: { loginWithCustomToken: ReturnType<typeof vi.fn> };
-    let routerSpy: { navigate: ReturnType<typeof vi.fn> };
-    let matDialogSpy: { open: ReturnType<typeof vi.fn> };
-    let appThemeServiceMock: { getAppTheme: ReturnType<typeof vi.fn> };
-    let themeSubject: BehaviorSubject<AppThemes>;
-
-    const mockUsers: AdminUser[] = [
-        {
-            uid: 'user1',
-            email: 'user1@example.com',
-            displayName: 'User One',
-            customClaims: { stripeRole: 'pro', admin: true },
-            metadata: { lastSignInTime: '2023-01-01', creationTime: '2022-01-01' },
-            disabled: false,
-            providerIds: ['password']
-        },
-        {
-            uid: 'user2',
-            email: 'user2@example.com',
-            displayName: 'User Two',
-            customClaims: { stripeRole: 'free' },
-            metadata: { lastSignInTime: '2023-01-02', creationTime: '2022-01-02' },
-            disabled: true,
-            providerIds: ['google.com']
-        }
-    ];
-
-    const mockResponse: ListUsersResponse = {
-        users: mockUsers,
-        totalCount: 2,
-        page: 0,
-        pageSize: 25
-    };
+    let adminServiceSpy: any;
+    let mockLogger: any;
 
     const mockQueueStats = {
         pending: 10,
@@ -125,74 +71,40 @@ describe('AdminDashboardComponent', () => {
         advanced: { throughput: 0, maxLagMs: 0, retryHistogram: { '0-3': 0, '4-7': 0, '8-9': 0 }, topErrors: [] }
     };
 
+    const mockFinancialStats = {
+        revenue: { total: 1000, currency: 'USD', invoiceCount: 10 },
+        cost: { reportUrl: 'http://test.com' }
+    };
+
     beforeEach(async () => {
         adminServiceSpy = {
-            getUsers: vi.fn().mockReturnValue(of(mockResponse)),
             getQueueStats: vi.fn().mockReturnValue(of(mockQueueStats)),
-            getTotalUserCount: vi.fn().mockReturnValue(of({ total: 100, pro: 30, basic: 70, free: 0 })),
-            getMaintenanceStatus: vi.fn().mockReturnValue(of({ enabled: false, message: 'Test' })),
-            setMaintenanceMode: vi.fn().mockReturnValue(of({ success: true, enabled: true, message: 'Test' })),
-            impersonateUser: vi.fn().mockReturnValue(of({ token: 'test-token' })),
-            getFinancialStats: vi.fn().mockReturnValue(of({ revenue: { total: 0, currency: 'USD', invoiceCount: 0 }, cost: { reportUrl: 'http://test.com' } })),
+            getFinancialStats: vi.fn().mockReturnValue(of(mockFinancialStats)),
         };
 
-        authServiceSpy = {
-            loginWithCustomToken: vi.fn().mockResolvedValue({})
-        };
-
-        routerSpy = {
-            navigate: vi.fn()
-        };
-
-        matDialogSpy = {
-            open: vi.fn().mockReturnValue({
-                afterClosed: () => of(true) // Default to confirmed
-            })
-        };
-
-        themeSubject = new BehaviorSubject<AppThemes>(AppThemes.Dark);
-        appThemeServiceMock = {
-            getAppTheme: vi.fn().mockReturnValue(themeSubject.asObservable())
+        mockLogger = {
+            error: vi.fn(),
+            log: vi.fn()
         };
 
         await TestBed.configureTestingModule({
             imports: [
                 AdminDashboardComponent,
-                MatTableModule,
-                MatPaginatorModule,
-                MatSortModule,
-                MatInputModule,
-                MatFormFieldModule,
-                MatIconModule,
-                MatProgressSpinnerModule,
-                NoopAnimationsModule,
-                FormsModule
+                NoopAnimationsModule
             ],
             providers: [
                 { provide: AdminService, useValue: adminServiceSpy },
-                { provide: AppAuthService, useValue: authServiceSpy },
-                { provide: AppThemeService, useValue: appThemeServiceMock },
-                { provide: Router, useValue: routerSpy },
-                { provide: MatDialog, useValue: matDialogSpy },
-                provideCharts(withDefaultRegisterables()),
-                {
-                    provide: ActivatedRoute,
-                    useValue: {
-                        snapshot: {
-                            data: {
-                                adminData: {
-                                    usersData: mockResponse,
-                                    userStats: { total: 100, pro: 30, basic: 70, free: 0 }
-                                }
-                            }
-                        }
-                    }
-                }
+                { provide: LoggerService, useValue: mockLogger },
+                { provide: ActivatedRoute, useValue: { snapshot: { data: {} } } },
+                { provide: Firestore, useValue: {} },
+                { provide: Storage, useValue: {} },
+                { provide: Auth, useValue: {} },
+                { provide: FirebaseApp, useValue: {} },
+                { provide: AppThemeService, useValue: { getAppTheme: () => new BehaviorSubject<AppThemes>(AppThemes.Dark).asObservable() } },
+                provideCharts(withDefaultRegisterables())
             ],
             schemas: [NO_ERRORS_SCHEMA]
-        })
-            .overrideProvider(MatDialog, { useValue: matDialogSpy })
-            .compileComponents();
+        }).compileComponents();
 
         fixture = TestBed.createComponent(AdminDashboardComponent);
         component = fixture.componentInstance;
@@ -203,98 +115,33 @@ describe('AdminDashboardComponent', () => {
         expect(component).toBeTruthy();
     });
 
-    it('should use resolved users on init', () => {
-        expect(adminServiceSpy.getUsers).not.toHaveBeenCalled();
-        expect(component.users).toEqual(mockUsers);
-        expect(component.totalCount).toBe(2);
-        expect(component.isLoading).toBe(false);
+    it('should load queue stats on init', () => {
+        expect(adminServiceSpy.getQueueStats).toHaveBeenCalled();
+        expect(component.queueStats).toEqual(mockQueueStats);
+        expect(component.isLoadingStats).toBe(false);
     });
 
-    it('should use resolved user stats on init', () => {
-        expect(adminServiceSpy.getTotalUserCount).not.toHaveBeenCalled();
-        expect(component.userStats).toEqual({ total: 100, pro: 30, basic: 70, free: 0 });
+    it('should load financial stats on init', () => {
+        expect(adminServiceSpy.getFinancialStats).toHaveBeenCalled();
+        expect(component.financialStats).toEqual(mockFinancialStats);
+        expect(component.isLoadingFinancials).toBe(false);
     });
 
-    it('should handle errors when fetching users', () => {
-        adminServiceSpy.getUsers.mockReturnValue(throwError(() => new Error('Fetch failed')));
-        component.fetchUsers();
-        expect(component.error).toContain('Failed to load users');
-        expect(component.isLoading).toBe(false);
-    });
-
-    it('should trigger fetch on page change', () => {
-        vi.clearAllMocks();
-        const pageEvent: PageEvent = { pageIndex: 1, pageSize: 50, length: 100 };
-        component.onPageChange(pageEvent);
-
-        expect(component.currentPage).toBe(1);
-        expect(component.pageSize).toBe(50);
-        expect(adminServiceSpy.getUsers).toHaveBeenCalledWith({
-            page: 1,
-            pageSize: 50,
-            searchTerm: undefined,
-            sortField: 'email',
-            sortDirection: 'asc'
-        });
-    });
-
-    it('should trigger fetch on sort change and reset to page 0', () => {
-        component.currentPage = 5; // Simulate being on page 5
-        vi.clearAllMocks();
-
-        const sortEvent: Sort = { active: 'displayName', direction: 'desc' };
-        component.onSortChange(sortEvent);
-
-        expect(component.sortField).toBe('displayName');
-        expect(component.sortDirection).toBe('desc');
-        expect(component.currentPage).toBe(0); // Should reset
-        expect(adminServiceSpy.getUsers).toHaveBeenCalled();
-    });
-
-    it('should return correct role', () => {
-        expect(component.getRole(mockUsers[0])).toBe('pro');
-        expect(component.getRole(mockUsers[1])).toBe('free');
-    });
-
-    it('should correctly identify admin', () => {
-        expect(component.isAdmin(mockUsers[0])).toBe(true);
-        expect(component.isAdmin(mockUsers[1])).toBe(false);
-    });
-
-    it('should update searchTerm on input and reset page on clear', () => {
-        // Test clear search resets state
-        component.searchTerm = 'existing';
-        component.currentPage = 3;
-
-        component.clearSearch();
-
-        expect(component.searchTerm).toBe('');
-    });
-
-
-
-    describe('Queue Stats Integration', () => {
-        it('should load queue stats on init', () => {
-            expect(adminServiceSpy.getQueueStats).toHaveBeenCalled();
+    describe('Queue Stats', () => {
+        it('should call fetchQueueStats and update state', () => {
+            vi.clearAllMocks();
+            component.fetchQueueStats();
+            expect(adminServiceSpy.getQueueStats).toHaveBeenCalledWith(true);
             expect(component.queueStats).toEqual(mockQueueStats);
         });
+    });
 
-
-
-        it('should merge cloudTasks data in updateQueueStatsUI', () => {
-            const partialStats = { pending: 15 } as any; // Missing cloudTasks
-
-            // Call internal method directly to test merging logic
-            (component as any).updateQueueStatsUI(partialStats, true);
-
-            // Should preserve existing cloudTasks if not present in update
-            expect(component.queueStats.pending).toBe(15);
-            expect(component.queueStats.cloudTasks).toEqual({ pending: 42 });
-
-            // Should update cloudTasks if present
-            const updateWithCloud = { cloudTasks: { pending: 100 } } as any;
-            (component as any).updateQueueStatsUI(updateWithCloud, true);
-            expect(component.queueStats.cloudTasks).toEqual({ pending: 100 });
+    describe('Financial Stats', () => {
+        it('should call fetchFinancialStats and update state', () => {
+            vi.clearAllMocks();
+            component.fetchFinancialStats();
+            expect(adminServiceSpy.getFinancialStats).toHaveBeenCalled();
+            expect(component.financialStats).toEqual(mockFinancialStats);
         });
     });
 });

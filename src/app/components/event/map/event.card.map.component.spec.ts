@@ -9,6 +9,9 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
+import { AppThemeService } from '../../../services/app.theme.service';
+import { AppThemes } from '@sports-alliance/sports-lib';
+import { signal } from '@angular/core';
 
 describe('EventCardMapComponent', () => {
     let component: EventCardMapComponent;
@@ -19,19 +22,25 @@ describe('EventCardMapComponent', () => {
     let mockEventService: any;
     let mockUserService: any;
     let mockCursorService: any;
+    let mockThemeService: any;
 
     beforeEach(async () => {
         const mockLoader = {
-            importLibrary: vi.fn().mockReturnValue(of({
+            importLibrary: vi.fn().mockResolvedValue({
                 Map: vi.fn(),
                 visualization: { HeatmapLayer: vi.fn() }
-            }))
+            })
         };
         const mockColor = { getActivityColor: vi.fn() };
         const mockLog = { error: vi.fn(), log: vi.fn() };
         const mockEvent = {};
         const mockUserSvc = { updateUserProperties: vi.fn() };
         const mockCursor = { cursors: new Subject() };
+        const mockTheme = {
+            appTheme: signal(AppThemes.Normal),
+            getAppTheme: vi.fn().mockReturnValue(of(AppThemes.Normal)),
+            getChartTheme: vi.fn().mockReturnValue(of(AppThemes.Normal)),
+        };
 
         mockLoaderService = mockLoader;
         mockColorService = mockColor;
@@ -39,6 +48,7 @@ describe('EventCardMapComponent', () => {
         mockEventService = mockEvent;
         mockUserService = mockUserSvc;
         mockCursorService = mockCursor;
+        mockThemeService = mockTheme;
 
         await TestBed.configureTestingModule({
             declarations: [EventCardMapComponent],
@@ -49,6 +59,7 @@ describe('EventCardMapComponent', () => {
                 { provide: AppEventService, useValue: mockEvent },
                 { provide: AppUserService, useValue: mockUserSvc },
                 { provide: AppActivityCursorService, useValue: mockCursor },
+                { provide: AppThemeService, useValue: mockTheme },
                 { provide: NgZone, useValue: new NgZone({ enableLongStackTrace: false }) },
                 ChangeDetectorRef
             ],
@@ -83,7 +94,29 @@ describe('EventCardMapComponent', () => {
     });
 
     it('should call importLibrary on init', () => {
+        component.apiLoaded.set(true);
         expect(mockLoaderService.importLibrary).toHaveBeenCalledWith('maps');
-        expect(mockLoaderService.importLibrary).toHaveBeenCalledWith('visualization');
+        expect(mockLoaderService.importLibrary).toHaveBeenCalledWith('marker');
     });
+
+    it('should initialize mapTypeId from user settings', async () => {
+        const userWithMapSettings = {
+            ...component.user,
+            settings: {
+                mapSettings: {
+                    mapType: 'satellite'
+                }
+            }
+        } as any;
+        component.user = userWithMapSettings;
+
+        // Reset spy counts to verify calls in this specific test cycle
+        mockLoaderService.importLibrary.mockClear();
+
+        await component.ngOnInit();
+
+        expect(component.mapTypeId()).toBe('satellite');
+    });
+
+
 });

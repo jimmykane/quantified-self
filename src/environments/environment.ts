@@ -25,5 +25,6 @@ export const environment = {
     measurementId: 'G-6YE27NNKDT',
     recaptchaSiteKey: '6Lfi_EwsAAAAACWwUUff0cd4E-92EJnXEwFuOSzz'
   },
+  googleMapsMapId: '1192252b0032f7559388bd8a',
 
 };

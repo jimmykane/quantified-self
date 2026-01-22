@@ -1,30 +1,33 @@
 import { TestBed } from '@angular/core/testing';
 import { AppAnalyticsService } from './app.analytics.service';
-import { Analytics, logEvent } from '@angular/fire/analytics';
+import { Analytics } from '@angular/fire/analytics';
+import { logEvent, setAnalyticsCollectionEnabled } from 'firebase/analytics';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { BehaviorSubject } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { LoggerService } from './logger.service';
 
-// Mock Firebase Analytics logEvent
-vi.mock('@angular/fire/analytics', () => ({
-    Analytics: vi.fn(),
+// Mock firebase/analytics (not @angular/fire/analytics)
+vi.mock('firebase/analytics', () => ({
     logEvent: vi.fn(),
     setAnalyticsCollectionEnabled: vi.fn()
 }));
-import { setAnalyticsCollectionEnabled } from '@angular/fire/analytics';
-import { environment } from '../../environments/environment';
 
+// Mock environment
 vi.mock('../../environments/environment', () => ({
     environment: {
         forceAnalyticsCollection: false
     }
 }));
 
+import { environment } from '../../environments/environment';
+
 describe('AppAnalyticsService', () => {
     let service: AppAnalyticsService;
     let mockAuthService: any;
     let userSubject: BehaviorSubject<User | null>;
+    let mockLogger: any;
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -32,12 +35,18 @@ describe('AppAnalyticsService', () => {
         mockAuthService = {
             user$: userSubject.asObservable()
         };
+        mockLogger = {
+            warn: vi.fn(),
+            error: vi.fn(),
+            log: vi.fn()
+        };
 
         TestBed.configureTestingModule({
             providers: [
                 AppAnalyticsService,
                 { provide: Analytics, useValue: {} },
-                { provide: AppAuthService, useValue: mockAuthService }
+                { provide: AppAuthService, useValue: mockAuthService },
+                { provide: LoggerService, useValue: mockLogger }
             ]
         });
         service = TestBed.inject(AppAnalyticsService);
@@ -45,7 +54,7 @@ describe('AppAnalyticsService', () => {
 
     afterEach(() => {
         userSubject.complete();
-        environment.forceAnalyticsCollection = false; // Reset to default
+        (environment as any).forceAnalyticsCollection = false;
     });
 
     it('should be created', () => {
@@ -53,7 +62,7 @@ describe('AppAnalyticsService', () => {
     });
 
     it('should NOT log event if user has not consented and forceAnalyticsCollection is FALSE', () => {
-        environment.forceAnalyticsCollection = false;
+        (environment as any).forceAnalyticsCollection = false;
         // User with no tracking consent
         userSubject.next({ acceptedTrackingPolicy: false } as User);
 
@@ -75,7 +84,7 @@ describe('AppAnalyticsService', () => {
     });
 
     it('should NOT log event if user is null (logged out) and forceAnalyticsCollection is FALSE', () => {
-        environment.forceAnalyticsCollection = false;
+        (environment as any).forceAnalyticsCollection = false;
         userSubject.next(null);
 
         service.logEvent('test_event');
@@ -85,11 +94,24 @@ describe('AppAnalyticsService', () => {
     });
 
     it('should log event if forceAnalyticsCollection is TRUE, regardless of user consent', () => {
-        environment.forceAnalyticsCollection = true;
+        (environment as any).forceAnalyticsCollection = true;
+
+        // Force recreate service with new environment
+        TestBed.resetTestingModule();
+        TestBed.configureTestingModule({
+            providers: [
+                AppAnalyticsService,
+                { provide: Analytics, useValue: {} },
+                { provide: AppAuthService, useValue: mockAuthService },
+                { provide: LoggerService, useValue: mockLogger }
+            ]
+        });
+        const forceService = TestBed.inject(AppAnalyticsService);
+
         // User with NO consent
         userSubject.next({ acceptedTrackingPolicy: false } as User);
 
-        service.logEvent('test_event', { param: 1 });
+        forceService.logEvent('test_event', { param: 1 });
 
         expect(logEvent).toHaveBeenCalledWith(expect.anything(), 'test_event', { param: 1 });
         expect(setAnalyticsCollectionEnabled).toHaveBeenCalledWith(expect.anything(), true);

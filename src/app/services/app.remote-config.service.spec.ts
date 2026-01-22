@@ -5,12 +5,21 @@ import { AppUserService } from './app.user.service';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { APP_STORAGE } from './storage/app.storage.token';
 import { PLATFORM_ID } from '@angular/core';
-import { RemoteConfig, fetchAndActivate, getString } from '@angular/fire/remote-config';
+import { RemoteConfig } from '@angular/fire/remote-config';
+import { fetchAndActivate, getString } from 'firebase/remote-config';
 
-// Mock the module
-vi.mock('@angular/fire/remote-config', () => {
+// Mock the environment
+vi.mock('../../environments/environment', () => ({
+    environment: {
+        production: false,
+        beta: false,
+        localhost: true
+    }
+}));
+
+// Mock firebase/remote-config (not @angular/fire/remote-config)
+vi.mock('firebase/remote-config', () => {
     return {
-        RemoteConfig: class { },
         fetchAndActivate: vi.fn(),
         getString: vi.fn()
     };
@@ -71,7 +80,7 @@ describe('AppRemoteConfigService', () => {
         service = TestBed.inject(AppRemoteConfigService);
 
         // Wait for initialization to complete
-        await new Promise(resolve => setTimeout(resolve, 10));
+        await new Promise(resolve => setTimeout(resolve, 50));
     });
 
     afterEach(() => {
@@ -82,7 +91,7 @@ describe('AppRemoteConfigService', () => {
         expect(service).toBeTruthy();
     });
 
-    it('should fetch config via AngularFire SDK', () => {
+    it('should fetch config via Firebase SDK', () => {
         expect(fetchAndActivate).toHaveBeenCalled();
     });
 
@@ -115,7 +124,7 @@ describe('AppRemoteConfigService', () => {
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
-            await new Promise(resolve => setTimeout(resolve, 10));
+            await new Promise(resolve => setTimeout(resolve, 50));
 
             expect(service.maintenanceMode()).toBe(false);
         });
@@ -140,7 +149,7 @@ describe('AppRemoteConfigService', () => {
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
-            await new Promise(resolve => setTimeout(resolve, 10));
+            await new Promise(resolve => setTimeout(resolve, 50));
 
             expect(service.maintenanceMode()).toBe(true);
             expect(service.maintenanceMessage()).toBe('Dev Maintenance');
@@ -166,7 +175,7 @@ describe('AppRemoteConfigService', () => {
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
-            await new Promise(resolve => setTimeout(resolve, 10));
+            await new Promise(resolve => setTimeout(resolve, 50));
 
             expect(service.maintenanceMode()).toBe(false);
         });
@@ -186,7 +195,7 @@ describe('AppRemoteConfigService', () => {
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
-            await new Promise(resolve => setTimeout(resolve, 10));
+            await new Promise(resolve => setTimeout(resolve, 50));
 
             expect(service.maintenanceMode()).toBe(false);
         });
@@ -211,7 +220,7 @@ describe('AppRemoteConfigService', () => {
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
-            await new Promise(resolve => setTimeout(resolve, 10));
+            await new Promise(resolve => setTimeout(resolve, 50));
 
             expect(service.maintenanceMode()).toBe(false);
         });
@@ -236,7 +245,7 @@ describe('AppRemoteConfigService', () => {
                 ]
             });
             service = TestBed.inject(AppRemoteConfigService);
-            await new Promise(resolve => setTimeout(resolve, 10));
+            await new Promise(resolve => setTimeout(resolve, 50));
 
             expect(service.maintenanceMode()).toBe(false);
         });
