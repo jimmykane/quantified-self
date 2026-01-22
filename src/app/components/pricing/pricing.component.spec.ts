@@ -88,7 +88,11 @@ describe('PricingComponent', () => {
                 {
                     provide: AppAnalyticsService,
                     useValue: {
-                        logEvent: vi.fn()
+                        logEvent: vi.fn(),
+                        logBeginCheckout: vi.fn(),
+                        logManageSubscription: vi.fn(),
+                        logSelectFreeTier: vi.fn(),
+                        logRestorePurchases: vi.fn()
                     }
                 }
             ]
@@ -217,49 +221,45 @@ describe('PricingComponent', () => {
 
     it('should log begin_checkout event on subscribe', async () => {
         const analyticsService = TestBed.inject(AppAnalyticsService);
-        const logSpy = vi.spyOn(analyticsService, 'logEvent');
+        const logSpy = vi.spyOn(analyticsService, 'logBeginCheckout');
         const price = { id: 'price_123', currency: 'USD', unit_amount: 1000 };
 
         await component.subscribe(price);
 
-        expect(logSpy).toHaveBeenCalledWith('begin_checkout', {
-            price_id: 'price_123',
-            currency: 'USD',
-            value: 10
-        });
+        expect(logSpy).toHaveBeenCalledWith('price_123', 'USD', 10);
     });
 
     it('should log select_freetier event on selectFreeTier', async () => {
         const analyticsService = TestBed.inject(AppAnalyticsService);
-        const logSpy = vi.spyOn(analyticsService, 'logEvent');
+        const logSpy = vi.spyOn(analyticsService, 'logSelectFreeTier');
         // Mock user existing
         const userService = TestBed.inject(AppUserService);
         vi.spyOn(userService, 'getUserByID').mockReturnValue(of({ uid: 'test-uid' } as any));
 
         await component.selectFreeTier();
 
-        expect(logSpy).toHaveBeenCalledWith('select_freetier');
+        expect(logSpy).toHaveBeenCalled();
     });
 
     it('should log manage_subscription event on manageSubscription', async () => {
         const analyticsService = TestBed.inject(AppAnalyticsService);
-        const logSpy = vi.spyOn(analyticsService, 'logEvent');
+        const logSpy = vi.spyOn(analyticsService, 'logManageSubscription');
 
         await component.manageSubscription();
 
-        expect(logSpy).toHaveBeenCalledWith('manage_subscription');
+        expect(logSpy).toHaveBeenCalled();
     });
 
     it('should log restore_purchases events on restorePurchases', async () => {
         const analyticsService = TestBed.inject(AppAnalyticsService);
-        const logSpy = vi.spyOn(analyticsService, 'logEvent');
+        const logSpy = vi.spyOn(analyticsService, 'logRestorePurchases');
         const paymentService = TestBed.inject(AppPaymentService);
         vi.spyOn(paymentService, 'restorePurchases').mockResolvedValue('pro');
 
         await component.restorePurchases();
 
-        expect(logSpy).toHaveBeenCalledWith('restore_purchases', { status: 'initiated' });
-        expect(logSpy).toHaveBeenCalledWith('restore_purchases', { status: 'success', role: 'pro' });
+        expect(logSpy).toHaveBeenCalledWith('initiated');
+        expect(logSpy).toHaveBeenCalledWith('success', 'pro');
     });
 
 });

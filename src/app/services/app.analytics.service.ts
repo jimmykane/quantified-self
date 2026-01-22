@@ -49,4 +49,40 @@ export class AppAnalyticsService {
             }
         }
     }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // Subscription / Pricing Events
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Log when user initiates a checkout flow for a paid subscription.
+     */
+    logBeginCheckout(priceId: string, currency?: string, value?: number): void {
+        this.logEvent('begin_checkout', {
+            price_id: priceId,
+            currency,
+            value
+        });
+    }
+
+    /**
+     * Log when user opens the subscription management portal.
+     */
+    logManageSubscription(): void {
+        this.logEvent('manage_subscription');
+    }
+
+    /**
+     * Log when user selects the free tier.
+     */
+    logSelectFreeTier(): void {
+        this.logEvent('select_freetier');
+    }
+
+    /**
+     * Log restore purchases lifecycle.
+     */
+    logRestorePurchases(status: 'initiated' | 'success' | 'failure', role?: string, error?: string): void {
+        this.logEvent('restore_purchases', { status, role, error });
+    }
 }
