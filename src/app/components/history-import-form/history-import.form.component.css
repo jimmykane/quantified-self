@@ -124,6 +124,8 @@
 .next-available-card mat-icon {
   color: var(--mat-sys-on-primary-container);
   opacity: 0.8;
+  overflow: visible !important;
+  flex-shrink: 0;
 }
 
 .next-available-card .stat-label {
