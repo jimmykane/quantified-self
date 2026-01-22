@@ -84,31 +84,39 @@ export class MarkerFactoryService {
   createClusterMarker(count: number): HTMLDivElement {
     const content = document.createElement('div');
 
-    let size = '30px';
-    let background = 'var(--mat-sys-primary, #4285F4)';
-    let color = 'var(--mat-sys-on-primary, white)';
+    // 10-step "Evil" Heatmap (Vivid Orange -> Blood Red -> Black)
+    const steps = [
+      { max: 5, size: '30px', bg: '#FF9100', fg: '#000000' }, // Vivid Orange
+      { max: 10, size: '30px', bg: '#FF6D00', fg: '#000000' }, // Darker Vivid Orange
+      { max: 25, size: '34px', bg: '#F57C00', fg: '#000000' }, // Orange 700
+      { max: 50, size: '34px', bg: '#E65100', fg: '#FFFFFF' }, // Orange 900
+      { max: 100, size: '38px', bg: '#FF3D00', fg: '#FFFFFF' }, // Deep Orange A400
+      { max: 250, size: '38px', bg: '#D50000', fg: '#FFFFFF' }, // Red A700
+      { max: 500, size: '42px', bg: '#B71C1C', fg: '#FFFFFF' }, // Red 900
+      { max: 1000, size: '42px', bg: '#8B0000', fg: '#FFFFFF' }, // Dark Red
+      { max: 2500, size: '46px', bg: '#4A0000', fg: '#FFFFFF' }, // Deep Maroon
+      { max: Infinity, size: '50px', bg: '#210000', fg: '#FFFFFF' } // Almost Black
+    ];
 
-    if (count >= 10 && count < 100) {
-      size = '40px';
-      background = 'var(--mat-sys-secondary, #FF4081)';
-      color = 'var(--mat-sys-on-secondary, white)';
-    } else if (count >= 100) {
-      size = '50px';
-      background = 'var(--mat-sys-error, #F44336)';
-      color = 'var(--mat-sys-on-error, white)';
-    }
+    const safeCount = Number(count) || 0;
+    const config = steps.find(s => safeCount < s.max) || steps[steps.length - 1];
 
-    content.style.background = background;
-    content.style.color = color;
-    content.style.padding = '8px';
+    content.style.setProperty('background-color', config.bg, 'important');
+    content.style.setProperty('background', config.bg, 'important');
+    content.style.setProperty('color', config.fg, 'important');
+
     content.style.borderRadius = '50%';
-    content.style.minWidth = size;
-    content.style.height = size;
+    content.style.minWidth = config.size;
+    content.style.height = config.size;
     content.style.display = 'flex';
     content.style.alignItems = 'center';
     content.style.justifyContent = 'center';
     content.style.fontWeight = 'bold';
-    content.textContent = String(count);
+    content.style.padding = '8px'; // Add padding to size (content-box behavior)
+    content.style.boxShadow = '0 2px 5px rgba(0,0,0,0.3)';
+    content.style.border = '2px solid white';
+    content.style.fontSize = '13px';
+    content.textContent = String(safeCount);
     return content;
   }
 }
