@@ -58,8 +58,10 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public garminCooldownDays = GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS;
   /** Optimistic UI flag - blocks re-submission immediately after success */
   public isHistoryImportPending = signal(false);
-  /** Stores the actual backend response for display (COROS/Suunto only) */
+  /** stores the actual backend response for display (COROS/Suunto only) */
   public pendingImportResult = signal<HistoryImportResult | null>(null);
+  /** Max date for any import is today (using dayjs for datepicker compatibility) */
+  public today = dayjs().endOf('day');
   /** Expose Math for template calculations */
   public Math = Math;
   private eventService = inject(AppEventService);
@@ -71,10 +73,10 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
   async ngOnInit() {
     this.formGroup = new UntypedFormGroup({
-      startDate: new UntypedFormControl(new Date(new Date().setHours(0, 0, 0, 0)), [
+      startDate: new UntypedFormControl(dayjs().startOf('day'), [
         Validators.required,
       ]),
-      endDate: new UntypedFormControl(new Date(new Date().setHours(24, 0, 0, 0)), [
+      endDate: new UntypedFormControl(dayjs().endOf('day'), [
         Validators.required,
       ]),
       accepted: new UntypedFormControl(false, [
@@ -90,9 +92,25 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   }
 
   dateRangeValidator: ValidatorFn = (group: AbstractControl): ValidationErrors | null => {
-    const start = group.get('startDate')?.value;
-    const end = group.get('endDate')?.value;
-    return start && end && new Date(start) > new Date(end) ? { dateRangeInvalid: true } : null;
+    const startControl = group.get('startDate');
+    const endControl = group.get('endDate');
+    const start = startControl?.value;
+    const end = endControl?.value;
+
+    if (start && end && dayjs(start).isAfter(dayjs(end))) {
+      endControl?.setErrors({ dateRangeInvalid: true });
+      return { dateRangeInvalid: true };
+    }
+
+    // If it was only invalid due to dateRangeInvalid, clear it. 
+    // Note: this is a simple check, in a complex form we'd be more careful about other errors.
+    if (endControl?.hasError('dateRangeInvalid')) {
+      endControl.setErrors(null);
+      // Re-trigger required validator if needed
+      endControl.updateValueAndValidity({ emitEvent: false });
+    }
+
+    return null;
   };
 
   get isMissingGarminPermissions(): boolean {
@@ -186,10 +204,14 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     try {
       this.analyticsService.logEvent('imported_history', { method: this.serviceName });
 
+      // Normalize dates: start = 00:00, end = 23:59
+      const startDate = dayjs(this.formGroup.get('startDate')?.value).startOf('day').toDate();
+      const endDate = dayjs(this.formGroup.get('endDate')?.value).endOf('day').toDate();
+
       const result = await this.userService.importServiceHistoryForCurrentUser(
         this.serviceName,
-        dayjs(this.formGroup.get('startDate')?.value).toDate(),
-        dayjs(this.formGroup.get('endDate')?.value).toDate()
+        startDate,
+        endDate
       );
       this.importInitiated.emit(result);
 

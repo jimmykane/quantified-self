@@ -180,16 +180,21 @@
   <div class="date-fields">
     <mat-form-field appearance="outline">
       <mat-label>Start Date</mat-label>
-      <input matInput [matDatepicker]="startDate" [min]="minDate" formControlName="startDate"
-        (click)="startDate.open()">
+      <input matInput [matDatepicker]="startDate" [min]="minDate" [max]="formGroup.get('endDate')?.value || today"
+        formControlName="startDate" (click)="startDate.open()">
       <mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>
       <mat-datepicker #startDate></mat-datepicker>
+      <mat-error *ngIf="formGroup.get('startDate')?.hasError('required')">Start date is required</mat-error>
     </mat-form-field>
     <mat-form-field appearance="outline">
       <mat-label>End Date</mat-label>
-      <input matInput [matDatepicker]="endDate" formControlName="endDate" (click)="endDate.open()">
+      <input matInput [matDatepicker]="endDate" [min]="formGroup.get('startDate')?.value || minDate" [max]="today"
+        formControlName="endDate" (click)="endDate.open()">
       <mat-datepicker-toggle matSuffix [for]="endDate"></mat-datepicker-toggle>
       <mat-datepicker #endDate></mat-datepicker>
+      <mat-error *ngIf="formGroup.get('endDate')?.hasError('required')">End date is required</mat-error>
+      <mat-error *ngIf="formGroup.get('endDate')?.hasError('dateRangeInvalid')">End date cannot be before start
+        date</mat-error>
     </mat-form-field>
   </div>
   <div class="confirmation-section">
