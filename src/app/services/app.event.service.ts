@@ -55,6 +55,12 @@ export class AppEventService implements OnDestroy {
   private appEventUtilities = inject(AppEventUtilities);
   private static reportedUnknownTypes = new Set<string>();
 
+  /**
+   * NOTE: We use `runInInjectionContext(this.injector, ...)` for Firebase SDK calls (doc, collection, etc.).
+   * This is required because AngularFire v7+ needs an active injection context to correctly integrate 
+   * with Zone.js, Change Detection, and Hydration. Without this wrapper, calls made after construction 
+   * time (like in async methods) would lose context and cause console warnings or hydration bugs.
+   */
   constructor(
     private windowService: AppWindowService) {
   }

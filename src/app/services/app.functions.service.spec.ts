@@ -5,11 +5,20 @@ import { Functions, getFunctions, httpsCallable } from '@angular/fire/functions'
 import { FirebaseApp } from '@angular/fire/app';
 import { FUNCTIONS_MANIFEST } from '../../shared/functions-manifest';
 
+const mocks = vi.hoisted(() => {
+    const callableSpy = vi.fn().mockResolvedValue({ data: 'success' });
+    const httpsCallableMock = vi.fn(() => callableSpy);
+    return {
+        callableSpy,
+        httpsCallableMock
+    };
+});
+
 // Mock getFunctions and httpsCallable
 vi.mock('@angular/fire/functions', () => ({
     Functions: class { },
     getFunctions: vi.fn(() => ({ region: 'mock-region-instance' })),
-    httpsCallable: vi.fn(() => vi.fn().mockResolvedValue({ data: 'success' }))
+    httpsCallable: mocks.httpsCallableMock
 }));
 
 // Mock the manifest
@@ -26,6 +35,9 @@ describe('AppFunctionsService', () => {
     let mockApp: any;
 
     beforeEach(() => {
+        mocks.httpsCallableMock.mockClear();
+        mocks.callableSpy.mockClear();
+
         mockDefaultFunctions = { region: 'europe-west2-instance' };
         mockApp = { name: '[DEFAULT]' };
 
@@ -43,22 +55,22 @@ describe('AppFunctionsService', () => {
         vi.clearAllMocks();
     });
 
-    it('should use getFunctions for all regions', async () => {
-        await service.call('defaultRegionFunc' as any);
-
+    it('should initialize all functions from manifest in constructor', () => {
+        // Service is created in beforeEach
         expect(getFunctions).toHaveBeenCalledWith(mockApp, 'europe-west2');
-        expect(httpsCallable).toHaveBeenCalledWith(expect.objectContaining({ region: 'mock-region-instance' }), 'func1');
+        expect(getFunctions).toHaveBeenCalledWith(mockApp, 'europe-west3');
+        expect(mocks.httpsCallableMock).toHaveBeenCalledTimes(2);
     });
 
-    it('should use getFunctions for non-default regions', async () => {
-        await service.call('otherRegionFunc' as any);
+    it('should call the pre-initialized callable', async () => {
+        // Call the service method
+        await service.call('defaultRegionFunc' as any);
 
-        expect(getFunctions).toHaveBeenCalledWith(mockApp, 'europe-west3');
-        // It should use the result of getFunctions
-        const expectedInstance = { region: 'mock-region-instance' };
-        // Note: getFunctions mock returns a new object each time unless we fix the return value. 
-        // The mock above returns { region: 'mock-region-instance' }.
+        // Check our stable spy
+        expect(mocks.callableSpy).toHaveBeenCalled();
+    });
 
-        expect(httpsCallable).toHaveBeenCalledWith(expect.objectContaining({ region: 'mock-region-instance' }), 'func2');
+    it('should throw error for invalid function key', async () => {
+        await expect(service.call('invalidFunc' as any)).rejects.toThrow('Function invalidFunc not initialized');
     });
 });
