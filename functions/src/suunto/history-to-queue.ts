@@ -51,6 +51,10 @@ export const addSuuntoAppHistoryToQueue = onCall({
     throw new HttpsError('invalid-argument', 'No start and/or end date');
   }
 
+  if (startDate > endDate) {
+    throw new HttpsError('invalid-argument', 'Start date is after the end date');
+  }
+
   // First check last history import
   if (!(await isAllowedToDoHistoryImport(userID, SERVICE_NAME))) {
     logger.error(`User ${userID} tried todo history import while not allowed`);

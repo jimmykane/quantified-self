@@ -50,6 +50,10 @@ export const addCOROSAPIHistoryToQueue = functions
       throw new functions.https.HttpsError('invalid-argument', 'No start and/or end date');
     }
 
+    if (startDate > endDate) {
+      throw new functions.https.HttpsError('invalid-argument', 'Start date is after the end date');
+    }
+
     // COROS V2 API Restriction: No data older than 3 months
     const threeMonthsAgo = new Date();
     threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - COROS_HISTORY_IMPORT_LIMIT_MONTHS);
