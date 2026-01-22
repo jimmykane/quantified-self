@@ -72,7 +72,7 @@ describe('EventCardMapComponent', () => {
         component = fixture.componentInstance;
 
         // Mock user input
-        component.user = { uid: 'test', settings: { mapSettings: {} } } as any;
+        component.user = { uid: 'test' } as any;
         component.targetUserID = 'test-uid';
         component.event = {
             getStat: () => ({ getValue: () => ({ latitudeDegrees: 0, longitudeDegrees: 0 }) }),
@@ -100,11 +100,8 @@ describe('EventCardMapComponent', () => {
     });
 
     it('should initialize mapTypeId from user settings', async () => {
-        fixture = TestBed.createComponent(EventCardMapComponent);
-        component = fixture.componentInstance;
-
         const userWithMapSettings = {
-            uid: 'test',
+            ...component.user,
             settings: {
                 mapSettings: {
                     mapType: 'satellite'
@@ -113,18 +110,10 @@ describe('EventCardMapComponent', () => {
         } as any;
         component.user = userWithMapSettings;
 
-        // Mock required inputs
-        component.event = {
-            getStat: () => ({ getValue: () => ({ latitudeDegrees: 0, longitudeDegrees: 0 }) }),
-            getDuration: () => ({ getDisplayValue: () => '1h' }),
-            getDistance: () => ({ getDisplayValue: () => '10km' }),
-            getActivityTypesAsString: () => 'Run'
-        } as any;
-
         // Reset spy counts to verify calls in this specific test cycle
         mockLoaderService.importLibrary.mockClear();
 
-        fixture.detectChanges(); // Triggers ngOnInit
+        await component.ngOnInit();
 
         expect(component.mapTypeId()).toBe('satellite');
     });

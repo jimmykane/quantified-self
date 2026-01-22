@@ -108,6 +108,10 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     if (!this.targetUserID || !this.event) {
       throw new Error('Component needs events and userID');
     }
+    if (this.user?.settings?.mapSettings?.mapType) {
+      this.mapTypeId.set(this.user.settings.mapSettings.mapType as unknown as google.maps.MapTypeId);
+    }
+
     // Load 'maps' library
     await this.mapsLoader.importLibrary('maps');
     await this.mapsLoader.importLibrary('marker');
