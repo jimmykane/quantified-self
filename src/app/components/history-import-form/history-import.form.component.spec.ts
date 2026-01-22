@@ -312,6 +312,39 @@ describe('HistoryImportFormComponent', () => {
             expect(component.isHistoryImportPending()).toBe(false);
         });
 
+        it('should normalize dates to start of day and end of day on submission', async () => {
+            component.serviceName = ServiceNames.SuuntoApp;
+            component.userMetaForService = {} as UserServiceMetaInterface;
+            component.isPro = true;
+            (component as any).processChanges();
+            component.formGroup.enable();
+
+            // Set arbitrary dates
+            const start = new Date(2024, 0, 15, 12, 30); // Jan 15, 12:30
+            const end = new Date(2024, 0, 16, 14, 45);   // Jan 16, 14:45
+
+            component.formGroup.patchValue({
+                startDate: start,
+                endDate: end,
+                accepted: true
+            });
+
+            const mockEvent = { preventDefault: vi.fn() } as any;
+            await component.onSubmit(mockEvent);
+
+            // Verify normalization
+            const sentStart = mockUserService.importServiceHistoryForCurrentUser.mock.calls[0][1];
+            const sentEnd = mockUserService.importServiceHistoryForCurrentUser.mock.calls[0][2];
+
+            expect(sentStart.getHours()).toBe(0);
+            expect(sentStart.getMinutes()).toBe(0);
+            expect(sentStart.getSeconds()).toBe(0);
+
+            expect(sentEnd.getHours()).toBe(23);
+            expect(sentEnd.getMinutes()).toBe(59);
+            expect(sentEnd.getSeconds()).toBe(59);
+        });
+
         it('should work for all service types', async () => {
             for (const serviceName of [ServiceNames.COROSAPI, ServiceNames.SuuntoApp, ServiceNames.GarminAPI]) {
                 // Reset the signal
