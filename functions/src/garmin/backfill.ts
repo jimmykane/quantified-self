@@ -141,6 +141,16 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
         throw new Error('Duplicate backfill detected by Garmin for this time range. Please try a different range or contact support.');
       }
 
+      // Handle "start date before min start time" error (400)
+      // Garmin enforces a "min start time" based on when the user first connected their account.
+      // This often manifests as a 5-year rolling window or strict anchor to the connection date.
+      // We skip these invalid batches to allow the valid ones (within the allowed window) to succeed.
+      if (e.statusCode === 400 && e.error?.error?.errorMessage?.includes('before min start time')) {
+        logger.warn(`Garmin backfill batch skipped: ${e.error.error.errorMessage}`);
+        // Do NOT throw. Continue to next batch.
+        continue;
+      }
+
       if (e.statusCode === 500) {
         throw new Error(`Garmin API error (500) for dates ${batchStartDate} to ${batchEndDate}`);
       }

@@ -131,10 +131,18 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     if (!this.userMetaForService || !this.userMetaForService.didLastHistoryImport) {
       this.isAllowedToDoHistoryImport = true;
       (this.isAllowedToDoHistoryImport && !this.isMissingGarminPermissions) ? this.formGroup.enable() : this.formGroup.disable();
-      // Set min date for COROS if no previous import
+
+      // Set min date for COROS (3 months)
       if (this.serviceName === ServiceNames.COROSAPI) {
         const limitDate = new Date();
         limitDate.setMonth(limitDate.getMonth() - this.corosHistoryLimitMonths);
+        this.minDate = limitDate;
+      }
+      // Set min date for Garmin (5 years) due to API restriction on backfill range
+      // The backfill endpoint typically restricts data to the last ~5 years from the connection date or current date.
+      else if (this.serviceName === ServiceNames.GarminAPI) {
+        const limitDate = new Date();
+        limitDate.setFullYear(limitDate.getFullYear() - 5);
         this.minDate = limitDate;
       }
       return;

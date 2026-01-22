@@ -285,6 +285,23 @@ describe('HistoryImportFormComponent', () => {
             expect(component.minDate!.getMonth()).toBe(expectedMinDate.getMonth());
         });
 
+        it('should enforce Garmin 5-year limit on minDate', () => {
+            component.serviceName = ServiceNames.GarminAPI;
+            component.userMetaForService = {} as UserServiceMetaInterface;
+
+            // Trigger logic
+            (component as any).processChanges();
+
+            expect(component.minDate).toBeTruthy();
+            const expectedMinDate = new Date();
+            expectedMinDate.setFullYear(expectedMinDate.getFullYear() - 5);
+
+            // Check roughly equal (within slightly different execution times)
+            expect(component.minDate!.getDate()).toBe(expectedMinDate.getDate());
+            expect(component.minDate!.getFullYear()).toBe(expectedMinDate.getFullYear());
+            expect(component.minDate!.getMonth()).toBe(expectedMinDate.getMonth());
+        });
+
         it('should NOT be set to true if import fails', async () => {
             // Setup component for allowed import
             component.serviceName = ServiceNames.SuuntoApp;
