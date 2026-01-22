@@ -1,4 +1,4 @@
-import { Component, Inject, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, inject, Output, EventEmitter, ChangeDetectorRef } from '@angular/core';
+import { Component, Inject, Input, OnChanges, OnDestroy, OnInit, SimpleChanges, inject, Output, EventEmitter, ChangeDetectorRef, signal } from '@angular/core';
 import {
   AbstractControl,
   UntypedFormArray,
@@ -46,6 +46,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public corosHistoryLimitMonths = COROS_HISTORY_IMPORT_LIMIT_MONTHS;
   public activitiesPerDayLimit = HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT;
   public garminCooldownDays = GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS;
+  /** Optimistic UI flag - blocks re-submission immediately after success */
+  public isHistoryImportPending = signal(false);
   private eventService = inject(AppEventService);
   private userService = inject(AppUserService);
   private analyticsService = inject(AppAnalyticsService);
@@ -152,6 +154,9 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
         dayjs(this.formGroup.get('endDate')?.value).toDate()
       );
       this.importInitiated.emit(result);
+
+      // Set optimistic flag immediately to prevent re-submission
+      this.isHistoryImportPending.set(true);
 
       this.snackBar.open('History import has been queued', undefined, {
         duration: 2000,

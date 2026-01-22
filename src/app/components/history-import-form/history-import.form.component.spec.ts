@@ -8,6 +8,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCardModule } from '@angular/material/card';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AppEventService } from '../../services/app.event.service';
@@ -64,6 +65,7 @@ describe('HistoryImportFormComponent', () => {
                 MatNativeDateModule,
                 MatIconModule,
                 MatButtonModule,
+                MatCardModule,
                 MatSnackBarModule,
                 MatProgressSpinnerModule,
                 NoopAnimationsModule
@@ -133,5 +135,90 @@ describe('HistoryImportFormComponent', () => {
         expect(component.isMissingGarminPermissions).toBe(true);
         expect(component.isAllowedToDoHistoryImport).toBe(true); // Should be true to show the form
         expect(component.formGroup.disabled).toBe(true);
+    });
+
+    describe('isHistoryImportPending (optimistic UI)', () => {
+        it('should initially be false', () => {
+            expect(component.isHistoryImportPending()).toBe(false);
+        });
+
+        it('should be set to true after successful import submission', async () => {
+            // Setup component for allowed import
+            component.serviceName = ServiceNames.COROSAPI;
+            component.userMetaForService = {} as UserServiceMetaInterface; // No previous import
+            component.isPro = true;
+            (component as any).processChanges();
+
+            // Enable form and set valid values
+            component.formGroup.enable();
+            component.formGroup.patchValue({
+                startDate: new Date(),
+                endDate: new Date(),
+                accepted: true
+            });
+
+            expect(component.isHistoryImportPending()).toBe(false);
+
+            // Submit the form
+            const mockEvent = { preventDefault: vi.fn() } as any;
+            await component.onSubmit(mockEvent);
+
+            expect(component.isHistoryImportPending()).toBe(true);
+            expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalled();
+        });
+
+        it('should NOT be set to true if import fails', async () => {
+            // Setup component for allowed import
+            component.serviceName = ServiceNames.SuuntoApp;
+            component.userMetaForService = {} as UserServiceMetaInterface;
+            component.isPro = true;
+            (component as any).processChanges();
+
+            // Enable form and set valid values
+            component.formGroup.enable();
+            component.formGroup.patchValue({
+                startDate: new Date(),
+                endDate: new Date(),
+                accepted: true
+            });
+
+            // Make the import fail
+            mockUserService.importServiceHistoryForCurrentUser.mockRejectedValueOnce(new Error('API Error'));
+
+            expect(component.isHistoryImportPending()).toBe(false);
+
+            const mockEvent = { preventDefault: vi.fn() } as any;
+            await component.onSubmit(mockEvent);
+
+            // Should remain false on error
+            expect(component.isHistoryImportPending()).toBe(false);
+        });
+
+        it('should work for all service types', async () => {
+            for (const serviceName of [ServiceNames.COROSAPI, ServiceNames.SuuntoApp, ServiceNames.GarminAPI]) {
+                // Reset the signal
+                component.isHistoryImportPending.set(false);
+
+                component.serviceName = serviceName;
+                component.userMetaForService = {} as UserServiceMetaInterface;
+                component.missingPermissions = [];
+                component.isPro = true;
+                (component as any).processChanges();
+
+                component.formGroup.enable();
+                component.formGroup.patchValue({
+                    startDate: new Date(),
+                    endDate: new Date(),
+                    accepted: true
+                });
+
+                mockUserService.importServiceHistoryForCurrentUser.mockResolvedValue({ success: true });
+
+                const mockEvent = { preventDefault: vi.fn() } as any;
+                await component.onSubmit(mockEvent);
+
+                expect(component.isHistoryImportPending()).toBe(true);
+            }
+        });
     });
 });

@@ -1,4 +1,27 @@
-@if (userMetaForService && userMetaForService.didLastHistoryImport && !isAllowedToDoHistoryImport) {
+@if (isHistoryImportPending()) {
+<!-- Optimistic UI: Show queued status immediately after successful submission -->
+<mat-card class="status-card glass-card">
+  <mat-card-header>
+    <mat-icon mat-card-avatar class="header-icon">cloud_sync</mat-icon>
+    <mat-card-title>Import Queued</mat-card-title>
+    <mat-card-subtitle>Just now</mat-card-subtitle>
+  </mat-card-header>
+  <mat-card-content>
+    <div class="dashboard-grid">
+      <div class="stat-card full-width next-available-card">
+        <div class="stat-row">
+          <mat-icon>hourglass_top</mat-icon>
+          <div class="stat-column">
+            <span class="stat-label">Status</span>
+            <span class="stat-value">Processing</span>
+            <span class="stat-hint">Your history import has been queued and is being processed.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </mat-card-content>
+</mat-card>
+} @else if (userMetaForService && userMetaForService.didLastHistoryImport && !isAllowedToDoHistoryImport) {
 <mat-card class="status-card glass-card">
   <mat-card-header>
     <mat-icon mat-card-avatar class="header-icon">history_toggle_off</mat-icon>
@@ -60,7 +83,7 @@
 </mat-card>
 }
 
-@if (formGroup && isAllowedToDoHistoryImport) {
+@if (formGroup && isAllowedToDoHistoryImport && !isHistoryImportPending()) {
 @if (isPro) {
 <form [formGroup]="formGroup" class="qs-form history-import-form">
   @if (isMissingGarminPermissions) {
