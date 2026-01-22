@@ -83,12 +83,27 @@ export class MarkerFactoryService {
 
   createClusterMarker(count: number): HTMLDivElement {
     const content = document.createElement('div');
-    content.style.background = 'var(--mat-sys-primary, #4285F4)';
-    content.style.color = 'var(--mat-sys-on-primary, white)';
+
+    let size = '30px';
+    let background = 'var(--mat-sys-primary, #4285F4)';
+    let color = 'var(--mat-sys-on-primary, white)';
+
+    if (count >= 10 && count < 100) {
+      size = '40px';
+      background = 'var(--mat-sys-secondary, #FF4081)';
+      color = 'var(--mat-sys-on-secondary, white)';
+    } else if (count >= 100) {
+      size = '50px';
+      background = 'var(--mat-sys-error, #F44336)';
+      color = 'var(--mat-sys-on-error, white)';
+    }
+
+    content.style.background = background;
+    content.style.color = color;
     content.style.padding = '8px';
     content.style.borderRadius = '50%';
-    content.style.minWidth = '30px';
-    content.style.height = '30px';
+    content.style.minWidth = size;
+    content.style.height = size;
     content.style.display = 'flex';
     content.style.alignItems = 'center';
     content.style.justifyContent = 'center';
