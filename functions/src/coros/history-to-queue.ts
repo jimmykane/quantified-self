@@ -5,7 +5,7 @@ import * as logger from 'firebase-functions/logger';
 import { isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
 import { SERVICE_NAME } from './constants';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS } from '../shared/history-import.constants';
-import { HistoryImportResult, addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
+import { HistoryImportResult, addHistoryToQueue, getNextAllowedHistoryImportDate } from '../history';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 
 interface HistoryToQueueRequest {
@@ -73,14 +73,15 @@ export const addCOROSAPIHistoryToQueue = functions
     }
 
     // First check last history import
-    if (!(await isAllowedToDoHistoryImport(userID, SERVICE_NAME))) {
-      logger.error(`User ${userID} tried todo history import while not allowed`);
-      throw new functions.https.HttpsError('permission-denied', 'History import is not allowed');
+    const nextAllowedDate = await getNextAllowedHistoryImportDate(userID, SERVICE_NAME);
+    if (nextAllowedDate && nextAllowedDate > new Date()) {
+      logger.error(`User ${userID} tried todo history import for ${SERVICE_NAME} while not allowed. (Requested: ${startDate.toISOString()} - ${endDate.toISOString()}, Available on: ${nextAllowedDate.toISOString()})`);
+      throw new functions.https.HttpsError('permission-denied', `History import is not allowed until ${nextAllowedDate.toISOString()}`);
     }
 
     // We need to break down the requests to multiple of 30 days max. 2592000000ms
     const maxDeltaInMS = 2592000000;
-    const batchCount = Math.ceil((+endDate - +startDate) / maxDeltaInMS);
+    const batchCount = Math.max(1, Math.ceil((+endDate - +startDate) / maxDeltaInMS));
 
     const totalStats: HistoryImportResult = {
       successCount: 0,

@@ -17,7 +17,8 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
 import { ServiceNames, UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Component, Input, NO_ERRORS_SCHEMA } from '@angular/core';
+import { CommonModule } from '@angular/common'; // Added CommonModule
 
 vi.mock('../../services/app.event.service');
 vi.mock('../../services/app.user.service');
@@ -57,7 +58,9 @@ describe('HistoryImportFormComponent', () => {
 
         await TestBed.configureTestingModule({
             declarations: [HistoryImportFormComponent],
+            schemas: [NO_ERRORS_SCHEMA],
             imports: [
+                CommonModule, // Added CommonModule
                 MatDatepickerModule,
                 MatFormFieldModule,
                 MatInputModule,

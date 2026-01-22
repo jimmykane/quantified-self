@@ -35,7 +35,7 @@ vi.mock('../utils', () => ({
 
 vi.mock('../history', () => ({
     addHistoryToQueue: vi.fn().mockResolvedValue({ successCount: 1, failureCount: 0, processedBatches: 1, failedBatches: 0 }),
-    isAllowedToDoHistoryImport: vi.fn().mockResolvedValue(true)
+    getNextAllowedHistoryImportDate: vi.fn().mockResolvedValue(null)
 }));
 
 // Import AFTER mocks
@@ -48,7 +48,7 @@ describe('COROS History to Queue', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         (utils.isProUser as any).mockResolvedValue(true);
-        (history.isAllowedToDoHistoryImport as any).mockResolvedValue(true);
+        (history.getNextAllowedHistoryImportDate as any).mockResolvedValue(null);
 
         const recentDate = new Date();
         recentDate.setDate(recentDate.getDate() - 7); // 7 days ago
@@ -68,7 +68,7 @@ describe('COROS History to Queue', () => {
         it('should add history to queue and return success', async () => {
             const result = await addCOROSAPIHistoryToQueue(data, context);
 
-            expect(history.isAllowedToDoHistoryImport).toHaveBeenCalledWith('testUserID', SERVICE_NAME);
+            expect(history.getNextAllowedHistoryImportDate).toHaveBeenCalledWith('testUserID', SERVICE_NAME);
             expect(history.addHistoryToQueue).toHaveBeenCalledWith(
                 'testUserID',
                 SERVICE_NAME,
@@ -79,6 +79,30 @@ describe('COROS History to Queue', () => {
                 result: 'History items added to queue',
                 stats: { successCount: 1, failureCount: 0, processedBatches: 1, failedBatches: 0 }
             });
+        });
+
+        it('should throw error if start date is after end date', async () => {
+            const startDate = new Date();
+            const endDate = new Date(startDate.getTime() - 86400000); // 1 day before
+            data = {
+                startDate: startDate.toISOString(),
+                endDate: endDate.toISOString()
+            };
+
+            await expect(addCOROSAPIHistoryToQueue(data, context))
+                .rejects.toThrow('Start date is after the end date');
+        });
+
+        it('should work if start date and end date are the same', async () => {
+            const sameDate = new Date().toISOString();
+            data = {
+                startDate: sameDate,
+                endDate: sameDate
+            };
+
+            const result = await addCOROSAPIHistoryToQueue(data, context);
+            expect(result.result).toBe('History items added to queue');
+            expect(history.addHistoryToQueue).toHaveBeenCalled();
         });
 
         it('should batch requests if range > 30 days', async () => {

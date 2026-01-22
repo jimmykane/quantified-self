@@ -4,7 +4,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import { isProUser, PRO_REQUIRED_MESSAGE, enforceAppCheck } from '../utils';
 import { SERVICE_NAME } from './constants';
-import { HistoryImportResult, addHistoryToQueue, isAllowedToDoHistoryImport } from '../history';
+import { HistoryImportResult, addHistoryToQueue, getNextAllowedHistoryImportDate } from '../history';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 import { ALLOWED_CORS_ORIGINS } from '../utils';
 
@@ -56,9 +56,10 @@ export const addSuuntoAppHistoryToQueue = onCall({
   }
 
   // First check last history import
-  if (!(await isAllowedToDoHistoryImport(userID, SERVICE_NAME))) {
-    logger.error(`User ${userID} tried todo history import while not allowed`);
-    throw new HttpsError('permission-denied', 'History import is not allowed');
+  const nextAllowedDate = await getNextAllowedHistoryImportDate(userID, SERVICE_NAME);
+  if (nextAllowedDate && nextAllowedDate > new Date()) {
+    logger.error(`User ${userID} tried todo history import for ${SERVICE_NAME} while not allowed. (Requested: ${startDate.toISOString()} - ${endDate.toISOString()}, Available on: ${nextAllowedDate.toISOString()})`);
+    throw new HttpsError('permission-denied', `History import is not allowed until ${nextAllowedDate.toISOString()}`);
   }
 
   let stats: HistoryImportResult;

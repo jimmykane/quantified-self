@@ -32,7 +32,7 @@ vi.mock('../utils', async (importOriginal) => {
 
 vi.mock('../history', () => ({
     addHistoryToQueue: vi.fn().mockResolvedValue({ successCount: 1, failureCount: 0, processedBatches: 1, failedBatches: 0 }),
-    isAllowedToDoHistoryImport: vi.fn().mockResolvedValue(true)
+    getNextAllowedHistoryImportDate: vi.fn().mockResolvedValue(null)
 }));
 
 // Import AFTER mocks
@@ -55,7 +55,7 @@ describe('Suunto History to Queue', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         (utils.isProUser as any).mockResolvedValue(true);
-        (history.isAllowedToDoHistoryImport as any).mockResolvedValue(true);
+        (history.getNextAllowedHistoryImportDate as any).mockResolvedValue(null);
     });
 
     describe('addSuuntoAppHistoryToQueue', () => {
@@ -73,7 +73,7 @@ describe('Suunto History to Queue', () => {
 
             const result = await addSuuntoAppHistoryToQueue(request as any);
 
-            expect(history.isAllowedToDoHistoryImport).toHaveBeenCalledWith('testUserID', SERVICE_NAME);
+            expect(history.getNextAllowedHistoryImportDate).toHaveBeenCalledWith('testUserID', SERVICE_NAME);
             expect(history.addHistoryToQueue).toHaveBeenCalledWith(
                 'testUserID',
                 SERVICE_NAME,
@@ -84,6 +84,34 @@ describe('Suunto History to Queue', () => {
                 result: 'History items added to queue',
                 stats: { successCount: 1, failureCount: 0, processedBatches: 1, failedBatches: 0 }
             });
+        });
+
+        it('should throw error if start date is after end date', async () => {
+            const startDate = new Date();
+            const endDate = new Date(startDate.getTime() - 86400000); // 1 day before
+            const request = createMockRequest({
+                data: {
+                    startDate: startDate.toISOString(),
+                    endDate: endDate.toISOString()
+                }
+            });
+
+            await expect(addSuuntoAppHistoryToQueue(request as any))
+                .rejects.toThrow('Start date is after the end date');
+        });
+
+        it('should work if start date and end date are the same', async () => {
+            const sameDate = new Date().toISOString();
+            const request = createMockRequest({
+                data: {
+                    startDate: sameDate,
+                    endDate: sameDate
+                }
+            });
+
+            const result = await addSuuntoAppHistoryToQueue(request as any);
+            expect(result.result).toBe('History items added to queue');
+            expect(history.addHistoryToQueue).toHaveBeenCalled();
         });
 
         it('should throw error during queue processing', async () => {
@@ -149,7 +177,7 @@ describe('Suunto History to Queue', () => {
         });
 
         it('should throw error if history import not allowed', async () => {
-            (history.isAllowedToDoHistoryImport as any).mockResolvedValue(false);
+            (history.getNextAllowedHistoryImportDate as any).mockResolvedValue(new Date(Date.now() + 86400000));
             const request = createMockRequest({
                 data: {
                     startDate: new Date().toISOString(),

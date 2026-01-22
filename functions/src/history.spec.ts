@@ -68,8 +68,50 @@ describe('history', () => {
         vi.clearAllMocks();
     });
 
+    describe('getNextAllowedHistoryImportDate', () => {
+        it('should return null if no meta document exists', async () => {
+            const firestore = admin.firestore();
+            (firestore.collection('').doc('').collection('').doc('').get as any).mockResolvedValue({ exists: false });
+
+            const result = await history.getNextAllowedHistoryImportDate('uid', ServiceNames.SuuntoApp);
+            expect(result).toBeNull();
+        });
+
+        it('should return the correct date if throttled', async () => {
+            const firestore = admin.firestore();
+            const lastImportTime = Date.now() - (1 * 24 * 60 * 60 * 1000); // 1 day ago
+            (firestore.collection('').doc('').collection('').doc('').get as any).mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    didLastHistoryImport: lastImportTime,
+                    processedActivitiesFromLastHistoryImportCount: 1000
+                })
+            });
+
+            const result = await history.getNextAllowedHistoryImportDate('uid', ServiceNames.SuuntoApp);
+            expect(result).toBeInstanceOf(Date);
+            // 1000 items / 500 per day = 2 days cooldown.
+            // lastImport + 2 days = lastImport + 172800000ms
+            expect(result!.getTime()).toBe(lastImportTime + (2 * 24 * 60 * 60 * 1000));
+        });
+
+        it('should return null if processedActivitiesFromLastHistoryImportCount is 0', async () => {
+            const firestore = admin.firestore();
+            (firestore.collection('').doc('').collection('').doc('').get as any).mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    didLastHistoryImport: Date.now(),
+                    processedActivitiesFromLastHistoryImportCount: 0
+                })
+            });
+
+            const result = await history.getNextAllowedHistoryImportDate('uid', ServiceNames.SuuntoApp);
+            expect(result).toBeNull();
+        });
+    });
+
     describe('isAllowedToDoHistoryImport', () => {
-        it('should return true if no meta document exists', async () => {
+        it('should return true if no nextAllowedDate', async () => {
             const firestore = admin.firestore();
             (firestore.collection('').doc('').collection('').doc('').get as any).mockResolvedValue({ exists: false });
 
@@ -77,22 +119,71 @@ describe('history', () => {
             expect(result).toBe(true);
         });
 
-        it('should return false if throttled', async () => {
+        it('should return false if nextAllowedDate is in the future', async () => {
             const firestore = admin.firestore();
-            // 1000 items processed, 3 days needed? 
-            // Logic: data.didLastHistoryImport + ((data.processedActivitiesFromLastHistoryImportCount / 500) * 24 * 60 * 60 * 1000)
-            // If count = 1000, then (1000/500) = 2 days.
-            // If last import was 1 day ago, it should be false.
             (firestore.collection('').doc('').collection('').doc('').get as any).mockResolvedValue({
                 exists: true,
                 data: () => ({
-                    didLastHistoryImport: Date.now() - (1 * 24 * 60 * 60 * 1000), // 1 day ago
-                    processedActivitiesFromLastHistoryImportCount: 1000
+                    didLastHistoryImport: Date.now(), // just now
+                    processedActivitiesFromLastHistoryImportCount: 500 // 1 day cooldown
                 })
             });
 
             const result = await history.isAllowedToDoHistoryImport('uid', ServiceNames.SuuntoApp);
             expect(result).toBe(false);
+        });
+
+        it('should return false if nextAllowedDate is exactly now', async () => {
+            const now = Date.now();
+            vi.setSystemTime(now);
+
+            const firestore = admin.firestore();
+            (firestore.collection('').doc('').collection('').doc('').get as any).mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    didLastHistoryImport: now - (1 * 24 * 60 * 60 * 1000), // 1 day ago
+                    processedActivitiesFromLastHistoryImportCount: 500 // 1 day cooldown
+                })
+            });
+
+            const result = await history.isAllowedToDoHistoryImport('uid', ServiceNames.SuuntoApp);
+            // nextAllowedDate (now) > now is false, so !(false) is true
+            expect(result).toBe(true);
+
+            vi.useRealTimers();
+        });
+
+        it('should return true if nextAllowedDate is 1ms in the past', async () => {
+            const now = Date.now();
+            vi.setSystemTime(now);
+
+            const firestore = admin.firestore();
+            (firestore.collection('').doc('').collection('').doc('').get as any).mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    didLastHistoryImport: now - (1 * 24 * 60 * 60 * 1000) - 1, // 1 day + 1ms ago
+                    processedActivitiesFromLastHistoryImportCount: 500 // 1 day cooldown
+                })
+            });
+
+            const result = await history.isAllowedToDoHistoryImport('uid', ServiceNames.SuuntoApp);
+            expect(result).toBe(true);
+
+            vi.useRealTimers();
+        });
+
+        it('should return true if nextAllowedDate is in the past', async () => {
+            const firestore = admin.firestore();
+            (firestore.collection('').doc('').collection('').doc('').get as any).mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    didLastHistoryImport: Date.now() - (2 * 24 * 60 * 60 * 1000), // 2 days ago
+                    processedActivitiesFromLastHistoryImportCount: 500 // 1 day cooldown
+                })
+            });
+
+            const result = await history.isAllowedToDoHistoryImport('uid', ServiceNames.SuuntoApp);
+            expect(result).toBe(true);
         });
     });
 
