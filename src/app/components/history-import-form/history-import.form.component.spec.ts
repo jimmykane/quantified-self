@@ -9,7 +9,7 @@ import { MatNativeDateModule } from '@angular/material/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
-import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AppEventService } from '../../services/app.event.service';
 import { AppUserService } from '../../services/app.user.service';
@@ -40,6 +40,7 @@ describe('HistoryImportFormComponent', () => {
     let mockUserService: any;
     let mockAnalyticsService: any;
     let mockLoggerService: any;
+    let snackBar: MatSnackBar;
 
     beforeEach(async () => {
         mockEventService = {};
@@ -77,12 +78,15 @@ describe('HistoryImportFormComponent', () => {
                 { provide: LoggerService, useValue: mockLoggerService }
             ]
         }).compileComponents();
+
+        snackBar = TestBed.inject(MatSnackBar);
     });
 
     beforeEach(() => {
         fixture = TestBed.createComponent(HistoryImportFormComponent);
         component = fixture.componentInstance;
         component.serviceName = ServiceNames.COROSAPI;
+        vi.spyOn(snackBar, 'open');
         fixture.detectChanges();
     });
 
@@ -165,6 +169,84 @@ describe('HistoryImportFormComponent', () => {
 
             expect(component.isHistoryImportPending()).toBe(true);
             expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalled();
+        });
+
+        it('should store pendingImportResult from backend response (COROS/Suunto)', async () => {
+            // Setup component for allowed import
+            component.serviceName = ServiceNames.COROSAPI;
+            component.userMetaForService = {} as UserServiceMetaInterface;
+            component.isPro = true;
+            (component as any).processChanges();
+
+            // Enable form and set valid values
+            component.formGroup.enable();
+            component.formGroup.patchValue({
+                startDate: new Date(),
+                endDate: new Date(),
+                accepted: true
+            });
+
+            // Mock backend response with stats (like COROS/Suunto returns)
+            const mockStats = {
+                successCount: 150,
+                failureCount: 5,
+                processedBatches: 2,
+                failedBatches: 0
+            };
+            mockUserService.importServiceHistoryForCurrentUser.mockResolvedValueOnce({
+                result: 'History items added to queue',
+                stats: mockStats
+            });
+
+            expect(component.pendingImportResult()).toBeNull();
+
+            const mockEvent = { preventDefault: vi.fn() } as any;
+            await component.onSubmit(mockEvent);
+
+            expect(component.pendingImportResult()).toEqual(mockStats);
+            expect(snackBar.open).toHaveBeenCalledWith(
+                `History import queued: ${mockStats.successCount} activities found.`,
+                undefined,
+                { duration: 3000 }
+            );
+        });
+
+        it('should show "No new activities" snackbar when successCount is 0', async () => {
+            // Setup component for allowed import
+            component.serviceName = ServiceNames.COROSAPI;
+            component.userMetaForService = {} as UserServiceMetaInterface;
+            component.isPro = true;
+            (component as any).processChanges();
+
+            // Enable form and set valid values
+            component.formGroup.enable();
+            component.formGroup.patchValue({
+                startDate: new Date(),
+                endDate: new Date(),
+                accepted: true
+            });
+
+            // Mock backend response with 0 items
+            const mockStats = {
+                successCount: 0,
+                failureCount: 0,
+                processedBatches: 1,
+                failedBatches: 0
+            };
+            mockUserService.importServiceHistoryForCurrentUser.mockResolvedValueOnce({
+                result: 'History items added to queue',
+                stats: mockStats
+            });
+
+            const mockEvent = { preventDefault: vi.fn() } as any;
+            await component.onSubmit(mockEvent);
+
+            expect(component.pendingImportResult()).toEqual(mockStats);
+            expect(snackBar.open).toHaveBeenCalledWith(
+                'No new activities found to import.',
+                undefined,
+                { duration: 3000 }
+            );
         });
 
         it('should NOT be set to true if import fails', async () => {

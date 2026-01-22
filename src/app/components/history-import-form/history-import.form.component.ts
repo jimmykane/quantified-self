@@ -19,6 +19,14 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT } from '../../../../functions/src/shared/history-import.constants';
 import dayjs from 'dayjs';
 
+/** Response from COROS/Suunto history import */
+export interface HistoryImportResult {
+  successCount: number;
+  failureCount: number;
+  processedBatches: number;
+  failedBatches: number;
+}
+
 
 @Component({
   selector: 'app-history-import-form',
@@ -48,6 +56,10 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public garminCooldownDays = GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS;
   /** Optimistic UI flag - blocks re-submission immediately after success */
   public isHistoryImportPending = signal(false);
+  /** Stores the actual backend response for display (COROS/Suunto only) */
+  public pendingImportResult = signal<HistoryImportResult | null>(null);
+  /** Expose Math for template calculations */
+  public Math = Math;
   private eventService = inject(AppEventService);
   private userService = inject(AppUserService);
   private analyticsService = inject(AppAnalyticsService);
@@ -158,9 +170,24 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       // Set optimistic flag immediately to prevent re-submission
       this.isHistoryImportPending.set(true);
 
-      this.snackBar.open('History import has been queued', undefined, {
-        duration: 2000,
-      });
+      // Store result for display (COROS/Suunto return stats, Garmin doesn't)
+      if (result?.stats) {
+        this.pendingImportResult.set(result.stats);
+
+        if (result.stats.successCount === 0) {
+          this.snackBar.open('No new activities found to import.', undefined, {
+            duration: 3000,
+          });
+        } else {
+          this.snackBar.open(`History import queued: ${result.stats.successCount} activities found.`, undefined, {
+            duration: 3000,
+          });
+        }
+      } else {
+        this.snackBar.open('History import has been queued', undefined, {
+          duration: 2000,
+        });
+      }
     } catch (e: any) {
       this.logger.error(e);
 
