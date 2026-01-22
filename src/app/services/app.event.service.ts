@@ -222,7 +222,7 @@ export class AppEventService implements OnDestroy {
 
   public getActivities(user: User, eventID: string): Observable<ActivityInterface[]> {
     const activitiesCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'activities'));
-    const q = query(activitiesCollection, where('eventID', '==', eventID));
+    const q = runInInjectionContext(this.injector, () => query(activitiesCollection, where('eventID', '==', eventID)));
     return (runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })) as Observable<any[]>).pipe(
       map((activitySnapshots: any[]) => {
         return activitySnapshots.reduce((activitiesArray: ActivityInterface[], activitySnapshot: any) => {
@@ -305,7 +305,7 @@ export class AppEventService implements OnDestroy {
       return all
     }, []).map((typesBatch) => {
       const streamsCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', userID, 'activities', activityID, 'streams'));
-      const q = query(streamsCollection, where('type', 'in', typesBatch));
+      const q = runInInjectionContext(this.injector, () => query(streamsCollection, where('type', 'in', typesBatch)));
       return from(runInInjectionContext(this.injector, () => getDocs(q)))
         .pipe(map((documentSnapshots) => {
           return documentSnapshots.docs.reduce((streamArray: StreamInterface[], documentSnapshot) => {
@@ -409,13 +409,13 @@ export class AppEventService implements OnDestroy {
 
     const storageAdapter: StorageAdapter = {
       uploadFile: async (path: string, data: any) => {
-        const fileRef = ref(this.storage, path);
+        const fileRef = runInInjectionContext(this.injector, () => ref(this.storage, path));
         // data can be Blob, Uint8Array or ArrayBuffer. If string, convert to Blob.
         let payload = data;
         if (typeof data === 'string') {
           payload = new Blob([data], { type: 'text/plain' });
         }
-        await uploadBytes(fileRef, payload);
+        await runInInjectionContext(this.injector, () => uploadBytes(fileRef, payload));
       },
       getBucketName: () => {
         // Return the Firebase Storage bucket name from config
@@ -649,8 +649,8 @@ export class AppEventService implements OnDestroy {
   }
 
   public async downloadFile(path: string): Promise<ArrayBuffer> {
-    const fileRef = ref(this.storage, path);
-    const buffer = await getBytes(fileRef);
+    const fileRef = runInInjectionContext(this.injector, () => ref(this.storage, path));
+    const buffer = await runInInjectionContext(this.injector, () => getBytes(fileRef));
     return this.fileService.decompressIfNeeded(buffer, path);
   }
 
@@ -834,37 +834,39 @@ export class AppEventService implements OnDestroy {
   }
 
   private getEventQueryForUser(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any) {
-    const eventsRef = runInInjectionContext(this.injector, () => collection(this.firestore, `users/${user.uid}/events`));
-    const constraints: any[] = [];
+    return runInInjectionContext(this.injector, () => {
+      const eventsRef = collection(this.firestore, `users/${user.uid}/events`);
+      const constraints: any[] = [];
 
-    // Replicate legacy logic for startDate ordering when filtering
-    if (whereClauses.length) {
+      // Replicate legacy logic for startDate ordering when filtering
+      if (whereClauses.length) {
+        whereClauses.forEach(clause => {
+          if (clause.fieldPath === 'startDate' && (orderByField !== 'startDate')) {
+            constraints.push(orderBy('startDate', 'asc'));
+          }
+        });
+      }
+
+      // Main Sort
+      constraints.push(orderBy(orderByField, asc ? 'asc' : 'desc'));
+
+      // Filters
       whereClauses.forEach(clause => {
-        if (clause.fieldPath === 'startDate' && (orderByField !== 'startDate')) {
-          constraints.push(orderBy('startDate', 'asc'));
-        }
+        constraints.push(where(clause.fieldPath, clause.opStr, clause.value));
       });
-    }
 
-    // Main Sort
-    constraints.push(orderBy(orderByField, asc ? 'asc' : 'desc'));
+      if (limitCount > 0) {
+        constraints.push(limit(limitCount));
+      }
+      if (startAfterDoc) {
+        constraints.push(startAfter(startAfterDoc));
+      }
+      if (endBeforeDoc) {
+        constraints.push(endBefore(endBeforeDoc));
+      }
 
-    // Filters
-    whereClauses.forEach(clause => {
-      constraints.push(where(clause.fieldPath, clause.opStr, clause.value));
+      return query(eventsRef, ...constraints);
     });
-
-    if (limitCount > 0) {
-      constraints.push(limit(limitCount));
-    }
-    if (startAfterDoc) {
-      constraints.push(startAfter(startAfterDoc));
-    }
-    if (endBeforeDoc) {
-      constraints.push(endBefore(endBeforeDoc));
-    }
-
-    return query(eventsRef, ...constraints);
   }
 
   // Legacy method kept for other consumers if any (though _getEvents was main one)
