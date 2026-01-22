@@ -65,11 +65,24 @@ describe('MarkerFactoryService', () => {
         expect(marker.innerHTML).toContain('fill="#aaaaaa"');
     });
 
-    it('should create cluster marker', () => {
-        const marker = service.createClusterMarker(42);
-        expect(marker.tagName).toBe('DIV');
-        expect(marker.textContent).toBe('42');
+    it('should create small cluster marker (< 10)', () => {
+        const marker = service.createClusterMarker(5);
+        expect(marker.textContent).toBe('5');
         expect(marker.style.borderRadius).toBe('50%');
         expect(marker.style.background).toContain('var(--mat-sys-primary');
+    });
+
+    it('should create medium cluster marker (10-99)', () => {
+        const marker = service.createClusterMarker(42);
+        expect(marker.textContent).toBe('42');
+        expect(marker.style.borderRadius).toBe('50%');
+        expect(marker.style.background).toContain('var(--mat-sys-secondary');
+    });
+
+    it('should create large cluster marker (>= 100)', () => {
+        const marker = service.createClusterMarker(150);
+        expect(marker.textContent).toBe('150');
+        expect(marker.style.borderRadius).toBe('50%');
+        expect(marker.style.background).toContain('var(--mat-sys-error');
     });
 });
