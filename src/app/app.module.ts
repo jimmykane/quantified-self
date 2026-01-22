@@ -103,11 +103,7 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
       return functions;
     }),
     providePerformance(() => getPerformance()),
-    provideAnalytics(() => {
-      const analytics = getAnalytics();
-      setAnalyticsCollectionEnabled(analytics, false);
-      return analytics;
-    }),
+    provideAnalytics(() => getAnalytics()),
     provideRemoteConfig(() => getRemoteConfig()),
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
     { provide: MAT_DIALOG_DEFAULT_OPTIONS, useValue: { panelClass: 'qs-dialog-container', hasBackdrop: true } },
