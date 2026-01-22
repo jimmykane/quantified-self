@@ -8,23 +8,31 @@ import { FunctionName, FUNCTIONS_MANIFEST } from '../../shared/functions-manifes
 })
 export class AppFunctionsService {
     private app = inject(FirebaseApp);
+    /**
+     * Map of pre-initialized callable functions.
+     * We initialize these in the constructor to capture the current Injection Context.
+     * Creating them at runtime (lazy-loading) would require wrapping every call in `runInInjectionContext`,
+     * which is verbose and prone to errors. Pre-initialization is cleaner and more performant.
+     */
+    private callables = new Map<FunctionName, (data?: any) => Promise<any>>();
 
-    constructor() { }
+    constructor() {
+        // Initialize all functions immediately to bind them to the current injection context.
+        Object.entries(FUNCTIONS_MANIFEST).forEach(([key, config]) => {
+            const functionsInstance = getFunctions(this.app, config.region);
+            const callable = httpsCallable(functionsInstance, config.name);
+            this.callables.set(key as FunctionName, callable);
+        });
+    }
 
     async call<RequestData = any, ResponseData = any>(
         functionKey: FunctionName,
         data?: RequestData
     ): Promise<{ data: ResponseData }> {
-        const config = FUNCTIONS_MANIFEST[functionKey];
-        const functionsInstance = this.getFunctionsInstance(config.region);
-
-        const callable = httpsCallable<RequestData, ResponseData>(functionsInstance, config.name);
+        const callable = this.callables.get(functionKey);
+        if (!callable) {
+            throw new Error(`Function ${functionKey} not initialized`);
+        }
         return callable(data);
-    }
-
-
-
-    private getFunctionsInstance(region: string): Functions {
-        return getFunctions(this.app, region);
     }
 }

@@ -8,7 +8,8 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
-import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatCardModule } from '@angular/material/card';
+import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { AppEventService } from '../../services/app.event.service';
 import { AppUserService } from '../../services/app.user.service';
@@ -16,7 +17,8 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
 import { ServiceNames, UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Component, Input, NO_ERRORS_SCHEMA } from '@angular/core';
+import { CommonModule } from '@angular/common'; // Added CommonModule
 
 vi.mock('../../services/app.event.service');
 vi.mock('../../services/app.user.service');
@@ -39,6 +41,7 @@ describe('HistoryImportFormComponent', () => {
     let mockUserService: any;
     let mockAnalyticsService: any;
     let mockLoggerService: any;
+    let snackBar: MatSnackBar;
 
     beforeEach(async () => {
         mockEventService = {};
@@ -55,7 +58,9 @@ describe('HistoryImportFormComponent', () => {
 
         await TestBed.configureTestingModule({
             declarations: [HistoryImportFormComponent],
+            schemas: [NO_ERRORS_SCHEMA],
             imports: [
+                CommonModule, // Added CommonModule
                 MatDatepickerModule,
                 MatFormFieldModule,
                 MatInputModule,
@@ -64,6 +69,7 @@ describe('HistoryImportFormComponent', () => {
                 MatNativeDateModule,
                 MatIconModule,
                 MatButtonModule,
+                MatCardModule,
                 MatSnackBarModule,
                 MatProgressSpinnerModule,
                 NoopAnimationsModule
@@ -75,12 +81,15 @@ describe('HistoryImportFormComponent', () => {
                 { provide: LoggerService, useValue: mockLoggerService }
             ]
         }).compileComponents();
+
+        snackBar = TestBed.inject(MatSnackBar);
     });
 
     beforeEach(() => {
         fixture = TestBed.createComponent(HistoryImportFormComponent);
         component = fixture.componentInstance;
         component.serviceName = ServiceNames.COROSAPI;
+        vi.spyOn(snackBar, 'open');
         fixture.detectChanges();
     });
 
@@ -133,5 +142,254 @@ describe('HistoryImportFormComponent', () => {
         expect(component.isMissingGarminPermissions).toBe(true);
         expect(component.isAllowedToDoHistoryImport).toBe(true); // Should be true to show the form
         expect(component.formGroup.disabled).toBe(true);
+    });
+
+    describe('isHistoryImportPending (optimistic UI)', () => {
+        it('should initially be false', () => {
+            expect(component.isHistoryImportPending()).toBe(false);
+        });
+
+        it('should be set to true after successful import submission', async () => {
+            // Setup component for allowed import
+            component.serviceName = ServiceNames.COROSAPI;
+            component.userMetaForService = {} as UserServiceMetaInterface; // No previous import
+            component.isPro = true;
+            (component as any).processChanges();
+
+            // Enable form and set valid values
+            component.formGroup.enable();
+            component.formGroup.patchValue({
+                startDate: new Date(),
+                endDate: new Date(),
+                accepted: true
+            });
+
+            expect(component.isHistoryImportPending()).toBe(false);
+
+            // Submit the form
+            const mockEvent = { preventDefault: vi.fn() } as any;
+            await component.onSubmit(mockEvent);
+
+            expect(component.isHistoryImportPending()).toBe(true);
+            expect(mockUserService.importServiceHistoryForCurrentUser).toHaveBeenCalled();
+        });
+
+        it('should store pendingImportResult from backend response (COROS/Suunto)', async () => {
+            // Setup component for allowed import
+            component.serviceName = ServiceNames.COROSAPI;
+            component.userMetaForService = {} as UserServiceMetaInterface;
+            component.isPro = true;
+            (component as any).processChanges();
+
+            // Enable form and set valid values
+            component.formGroup.enable();
+            component.formGroup.patchValue({
+                startDate: new Date(),
+                endDate: new Date(),
+                accepted: true
+            });
+
+            // Mock backend response with stats (like COROS/Suunto returns)
+            const mockStats = {
+                successCount: 150,
+                failureCount: 5,
+                processedBatches: 2,
+                failedBatches: 0
+            };
+            mockUserService.importServiceHistoryForCurrentUser.mockResolvedValueOnce({
+                result: 'History items added to queue',
+                stats: mockStats
+            });
+
+            expect(component.pendingImportResult()).toBeNull();
+
+            const mockEvent = { preventDefault: vi.fn() } as any;
+            await component.onSubmit(mockEvent);
+
+            expect(component.pendingImportResult()).toEqual(mockStats);
+            expect(snackBar.open).toHaveBeenCalledWith(
+                `History import queued: ${mockStats.successCount} activities found.`,
+                undefined,
+                { duration: 3000 }
+            );
+        });
+
+        it('should show "No new activities" snackbar when successCount is 0', async () => {
+            // Setup component for allowed import
+            component.serviceName = ServiceNames.COROSAPI;
+            component.userMetaForService = {} as UserServiceMetaInterface;
+            component.isPro = true;
+            (component as any).processChanges();
+
+            // Enable form and set valid values
+            component.formGroup.enable();
+            component.formGroup.patchValue({
+                startDate: new Date(),
+                endDate: new Date(),
+                accepted: true
+            });
+
+            // Mock backend response with 0 items
+            const mockStats = {
+                successCount: 0,
+                failureCount: 0,
+                processedBatches: 1,
+                failedBatches: 0
+            };
+            mockUserService.importServiceHistoryForCurrentUser.mockResolvedValueOnce({
+                result: 'History items added to queue',
+                stats: mockStats
+            });
+
+            const mockEvent = { preventDefault: vi.fn() } as any;
+            await component.onSubmit(mockEvent);
+
+            expect(component.pendingImportResult()).toEqual(mockStats);
+            expect(snackBar.open).toHaveBeenCalledWith(
+                'No new activities found to import.',
+                undefined,
+                { duration: 3000 }
+            );
+        });
+
+        it('should show error when start date is after end date', () => {
+            // Valid simple form
+            component.serviceName = ServiceNames.GarminAPI;
+            component.userMetaForService = {} as UserServiceMetaInterface;
+            (component as any).processChanges();
+            component.formGroup.enable();
+
+            const startDate = new Date();
+            const endDate = new Date(startDate.getTime() - 86400000); // Yesterday
+
+            component.formGroup.patchValue({
+                startDate: startDate,
+                endDate: endDate,
+                accepted: true
+            });
+
+            expect(component.formGroup.valid).toBe(false);
+            expect(component.formGroup.errors?.['dateRangeInvalid']).toBe(true);
+        });
+
+        it('should enforce COROS 3-month limit on minDate', () => {
+            component.serviceName = ServiceNames.COROSAPI;
+            component.userMetaForService = {} as UserServiceMetaInterface;
+
+            // Trigger logic
+            (component as any).processChanges();
+
+            expect(component.minDate).toBeTruthy();
+            const expectedMinDate = new Date();
+            expectedMinDate.setMonth(expectedMinDate.getMonth() - component.corosHistoryLimitMonths);
+
+            // Check roughly equal (within slightly different execution times)
+            expect(component.minDate!.getDate()).toBe(expectedMinDate.getDate());
+            expect(component.minDate!.getMonth()).toBe(expectedMinDate.getMonth());
+        });
+
+        it('should enforce Garmin 5-year limit on minDate', () => {
+            component.serviceName = ServiceNames.GarminAPI;
+            component.userMetaForService = {} as UserServiceMetaInterface;
+
+            // Trigger logic
+            (component as any).processChanges();
+
+            expect(component.minDate).toBeTruthy();
+            const expectedMinDate = new Date();
+            expectedMinDate.setFullYear(expectedMinDate.getFullYear() - 5);
+
+            // Check roughly equal (within slightly different execution times)
+            expect(component.minDate!.getDate()).toBe(expectedMinDate.getDate());
+            expect(component.minDate!.getFullYear()).toBe(expectedMinDate.getFullYear());
+            expect(component.minDate!.getMonth()).toBe(expectedMinDate.getMonth());
+        });
+
+        it('should NOT be set to true if import fails', async () => {
+            // Setup component for allowed import
+            component.serviceName = ServiceNames.SuuntoApp;
+            component.userMetaForService = {} as UserServiceMetaInterface;
+            component.isPro = true;
+            (component as any).processChanges();
+
+            // Enable form and set valid values
+            component.formGroup.enable();
+            component.formGroup.patchValue({
+                startDate: new Date(),
+                endDate: new Date(),
+                accepted: true
+            });
+
+            // Make the import fail
+            mockUserService.importServiceHistoryForCurrentUser.mockRejectedValueOnce(new Error('API Error'));
+
+            expect(component.isHistoryImportPending()).toBe(false);
+
+            const mockEvent = { preventDefault: vi.fn() } as any;
+            await component.onSubmit(mockEvent);
+
+            // Should remain false on error
+            expect(component.isHistoryImportPending()).toBe(false);
+        });
+
+        it('should normalize dates to start of day and end of day on submission', async () => {
+            component.serviceName = ServiceNames.SuuntoApp;
+            component.userMetaForService = {} as UserServiceMetaInterface;
+            component.isPro = true;
+            (component as any).processChanges();
+            component.formGroup.enable();
+
+            // Set arbitrary dates
+            const start = new Date(2024, 0, 15, 12, 30); // Jan 15, 12:30
+            const end = new Date(2024, 0, 16, 14, 45);   // Jan 16, 14:45
+
+            component.formGroup.patchValue({
+                startDate: start,
+                endDate: end,
+                accepted: true
+            });
+
+            const mockEvent = { preventDefault: vi.fn() } as any;
+            await component.onSubmit(mockEvent);
+
+            // Verify normalization
+            const sentStart = mockUserService.importServiceHistoryForCurrentUser.mock.calls[0][1];
+            const sentEnd = mockUserService.importServiceHistoryForCurrentUser.mock.calls[0][2];
+
+            expect(sentStart.getHours()).toBe(0);
+            expect(sentStart.getMinutes()).toBe(0);
+            expect(sentStart.getSeconds()).toBe(0);
+
+            expect(sentEnd.getHours()).toBe(23);
+            expect(sentEnd.getMinutes()).toBe(59);
+            expect(sentEnd.getSeconds()).toBe(59);
+        });
+
+        it('should work for all service types', async () => {
+            for (const serviceName of [ServiceNames.COROSAPI, ServiceNames.SuuntoApp, ServiceNames.GarminAPI]) {
+                // Reset the signal
+                component.isHistoryImportPending.set(false);
+
+                component.serviceName = serviceName;
+                component.userMetaForService = {} as UserServiceMetaInterface;
+                component.missingPermissions = [];
+                component.isPro = true;
+                (component as any).processChanges();
+
+                component.formGroup.enable();
+                component.formGroup.patchValue({
+                    startDate: new Date(),
+                    endDate: new Date(),
+                    accepted: true
+                });
+
+                mockUserService.importServiceHistoryForCurrentUser.mockResolvedValue({ success: true });
+
+                const mockEvent = { preventDefault: vi.fn() } as any;
+                await component.onSubmit(mockEvent);
+
+                expect(component.isHistoryImportPending()).toBe(true);
+            }
+        });
     });
 });

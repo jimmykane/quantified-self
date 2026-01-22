@@ -1,66 +1,54 @@
-@if (userMetaForService && userMetaForService.didLastHistoryImport && !isAllowedToDoHistoryImport) {
-<mat-card class="status-card glass-card">
-  <mat-card-header>
-    <mat-icon mat-card-avatar class="header-icon">history_toggle_off</mat-icon>
-    <mat-card-title>Import Status</mat-card-title>
-    <mat-card-subtitle>Last import: {{ userMetaForService.didLastHistoryImport | date: 'short' }}</mat-card-subtitle>
-  </mat-card-header>
-  <mat-card-content>
-    <div class="dashboard-grid">
-      @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI) {
-      <div class="stat-card">
-        <div class="stat-header">
-          <mat-icon>queue</mat-icon>
-          <span class="stat-label">Queued</span>
-        </div>
-        <div class="stat-value highlight">{{ userMetaForService.processedActivitiesFromLastHistoryImportCount }}</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-header">
-          <mat-icon>hourglass_empty</mat-icon>
-          <span class="stat-label">Cooldown</span>
-        </div>
-        <div class="stat-value">
-          <span class="badge warn">{{ cooldownDays }} {{ cooldownDays === 1 ? 'day' : 'days' }}</span>
-        </div>
-        <span class="stat-hint">~{{ activitiesPerDayLimit }} / day</span>
-      </div>
-      } @else if (serviceName === serviceNames.GarminAPI) {
-      <div class="stat-card">
-        <div class="stat-header">
-          <mat-icon>timer</mat-icon>
-          <span class="stat-label">Cooldown</span>
-        </div>
-        <div class="stat-value">
-          <span class="badge accent">{{ garminCooldownDays }} days</span>
-        </div>
-        <span class="stat-hint">Garmin API limit</span>
-      </div>
-      <div class="stat-card">
-        <div class="stat-header">
-          <mat-icon>cloud_sync</mat-icon>
-          <span class="stat-label">Status</span>
-        </div>
-        <div class="stat-value">Requested</div>
-        <span class="stat-hint">Activities arrive via push</span>
-      </div>
-      }
+@if (isHistoryImportPending()) {
+<!-- Optimistic UI: Show queued status immediately using Shared Callout Component -->
+<div class="status-container">
+  @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI) {
+  @if (pendingImportResult()) {
+  <app-status-info type="success" title="Import Queued">
+    {{ pendingImportResult()!.successCount }} activities queued.
+    Estimated completion in {{ Math.ceil(pendingImportResult()!.successCount / activitiesPerDayLimit) || 1 }} {{
+    (Math.ceil(pendingImportResult()!.successCount / activitiesPerDayLimit) || 1) === 1 ? 'day' : 'days' }}.
+    (~{{ activitiesPerDayLimit }} / day)
+  </app-status-info>
+  } @else {
+  <app-status-info type="pending" title="Processing Request">
+    Your history import is being processed...
+  </app-status-info>
+  }
+  } @else if (serviceName === serviceNames.GarminAPI) {
+  <app-status-info type="success" title="Import Requested">
+    Garmin will push activities to your account over the coming hours/days.
+  </app-status-info>
 
-      <div class="stat-card full-width next-available-card">
-        <div class="stat-row">
-          <mat-icon>event_available</mat-icon>
-          <div class="stat-column">
-            <span class="stat-label">Next Available Import</span>
-            <span class="stat-value date-highlight">{{ nextImportAvailableDate | date: 'medium' }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </mat-card-content>
-</mat-card>
+  <app-status-info type="pending" [title]="garminCooldownDays + '-Day Cooldown'">
+    Next import available in {{ garminCooldownDays }} days.
+  </app-status-info>
+  }
+</div>
+} @else if (userMetaForService && userMetaForService.didLastHistoryImport && !isAllowedToDoHistoryImport) {
+<div class="status-container">
+  @if (serviceName === serviceNames.SuuntoApp || serviceName === serviceNames.COROSAPI) {
+  <app-status-info type="success" title="Import In Progress">
+    {{ userMetaForService.processedActivitiesFromLastHistoryImportCount }} activities queued from last import.
+    Cooldown active for {{ cooldownDays }} {{ cooldownDays === 1 ? 'day' : 'days' }}.
+  </app-status-info>
+
+  <app-status-info title="Next Available Import">
+    {{ nextImportAvailableDate | date: 'medium' }}
+  </app-status-info>
+
+  } @else if (serviceName === serviceNames.GarminAPI) {
+  <app-status-info type="success" title="Import Active">
+    Activities are arriving via Garmin push.
+  </app-status-info>
+
+  <app-status-info title="Cooldown Active">
+    New import available on {{ nextImportAvailableDate | date: 'medium' }}.
+  </app-status-info>
+  }
+</div>
 }
 
-@if (formGroup && isAllowedToDoHistoryImport) {
+@if (formGroup && isAllowedToDoHistoryImport && !isHistoryImportPending()) {
 @if (isPro) {
 <form [formGroup]="formGroup" class="qs-form history-import-form">
   @if (isMissingGarminPermissions) {
@@ -75,41 +63,33 @@
   </div>
   }
   @if (serviceName === serviceNames.GarminAPI) {
-  <div class="limit-info">
-    <mat-icon>info</mat-icon>
-    <div class="limit-text">
-      <span class="limit-title">{{garminCooldownDays}}-Day Cooldown</span>
-      <p class="limit-description">
-        Garmin's API limits history imports to once per month. This is enforced by Garmin to prevent overloading their
-        servers.
-      </p>
-    </div>
-  </div>
+  <app-status-info [title]="garminCooldownDays + '-Day Cooldown • 5-Year Max Range'">
+    Garmin's API limits history imports to once per month and a maximum of 5 years of data per request.
+  </app-status-info>
   }
   @if (minDate && serviceName === serviceNames.COROSAPI) {
-  <div class="limit-info">
-    <mat-icon>info</mat-icon>
-    <div class="limit-text">
-      <span class="limit-title">{{corosHistoryLimitMonths}}-Month Import Limit</span>
-      <p class="limit-description">
-        Dates before {{ minDate | date:'mediumDate' }} are disabled in the picker due to API restrictions.
-      </p>
-    </div>
-  </div>
+  <app-status-info [title]="corosHistoryLimitMonths + '-Month Import Limit'">
+    Dates before {{ minDate | date:'mediumDate' }} are disabled in the picker due to API restrictions.
+  </app-status-info>
   }
   <div class="date-fields">
     <mat-form-field appearance="outline">
       <mat-label>Start Date</mat-label>
-      <input matInput [matDatepicker]="startDate" [min]="minDate" formControlName="startDate"
-        (click)="startDate.open()">
+      <input matInput [matDatepicker]="startDate" [min]="minDate" [max]="formGroup.get('endDate')?.value || today"
+        formControlName="startDate" (click)="startDate.open()">
       <mat-datepicker-toggle matSuffix [for]="startDate"></mat-datepicker-toggle>
       <mat-datepicker #startDate></mat-datepicker>
+      <mat-error *ngIf="formGroup.get('startDate')?.hasError('required')">Start date is required</mat-error>
     </mat-form-field>
     <mat-form-field appearance="outline">
       <mat-label>End Date</mat-label>
-      <input matInput [matDatepicker]="endDate" formControlName="endDate" (click)="endDate.open()">
+      <input matInput [matDatepicker]="endDate" [min]="formGroup.get('startDate')?.value || minDate" [max]="today"
+        formControlName="endDate" (click)="endDate.open()">
       <mat-datepicker-toggle matSuffix [for]="endDate"></mat-datepicker-toggle>
       <mat-datepicker #endDate></mat-datepicker>
+      <mat-error *ngIf="formGroup.get('endDate')?.hasError('required')">End date is required</mat-error>
+      <mat-error *ngIf="formGroup.get('endDate')?.hasError('dateRangeInvalid')">End date cannot be before start
+        date</mat-error>
     </mat-form-field>
   </div>
   <div class="confirmation-section">

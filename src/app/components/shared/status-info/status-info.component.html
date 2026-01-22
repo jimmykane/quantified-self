@@ -1,0 +1,9 @@
+<div class="status-info" [ngClass]="type">
+    <div class="status-text">
+        <span class="status-title" *ngIf="title">{{ title }}</span>
+        <p class="status-description">
+            <ng-container *ngIf="description">{{ description }}</ng-container>
+            <ng-content></ng-content>
+        </p>
+    </div>
+</div>

@@ -217,4 +217,33 @@ describe('Garmin Backfill', () => {
 
         await expect((backfillGarminAPIActivities as any)(data, context)).rejects.toThrow('Duplicate backfill detected');
     });
+
+    it('should throw invalid-argument if start date is after end date', async () => {
+        const data = { startDate: '2023-01-10', endDate: '2023-01-01' };
+        await expect((backfillGarminAPIActivities as any)(data, context))
+            .rejects.toThrow('Start date if after the end date');
+    });
+
+    it('should skip invalid batches (400) and continue with other batches', async () => {
+        const data = { startDate: '2023-01-01', endDate: '2023-06-01' }; // > 90 days, at least 2 batches
+
+        // Mock requestHelper.get to fail with 400 for the first call and succeed for the rest
+        const garminError: any = {
+            statusCode: 400,
+            error: {
+                error: {
+                    errorMessage: 'start date before min start time'
+                }
+            }
+        };
+
+        (requestHelper.get as any)
+            .mockRejectedValueOnce(garminError)
+            .mockResolvedValueOnce({ success: true });
+
+        await (backfillGarminAPIActivities as any)(data, context);
+
+        // Should have called get twice (for 2 batches)
+        expect(requestHelper.get).toHaveBeenCalledTimes(2);
+    });
 });

@@ -3,78 +3,78 @@
   width: 100%;
 }
 
-.mat-column-Manufacturer {
-  text-transform: capitalize;
-}
-
-mat-table {
-  padding-bottom: 1em;
-  background: transparent;
-  min-width: 100%;
-}
-
-mat-header-cell,
-mat-cell {
-  padding-right: 24px;
-  min-width: 80px;
-  flex: 1 1 auto;
-  box-sizing: border-box;
-  white-space: nowrap;
-}
-
-mat-header-cell:first-of-type,
-mat-cell:first-of-type {
-  padding-left: 16px;
-}
-
-/* Make the index column smaller */
-.mat-column-\# {
-  min-width: 50px;
-  justify-content: center;
-}
-
 .activity-devices-section {
   padding-bottom: 16px;
 }
 
-.table-container {
-  overflow-x: auto;
-  width: 100%;
+/* Accordion styling */
+.device-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-/* Center align specific metric columns */
-.mat-column-Battery-Level,
-.mat-column-Battery-Voltage,
-.mat-column-Product-ID,
-.mat-column-Serial-Number,
-.mat-column-Manufacturer {
-  justify-content: center;
-  text-align: center;
+.device-accordion mat-expansion-panel {
+  background: var(--mat-sys-surface-container);
+  border-radius: 12px;
+  box-shadow: none;
 }
 
-.battery-cell {
+.device-accordion mat-expansion-panel-header {
+  font: var(--mat-sys-body-large);
+}
+
+/* Panel header content */
+mat-panel-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 500;
+  gap: 12px;
+  flex: 1;
 }
 
-.battery-cell mat-icon {
+.category-icon {
+  color: var(--mat-sys-primary);
   font-size: 20px;
   width: 20px;
   height: 20px;
-  /* Rotate vertical battery icons to be horizontal if preferred, 
-     but standard material battery icons are vertical or horizontal depending on set. 
-     Usually 'battery_full' is vertical. Let's rotate it 90deg? 
-     Actually standard is vertical. Let's keep it vertical or rotate 90deg to look like a standard bar.
-     Let's rotate 90deg for a horizontal look. */
+}
+
+.device-name {
+  font: var(--mat-sys-title-medium);
+  color: var(--mat-sys-on-surface);
+}
+
+.occurrence-badge {
+  background: var(--mat-sys-secondary-container);
+  color: var(--mat-sys-on-secondary-container);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font: var(--mat-sys-label-small);
+}
+
+mat-panel-description {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+/* Battery indicator */
+.battery-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font: var(--mat-sys-label-medium);
+}
+
+.battery-indicator mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
   transform: rotate(90deg);
 }
 
 .battery-good {
-  color: var(--mat-sys-primary);
-  /* Or a specific green if primary isn't suitable */
-  /* If checking for successful/good state, maybe a green variable */
   color: #4caf50;
 }
 
@@ -84,4 +84,51 @@ mat-cell:first-of-type {
 
 .battery-low {
   color: #f44336;
+}
+
+.battery-status {
+  font: var(--mat-sys-label-medium);
+  color: var(--mat-sys-on-surface-variant);
+  text-transform: capitalize;
+}
+
+.manufacturer-chip {
+  background: var(--mat-sys-tertiary-container);
+  color: var(--mat-sys-on-tertiary-container);
+  padding: 4px 10px;
+  border-radius: 16px;
+  font: var(--mat-sys-label-small);
+  text-transform: capitalize;
+}
+
+/* Device details grid */
+.device-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.detail-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.detail-label {
+  font: var(--mat-sys-label-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.detail-value {
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface);
+}
+
+.no-details,
+.no-devices {
+  font: var(--mat-sys-body-medium);
+  color: var(--mat-sys-on-surface-variant);
+  text-align: center;
+  padding: 16px;
 }

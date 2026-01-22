@@ -1,0 +1,52 @@
+.status-info {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--mat-sys-surface-variant);
+    border-left: 4px solid var(--mat-sys-primary);
+    border-radius: 0 4px 4px 0;
+    margin-bottom: 1.5rem;
+    box-sizing: border-box;
+}
+
+.status-info mat-icon {
+    display: none;
+}
+
+.status-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.status-title {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--mat-sys-on-surface);
+    text-transform: capitalize;
+}
+
+.status-description {
+    font-size: 0.85rem;
+    color: var(--mat-sys-on-surface-variant);
+    line-height: 1.4;
+    margin: 0;
+}
+
+.status-info.success {
+    border-left-color: var(--mat-sys-primary);
+}
+
+.status-info.pending {
+    border-left-color: var(--mat-sys-secondary);
+}
+
+.status-info.warning {
+    border-left-color: var(--mat-sys-error);
+    /* Or warning color if defined, usually error/warn share similar semantics */
+}
+
+.status-info.error {
+    border-left-color: var(--mat-sys-error);
+}

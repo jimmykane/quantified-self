@@ -175,12 +175,22 @@ export async function getWorkoutQueueItems(serviceName: ServiceNames, serviceTok
   }
 }
 
-export async function isAllowedToDoHistoryImport(userID: string, serviceName: ServiceNames): Promise<boolean> {
+export async function getNextAllowedHistoryImportDate(userID: string, serviceName: ServiceNames): Promise<Date | null> {
   const userServiceMetaDocumentSnapshot = await admin.firestore().collection('users').doc(userID).collection('meta').doc(serviceName).get();
   if (!userServiceMetaDocumentSnapshot.exists) {
-    return true;
+    return null;
   }
   const data = <UserServiceMetaInterface>userServiceMetaDocumentSnapshot.data();
-  const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + ((data.processedActivitiesFromLastHistoryImportCount / HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT) * 24 * 60 * 60 * 1000)); // 7 days for  285,7142857143 per day
-  return !((nextHistoryImportAvailableDate > new Date()) && data.processedActivitiesFromLastHistoryImportCount !== 0);
+  if (data.processedActivitiesFromLastHistoryImportCount === 0) {
+    return null;
+  }
+  return new Date(data.didLastHistoryImport + ((data.processedActivitiesFromLastHistoryImportCount / HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT) * 24 * 60 * 60 * 1000));
+}
+
+export async function isAllowedToDoHistoryImport(userID: string, serviceName: ServiceNames): Promise<boolean> {
+  const nextHistoryImportAvailableDate = await getNextAllowedHistoryImportDate(userID, serviceName);
+  if (!nextHistoryImportAvailableDate) {
+    return true;
+  }
+  return !(nextHistoryImportAvailableDate > new Date());
 }

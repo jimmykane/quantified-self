@@ -149,10 +149,11 @@ export class PricingComponent implements OnInit, OnDestroy {
         this.isLoading = true;
 
         try {
-            this.analyticsService.logEvent('select_content', {
-                content_type: 'paid_plan',
-                item_id: priceId
-            });
+            this.analyticsService.logBeginCheckout(
+                priceId,
+                typeof price !== 'string' ? price.currency : undefined,
+                typeof price !== 'string' ? price.unit_amount / 100 : undefined
+            );
             await this.paymentService.appendCheckoutSession(price);
         } catch (error) {
             const errorMessage = (error as Error).message || '';
@@ -195,6 +196,7 @@ export class PricingComponent implements OnInit, OnDestroy {
             }
         }
 
+        this.analyticsService.logManageSubscription();
         this.isLoading = true;
         try {
             await this.paymentService.manageSubscriptions();
@@ -230,10 +232,7 @@ export class PricingComponent implements OnInit, OnDestroy {
             const user = await firstValueFrom(this.userService.getUserByID(uid));
 
             if (user) {
-                this.analyticsService.logEvent('select_content', {
-                    content_type: 'free_plan',
-                    item_id: 'free_tier'
-                });
+                this.analyticsService.logSelectFreeTier();
                 await this.userService.setFreeTier(user);
                 this.logger.log('Free tier selected. Waiting for reactive updates to handle navigation.');
 
@@ -260,12 +259,15 @@ export class PricingComponent implements OnInit, OnDestroy {
             return;
         }
 
+        this.analyticsService.logRestorePurchases('initiated');
         this.isLoading = true;
         try {
             const role = await this.paymentService.restorePurchases();
+            this.analyticsService.logRestorePurchases('success', role);
             this.showSubscriptionRestoredDialog(role);
         } catch (error) {
             this.logger.error('Error restoring purchases:', error);
+            this.analyticsService.logRestorePurchases('failure', undefined, (error as Error).message);
             const message = `Failed to restore purchases. Please <a href="mailto:${environment.supportEmail}">contact support</a>.`;
             this.dialog.open(ConfirmationDialogComponent, {
                 data: {

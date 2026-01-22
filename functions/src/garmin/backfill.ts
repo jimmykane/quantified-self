@@ -82,8 +82,8 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
     if (data.didLastHistoryImport) {
       const nextHistoryImportAvailableDate = new Date(data.didLastHistoryImport + (GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS * 24 * 60 * 60 * 1000)); // 3 days
       if ((nextHistoryImportAvailableDate > new Date())) {
-        logger.error(`User ${userID} tried todo history import for ${ServiceNames.GarminAPI} while not allowed`);
-        throw new Error(`History import cannot happen before ${nextHistoryImportAvailableDate}`);
+        logger.error(`User ${userID} tried todo history import for ${ServiceNames.GarminAPI} while not allowed. (Requested: ${startDate.toISOString()} - ${endDate.toISOString()}, Available on: ${nextHistoryImportAvailableDate.toISOString()})`);
+        throw new Error(`History import cannot happen before ${nextHistoryImportAvailableDate.toISOString()}`);
       }
     }
   }
@@ -118,7 +118,7 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
   // Use slightly under 90 days (89 days) to ensure we never exceed the limit due to rounding.
   const maxDeltaInMS = 89 * 24 * 60 * 60 * 1000; // 89 days in milliseconds
   logger.info(`Starting backfill for Garmin User ID: ${(serviceToken as any).userID}`);
-  const batchCount = Math.ceil((+endDate - +startDate) / maxDeltaInMS);
+  const batchCount = Math.max(1, Math.ceil((+endDate - +startDate) / maxDeltaInMS));
 
   for (let i = 0; i < batchCount; i++) {
     const batchStartDate = new Date(startDate.getTime() + (i * maxDeltaInMS));
@@ -139,6 +139,16 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
       // Handle specific API errors
       if (e.statusCode === 409) {
         throw new Error('Duplicate backfill detected by Garmin for this time range. Please try a different range or contact support.');
+      }
+
+      // Handle "start date before min start time" error (400)
+      // Garmin enforces a "min start time" based on when the user first connected their account.
+      // This often manifests as a 5-year rolling window or strict anchor to the connection date.
+      // We skip these invalid batches to allow the valid ones (within the allowed window) to succeed.
+      if (e.statusCode === 400 && e.error?.error?.errorMessage?.includes('before min start time')) {
+        logger.warn(`Garmin backfill batch skipped: ${e.error.error.errorMessage}`);
+        // Do NOT throw. Continue to next batch.
+        continue;
       }
 
       if (e.statusCode === 500) {

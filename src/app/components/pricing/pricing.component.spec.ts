@@ -8,6 +8,8 @@ import { Auth } from '@angular/fire/auth';
 import { Analytics } from '@angular/fire/analytics';
 import { Router } from '@angular/router';
 
+import { AppAnalyticsService } from '../../services/app.analytics.service';
+
 class MockAppPaymentService {
     getProducts() {
         return of([]);
@@ -29,6 +31,9 @@ class MockAppPaymentService {
 class MockAppUserService {
     getSubscriptionRole() {
         return Promise.resolve('free');
+    }
+    getUserByID() {
+        return of({});
     }
 }
 
@@ -79,6 +84,16 @@ describe('PricingComponent', () => {
                 {
                     provide: Analytics,
                     useValue: null
+                },
+                {
+                    provide: AppAnalyticsService,
+                    useValue: {
+                        logEvent: vi.fn(),
+                        logBeginCheckout: vi.fn(),
+                        logManageSubscription: vi.fn(),
+                        logSelectFreeTier: vi.fn(),
+                        logRestorePurchases: vi.fn()
+                    }
                 }
             ]
         }).compileComponents();
@@ -202,4 +217,49 @@ describe('PricingComponent', () => {
         expect(component.isLoading).toBe(false);
         expect(component.loadingPriceId).toBeNull();
     });
+
+
+    it('should log begin_checkout event on subscribe', async () => {
+        const analyticsService = TestBed.inject(AppAnalyticsService);
+        const logSpy = vi.spyOn(analyticsService, 'logBeginCheckout');
+        const price = { id: 'price_123', currency: 'USD', unit_amount: 1000 };
+
+        await component.subscribe(price);
+
+        expect(logSpy).toHaveBeenCalledWith('price_123', 'USD', 10);
+    });
+
+    it('should log select_freetier event on selectFreeTier', async () => {
+        const analyticsService = TestBed.inject(AppAnalyticsService);
+        const logSpy = vi.spyOn(analyticsService, 'logSelectFreeTier');
+        // Mock user existing
+        const userService = TestBed.inject(AppUserService);
+        vi.spyOn(userService, 'getUserByID').mockReturnValue(of({ uid: 'test-uid' } as any));
+
+        await component.selectFreeTier();
+
+        expect(logSpy).toHaveBeenCalled();
+    });
+
+    it('should log manage_subscription event on manageSubscription', async () => {
+        const analyticsService = TestBed.inject(AppAnalyticsService);
+        const logSpy = vi.spyOn(analyticsService, 'logManageSubscription');
+
+        await component.manageSubscription();
+
+        expect(logSpy).toHaveBeenCalled();
+    });
+
+    it('should log restore_purchases events on restorePurchases', async () => {
+        const analyticsService = TestBed.inject(AppAnalyticsService);
+        const logSpy = vi.spyOn(analyticsService, 'logRestorePurchases');
+        const paymentService = TestBed.inject(AppPaymentService);
+        vi.spyOn(paymentService, 'restorePurchases').mockResolvedValue('pro');
+
+        await component.restorePurchases();
+
+        expect(logSpy).toHaveBeenCalledWith('initiated');
+        expect(logSpy).toHaveBeenCalledWith('success', 'pro');
+    });
+
 });

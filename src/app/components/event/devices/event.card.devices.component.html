@@ -3,31 +3,50 @@
   <app-activity-toggle [event]="event" [showToggle]="false" [showDate]="false" [showStats]="false" [activity]="activity"
     [selectedActivities]="selectedActivities">
   </app-activity-toggle>
-  @if (getDataSource(activity)) {
-  <div class="table-container">
-    <mat-table [dataSource]="getDataSource(activity)">
-      @for (column of getColumns(activity); track column) {
-      <ng-container [matColumnDef]="column">
-        <mat-header-cell *matHeaderCellDef><app-data-type-icon
-            [dataType]="column"></app-data-type-icon></mat-header-cell>
-        <mat-cell *matCellDef="let row">
-          @if (column === 'Battery Level') {
-          <div class="battery-cell" [ngClass]="getBatteryColorClass(row[column])">
-            <mat-icon>{{ getBatteryIcon(row[column]) }}</mat-icon>
-            <span>{{ row[column] }}%</span>
-          </div>
-          } @else if (column === 'Battery Voltage') {
-          {{ row[column] | number:'1.1-2' }} V
-          } @else {
-          {{ row[column] }}
+
+  @if (getDeviceGroups(activity).length > 0) {
+  <mat-accordion class="device-accordion" multi>
+    @for (group of getDeviceGroups(activity); track group.signature) {
+    <mat-expansion-panel>
+      <mat-expansion-panel-header>
+        <mat-panel-title>
+          <mat-icon class="category-icon">{{ getCategoryIcon(group.category) }}</mat-icon>
+          <span class="device-name">{{ group.displayName }}</span>
+          @if (group.occurrences > 1) {
+          <span class="occurrence-badge">×{{ group.occurrences }}</span>
           }
-        </mat-cell>
-      </ng-container>
-      }
-      <mat-header-row *matHeaderRowDef="getColumns(activity)"></mat-header-row>
-      <mat-row *matRowDef="let row; columns: getColumns(activity);"></mat-row>
-    </mat-table>
-  </div>
+        </mat-panel-title>
+        <mat-panel-description>
+          @if (group.batteryLevel !== null) {
+          <div class="battery-indicator" [ngClass]="getBatteryColorClass(group.batteryLevel)">
+            <mat-icon>{{ getBatteryIcon(group.batteryLevel) }}</mat-icon>
+            <span>{{ group.batteryLevel }}%</span>
+          </div>
+          } @else if (group.batteryStatus) {
+          <span class="battery-status">{{ group.batteryStatus }}</span>
+          }
+          @if (group.manufacturer) {
+          <span class="manufacturer-chip">{{ group.manufacturer }}</span>
+          }
+        </mat-panel-description>
+      </mat-expansion-panel-header>
+
+      <div class="device-details">
+        @for (entry of getDetailEntries(group); track entry.label) {
+        <div class="detail-row">
+          <span class="detail-label">{{ entry.label }}</span>
+          <span class="detail-value">{{ entry.value }}</span>
+        </div>
+        }
+        @if (getDetailEntries(group).length === 0) {
+        <p class="no-details">No additional details available.</p>
+        }
+      </div>
+    </mat-expansion-panel>
+    }
+  </mat-accordion>
+  } @else {
+  <p class="no-devices">No device information available.</p>
   }
 </div>
 @if (!$last) {
