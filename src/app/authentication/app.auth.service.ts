@@ -15,6 +15,7 @@ import { environment } from '../../environments/environment';
 })
 export class AppAuthService {
   public user$: Observable<User | null>;
+  public authState$: Observable<User | null>;
   // store the URL so we can redirect after logging in
   redirectUrl: string = '';
 
@@ -33,6 +34,13 @@ export class AppAuthService {
     public localStorageService: LocalStorageService,
     private logger: LoggerService
   ) {
+    /* 
+     * NOTE on runInInjectionContext:
+     * Firebase v9+ Modular SDK methods (signInWithPopup, etc.) must be called within an Injection Context
+     * to allow AngularFire to correctly track Zones for change detection.
+     * Since these methods are often called asynchronously from user actions (outside constructor),
+     * we manually wrap them.
+     */
     // Use modular user observable to react to token refreshes too
     this.user$ = user(this.auth).pipe(
       switchMap(firebaseUser => {
@@ -141,17 +149,17 @@ export class AppAuthService {
    * - Localhost: Use popup (works in Safari, Chrome needs cookie exception)
    * - Production: Use redirect (better mobile experience, avoids popup blockers)
    */
-  private async signInWithProvider(provider: GoogleAuthProvider) {
+  public async signInWithProvider(provider: AuthProvider) {
     this.logger.log('[Auth] signInWithProvider - localhost:', environment.localhost);
     try {
       if (environment.localhost) {
         this.logger.log('[Auth] Using popup...');
-        const result = await signInWithPopup(this.auth, provider);
+        const result = await runInInjectionContext(this.injector, () => signInWithPopup(this.auth, provider));
         this.logger.log('[Auth] Popup succeeded:', result);
         return result;
       } else {
         this.logger.log('[Auth] Using redirect...');
-        return await signInWithRedirect(this.auth, provider);
+        return await runInInjectionContext(this.injector, () => signInWithRedirect(this.auth, provider));
       }
     } catch (error: any) {
       this.logger.error('[Auth] signInWithProvider error:', error);
@@ -159,6 +167,10 @@ export class AppAuthService {
       this.logger.error('[Auth] Error message:', error?.message);
       throw error;
     }
+  }
+
+  public async signInWithPopup(provider: AuthProvider) {
+    return runInInjectionContext(this.injector, () => signInWithPopup(this.auth, provider));
   }
 
   async googleLogin() {
@@ -172,7 +184,7 @@ export class AppAuthService {
   }
 
   async getRedirectResult() {
-    return getRedirectResult(this.auth);
+    return runInInjectionContext(this.injector, () => getRedirectResult(this.auth));
   }
 
 
@@ -190,7 +202,7 @@ export class AppAuthService {
     };
 
     try {
-      await sendSignInLinkToEmail(this.auth, email, actionCodeSettings);
+      await runInInjectionContext(this.injector, () => sendSignInLinkToEmail(this.auth, email, actionCodeSettings));
       this.localStorageService.setItem('emailForSignIn', email);
       this.snackBar.open(`Magic link sent to ${email} `, 'Close', {
         duration: 5000
@@ -203,12 +215,12 @@ export class AppAuthService {
   }
 
   isSignInWithEmailLink(url: string): boolean {
-    return isSignInWithEmailLink(this.auth, url);
+    return runInInjectionContext(this.injector, () => isSignInWithEmailLink(this.auth, url));
   }
 
   async signInWithEmailLink(email: string, url: string) {
     try {
-      const result = await signInWithEmailLink(this.auth, email, url);
+      const result = await runInInjectionContext(this.injector, () => signInWithEmailLink(this.auth, email, url));
       this.localStorageService.removeItem('emailForSignIn');
       return result;
     } catch (error: any) {
@@ -221,7 +233,7 @@ export class AppAuthService {
 
   async emailSignUp(email: string, password: string) {
     try {
-      return createUserWithEmailAndPassword(this.auth, email, password);
+      return runInInjectionContext(this.injector, () => createUserWithEmailAndPassword(this.auth, email, password));
     } catch (e: any) {
       this.handleError(e);
       throw e;
@@ -230,7 +242,7 @@ export class AppAuthService {
 
   async emailLogin(email: string, password: string) {
     try {
-      return signInWithEmailAndPassword(this.auth, email, password);
+      return runInInjectionContext(this.injector, () => signInWithEmailAndPassword(this.auth, email, password));
     } catch (e: any) {
       this.handleError(e);
       throw e;
@@ -239,7 +251,7 @@ export class AppAuthService {
 
   async loginWithCustomToken(token: string) {
     try {
-      return await signInWithCustomToken(this.auth, token);
+      return await runInInjectionContext(this.injector, () => signInWithCustomToken(this.auth, token));
     } catch (e: any) {
       this.handleError(e);
       throw e;
@@ -249,7 +261,7 @@ export class AppAuthService {
   // Sends email allowing user to reset password
   async resetPassword(email: string) {
     try {
-      await sendPasswordResetEmail(this.auth, email);
+      await runInInjectionContext(this.injector, () => sendPasswordResetEmail(this.auth, email));
       this.snackBar.open(`Password update email sent`, undefined, {
         duration: 2000
       });
@@ -259,7 +271,7 @@ export class AppAuthService {
   }
 
   async signOut(): Promise<void> {
-    await signOut(this.auth);
+    await runInInjectionContext(this.injector, () => signOut(this.auth));
     await terminate(this.firestore);
     this.localStorageService.clearAllStorage();
     await clearIndexedDbPersistence(this.firestore);
@@ -269,15 +281,15 @@ export class AppAuthService {
   }
 
   async fetchSignInMethods(email: string) {
-    return fetchSignInMethodsForEmail(this.auth, email);
+    return runInInjectionContext(this.injector, () => fetchSignInMethodsForEmail(this.auth, email));
   }
 
   async linkCredential(user: any, credential: AuthCredential) {
-    return linkWithCredential(user, credential);
+    return runInInjectionContext(this.injector, () => linkWithCredential(user, credential));
   }
 
   async linkWithPopup(user: any, provider: AuthProvider) {
-    return linkWithPopup(user, provider);
+    return runInInjectionContext(this.injector, () => linkWithPopup(user, provider));
   }
 
   getProviderForId(providerId: string) {

@@ -6,7 +6,7 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { User } from '@sports-alliance/sports-lib';
 import { take } from 'rxjs/operators';
 import { AppUserService } from '../../services/app.user.service';
-import { Auth, signInWithCustomToken, authState, OAuthProvider, signInWithPopup } from '@angular/fire/auth';
+import { OAuthProvider } from '@angular/fire/auth';
 import { Auth2ServiceTokenInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { LoggerService } from '../../services/logger.service';
@@ -28,14 +28,14 @@ export class LoginComponent implements OnInit, OnDestroy {
   signInProviders = SignInProviders;
   email: string = '';
   private userSubscription: Subscription | undefined;
-  private auth = inject(Auth);
+  // private auth = inject(Auth); // Removed as we use authService
 
 
 
   @HostListener('window:tokensReceived', ['$event'])
   async tokensReceived(event: any) {
     this.isLoading = true;
-    const loggedInUser = await signInWithCustomToken(this.auth, event.detail.firebaseAuthToken);
+    const loggedInUser = await this.authService.loginWithCustomToken(event.detail.firebaseAuthToken);
     return this.redirectOrShowDataPrivacyDialog(loggedInUser);
   }
 
@@ -112,7 +112,7 @@ export class LoginComponent implements OnInit, OnDestroy {
     });
 
     // Check if user is already authenticated with Firebase but has no DB profile
-    authState(this.auth).pipe(take(1)).subscribe(async (firebaseUser) => {
+    this.authService.authState$.pipe(take(1)).subscribe(async (firebaseUser) => {
       if (firebaseUser) {
         setTimeout(async () => {
           const dbUser = await this.authService.getUser();
@@ -248,7 +248,7 @@ export class LoginComponent implements OnInit, OnDestroy {
               const provider = this.authService.getProviderForId(selectedProvider);
               if (!provider) return;
 
-              const result = await signInWithPopup(this.auth, provider as any);
+              const result = await this.authService.signInWithPopup(provider as any);
               if (result.user) {
                 // If we have a pending credential (e.g. GitHub), link it now.
                 if (pendingCredential) {
