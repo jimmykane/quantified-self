@@ -14,7 +14,7 @@ import { getApp } from '@angular/fire/app';
 import { provideFunctions, getFunctions } from '@angular/fire/functions';
 import { provideAppCheck, initializeAppCheck, ReCaptchaV3Provider, AppCheck } from '@angular/fire/app-check';
 import { providePerformance, getPerformance } from '@angular/fire/performance';
-import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService, setAnalyticsCollectionEnabled } from '@angular/fire/analytics';
+import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService, setAnalyticsCollectionEnabled, initializeAnalytics } from '@angular/fire/analytics';
 import { provideRemoteConfig, getRemoteConfig } from '@angular/fire/remote-config';
 import { provideStorage, getStorage } from '@angular/fire/storage';
 import { MaterialModule } from './modules/material.module';
@@ -103,7 +103,13 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
       return functions;
     }),
     providePerformance(() => getPerformance()),
-    provideAnalytics(() => getAnalytics()),
+    provideAnalytics(() => initializeAnalytics(getApp(), {
+      config: {
+        app_name: environment.firebase.projectId,
+        app_version: environment.appVersion,
+        debug_mode: environment.localhost
+      }
+    })),
     provideRemoteConfig(() => getRemoteConfig()),
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
     { provide: MAT_DIALOG_DEFAULT_OPTIONS, useValue: { panelClass: 'qs-dialog-container', hasBackdrop: true } },
