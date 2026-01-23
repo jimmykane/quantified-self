@@ -8,6 +8,12 @@
     Estimated completion in {{ Math.ceil(pendingImportResult()!.successCount / activitiesPerDayLimit) || 1 }} {{
     (Math.ceil(pendingImportResult()!.successCount / activitiesPerDayLimit) || 1) === 1 ? 'day' : 'days' }}.
     (~{{ activitiesPerDayLimit }} / day)
+    @if (formGroup.get('startDate')?.value && formGroup.get('endDate')?.value) {
+    <div style="margin-top: 8px; opacity: 0.8; font-size: 0.9em;">
+      Last import range: {{ formGroup.get('startDate')?.value | date: 'mediumDate' }} - {{
+      formGroup.get('endDate')?.value | date: 'mediumDate' }}
+    </div>
+    }
   </app-status-info>
   } @else {
   <app-status-info type="pending" title="Processing Request">
@@ -17,6 +23,12 @@
   } @else if (serviceName === serviceNames.GarminAPI) {
   <app-status-info type="success" title="Import Requested">
     Garmin will push activities to your account over the coming hours/days.
+    @if (formGroup.get('startDate')?.value && formGroup.get('endDate')?.value) {
+    <div style="margin-top: 8px; opacity: 0.8; font-size: 0.9em;">
+      Last import range: {{ formGroup.get('startDate')?.value | date: 'mediumDate' }} - {{
+      formGroup.get('endDate')?.value | date: 'mediumDate' }}
+    </div>
+    }
   </app-status-info>
 
   <app-status-info type="pending" [title]="garminCooldownDays + '-Day Cooldown'">
@@ -34,6 +46,12 @@
 
   <app-status-info title="Next Available Import">
     {{ nextImportAvailableDate | date: 'medium' }}
+    @if (userMeta.lastHistoryImportStartDate && userMeta.lastHistoryImportEndDate) {
+    <div style="margin-top: 8px; opacity: 0.8; font-size: 0.9em;">
+      Last import range: {{ userMeta.lastHistoryImportStartDate | date: 'mediumDate' }} - {{
+      userMeta.lastHistoryImportEndDate | date: 'mediumDate' }}
+    </div>
+    }
   </app-status-info>
 
   } @else if (serviceName === serviceNames.GarminAPI) {
@@ -43,6 +61,12 @@
 
   <app-status-info title="Cooldown Active">
     New import available on {{ nextImportAvailableDate | date: 'medium' }}.
+    @if (userMeta.lastHistoryImportStartDate && userMeta.lastHistoryImportEndDate) {
+    <div style="margin-top: 8px; opacity: 0.8; font-size: 0.9em;">
+      Last import range: {{ userMeta.lastHistoryImportStartDate | date: 'mediumDate' }} - {{
+      userMeta.lastHistoryImportEndDate | date: 'mediumDate' }}
+    </div>
+    }
   </app-status-info>
   }
 </div>
