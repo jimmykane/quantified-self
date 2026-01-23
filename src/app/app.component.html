@@ -1,103 +1,111 @@
-<ng-container *ngIf="authState !== null; else loadingApp">
-  <!-- Circular Reveal Theme Overlay -->
-  <div *ngIf="themeOverlayActive" class="theme-reveal-overlay" [ngClass]="themeOverlayClass"
-    [ngStyle]="themeOverlayStyle">
-  </div>
+@if (authState !== null) {
+<!-- Circular Reveal Theme Overlay -->
+@if (themeOverlayActive) {
+<div class="theme-reveal-overlay" [ngClass]="themeOverlayClass" [ngStyle]="themeOverlayStyle">
+</div>
+}
 
+<div [class.has-banner]="hasBanner" class="app-layout-wrapper">
+  <app-grace-period-banner (heightChanged)="onBannerHeightChanged($event)"></app-grace-period-banner>
 
-  <div [class.has-banner]="hasBanner" class="app-layout-wrapper">
-    <app-grace-period-banner (heightChanged)="onBannerHeightChanged($event)"></app-grace-period-banner>
+  <app-route-loader></app-route-loader>
 
-    <app-route-loader></app-route-loader>
+  <!-- Maintenance & Replacement Logic -->
+  @if (maintenanceMode() && !isHomeRoute && !isOnboardingRoute) {
+  <app-maintenance [message]="maintenanceMessage()"></app-maintenance>
+  } @else {
+  <!-- New Header Layout -->
+  @if (showNavigation) {
+  <nav class="custom-header mat-typography" [style.top.px]="bannerHeight">
+    <button mat-icon-button (click)="toggleSidenav()" class="hamburger-link">
+      <mat-icon class="larger_icon">menu</mat-icon>
+    </button>
 
+    <mat-icon class="app-icon header-logo" svgIcon="logo" (click)="onLogoClick()"></mat-icon>
 
-    <!-- Maintenance & Replacement Logic -->
-    <ng-container *ngIf="maintenanceMode() && !isHomeRoute && !isOnboardingRoute; else appLayout">
-      <app-maintenance [message]="maintenanceMessage()"></app-maintenance>
-    </ng-container>
+    <span class="fill-space"></span>
 
-    <ng-template #appLayout>
-      <!-- New Header Layout -->
-      <nav *ngIf="showNavigation" class="custom-header mat-typography" [style.top.px]="bannerHeight">
-        <button mat-icon-button (click)="toggleSidenav()" class="hamburger-link">
-          <mat-icon class="larger_icon">menu</mat-icon>
-        </button>
+    @if (authState === null && !isDashboardRoute && !isLoginRoute) {
+    <button mat-flat-button class="right" color="accent" disabled>
+      Loading
+    </button>
+    }
+    @if (authState === true && !isDashboardRoute) {
+    <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);"
+      [matTooltip]="isHandset() ? 'Dashboard' : ''" [class.icon-only]="isHandset()">
+      @if (isHandset()) {
+      <mat-icon>dashboard</mat-icon>
+      }
+      @if (!isHandset()) {
+      <span>Dashboard</span>
+      }
+    </button>
+    }
 
-        <mat-icon class="app-icon header-logo" svgIcon="logo" (click)="onLogoClick()"></mat-icon>
+    @if (showUploadActivities) {
+    <app-processing-indicator class="right"></app-processing-indicator>
+    <app-upload-activities class="right" [isHandset]="isHandset()">
+    </app-upload-activities>
+    }
 
-        <span class="fill-space"></span>
+    @if (isAdminUser && !isAdminRoute) {
+    <button mat-icon-button class="right admin-button" matTooltip="Admin Dashboard"
+      (click)="router.navigate(['/admin']);">
+      <mat-icon>admin_panel_settings</mat-icon>
+    </button>
+    }
 
-        @if (authState === null && !isDashboardRoute && !isLoginRoute) {
-        <button mat-flat-button class="right" color="accent" disabled>
-          Loading
-        </button>
-        }
-        @if (authState === true && !isDashboardRoute) {
-        <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);"
-          [matTooltip]="isHandset() ? 'Dashboard' : ''" [class.icon-only]="isHandset()">
-          <mat-icon *ngIf="isHandset()">dashboard</mat-icon>
-          <span *ngIf="!isHandset()">Dashboard</span>
-        </button>
-        }
+    @if (authState === false && !isLoginRoute) {
+    <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/login']);"
+      [matTooltip]="isHandset() ? 'Login or Register' : ''" [class.icon-only]="isHandset()">
+      @if (isHandset()) {
+      <mat-icon>login</mat-icon>
+      }
+      @if (!isHandset()) {
+      <span>Login or Register</span>
+      }
+    </button>
+    }
+  </nav>
+  }
 
-        @if (showUploadActivities) {
-        <app-processing-indicator class="right"></app-processing-indicator>
-        <app-upload-activities class="right" [isHandset]="isHandset()">
-        </app-upload-activities>
-        }
+  <mat-sidenav-container class="app-sidenav-container" [class.no-margin-top]="!onboardingCompleted"
+    [style.margin-top.px]="bannerHeight + 64">
+    @if (showNavigation) {
+    <mat-sidenav #sidenav [mode]="'over'" [fixedInViewport]="true" [fixedTopGap]="bannerHeight + 64"
+      [autoFocus]="false">
+      <app-sidenav></app-sidenav>
+    </mat-sidenav>
+    }
 
-        @if (isAdminUser && !isAdminRoute) {
-        <button mat-icon-button class="right admin-button" matTooltip="Admin Dashboard"
-          (click)="router.navigate(['/admin']);">
-          <mat-icon>admin_panel_settings</mat-icon>
-        </button>
-        }
-
-        @if (authState === false && !isLoginRoute) {
-        <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/login']);"
-          [matTooltip]="isHandset() ? 'Login or Register' : ''" [class.icon-only]="isHandset()">
-          <mat-icon *ngIf="isHandset()">login</mat-icon>
-          <span *ngIf="!isHandset()">Login or Register</span>
-        </button>
-        }
-      </nav>
-
-      <mat-sidenav-container class="app-sidenav-container" [class.no-margin-top]="!onboardingCompleted"
-        [style.margin-top.px]="bannerHeight + 64">
-        <mat-sidenav #sidenav [mode]="'over'" *ngIf="showNavigation" [fixedInViewport]="true"
-          [fixedTopGap]="bannerHeight + 64" [autoFocus]="false">
-          <app-sidenav></app-sidenav>
-        </mat-sidenav>
-
-        <mat-sidenav-content>
-          <div class="router-outlet-container" [@routeAnimations]="prepareRoute(outlet)">
-            <div *ngIf="maintenanceLoading()" class="loading-overlay">
-              <div class="logo-spinner">
-                <mat-icon svgIcon="qs-logo"></mat-icon>
-              </div>
-            </div>
-
-            <router-outlet #outlet="outlet"></router-outlet>
+    <mat-sidenav-content>
+      <div class="router-outlet-container" [@routeAnimations]="prepareRoute(outlet)">
+        @if (maintenanceLoading()) {
+        <div class="loading-overlay">
+          <div class="logo-spinner">
+            <mat-icon svgIcon="logo"></mat-icon>
           </div>
-        </mat-sidenav-content>
-      </mat-sidenav-container>
-    </ng-template>
-  </div>
-</ng-container>
+        </div>
+        }
 
-
-<ng-template #loadingApp>
-  <div class="spinner-container">
-    <div class="sk-cube-grid">
-      <div class="sk-cube sk-cube1"></div>
-      <div class="sk-cube sk-cube2"></div>
-      <div class="sk-cube sk-cube3"></div>
-      <div class="sk-cube sk-cube4"></div>
-      <div class="sk-cube sk-cube5"></div>
-      <div class="sk-cube sk-cube6"></div>
-      <div class="sk-cube sk-cube7"></div>
-      <div class="sk-cube sk-cube8"></div>
-      <div class="sk-cube sk-cube9"></div>
-    </div>
+        <router-outlet #outlet="outlet"></router-outlet>
+      </div>
+    </mat-sidenav-content>
+  </mat-sidenav-container>
+  }
+</div>
+} @else {
+<div class="spinner-container">
+  <div class="sk-cube-grid">
+    <div class="sk-cube sk-cube1"></div>
+    <div class="sk-cube sk-cube2"></div>
+    <div class="sk-cube sk-cube3"></div>
+    <div class="sk-cube sk-cube4"></div>
+    <div class="sk-cube sk-cube5"></div>
+    <div class="sk-cube sk-cube6"></div>
+    <div class="sk-cube sk-cube7"></div>
+    <div class="sk-cube sk-cube8"></div>
+    <div class="sk-cube sk-cube9"></div>
   </div>
-</ng-template>
+</div>
+}
