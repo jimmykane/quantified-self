@@ -22,6 +22,9 @@
     "e2e": "ng e2e"
   },
   "private": true,
+  "overrides": {
+    "firebase": "^12.8.0"
+  },
   "dependencies": {
     "@amcharts/amcharts4": "^4.10.40",
     "@angular/animations": "20.3.15",
