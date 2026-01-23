@@ -273,6 +273,7 @@ export class AppPaymentService {
                 cancel_url: cancel,
                 allow_promotion_codes: true,
                 mode: mode, // Explicitly set mode
+                automatic_tax: { enabled: true },
                 metadata: {
                     firebaseUID: user.uid
                 }
