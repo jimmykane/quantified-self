@@ -200,6 +200,12 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       return;
     }
 
+    try {
+      this.analyticsService.logEvent('imported_history', { method: this.serviceName });
+    } catch (e) {
+      this.logger.error(e);
+    }
+
     this.isSubmitting = true;
 
     // Explicitly disable the form to force UI state update
@@ -210,7 +216,6 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     await new Promise(resolve => setTimeout(resolve, 100));
 
     try {
-      this.analyticsService.logEvent('imported_history', { method: this.serviceName });
 
       // Normalize dates: start = 00:00, end = 23:59
       const startDate = dayjs(this.formGroup.get('startDate')?.value).startOf('day').toDate();

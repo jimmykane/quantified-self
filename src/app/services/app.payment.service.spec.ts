@@ -138,7 +138,10 @@ describe('AppPaymentService', () => {
                 firebaseUID: 'test_user_uid'
             });
 
-            // CHECK 2: Subscription data metadata
+            // CHECK 2: Automatic Tax
+            expect(payload.automatic_tax).toEqual({ enabled: true });
+
+            // CHECK 3: Subscription data metadata
             expect(payload.subscription_data).toBeDefined();
             expect(payload.subscription_data.metadata).toEqual({
                 firebaseUID: 'test_user_uid'
@@ -169,7 +172,10 @@ describe('AppPaymentService', () => {
                 firebaseUID: 'test_user_uid'
             });
 
-            // CHECK 2: Subscription data must NOT be present
+            // CHECK 2: Automatic Tax
+            expect(payload.automatic_tax).toEqual({ enabled: true });
+
+            // CHECK 3: Subscription data must NOT be present
             expect(payload.subscription_data).toBeUndefined();
         });
     });
