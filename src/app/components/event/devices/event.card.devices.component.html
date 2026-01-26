@@ -17,16 +17,16 @@
           }
         </mat-panel-title>
         <mat-panel-description>
-          @if (group.batteryLevel !== null) {
-          <div class="battery-indicator" [ngClass]="getBatteryColorClass(group.batteryLevel)">
-            <mat-icon>{{ getBatteryIcon(group.batteryLevel) }}</mat-icon>
+          @if (group.batteryLevel !== null || group.batteryStatus) {
+          <div class="battery-indicator" [ngClass]="getBatteryColorClass(group.batteryLevel, group.batteryStatus)">
+            <mat-icon>{{ getBatteryIcon(group.batteryLevel, group.batteryStatus) }}</mat-icon>
+            @if (group.batteryLevel !== null) {
             <span>{{ group.batteryLevel }}%</span>
+            } @else {
+            <!-- Map 'New' to 'Full' for clarity, otherwise show status -->
+            <span>{{ group.batteryStatus === 'New' ? 'Full' : group.batteryStatus }}</span>
+            }
           </div>
-          } @else if (group.batteryStatus) {
-          <span class="battery-status">{{ group.batteryStatus }}</span>
-          }
-          @if (group.manufacturer) {
-          <span class="manufacturer-chip">{{ group.manufacturer }}</span>
           }
         </mat-panel-description>
       </mat-expansion-panel-header>

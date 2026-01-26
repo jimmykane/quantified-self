@@ -17,6 +17,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 16px 24px;
+    padding-right: 0;
     border-bottom: 1px solid var(--mat-app-outline-variant);
     flex-shrink: 0;
     /* Important: Don't shrink header */

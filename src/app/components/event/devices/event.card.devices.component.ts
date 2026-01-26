@@ -173,6 +173,13 @@ export class EventCardDevicesComponent implements OnChanges {
       parts.push(this.formatType(device.type));
     }
 
+    // If we have a type but no manufacturer, and we have a product ID, append it for specificity
+    if (!device.manufacturer && device.productId && device.type) {
+      // Optional: parts.push(`(#${device.productId})`); 
+      // Keeping it clean for now, just Type is usually enough ("Heart Rate") 
+      // unless user wants "Heart Rate (Prod 123)"
+    }
+
     if (parts.length === 0 && device.productId) {
       parts.push(`Product ${device.productId}`);
     }
@@ -195,8 +202,9 @@ export class EventCardDevicesComponent implements OnChanges {
     const mfgLower = (manufacturer || '').toLowerCase();
     const srcLower = (sourceType || '').toLowerCase();
 
-    // Main device: local source with manufacturer (usually the watch)
-    if (srcLower === 'local' && mfgLower) {
+    // Main device: local source (usually the watch/computer)
+    // Relaxed check: don't strictly require manufacturer, as some files might miss it
+    if (srcLower === 'local') {
       return 'main';
     }
 
@@ -270,28 +278,49 @@ export class EventCardDevicesComponent implements OnChanges {
     switch (category) {
       case 'main': return 'watch';
       case 'power': return 'bolt';
-      case 'hr': return 'favorite';
+      case 'hr': return 'monitor_heart';
       default: return 'devices_other';
     }
   }
 
-  getBatteryIcon(level: number | null): string {
-    if (level == null) return 'battery_unknown';
-    if (level >= 90) return 'battery_full';
-    if (level >= 80) return 'battery_6_bar';
-    if (level >= 60) return 'battery_5_bar';
-    if (level >= 50) return 'battery_4_bar';
-    if (level >= 30) return 'battery_3_bar';
-    if (level >= 20) return 'battery_2_bar';
-    if (level >= 10) return 'battery_1_bar';
-    return 'battery_alert';
+  getBatteryIcon(level: number | null, status?: string | null): string {
+    if (level != null) {
+      if (level >= 90) return 'battery_full';
+      if (level >= 80) return 'battery_6_bar';
+      if (level >= 60) return 'battery_5_bar';
+      if (level >= 50) return 'battery_4_bar';
+      if (level >= 30) return 'battery_3_bar';
+      if (level >= 20) return 'battery_2_bar';
+      if (level >= 10) return 'battery_1_bar';
+      return 'battery_alert';
+    }
+
+    if (status) {
+      const s = status.toLowerCase();
+      if (s === 'new' || s === 'good') return 'battery_full';
+      if (s === 'ok') return 'battery_5_bar';
+      if (s === 'low') return 'battery_2_bar';
+      if (s === 'critical') return 'battery_alert';
+    }
+
+    return 'battery_unknown';
   }
 
-  getBatteryColorClass(level: number | null): string {
-    if (level == null) return '';
-    if (level > 50) return 'battery-good';
-    if (level > 20) return 'battery-medium';
-    return 'battery-low';
+  getBatteryColorClass(level: number | null, status?: string | null): string {
+    if (level != null) {
+      if (level > 50) return 'battery-good';
+      if (level > 20) return 'battery-medium';
+      return 'battery-low';
+    }
+
+    if (status) {
+      const s = status.toLowerCase();
+      if (s === 'new' || s === 'good' || s === 'ok') return 'battery-good';
+      if (s === 'low') return 'battery-medium';
+      if (s === 'critical') return 'battery-low';
+    }
+
+    return '';
   }
 
   getDetailEntries(group: DeviceGroup): { label: string; value: string; icon: string }[] {
