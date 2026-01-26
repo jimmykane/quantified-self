@@ -35,7 +35,8 @@
   <div class="sidenav-section-header">Navigation</div>
 
   @if (!user) {
-  <mat-list-item routerLinkActive="active" routerLink="/" (click)="sideNav.close();">
+  <mat-list-item routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" routerLink="/"
+    (click)="sideNav.close();">
     <mat-icon>home</mat-icon>
     <span>Home</span>
   </mat-list-item>
