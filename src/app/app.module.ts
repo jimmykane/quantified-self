@@ -91,7 +91,8 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
     // This is the official Firebase approach - undefined fields are silently skipped, not stored.
     provideFirestore(() => {
       return initializeFirestore(getApp(), {
-        ignoreUndefinedProperties: true
+        ignoreUndefinedProperties: true,
+        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
       });
     }),
     provideStorage(() => getStorage()),
