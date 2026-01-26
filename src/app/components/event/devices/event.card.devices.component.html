@@ -33,13 +33,19 @@
 
       <div class="device-details">
         @for (entry of getDetailEntries(group); track entry.label) {
-        <div class="detail-row">
-          <span class="detail-label">{{ entry.label }}</span>
-          <span class="detail-value">{{ entry.value }}</span>
+        <div class="detail-item">
+          <mat-icon class="detail-icon">{{ entry.icon }}</mat-icon>
+          <div class="detail-content">
+            <span class="detail-label">{{ entry.label }}</span>
+            <span class="detail-value">{{ entry.value }}</span>
+          </div>
         </div>
         }
         @if (getDetailEntries(group).length === 0) {
-        <p class="no-details">No additional details available.</p>
+        <div class="no-details">
+          <mat-icon>info</mat-icon>
+          <p>No additional technical details reported for this device.</p>
+        </div>
         }
       </div>
     </mat-expansion-panel>

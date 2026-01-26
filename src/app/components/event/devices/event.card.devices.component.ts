@@ -66,21 +66,21 @@ export class EventCardDevicesComponent implements OnChanges {
 
   private extractRawDevices(activity: ActivityInterface): any[] {
     return activity.creator.devices.map(device => ({
-      type: device.type === 'Unknown' ? '' : device.type,
-      name: device.name,
-      batteryStatus: device.batteryStatus,
-      batteryLevel: device.batteryLevel,
-      batteryVoltage: device.batteryVoltage,
-      manufacturer: device.manufacturer,
-      serialNumber: device.serialNumber,
-      productId: device.product,
-      softwareInfo: device.swInfo,
-      hardwareInfo: device.hwInfo,
-      antDeviceNumber: device.antDeviceNumber,
-      antTransmissionType: device.antTransmissionType,
-      antNetwork: device.antNetwork,
-      sourceType: device.sourceType,
-      cumulativeOperatingTime: device.cumOperatingTime,
+      type: device.type === 'Unknown' ? '' : (device.type ?? ''),
+      name: device.name ?? '',
+      batteryStatus: device.batteryStatus ?? null,
+      batteryLevel: device.batteryLevel ?? null,
+      batteryVoltage: device.batteryVoltage ?? null,
+      manufacturer: device.manufacturer ?? '',
+      serialNumber: device.serialNumber ?? null,
+      productId: device.product ?? null,
+      softwareInfo: device.swInfo ?? null,
+      hardwareInfo: device.hwInfo ?? null,
+      antDeviceNumber: device.antDeviceNumber ?? null,
+      antTransmissionType: device.antTransmissionType ?? null,
+      antNetwork: device.antNetwork ?? null,
+      sourceType: device.sourceType ?? null,
+      cumulativeOperatingTime: device.cumOperatingTime ?? null,
     }));
   }
 
@@ -269,33 +269,33 @@ export class EventCardDevicesComponent implements OnChanges {
     return 'battery-low';
   }
 
-  getDetailEntries(group: DeviceGroup): { label: string; value: string }[] {
-    const entries: { label: string; value: string }[] = [];
+  getDetailEntries(group: DeviceGroup): { label: string; value: string; icon: string }[] {
+    const entries: { label: string; value: string; icon: string }[] = [];
 
     if (group.serialNumber) {
-      entries.push({ label: 'Serial Number', value: String(group.serialNumber) });
+      entries.push({ label: 'Serial Number', value: String(group.serialNumber), icon: 'fingerprint' });
     }
     if (group.productId) {
-      entries.push({ label: 'Product ID', value: String(group.productId) });
+      entries.push({ label: 'Product ID', value: String(group.productId), icon: 'inventory_2' });
     }
     if (group.softwareInfo != null) {
-      entries.push({ label: 'Software', value: String(group.softwareInfo) });
+      entries.push({ label: 'Software', value: String(group.softwareInfo), icon: 'terminal' });
     }
     if (group.hardwareInfo != null) {
-      entries.push({ label: 'Hardware', value: String(group.hardwareInfo) });
+      entries.push({ label: 'Hardware', value: String(group.hardwareInfo), icon: 'memory' });
     }
     if (group.antNetwork) {
-      entries.push({ label: 'ANT Network', value: group.antNetwork });
+      entries.push({ label: 'ANT Network', value: group.antNetwork, icon: 'settings_input_antenna' });
     }
     if (group.sourceType) {
-      entries.push({ label: 'Source', value: group.sourceType.replace(/_/g, ' ') });
+      entries.push({ label: 'Source', value: group.sourceType.replace(/_/g, ' '), icon: 'source' });
     }
     if (group.cumulativeOperatingTime != null) {
       const hours = Math.round(group.cumulativeOperatingTime / 3600);
-      entries.push({ label: 'Operating Time', value: `${hours}h` });
+      entries.push({ label: 'Operating Time', value: `${hours}h`, icon: 'timer' });
     }
     if (group.batteryVoltage != null) {
-      entries.push({ label: 'Battery Voltage', value: `${group.batteryVoltage.toFixed(2)}V` });
+      entries.push({ label: 'Battery Voltage', value: `${group.batteryVoltage.toFixed(2)}V`, icon: 'electric_bolt' });
     }
 
     return entries;
