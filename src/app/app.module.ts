@@ -9,7 +9,7 @@ import { environment } from '../environments/environment';
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
 import { provideAuth, getAuth, connectAuthEmulator } from '@angular/fire/auth';
-import { provideFirestore, initializeFirestore } from '@angular/fire/firestore';
+import { provideFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from '@angular/fire/firestore';
 import { getApp } from '@angular/fire/app';
 import { provideFunctions, getFunctions } from '@angular/fire/functions';
 import { provideAppCheck, initializeAppCheck, ReCaptchaV3Provider, AppCheck } from '@angular/fire/app-check';
@@ -92,7 +92,11 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
     provideFirestore(() => {
       return initializeFirestore(getApp(), {
         ignoreUndefinedProperties: true,
-        localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+          cacheSizeBytes: 104857600 // 100 MB
+        }),
+
       });
     }),
     provideStorage(() => getStorage()),
