@@ -39,8 +39,8 @@ const POWER_MANUFACTURERS = ['sram', 'quarq', 'stages', 'favero', 'garmin', 'shi
   standalone: false
 })
 export class EventCardDevicesComponent implements OnChanges {
-  @Input() event: EventInterface;
-  @Input() selectedActivities: ActivityInterface[];
+  @Input() event!: EventInterface;
+  @Input() selectedActivities!: ActivityInterface[];
 
   public deviceGroupsMap = new Map<string, DeviceGroup[]>();
 
@@ -56,7 +56,23 @@ export class EventCardDevicesComponent implements OnChanges {
     }
 
     this.selectedActivities.forEach(activity => {
+      console.log('Activity Object Full Details:', {
+        id: activity.getID(),
+        keys: Object.keys(activity),
+        creatorKeys: activity.creator ? Object.keys(activity.creator) : [],
+        // @ts-ignore
+        events: activity.events?.length,
+        // @ts-ignore
+        streams: activity.streams?.keys(),
+      });
       const rawDevices = this.extractRawDevices(activity);
+      console.log('Device Data Debug:', {
+        activityId: activity.getID(),
+        creator: activity.creator,
+        originalDevices: activity.creator?.devices,
+        rawDevices,
+        groups: this.groupDevices(rawDevices)
+      });
       const groups = this.groupDevices(rawDevices);
       if (groups.length > 0) {
         this.deviceGroupsMap.set(activity.getID() ?? '', groups);
@@ -96,11 +112,14 @@ export class EventCardDevicesComponent implements OnChanges {
       const signature = this.createSignature(device);
       const existing = groupMap.get(signature);
 
+      console.log(`Processing device: Type=${device.type}, Serial=${device.serialNumber} -> Signature: ${signature}`);
+
       if (existing) {
         existing.occurrences++;
         // Merge: prefer values that have more info
         this.mergeDeviceData(existing, device);
       } else {
+        console.log(`Creating NEW group for signature: ${signature} with Type=${device.type}`);
         groupMap.set(signature, this.createDeviceGroup(device, signature));
       }
     }
@@ -121,12 +140,16 @@ export class EventCardDevicesComponent implements OnChanges {
   }
 
   private createSignature(device: any): string {
-    // Create unique key from stable device properties
+    // Priority 1: Group by Serial Number if it's valid
+    if (device.serialNumber && device.serialNumber !== INVALID_SERIAL) {
+      return `serial-${device.serialNumber}`;
+    }
+
+    // Priority 2: Fallback to composite key for devices without unique serials
     const parts = [
       device.type || 'unknown',
       device.manufacturer || 'unknown',
-      device.productId || 'unknown',
-      (device.serialNumber && device.serialNumber !== INVALID_SERIAL) ? device.serialNumber : 'no-serial'
+      device.productId || 'unknown'
     ];
     return parts.join('-').toLowerCase();
   }
@@ -211,7 +234,26 @@ export class EventCardDevicesComponent implements OnChanges {
   }
 
   private mergeDeviceData(existing: DeviceGroup, newDevice: any): void {
-    // Prefer non-null values
+    // 1. Merge Identity Fields (Type, Manufacturer, ProductId)
+    // 1. Merge Identity Fields (Type, Manufacturer, ProductId)
+    // Use score-based resolution for Type to prefer specific over generic (heart_rate > antfs > unknown)
+    const newScore = this.getTypeScore(newDevice.type);
+    const oldScore = this.getTypeScore(existing.type);
+    console.log(`Merging ${newDevice.type} (score ${newScore}) into ${existing.type} (score ${oldScore})`);
+
+    if (newScore > oldScore) {
+      console.log(`Upgrading type from '${existing.type}' to '${newDevice.type}'`);
+      existing.type = newDevice.type;
+    }
+
+    if ((!existing.manufacturer || existing.manufacturer === 'unknown') && newDevice.manufacturer) {
+      existing.manufacturer = newDevice.manufacturer;
+    }
+    if (!existing.productId && newDevice.productId) {
+      existing.productId = newDevice.productId;
+    }
+
+    // 2. Merge Technical / Battery Data (Prefer non-null)
     if (!existing.batteryLevel && newDevice.batteryLevel != null) {
       existing.batteryLevel = newDevice.batteryLevel;
     }
@@ -230,6 +272,13 @@ export class EventCardDevicesComponent implements OnChanges {
     if (!existing.cumulativeOperatingTime && newDevice.cumulativeOperatingTime != null) {
       existing.cumulativeOperatingTime = newDevice.cumulativeOperatingTime;
     }
+    if (!existing.antNetwork && newDevice.antNetwork) {
+      existing.antNetwork = newDevice.antNetwork;
+    }
+
+    // 3. Re-calculate derived properties based on merged data
+    existing.displayName = this.generateDisplayName(existing);
+    existing.category = this.categorizeDevice(existing.type, existing.manufacturer, existing.sourceType || '');
   }
 
   private sortByCategory(groups: DeviceGroup[]): DeviceGroup[] {
@@ -272,8 +321,18 @@ export class EventCardDevicesComponent implements OnChanges {
   getDetailEntries(group: DeviceGroup): { label: string; value: string; icon: string }[] {
     const entries: { label: string; value: string; icon: string }[] = [];
 
+    // Debug availability of type
+    console.log(`Debug details for ${group.displayName}:`, {
+      type: group.type,
+      hasType: !!group.type,
+      serial: group.serialNumber
+    });
+
     if (group.serialNumber) {
       entries.push({ label: 'Serial Number', value: String(group.serialNumber), icon: 'fingerprint' });
+    }
+    if (group.type) {
+      entries.push({ label: 'Type', value: this.formatType(group.type), icon: 'category' });
     }
     if (group.productId) {
       entries.push({ label: 'Product ID', value: String(group.productId), icon: 'inventory_2' });
@@ -299,6 +358,20 @@ export class EventCardDevicesComponent implements OnChanges {
     }
 
     return entries;
+  }
+
+  private getTypeScore(type: string | null): number {
+    if (!type || type === 'unknown' || type === 'Unknown') return 0;
+
+    const t = type.toLowerCase();
+
+    // Transport protocols (low priority)
+    if (t === 'antfs' || t === 'antplus' || t === 'bluetooth' || t === 'ble' || t === 'bluetooth_low_energy') {
+      return 1;
+    }
+
+    // Specific sensors (high priority)
+    return 10;
   }
 }
 

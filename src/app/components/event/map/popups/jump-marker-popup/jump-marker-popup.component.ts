@@ -16,7 +16,7 @@ export class JumpMarkerPopupComponent implements OnChanges {
     }
 
     ngOnChanges() {
-        console.log('JumpMarkerPopupComponent received jump:', this.jump);
+        // Component receives new jump data
     }
 
     getFormattedScore(): string {

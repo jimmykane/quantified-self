@@ -212,8 +212,9 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     this.nativeMap = map;
     this.mapActivities(++this.processSequence);
 
-    this.nativeMap.addListener('click', (e: google.maps.MapMouseEvent) => {
-      console.log('NATIVE Map Clicked at:', e.latLng?.toJSON());
+    // Store listener reference for cleanup if needed
+    this.nativeMap.addListener('click', (_e: google.maps.MapMouseEvent) => {
+      // Map click handling - no debug logging
     });
 
     // Add native listener for map type changes from Google controls
@@ -244,7 +245,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
   openJumpMarkerInfoWindow(jump: DataJumpEvent, marker: MapAdvancedMarker) {
     this.zone.run(() => {
-      console.log('Jump Marker Clicked Component:', jump, 'opening with ViewChild');
       this.openedJumpMarkerInfoWindow = jump;
       this.openedLapMarkerInfoWindow = void 0;
       this.openedActivityStartMarkerInfoWindow = void 0;
@@ -253,8 +253,8 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     });
   }
 
-  onMapClick(event: google.maps.MapMouseEvent | google.maps.IconMouseEvent) {
-    console.log('Map Clicked at:', event.latLng?.toJSON());
+  onMapClick(_event: google.maps.MapMouseEvent | google.maps.IconMouseEvent) {
+    // Map click handler - available for future use
   }
 
   getMarkerOptions(_activity: ActivityInterface, color: string): google.maps.marker.AdvancedMarkerElementOptions {
@@ -293,7 +293,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   getJumpMarkerOptions(jump: DataJumpEvent, color: string): google.maps.marker.AdvancedMarkerElementOptions {
-    console.log('Generating Jump Marker Options for:', jump.getType());
     const data = jump.jumpData;
     const format = (v: number | undefined) => v !== undefined ? Math.round(v * 10) / 10 : '-';
     const stats = [
@@ -311,7 +310,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       zIndex: 150,
       gmpClickable: true
     };
-    console.log('Jump Marker Options:', options);
     return options;
   }
 
