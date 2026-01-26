@@ -34,9 +34,9 @@ const routes: Routes = [
     loadComponent: () => import('./components/pricing/pricing.component').then(m => m.PricingComponent),
     // Public route
     data: {
-      title: 'Pricing',
-      description: 'Choose the right plan for your fitness data analysis needs. Free, Basic, and Pro tiers available.',
-      keywords: 'pricing, subscription, fitness analytics, strava alternative, garmin connect alternative'
+      title: 'Membership',
+      description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Suunto, Garmin, and COROS while helping keep the project independent.',
+      keywords: 'support, membership, fitness analytics, suunto sync, garmin connect sync, coros integration, independent software'
     }
   },
   {
@@ -90,10 +90,10 @@ const routes: Routes = [
     path: '',
     loadChildren: () => import('./modules/home.module').then(module => module.HomeModule),
     data: {
-      title: 'Home',
+      title: 'Advanced Fitness Analytics & Multi-Platform Sync',
       animation: 'Home',
-      description: 'Quantified Self is a premium analytical tool for your activity data. aggregatde data from Garmin, Suunto, Coros and more.',
-      keywords: 'quantified self, fitness tracker, activity analysis, garmin, suunto, coros, strava'
+      description: 'Quantified Self: Premium fitness analytics for Suunto, Garmin, and COROS. Jump into your data with full history imports or watch your activities sync automatically.',
+      keywords: 'quantified self, fitness tracker, activity analysis, garmin connect sync, suunto app, coros integration, strava alternative, history import, suunto routes, activity sync, fit file viewer, gpx parser'
     },
     canMatch: [guestGuard, onboardingGuard],
     pathMatch: 'full'

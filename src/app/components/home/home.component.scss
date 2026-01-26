@@ -213,6 +213,66 @@
     }
 }
 
+// 1.5 Fast Track Section
+.fast-track-section {
+    padding: 2rem 2rem 4rem;
+    max-width: 1000px;
+    margin: 0 auto;
+
+    .fast-track-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+    }
+
+    .fast-track-card {
+        border-radius: 20px;
+        background: var(--mat-sys-surface-container-low);
+        transition: transform 0.3s ease, background-color 0.3s ease;
+
+        &:hover {
+            transform: translateY(-4px);
+            background: var(--mat-sys-surface-container);
+        }
+
+        .fast-track-icon-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            width: 40px;
+            height: 40px;
+
+            &.import {
+                background-color: var(--mat-sys-secondary-container);
+                color: var(--mat-sys-on-secondary-container);
+            }
+
+            &.sync {
+                background-color: var(--mat-sys-tertiary-container);
+                color: var(--mat-sys-on-tertiary-container);
+            }
+
+            mat-icon {
+                font-size: 20px;
+                width: 20px;
+                height: 20px;
+            }
+        }
+
+        mat-card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        mat-card-content p {
+            font-size: 0.95rem;
+            color: var(--mat-sys-on-surface-variant);
+            line-height: 1.5;
+        }
+    }
+}
+
 // 2. Integrations Ticker
 .integrations-section {
     display: flex;
@@ -341,6 +401,10 @@
 
         &>*:nth-child(3) {
             transition-delay: 0.3s;
+        }
+
+        &>*:nth-child(4) {
+            transition-delay: 0.4s;
         }
     }
 
