@@ -109,36 +109,24 @@
     </mat-slide-toggle>
   </mat-list-item>
 
-  <!-- Support Section -->
-  <div class="sidenav-section-header">Support</div>
-
-
-
-  <mat-list-item (click)="gitHubStar()">
-    <mat-icon>star</mat-icon>
-    <span>Star on GitHub</span><span class="fill-space"></span>
-    <mat-icon>open_in_new</mat-icon>
-  </mat-list-item>
-
-  <mat-list-item onclick="window.open('mailto:support@quantified-self.io')">
-    <mat-icon>email</mat-icon>
-    <span>Contact</span><span class="fill-space"></span>
-    <mat-icon>open_in_new</mat-icon>
-  </mat-list-item>
-
-  <mat-list-item onclick="window.open('https://github.com/jimmykane/quantified-self/issues')">
-    <mat-icon>bug_report</mat-icon>
-    <span>File a bug</span><span class="fill-space"></span>
-    <mat-icon>open_in_new</mat-icon>
-  </mat-list-item>
-
-  <!-- Legal Section -->
-  <div class="sidenav-section-header">Legal</div>
-
-  <mat-list-item routerLink="/policies" (click)="sideNav.close();">
-    <mat-icon>policy</mat-icon>
-    <span>Policies</span>
-  </mat-list-item>
+  <!-- Compact Footer -->
+  <div class="sidenav-footer">
+    <div class="sidenav-footer-links">
+      <button mat-icon-button matTooltip="Star on GitHub" (click)="gitHubStar()">
+        <mat-icon>star</mat-icon>
+      </button>
+      <button mat-icon-button matTooltip="Contact Support" onclick="window.open('mailto:support@quantified-self.io')">
+        <mat-icon>email</mat-icon>
+      </button>
+      <button mat-icon-button matTooltip="Report a Bug"
+        onclick="window.open('https://github.com/jimmykane/quantified-self/issues')">
+        <mat-icon>bug_report</mat-icon>
+      </button>
+      <button mat-icon-button matTooltip="Policies" routerLink="/policies" (click)="sideNav.close();">
+        <mat-icon>policy</mat-icon>
+      </button>
+    </div>
+  </div>
 
   <!-- Logout -->
   @if (user) {

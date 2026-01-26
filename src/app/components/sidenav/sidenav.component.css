@@ -335,6 +335,45 @@ mat-divider {
 }
 
 /* ==========================================================================
+   Compact Footer
+   ========================================================================== */
+
+.sidenav-footer {
+  margin-top: 16px;
+  padding: 12px 8px;
+  border-top: 1px solid var(--mat-sys-outline-variant, rgba(0, 0, 0, 0.08));
+}
+
+:host-context(.dark-theme) .sidenav-footer {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+.sidenav-footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+
+.sidenav-footer-links button {
+  opacity: 0.6;
+  transition: opacity 0.2s ease, background-color 0.2s ease;
+}
+
+.sidenav-footer-links button:hover {
+  opacity: 1;
+  background-color: var(--mat-sys-surface-container-high, rgba(0, 0, 0, 0.06));
+}
+
+:host-context(.dark-theme) .sidenav-footer-links button:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.sidenav-footer-links button mat-icon {
+  margin: 0;
+  opacity: 1;
+}
+
+/* ==========================================================================
    Responsive Adjustments
    ========================================================================== */
 
