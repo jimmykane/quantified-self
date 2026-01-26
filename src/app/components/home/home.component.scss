@@ -1,581 +1,516 @@
 @use '../../../styles/breakpoints' as bp;
 
+// Variables based on Material System
+// Note: Actual colors come from var(--mat-sys-*) CSS variables defined in theme
+
 :host {
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+    background-color: var(--mat-sys-surface);
+    color: var(--mat-sys-on-surface);
     overflow-x: hidden;
-
-    // Service Brand Colors
-    --brand-garmin: #007cc3;
-    --brand-suunto: #e53935;
-    --brand-coros: #d4a853;
 }
 
-// Mobile-specific footer styles
-@include bp.xsmall {
-    .footer.rich-footer {
-        padding: 1.5rem 1rem 1rem;
-        gap: 1rem;
-        width: 100%;
-        box-sizing: border-box;
-        align-items: center;
+
+
+
+// Animations & Transitions
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(40px) scale(0.95);
     }
 
-    .ecosystem {
-        flex-direction: column;
-        align-items: center;
-        gap: 0.75rem;
-        padding: 0.5rem 0.75rem;
-        width: auto;
-        max-width: none;
-    }
-
-    .logo-group {
-        gap: 0.5rem;
-        flex-wrap: wrap;
-        justify-content: center;
-        width: 100%;
-    }
-
-    .partner-logo {
-        width: 24px;
-        height: 24px;
-        font-size: 24px;
-
-        &.wide {
-            width: 56px;
-            height: 24px;
-        }
-    }
-
-    .vertical-divider {
-        width: 50%;
-        height: 1px;
-    }
-
-    .bottom-legal {
-        flex-wrap: wrap;
-        justify-content: center;
-        text-align: center;
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
     }
 }
 
-/* Split Layout Container */
-.split-container {
-    display: flex;
-    flex: 1;
-    max-width: 1400px;
-    margin: 0 auto;
-    width: 100%;
-    flex-wrap: wrap; // Allow wrapping on smaller screens
-    gap: 0;
-    box-sizing: border-box; // Ensure padding doesn't cause overflow
-}
+.animate-on-scroll {
+    opacity: 0;
+    transform: translateY(40px) scale(0.95);
+    transition: opacity 1s cubic-bezier(0.2, 0.8, 0.2, 1),
+        transform 1s cubic-bezier(0.2, 0.8, 0.2, 1);
+    will-change: opacity, transform;
 
-/* Left Side: Hero content */
-.hero-section {
-    flex: 0 0 35%;
-    padding: 4rem 4rem;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    overflow: hidden;
-    margin: 1.5rem 0 0 1.5rem;
-
-    // Animated gradient background
-    &::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: linear-gradient(135deg,
-                rgba(var(--mat-sys-primary-rgb, 63, 81, 181), 0.05) 0%,
-                rgba(var(--mat-sys-secondary-rgb, 255, 64, 129), 0.03) 50%,
-                rgba(var(--mat-sys-tertiary-rgb, 0, 188, 212), 0.05) 100%);
-        background-size: 200% 200%;
-        animation: gradientShift 8s ease-in-out infinite;
-        z-index: -1;
-        border-radius: 24px;
+    &.is-visible {
+        opacity: 1;
+        transform: translateY(0) scale(1);
     }
 }
 
 @keyframes gradientShift {
-
-    0%,
-    100% {
+    0% {
         background-position: 0% 50%;
     }
 
     50% {
         background-position: 100% 50%;
     }
-}
 
-.brand-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 2rem;
-}
-
-.brand-logo {
-    width: 48px !important;
-    height: 48px !important;
-}
-
-.brand-name {
-    font-size: 1.5rem;
-    font-weight: 400;
-    color: var(--mat-sys-primary, #3f51b5);
-}
-
-.hero-section h1 {
-    font-size: 4rem;
-    font-weight: 300;
-    margin: 0 0 1.5rem;
-    line-height: 1.1;
-}
-
-.hero-section .subtitle {
-    font-size: 1.35rem;
-    opacity: 0.7;
-    margin-bottom: 2.5rem;
-    font-weight: 400;
-    line-height: 1.6;
-}
-
-.cta-container {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-}
-
-.btn-large {
-    height: 56px;
-    padding: 0 32px;
-    border-radius: 28px;
-    font-size: 1.1rem;
-    font-weight: 400;
-    text-transform: uppercase;
-    letter-spacing: 1.25px;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-}
-
-/* How It Works Section */
-/* How It Works Section */
-.how-it-works {
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    gap: 0.75rem;
-    margin-top: 2rem;
-    padding: 1rem 0;
-}
-
-.step {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.step-icon {
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    background: var(--mat-sys-primary-container, rgba(63, 81, 181, 0.12));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.2s ease, background 0.2s ease;
-
-    mat-icon {
-        color: var(--mat-sys-primary, #3f51b5);
-        font-size: 32px;
-        width: 32px;
-        height: 32px;
+    100% {
+        background-position: 0% 50%;
     }
 }
 
-.step:hover .step-icon {
-    transform: scale(1.1);
-    background: var(--mat-sys-primary, #3f51b5);
-
-    mat-icon {
-        color: var(--mat-sys-on-primary, #ffffff);
-    }
-}
-
-.step-label {
-    font-size: 0.85rem;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--mat-sys-on-surface-variant, rgba(0, 0, 0, 0.6));
-}
-
-.step-arrow {
-    font-size: 24px;
-    width: 24px;
-    height: 24px;
-    margin-top: 20px; // (64px icon height - 24px arrow height) / 2
-    opacity: 0.5;
-}
-
-/* File Format Badges */
-.file-formats {
-    display: flex;
-    justify-content: center;
-    gap: 0.75rem;
-    margin-top: 1.5rem;
-}
-
-.format-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 6px 12px;
-    border-radius: 16px;
-    background: var(--mat-sys-surface-variant, rgba(0, 0, 0, 0.04));
-    border: 1px solid var(--mat-sys-outline-variant, rgba(0, 0, 0, 0.12));
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    color: var(--mat-sys-on-surface-variant, rgba(0, 0, 0, 0.7));
-    transition: all 0.2s ease;
-
-    mat-icon {
-        font-size: 14px;
-        width: 14px;
-        height: 14px;
-    }
-}
-
-.format-badge:hover {
-    background: var(--mat-sys-primary, #3f51b5);
-    color: var(--mat-sys-on-primary, #ffffff);
-    border-color: var(--mat-sys-primary, #3f51b5);
-
-    mat-icon {
-        color: var(--mat-sys-on-primary, #ffffff);
-    }
-}
-
-/* Right Side: Grid Feature List */
-.features-section {
-    flex: 1;
-    padding: 2rem 3rem;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); // Flexible columns
-    gap: 2rem;
-    align-content: start;
-    box-sizing: border-box;
-}
-
-.feature-card {
-    // Glass styles handled by .glass-card
-    padding: 2rem;
-    border-left: 4px solid transparent;
-    transition: all 0.2s ease;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    box-sizing: border-box; // Vital for avoiding overflow
-    height: 100%; // Ensure equal heights
-}
-
-
-
-/* Last card spans full width */
-.feature-card.full-width {
-    width: calc(100% - 6rem);
-    margin: 3rem auto;
-    grid-column: span 2;
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.feature-card.full-width .card-header {
-    margin-bottom: 0;
-    margin-right: 4rem;
-    min-width: 240px;
-}
-
-.feature-card.full-width .card-content-wrapper {
-    flex: 1;
-}
-
-// Default hover effect with subtle glow
-.feature-card:hover {
-    border-left-color: var(--mat-sys-secondary, #ff4081);
-    transform: scale(1.01);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-}
-
-// Service-branded hover effects
-.feature-card.service-garmin:hover {
-    border-left-color: var(--brand-garmin);
-    box-shadow: 0 4px 20px rgba(0, 124, 195, 0.2); // Keep specific opacity shadow
-
-    .card-icon {
-        color: var(--brand-garmin);
-    }
-}
-
-.feature-card.service-suunto:hover {
-    border-left-color: var(--brand-suunto);
-    box-shadow: 0 4px 20px rgba(229, 57, 53, 0.2);
-
-    .card-icon {
-        color: var(--brand-suunto);
-    }
-}
-
-.feature-card.service-coros:hover {
-    border-left-color: var(--brand-coros);
-    box-shadow: 0 4px 20px rgba(212, 168, 83, 0.2);
-
-    .card-icon {
-        color: var(--brand-coros);
-    }
-}
-
-.card-header {
-    display: flex;
-    align-items: center;
-    gap: 0.8rem;
-    margin-bottom: 0.5rem;
-}
-
-.card-icon {
-    color: var(--mat-sys-primary, #3f51b5);
-}
-
-
-
-.card-title {
-    font-size: 1.5rem;
-    font-weight: 500;
-    margin: 0;
-}
-
-.card-text {
-    opacity: 0.7;
-    font-size: 1.15rem; // Increased from 1rem
-    margin-bottom: 1.5rem;
-    line-height: 1.6; // Increased for readability
-    // Removed line-clamp to show full text
-}
-
-.tag-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    margin-top: auto;
-}
-
-.tag {
-    background: rgba(0, 0, 0, 0.06);
-    opacity: 0.7;
-    padding: 6px 14px;
-    border-radius: 16px;
-    font-size: 1rem;
-    font-weight: 400;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-}
-
-:host-context(.dark-theme) .tag {
-    background: rgba(255, 255, 255, 0.1);
-}
-
-.tag mat-icon {
-    width: 18px;
-    height: 18px;
-    min-width: 18px;
-    min-height: 18px;
-    font-size: 18px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-/* Footer - Option 3: Maker Brand */
-.footer {
-    position: relative;
-    width: 100%;
-    background: transparent;
-    border-top: 1px solid var(--mat-sys-outline-variant, rgba(0, 0, 0, 0.12));
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem 1rem 1.5rem;
-    gap: 1.5rem;
-    margin-top: auto;
-    overflow: hidden;
-}
-
-/* 1. Maker Section */
-.maker-profile {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-}
-
-
-
-.maker-info {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    font-size: 0.75rem;
-    color: var(--mat-sys-on-surface-variant);
-}
-
-.maker-link {
-    font-family: inherit;
-    font-size: 1rem;
-    font-weight: 400;
-    text-decoration: none;
-    letter-spacing: -0.2px;
+// Common Utils
+.highlight-text {
+    background: linear-gradient(135deg,
+            var(--mat-sys-primary) 0%,
+            var(--mat-sys-tertiary) 50%,
+            var(--mat-sys-primary) 100%);
     background-size: 200% auto;
-    transition: background-position 0.5s;
-
-    &:hover {
-        background-position: right center;
-    }
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent; // Fallback
+    animation: gradientShift 6s ease infinite;
 }
 
-
-/* 2. Ecosystem Row */
-.ecosystem {
+// 1. Hero Section
+.hero-section {
+    position: relative;
     display: flex;
-    align-items: center;
     justify-content: center;
-    flex-wrap: wrap;
-    gap: 2rem;
-    padding: 0.8rem 1.5rem;
-    border-radius: 24px;
-
-    // Neutral transparent gray works on both Light (greyish) and Dark (lighter greyish)
-    background: rgba(127, 127, 127, 0.08);
-    border: 1px solid var(--mat-sys-outline-variant, rgba(127, 127, 127, 0.2));
-}
-
-.logo-group {
-    display: flex;
     align-items: center;
-    gap: 1.5rem;
-}
+    text-align: center;
+    padding: 8rem 2rem 5rem;
+    background: radial-gradient(circle at 50% 0%,
+            var(--mat-sys-surface-container-high) 0%,
+            var(--mat-sys-surface) 70%);
 
-.vertical-divider {
-    width: 2px; // Slightly thicker for visibility
-    height: 36px; // Taller for larger logos
-    background: var(--mat-sys-outline-variant, rgba(127, 127, 127, 0.3));
-}
-
-// Unified Icon Styling
-.partner-logo {
-    cursor: pointer;
-    vertical-align: middle;
-
-    // Increased size by 50% (24px -> 36px)
-    width: 36px;
-    height: 36px;
-    font-size: 36px;
-
-    // Wide icons
-    &.wide {
-        width: 90px; // 60px -> 90px
-        height: 36px;
-    }
-
-    &:hover {
-        transform: translateY(-2px);
-    }
-}
-
-/* 3. Bottom Legal */
-.bottom-legal {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.75rem;
-    color: var(--mat-sys-on-surface-variant); // Adapts to theme (dark/light)
-}
-
-.privacy-link {
-    cursor: pointer;
-    transition: color 0.2s;
-
-    &:hover {
-        color: var(--mat-sys-primary, #3f51b5);
-        text-decoration: underline;
-    }
-}
-
-.dot-separator {
-    opacity: 0.5;
-}
-
-/* Responsive */
-/* Responsive */
-@media (max-width: 900px) {
-    .split-container {
+    .hero-content {
+        max-width: 900px;
+        display: flex;
         flex-direction: column;
-        width: 100%;
-        max-width: 100%; // Avoid 100vw which includes scrollbar
-    }
+        align-items: center;
+        gap: 2rem;
 
-    .hero-section {
-        flex: 0 0 auto;
-        padding: 2rem 1.5rem; // Reduced padding for mobile
-        margin: 0; // Remove margin causing overflow
-        text-align: center;
-        width: 100%;
-        box-sizing: border-box;
+        // Immediate Entrance Animation
+        &>* {
+            opacity: 0; // Start hidden
+            animation: fadeInUp 1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
 
-        h1 {
-            font-size: 2.5rem; // Scale down for mobile
+        // Stagger Delays
+        .brand-badge {
+            animation-delay: 0.1s;
+        }
+
+        .hero-title {
+            animation-delay: 0.2s;
+        }
+
+        .hero-subtitle {
+            animation-delay: 0.3s;
+        }
+
+        .hero-actions {
+            animation-delay: 0.4s;
+        }
+
+        .trust-indicators {
+            animation-delay: 0.5s;
         }
     }
 
+    .brand-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem; // Increased gap
+        padding: 0.75rem 1.5rem; // Larger padding
+        border-radius: 999px;
+        background-color: var(--mat-sys-surface-container-highest);
+        color: var(--mat-sys-on-surface-variant);
+        font-size: 1.25rem; // Increased from 1rem
+        font-weight: 500;
+        margin-bottom: 2rem; // More breathing room
+        transition: transform 0.3s ease;
 
+        &:hover {
+            transform: scale(1.05);
+        }
 
-    .features-section {
-        grid-template-columns: 1fr;
-        padding: 1.5rem;
-        width: 100%;
-        box-sizing: border-box;
+        .brand-logo {
+            width: 32px; // Increased from 24px
+            height: 32px;
+        }
     }
 
-    .feature-card.full-width {
-        grid-column: auto;
-        flex-direction: column;
-        align-items: flex-start;
-        margin: 0 auto;
-        width: 100%;
-        max-width: none; // Reset max-width
+    .hero-title {
+        font-family: var(--mat-sys-display-large-font-family-name);
+        // Use clamp for responsive font sizing
+        font-size: clamp(3.5rem, 6vw, 5.5rem);
+        line-height: 1.1;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        margin: 0;
     }
 
-    .feature-card.full-width .card-header {
-        margin-bottom: 1rem;
-        margin-right: 0;
+    .hero-subtitle {
+        font-size: 1.25rem;
+        line-height: 1.6;
+        color: var(--mat-sys-on-surface-variant);
+        max-width: 600px;
+        margin-bottom: 1.5rem;
+    }
+
+    .hero-actions {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 2rem;
+        flex-wrap: wrap;
+        justify-content: center;
+
+        .cta-button {
+            padding: 1.5rem 2rem; // Slightly taller buttons
+            font-size: 1.1rem;
+            border-radius: 999px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+            &:hover {
+                transform: translateY(-2px);
+            }
+
+            &.primary {
+                &:hover {
+                    box-shadow: 0 4px 12px rgba(var(--mat-sys-primary-rgb), 0.3); // Assuming RGB var might exist, else just shadow
+                    // If RGB var doesn't exist, we fall back to standard shadow or elevation
+                }
+            }
+        }
+    }
+
+    .trust-indicators {
+        display: flex;
+        gap: 2rem;
+        font-size: 0.875rem;
+        color: var(--mat-sys-on-surface-variant);
+        opacity: 0.8;
+        flex-wrap: wrap;
+        justify-content: center;
+
+        .indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            transition: opacity 0.2s;
+
+            &:hover {
+                opacity: 1;
+                color: var(--mat-sys-on-surface);
+            }
+
+            mat-icon {
+                font-size: 18px;
+                width: 18px;
+                height: 18px;
+                color: var(--mat-sys-primary);
+            }
+        }
     }
 }
 
-/* Shadow helpers */
-.elevation-2 {
-    box-shadow: 0 3px 1px -2px rgba(0, 0, 0, 0.2), 0 2px 2px 0 rgba(0, 0, 0, 0.14), 0 1px 5px 0 rgba(0, 0, 0, 0.12);
+// 2. Integrations Ticker
+.integrations-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6rem 2rem;
+    background-color: var(--mat-sys-surface);
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+    // Scroll Animation
+    @extend .animate-on-scroll;
+    transition-delay: 0.2s; // Delay relative to appearance
+
+    .section-label {
+        font-size: 2.5rem; // Much bigger as requested
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        color: var(--mat-sys-on-surface);
+        margin-bottom: 3rem;
+        opacity: 1; // Remove opacity for prominence
+        text-align: center;
+    }
+
+    .logos-container {
+        display: flex;
+        align-items: center;
+        gap: 3rem;
+        flex-wrap: wrap;
+        justify-content: center;
+        opacity: 0.6;
+        transition: opacity 0.3s ease;
+
+        &:hover {
+            opacity: 1;
+        }
+
+        .partner-logo {
+            width: 90px;
+            height: 90px;
+            cursor: pointer;
+            transition: transform 0.2s ease, filter 0.2s ease;
+            // filter: grayscale(100%); // Start grayscale for "pro" look, color on hover if wanted?
+            // Actually, removing grayscale might be better if they are SVG icons that follow text color.
+            // Let's assume they take color from 'color' property or are original SVGs.
+            // filter: grayscale(0%); // Reset
+
+            &.wide {
+                width: 90px; // align width with square icons, height will be much smaller = "smaller" overall
+            }
+
+            &:hover {
+                transform: translateY(-2px) scale(1.1);
+                color: var(--mat-sys-primary);
+            }
+        }
+
+        .divider {
+            width: 1px;
+            height: 24px;
+            background-color: var(--mat-sys-outline-variant);
+            margin: 0 1rem;
+            display: none; // Hide on mobile primarily
+
+            @include bp.small {
+                display: block;
+            }
+        }
+
+        .file-formats {
+            display: flex;
+            gap: 1rem;
+
+            .format {
+                font-size: 0.875rem;
+                font-weight: 600;
+                color: var(--mat-sys-on-surface-variant);
+                padding: 0.25rem 0.75rem;
+                background-color: var(--mat-sys-surface-container);
+                border-radius: 8px;
+                transition: background-color 0.2s;
+
+                &:hover {
+                    background-color: var(--mat-sys-surface-container-high);
+                    color: var(--mat-sys-on-surface);
+                }
+            }
+        }
+    }
+}
+
+// 3. Features Grid
+.features-section {
+    padding: 6rem 2rem;
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+    box-sizing: border-box;
+
+    .section-title {
+        text-align: center;
+        font-size: 2.5rem;
+        margin-bottom: 4rem;
+        font-weight: 600;
+        @extend .animate-on-scroll;
+    }
+
+    .features-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 2rem;
+
+        // Apply scroll animation to cards
+        &>* {
+            @extend .animate-on-scroll;
+        }
+
+        // Stagger delays (transition-delay)
+        &>*:nth-child(1) {
+            transition-delay: 0.1s;
+        }
+
+        &>*:nth-child(2) {
+            transition-delay: 0.2s;
+        }
+
+        &>*:nth-child(3) {
+            transition-delay: 0.3s;
+        }
+    }
+
+    .feature-card {
+        height: 100%;
+        border-radius: 24px;
+        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease; // Bouncy transition
+        background: var(--mat-sys-surface-container-low);
+        // Ensure border doesn't conflict with elevation if any, but adding a transparent border helps with high contrast modes or just structure
+        border: 1px solid transparent;
+
+        &:hover {
+            transform: translateY(-8px); // More dramatic lift
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08); // Custom soft shadow or var(--mat-sys-elevation-level2)
+            border-color: var(--mat-sys-outline-variant); // Slight border highlight
+            background: var(--mat-sys-surface-container); // Slightly lighter background
+
+            .feature-icon-container {
+                transform: scale(1.1) rotate(5deg); // Playful interaction
+            }
+        }
+
+        .feature-icon-container {
+            background-color: var(--mat-sys-primary-container);
+            color: var(--mat-sys-on-primary-container);
+            width: 48px;
+            height: 48px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); // Bouncy
+
+            mat-icon {
+                width: 24px;
+                height: 24px;
+            }
+        }
+
+        mat-card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        mat-card-content p {
+            color: var(--mat-sys-on-surface-variant);
+            line-height: 1.6;
+            font-size: 1rem;
+        }
+    }
+}
+
+// 4. Sovereignty Section
+.sovereignty-section {
+    background-color: var(--mat-sys-surface-container);
+    padding: 6rem 2rem;
+    text-align: center;
+
+    .content-wrapper {
+        max-width: 700px;
+        margin: 0 auto;
+    }
+
+    .large-icon {
+        font-size: 64px;
+        width: 64px;
+        height: 64px;
+        color: var(--mat-sys-primary);
+        margin-bottom: 1.5rem;
+    }
+
+    h2 {
+        font-size: 2.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    p {
+        font-size: 1.25rem;
+        line-height: 1.6;
+        color: var(--mat-sys-on-surface-variant);
+        margin-bottom: 2.5rem;
+    }
+}
+
+// 5. Footer (Simplified & Modern)
+.app-footer {
+    padding: 4rem 2rem 2rem;
+    background-color: var(--mat-sys-surface);
+    border-top: 1px solid var(--mat-sys-outline-variant);
+    margin-top: auto;
+
+    .footer-content {
+        max-width: 1200px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 2rem;
+    }
+
+    .maker-info {
+        font-size: 0.9rem;
+        color: var(--mat-sys-on-surface-variant);
+
+        a {
+            color: var(--mat-sys-primary);
+            text-decoration: none;
+            font-weight: 500;
+
+            &:hover {
+                text-decoration: underline;
+            }
+        }
+    }
+
+    .tech-stack {
+        display: flex;
+        gap: 1.5rem;
+        opacity: 0.5;
+
+        mat-icon {
+            width: 24px;
+            height: 24px;
+            transition: opacity 0.2s;
+
+            &:hover {
+                opacity: 1;
+                cursor: help;
+            }
+        }
+    }
+
+    .legal-links {
+        display: flex;
+        gap: 1.5rem;
+        font-size: 0.8rem;
+        color: var(--mat-sys-on-surface-variant);
+        opacity: 0.8;
+        flex-wrap: wrap;
+        justify-content: center;
+
+        a {
+            color: inherit;
+            text-decoration: none;
+
+            &:hover {
+                text-decoration: underline;
+            }
+        }
+    }
+}
+
+// Responsive Adjustments
+@include bp.xsmall {
+    .hero-section {
+        padding: 4rem 1.5rem 2rem;
+
+        .hero-title {
+            font-size: 2.5rem;
+        }
+    }
+
+    .features-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .trust-indicators {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
 }
