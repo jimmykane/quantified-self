@@ -459,6 +459,56 @@
     }
 }
 
+// 3.5 Footprint Section (MyTracks Highlight)
+.footprint-section {
+    padding: 5rem 2rem;
+    text-align: center;
+    background: linear-gradient(135deg, var(--mat-sys-surface) 0%, var(--mat-sys-surface-container-low) 100%);
+    border-top: 1px solid var(--mat-sys-outline-variant);
+
+    .footprint-content {
+        max-width: 700px;
+        margin: 0 auto;
+    }
+
+    .footprint-text {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .footprint-icon {
+        font-size: 56px;
+        width: 56px;
+        height: 56px;
+        color: var(--mat-sys-tertiary);
+        margin-bottom: 1.5rem;
+    }
+
+    h2 {
+        font-size: 2.25rem;
+        margin-bottom: 1rem;
+        color: var(--mat-sys-on-surface);
+    }
+
+    p {
+        font-size: 1.15rem;
+        line-height: 1.7;
+        color: var(--mat-sys-on-surface-variant);
+        margin-bottom: 2rem;
+    }
+
+    button {
+        border-radius: 999px;
+        padding: 0.75rem 1.5rem;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+        &:hover {
+            transform: translateY(-2px);
+        }
+    }
+}
+
 // 4. Sovereignty Section
 .sovereignty-section {
     background-color: var(--mat-sys-surface-container);
