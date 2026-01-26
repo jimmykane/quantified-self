@@ -342,7 +342,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       ChartHelper.unsetYAxesToStack(chart);
     }
 
-    chart.xAxes.push(this.addXAxis(chart, this.xAxisType));
+    this.addXAxis(chart, this.xAxisType);
 
     // Create a Legend
     this.attachChartLegendToChart(chart);
