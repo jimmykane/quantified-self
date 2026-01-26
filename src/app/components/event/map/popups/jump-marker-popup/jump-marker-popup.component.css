@@ -1,0 +1,78 @@
+:host {
+    display: block;
+}
+
+/* Use app's global font-family for text, but EXCLUDE icons */
+:host *:not(mat-icon) {
+    font-family: 'Noto Sans', sans-serif !important;
+}
+
+.popup-container {
+    padding: 16px;
+    /* Back to original padding for compactness */
+    min-width: 220px;
+}
+
+.popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--mat-app-outline-variant);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+}
+
+.card-title {
+    margin: 0;
+    font-size: 1.1rem !important;
+    /* Balanced title size */
+    color: var(--mat-sys-primary) !important;
+    display: flex;
+    align-items: center;
+}
+
+.close-btn {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    color: var(--mat-sys-on-surface-variant);
+    margin-right: -8px;
+    margin-top: -6px;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+}
+
+.close-btn mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 16px;
+    align-items: center;
+}
+
+.stat-row {
+    display: contents;
+}
+
+.label {
+    font-size: 0.8rem;
+    /* Compact labels */
+    font-weight: 400;
+    color: var(--mat-app-on-surface-variant);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.value {
+    font-size: 0.95rem;
+    /* Balanced values */
+    font-weight: 500;
+    color: var(--mat-app-on-surface);
+    text-align: right;
+}

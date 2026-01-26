@@ -14,10 +14,10 @@ import {
   signal,
   computed,
 } from '@angular/core';
-import { GoogleMap } from '@angular/google-maps';
+import { GoogleMap, MapInfoWindow, MapAdvancedMarker } from '@angular/google-maps';
 import { throttleTime } from 'rxjs/operators';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { EventInterface, ActivityInterface, LapInterface, User, LapTypes, GeoLibAdapter, DataLatitudeDegrees, DataLongitudeDegrees } from '@sports-alliance/sports-lib';
+import { EventInterface, ActivityInterface, LapInterface, User, LapTypes, GeoLibAdapter, DataLatitudeDegrees, DataLongitudeDegrees, DataJumpEvent, DataEvent } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../../services/app.event.service';
 import { Subject, Subscription, asyncScheduler } from 'rxjs';
 import { AppUserService } from '../../../services/app.user.service';
@@ -54,8 +54,10 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
   public activitiesMapData: MapData[] = [];
   public noMapData = false;
+  @ViewChild(MapInfoWindow) infoWindow: MapInfoWindow;
   public openedLapMarkerInfoWindow: LapInterface;
   public openedActivityStartMarkerInfoWindow: ActivityInterface;
+  public openedJumpMarkerInfoWindow: DataJumpEvent;
   public mapTypeId = signal<google.maps.MapTypeId>('roadmap' as google.maps.MapTypeId);
   public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
   public mapCenter = signal<google.maps.LatLngLiteral>({ lat: 0, lng: 0 }, {
@@ -210,6 +212,10 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     this.nativeMap = map;
     this.mapActivities(++this.processSequence);
 
+    this.nativeMap.addListener('click', (e: google.maps.MapMouseEvent) => {
+      console.log('NATIVE Map Clicked at:', e.latLng?.toJSON());
+    });
+
     // Add native listener for map type changes from Google controls
     if (this.mapListener) {
       this.mapListener.remove();
@@ -227,11 +233,28 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   openLapMarkerInfoWindow(lap: LapInterface) {
     this.openedLapMarkerInfoWindow = lap;
     this.openedActivityStartMarkerInfoWindow = void 0;
+    this.openedJumpMarkerInfoWindow = void 0;
   }
 
   openActivityStartMarkerInfoWindow(activity: ActivityInterface) {
     this.openedActivityStartMarkerInfoWindow = activity;
     this.openedLapMarkerInfoWindow = void 0;
+    this.openedJumpMarkerInfoWindow = void 0;
+  }
+
+  openJumpMarkerInfoWindow(jump: DataJumpEvent, marker: MapAdvancedMarker) {
+    this.zone.run(() => {
+      console.log('Jump Marker Clicked Component:', jump, 'opening with ViewChild');
+      this.openedJumpMarkerInfoWindow = jump;
+      this.openedLapMarkerInfoWindow = void 0;
+      this.openedActivityStartMarkerInfoWindow = void 0;
+      this.infoWindow.open(marker);
+      this.changeDetectorRef.markForCheck();
+    });
+  }
+
+  onMapClick(event: google.maps.MapMouseEvent | google.maps.IconMouseEvent) {
+    console.log('Map Clicked at:', event.latLng?.toJSON());
   }
 
   getMarkerOptions(_activity: ActivityInterface, color: string): google.maps.marker.AdvancedMarkerElementOptions {
@@ -267,6 +290,29 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       content: this.markerFactory.createLapMarker(color, lapIndex),
       zIndex: lapIndex + 1
     };
+  }
+
+  getJumpMarkerOptions(jump: DataJumpEvent, color: string): google.maps.marker.AdvancedMarkerElementOptions {
+    console.log('Generating Jump Marker Options for:', jump.getType());
+    const data = jump.jumpData;
+    const format = (v: number | undefined) => v !== undefined ? Math.round(v * 10) / 10 : '-';
+    const stats = [
+      `Distance: ${format(data.distance.getValue())} ${data.distance.getDisplayUnit()}`,
+      `Height: ${data.height ? `${format(data.height.getValue())} ${data.height.getDisplayUnit()}` : '-'}`,
+      `Score: ${format(data.score.getValue())}`,
+      `Hang Time: ${data.hang_time ? `${format(data.hang_time.getValue())}` : '-'}`,
+      `Speed: ${data.speed ? `${format(data.speed.getValue())} ${data.speed.getDisplayUnit()}` : '-'}`,
+      `Rotations: ${data.rotations ? `${format(data.rotations.getValue())}` : '-'}`
+    ].join('\n');
+
+    const options = {
+      content: this.markerFactory.createJumpMarker(color),
+      title: `Jump Stats:\n${stats}`,
+      zIndex: 150,
+      gmpClickable: true
+    };
+    console.log('Jump Marker Options:', options);
+    return options;
   }
 
   pointMarkerContent(color: string): Node {
@@ -414,6 +460,18 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
             }
           });
           return laps;
+        }, []),
+        jumps: (activity.getAllEvents() || []).reduce((jumps, event: DataEvent) => {
+          if (event instanceof DataJumpEvent && event.jumpData.position_lat && event.jumpData.position_long) {
+            jumps.push({
+              event: event,
+              position: {
+                latitudeDegrees: event.jumpData.position_lat.getValue(),
+                longitudeDegrees: event.jumpData.position_long.getValue()
+              }
+            });
+          }
+          return jumps;
         }, [])
       });
     });
@@ -471,7 +529,11 @@ export interface MapData {
     lap: LapInterface,
     lapPosition: { latitudeDegrees: number, longitudeDegrees: number, time?: number },
     symbol?: any,
-  }[]
+  }[];
+  jumps: {
+    event: DataJumpEvent,
+    position: { latitudeDegrees: number, longitudeDegrees: number }
+  }[];
 }
 
 export interface PositionWithTime {

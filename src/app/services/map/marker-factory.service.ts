@@ -132,11 +132,12 @@ export class MarkerFactoryService {
    * Used to display jump events on the map.
    */
   createJumpMarker(color: string): HTMLDivElement {
-    // Material Design "outbound" icon path
+    // Solid colored circle with a white arrow icon on top
     return this.createSvgElement(`
         <svg width="28" height="28" viewBox="0 0 24 24">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1.88 9.54L8.92 16.5l-1.41-1.41 4.96-4.96L10.34 8l5.65.01.01 5.65-2.12-2.12z" 
-                fill="${color}" stroke="#FFF" stroke-width="0.8" />
+          <circle cx="12" cy="12" r="10" fill="${color}" stroke="#FFF" stroke-width="0.8" />
+          <path d="M13.88 11.54L8.92 16.5l-1.41-1.41 4.96-4.96L10.34 8l5.65.01.01 5.65-2.12-2.12z" 
+                fill="#FFF" />
         </svg>`);
   }
 }

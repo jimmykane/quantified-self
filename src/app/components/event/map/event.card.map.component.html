@@ -31,7 +31,7 @@
     @if (activitiesMapData.length > 0 && apiLoaded()) {
     <google-map height="100%" width="100%" [center]="mapCenter()" [zoom]="mapZoom()" [mapTypeId]="mapTypeId()"
       [options]="mapOptions()" (mapInitialized)="onMapReady($event)" (zoomChanged)="onZoomChanged()"
-      (centerChanged)="onCenterChanged()">
+      (centerChanged)="onCenterChanged()" (mapClick)="onMapClick($event)">
       @for (activityMapData of activitiesMapData; track activityMapData.activity.getID()) {
       <!-- Start Marker -->
       @if (activityMapData.positions.length > 0) {
@@ -64,6 +64,23 @@
         [options]="getLapMarkerOptions(activityMapData.activity, activityMapData.strokeColor, i)">
       </map-advanced-marker>
       }
+      <!-- Jump Markers -->
+      @for (jump of activityMapData.jumps; track jump.event.timestamp) {
+      <map-advanced-marker #marker="mapAdvancedMarker"
+        [position]="{lat: jump.position.latitudeDegrees, lng: jump.position.longitudeDegrees}"
+        [options]="getJumpMarkerOptions(jump.event, activityMapData.strokeColor)"
+        (mapClick)="openJumpMarkerInfoWindow(jump.event, marker)"
+        (click)="openJumpMarkerInfoWindow(jump.event, marker)">
+      </map-advanced-marker>
+      }
+
+      <map-info-window>
+        @if (openedJumpMarkerInfoWindow) {
+        <app-jump-marker-popup [jump]="openedJumpMarkerInfoWindow"
+          (dismiss)="infoWindow.close()"></app-jump-marker-popup>
+        }
+      </map-info-window>
+
       <!-- Point Markers (optional) -->
       @if (showPoints) {
       @for (position of activityMapData.positions; track position.time) {
