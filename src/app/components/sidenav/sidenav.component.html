@@ -73,14 +73,12 @@
   <!-- Account Section -->
   @if (user) {
   <div class="sidenav-section-header">Account</div>
-  }
 
   <mat-list-item routerLinkActive="active" routerLink="/services" (click)="sideNav.close();">
     <mat-icon>leak_add</mat-icon>
     <span>Services</span>
   </mat-list-item>
 
-  @if (user) {
   <mat-list-item routerLinkActive="active" [routerLink]="'/settings'" (click)="sideNav.close();">
     <mat-icon>settings</mat-icon>
     <span>Settings</span>
