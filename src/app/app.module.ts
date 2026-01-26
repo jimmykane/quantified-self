@@ -92,6 +92,8 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
     provideFirestore(() => {
       return initializeFirestore(getApp(), {
         ignoreUndefinedProperties: true,
+        // @ts-ignore
+        useFetchStreams: true,
         localCache: persistentLocalCache({
           tabManager: persistentMultipleTabManager(),
           cacheSizeBytes: 104857600 // 100 MB
