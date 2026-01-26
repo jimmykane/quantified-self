@@ -24,7 +24,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public suuntoAppLinkFormGroup!: UntypedFormGroup;
   public isLoading = false;
   public user!: User;
-  public isGuest = false;
+
   public suuntoAppTokens: Auth2ServiceTokenInterface[] = [];
   public activeSection: 'suunto' | 'garmin' | 'coros' = 'suunto';
   public serviceNames = ServiceNames;
@@ -115,14 +115,6 @@ export class ServicesComponent implements OnInit, OnDestroy {
       return
     }
     this.user = user;
-    this.isGuest = !!(user as any)?.isAnonymous;
-    if (this.isGuest) {
-      this.isLoading = false;
-      this.snackBar.open('You must login with a non-guest account if you want to use the service features', 'OK', {
-        duration: undefined,
-      });
-      return;
-    }
 
     this.hasProAccess = isPro;
 

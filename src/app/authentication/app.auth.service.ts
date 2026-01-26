@@ -111,7 +111,7 @@ export class AppAuthService {
                   acceptedTrackingPolicy: false,
                   acceptedDiagnosticsPolicy: true, // Legitimate interest
                   privacy: Privacy.Private,
-                  isAnonymous: firebaseUser.isAnonymous,
+                  isAnonymous: false,
                   stripeRole: stripeRole,
                   claimsUpdatedAt: (dbUser as any)?.claimsUpdatedAt, // Pass it through if it exists on synthetic user (unlikely but good for types)
                   creationDate: new Date(firebaseUser.metadata.creationTime!),
