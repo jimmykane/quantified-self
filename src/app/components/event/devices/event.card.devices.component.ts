@@ -56,23 +56,7 @@ export class EventCardDevicesComponent implements OnChanges {
     }
 
     this.selectedActivities.forEach(activity => {
-      console.log('Activity Object Full Details:', {
-        id: activity.getID(),
-        keys: Object.keys(activity),
-        creatorKeys: activity.creator ? Object.keys(activity.creator) : [],
-        // @ts-ignore
-        events: activity.events?.length,
-        // @ts-ignore
-        streams: activity.streams?.keys(),
-      });
       const rawDevices = this.extractRawDevices(activity);
-      console.log('Device Data Debug:', {
-        activityId: activity.getID(),
-        creator: activity.creator,
-        originalDevices: activity.creator?.devices,
-        rawDevices,
-        groups: this.groupDevices(rawDevices)
-      });
       const groups = this.groupDevices(rawDevices);
       if (groups.length > 0) {
         this.deviceGroupsMap.set(activity.getID() ?? '', groups);
@@ -112,14 +96,10 @@ export class EventCardDevicesComponent implements OnChanges {
       const signature = this.createSignature(device);
       const existing = groupMap.get(signature);
 
-      console.log(`Processing device: Type=${device.type}, Serial=${device.serialNumber} -> Signature: ${signature}`);
-
       if (existing) {
         existing.occurrences++;
-        // Merge: prefer values that have more info
         this.mergeDeviceData(existing, device);
       } else {
-        console.log(`Creating NEW group for signature: ${signature} with Type=${device.type}`);
         groupMap.set(signature, this.createDeviceGroup(device, signature));
       }
     }
@@ -234,15 +214,11 @@ export class EventCardDevicesComponent implements OnChanges {
   }
 
   private mergeDeviceData(existing: DeviceGroup, newDevice: any): void {
-    // 1. Merge Identity Fields (Type, Manufacturer, ProductId)
-    // 1. Merge Identity Fields (Type, Manufacturer, ProductId)
-    // Use score-based resolution for Type to prefer specific over generic (heart_rate > antfs > unknown)
+    // Merge Identity Fields using score-based resolution for Type
     const newScore = this.getTypeScore(newDevice.type);
     const oldScore = this.getTypeScore(existing.type);
-    console.log(`Merging ${newDevice.type} (score ${newScore}) into ${existing.type} (score ${oldScore})`);
 
     if (newScore > oldScore) {
-      console.log(`Upgrading type from '${existing.type}' to '${newDevice.type}'`);
       existing.type = newDevice.type;
     }
 
@@ -320,13 +296,6 @@ export class EventCardDevicesComponent implements OnChanges {
 
   getDetailEntries(group: DeviceGroup): { label: string; value: string; icon: string }[] {
     const entries: { label: string; value: string; icon: string }[] = [];
-
-    // Debug availability of type
-    console.log(`Debug details for ${group.displayName}:`, {
-      type: group.type,
-      hasType: !!group.type,
-      serial: group.serialNumber
-    });
 
     if (group.serialNumber) {
       entries.push({ label: 'Serial Number', value: String(group.serialNumber), icon: 'fingerprint' });
