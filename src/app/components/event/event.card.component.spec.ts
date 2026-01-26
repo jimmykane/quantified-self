@@ -51,7 +51,7 @@ describe('EventCardComponent', () => {
         },
         mapSettings: {
             showLaps: true,
-            showPoints: false,
+
             showArrows: true,
             strokeWidth: 3,
             lapTypes: []
@@ -186,7 +186,7 @@ describe('EventCardComponent', () => {
 
     it('should derive map settings from user signal', () => {
         expect(component.showMapLaps()).toBe(true);
-        expect(component.showMapPoints()).toBe(false);
+
         expect(component.showMapArrows()).toBe(true);
     });
 

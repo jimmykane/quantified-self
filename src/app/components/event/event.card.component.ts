@@ -125,9 +125,7 @@ export class EventCardComponent implements OnInit {
     this.currentUser()?.settings?.mapSettings?.showLaps ?? true
   );
 
-  public showMapPoints = computed(() =>
-    this.currentUser()?.settings?.mapSettings?.showPoints ?? false
-  );
+
 
   public showChartLaps = computed(() =>
     this.currentUser()?.settings?.chartSettings?.showLaps ?? true

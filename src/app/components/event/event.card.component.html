@@ -28,9 +28,8 @@
         @if (event() && targetUserID() && hasPositionsFlag()) {
         @if (selectedActivitiesDebounced().length > 0) {
         <app-event-card-map [selectedActivities]="selectedActivitiesDebounced()" [targetUserID]="targetUserID()"
-          [user]="currentUser()!" [event]="event()!" [showLaps]="showMapLaps()" [showPoints]="showMapPoints()"
-          [lapTypes]="mapLapTypes()" [showArrows]="showMapArrows()" [strokeWidth]="mapStrokeWidth()"
-          [mapType]="mapType()">
+          [user]="currentUser()!" [event]="event()!" [showLaps]="showMapLaps()" [lapTypes]="mapLapTypes()"
+          [showArrows]="showMapArrows()" [strokeWidth]="mapStrokeWidth()" [mapType]="mapType()">
         </app-event-card-map>
         } @else {
         <div class="empty-selection-message">

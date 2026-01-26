@@ -81,14 +81,7 @@
         }
       </map-info-window>
 
-      <!-- Point Markers (optional) -->
-      @if (showPoints) {
-      @for (position of activityMapData.positions; track position.time) {
-      <map-advanced-marker [position]="{lat: position.latitudeDegrees, lng: position.longitudeDegrees}"
-        [content]="pointMarkerContent(activityMapData.strokeColor)">
-      </map-advanced-marker>
-      }
-      }
+
       }
     </google-map>
     }

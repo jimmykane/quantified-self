@@ -42,7 +42,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   @Input() user: User;
   @Input() selectedActivities: ActivityInterface[];
   @Input() showLaps: boolean;
-  @Input() showPoints: boolean;
+
   @Input() showArrows: boolean;
   @Input() strokeWidth: number;
   @Input() lapTypes: LapTypes[] = [];
@@ -162,7 +162,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       (simpleChanges.lapTypes && !simpleChanges.lapTypes.firstChange) ||
       (simpleChanges.showArrows && !simpleChanges.showArrows.firstChange) ||
       (simpleChanges.strokeWidth && !simpleChanges.strokeWidth.firstChange) ||
-      (simpleChanges.showPoints && !simpleChanges.showPoints.firstChange)
+      (simpleChanges.strokeWidth && !simpleChanges.strokeWidth.firstChange)
     ) {
       // Only re-fit bounds if the selected activities changed
       const shouldFitBounds = !!simpleChanges.selectedActivities;
@@ -313,9 +313,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     return options;
   }
 
-  pointMarkerContent(color: string): Node {
-    return this.markerFactory.createPointMarker(color);
-  }
+
 
   getPolylineOptions(activityMapData: MapData): google.maps.PolylineOptions {
     const options: google.maps.PolylineOptions = {
