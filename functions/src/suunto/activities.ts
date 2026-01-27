@@ -73,20 +73,25 @@ export const importActivityToSuuntoApp = onCall({
                 'Authorization': accessToken,
                 'Content-Type': 'application/json',
                 'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-                'json': true,
               },
-              body: JSON.stringify({
+              json: true,
+              body: {
                 // description: "#qs",
                 // comment: "",
                 notifyUser: true,
-              }),
+              },
               url: 'https://cloudapi.suunto.com/v2/upload/',
             });
-            result = JSON.parse(result);
+            // Result is already parsed because json: true
           } catch (e: any) {
             // Start logging and rethrowing for retry-helper to catch matching 401s
             logger.error(`Could not init activity upload for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
             throw e;
+          }
+
+          if (!result || !result.url || !result.id) {
+            logger.error(`Invalid init response from Suunto for user ${userID}`, result);
+            throw new HttpsError('internal', 'Invalid response from Suunto initialization.');
           }
 
           const url = result.url;
@@ -124,11 +129,23 @@ export const importActivityToSuuntoApp = onCall({
                   'Authorization': accessToken,
                   'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
                 },
+                json: true,
                 url: `https://cloudapi.suunto.com/v2/upload/${uploadId}`,
               });
 
-              const statusJson = JSON.parse(statusResponse);
-              status = statusJson.status;
+              // Response is already parsed
+              const statusJson = statusResponse;
+
+              if (!statusJson || !statusJson.status) {
+                logger.warn(`Missing status in response for user ${userID}, id ${uploadId}:`, statusJson);
+                // We don't throw immediately, we let it retry unless it's critical, but here status is undefined so we might want to wait or fail.
+                // Let's assume 'NEW' if missing to keep retrying, or error. safer to error or warn.
+                // If status is undefined, the loop condition (status === 'NEW'...) might break or continue depending on logic.
+                // status will be undefined. undefined !== 'PROCESSED'. 
+                // status === undefined.
+              }
+
+              status = statusJson?.status;
               logger.info(`Upload status (attempt ${attempts}/${maxAttempts}) for user ${userID}, id ${uploadId}: ${status}`, statusJson);
 
               if (status === 'PROCESSED') {
