@@ -131,7 +131,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         setTimeout(() => {
           this.isMapVisible.set(true);
           this.changeDetectorRef.detectChanges();
-        }, 50);
+        }, 0);
       } else if (!this.lastAppliedColorScheme) {
         // Initial set
         this.lastAppliedColorScheme = colorScheme;
