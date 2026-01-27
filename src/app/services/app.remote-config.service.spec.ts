@@ -18,8 +18,10 @@ vi.mock('../../environments/environment', () => ({
 }));
 
 // Mock firebase/remote-config (not @angular/fire/remote-config)
-vi.mock('firebase/remote-config', () => {
+vi.mock('firebase/remote-config', async (importOriginal) => {
+    const actual = await importOriginal<any>();
     return {
+        ...actual,
         fetchAndActivate: vi.fn(),
         getString: vi.fn()
     };
