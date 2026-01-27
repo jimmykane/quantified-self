@@ -17,9 +17,12 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    /* Robust centering */
     border-bottom: 1px solid var(--mat-app-outline-variant);
     margin-bottom: 12px;
     padding-bottom: 8px;
+    /* Padding is fine if we don't force height */
+    /* Removed explicit height to allow padding + content to flow naturally */
 }
 
 .card-title {
@@ -27,21 +30,29 @@
     font-size: 1.125rem !important;
     font-weight: 500;
     color: var(--mat-sys-on-surface) !important;
-    display: flex;
-    align-items: center;
+    display: block;
+    /* Removed flex */
+    line-height: 32px !important;
+    /* Force match close-btn height */
 }
 
 .close-btn {
-    width: 32px;
-    height: 32px;
-    padding: 0;
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    max-width: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+    padding: 0 !important;
+    /* Strict enforcement against theme math */
     color: var(--mat-sys-on-surface-variant);
     display: flex !important;
     align-items: center;
     justify-content: center;
-    /* Constrain ripple to button size */
+    /* Constrain ripple to button size - Target ALL specificity levels */
     --mdc-icon-button-state-layer-size: 32px;
-    --mat-mdc-icon-button-ripple-size: 32px;
+    --mat-icon-button-state-layer-size: 32px;
+    /* Some versions use one or the other, or both in transition */
 }
 
 .close-btn mat-icon {
