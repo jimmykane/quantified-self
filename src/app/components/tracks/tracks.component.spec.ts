@@ -18,6 +18,7 @@ import { of } from 'rxjs';
 import { DateRanges, AppThemes } from '@sports-alliance/sports-lib';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Overlay } from '@angular/cdk/overlay';
+import { MaterialModule } from '../../modules/material.module';
 
 describe('TracksComponent', () => {
     let component: TracksComponent;
@@ -93,6 +94,7 @@ describe('TracksComponent', () => {
 
         await TestBed.configureTestingModule({
             declarations: [TracksComponent],
+            imports: [MaterialModule],
             providers: [
                 { provide: AppAuthService, useValue: mockAuthService },
                 { provide: AppUserService, useValue: mockUserService },

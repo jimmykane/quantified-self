@@ -55,6 +55,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   private eventsSubscription: Subscription = new Subscription();
   private trackLoadingSubscription: Subscription = new Subscription();
   private currentStyleUrl: string | undefined;
+  public manualStyleOverride: string | null = null; // Track manual style selection
 
   private promiseTime!: number;
   private analyticsService = inject(AppAnalyticsService);
@@ -131,6 +132,10 @@ export class TracksComponent implements OnInit, OnDestroy {
       // Subscribe to theme changes
       this.eventsSubscription.add(this.themeService.getAppTheme().subscribe(theme => {
         if (!this.map) return;
+
+        // If manual override is active, do not apply theme style
+        if (this.manualStyleOverride) return;
+
         const style = theme === AppThemes.Dark ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11';
 
         // Robust check: Only update if the requested style is different from what we think it is
@@ -138,28 +143,54 @@ export class TracksComponent implements OnInit, OnDestroy {
           return;
         }
 
-        this.currentStyleUrl = style;
-        this.map.setStyle(style);
-
-        this.map.once('style.load', async () => {
-          // Re-add Terrain Source
-          // Re-add Terrain Source
-          this.addDemSource(this.map);
-
-          // Clear internal state of "active layers" because map cleared them
-          this.activeLayerIds = [];
-          // Re-fetch/Re-draw tracks
-          await this.loadTracksMapForUserByDateRange(this.user, this.map, this.user.settings.myTracksSettings.dateRange, this.user.settings.myTracksSettings.activityTypes);
-        });
+        this.applyStyle(style);
       }));
 
       // Removed original manual addSource block as it is now handled in helper
-
-
-      await this.loadTracksMapForUserByDateRange(this.user, this.map, this.user.settings.myTracksSettings.dateRange);
     } catch (error) {
       console.error('Failed to initialize Mapbox:', error);
     }
+  }
+
+  public setMapStyle(styleType: 'default' | 'satellite' | 'outdoors') {
+    if (!this.map) return;
+
+    let styleUrl: string;
+
+    if (styleType === 'default') {
+      this.manualStyleOverride = null;
+      // Re-apply current theme style
+      const theme = this.themeService.appTheme();
+      styleUrl = theme === AppThemes.Dark ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11';
+    } else if (styleType === 'satellite') {
+      styleUrl = 'mapbox://styles/mapbox/satellite-v9';
+      this.manualStyleOverride = styleUrl;
+    } else { // outdoors
+      styleUrl = 'mapbox://styles/mapbox/outdoors-v12';
+      this.manualStyleOverride = styleUrl;
+    }
+
+    if (this.currentStyleUrl !== styleUrl) {
+      this.applyStyle(styleUrl);
+    }
+  }
+
+  private applyStyle(style: string) {
+    this.currentStyleUrl = style;
+    this.map.setStyle(style);
+
+    this.map.once('style.load', async () => {
+      // Re-add Terrain Source
+      this.addDemSource(this.map);
+
+      // Clear internal state of "active layers" because map cleared them
+      this.activeLayerIds = [];
+      // Re-fetch/Re-draw tracks
+      this.changeDetectorRef.detectChanges(); // Check if this helps
+      if (this.user?.settings?.myTracksSettings) {
+        await this.loadTracksMapForUserByDateRange(this.user, this.map, this.user.settings.myTracksSettings.dateRange, this.user.settings.myTracksSettings.activityTypes);
+      }
+    });
   }
 
   public async search(event) {
@@ -222,6 +253,9 @@ export class TracksComponent implements OnInit, OnDestroy {
       this.bottomSheet.dismiss()
     }
   }
+
+
+
 
   private async loadTracksMapForUserByDateRange(user: AppUserInterface, map: any, dateRange: DateRanges, activityTypes?: ActivityTypes[]) {
     const promiseTime = new Date().getTime();

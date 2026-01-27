@@ -17,4 +17,14 @@
   <!--    (searchChange)="search($event)">-->
   <!--  </app-event-search>-->
   <div #mapDiv id="map"></div>
+  <div class="map-style-controls">
+    <mat-button-toggle-group appearance="legacy" name="mapStyle" aria-label="Map Style"
+      (change)="setMapStyle($any($event).value)">
+      <mat-button-toggle value="default" [checked]="!manualStyleOverride">Default</mat-button-toggle>
+      <mat-button-toggle value="satellite"
+        [checked]="manualStyleOverride === 'mapbox://styles/mapbox/satellite-v9'">Satellite</mat-button-toggle>
+      <mat-button-toggle value="outdoors"
+        [checked]="manualStyleOverride === 'mapbox://styles/mapbox/outdoors-v12'">Outdoors</mat-button-toggle>
+    </mat-button-toggle-group>
+  </div>
 </mat-card>

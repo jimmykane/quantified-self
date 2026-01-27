@@ -2,6 +2,8 @@ mat-card {
   padding: 0;
   height: calc(100vh - 60px);
   /*height: 100vh;*/
+  position: relative;
+  /* Ensure absolute children are relative to this card */
 }
 
 app-event-search {
@@ -31,4 +33,20 @@ app-event-search {
 
 #map {
   height: 100%;
+}
+
+.map-style-controls {
+  position: absolute;
+  bottom: 30px;
+  /* Adjust as needed to align with other controls */
+  left: 10px;
+  z-index: 1000;
+  /* Ensure it's above the map */
+  background: transparent;
+}
+
+.map-style-controls mat-button-toggle-group {
+  background-color: var(--mat-sys-surface);
+  box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
 }
