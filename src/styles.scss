@@ -5,6 +5,7 @@
 @use 'styles/forms';
 @use 'styles/search';
 @use 'styles/segmented-buttons';
+@use 'styles/google-maps';
 
 // Include the common styles for Angular Material. We include this here so that you only
 // have to load a single css file for Angular Material in your app.
@@ -303,21 +304,7 @@ section.component-container {
   --mat-app-primary: var(--mat-sys-primary);
 }
 
-/* Global Glassmorphism Card Style */
-.glass-card {
-  background: var(--mat-sys-surface) !important;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  border-radius: 20px !important;
-  /* Force border radius */
-  box-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.05),
-    0 2px 4px -1px rgba(0, 0, 0, 0.03),
-    0 10px 15px -3px rgba(0, 0, 0, 0.05) !important;
-  /* Override material elevation */
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
+
 
 /* Global Paginator Transparent Override */
 mat-paginator,
@@ -328,15 +315,7 @@ mat-stepper,
   background: transparent !important;
 }
 
-/* Dark Theme Overrides */
-.dark-theme {
 
-  .glass-card {
-    /* Background handled by variable */
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2) !important;
-  }
-}
 
 /* ==========================================================================
    Sidenav Scrollbar Hiding
@@ -812,33 +791,5 @@ tr.mat-row:focus,
   mat-form-field {
     width: 100%;
     display: block;
-  }
-}
-
-/* ==========================================================================
-   Google Maps Dark Theme Overrides - "Nuclear" Option
-   1. Make the Google wrapper invisible/transparent
-   2. Remove standard Google padding/shadows
-   3. Let the Angular component handle the visual box
-   ========================================================================== */
-.dark-theme {
-  .gm-style-iw-c {
-    background-color: transparent !important;
-    box-shadow: none !important;
-    padding: 0 !important;
-  }
-
-  .gm-style-iw-tc::after {
-    background: var(--mat-sys-surface-container-low, #333) !important;
-  }
-
-  .gm-style-iw-d {
-    overflow: hidden !important;
-    background-color: transparent !important;
-  }
-
-  /* Hide the default Google Maps close button as we will implement our own */
-  .gm-ui-hover-effect {
-    display: none !important;
   }
 }
