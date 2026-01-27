@@ -22,7 +22,7 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
   @Input() useAnimations: boolean;
 
 
-  protected chart: am4charts.PieChart | am4charts.XYChart | am4charts.RadarChart;
+  protected chart: am4charts.PieChart | am4charts.XYChart | am4charts.RadarChart | undefined;
 
   protected subscriptions: Subscription[] = [];
 
@@ -148,8 +148,7 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
         core.unuseAllThemes();
         if (this.chart) {
           this.chart.dispose();
-          // delete this.chart
-
+          this.chart = undefined;
         }
       });
     } catch (e) {

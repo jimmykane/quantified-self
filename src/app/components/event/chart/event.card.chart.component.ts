@@ -131,7 +131,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
 
   public distanceAxesForActivitiesMap = new Map<string, StreamInterface>();
-  protected declare chart: am4charts.XYChart;
+  private chartActionPromise: Promise<void> = Promise.resolve();
+  protected declare chart: am4charts.XYChart | undefined;
 
   private core: typeof am4core;
   private charts: typeof am4charts;
@@ -255,31 +256,31 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         this.distanceAxesForActivitiesMap.clear();
       }
 
-      // #2: Temporarily disable animations during rebuild for better performance
-      const originalAnimationSetting = this.useAnimations;
-      this.useAnimations = false;
+      this.chartActionPromise = this.chartActionPromise.then(async () => {
+        // #2: Temporarily disable animations during rebuild for better performance
+        const originalAnimationSetting = this.useAnimations;
+        this.useAnimations = false;
 
-      // Use requestAnimationFrame to ensure paint happens before heavy work
-      requestAnimationFrame(() => {
-        setTimeout(async () => {
-          this.destroyChart();
-          this.activityCursorService.clear();
-          this.eventColorService.clearCache();
+        await this.destroyChart();
+        this.activityCursorService.clear();
+        this.eventColorService.clearCache();
 
-          // Re-create the empty chart shell
-          this.chart = await this.createChart();
+        // Re-create the empty chart shell
+        this.chart = await this.createChart();
 
-          // Restore animation setting after chart is created
-          this.useAnimations = originalAnimationSetting;
+        // Restore animation setting after chart is created
+        this.useAnimations = originalAnimationSetting;
 
-          // Proceed to populate data
-          const seq = ++this.processSequence;
-          if (!this.event || !this.selectedActivities?.length) {
-            this.loaded();
-            return;
-          }
-          await this.processChanges(seq);
-        }, 0);
+        // Proceed to populate data
+        const seq = ++this.processSequence;
+        if (!this.event || !this.selectedActivities?.length) {
+          this.loaded();
+          return;
+        }
+        await this.processChanges(seq);
+      }).catch(err => {
+        this.logger.error('Error during chart rebuild sequence', err);
+        this.loaded(); // Ensure loading spinner is hidden on error
       });
     }
   }
@@ -293,7 +294,10 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     if (this.cursorPositionSubscription) {
       this.cursorPositionSubscription.unsubscribe();
     }
-    super.ngOnDestroy();
+    // Ensure we handle any lingering chart action, or at least try to destroy cleanly
+    this.chartActionPromise.then(() => {
+      super.ngOnDestroy();
+    });
   }
 
   getFillColor(chart: am4charts.XYChart | am4charts.PieChart, index: number) {
