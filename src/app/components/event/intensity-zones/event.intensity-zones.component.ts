@@ -23,7 +23,7 @@ import { DataSpeed } from '@sports-alliance/sports-lib';
 import { AppColors } from '../../../services/color/app.colors';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { convertIntensityZonesStatsToChartData } from '../../../helpers/intensity-zones-chart-data-helper';
+import { convertIntensityZonesStatsToChartData, getActiveDataTypes } from '../../../helpers/intensity-zones-chart-data-helper';
 import { AppDataColors } from '../../../services/color/app.data.colors';
 import { LoggerService } from '../../../services/logger.service';
 import { AppBreakpoints } from '../../../constants/breakpoints';
@@ -162,19 +162,22 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
 
   private updateChart(data: any) {
     this.chart.series.clear();
-    this.createChartSeries();
+    this.createChartSeries(getActiveDataTypes(data));
     this.chart.data = data
   }
 
-  private createChartSeries() {
+  private createChartSeries(activeTypes: Set<string>) {
     DynamicDataLoader.zoneStatsTypeMap.forEach(statsTypeMap => {
+      if (!activeTypes.has(statsTypeMap.type)) {
+        return;
+      }
       const series = this.chart.series.push(new this.charts.ColumnSeries());
 
       // series.clustered = false;
       series.dataFields.valueX = statsTypeMap.type;
       series.dataFields.categoryY = 'zone';
       series.calculatePercent = true;
-      series.legendSettings.labelText = `${statsTypeMap.type}`;
+      series.legendSettings.labelText = statsTypeMap.type === 'Heart Rate' ? 'HR' : `${statsTypeMap.type}`;
       series.columns.template.tooltipText = `[bold font-size: 1.05em]{categoryY}[/]\n ${statsTypeMap.type}: [bold]{valueX.percent.formatNumber('#.')}%[/]\n Time: [bold]{valueX.formatDuration()}[/]`;
       series.columns.template.strokeWidth = 0;
       series.columns.template.height = this.core.percent(80);
