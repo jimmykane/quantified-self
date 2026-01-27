@@ -12,9 +12,6 @@
         <mat-panel-title>
           <mat-icon class="category-icon">{{ getCategoryIcon(group.category) }}</mat-icon>
           <span class="device-name">{{ group.displayName }}</span>
-          @if (group.occurrences > 1) {
-          <span class="occurrence-badge">×{{ group.occurrences }}</span>
-          }
         </mat-panel-title>
         <mat-panel-description>
           @if (group.batteryLevel !== null || group.batteryStatus) {

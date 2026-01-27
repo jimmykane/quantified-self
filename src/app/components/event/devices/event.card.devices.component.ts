@@ -21,7 +21,7 @@ export interface DeviceGroup {
   sourceType: string | null;
   cumulativeOperatingTime: number | null;
   occurrences: number;
-  category: 'main' | 'power' | 'hr' | 'other';
+  category: 'main' | 'power' | 'hr' | 'shifting' | 'other';
 }
 
 /** Invalid serial number (0xFFFFFFFF) used by FIT protocol as default. */
@@ -65,23 +65,25 @@ export class EventCardDevicesComponent implements OnChanges {
   }
 
   private extractRawDevices(activity: ActivityInterface): any[] {
-    return activity.creator.devices.map(device => ({
-      type: device.type === 'Unknown' ? '' : (device.type ?? ''),
-      name: device.name ?? '',
-      batteryStatus: device.batteryStatus ?? null,
-      batteryLevel: device.batteryLevel ?? null,
-      batteryVoltage: device.batteryVoltage ?? null,
-      manufacturer: device.manufacturer ?? '',
-      serialNumber: device.serialNumber ?? null,
-      productId: device.product ?? null,
-      softwareInfo: device.swInfo ?? null,
-      hardwareInfo: device.hwInfo ?? null,
-      antDeviceNumber: device.antDeviceNumber ?? null,
-      antTransmissionType: device.antTransmissionType ?? null,
-      antNetwork: device.antNetwork ?? null,
-      sourceType: device.sourceType ?? null,
-      cumulativeOperatingTime: device.cumOperatingTime ?? null,
-    }));
+    return activity.creator.devices.map(device => {
+      return {
+        type: device.type === 'Unknown' ? '' : (device.type ?? ''),
+        name: device.name ?? '',
+        batteryStatus: device.batteryStatus ?? null,
+        batteryLevel: device.batteryLevel ?? null,
+        batteryVoltage: device.batteryVoltage ?? null,
+        manufacturer: device.manufacturer ?? '',
+        serialNumber: device.serialNumber ?? null,
+        productId: device.product ?? null,
+        softwareInfo: device.swInfo ?? null,
+        hardwareInfo: device.hwInfo ?? null,
+        antDeviceNumber: device.antDeviceNumber ?? null,
+        antTransmissionType: device.antTransmissionType ?? null,
+        antNetwork: device.antNetwork ?? null,
+        sourceType: device.sourceType ?? null,
+        cumulativeOperatingTime: device.cumOperatingTime ?? null,
+      };
+    });
   }
 
   private groupDevices(devices: any[]): DeviceGroup[] {
@@ -121,7 +123,7 @@ export class EventCardDevicesComponent implements OnChanges {
 
   private createSignature(device: any): string {
     // Priority 1: Group by Serial Number if it's valid
-    if (device.serialNumber && device.serialNumber !== INVALID_SERIAL) {
+    if (device.serialNumber && Number(device.serialNumber) !== INVALID_SERIAL) {
       return `serial-${device.serialNumber}`;
     }
 
@@ -143,7 +145,7 @@ export class EventCardDevicesComponent implements OnChanges {
       type,
       displayName: this.generateDisplayName(device),
       manufacturer,
-      serialNumber: device.serialNumber !== INVALID_SERIAL ? device.serialNumber : null,
+      serialNumber: device.serialNumber,
       productId: device.productId,
       softwareInfo: device.softwareInfo,
       hardwareInfo: device.hardwareInfo,
@@ -197,7 +199,7 @@ export class EventCardDevicesComponent implements OnChanges {
     return str.charAt(0).toUpperCase() + str.slice(1).toLowerCase();
   }
 
-  private categorizeDevice(type: string, manufacturer: string, sourceType: string): 'main' | 'power' | 'hr' | 'other' {
+  private categorizeDevice(type: string, manufacturer: string, sourceType: string): 'main' | 'power' | 'hr' | 'shifting' | 'other' {
     const typeLower = (type || '').toLowerCase();
     const mfgLower = (manufacturer || '').toLowerCase();
     const srcLower = (sourceType || '').toLowerCase();
@@ -211,6 +213,12 @@ export class EventCardDevicesComponent implements OnChanges {
     // Heart rate
     if (typeLower.includes('heart') || typeLower === 'hr' || typeLower === 'heart_rate') {
       return 'hr';
+    }
+
+    // Shifting (Sram, Shimano Di2, Campagnolo, etc.)
+    // Check for "shifting" keyword in type or name, or specific names
+    if (typeLower.includes('shifting') || typeLower.includes('di2') || typeLower.includes('eps') || typeLower.includes('etap')) {
+      return 'shifting';
     }
 
     // Power/cadence sensors
@@ -266,7 +274,7 @@ export class EventCardDevicesComponent implements OnChanges {
   }
 
   private sortByCategory(groups: DeviceGroup[]): DeviceGroup[] {
-    const priority: Record<string, number> = { main: 0, power: 1, hr: 2, other: 3 };
+    const priority: Record<string, number> = { main: 0, power: 1, hr: 2, shifting: 3, other: 4 };
     return groups.sort((a, b) => priority[a.category] - priority[b.category]);
   }
 
@@ -279,6 +287,7 @@ export class EventCardDevicesComponent implements OnChanges {
       case 'main': return 'watch';
       case 'power': return 'bolt';
       case 'hr': return 'monitor_heart';
+      case 'shifting': return 'settings'; // Gears/cogs
       default: return 'devices_other';
     }
   }
@@ -326,8 +335,11 @@ export class EventCardDevicesComponent implements OnChanges {
   getDetailEntries(group: DeviceGroup): { label: string; value: string; icon: string }[] {
     const entries: { label: string; value: string; icon: string }[] = [];
 
-    if (group.serialNumber) {
-      entries.push({ label: 'Serial Number', value: String(group.serialNumber), icon: 'fingerprint' });
+    if (group.serialNumber != null) {
+      const displayValue = Number(group.serialNumber) === INVALID_SERIAL
+        ? `Invalid (${group.serialNumber})`
+        : String(group.serialNumber);
+      entries.push({ label: 'Serial Number', value: displayValue, icon: 'fingerprint' });
     }
     if (group.type) {
       entries.push({ label: 'Type', value: this.formatType(group.type), icon: 'category' });

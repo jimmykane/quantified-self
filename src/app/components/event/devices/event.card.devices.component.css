@@ -23,8 +23,9 @@
 .device-accordion mat-expansion-panel-header {
   font: var(--mat-sys-body-large);
   height: auto;
+  height: auto;
   min-height: 48px;
-  padding: 0 16px;
+  padding: 8px 16px;
 }
 
 .device-accordion ::ng-deep .mat-content {
