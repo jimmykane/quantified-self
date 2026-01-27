@@ -43,12 +43,14 @@ mat-panel-title {
 
 .category-icon {
   color: var(--mat-sys-primary);
-  font-size: 20px;
-  width: 20px;
-  height: 20px;
+  font-size: 24px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: visible;
+  /* Ensure glyphs slightly larger than box don't clip */
 }
 
 .device-name {
