@@ -4,7 +4,7 @@ import { authGuard } from './authentication/app.auth.guard';
 import { proGuard } from './authentication/pro.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { adminGuard } from './authentication/admin.guard';
-import { guestGuard } from './authentication/guest.guard';
+import { loggedInGuard } from './authentication/logged-in.guard';
 
 const routes: Routes = [
   {
@@ -95,7 +95,7 @@ const routes: Routes = [
       description: 'Quantified Self: Premium fitness analytics for Suunto, Garmin, and COROS. Jump into your data with full history imports or watch your activities sync automatically.',
       keywords: 'quantified self, fitness tracker, activity analysis, garmin connect sync, suunto app, coros integration, strava alternative, history import, suunto routes, activity sync, fit file viewer, gpx parser'
     },
-    canMatch: [guestGuard, onboardingGuard],
+    canMatch: [loggedInGuard, onboardingGuard],
     pathMatch: 'full'
   },
   { path: '**', redirectTo: '/', pathMatch: 'full' },

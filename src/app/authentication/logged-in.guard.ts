@@ -7,7 +7,7 @@ import { AppAuthService } from './app.auth.service';
  * Guard to prevent authenticated users from matching certain routes (e.g., landing page).
  * Redirects to /dashboard if a user is found.
  */
-export const guestGuard: CanMatchFn = (route, segments) => {
+export const loggedInGuard: CanMatchFn = (route, segments) => {
     const authService = inject(AppAuthService);
     const router = inject(Router);
 
