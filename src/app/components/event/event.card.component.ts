@@ -25,6 +25,7 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../services/app.user.service';
 import { AppActivitySelectionService } from '../../services/activity-selection-service/app-activity-selection.service';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { LapTypes } from '@sports-alliance/sports-lib';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { LoggerService } from '../../services/logger.service';
@@ -45,6 +46,7 @@ export class EventCardComponent implements OnInit {
   private authService = inject(AppAuthService);
   private userService = inject(AppUserService);
   private activitySelectionService = inject(AppActivitySelectionService);
+  private userSettingsQuery = inject(AppUserSettingsQueryService);
   private snackBar = inject(MatSnackBar);
   private themeService = inject(AppThemeService);
   private bottomSheet = inject(MatBottomSheet);
@@ -85,109 +87,15 @@ export class EventCardComponent implements OnInit {
   });
 
   // Convert theme observables to signals
+  // User settings (derived from query service)
+  public userUnitSettings = this.userSettingsQuery.unitSettings;
+
   public chartTheme = toSignal(this.themeService.getChartTheme(), { initialValue: ChartThemes.Material });
-  public appTheme = toSignal(this.themeService.getAppTheme(), { initialValue: AppThemes.Normal });
 
-  // User settings (derived from currentUser signal)
-  public userUnitSettings = computed(() =>
-    this.currentUser()?.settings?.unitSettings ?? AppUserService.getDefaultUserUnitSettings()
-  );
-
-  public chartXAxisType = computed(() =>
-    this.currentUser()?.settings?.chartSettings?.xAxisType ?? XAxisTypes.Duration
-  );
-
-  public chartDownSamplingLevel = computed(() =>
-    this.currentUser()?.settings?.chartSettings?.downSamplingLevel ?? AppUserService.getDefaultDownSamplingLevel()
-  );
-
-  public chartGainAndLossThreshold = computed(() =>
-    this.currentUser()?.settings?.chartSettings?.gainAndLossThreshold ?? AppUserService.getDefaultGainAndLossThreshold()
-  );
-
-  public chartCursorBehaviour = computed(() =>
-    this.currentUser()?.settings?.chartSettings?.chartCursorBehaviour ?? AppUserService.getDefaultChartCursorBehaviour()
-  );
-
-  public showAllData = computed(() =>
-    this.currentUser()?.settings?.chartSettings?.showAllData ?? false
-  );
-
+  // Required for app-event-intensity-zones until it is also refactored
   public useChartAnimations = computed(() =>
-    this.currentUser()?.settings?.chartSettings?.useAnimations ?? false
+    this.userSettingsQuery.chartSettings()?.useAnimations ?? false
   );
-
-  public chartDisableGrouping = computed(() =>
-    this.currentUser()?.settings?.chartSettings?.disableGrouping ?? false
-  );
-
-  public showMapLaps = computed(() =>
-    this.currentUser()?.settings?.mapSettings?.showLaps ?? true
-  );
-
-
-
-  public showChartLaps = computed(() =>
-    this.currentUser()?.settings?.chartSettings?.showLaps ?? true
-  );
-
-  public showChartGrid = computed(() =>
-    this.currentUser()?.settings?.chartSettings?.showGrid ?? true
-  );
-
-  public stackChartYAxes = computed(() =>
-    this.currentUser()?.settings?.chartSettings?.stackYAxes ?? true
-  );
-
-  public chartHideAllSeriesOnInit = computed(() =>
-    this.currentUser()?.settings?.chartSettings?.hideAllSeriesOnInit ?? false
-  );
-
-  public mapType = computed(() => {
-    const type = this.currentUser()?.settings?.mapSettings?.mapType;
-    return type ?? AppUserService.getDefaultMapType();
-  });
-
-  public showMapArrows = computed(() =>
-    this.currentUser()?.settings?.mapSettings?.showArrows ?? true
-  );
-
-  public mapStrokeWidth = computed(() =>
-    this.currentUser()?.settings?.mapSettings?.strokeWidth ?? AppUserService.getDefaultMapStrokeWidth()
-  );
-
-  public mapLapTypes = computed<LapTypes[]>(() =>
-    this.currentUser()?.settings?.mapSettings?.lapTypes ?? AppUserService.getDefaultMapLapTypes()
-  );
-
-  public chartLapTypes = computed<LapTypes[]>(() =>
-    this.currentUser()?.settings?.chartSettings?.lapTypes ?? AppUserService.getDefaultChartLapTypes()
-  );
-
-  public chartStrokeWidth = computed(() =>
-    this.currentUser()?.settings?.chartSettings?.strokeWidth ?? AppUserService.getDefaultChartStrokeWidth()
-  );
-
-  public chartStrokeOpacity = computed(() =>
-    this.currentUser()?.settings?.chartSettings?.strokeOpacity ?? AppUserService.getDefaultChartStrokeOpacity()
-  );
-
-  public chartFillOpacity = computed(() =>
-    this.currentUser()?.settings?.chartSettings?.fillOpacity ?? AppUserService.getDefaultChartFillOpacity()
-  );
-
-  public chartExtraMaxForPower = computed(() =>
-    this.currentUser()?.settings?.chartSettings?.extraMaxForPower ?? AppUserService.getDefaultExtraMaxForPower()
-  );
-
-  public chartExtraMaxForPace = computed(() =>
-    this.currentUser()?.settings?.chartSettings?.extraMaxForPace ?? AppUserService.getDefaultExtraMaxForPace()
-  );
-
-  public chartDataTypesToUse = computed(() => {
-    const user = this.currentUser();
-    return user ? this.userService.getUserChartDataTypesToUse(user) : [];
-  });
 
   public basicStatsTypes = [
     'Duration',
