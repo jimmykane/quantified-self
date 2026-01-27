@@ -50,8 +50,7 @@
         <div style="margin-top: auto; padding-top: 16px;">
           @if (!isConnectedToService()) {
           <button mat-flat-button color="primary" style="width: 100%"
-            [disabled]="!user || this.isGuest || isLoading || isConnecting || !hasProAccess"
-            (click)="connectWithService($event)">
+            [disabled]="!user || isLoading || isConnecting || !hasProAccess" (click)="connectWithService($event)">
             @if (isConnecting) {
             <ng-container>
               <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"

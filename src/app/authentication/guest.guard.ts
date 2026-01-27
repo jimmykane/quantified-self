@@ -14,8 +14,8 @@ export const guestGuard: CanMatchFn = (route, segments) => {
     return authService.user$.pipe(
         take(1),
         map(user => !user),
-        tap(isGuest => {
-            if (!isGuest) {
+        tap(isLoggedOut => {
+            if (!isLoggedOut) {
                 // User is logged in, redirect to dashboard
                 router.navigate(['/dashboard']);
             }

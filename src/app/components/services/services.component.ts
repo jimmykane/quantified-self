@@ -30,7 +30,7 @@ export class ServicesComponent implements OnInit, OnDestroy {
   public serviceNames = ServiceNames;
   public hasProAccess = false;
   public isAdmin = false;
-  public isGuest = false;
+
 
   private userSubscription!: Subscription;
   private routeSubscription!: Subscription;

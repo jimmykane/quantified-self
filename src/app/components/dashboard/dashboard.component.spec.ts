@@ -42,7 +42,7 @@ describe('DashboardComponent', () => {
     beforeEach(async () => {
         mockAuthService = {
             user$: of(mockUser),
-            isGuest: () => false
+
         };
 
         mockEventService = {
