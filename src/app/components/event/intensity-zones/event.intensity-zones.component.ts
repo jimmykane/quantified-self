@@ -177,7 +177,7 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
       series.dataFields.valueX = statsTypeMap.type;
       series.dataFields.categoryY = 'zone';
       series.calculatePercent = true;
-      series.legendSettings.labelText = statsTypeMap.type === 'Heart Rate' ? 'HR' : `${statsTypeMap.type}`;
+      series.legendSettings.labelText = statsTypeMap.type === DataHeartRate.type ? 'HR' : `${statsTypeMap.type}`;
       series.columns.template.tooltipText = `[bold font-size: 1.05em]{categoryY}[/]\n ${statsTypeMap.type}: [bold]{valueX.percent.formatNumber('#.')}%[/]\n Time: [bold]{valueX.formatDuration()}[/]`;
       series.columns.template.strokeWidth = 0;
       series.columns.template.height = this.core.percent(80);

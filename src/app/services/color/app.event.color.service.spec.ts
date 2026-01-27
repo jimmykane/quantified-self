@@ -147,6 +147,28 @@ describe('AppEventColorService', () => {
                 expect(mockCore.color).toHaveBeenCalledWith(AppColors.LightRed);
                 expect(result).toBe(mockColorObj);
             });
+
+            it('should return correct colors for short zone labels (Z1-Z5)', () => {
+                const mockCore = {
+                    color: vi.fn().mockImplementation((color) => ({ hex: color }))
+                };
+                mockAmChartsService.getCachedCore.mockReturnValue(mockCore);
+
+                service.getColorForZone('Z1');
+                expect(mockCore.color).toHaveBeenCalledWith(AppColors.LightBlue);
+
+                service.getColorForZone('Z2');
+                expect(mockCore.color).toHaveBeenCalledWith(AppColors.Blue);
+
+                service.getColorForZone('Z3');
+                expect(mockCore.color).toHaveBeenCalledWith(AppColors.Green);
+
+                service.getColorForZone('Z4');
+                expect(mockCore.color).toHaveBeenCalledWith(AppColors.Yellow);
+
+                service.getColorForZone('Z5');
+                expect(mockCore.color).toHaveBeenCalledWith(AppColors.LightRed);
+            });
         });
 
         describe('clearCache', () => {
