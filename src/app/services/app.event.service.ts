@@ -40,6 +40,8 @@ import { AppEventUtilities } from '../utils/app.event.utilities';
 import { LoggerService } from './logger.service';
 import { AppFileService } from './app.file.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
+import { getMetadata } from '@angular/fire/storage';
+import { AppCacheService } from './app.cache.service';
 
 
 @Injectable({
@@ -654,10 +656,42 @@ export class AppEventService implements OnDestroy {
     return this.fetchAndParseOneFile(originalFile, skipEnrichment);
   }
 
+  private cacheService = inject(AppCacheService);
+
+  // ... (imports)
+
   public async downloadFile(path: string): Promise<ArrayBuffer> {
     const fileRef = runInInjectionContext(this.injector, () => ref(this.storage, path));
-    const buffer = await runInInjectionContext(this.injector, () => getBytes(fileRef));
-    return this.fileService.decompressIfNeeded(buffer, path);
+
+    try {
+      // 1. Fetch Metadata (fast) to get generation ID
+      const metadata = await runInInjectionContext(this.injector, () => getMetadata(fileRef));
+      const generation = metadata.generation;
+
+      // 2. Check Cache
+      const cached = await this.cacheService.getFile(path);
+
+      if (cached && cached.generation === generation) {
+        this.logger.log(`[AppEventService] Cache HIT for ${path}`);
+        return this.fileService.decompressIfNeeded(cached.buffer, path);
+      }
+
+      this.logger.log(`[AppEventService] Cache MISS/STALE for ${path} (Cloud Gen: ${generation}, Cached Gen: ${cached?.generation})`);
+
+      // 3. Download fresh
+      const buffer = await runInInjectionContext(this.injector, () => getBytes(fileRef));
+
+      // 4. Update Cache
+      await this.cacheService.setFile(path, { buffer, generation });
+
+      return this.fileService.decompressIfNeeded(buffer, path);
+
+    } catch (e) {
+      this.logger.error(`[AppEventService] Error downloading/caching file ${path}`, e);
+      // Fallback to direct download if metadata/cache fails
+      const buffer = await runInInjectionContext(this.injector, () => getBytes(fileRef));
+      return this.fileService.decompressIfNeeded(buffer, path);
+    }
   }
 
   private async decompressIfNeeded(buffer: ArrayBuffer, path: string): Promise<ArrayBuffer> {

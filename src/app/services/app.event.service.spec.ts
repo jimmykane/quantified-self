@@ -11,6 +11,8 @@ import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
 import { of } from 'rxjs';
+import { AppCacheService } from './app.cache.service';
+import { getMetadata } from '@angular/fire/storage';
 
 // Hoist mocks
 const mocks = vi.hoisted(() => {
@@ -20,6 +22,7 @@ const mocks = vi.hoisted(() => {
         getActivityFromJSON: vi.fn(),
         sanitize: vi.fn(),
         getCountFromServer: vi.fn(),
+        getBytes: vi.fn(),
     };
 });
 
@@ -37,6 +40,19 @@ vi.mock('@angular/fire/firestore', async (importOriginal) => {
         deleteDoc: vi.fn(),
         setDoc: vi.fn(),
         getCountFromServer: mocks.getCountFromServer,
+        runInInjectionContext: vi.fn((injector, fn) => fn()),
+    };
+});
+
+// Mock @angular/fire/storage
+vi.mock('@angular/fire/storage', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@angular/fire/storage')>();
+    return {
+        ...actual,
+        ref: vi.fn(),
+        getBytes: mocks.getBytes,
+        uploadBytes: vi.fn(),
+        getMetadata: vi.fn(),
         runInInjectionContext: vi.fn((injector, fn) => fn()),
     };
 });
@@ -90,6 +106,11 @@ describe('AppEventService', () => {
     const originalCompressionStream = globalThis.CompressionStream;
     const originalResponse = globalThis.Response;
 
+    const mockCacheService = {
+        getFile: vi.fn(),
+        setFile: vi.fn()
+    };
+
     beforeEach(() => {
         TestBed.configureTestingModule({
             providers: [
@@ -102,7 +123,10 @@ describe('AppEventService', () => {
                 { provide: LoggerService, useValue: mockLogger },
                 { provide: AppFileService, useValue: mockFileService },
                 { provide: BrowserCompatibilityService, useValue: mockCompatibility },
-                { provide: AppEventUtilities, useValue: { enrich: vi.fn() } }
+                { provide: AppFileService, useValue: mockFileService },
+                { provide: BrowserCompatibilityService, useValue: mockCompatibility },
+                { provide: AppEventUtilities, useValue: { enrich: vi.fn() } },
+                { provide: AppCacheService, useValue: mockCacheService }
             ]
         });
         service = TestBed.inject(AppEventService);
@@ -265,8 +289,76 @@ describe('AppEventService', () => {
         await expect(service.writeAllEventData({ uid: 'user1' } as any, mockEvent, originalFiles))
             .resolves.not.toThrow();
     });
-    // Note: SML is added to textExtensions in the service code.
-    // This is verified by the existing "should skip compression if browser not supported" test
-    // which uses a GPX file - the same code path applies to SML since they're in the same
-    // textExtensions array.
+    // ... existing tests ...
+
+    describe('downloadFile', () => {
+        const testPath = 'test/path/file.json';
+        const testBuffer = new ArrayBuffer(8);
+        const testGeneration = '12345';
+
+        beforeEach(() => {
+            // Default mocks
+            vi.mocked(getMetadata).mockResolvedValue({ generation: testGeneration } as any);
+            vi.mocked(mocks.getBytes).mockResolvedValue(testBuffer);
+            // @ts-ignore
+            service.fileService.decompressIfNeeded = vi.fn().mockResolvedValue(testBuffer);
+        });
+
+        it('should return cached file if generation matches (Cache Hit)', async () => {
+            mockCacheService.getFile.mockResolvedValue({ buffer: testBuffer, generation: testGeneration });
+
+            const result = await service.downloadFile(testPath);
+
+            expect(getMetadata).toHaveBeenCalled();
+            expect(mockCacheService.getFile).toHaveBeenCalledWith(testPath);
+            expect(mocks.getBytes).not.toHaveBeenCalled(); // Should NOT download
+            expect(result).toBe(testBuffer);
+        });
+
+        it('should download and cache file if cache is empty (Cache Miss)', async () => {
+            mockCacheService.getFile.mockResolvedValue(undefined);
+
+            const result = await service.downloadFile(testPath);
+
+            expect(getMetadata).toHaveBeenCalled();
+            expect(mockCacheService.getFile).toHaveBeenCalledWith(testPath);
+            expect(mocks.getBytes).toHaveBeenCalled(); // Should download
+            expect(mockCacheService.setFile).toHaveBeenCalledWith(testPath, { buffer: testBuffer, generation: testGeneration });
+            expect(result).toBe(testBuffer);
+        });
+
+        it('should download and cache file if generation does not match (Cache Stale)', async () => {
+            const staleGeneration = '00000';
+            mockCacheService.getFile.mockResolvedValue({ buffer: testBuffer, generation: staleGeneration });
+
+            const result = await service.downloadFile(testPath);
+
+            expect(getMetadata).toHaveBeenCalled();
+            expect(mockCacheService.getFile).toHaveBeenCalledWith(testPath);
+            expect(mocks.getBytes).toHaveBeenCalled(); // Should download
+            expect(mockCacheService.setFile).toHaveBeenCalledWith(testPath, { buffer: testBuffer, generation: testGeneration });
+            expect(result).toBe(testBuffer);
+        });
+
+        it('should fallback to download if metadata fetch fails', async () => {
+            vi.mocked(getMetadata).mockRejectedValue(new Error('Metadata Error'));
+
+            const result = await service.downloadFile(testPath);
+
+            expect(getMetadata).toHaveBeenCalled();
+            expect(mocks.getBytes).toHaveBeenCalled(); // Fallback download
+            expect(mockCacheService.setFile).not.toHaveBeenCalled(); // Should skip caching on error
+            expect(result).toBe(testBuffer);
+        });
+
+        it('should fallback to download if cache get fails', async () => {
+            vi.mocked(getMetadata).mockResolvedValue({ generation: testGeneration } as any);
+            mockCacheService.getFile.mockRejectedValue(new Error('Cache Error'));
+
+            const result = await service.downloadFile(testPath);
+
+            expect(mocks.getBytes).toHaveBeenCalled();
+            expect(result).toBe(testBuffer);
+        });
+    });
 });
