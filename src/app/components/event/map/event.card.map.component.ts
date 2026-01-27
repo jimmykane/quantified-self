@@ -133,7 +133,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         // Initial set
         this.lastAppliedColorScheme = colorScheme;
       }
-    }, { allowSignalWrites: true });
+    });
   }
 
   async ngOnInit() {
@@ -231,12 +231,17 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   onShowArrowsChange(value: boolean) {
+    this.logger.info('onShowArrowsChange', value);
     this.showArrows = value;
     if (this.nativeMap) {
       this.mapActivities(++this.processSequence, false);
       this.changeDetectorRef.markForCheck();
     }
   }
+
+  // ...
+
+
 
   async onMapReady(map: google.maps.Map) {
     this.logger.info('onMapReady called', map);
@@ -352,11 +357,8 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       strokeColor: activityMapData.strokeColor,
       strokeWeight: this.strokeWidth || 3,
       strokeOpacity: 1,
-      clickable: true
-    };
-
-    if (this.showArrows) {
-      options.icons = [{
+      clickable: true,
+      icons: this.showArrows ? [{
         icon: {
           path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
           scale: 2,
@@ -367,7 +369,11 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         },
         offset: '50%',
         repeat: '100px'
-      }];
+      }] : []
+    };
+
+    if (this.showArrows) {
+      this.logger.info('Adding arrows to polyline options');
     }
 
     return options;
