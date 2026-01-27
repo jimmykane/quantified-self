@@ -13,6 +13,8 @@ import {
   ViewChild,
   signal,
   computed,
+  effect,
+  untracked,
 } from '@angular/core';
 import { GoogleMap, MapInfoWindow, MapAdvancedMarker } from '@angular/google-maps';
 import { throttleTime } from 'rxjs/operators';
@@ -93,6 +95,10 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   private processSequence = 0;
   private pendingFitBoundsTimeout: ReturnType<typeof setTimeout> | null = null;
 
+  public mapInstance = signal<google.maps.Map | undefined>(undefined);
+  public isMapVisible = signal(true);
+  private lastAppliedColorScheme: string | undefined;
+
   constructor(
     private zone: NgZone,
     private changeDetectorRef: ChangeDetectorRef,
@@ -104,6 +110,33 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     private markerFactory: MarkerFactoryService,
     protected logger: LoggerService) {
     super(changeDetectorRef, logger);
+
+    // Re-initialize map on theme change
+    effect(() => {
+      const colorScheme = this.mapColorScheme();
+      // Use untracked to avoid reacting to mapInstance changes
+      const map = untracked(() => this.mapInstance());
+
+      // Only re-initialize if the scheme actually changed AND we have an active map
+      if (map && this.lastAppliedColorScheme !== colorScheme) {
+        this.logger.info(`Theme changed to ${colorScheme} - Re-initializing map...`);
+
+        // Update the guard immediately to prevent loops
+        this.lastAppliedColorScheme = colorScheme;
+
+        this.isMapVisible.set(false);
+        this.changeDetectorRef.detectChanges();
+
+        // Force next tick to re-render
+        setTimeout(() => {
+          this.isMapVisible.set(true);
+          this.changeDetectorRef.detectChanges();
+        }, 50);
+      } else if (!this.lastAppliedColorScheme) {
+        // Initial set
+        this.lastAppliedColorScheme = colorScheme;
+      }
+    }, { allowSignalWrites: true });
   }
 
   async ngOnInit() {
@@ -209,7 +242,9 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   async onMapReady(map: google.maps.Map) {
+    this.logger.info('onMapReady called', map);
     this.nativeMap = map;
+    this.mapInstance.set(map);
     this.mapActivities(++this.processSequence);
 
     // Store listener reference for cleanup if needed

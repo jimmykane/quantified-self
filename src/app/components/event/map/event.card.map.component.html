@@ -28,7 +28,7 @@
 
     <!-- Google Map -->
     @defer (on viewport) {
-    @if (activitiesMapData.length > 0 && apiLoaded()) {
+    @if (activitiesMapData.length > 0 && apiLoaded() && isMapVisible()) {
     <google-map height="100%" width="100%" [center]="mapCenter()" [zoom]="mapZoom()" [mapTypeId]="mapTypeId()"
       [options]="mapOptions()" (mapInitialized)="onMapReady($event)" (zoomChanged)="onZoomChanged()"
       (centerChanged)="onCenterChanged()" (mapClick)="onMapClick($event)">
