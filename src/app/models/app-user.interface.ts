@@ -3,6 +3,7 @@ import { User, UserMyTracksSettingsInterface, UserSettingsInterface, ActivityTyp
 export interface AppMyTracksSettings extends UserMyTracksSettingsInterface {
     is3D?: boolean;
     activityTypes?: ActivityTypes[];
+    mapStyle?: 'default' | 'satellite' | 'outdoors';
 }
 
 export interface AppUserSettingsInterface extends UserSettingsInterface {

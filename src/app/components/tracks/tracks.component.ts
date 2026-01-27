@@ -105,6 +105,17 @@ export class TracksComponent implements OnInit, OnDestroy {
         this.userService.updateUserProperties(this.user, { settings: this.user.settings });
       }), 'bottom-right');
 
+      // Restore saved map style
+      if (settings.mapStyle && settings.mapStyle !== 'default') {
+        const styleUrl = settings.mapStyle === 'satellite' ? 'mapbox://styles/mapbox/satellite-v9' :
+          settings.mapStyle === 'outdoors' ? 'mapbox://styles/mapbox/outdoors-v12' : null;
+        if (styleUrl) {
+          this.manualStyleOverride = styleUrl;
+          this.currentStyleUrl = styleUrl;
+          this.map.setStyle(styleUrl);
+        }
+      }
+
       // Set initial 3D state if needed
       // Reordered: Add source FIRST, then set terrain
       if (this.isStyleLoaded()) {
@@ -154,6 +165,12 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   public setMapStyle(styleType: 'default' | 'satellite' | 'outdoors') {
     if (!this.map) return;
+
+    // Persist setting
+    if (this.user?.settings?.myTracksSettings) {
+      this.user.settings.myTracksSettings.mapStyle = styleType;
+      this.userService.updateUserProperties(this.user, { settings: this.user.settings });
+    }
 
     let styleUrl: string;
 
