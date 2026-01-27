@@ -232,6 +232,7 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
       categoryLabel.locationX = 0;
       categoryLabel.label.horizontalCenter = 'left';
       categoryLabel.label.verticalCenter = 'middle';
+      categoryLabel.label.textAlign = 'middle';
       categoryLabel.label.truncate = false;
       categoryLabel.label.hideOversized = false;
       categoryLabel.label.fontSize = '0.75em';
