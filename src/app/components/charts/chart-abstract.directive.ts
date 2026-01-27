@@ -15,11 +15,11 @@ import { LoggerService } from '../../services/logger.service';
 // @todo should dectate to implement on screen change
 @Directive()
 export abstract class ChartAbstractDirective extends LoadingAbstractDirective implements OnDestroy {
-  @ViewChild('chartDiv', { static: true }) chartDiv: ElementRef;
-  @ViewChild('legendDiv', { static: true }) legendDiv: ElementRef;
+  @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef;
+  @ViewChild('legendDiv', { static: true }) legendDiv!: ElementRef;
 
   @Input() chartTheme: ChartThemes = ChartThemes.Material;
-  @Input() useAnimations: boolean;
+  @Input() useAnimations!: boolean;
 
 
   protected chart: am4charts.PieChart | am4charts.XYChart | am4charts.RadarChart | undefined;
@@ -38,10 +38,15 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
 
     // Config options set in service, but we can override or use core here
     return this.zone.runOutsideAngular(async () => {
-      await this.setChartThemes(this.chartTheme, this.useAnimations, core);
+      await this.amChartsService.setChartTheme(this.chartTheme, this.useAnimations);
+      if (this.chart) {
+        this.chart.dispose();
+      }
       const chart = core.create(this.chartDiv.nativeElement, chartType || charts.XYChart) as am4charts.Chart;
       chart.fontFamily = "'Barlow Condensed', sans-serif";
-      chart.preloader.disabled = true;
+      if (chart.preloader) {
+        chart.preloader.disabled = true;
+      }
 
       // chart.pixelPerfect = true;
       // chart.colors.step = 2;
@@ -59,93 +64,11 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
     return null;
   }
 
-  protected async setChartThemes(chartTheme: ChartThemes, useAnimations: boolean, am4core: typeof am4coretype) {
-    am4core.unuseAllThemes();
 
-    let themeModule;
-    this.logger.log(`[Antigravity] Setting chart theme to: ${chartTheme}`);
-    try {
-      switch (chartTheme) {
-        case 'material': themeModule = await import('@amcharts/amcharts4/themes/material'); break;
-        case 'frozen': themeModule = await import('@amcharts/amcharts4/themes/frozen'); break;
-        case 'dataviz': themeModule = await import('@amcharts/amcharts4/themes/dataviz'); break;
-        case 'dark': themeModule = await import('@amcharts/amcharts4/themes/dark'); break;
-        case 'amcharts': themeModule = await import('@amcharts/amcharts4/themes/amcharts'); break;
-        case 'amchartsdark': themeModule = await import('@amcharts/amcharts4/themes/amchartsdark'); break;
-        case 'moonrisekingdom': themeModule = await import('@amcharts/amcharts4/themes/moonrisekingdom'); break;
-        case 'spiritedaway': themeModule = await import('@amcharts/amcharts4/themes/spiritedaway'); break;
-        case 'kelly': themeModule = await import('@amcharts/amcharts4/themes/kelly'); break;
-        default:
-          this.logger.warn(`[Antigravity] Unknown theme '${chartTheme}', defaulting to material.`);
-          themeModule = await import('@amcharts/amcharts4/themes/material');
-          break;
-      }
-
-      if (themeModule && themeModule.default) {
-        this.logger.log(`[Antigravity] Applying theme module for ${chartTheme}`);
-        try {
-          am4core.useTheme(themeModule.default);
-          this.logger.log(`[Antigravity] Successfully applied theme: ${chartTheme}`);
-        } catch (themeError) {
-          this.logger.error(`[Antigravity] Failed to apply theme ${chartTheme}:`, themeError);
-        }
-      } else {
-        this.logger.error(`[Antigravity] Theme module for ${chartTheme} did not load correctly.`, themeModule);
-      }
-    } catch (e) {
-      this.logger.error(`[Antigravity] Error loading theme ${chartTheme}:`, e);
-    }
-
-    // Programmatically enforce dark styles for dark themes to prevent visibility issues
-    if (chartTheme === 'dark' || chartTheme === 'amchartsdark') {
-      const customDarkTheme = (target: any) => {
-        // Fix tooltip styles
-        if (target instanceof am4core.Tooltip) {
-          if (target.background) {
-            target.background.fill = am4core.color("#303030");
-            target.background.stroke = am4core.color("#303030");
-          }
-          if (target.label) {
-            target.label.fill = am4core.color("#ffffff");
-          }
-          target.getFillFromObject = false;
-        }
-        // Fix axis labels (AxisLabel extends Label)
-        if (target.className === 'AxisLabel') {
-          target.fill = am4core.color("#ffffff");
-        }
-        // Fix axis titles
-        if (target.className === 'Label' && target.parent?.className === 'AxisRendererY') {
-          target.fill = am4core.color("#ffffff");
-        }
-        if (target.className === 'Label' && target.parent?.className === 'AxisRendererX') {
-          target.fill = am4core.color("#ffffff");
-        }
-        // Fix axis range labels (lap numbers, etc.)
-        if (target.className === 'AxisLabelCircular' || (target.className === 'Label' && target.parent?.className === 'Grid')) {
-          target.fill = am4core.color("#ffffff");
-        }
-        // Fix legend and bullet labels
-        if (target.className === 'Label' && (target.parent?.className === 'LegendDataItem' || target.parent?.className === 'LabelBullet' || target.parent?.className === 'Label')) {
-          target.fill = am4core.color("#ffffff");
-        }
-      };
-      am4core.useTheme(customDarkTheme);
-    }
-
-    if (useAnimations === true) {
-      const animated = await import('@amcharts/amcharts4/themes/animated');
-      am4core.useTheme(animated.default);
-    }
-  }
 
   protected async destroyChart() {
     try {
-      const { core } = await this.amChartsService.load();
       this.zone.runOutsideAngular(() => {
-        // We need core to unuse themes, but strictly we just need to dispose the chart object which we have
-        // But to be safe let's load core if we want to unuseAllThemes
-        core.unuseAllThemes();
         if (this.chart) {
           this.chart.dispose();
           this.chart = undefined;
@@ -156,6 +79,8 @@ export abstract class ChartAbstractDirective extends LoadingAbstractDirective im
       this.logger.error(e);
     }
   }
+
+
 
   getFillColor(chart: am4charts.XYChart | am4charts.PieChart, index: number) {
     return chart.colors.getIndex(index * 2);
