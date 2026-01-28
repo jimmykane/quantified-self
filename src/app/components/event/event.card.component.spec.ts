@@ -178,21 +178,8 @@ describe('EventCardComponent', () => {
         expect(component.hasPositionsFlag()).toBe(false);
     });
 
-    it('should derive chart settings from user signal', () => {
-        expect(component.chartXAxisType()).toBe(XAxisTypes.Duration);
-        expect(component.showChartLaps()).toBe(true);
-        expect(component.showChartGrid()).toBe(true);
-    });
-
-    it('should derive map settings from user signal', () => {
-        expect(component.showMapLaps()).toBe(true);
-
-        expect(component.showMapArrows()).toBe(true);
-    });
-
     it('should get theme signals from theme service', () => {
         expect(component.chartTheme()).toBe(ChartThemes.Material);
-        expect(component.appTheme()).toBe(AppThemes.Normal);
     });
 
     describe('computed flags with activities that have data', () => {

@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { TracksComponent } from './tracks.component';
-import { ChangeDetectorRef, NgZone, PLATFORM_ID, NO_ERRORS_SCHEMA } from '@angular/core';
+import { ChangeDetectorRef, NgZone, PLATFORM_ID, NO_ERRORS_SCHEMA, signal } from '@angular/core';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import { AppEventService } from '../../services/app.event.service';
@@ -81,9 +81,10 @@ describe('TracksComponent', () => {
             })
         };
 
+
         mockThemeService = {
             getAppTheme: vi.fn().mockReturnValue(of(AppThemes.Dark)),
-            appTheme: of(AppThemes.Dark)
+            appTheme: signal(AppThemes.Dark)
         };
 
         mockEventService = {
@@ -104,7 +105,7 @@ describe('TracksComponent', () => {
                 { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '#ff0000' } },
                 { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
                 { provide: BrowserCompatibilityService, useValue: { checkCompressionSupport: vi.fn().mockReturnValue(true) } },
-                { provide: LoggerService, useValue: { log: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() } },
+                { provide: LoggerService, useValue: { log: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn(), info: vi.fn() } },
                 { provide: AppFileService, useValue: {} },
                 { provide: Router, useValue: { navigate: vi.fn() } },
                 { provide: ChangeDetectorRef, useValue: { markForCheck: vi.fn(), detectChanges: vi.fn() } },

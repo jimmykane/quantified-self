@@ -4,10 +4,8 @@ import { map, distinctUntilChanged, tap } from 'rxjs/operators';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { AppUserService } from './app.user.service';
 import {
-    User,
     UserChartSettingsInterface,
     UserMapSettingsInterface,
-    UserUnitSettingsInterface,
     UserMyTracksSettingsInterface,
     AppThemes
 } from '@sports-alliance/sports-lib';
