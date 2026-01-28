@@ -157,6 +157,7 @@ export class AppEventService implements OnDestroy {
   }
 
   public getEventsBy(user: User, where: { fieldPath: string | any, opStr: any, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
+    this.logger.log(`[AppEventService] getEventsBy called for user: ${user.uid}, where: ${JSON.stringify(where)}`);
     if (startAfter || endBefore) {
       return this.getEventsStartingAfterOrEndingBefore(user, false, where, orderBy, asc, limit, startAfter, endBefore);
     }
@@ -229,10 +230,12 @@ export class AppEventService implements OnDestroy {
   }
 
   public getActivities(user: User, eventID: string): Observable<ActivityInterface[]> {
+    this.logger.log(`[AppEventService] getActivities called for event: ${eventID}`);
     const activitiesCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'activities'));
     const q = runInInjectionContext(this.injector, () => query(activitiesCollection, where('eventID', '==', eventID)));
     return (runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })) as Observable<any[]>).pipe(
       map((activitySnapshots: any[]) => {
+        this.logger.log(`[AppEventService] getActivities emitted ${activitySnapshots?.length || 0} activity snapshots for event: ${eventID}`);
         return activitySnapshots.reduce((activitiesArray: ActivityInterface[], activitySnapshot: any) => {
           try {
             // Ensure required properties exist for sports-lib 6.x compatibility
@@ -805,31 +808,33 @@ export class AppEventService implements OnDestroy {
   private _getEvents(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any): Observable<EventInterface[]> {
     const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount, startAfterDoc, endBeforeDoc);
 
-    return runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })).pipe(map((eventSnapshots: any[]) => {
-      return eventSnapshots.map((eventSnapshot) => {
-        const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
-        if (unknownTypes.length > 0) {
-          const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
-          if (newUnknownTypes.length > 0) {
-            newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
-            this.logger.captureMessage('Unknown Data Types in _getEvents', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
+    return runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })).pipe(
+      map((eventSnapshots: any[]) => {
+        this.logger.log(`[AppEventService] _getEvents emitted ${eventSnapshots?.length || 0} event snapshots for user: ${user.uid}`);
+        return eventSnapshots.map((eventSnapshot) => {
+          const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
+          if (unknownTypes.length > 0) {
+            const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
+            if (newUnknownTypes.length > 0) {
+              newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
+              this.logger.captureMessage('Unknown Data Types in _getEvents', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
+            }
           }
-        }
-        const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id) as AppEventInterface;
+          const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id) as AppEventInterface;
 
-        // Hydrate with original file(s) info if present
-        const rawData = eventSnapshot as any;
+          // Hydrate with original file(s) info if present
+          const rawData = eventSnapshot as any;
 
-        if (rawData.originalFiles) {
-          event.originalFiles = rawData.originalFiles;
-        }
-        if (rawData.originalFile) {
-          event.originalFile = rawData.originalFile;
-        }
+          if (rawData.originalFiles) {
+            event.originalFiles = rawData.originalFiles;
+          }
+          if (rawData.originalFile) {
+            event.originalFile = rawData.originalFile;
+          }
 
-        return event;
-      })
-    }));
+          return event;
+        })
+      }));
   }
 
   private _getEventsAndActivities(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any): Observable<EventInterface[]> {

@@ -26,6 +26,7 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppMyTracksSettings } from '../../models/app-user.interface';
+import { LoggerService } from '../../services/logger.service';
 
 @Component({
   selector: 'app-tracks',
@@ -51,7 +52,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   public user!: AppUserInterface;
 
-  private map!: any; // mapboxgl.Map - typed as any to avoid explicit dependency issues if types are missing
+  private mapSignal = signal<any>(null); // Signal to hold map instance for reactive synchronization
   private activeLayerIds: string[] = []; // Store IDs of added layers/sources
   private scrolled = false;
 
@@ -60,10 +61,12 @@ export class TracksComponent implements OnInit, OnDestroy {
   private currentStyleUrl: string | undefined;
   public manualStyleOverride: string | null = null; // Track manual style selection
   private terrainControl: any; // Using any to avoid forward reference issues if class is defined below
+  private platformId!: object;
 
   private promiseTime!: number;
   private analyticsService = inject(AppAnalyticsService);
   private userSettingsQuery = inject(AppUserSettingsQueryService);
+  private logger = inject(LoggerService);
 
   // Track previous settings replaced by currentSettings/pendingSettings logic
 
@@ -86,12 +89,14 @@ export class TracksComponent implements OnInit, OnDestroy {
     private snackBar: MatSnackBar,
     private mapboxLoader: MapboxLoaderService,
     private themeService: AppThemeService,
-    @Inject(PLATFORM_ID) private platformId: object
   ) {
+    const platformId = inject(PLATFORM_ID);
+    this.platformId = platformId;
     effect(() => {
       const settings = this.userSettingsQuery.myTracksSettings();
+      const map = this.mapSignal();
       // Guard: check for map presence and valid settings
-      if (!this.map || !settings || settings.dateRange === undefined) return;
+      if (!map || !settings || settings.dateRange === undefined) return;
 
       this.scheduleSync(settings as AppMyTracksSettings);
     });
@@ -121,15 +126,16 @@ export class TracksComponent implements OnInit, OnDestroy {
         this.manualStyleOverride = null;
       }
 
-      this.map = await this.mapboxLoader.createMap(this.mapDiv.nativeElement, {
+      const mapInstance = await this.mapboxLoader.createMap(this.mapDiv.nativeElement, {
         zoom: 1.5,
         center: [0, 20],
         style: initialStyleUrl // Pass user's preferred style directly
       });
+      this.mapSignal.set(mapInstance);
       this.currentStyleUrl = initialStyleUrl; // Track so later checks don't re-apply
 
-      this.map.addControl(new (await this.mapboxLoader.loadMapbox()).FullscreenControl(), 'bottom-right');
-      this.centerMapToStartingLocation(this.map);
+      mapInstance.addControl(new (await this.mapboxLoader.loadMapbox()).FullscreenControl(), 'bottom-right');
+      this.centerMapToStartingLocation(mapInstance);
       this.user = await this.authService.user$.pipe(take(1)).toPromise() as AppUserInterface;
 
       // Settings are now handled by the effect, but we need to ensure the first load happens 
@@ -147,13 +153,11 @@ export class TracksComponent implements OnInit, OnDestroy {
         // Persist 3D setting via service
         this.userSettingsQuery.updateMyTracksSettings({ is3D });
       });
-      this.map.addControl(this.terrainControl, 'bottom-right');
+      mapInstance.addControl(this.terrainControl, 'bottom-right');
 
 
       // Trigger a manual check with current signal value (already have initialSettings)
-      if (initialSettings) {
-        this.scheduleSync(initialSettings);
-      }
+      // Removed redundant scheduleSync call here as it's handled by the effect in constructor
 
 
 
@@ -162,7 +166,8 @@ export class TracksComponent implements OnInit, OnDestroy {
 
       // Subscribe to theme changes
       this.eventsSubscription.add(this.themeService.getAppTheme().subscribe(theme => {
-        if (!this.map) return;
+        const map = this.mapSignal();
+        if (!map) return;
 
         // If manual override is active, do not apply theme style
         if (this.manualStyleOverride) return;
@@ -184,7 +189,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   public setMapStyle(styleType: 'default' | 'satellite' | 'outdoors') {
-    if (!this.map) return;
+    if (!this.mapSignal()) return;
     this.userSettingsQuery.updateMyTracksSettings({ mapStyle: styleType });
   }
 
@@ -201,6 +206,10 @@ export class TracksComponent implements OnInit, OnDestroy {
       const distinctSettings = this.pendingSettings;
       this.pendingSettings = null; // consume job
 
+      if (JSON.stringify(distinctSettings) === JSON.stringify(this.currentSettings)) {
+        continue;
+      }
+
       // Only show loading if style is actually changing, or simpler: just show it.
       // User wants feedback.
       this.isLoading.set(true);
@@ -215,7 +224,8 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   private async synchronizeMap(targetSettings: AppMyTracksSettings) {
-    if (!this.map) return;
+    const map = this.mapSignal();
+    if (!map) return;
 
     // 1. Resolve Style
     let targetStyle = 'mapbox://styles/mapbox/streets-v11'; // fallback
@@ -233,7 +243,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     if (this.currentStyleUrl !== targetStyle) {
       this.currentStyleUrl = targetStyle;
       styleChanged = true;
-      this.map.setStyle(targetStyle, { diff: false });
+      this.mapSignal().setStyle(targetStyle, { diff: false });
       await this.waitForStyleLoad();
       this.activeLayerIds = []; // Sources wiped
     }
@@ -263,18 +273,18 @@ export class TracksComponent implements OnInit, OnDestroy {
       // Given "monkey pressing", let's await it so we don't start next job until tracks request is fired?
       // No, loadTracks returns Promise<void> that awaits nothing crucial.
       // We call it.
-      await this.loadTracksMapForUserByDateRange(this.user, this.map, targetSettings.dateRange, targetSettings.activityTypes);
+      await this.loadTracksMapForUserByDateRange(this.user, this.mapSignal(), targetSettings.dateRange, targetSettings.activityTypes);
     }
 
     this.currentSettings = targetSettings;
   }
 
   private waitForStyleLoad(): Promise<void> {
-    if (this.map.isStyleLoaded()) return Promise.resolve();
-    return new Promise(resolve => this.map.once('style.load', () => resolve()));
+    if (this.mapSignal().isStyleLoaded()) return Promise.resolve();
+    return new Promise(resolve => this.mapSignal().once('style.load', () => resolve()));
   }
 
-  public async search(event) {
+  public async search(event: { dateRange: DateRanges, activityTypes?: ActivityTypes[] }) {
     if (!isPlatformBrowser(this.platformId)) return;
 
     // Update user settings - this will trigger signal -> effect -> handleSettingsChange -> loadTracks
@@ -295,8 +305,8 @@ export class TracksComponent implements OnInit, OnDestroy {
   public ngOnDestroy() {
     this.unsubscribeFromAll()
     this.bottomSheet.dismiss();
-    if (this.map) {
-      this.map.remove();
+    if (this.mapSignal()) {
+      this.mapSignal().remove();
     }
   }
 
@@ -341,7 +351,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     const promiseTime = new Date().getTime();
     this.promiseTime = promiseTime
     this.clearProgressAndOpenBottomSheet();
-    const dates = getDatesForDateRange(dateRange, user.settings.unitSettings.startOfTheWeek);
+    const dates = getDatesForDateRange(dateRange, user.settings?.unitSettings?.startOfTheWeek || 1);
     const where = []
     if (dates.startDate) {
       where.push({
@@ -358,14 +368,15 @@ export class TracksComponent implements OnInit, OnDestroy {
       })
     }
 
-    // Use the specific subscription for tracks loading
-    if (this.trackLoadingSubscription) {
-      this.trackLoadingSubscription.unsubscribe();
-    }
+    this.logger.log(`[TracksComponent] Initializing fetch from event service for dateRange: ${DateRanges[dateRange]}, activityTypes: ${activityTypes?.[0] || 'all'}, promiseTime: ${promiseTime}`);
 
     this.trackLoadingSubscription = this.eventService.getEventsBy(user, where, 'startDate', true, 0)
-      .pipe(debounceTime(300))
+      .pipe(
+        debounceTime(300),
+        take(1), // Fix: Avoid double emission (cache + server) and prevent memory leaks if subscription is not cleared
+      )
       .subscribe(async (events) => {
+        this.logger.log(`[TracksComponent] eventService.getEventsBy emitted ${events?.length || 0} events for promiseTime: ${promiseTime}`);
         try {
           events = events.filter((event) => event.getStat(DataStartPosition.type));
           if (!events || !events.length) {
@@ -374,9 +385,9 @@ export class TracksComponent implements OnInit, OnDestroy {
           }
 
           const chuckArraySize = 15;
-          const chunckedEvents = events.reduce((all, one, i) => {
+          const chunckedEvents: any[][] = events.reduce((all: any[][], one: any, i: number) => {
             const ch = Math.floor(i / chuckArraySize);
-            all[ch] = [].concat((all[ch] || []), one);
+            all[ch] = ([] as any[]).concat((all[ch] || []), one);
             return all
           }, [])
 
@@ -396,12 +407,14 @@ export class TracksComponent implements OnInit, OnDestroy {
             const chunkCoordinates: number[][] = [];
 
             await Promise.all(eventsChunk.map(async (event: any) => {
+              this.logger.log(`[TracksComponent] Fetching activities and streams for event: ${event.getID()}, promiseTime: ${promiseTime}`);
               event.addActivities(await this.eventService.getActivities(user, event.getID()).pipe(take(1)).toPromise())
               return this.eventService.attachStreamsToEventWithActivities(user, event, [
                 DataLatitudeDegrees.type,
                 DataLongitudeDegrees.type,
               ]).pipe(take(1)).toPromise()
                 .then((fullEvent: any) => {
+                  this.logger.log(`[TracksComponent] Attached streams for event: ${event.getID()}, promiseTime: ${promiseTime}`);
                   if (this.promiseTime !== promiseTime) {
                     return
                   }
@@ -526,7 +539,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   private clearAllPolylines() {
-    if (!this.map) return;
+    if (!this.mapSignal()) return;
 
     // Reverse order: remove layers first, then sources
     // We pushed layerId then sourceId, so we can iterate
@@ -538,11 +551,11 @@ export class TracksComponent implements OnInit, OnDestroy {
     const sources = this.activeLayerIds.filter(id => id.startsWith('track-source-'));
 
     layers.forEach(id => {
-      if (this.map.getLayer(id)) this.map.removeLayer(id);
+      if (this.mapSignal().getLayer(id)) this.mapSignal().removeLayer(id);
     });
 
     sources.forEach(id => {
-      if (this.map.getSource(id)) this.map.removeSource(id);
+      if (this.mapSignal().getSource(id)) this.mapSignal().removeSource(id);
     });
 
     this.activeLayerIds = [];
@@ -592,17 +605,17 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
   }
 
-  private markScrolled(map) {
+  private markScrolled(map: any) {
     map.off('movestart', this.onMoveStart);
     this.scrolled = true;
   }
 
   // Bound function to be able to remove listener
   private onMoveStart = () => {
-    this.markScrolled(this.map);
+    this.markScrolled(this.mapSignal());
   }
 
-  private clearScroll(map) {
+  private clearScroll(map: any) {
     this.scrolled = false;
     map.on('movestart', this.onMoveStart);
   }
@@ -617,7 +630,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   // Refactored helpers
   private isStyleLoaded(): boolean {
-    return this.map && this.map.isStyleLoaded();
+    return this.mapSignal() && this.mapSignal().isStyleLoaded();
   }
 
   private addDemSource(map: any) {
@@ -633,28 +646,28 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   private toggleTerrain(enable: boolean, animate: boolean = true) {
-    if (!this.map) return;
+    if (!this.mapSignal()) return;
 
     try {
       // Ensure source exists just in case
-      if (enable && !this.map.getSource('mapbox-dem')) {
-        this.addDemSource(this.map);
+      if (enable && !this.mapSignal().getSource('mapbox-dem')) {
+        this.addDemSource(this.mapSignal());
       }
 
       if (enable) {
-        this.map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
+        this.mapSignal().setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
         if (animate) {
-          this.map.easeTo({ pitch: 60 });
+          this.mapSignal().easeTo({ pitch: 60 });
         } else {
           // Instant
-          this.map.setPitch(60);
+          this.mapSignal().setPitch(60);
         }
       } else {
-        this.map.setTerrain(null);
+        this.mapSignal().setTerrain(null);
         if (animate) {
-          this.map.easeTo({ pitch: 0 });
+          this.mapSignal().easeTo({ pitch: 0 });
         } else {
-          this.map.setPitch(0);
+          this.mapSignal().setPitch(0);
         }
       }
 
@@ -662,7 +675,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     } catch (error: any) {
       if (error?.message?.includes('Style is not done loading')) {
         console.log('Style loading in progress, deferring 3D terrain...');
-        this.map.once('style.load', () => this.toggleTerrain(enable, animate));
+        this.mapSignal().once('style.load', () => this.toggleTerrain(enable, animate));
       } else {
         console.warn('Map style not ready for terrain toggle, deferring.', error);
         // Still retry just in case it's a momentary glitch?
