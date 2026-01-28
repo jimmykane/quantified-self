@@ -43,7 +43,8 @@ export class TracksComponent implements OnInit, OnDestroy {
     DateRanges.thisMonth,
     DateRanges.lastMonth,
     DateRanges.lastThirtyDays,
-    DateRanges.thisYear
+    DateRanges.thisYear,
+    DateRanges.all
   ]
   bufferProgress = new Subject<number>();
   totalProgress = new Subject<number>();
@@ -248,7 +249,9 @@ export class TracksComponent implements OnInit, OnDestroy {
 
     // 4. Data
     const dateChanged = this.currentSettings?.dateRange !== targetSettings.dateRange;
-    const typesChanged = JSON.stringify(this.currentSettings?.activityTypes) !== JSON.stringify(targetSettings.activityTypes);
+    const currentTypes = this.currentSettings?.activityTypes || [];
+    const targetTypes = targetSettings.activityTypes || [];
+    const typesChanged = JSON.stringify(currentTypes.sort()) !== JSON.stringify(targetTypes.sort());
 
     if (styleChanged || dateChanged || typesChanged || !this.currentSettings) {
       if (this.user && this.user.settings) {
