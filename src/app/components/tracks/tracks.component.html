@@ -18,7 +18,7 @@
   <!--  </app-event-search>-->
   <div #mapDiv id="map"></div>
   <div class="map-style-controls">
-    <mat-button-toggle-group appearance="legacy" name="mapStyle" aria-label="Map Style"
+    <mat-button-toggle-group appearance="legacy" name="mapStyle" aria-label="Map Style" [disabled]="isLoading()"
       (change)="setMapStyle($any($event).value)">
       <mat-button-toggle value="default" [checked]="!manualStyleOverride">Default</mat-button-toggle>
       <mat-button-toggle value="satellite"
@@ -26,5 +26,8 @@
       <mat-button-toggle value="outdoors"
         [checked]="manualStyleOverride === 'mapbox://styles/mapbox/outdoors-v12'">Outdoors</mat-button-toggle>
     </mat-button-toggle-group>
+    @if (isLoading()) {
+    <mat-spinner diameter="24"></mat-spinner>
+    }
   </div>
 </mat-card>

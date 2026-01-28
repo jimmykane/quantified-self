@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, ElementRef, NgZone, OnDestroy, OnInit, ViewChild, inject, Inject, PLATFORM_ID } from '@angular/core';
+import { Component, Inject, ViewChild, ElementRef, ChangeDetectorRef, NgZone, effect, signal, WritableSignal, PLATFORM_ID, OnInit, OnDestroy, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
@@ -25,7 +25,6 @@ import { MapboxLoaderService } from '../../services/mapbox-loader.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
-import { effect } from '@angular/core';
 import { AppMyTracksSettings } from '../../models/app-user.interface';
 
 @Component({
@@ -59,13 +58,18 @@ export class TracksComponent implements OnInit, OnDestroy {
   private trackLoadingSubscription: Subscription = new Subscription();
   private currentStyleUrl: string | undefined;
   public manualStyleOverride: string | null = null; // Track manual style selection
+  private terrainControl: any; // Using any to avoid forward reference issues if class is defined below
 
   private promiseTime!: number;
   private analyticsService = inject(AppAnalyticsService);
   private userSettingsQuery = inject(AppUserSettingsQueryService);
 
-  // Track previous settings for diffing in effect
-  private previousSettings: AppMyTracksSettings | undefined;
+  // Track previous settings replaced by currentSettings/pendingSettings logic
+
+  public isLoading: WritableSignal<boolean> = signal(false);
+  private pendingSettings: AppMyTracksSettings | null = null;
+  private currentSettings: AppMyTracksSettings | null = null;
+  private isProcessingQueue = false;
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
@@ -85,9 +89,10 @@ export class TracksComponent implements OnInit, OnDestroy {
   ) {
     effect(() => {
       const settings = this.userSettingsQuery.myTracksSettings();
-      if (!this.map || !settings) return;
+      // Guard: check for map presence and valid settings
+      if (!this.map || !settings || settings.dateRange === undefined) return;
 
-      this.handleSettingsChange(settings);
+      this.scheduleSync(settings as AppMyTracksSettings);
     });
   }
 
@@ -97,10 +102,30 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
 
     try {
+      // --- Constructor Style Injection ---
+      // Resolve user's preferred style BEFORE creating the map.
+      const initialSettings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
+      const prefMapStyle = initialSettings?.mapStyle || 'default';
+      let initialStyleUrl: string;
+      if (prefMapStyle === 'satellite') {
+        initialStyleUrl = 'mapbox://styles/mapbox/satellite-v9';
+        this.manualStyleOverride = initialStyleUrl;
+      } else if (prefMapStyle === 'outdoors') {
+        initialStyleUrl = 'mapbox://styles/mapbox/outdoors-v12';
+        this.manualStyleOverride = initialStyleUrl;
+      } else {
+        // 'default' - use theme
+        const theme = this.themeService.appTheme();
+        initialStyleUrl = theme === AppThemes.Dark ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11';
+        this.manualStyleOverride = null;
+      }
+
       this.map = await this.mapboxLoader.createMap(this.mapDiv.nativeElement, {
         zoom: 1.5,
-        center: [0, 20]
+        center: [0, 20],
+        style: initialStyleUrl // Pass user's preferred style directly
       });
+      this.currentStyleUrl = initialStyleUrl; // Track so later checks don't re-apply
 
       this.map.addControl(new (await this.mapboxLoader.loadMapbox()).FullscreenControl(), 'bottom-right');
       this.centerMapToStartingLocation(this.map);
@@ -109,18 +134,24 @@ export class TracksComponent implements OnInit, OnDestroy {
       // Settings are now handled by the effect, but we need to ensure the first load happens 
       // if the effect ran before map was ready.
 
-      // Restore terrain control
-      const initialSettings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
-      this.map.addControl(new TerrainControl(!!initialSettings?.is3D, (is3D) => {
+      // Restore terrain control (initialSettings already loaded above)
+      // Initialize 3D state
+      if (initialSettings?.is3D) {
+        this.toggleTerrain(true, false);
+      }
+
+      this.terrainControl = new TerrainControl(!!initialSettings?.is3D, (is3D) => {
+        // Toggle map locally immediately for responsiveness
+        this.toggleTerrain(is3D, true);
         // Persist 3D setting via service
         this.userSettingsQuery.updateMyTracksSettings({ is3D });
-      }), 'bottom-right');
+      });
+      this.map.addControl(this.terrainControl, 'bottom-right');
 
 
-      // Trigger a manual check with current signal value
-      const currentSettings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
-      if (currentSettings) {
-        this.handleSettingsChange(currentSettings);
+      // Trigger a manual check with current signal value (already have initialSettings)
+      if (initialSettings) {
+        this.scheduleSync(initialSettings);
       }
 
 
@@ -142,7 +173,7 @@ export class TracksComponent implements OnInit, OnDestroy {
           return;
         }
 
-        this.applyStyle(style);
+        this.scheduleSync({ ...this.userSettingsQuery.myTracksSettings(), mapStyle: 'default' }); // Trigger sync with default style
       }));
 
       // Removed original manual addSource block as it is now handled in helper
@@ -153,26 +184,91 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   public setMapStyle(styleType: 'default' | 'satellite' | 'outdoors') {
     if (!this.map) return;
-    // Persist setting - this will trigger the signal -> effect -> handleSettingsChange -> applyStyle workflow.
     this.userSettingsQuery.updateMyTracksSettings({ mapStyle: styleType });
   }
 
-  private applyStyle(style: string) {
-    this.currentStyleUrl = style;
-    this.map.setStyle(style);
+  private scheduleSync(settings: AppMyTracksSettings) {
+    this.pendingSettings = settings;
+    if (!this.isProcessingQueue) {
+      this.processQueue();
+    }
+  }
 
-    this.map.once('style.load', async () => {
-      // Re-add Terrain Source
-      this.addDemSource(this.map);
+  private async processQueue() {
+    this.isProcessingQueue = true;
+    while (this.pendingSettings) {
+      const distinctSettings = this.pendingSettings;
+      this.pendingSettings = null; // consume job
 
-      // Clear internal state of "active layers" because map cleared them
-      this.activeLayerIds = [];
-      // Re-fetch/Re-draw tracks
-      this.changeDetectorRef.detectChanges(); // Check if this helps
-      if (this.user?.settings?.myTracksSettings) {
-        await this.loadTracksMapForUserByDateRange(this.user, this.map, this.user.settings.myTracksSettings.dateRange, this.user.settings.myTracksSettings.activityTypes);
+      // Only show loading if style is actually changing, or simpler: just show it.
+      // User wants feedback.
+      this.isLoading.set(true);
+      try {
+        await this.synchronizeMap(distinctSettings);
+      } catch (e) {
+        console.error('Map sync error', e);
       }
-    });
+      this.isLoading.set(false);
+    }
+    this.isProcessingQueue = false;
+  }
+
+  private async synchronizeMap(targetSettings: AppMyTracksSettings) {
+    if (!this.map) return;
+
+    // 1. Resolve Style
+    let targetStyle = 'mapbox://styles/mapbox/streets-v11'; // fallback
+    if (targetSettings.mapStyle === 'satellite') targetStyle = 'mapbox://styles/mapbox/satellite-v9';
+    else if (targetSettings.mapStyle === 'outdoors') targetStyle = 'mapbox://styles/mapbox/outdoors-v12';
+    else {
+      const theme = this.themeService.appTheme();
+      targetStyle = theme === AppThemes.Dark ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11';
+      this.manualStyleOverride = null;
+    }
+    if (targetSettings.mapStyle !== 'default') this.manualStyleOverride = targetStyle;
+
+    // 2. Apply Style if changed
+    let styleChanged = false;
+    if (this.currentStyleUrl !== targetStyle) {
+      this.currentStyleUrl = targetStyle;
+      styleChanged = true;
+      this.map.setStyle(targetStyle, { diff: false });
+      await this.waitForStyleLoad();
+      this.activeLayerIds = []; // Sources wiped
+    }
+
+    // 3. Terrain
+    // If style changed, IS3D must be re-applied.
+    // If IS3D changed, apply it.
+    const is3D = !!targetSettings.is3D;
+    // Note: toggleTerrain handles "add if missing".
+    if (styleChanged || (this.currentSettings?.is3D !== is3D)) {
+      this.toggleTerrain(is3D, true);
+    }
+
+    // 4. Data
+    const dateChanged = this.currentSettings?.dateRange !== targetSettings.dateRange;
+    const typesChanged = JSON.stringify(this.currentSettings?.activityTypes) !== JSON.stringify(targetSettings.activityTypes);
+
+    if (styleChanged || dateChanged || typesChanged || !this.currentSettings) {
+      if (this.user && this.user.settings) {
+        this.user.settings.myTracksSettings = targetSettings;
+      }
+      // We do NOT await tracks loading to prevent blocking the queue for too long,
+      // but we do trigger it. The isLoading signal covers the STYLE switch (synchronous part).
+      // If user wants tracks loading to block buttons, we should await it.
+      // Given "monkey pressing", let's await it so we don't start next job until tracks request is fired?
+      // No, loadTracks returns Promise<void> that awaits nothing crucial.
+      // We call it.
+      await this.loadTracksMapForUserByDateRange(this.user, this.map, targetSettings.dateRange, targetSettings.activityTypes);
+    }
+
+    this.currentSettings = targetSettings;
+  }
+
+  private waitForStyleLoad(): Promise<void> {
+    if (this.map.isStyleLoaded()) return Promise.resolve();
+    return new Promise(resolve => this.map.once('style.load', () => resolve()));
   }
 
   public async search(event) {
@@ -327,34 +423,47 @@ export class TracksComponent implements OnInit, OnDestroy {
 
                         // Run inside zone to ensure map updates are picked up? actually outside is better for perf
                         this.zone.runOutsideAngular(() => {
+                          if (!map) return;
                           if (map.getSource(sourceId)) return; // Prevent duplicates
 
-                          map.addSource(sourceId, {
-                            type: 'geojson',
-                            data: {
-                              type: 'Feature',
-                              properties: {},
-                              geometry: {
-                                type: 'LineString',
-                                coordinates: coordinates
+                          try {
+                            map.addSource(sourceId, {
+                              type: 'geojson',
+                              data: {
+                                type: 'Feature',
+                                properties: {},
+                                geometry: {
+                                  type: 'LineString',
+                                  coordinates: coordinates
+                                }
                               }
-                            }
-                          });
+                            });
 
-                          map.addLayer({
-                            id: layerId,
-                            type: 'line',
-                            source: sourceId,
-                            layout: {
-                              'line-join': 'round',
-                              'line-cap': 'round'
-                            },
-                            paint: {
-                              'line-color': color,
-                              'line-width': 2, // Equivalent to leaflet Default weight
-                              'line-opacity': 0.6 // Slightly higher opacity for visibility
+                            // Add Main Track Layer
+                            map.addLayer({
+                              id: layerId,
+                              type: 'line',
+                              source: sourceId,
+                              layout: {
+                                'line-join': 'round',
+                                'line-cap': 'round'
+                              },
+                              paint: {
+                                'line-color': color,
+                                'line-width': 2.5, // Slightly thicker
+                                'line-opacity': 0.9 // High visibility
+                              }
+                            });
+                          } catch (error: any) {
+                            if (error?.message?.includes('Style is not done loading')) {
+                              console.log('Style loading in progress, retrying tracks...');
+                              map.once('style.load', () => {
+                                this.loadTracksMapForUserByDateRange(user, map, dateRange, activityTypes);
+                              });
+                            } else {
+                              console.warn('Failed to add track layer:', error);
                             }
-                          });
+                          }
 
                           this.activeLayerIds.push(layerId);
                           this.activeLayerIds.push(sourceId); // Store source ID too for cleanup
@@ -503,98 +612,42 @@ export class TracksComponent implements OnInit, OnDestroy {
   private toggleTerrain(enable: boolean, animate: boolean = true) {
     if (!this.map) return;
 
-    // Ensure source exists just in case
-    if (enable && !this.map.getSource('mapbox-dem')) {
-      this.addDemSource(this.map);
-    }
+    try {
+      // Ensure source exists just in case
+      if (enable && !this.map.getSource('mapbox-dem')) {
+        this.addDemSource(this.map);
+      }
 
-    if (enable) {
-      this.map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
-      if (animate) {
-        this.map.easeTo({ pitch: 60 });
+      if (enable) {
+        this.map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
+        if (animate) {
+          this.map.easeTo({ pitch: 60 });
+        } else {
+          // Instant
+          this.map.setPitch(60);
+        }
       } else {
-        // Instant
-        this.map.setPitch(60);
+        this.map.setTerrain(null);
+        if (animate) {
+          this.map.easeTo({ pitch: 0 });
+        } else {
+          this.map.setPitch(0);
+        }
       }
-    } else {
-      this.map.setTerrain(null);
-      if (animate) {
-        this.map.easeTo({ pitch: 0 });
+
+      this.terrainControl?.set3DState(enable);
+    } catch (error: any) {
+      if (error?.message?.includes('Style is not done loading')) {
+        console.log('Style loading in progress, deferring 3D terrain...');
+        this.map.once('style.load', () => this.toggleTerrain(enable, animate));
       } else {
-        this.map.setPitch(0);
+        console.warn('Map style not ready for terrain toggle, deferring.', error);
+        // Still retry just in case it's a momentary glitch?
+        // Original logic was retry. Let's keep retry for generic errors if we want, or just fail.
+        // The original code passed unconditionally to retry.
+        // Checking error message explicitly is safer.
       }
     }
-  }
-
-  private async handleSettingsChange(settings: AppMyTracksSettings) {
-    // 1. Handle Terrain Control & State
-    // Note: We need to ensure the control exists or update it. 
-    // Since TerrainControl is a custom control added via new(), we can't easily update its state externally 
-    // without keeping a reference.
-    // However, for this refactor, let's focus on the map effect.
-    // The TerrainControl itself updates the user setting, which updates the signal, which triggers this again.
-    // Circular? No, because we check distinctUntilChanged in service and could check here too.
-
-    // Better: Ensure we only add the control once (which we do in ngOnInit logic mostly, but we removed it).
-    // Wait, I removed the control addition in ngOnInit. I need to restore it or add it here.
-    // Adding controls in an effect is risky (duplicates). 
-    // Let's add the control in ngOnInit ONCE, and detached from specific settings values if possible, 
-    // OR manage it here carefully. 
-    // actually, let's put the Control addition back to ngOnInit but just use a callback that updates service.
-
-    // 2. Handle 3D
-    if (this.previousSettings?.is3D !== settings.is3D) {
-      this.toggleTerrain(!!settings.is3D, true);
-    }
-
-    // 3. Handle Map Style
-    if (this.previousSettings?.mapStyle !== settings.mapStyle) {
-      const styleType = settings.mapStyle || 'default';
-      let styleUrl: string;
-      if (styleType === 'default') {
-        this.manualStyleOverride = null;
-        const theme = this.themeService.appTheme();
-        styleUrl = theme === AppThemes.Dark ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11';
-      } else if (styleType === 'satellite') {
-        styleUrl = 'mapbox://styles/mapbox/satellite-v9';
-        this.manualStyleOverride = styleUrl;
-      } else {
-        styleUrl = 'mapbox://styles/mapbox/outdoors-v12';
-        this.manualStyleOverride = styleUrl;
-      }
-
-      if (this.currentStyleUrl !== styleUrl) {
-        this.applyStyle(styleUrl);
-        // applyStyle triggers reload, so we might not need to explicit reload below if style changed
-        // But applyStyle is async...
-      }
-    }
-
-    // 4. Handle Data Load (DateRange or ActivityTypes)
-    const dateRangeChanged = this.previousSettings?.dateRange !== settings.dateRange;
-    // Simple array comparison for activity types
-    const typesChanged = JSON.stringify(this.previousSettings?.activityTypes) !== JSON.stringify(settings.activityTypes);
-
-    if (dateRangeChanged || typesChanged) {
-      // Only reload if we are not already reloading from applyStyle? 
-      // applyStyle reloads. 
-      // If style changed, applyStyle runs.
-      // If distinct checks pass, we are good.
-      // But applyStyle uses `this.user.settings...`. We need to update that to use params or `settings` var.
-
-      // Actually `applyStyle` calls `loadTracksMapForUserByDateRange` using `this.user.settings`. 
-      // We should update `this.user.settings` to match the signal? 
-      // Or pass arguments. 
-
-      // Sync local user object settings to keep `this.user` consistent for other methods
-      if (this.user && this.user.settings) {
-        this.user.settings.myTracksSettings = settings;
-      }
-
-      await this.loadTracksMapForUserByDateRange(this.user, this.map, settings.dateRange || DateRanges.thisWeek, settings.activityTypes);
-    }
-
-    this.previousSettings = settings;
   }
 }
 
@@ -650,6 +703,13 @@ class TerrainControl {
     this.map = undefined;
   }
 
+  public set3DState(is3D: boolean) {
+    this.is3D = is3D;
+    if (this.icon) {
+      this.icon.style.color = is3D ? '#4264fb' : '';
+    }
+  }
+
   private toggleMapTerrain(map: any, enable: boolean) {
     if (enable) {
       // Check source
@@ -663,11 +723,11 @@ class TerrainControl {
       }
       map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
       map.easeTo({ pitch: 60 });
-      if (this.icon) this.icon.style.color = '#4264fb';
     } else {
       map.setTerrain(null);
       map.easeTo({ pitch: 0 });
-      if (this.icon) this.icon.style.color = '';
     }
+    // Update visual state
+    this.set3DState(enable);
   }
 }

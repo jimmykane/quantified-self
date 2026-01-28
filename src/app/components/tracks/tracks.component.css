@@ -25,6 +25,23 @@ app-event-search {
   max-width: 600px;
 }
 
+/* Force opaque background for search buttons on the map */
+app-event-search ::ng-deep .mat-button-toggle-group {
+  background-color: var(--mat-sys-surface) !important;
+  box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+app-event-search ::ng-deep .mat-button-toggle {
+  background-color: var(--mat-sys-surface);
+}
+
+app-event-search ::ng-deep .mat-button-toggle-checked {
+  background-color: var(--mat-sys-secondary-container) !important;
+  color: var(--mat-sys-on-secondary-container) !important;
+}
+
 #map {
   height: 100%;
 }
@@ -37,6 +54,10 @@ app-event-search {
   z-index: 1000;
   /* Ensure it's above the map */
   background: transparent;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Space between buttons and spinner */
 }
 
 .map-style-controls mat-button-toggle-group {
