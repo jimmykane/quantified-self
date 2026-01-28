@@ -14,9 +14,10 @@ trigger: always_on
 - **Dependency Injection**:
   - Supported: Constructor Injection (Legacy/Current).
   - Preferred for New Code: `inject()` function.
-- **Signals & Observables Naming**:
-  - **STRICT RULE**: Do **NOT** use the `$` suffix for Observables or Signals (e.g., use `isLoading`, not `isLoading$`). This applies to all variables.
-  - Reason: Consistency and readability, avoiding "Swiss cheese" code style.
+  - **Signals & Observables Naming**:
+  - **STRICT RULE**: **ALWAYS** use the `$` suffix for Observables (e.g., `user$`, `isLoading$`).
+  - **Signals**: Do **NOT** use the `$` suffix for Signals (e.g., `isLoading`, `user`).
+  - Reason: Clear distinction between streams (Observables) and reactive state (Signals).
 
 ### Firebase
 - Use **Modular SDK** (`@angular/fire` v20+, `firebase` v9+).
