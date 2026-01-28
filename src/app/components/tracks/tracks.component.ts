@@ -451,8 +451,8 @@ export class TracksComponent implements OnInit, OnDestroy {
                               },
                               paint: {
                                 'line-color': color,
-                                'line-width': 8, // Wider for glow
-                                'line-blur': 4,  // Blur for soft edge
+                                'line-width': 6, // Reduced from 8
+                                'line-blur': 3,  // Reduced from 4
                                 'line-opacity': 0.6 // Translucent
                               }
                             });
