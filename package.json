@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "7.0.12",
+  "version": "7.1.0",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
