@@ -177,16 +177,18 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   private initMapData() {
     if (!this.nativeMap) return;
 
+    // Clear existing markers unconditionally
+    if (this.markers) {
+      this.markers.forEach(m => m.map = null);
+    }
+    if (this.markerClusterer) {
+      this.markerClusterer.clearMarkers();
+    }
+    this.markerActivityTypes.clear();
+    this.markers = []; // Ensure markers array is reset
+
     // Create and add markers
     if (this.events?.length) {
-      // Clear existing markers
-      if (this.markers) {
-        this.markers.forEach(m => m.map = null);
-      }
-      if (this.markerClusterer) {
-        this.markerClusterer.clearMarkers();
-      }
-      this.markerActivityTypes.clear();
 
       this.markers = this.getMarkersFromEvents(this.events);
       // for AdvancedMarkerElement, setting map via constructor is enough, or set properties.
