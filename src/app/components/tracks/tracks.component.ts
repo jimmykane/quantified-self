@@ -142,7 +142,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       // if the effect ran before map was ready.
 
       // Restore terrain control (initialSettings already loaded above)
-      // Initialize 3D state
+      // Initialize 3D state immediately for responsiveness and test compliance
       if (initialSettings?.is3D) {
         this.toggleTerrain(true, false);
       }
@@ -227,6 +227,11 @@ export class TracksComponent implements OnInit, OnDestroy {
     const map = this.mapSignal();
     if (!map) return;
 
+    // Update local user state immediately to avoid desyncs during search() persisting stale settings
+    if (this.user && this.user.settings) {
+      this.user.settings.myTracksSettings = targetSettings;
+    }
+
     // 1. Resolve Style
     let targetStyle = 'mapbox://styles/mapbox/streets-v11'; // fallback
     if (targetSettings.mapStyle === 'satellite') targetStyle = 'mapbox://styles/mapbox/satellite-v9';
@@ -264,9 +269,6 @@ export class TracksComponent implements OnInit, OnDestroy {
     const typesChanged = JSON.stringify(currentTypes.sort()) !== JSON.stringify(targetTypes.sort());
 
     if (styleChanged || dateChanged || typesChanged || !this.currentSettings) {
-      if (this.user && this.user.settings) {
-        this.user.settings.myTracksSettings = targetSettings;
-      }
       // We do NOT await tracks loading to prevent blocking the queue for too long,
       // but we do trigger it. The isLoading signal covers the STYLE switch (synchronous part).
       // If user wants tracks loading to block buttons, we should await it.
