@@ -34,6 +34,8 @@ import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib';
 import { environment } from '../../../environments/environment';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
+import { inject } from '@angular/core';
 
 @Component({
   selector: 'app-events-map',
@@ -104,12 +106,13 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     private changeDetectorRef: ChangeDetectorRef,
     private eventColorService: AppEventColorService,
     private eventService: AppEventService,
-    private userService: AppUserService,
     private mapsLoader: GoogleMapsLoaderService,
     private markerFactory: MarkerFactoryService,
     protected logger: LoggerService) {
     super(changeDetectorRef, logger);
   }
+
+  private userSettingsQuery = inject(AppUserSettingsQueryService);
 
   // Class property to hold the loaded class
   // Class property to hold the loaded class
@@ -118,8 +121,9 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   async changeMapType(mapType: google.maps.MapTypeId) {
     if (!this.user) return;
     this.mapTypeId.set(mapType);
-    this.user.settings.mapSettings.mapType = mapType as any;
-    await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
+
+    // Safe persist via service
+    this.userSettingsQuery.updateMapSettings({ mapType: mapType as any });
   }
 
   async ngOnInit(): Promise<void> {
@@ -128,8 +132,11 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
 
     this.AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
 
-    if (this.user?.settings?.mapSettings?.mapType) {
-      this.mapTypeId.set(this.user.settings.mapSettings.mapType as any);
+    this.AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
+
+    const mapSettings = this.userSettingsQuery.mapSettings();
+    if (mapSettings?.mapType) {
+      this.mapTypeId.set(mapSettings.mapType as any);
     }
 
     this.apiLoaded.set(true);

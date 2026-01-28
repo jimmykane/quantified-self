@@ -122,17 +122,26 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   // ...
 
   public get showAllData() { return this.userSettingsQuery.chartSettings()?.showAllData ?? false; }
+  public set showAllData(value: boolean) { this.userSettingsQuery.updateChartSettings({ showAllData: value }); }
+
   public get showLaps() { return this.userSettingsQuery.chartSettings()?.showLaps ?? true; }
+  public set showLaps(value: boolean) { this.userSettingsQuery.updateChartSettings({ showLaps: value }); }
   public get showGrid() { return this.userSettingsQuery.chartSettings()?.showGrid ?? true; }
   public get disableGrouping() { return this.userSettingsQuery.chartSettings()?.disableGrouping ?? false; }
   public get hideAllSeriesOnInit() { return this.userSettingsQuery.chartSettings()?.hideAllSeriesOnInit ?? false; }
   public get lapTypes() { return this.userSettingsQuery.chartSettings()?.lapTypes ?? AppUserService.getDefaultChartLapTypes(); }
+
   public get xAxisType() { return this.userSettingsQuery.chartSettings()?.xAxisType ?? XAxisTypes.Duration; }
+  public set xAxisType(value: XAxisTypes) { this.userSettingsQuery.updateChartSettings({ xAxisType: value }); }
+
   public get downSamplingLevel() { return this.userSettingsQuery.chartSettings()?.downSamplingLevel ?? AppUserService.getDefaultDownSamplingLevel(); }
   public get gainAndLossThreshold() { return this.userSettingsQuery.chartSettings()?.gainAndLossThreshold ?? AppUserService.getDefaultGainAndLossThreshold(); }
   @Input() waterMark?: string;
   public get chartCursorBehaviour() { return this.userSettingsQuery.chartSettings()?.chartCursorBehaviour ?? AppUserService.getDefaultChartCursorBehaviour(); }
+
   public get stackYAxes() { return this.userSettingsQuery.chartSettings()?.stackYAxes ?? false; }
+  public set stackYAxes(value: boolean) { this.userSettingsQuery.updateChartSettings({ stackYAxes: value }); }
+
   public get strokeWidth() { return this.userSettingsQuery.chartSettings()?.strokeWidth ?? AppUserService.getDefaultChartStrokeWidth(); }
   public get strokeOpacity() { return this.userSettingsQuery.chartSettings()?.strokeOpacity ?? AppUserService.getDefaultChartStrokeOpacity(); }
   public get fillOpacity() { return this.userSettingsQuery.chartSettings()?.fillOpacity ?? AppUserService.getDefaultChartFillOpacity(); }

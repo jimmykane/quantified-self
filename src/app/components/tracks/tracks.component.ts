@@ -23,7 +23,10 @@ import { AppUserService } from '../../services/app.user.service';
 import { WhereFilterOp } from 'firebase/firestore';
 import { MapboxLoaderService } from '../../services/mapbox-loader.service';
 import { AppThemeService } from '../../services/app.theme.service';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
+import { effect } from '@angular/core';
+import { AppMyTracksSettings } from '../../models/app-user.interface';
 
 @Component({
   selector: 'app-tracks',
@@ -59,6 +62,10 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   private promiseTime!: number;
   private analyticsService = inject(AppAnalyticsService);
+  private userSettingsQuery = inject(AppUserSettingsQueryService);
+
+  // Track previous settings for diffing in effect
+  private previousSettings: AppMyTracksSettings | undefined;
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
@@ -76,6 +83,12 @@ export class TracksComponent implements OnInit, OnDestroy {
     private themeService: AppThemeService,
     @Inject(PLATFORM_ID) private platformId: object
   ) {
+    effect(() => {
+      const settings = this.userSettingsQuery.myTracksSettings();
+      if (!this.map || !settings) return;
+
+      this.handleSettingsChange(settings);
+    });
   }
 
   async ngOnInit() {
@@ -93,47 +106,22 @@ export class TracksComponent implements OnInit, OnDestroy {
       this.centerMapToStartingLocation(this.map);
       this.user = await this.authService.user$.pipe(take(1)).toPromise() as AppUserInterface;
 
-      // Ensure local settings structure exists if service didn't catch it yet
-      if (!this.user.settings) this.user.settings = {};
-      if (!this.user.settings.myTracksSettings) this.user.settings.myTracksSettings = { dateRange: DateRanges.thisWeek, activityTypes: [] };
+      // Settings are now handled by the effect, but we need to ensure the first load happens 
+      // if the effect ran before map was ready.
 
-      const settings = this.user.settings.myTracksSettings;
-
-      // Add control with persistence callback
-      this.map.addControl(new TerrainControl(!!settings.is3D, (is3D) => {
-        this.user.settings!.myTracksSettings!.is3D = is3D;
-        this.userService.updateUserProperties(this.user, { settings: this.user.settings });
+      // Restore terrain control
+      const initialSettings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
+      this.map.addControl(new TerrainControl(!!initialSettings?.is3D, (is3D) => {
+        // Persist 3D setting via service
+        this.userSettingsQuery.updateMyTracksSettings({ is3D });
       }), 'bottom-right');
 
-      // Restore saved map style
-      if (settings.mapStyle && settings.mapStyle !== 'default') {
-        const styleUrl = settings.mapStyle === 'satellite' ? 'mapbox://styles/mapbox/satellite-v9' :
-          settings.mapStyle === 'outdoors' ? 'mapbox://styles/mapbox/outdoors-v12' : null;
-        if (styleUrl) {
-          this.manualStyleOverride = styleUrl;
-          this.currentStyleUrl = styleUrl;
-          this.map.setStyle(styleUrl);
-        }
-      }
 
-      // Set initial 3D state if needed
-      // Reordered: Add source FIRST, then set terrain
-      if (this.isStyleLoaded()) {
-        this.addDemSource(this.map);
-        if (settings.is3D) {
-          this.toggleTerrain(true, false);
-        }
-      } else {
-        this.map.once('style.load', () => {
-          this.addDemSource(this.map);
-          if (settings.is3D) {
-            this.toggleTerrain(true, true);
-          }
-        });
+      // Trigger a manual check with current signal value
+      const currentSettings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
+      if (currentSettings) {
+        this.handleSettingsChange(currentSettings);
       }
-
-      // Initial load with Saved Date Range! (No more overwrite)
-      await this.loadTracksMapForUserByDateRange(this.user, this.map, settings.dateRange || DateRanges.thisWeek); // Fallback only if strictly undefined
 
 
 
@@ -165,31 +153,8 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   public setMapStyle(styleType: 'default' | 'satellite' | 'outdoors') {
     if (!this.map) return;
-
-    // Persist setting
-    if (this.user?.settings?.myTracksSettings) {
-      this.user.settings.myTracksSettings.mapStyle = styleType;
-      this.userService.updateUserProperties(this.user, { settings: this.user.settings });
-    }
-
-    let styleUrl: string;
-
-    if (styleType === 'default') {
-      this.manualStyleOverride = null;
-      // Re-apply current theme style
-      const theme = this.themeService.appTheme();
-      styleUrl = theme === AppThemes.Dark ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11';
-    } else if (styleType === 'satellite') {
-      styleUrl = 'mapbox://styles/mapbox/satellite-v9';
-      this.manualStyleOverride = styleUrl;
-    } else { // outdoors
-      styleUrl = 'mapbox://styles/mapbox/outdoors-v12';
-      this.manualStyleOverride = styleUrl;
-    }
-
-    if (this.currentStyleUrl !== styleUrl) {
-      this.applyStyle(styleUrl);
-    }
+    // Persist setting - this will trigger the signal -> effect -> handleSettingsChange -> applyStyle workflow.
+    this.userSettingsQuery.updateMyTracksSettings({ mapStyle: styleType });
   }
 
   private applyStyle(style: string) {
@@ -212,20 +177,19 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   public async search(event) {
     if (!isPlatformBrowser(this.platformId)) return;
-    // Don't unsubscribe from theme! just logic related to events
-    // this.unsubscribeFromAll(); // This killed theme subscription
+
+    // Update user settings - this will trigger signal -> effect -> handleSettingsChange -> loadTracks
+    this.userSettingsQuery.updateMyTracksSettings({
+      dateRange: event.dateRange,
+      activityTypes: event.activityTypes
+    });
+
+    // Manually clean legacy subscription if it exists, though effect handles fresh load
     if (this.trackLoadingSubscription) {
-      this.trackLoadingSubscription.unsubscribe(); // Unsubscribe only the previous track loading
+      this.trackLoadingSubscription.unsubscribe();
     }
 
-    this.user.settings.myTracksSettings.dateRange = event.dateRange;
-    this.user.settings.myTracksSettings.activityTypes = event.activityTypes;
     await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
-
-    // Clear existing track lines before reloading
-    this.clearAllPolylines();
-
-    await this.loadTracksMapForUserByDateRange(this.user, this.map, this.user.settings.myTracksSettings.dateRange, this.user.settings.myTracksSettings.activityTypes)
     this.analyticsService.logEvent('my_tracks_search', { method: DateRanges[event.dateRange] });
   }
 
@@ -560,6 +524,77 @@ export class TracksComponent implements OnInit, OnDestroy {
         this.map.setPitch(0);
       }
     }
+  }
+
+  private async handleSettingsChange(settings: AppMyTracksSettings) {
+    // 1. Handle Terrain Control & State
+    // Note: We need to ensure the control exists or update it. 
+    // Since TerrainControl is a custom control added via new(), we can't easily update its state externally 
+    // without keeping a reference.
+    // However, for this refactor, let's focus on the map effect.
+    // The TerrainControl itself updates the user setting, which updates the signal, which triggers this again.
+    // Circular? No, because we check distinctUntilChanged in service and could check here too.
+
+    // Better: Ensure we only add the control once (which we do in ngOnInit logic mostly, but we removed it).
+    // Wait, I removed the control addition in ngOnInit. I need to restore it or add it here.
+    // Adding controls in an effect is risky (duplicates). 
+    // Let's add the control in ngOnInit ONCE, and detached from specific settings values if possible, 
+    // OR manage it here carefully. 
+    // actually, let's put the Control addition back to ngOnInit but just use a callback that updates service.
+
+    // 2. Handle 3D
+    if (this.previousSettings?.is3D !== settings.is3D) {
+      this.toggleTerrain(!!settings.is3D, true);
+    }
+
+    // 3. Handle Map Style
+    if (this.previousSettings?.mapStyle !== settings.mapStyle) {
+      const styleType = settings.mapStyle || 'default';
+      let styleUrl: string;
+      if (styleType === 'default') {
+        this.manualStyleOverride = null;
+        const theme = this.themeService.appTheme();
+        styleUrl = theme === AppThemes.Dark ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11';
+      } else if (styleType === 'satellite') {
+        styleUrl = 'mapbox://styles/mapbox/satellite-v9';
+        this.manualStyleOverride = styleUrl;
+      } else {
+        styleUrl = 'mapbox://styles/mapbox/outdoors-v12';
+        this.manualStyleOverride = styleUrl;
+      }
+
+      if (this.currentStyleUrl !== styleUrl) {
+        this.applyStyle(styleUrl);
+        // applyStyle triggers reload, so we might not need to explicit reload below if style changed
+        // But applyStyle is async...
+      }
+    }
+
+    // 4. Handle Data Load (DateRange or ActivityTypes)
+    const dateRangeChanged = this.previousSettings?.dateRange !== settings.dateRange;
+    // Simple array comparison for activity types
+    const typesChanged = JSON.stringify(this.previousSettings?.activityTypes) !== JSON.stringify(settings.activityTypes);
+
+    if (dateRangeChanged || typesChanged) {
+      // Only reload if we are not already reloading from applyStyle? 
+      // applyStyle reloads. 
+      // If style changed, applyStyle runs.
+      // If distinct checks pass, we are good.
+      // But applyStyle uses `this.user.settings...`. We need to update that to use params or `settings` var.
+
+      // Actually `applyStyle` calls `loadTracksMapForUserByDateRange` using `this.user.settings`. 
+      // We should update `this.user.settings` to match the signal? 
+      // Or pass arguments. 
+
+      // Sync local user object settings to keep `this.user` consistent for other methods
+      if (this.user && this.user.settings) {
+        this.user.settings.myTracksSettings = settings;
+      }
+
+      await this.loadTracksMapForUserByDateRange(this.user, this.map, settings.dateRange || DateRanges.thisWeek, settings.activityTypes);
+    }
+
+    this.previousSettings = settings;
   }
 }
 
