@@ -579,7 +579,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       const currentBearing = map.getBearing();
 
       map.fitBounds(bounds, {
-        padding: 25,
+        padding: 50,
         animate: true,
         pitch: currentPitch,
         bearing: currentBearing
