@@ -578,8 +578,9 @@
         opacity: 0.5;
 
         mat-icon {
-            width: 24px;
-            height: 24px;
+            width: 64px;
+            height: 64px;
+            font-size: 64px;
             transition: opacity 0.2s;
 
             &:hover {
