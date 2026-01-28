@@ -1,0 +1,90 @@
+:host {
+    display: block;
+}
+
+/* Use app's global font-family for text, but EXCLUDE icons */
+:host *:not(mat-icon) {
+    font-family: 'Noto Sans', sans-serif !important;
+}
+
+.popup-container {
+    padding: 16px;
+    /* Back to original padding for compactness */
+    min-width: 220px;
+}
+
+.popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    /* Robust centering */
+    border-bottom: 1px solid var(--mat-app-outline-variant);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    /* Padding is fine if we don't force height */
+    /* Removed explicit height to allow padding + content to flow naturally */
+}
+
+.card-title {
+    margin: 0;
+    font-size: 1.125rem !important;
+    font-weight: 500;
+    color: var(--mat-sys-on-surface) !important;
+    display: block;
+    /* Removed flex */
+    line-height: 32px !important;
+    /* Force match close-btn height */
+}
+
+.close-btn {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    max-width: 32px !important;
+    min-height: 32px !important;
+    max-height: 32px !important;
+    padding: 0 !important;
+    /* Strict enforcement against theme math */
+    color: var(--mat-sys-on-surface-variant);
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    /* Constrain ripple to button size - Target ALL specificity levels */
+    --mdc-icon-button-state-layer-size: 32px;
+    --mat-icon-button-state-layer-size: 32px;
+    /* Some versions use one or the other, or both in transition */
+}
+
+.close-btn mat-icon {
+    font-size: 20px;
+    width: 20px;
+    height: 20px;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 16px;
+    align-items: center;
+}
+
+.stat-row {
+    display: contents;
+}
+
+.label {
+    font-size: 0.8rem;
+    /* Compact labels */
+    font-weight: 400;
+    color: var(--mat-app-on-surface-variant);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.value {
+    font-size: 0.95rem;
+    /* Balanced values */
+    font-weight: 500;
+    color: var(--mat-app-on-surface);
+    text-align: right;
+}

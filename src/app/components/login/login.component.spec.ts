@@ -9,7 +9,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { Auth } from '@angular/fire/auth';
 import { Analytics } from '@angular/fire/analytics';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { of, throwError } from 'rxjs';
+import { of, throwError, BehaviorSubject } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
 // Mock Firebase Auth functions
@@ -31,7 +31,8 @@ describe('LoginComponent', () => {
     let component: LoginComponent;
 
     const mockAuthService = {
-        user$: of(null),
+        user$: new BehaviorSubject(null) as any, // Use BehaviorSubject to control emission
+        authState$: of(null),
         isSignInWithEmailLink: () => false,
         googleLogin: vi.fn().mockResolvedValue({ user: { uid: '123' } }),
         githubLogin: vi.fn().mockResolvedValue({ user: { uid: '123' } }),
@@ -40,6 +41,7 @@ describe('LoginComponent', () => {
         linkCredential: vi.fn().mockResolvedValue({}),
         sendEmailLink: vi.fn().mockResolvedValue(true),
         linkWithPopup: vi.fn().mockResolvedValue({}),
+        signInWithPopup: vi.fn().mockResolvedValue({ user: { uid: '123' } }), // Add missing method
         getRedirectResult: vi.fn().mockResolvedValue(null),
         localStorageService: {
             getItem: vi.fn().mockReturnValue(null),
@@ -131,9 +133,13 @@ describe('LoginComponent', () => {
         // We need to wait for the async handle error flow
         await new Promise(resolve => setTimeout(resolve, 0));
 
+        // Emit user to allow navigation to proceed
+        (mockAuthService.user$ as any).next({ uid: '123' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
         expect(mockAuthService.fetchSignInMethods).toHaveBeenCalledWith('test@example.com');
         expect((mockDialog as any).open).toHaveBeenCalled();
-        expect(signInWithPopup).toHaveBeenCalled();
+        expect(mockAuthService.signInWithPopup).toHaveBeenCalled();
         expect(mockAuthService.linkCredential).toHaveBeenCalledWith(mockUser, expect.anything());
         expect(mockSnackBar.open).toHaveBeenCalledWith('Accounts successfully linked!', 'Close', expect.anything());
     });
@@ -226,7 +232,7 @@ describe('LoginComponent', () => {
         component.signInWithProvider(SignInProviders.GitHub);
         await new Promise(resolve => setTimeout(resolve, 0));
 
-        expect(signInWithPopup).not.toHaveBeenCalled();
+        expect(mockAuthService.signInWithPopup).not.toHaveBeenCalled();
         expect(mockAuthService.linkCredential).not.toHaveBeenCalled();
     });
 
@@ -247,7 +253,8 @@ describe('LoginComponent', () => {
 
         // Secondary login fails (e.g. user closed popup)
         const popupError = { code: 'auth/popup-closed-by-user' };
-        (signInWithPopup as any).mockRejectedValue(popupError);
+        // Use spyOn or just assign the mock to the SERVICE method, not the imported function
+        (mockAuthService as any).signInWithPopup = vi.fn().mockRejectedValue(popupError);
 
         component.signInWithProvider(SignInProviders.GitHub);
         await new Promise(resolve => setTimeout(resolve, 0));
@@ -271,7 +278,8 @@ describe('LoginComponent', () => {
         const mockDialogRef = { afterClosed: () => of('google.com') };
         (mockDialog as any).open = vi.fn().mockReturnValue(mockDialogRef);
 
-        (signInWithPopup as any).mockResolvedValue({ user: { uid: '123' } });
+        // Ensure signInWithPopup succeeds on the service
+        (mockAuthService as any).signInWithPopup = vi.fn().mockResolvedValue({ user: { uid: '123' } });
 
         // Link fails
         (mockAuthService as any).linkCredential = vi.fn().mockRejectedValue({ code: 'auth/credential-already-in-use' });
@@ -320,7 +328,11 @@ describe('LoginComponent', () => {
         (mockAuthService.getRedirectResult as any).mockResolvedValue(mockRedirectResult);
         (mockUserService.getUserByID as any).mockReturnValue(of({ displayName: 'Redirect User' }));
 
-        await component.ngOnInit();
+        component.ngOnInit(); // Do not await ngOnInit directly if it returns void/promise we don't control fully? Actually it is async.
+        // But we want to trigger emission.
+
+        await new Promise(resolve => setTimeout(resolve, 0));
+        (mockAuthService.user$ as any).next({ uid: 'redirect-user' });
         await new Promise(resolve => setTimeout(resolve, 0));
 
         expect(mockAuthService.getRedirectResult).toHaveBeenCalled();

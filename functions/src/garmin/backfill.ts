@@ -166,6 +166,8 @@ export async function processGarminBackfill(userID: string, startDate: Date, end
       .collection('meta')
       .doc(ServiceNames.GarminAPI).set({
         didLastHistoryImport: (new Date()).getTime(),
+        lastHistoryImportStartDate: startDate.getTime(),
+        lastHistoryImportEndDate: endDate.getTime(),
       });
   } catch (e: any) {
     logger.error(e);

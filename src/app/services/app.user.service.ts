@@ -33,8 +33,7 @@ import {
   VerticalSpeedUnits
 } from '@sports-alliance/sports-lib';
 import { Auth, authState } from '@angular/fire/auth';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { environment } from '../../environments/environment';
+import { HttpClient } from '@angular/common/http';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import {
   DateRanges,
@@ -83,7 +82,7 @@ import { DataDeviceNames } from '@sports-alliance/sports-lib';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
-import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc, getDoc } from '@angular/fire/firestore';
+import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc } from '@angular/fire/firestore';
 import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '../../shared/functions-manifest';
 
@@ -678,13 +677,6 @@ export class AppUserService implements OnDestroy {
     // const hasPaidAccess = stripeRole === 'pro' || stripeRole === 'basic' || (user as any).isPro === true;
     // const onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce);
 
-    // We need to enable a way for 'free' users to pass.
-    // We can set a property like 'onboardingCompleted' explicitly, but the guard calculates it dynamically 
-    // based on roles.
-
-    // Wait, the guard:
-    // return onboardingCompleted;
-
     // So if I just set 'onboardingCompleted' property on the user in Firestore, 
     // does the guard read it?
     // The guard code:
@@ -797,7 +789,7 @@ export class AppUserService implements OnDestroy {
     });
   }
 
-  public async deleteAllUserData(user: User) {
+  public async deleteAllUserData(_user: User) {
     try {
       await this.functionsService.call('deleteSelf');
       await this.auth.signOut();
@@ -819,6 +811,7 @@ export class AppUserService implements OnDestroy {
   }
 
   ngOnDestroy() {
+    // Required to satisfy OnDestroy interface
   }
 
   private getServiceTokens(user: User, serviceName: ServiceNames): Observable<any[]> {
@@ -904,7 +897,7 @@ export class AppUserService implements OnDestroy {
     settings.mapSettings = settings.mapSettings || <UserMapSettingsInterface>{};
     settings.mapSettings.theme = settings.mapSettings.theme || MapThemes.Normal;
     settings.mapSettings.showLaps = settings.mapSettings.showLaps !== false;
-    settings.mapSettings.showPoints = settings.mapSettings.showPoints === true;
+
     settings.mapSettings.showArrows = settings.mapSettings.showArrows !== false;
     settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || AppUserService.getDefaultMapLapTypes();
     settings.mapSettings.mapType = settings.mapSettings.mapType || AppUserService.getDefaultMapType();

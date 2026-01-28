@@ -100,6 +100,8 @@ export async function addHistoryToQueue(userID: string, serviceName: ServiceName
           admin.firestore().collection('users').doc(userID).collection('meta').doc(serviceName),
           <UserServiceMetaInterface>{
             didLastHistoryImport: (new Date()).getTime(),
+            lastHistoryImportStartDate: startDate.getTime(),
+            lastHistoryImportEndDate: endDate.getTime(),
             processedActivitiesFromLastHistoryImportCount: totalProcessedWorkoutsCount + processedWorkoutsCount,
           }, { merge: true });
 

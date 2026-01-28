@@ -127,14 +127,19 @@ export class AppEventColorService {
 
     switch (zone) {
       case `Zone 5`:
+      case `Z5`:
         return core.color(AppColors.LightRed);
       case `Zone 4`:
+      case `Z4`:
         return core.color(AppColors.Yellow);
       case `Zone 3`:
+      case `Z3`:
         return core.color(AppColors.Green);
       case `Zone 2`:
+      case `Z2`:
         return core.color(AppColors.Blue);
       case `Zone 1`:
+      case `Z1`:
       default:
         return core.color(AppColors.LightBlue);
     }

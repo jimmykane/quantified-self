@@ -27,15 +27,17 @@ interface CloudTasksConfig {
     serviceAccountEmail: string;
 }
 
+interface DebugConfig {
+    bucketName: string;
+}
+
 interface AppConfig {
     suuntoapp: SuuntoAppConfig;
     corosapi: CorosApiConfig;
     garminapi: GarminApiConfig;
     cloudtasks: CloudTasksConfig;
-
+    debug: DebugConfig;
 }
-
-
 
 function getEnvVar(name: string): string {
     const value = process.env[name];
@@ -72,6 +74,11 @@ export const config: AppConfig = {
             location: 'europe-west2',
             queue: 'processWorkoutTask',
             serviceAccountEmail: `${process.env.GCLOUD_PROJECT || admin.instanceId().app.options.projectId}@appspot.gserviceaccount.com`,
+        };
+    },
+    get debug() {
+        return {
+            bucketName: 'quantified-self-io-debug-files',
         };
     },
 };

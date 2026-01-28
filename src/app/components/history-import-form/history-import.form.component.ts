@@ -284,5 +284,9 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     }
     return Math.ceil(this.userMetaForService.processedActivitiesFromLastHistoryImportCount / this.activitiesPerDayLimit);
   }
+
+  get userMeta(): any {
+    return this.userMetaForService;
+  }
 }
 

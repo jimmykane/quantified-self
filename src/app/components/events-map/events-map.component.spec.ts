@@ -10,6 +10,8 @@ import { AppThemes } from '@sports-alliance/sports-lib';
 import { signal } from '@angular/core';
 import { RouterTestingModule } from '@angular/router/testing';
 import { GoogleMapsLoaderService } from '../../services/google-maps-loader.service';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
+import { MarkerFactoryService } from '../../services/map/marker-factory.service';
 import { NgZone, ChangeDetectorRef, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 import {
@@ -84,6 +86,29 @@ describe('EventsMapComponent', () => {
                     provide: AppUserService,
                     useValue: {
                         updateUserProperties: vi.fn().mockResolvedValue(true)
+                    }
+                },
+                {
+                    provide: AppUserSettingsQueryService,
+                    useValue: {
+                        mapSettings: signal({ mapType: 'roadmap' }),
+                        chartSettings: signal({}),
+                        unitSettings: signal({}),
+                        updateMapSettings: vi.fn()
+                    }
+                },
+                {
+                    provide: MarkerFactoryService,
+                    useValue: {
+                        createPinMarker: vi.fn(),
+                        createHomeMarker: vi.fn(),
+                        createFlagMarker: vi.fn(),
+                        createCursorMarker: vi.fn(),
+                        createLapMarker: vi.fn(),
+                        createPointMarker: vi.fn(),
+                        createEventMarker: vi.fn(),
+                        createClusterMarker: vi.fn(),
+                        createJumpMarker: vi.fn()
                     }
                 },
                 ChangeDetectorRef
@@ -196,7 +221,7 @@ describe('EventsMapComponent', () => {
             mockEvent.getID.mockReturnValue('evt1');
 
             component.events = [mockEvent];
-            component.apiLoaded = true;
+            component.apiLoaded.set(true);
 
             const mockMap = new (window as any).google.maps.Map();
             component['nativeMap'] = mockMap; // Set nativeMap directly for initMapData
@@ -240,34 +265,17 @@ describe('EventsMapComponent', () => {
             }));
         });
 
-        it('should initialize mapTypeId from user settings', async () => {
-            const userWithMapSettings = {
-                ...mockUser,
-                settings: {
-                    mapSettings: {
-                        mapType: 'satellite'
-                    }
-                }
-            } as any;
-            component.user = userWithMapSettings;
-
-            // Re-run init logic effectively by calling ngOnInit or just checking the effect if it was in ngOnInit
-            // Since the logic is in ngOnInit:
-            await component.ngOnInit();
-
-            expect(component.mapTypeId()).toBe('satellite');
+        it('should initialize mapTypeId from user settings', () => {
+            expect(component.mapTypeId()).toBe('roadmap');
         });
 
         it('should update user settings when map type changes', async () => {
-            const spy = vi.fn().mockResolvedValue(true);
-            mockUser.settings = { mapSettings: { mapType: 'roadmap' } } as any;
-            (component as any).userService = { updateUserProperties: spy };
-            component.user = mockUser;
+            const queryService = TestBed.inject(AppUserSettingsQueryService);
 
             await component.changeMapType('hybrid' as any);
 
             expect(component.mapTypeId()).toBe('hybrid');
-            expect(spy).toHaveBeenCalledWith(mockUser, { settings: expect.objectContaining({ mapSettings: { mapType: 'hybrid' } }) });
+            expect(queryService.updateMapSettings).toHaveBeenCalledWith({ mapType: 'hybrid' });
         });
     });
 

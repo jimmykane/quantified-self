@@ -43,3 +43,22 @@ export function convertIntensityZonesStatsToChartData(
     return data;
   }, []);
 }
+
+/**
+ * Scans the chart data to find which types have non-zero values.
+ * @param data - The chart data returned by convertIntensityZonesStatsToChartData
+ * @returns A Set of types that have at least one non-zero value.
+ */
+export function getActiveDataTypes(data: any[]): Set<string> {
+  const activeTypes = new Set<string>();
+  if (!data) return activeTypes;
+
+  data.forEach(entry => {
+    const type = entry.type;
+    const value = entry[type];
+    if (typeof value === 'number' && value > 0) {
+      activeTypes.add(type);
+    }
+  });
+  return activeTypes;
+}

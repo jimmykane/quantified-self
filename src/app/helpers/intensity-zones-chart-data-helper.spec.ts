@@ -21,7 +21,7 @@ vi.mock('@sports-alliance/sports-lib', () => ({
     }
 }));
 
-import { convertIntensityZonesStatsToChartData } from './intensity-zones-chart-data-helper';
+import { convertIntensityZonesStatsToChartData, getActiveDataTypes } from './intensity-zones-chart-data-helper';
 
 describe('convertIntensityZonesStatsToChartData', () => {
     beforeEach(() => {
@@ -81,5 +81,32 @@ describe('convertIntensityZonesStatsToChartData', () => {
         expect(result[2]['Heart Rate']).toBe(3000);
         expect(result[3]['Heart Rate']).toBe(4000);
         expect(result[4]['Heart Rate']).toBe(5000);
+    });
+});
+
+describe('getActiveDataTypes', () => {
+    it('should return empty set for empty data', () => {
+        expect(getActiveDataTypes([]).size).toBe(0);
+    });
+
+    it('should return valid types with non-zero values', () => {
+        const data = [
+            { type: 'Heart Rate', 'Heart Rate': 100 },
+            { type: 'Speed', 'Speed': 0 },
+            { type: 'Power', 'Power': 50 }
+        ];
+        const result = getActiveDataTypes(data);
+        expect(result.has('Heart Rate')).toBe(true);
+        expect(result.has('Power')).toBe(true);
+        expect(result.has('Speed')).toBe(false);
+    });
+
+    it('should return empty set if all values are 0', () => {
+        const data = [
+            { type: 'Heart Rate', 'Heart Rate': 0 },
+            { type: 'Speed', 'Speed': 0 }
+        ];
+        const result = getActiveDataTypes(data);
+        expect(result.size).toBe(0);
     });
 });

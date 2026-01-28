@@ -156,7 +156,11 @@ describe('Garmin Backfill', () => {
         expect(requestHelper.get).toHaveBeenCalled();
         // onCall functions return data directly or void, status is handled by framework
         // We verify side effects (setMock for updating timestamp)
-        expect(setMock).toHaveBeenCalled();
+        expect(setMock).toHaveBeenCalledWith(expect.objectContaining({
+            didLastHistoryImport: expect.any(Number),
+            lastHistoryImportStartDate: expect.any(Number),
+            lastHistoryImportEndDate: expect.any(Number),
+        }));
     });
 
     it('should throw failed-precondition if app is undefined', async () => {

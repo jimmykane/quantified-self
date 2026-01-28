@@ -57,3 +57,23 @@ mat-card.map-legend {
 mat-slide-toggle {
   margin-top: 10000px !important;
 }
+
+.info-window-content {
+  padding: 8px;
+  min-width: 150px;
+}
+
+.info-window-content h3 {
+  margin: 0 0 8px 0;
+  font: var(--mat-sys-title-small);
+  color: var(--mat-sys-primary);
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+  padding-bottom: 4px;
+}
+
+.info-window-content p {
+  margin: 4px 0;
+  font: var(--mat-sys-body-small);
+  display: flex;
+  justify-content: space-between;
+}

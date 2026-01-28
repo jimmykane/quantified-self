@@ -204,6 +204,15 @@ describe('history', () => {
                 url: expect.stringContaining('/v3/workouts')
             }));
             expect(firestore.batch).toHaveBeenCalled();
+            expect(firestore.batch().set).toHaveBeenCalledWith(
+                expect.anything(),
+                expect.objectContaining({
+                    didLastHistoryImport: expect.any(Number),
+                    lastHistoryImportStartDate: expect.any(Number),
+                    lastHistoryImportEndDate: expect.any(Number),
+                }),
+                expect.anything()
+            );
             expect(firestore.batch().commit).toHaveBeenCalled();
 
             // Assert return value

@@ -73,20 +73,25 @@ export const importActivityToSuuntoApp = onCall({
                 'Authorization': accessToken,
                 'Content-Type': 'application/json',
                 'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
-                'json': true,
               },
-              body: JSON.stringify({
+              json: true,
+              body: {
                 // description: "#qs",
                 // comment: "",
                 notifyUser: true,
-              }),
+              },
               url: 'https://cloudapi.suunto.com/v2/upload/',
             });
-            result = JSON.parse(result);
+            // Result is already parsed because json: true
           } catch (e: any) {
             // Start logging and rethrowing for retry-helper to catch matching 401s
             logger.error(`Could not init activity upload for token ${tokenQueryDocumentSnapshot.id} for user ${userID}`, e);
             throw e;
+          }
+
+          if (!result || !result.url || !result.id) {
+            logger.error(`Invalid init response from Suunto for user ${userID}`, result);
+            throw new HttpsError('internal', 'Invalid response from Suunto initialization.');
           }
 
           const url = result.url;
@@ -113,7 +118,7 @@ export const importActivityToSuuntoApp = onCall({
           let attempts = 0;
           const maxAttempts = 10; // 20 seconds total wait
 
-          while ((status === 'NEW' || status === 'ACCEPTED') && attempts < maxAttempts) {
+          while (attempts < maxAttempts) {
             attempts++;
             // Wait 2 seconds before checking
             await new Promise(resolve => setTimeout(resolve, 2000));
@@ -124,10 +129,19 @@ export const importActivityToSuuntoApp = onCall({
                   'Authorization': accessToken,
                   'Ocp-Apim-Subscription-Key': config.suuntoapp.subscription_key,
                 },
+                json: true,
                 url: `https://cloudapi.suunto.com/v2/upload/${uploadId}`,
               });
 
-              const statusJson = JSON.parse(statusResponse);
+              // Response is already parsed
+              const statusJson = statusResponse;
+
+              if (!statusJson || !statusJson.status) {
+                logger.warn(`Missing status in response for user ${userID}, id ${uploadId}:`, statusJson);
+                // Continue polling if status is missing
+                continue;
+              }
+
               status = statusJson.status;
               logger.info(`Upload status (attempt ${attempts}/${maxAttempts}) for user ${userID}, id ${uploadId}: ${status}`, statusJson);
 
@@ -140,6 +154,13 @@ export const importActivityToSuuntoApp = onCall({
                   return { status: 'info', code: 'ALREADY_EXISTS', message: 'Activity already exists in Suunto' };
                 }
                 throw new HttpsError('internal', `Suunto processing failed: ${statusJson.message}`);
+              } else if (status === 'NEW' || status === 'ACCEPTED') {
+                // Continue polling
+                continue;
+              } else {
+                logger.warn(`Unknown status ${status} for user ${userID}, id ${uploadId}`);
+                // Continue polling on unknown status? Or fail? Best to continue for now.
+                continue;
               }
             } catch (e: unknown) {
               const errorMessage = e instanceof Error ? e.message : String(e);
@@ -148,11 +169,7 @@ export const importActivityToSuuntoApp = onCall({
             }
           }
 
-          if (status !== 'PROCESSED') {
-            throw new HttpsError('deadline-exceeded', `Upload timed out or failed with status ${status}`);
-          }
-          // Shouldn't reach here as PROCESSED is handled in the loop
-          return { status: 'success' };
+          throw new HttpsError('deadline-exceeded', `Upload timed out or failed with status ${status}`);
         },
         `Upload activity for user ${userID}`
       );

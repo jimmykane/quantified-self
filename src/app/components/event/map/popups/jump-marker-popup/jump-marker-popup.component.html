@@ -1,0 +1,51 @@
+<div class="popup-container glass-card">
+    <div class="popup-header">
+        <h3 class="card-title">Jump Stats</h3>
+        <button mat-icon-button class="close-btn" (click)="onClose()">
+            <mat-icon>close</mat-icon>
+        </button>
+    </div>
+    <div class="stats-grid">
+        <div class="stat-row">
+            <span class="label">Distance:</span>
+            <span class="value">{{jump?.jumpData?.distance?.getDisplayValue()}}
+                {{jump?.jumpData?.distance?.getDisplayUnit()}}</span>
+        </div>
+
+        @if (jump?.jumpData?.height) {
+        <div class="stat-row">
+            <span class="label">Height:</span>
+            <span class="value">{{jump?.jumpData?.height?.getDisplayValue()}}
+                {{jump?.jumpData?.height?.getDisplayUnit()}}</span>
+        </div>
+        }
+
+        <div class="stat-row">
+            <span class="label">Score:</span>
+            <span class="value">{{getFormattedScore()}}</span>
+        </div>
+
+        @if (jump?.jumpData?.hang_time) {
+        <div class="stat-row">
+            <span class="label">Hang Time:</span>
+            <span class="value">{{jump?.jumpData?.hang_time?.getDisplayValue()}}
+                {{jump?.jumpData?.hang_time?.getDisplayUnit()}}</span>
+        </div>
+        }
+
+        @if (jump?.jumpData?.speed) {
+        <div class="stat-row">
+            <span class="label">Speed:</span>
+            <span class="value">{{jump?.jumpData?.speed?.getDisplayValue()}}
+                {{jump?.jumpData?.speed?.getDisplayUnit()}}</span>
+        </div>
+        }
+
+        @if (jump?.jumpData?.rotations) {
+        <div class="stat-row">
+            <span class="label">Rotations:</span>
+            <span class="value">{{jump?.jumpData?.rotations?.getDisplayValue()}}</span>
+        </div>
+        }
+    </div>
+</div>

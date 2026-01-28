@@ -8,6 +8,7 @@ export class MarkerFactoryService {
   private createSvgElement(svgContent: string): HTMLDivElement {
     const div = document.createElement('div');
     div.innerHTML = svgContent;
+    div.style.cursor = 'pointer';
     return div;
   }
 
@@ -81,7 +82,7 @@ export class MarkerFactoryService {
         `);
   }
 
-  createClusterMarker(count: number): HTMLDivElement {
+  createClusterMarker(count: number, color?: string): HTMLDivElement {
     const content = document.createElement('div');
 
     // 10-step "Evil" Heatmap (Vivid Orange -> Blood Red -> Black)
@@ -101,9 +102,15 @@ export class MarkerFactoryService {
     const safeCount = Number(count) || 0;
     const config = steps.find(s => safeCount < s.max) || steps[steps.length - 1];
 
-    content.style.setProperty('background-color', config.bg, 'important');
-    content.style.setProperty('background', config.bg, 'important');
-    content.style.setProperty('color', config.fg, 'important');
+    const bgColor = color || config.bg;
+    // If custom color is provided, use white text for contrast, else use config fg
+    // Basic heuristic: most activity colors are dark/vivid enough for white text.
+    // Ideally we'd check contrast, but white is usually safe for map markers.
+    const fgColor = color ? '#FFFFFF' : config.fg;
+
+    content.style.setProperty('background-color', bgColor, 'important');
+    content.style.setProperty('background', bgColor, 'important');
+    content.style.setProperty('color', fgColor, 'important');
 
     content.style.borderRadius = '50%';
     content.style.minWidth = config.size;
@@ -119,4 +126,19 @@ export class MarkerFactoryService {
     content.textContent = String(safeCount);
     return content;
   }
+
+  /**
+   * Creates a jump marker using the Material Design "flight" icon.
+   * Used to display jump events on the map.
+   */
+  createJumpMarker(color: string): HTMLDivElement {
+    // Solid colored circle with a white arrow icon on top
+    return this.createSvgElement(`
+        <svg width="28" height="28" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10" fill="${color}" stroke="#FFF" stroke-width="0.8" />
+          <path d="M13.88 11.54L8.92 16.5l-1.41-1.41 4.96-4.96L10.34 8l5.65.01.01 5.65-2.12-2.12z" 
+                fill="#FFF" />
+        </svg>`);
+  }
 }
+

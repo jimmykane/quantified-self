@@ -63,7 +63,7 @@ describe('UserSettingsComponent', () => {
                 mapType: 'roadmap',
                 strokeWidth: 4,
                 showLaps: true,
-                showPoints: true,
+
                 showArrows: true,
                 lapTypes: []
             } as any,
