@@ -2,6 +2,8 @@
 import { TestBed } from '@angular/core/testing';
 import { AppUserSettingsQueryService } from './app.user-settings-query.service';
 import { AppAuthService } from '../authentication/app.auth.service';
+import { AppUserService } from './app.user.service';
+import { LoggerService } from './logger.service';
 import { BehaviorSubject } from 'rxjs';
 import { User, ChartThemes, AppThemes, MapTypes } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -40,7 +42,9 @@ describe('AppUserSettingsQueryService', () => {
         TestBed.configureTestingModule({
             providers: [
                 AppUserSettingsQueryService,
-                { provide: AppAuthService, useValue: mockAuthService }
+                { provide: AppAuthService, useValue: mockAuthService },
+                { provide: AppUserService, useValue: { updateUserProperties: vi.fn().mockResolvedValue(true) } },
+                { provide: LoggerService, useValue: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }
             ]
         });
 
@@ -89,13 +93,13 @@ describe('AppUserSettingsQueryService', () => {
             // Emit NEW user object with DIFFERENT chart settings
             const user3 = createMockUser();
             if (!user3.settings) user3.settings = {};
-            user3.settings.chartSettings = { theme: ChartThemes.Light, showGrid: false };
+            user3.settings.chartSettings = { theme: ChartThemes.Material, showGrid: false } as any;
 
             mockUserSubject.next(user3);
             TestBed.flushEffects();
 
             const thirdEmission = service.chartSettings();
-            expect(thirdEmission.theme).toBe(ChartThemes.Light);
+            expect(thirdEmission.theme).toBe(ChartThemes.Material);
             expect(thirdEmission.showGrid).toBe(false);
             expect(thirdEmission).not.toEqual(firstEmission);
         });
@@ -114,11 +118,12 @@ describe('AppUserSettingsQueryService', () => {
             TestBed.flushEffects();
 
             const first = service.mapSettings();
-            expect(first.type).toBe(MapTypes.Hybrid);
+            // Cast to any to access potentially mismatched properties
+            expect((first as any).type).toBe(MapTypes.Hybrid);
 
             // Change unrelated setting
             const user2 = createMockUser();
-            user2.settings.chartSettings = { theme: ChartThemes.Material }; // Change chart, keep map same
+            user2.settings.chartSettings = { theme: ChartThemes.Material } as any; // Change chart, keep map same
             mockUserSubject.next(user2);
             TestBed.flushEffects();
 
@@ -127,12 +132,12 @@ describe('AppUserSettingsQueryService', () => {
 
             // Change map setting
             const user3 = createMockUser();
-            user3.settings.mapSettings = { type: MapTypes.Streets, showLaps: false };
+            user3.settings.mapSettings = { type: MapTypes.RoadMap, showLaps: false } as any;
             mockUserSubject.next(user3);
             TestBed.flushEffects();
 
             const third = service.mapSettings();
-            expect(third.type).toBe(MapTypes.Streets);
+            expect((third as any).type).toBe(MapTypes.RoadMap);
             expect(third).not.toEqual(first);
         });
     });
@@ -140,11 +145,11 @@ describe('AppUserSettingsQueryService', () => {
     describe('appThemeSetting', () => {
         it('should track app theme changes', () => {
             const user = createMockUser();
-            user.settings.appSettings = { theme: AppThemes.Light };
+            user.settings.appSettings = { theme: AppThemes.Normal };
             mockUserSubject.next(user);
             TestBed.flushEffects();
 
-            expect(service.appThemeSetting()).toBe(AppThemes.Light);
+            expect(service.appThemeSetting()).toBe(AppThemes.Normal);
 
             const user2 = createMockUser();
             user2.settings.appSettings = { theme: AppThemes.Dark };
