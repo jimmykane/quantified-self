@@ -148,7 +148,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   get showUploadActivities(): boolean {
-    return (this.isDashboardRoute || this.isAdminRoute) && !!this.currentUser;
+    return this.isDashboardRoute && !!this.currentUser;
   }
 
   private updateOnboardingState() {
