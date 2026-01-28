@@ -20,6 +20,7 @@ import {
   GarminAPIEventMetaData,
   ActivityParsingOptions,
 } from '@sports-alliance/sports-lib';
+import { uploadDebugFile } from '../debug-utils';
 
 interface RequestError extends Error {
   statusCode?: number;
@@ -214,6 +215,12 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
     }
 
     const err = e instanceof Error ? e : new Error(String(e));
+
+    // Attempt to upload the debug file if we have the result (file data)
+    if (result) {
+      await uploadDebugFile(result, queueItem.activityFileType.toLowerCase(), queueItem.id, 'garmin');
+    }
+
     logger.info(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${(serviceToken as any).userID} to ${queueItem.retryCount + 1} due to ${err.message}`));
     await increaseRetryCountForQueueItem(queueItem, err, 1, bulkWriter);
     return QueueResult.RetryIncremented;
