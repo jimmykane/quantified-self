@@ -420,6 +420,7 @@ export class TracksComponent implements OnInit, OnDestroy {
                         const activityId = activity.getID() ? activity.getID() : `temp-${Date.now()}-${Math.random()}`;
                         const sourceId = `track-source-${activityId}`;
                         const layerId = `track-layer-${activityId}`;
+                        const glowLayerId = `track-layer-glow-${activityId}`;
 
                         // Run inside zone to ensure map updates are picked up? actually outside is better for perf
                         this.zone.runOutsideAngular(() => {
@@ -439,6 +440,23 @@ export class TracksComponent implements OnInit, OnDestroy {
                               }
                             });
 
+                            // Add Glow Layer (Underneath)
+                            map.addLayer({
+                              id: glowLayerId,
+                              type: 'line',
+                              source: sourceId,
+                              layout: {
+                                'line-join': 'round',
+                                'line-cap': 'round'
+                              },
+                              paint: {
+                                'line-color': color,
+                                'line-width': 8, // Wider for glow
+                                'line-blur': 4,  // Blur for soft edge
+                                'line-opacity': 0.6 // Translucent
+                              }
+                            });
+
                             // Add Main Track Layer
                             map.addLayer({
                               id: layerId,
@@ -454,6 +472,7 @@ export class TracksComponent implements OnInit, OnDestroy {
                                 'line-opacity': 0.9 // High visibility
                               }
                             });
+
                           } catch (error: any) {
                             if (error?.message?.includes('Style is not done loading')) {
                               console.log('Style loading in progress, retrying tracks...');
@@ -466,6 +485,7 @@ export class TracksComponent implements OnInit, OnDestroy {
                           }
 
                           this.activeLayerIds.push(layerId);
+                          this.activeLayerIds.push(glowLayerId);
                           this.activeLayerIds.push(sourceId); // Store source ID too for cleanup
                         });
 
