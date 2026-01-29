@@ -453,6 +453,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       chart.dateFormatter.utc = true;
     }
 
+    // Enable native "Click to Interact" behavior
+    chart.tapToActivate = true;
+
     chart.fontSize = '1em';
     chart.paddingTop = 0;
     chart.paddingRight = 10;
