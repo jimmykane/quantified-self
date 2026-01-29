@@ -41,9 +41,9 @@
       </map-advanced-marker>
       }
       <!-- Cursor Marker -->
-      @if (activitiesCursors.get(activityMapData.activity.getID())) {
+      @if (activitiesCursors.get(activityMapData.activity.getID() || '')) {
       <map-advanced-marker
-        [position]="{lat: activitiesCursors.get(activityMapData.activity.getID()).latitudeDegrees, lng: activitiesCursors.get(activityMapData.activity.getID()).longitudeDegrees}"
+        [position]="{lat: activitiesCursors.get(activityMapData.activity.getID() || '').latitudeDegrees, lng: activitiesCursors.get(activityMapData.activity.getID() || '').longitudeDegrees}"
         [options]="getCursorMarkerOptions(activityMapData.activity, activityMapData.strokeColor)">
       </map-advanced-marker>
       }

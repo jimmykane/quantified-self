@@ -243,7 +243,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     // Subscribe to cursor position changes with throttling
     this.cursorPositionSubscription = this.cursorPositionSubject.pipe(
-      throttleTime(2000, asyncScheduler, { leading: true, trailing: true })
+      throttleTime(100, asyncScheduler, { leading: true, trailing: true })
     ).subscribe((event) => {
       this.handleCursorPositionChange(event);
     });
@@ -961,108 +961,124 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // If "Show All Data" is enabled, streams should have been hydrated from the original file already
     // via attachStreamsToEventWithActivities in the event service.
 
-    if (this.selectedActivities && this.selectedActivities.length > 0) {
-      this.selectedActivities.forEach(activity => {
-        const streams = activity.getAllStreams();
-        if (!streams.length) {
-          return;
-        }
-
-        // #8: Populate distance map for distance axis mode
-        if (this.xAxisType === XAxisTypes.Distance) {
-          const distanceStream = streams.find(s => s.type === DataDistance.type) || streams.find(s => s.type === DataStrydDistance.type);
-          if (distanceStream) {
-            this.distanceAxesForActivitiesMap.set(activity.getID(), distanceStream);
-          }
-        }
-
-        // Determine which data types to show based on showAllData toggle
-        const allowedDataTypes = this.showAllData
-          ? null // null means show all
-          : DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(
-            [...DynamicDataLoader.basicDataTypes, ...this.dataTypesToUse],
-            this.userUnitSettings,
-            { includeDerivedTypes: true }
-          ).concat([...DynamicDataLoader.basicDataTypes, ...this.dataTypesToUse]);
-
-        // These need to be unit based and activity based?
-        const shouldRemoveSpeed = DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataSpeed.type, this.userUnitSettings).indexOf(DataSpeed.type) === -1
-        const shouldRemoveGradeAdjustedSpeed = DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataGradeAdjustedSpeed.type, this.userUnitSettings).indexOf(DataGradeAdjustedSpeed.type) === -1
-        const shouldRemoveDistance = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataDistance.type) === -1;
-
-        // @todo should do the same with distance (miles) and vertical speed
-        // When Show All Data is enabled, we want to prevent the "explosion" of derived types (e.g. Pace from Speed).
-        // derivedTypes are "sister" types. unitVariants are "formats" (km/h vs mph).
-        const includeDerivedTypes = !this.showAllData;
-
-        // DEBUG: Check what units are actually configured
-        if (this.showAllData) {
-          this.logger.log('[EventCardChart] userUnitSettings:', this.userUnitSettings);
-        }
-
-        const whitelistedUnitTypes = DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(
-          streams.map(st => st.type),
-          this.userUnitSettings,
-          { includeDerivedTypes }
-        );
-
-        if (this.showAllData) {
-          this.logger.log('[EventCardChart] whitelistedUnitTypes:', whitelistedUnitTypes);
-        }
-
-        // Gather all "known" unit variants to identify what we should potentially hide
-        // Using dataTypeUnitGroups which maps BaseType -> { Variant1, Variant2... }
-        const allKnownUnitVariants = Object.values(DynamicDataLoader.dataTypeUnitGroups)
-          .flatMap(group => Object.keys(group));
-
-        [...new Set(ActivityUtilities.createUnitStreamsFromStreams(
-          streams,
-          activity.type,
-          whitelistedUnitTypes,
-          { includeDerivedTypes, includeUnitVariants: true }
-        ).concat(streams))]
-          .filter((stream) => {
-            // First, filter by showAllData toggle
-            if (allowedDataTypes !== null && !allowedDataTypes.includes(stream.type)) {
-              return false;
-            }
-
-            // CRITICAL FIX: Even if showAllData is TRUE, we must hide "sister" unit variants
-            // that are not in our whitelist.
-            // If this stream describes a known unit variant (e.g. 'Speed in miles per hour')
-            // AND
-            // It is NOT in our allowed whitelist (e.g. we only want 'Speed in km/h')
-            // THEN hide it.
-            if (allKnownUnitVariants.includes(stream.type) && !whitelistedUnitTypes.includes(stream.type)) {
-              return false;
-            }
-
-            switch (stream.type) {
-              case DataDistance.type:
-                return !shouldRemoveDistance;
-              case DataSpeed.type:
-                return !shouldRemoveSpeed;
-              case DataGradeAdjustedSpeed.type:
-                return !shouldRemoveGradeAdjustedSpeed;
-              case DataLatitudeDegrees.type:
-              case DataLongitudeDegrees.type:
-                return false;
-              default:
-                return true;
-            }
-          }).sort((left, right) => {
-            if (left.type < right.type) {
-              return -1;
-            }
-            if (left.type > right.type) {
-              return 1;
-            }
-            return 0;
-          }).forEach((stream) => {
-            streamsToProcess.push({ activity, stream });
-          });
-      });
+    if (!this.selectedActivities?.length) {
+      this.logger.info('EventCardChartComponent: No selected activities to map');
+      // this.noMapData = true; // This property doesn't exist in EventCardChartComponent
+      this.loaded();
+      return;
     }
+
+    this.logger.info(`EventCardChartComponent: Mapping ${this.selectedActivities.length} activities. showLaps: ${this.showLaps}, lapTypes count: ${this.lapTypes?.length}`);
+
+    this.selectedActivities.forEach((activity) => {
+      this.logger.info(`EventCardChartComponent: Mapping activity ID: "${activity.getID()}"`);
+      // The original code had a check for hasPositionData, which is not directly relevant for chart streams.
+      // Assuming the intent is to check if the activity has any streams at all.
+      // If the original intent was to check for position data for a map, this block might need adjustment.
+      // For now, I'll keep the original stream check.
+      // if (!activity.hasPositionData()) {
+      //   this.logger.info(`EventCardChartComponent: Activity ${activity.getID()} has NO position data`);
+      //   return;
+      // }
+      const streams = activity.getAllStreams();
+      if (!streams.length) {
+        return;
+      }
+
+      // #8: Populate distance map for distance axis mode
+      if (this.xAxisType === XAxisTypes.Distance) {
+        const distanceStream = streams.find(s => s.type === DataDistance.type) || streams.find(s => s.type === DataStrydDistance.type);
+        if (distanceStream) {
+          this.distanceAxesForActivitiesMap.set(activity.getID(), distanceStream);
+        }
+      }
+
+      // Determine which data types to show based on showAllData toggle
+      const allowedDataTypes = this.showAllData
+        ? null // null means show all
+        : DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(
+          [...DynamicDataLoader.basicDataTypes, ...this.dataTypesToUse],
+          this.userUnitSettings,
+          { includeDerivedTypes: true }
+        ).concat([...DynamicDataLoader.basicDataTypes, ...this.dataTypesToUse]);
+
+      // These need to be unit based and activity based?
+      const shouldRemoveSpeed = DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataSpeed.type, this.userUnitSettings).indexOf(DataSpeed.type) === -1
+      const shouldRemoveGradeAdjustedSpeed = DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataGradeAdjustedSpeed.type, this.userUnitSettings).indexOf(DataGradeAdjustedSpeed.type) === -1
+      const shouldRemoveDistance = DynamicDataLoader.getNonUnitBasedDataTypes(this.showAllData, this.dataTypesToUse).indexOf(DataDistance.type) === -1;
+
+      // @todo should do the same with distance (miles) and vertical speed
+      // When Show All Data is enabled, we want to prevent the "explosion" of derived types (e.g. Pace from Speed).
+      // derivedTypes are "sister" types. unitVariants are "formats" (km/h vs mph).
+      const includeDerivedTypes = !this.showAllData;
+
+      // DEBUG: Check what units are actually configured
+      if (this.showAllData) {
+        this.logger.log('[EventCardChart] userUnitSettings:', this.userUnitSettings);
+      }
+
+      const whitelistedUnitTypes = DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(
+        streams.map(st => st.type),
+        this.userUnitSettings,
+        { includeDerivedTypes }
+      );
+
+      if (this.showAllData) {
+        this.logger.log('[EventCardChart] whitelistedUnitTypes:', whitelistedUnitTypes);
+      }
+
+      // Gather all "known" unit variants to identify what we should potentially hide
+      // Using dataTypeUnitGroups which maps BaseType -> { Variant1, Variant2... }
+      const allKnownUnitVariants = Object.values(DynamicDataLoader.dataTypeUnitGroups)
+        .flatMap(group => Object.keys(group));
+
+      [...new Set(ActivityUtilities.createUnitStreamsFromStreams(
+        streams,
+        activity.type,
+        whitelistedUnitTypes,
+        { includeDerivedTypes, includeUnitVariants: true }
+      ).concat(streams))]
+        .filter((stream) => {
+          // First, filter by showAllData toggle
+          if (allowedDataTypes !== null && !allowedDataTypes.includes(stream.type)) {
+            return false;
+          }
+
+          // CRITICAL FIX: Even if showAllData is TRUE, we must hide "sister" unit variants
+          // that are not in our whitelist.
+          // If this stream describes a known unit variant (e.g. 'Speed in miles per hour')
+          // AND
+          // It is NOT in our allowed whitelist (e.g. we only want 'Speed in km/h')
+          // THEN hide it.
+          if (allKnownUnitVariants.includes(stream.type) && !whitelistedUnitTypes.includes(stream.type)) {
+            return false;
+          }
+
+          switch (stream.type) {
+            case DataDistance.type:
+              return !shouldRemoveDistance;
+            case DataSpeed.type:
+              return !shouldRemoveSpeed;
+            case DataGradeAdjustedSpeed.type:
+              return !shouldRemoveGradeAdjustedSpeed;
+            case DataLatitudeDegrees.type:
+            case DataLongitudeDegrees.type:
+              return false;
+            default:
+              return true;
+          }
+        }).sort((left, right) => {
+          if (left.type < right.type) {
+            return -1;
+          }
+          if (left.type > right.type) {
+            return 1;
+          }
+          return 0;
+        }).forEach((stream) => {
+          streamsToProcess.push({ activity, stream });
+        });
+    });
 
     // Process streams in chunks
     const processChunk = (index: number) => {
@@ -1446,7 +1462,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       });
 
       // Style axis tooltip for dark themes
-      if (this.chartTheme === 'dark' || this.chartTheme === 'amchartsdark') {
+      if ((this.chartTheme === 'dark' || this.chartTheme === 'amchartsdark') && yAxis.tooltip && yAxis.tooltip.background && yAxis.tooltip.label) {
         yAxis.tooltip.background.fill = this.core.color('#303030');
         yAxis.tooltip.background.stroke = this.core.color('#303030');
         yAxis.tooltip.label.fill = this.core.color('#ffffff');
@@ -1462,7 +1478,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     }
     if (this.hideAllSeriesOnInit) {
       return true
-    } else if (this.chartSettingsLocalStorageService.getSeriesIDsToShow(this.event).length) {
+    } else if (this.event && this.chartSettingsLocalStorageService.getSeriesIDsToShow(this.event).length) {
       const storedIDs = this.chartSettingsLocalStorageService.getSeriesIDsToShow(this.event);
       // Try to match exact or loose (ignoring the merge index suffix)
       // Suffix is usually _0, _1 etc. before the stream type (which starts with capital D for Data...)
@@ -1698,7 +1714,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     button.icon = new this.core.Sprite();
     button.icon.marginRight = 8;
     button.icon.path = chart.cursor.behavior === ChartCursorBehaviours.SelectX
-      ? 'M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 10H3V8h2v4h2V8h2v4h2V8h2v4h2V8h2v4h2V8h2v8z' // Ruler/Range icon (straighten)
+      ? 'M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 10H3V8h2v4h2V8h2v4h2V8h2v4h2V8h2v8z' // Ruler/Range icon (straighten)
       : 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z'; // Zoom icon
 
     // Set label
@@ -1785,7 +1801,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     // Distance Axis: Use performant loop instead of map/reduce
     if (this.xAxisType === XAxisTypes.Distance) {
-      const distanceStream = this.distanceAxesForActivitiesMap.get(activity.getID());
+      const distanceStream = this.distanceAxesForActivitiesMap.get(activity.getID() || '');
       if (distanceStream) {
         const distanceData = distanceStream.getData();
         const len = Math.min(streamData.length, distanceData.length);
@@ -1883,6 +1899,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     xAxis.axisRanges.template.grid.disabled = false;
     selectedActivities
       .forEach((activity, activityIndex) => {
+        this.logger.info(`EventCardChartComponent: Rendering laps for activity ID: "${activity.getID() || ''}"`);
         // Filter on lapTypes
         lapTypes
           .forEach(lapType => {
@@ -1891,8 +1908,14 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
               .filter(lap => lap.type === lapType)
               .forEach((lap, lapIndex) => {
                 if (lapIndex === activity.getLaps().length - 1) {
+                  this.logger.info(`EventCardChartComponent: Skipping last lap for activity ${activity.getID()} (lap ${lapIndex + 1})`);
                   return;
                 }
+                if (this.lapTypes.indexOf(lap.type) === -1) {
+                  this.logger.info(`EventCardChartComponent: Skipping lap type ${lap.type} for activity ${activity.getID()} (not in lapTypes filter)`);
+                  return;
+                }
+                this.logger.info(`EventCardChartComponent: Adding lap guide for activity ${activity.getID()}, lap type ${lap.type}, lap index ${lapIndex + 1}`);
                 let range
                 if (xAxisType === XAxisTypes.Time) {
                   range = xAxis.axisRanges.create();
@@ -1900,14 +1923,15 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
                 } else if (xAxisType === XAxisTypes.Duration) {
                   range = xAxis.axisRanges.create();
                   range.value = +lap.endDate - +activity.startDate;
-                } else if (xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID())) {
+                } else if (xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID() || '')) {
                   const data = this.distanceAxesForActivitiesMap
-                    .get(activity.getID())
+                    .get(activity.getID() || '')
                     .getStreamDataByTime(activity.startDate, true)
                     .filter(streamData => streamData && (streamData.time >= lap.endDate.getTime()));
                   // There can be a case that the distance stream does not have data for this?
                   // So if there is a lap, done and the watch did not update the distance example: last 2s lap
                   if (!data[0]) {
+                    this.logger.warn(`EventCardChartComponent: No distance data found for lap ${lapIndex + 1} of activity ${activity.getID()}`);
                     return;
                   }
                   range = xAxis.axisRanges.create();
@@ -2072,7 +2096,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   private unSubscribeFromAll() {
     this.getSubscriptions().forEach(subscription => subscription.unsubscribe());
-
   }
 
   private addXAxis(chart: am4charts.XYChart, xAxisType: XAxisTypes): am4charts.ValueAxis | am4charts.DateAxis {
@@ -2196,6 +2219,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     if (!event || !event.target || !event.target.chart) {
       return;
     }
+    this.logger.info(`EventCardChartComponent: handleCursorPositionChange Type: ${this.xAxisType}`);
 
     // Avoid rewriting cursor change if it's triggered from this component
     if (event.target['_stick'] === 'hard') {
@@ -2224,11 +2248,15 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         if (xAxis.positionToDate) {
           const date = xAxis.positionToDate(xAxis.pointToPosition(event.target.point));
           if (date) {
-            this.selectedActivities.forEach(activity => this.activityCursorService.setCursor({
-              activityID: activity.getID() || '',
-              time: date.getTime() + activity.startDate.getTime(),
-              byChart: true,
-            }));
+            this.selectedActivities.forEach(activity => {
+              const id = activity.getID();
+              this.logger.info(`EventCardChartComponent: Sending cursor for activity ID: "${id}"`);
+              this.activityCursorService.setCursor({
+                activityID: id || '',
+                time: date.getTime() + activity.startDate.getTime(),
+                byChart: true,
+              });
+            });
           }
         }
         break;
@@ -2241,11 +2269,12 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           }
           this.selectedActivities.forEach(activity => {
             if (!activity.hasStreamData(DataDistance.type)) {
+              this.logger.info(`EventCardChartComponent: Activity ${activity.getID()} has no distance stream data.`);
               return;
             }
             const distanceStream = activity.getStream(DataDistance.type);
             if (distanceStream) {
-              const distances = distanceStream.getData();
+              const distances = <number[]>distanceStream.getData();
               if (!distances || distances.length === 0) {
                 return;
               }

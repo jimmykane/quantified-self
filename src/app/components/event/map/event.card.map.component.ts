@@ -22,6 +22,7 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { EventInterface, ActivityInterface, LapInterface, User, LapTypes, GeoLibAdapter, DataLatitudeDegrees, DataLongitudeDegrees, DataJumpEvent, DataEvent } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../../services/app.event.service';
 import { Subject, Subscription, asyncScheduler } from 'rxjs';
+import { AppUserService } from '../../../services/app.user.service';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import { MapAbstractDirective } from '../../map/map-abstract.directive';
@@ -52,7 +53,17 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   public get strokeWidth() { return this.userSettingsQuery.mapSettings()?.strokeWidth ?? 2; }
   public set strokeWidth(value: number) { this.userSettingsQuery.updateMapSettings({ strokeWidth: value }); }
 
-  @Input() lapTypes: LapTypes[] = [];
+  public get lapTypes(): LapTypes[] {
+    const types = (this._lapTypes && this._lapTypes.length > 0)
+      ? this._lapTypes
+      : (this.userSettingsQuery.chartSettings()?.lapTypes ?? AppUserService.getDefaultChartLapTypes());
+    return types;
+  }
+  @Input() set lapTypes(value: LapTypes[]) {
+    this._lapTypes = value;
+  }
+  private _lapTypes: LapTypes[] = [];
+
   @Input() set mapType(type: google.maps.MapTypeId | string) {
     if (type) {
       this.mapTypeId.set(type as google.maps.MapTypeId);
@@ -164,7 +175,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       throttleTime(2000, asyncScheduler, { leading: true, trailing: true })
     ).subscribe((cursors) => {
       cursors.filter(cursor => cursor.byChart === true).forEach(cursor => {
-        const cursorActivityMapData = this.activitiesMapData.find(amd => amd.activity.getID() === cursor.activityID);
+        const cursorActivityMapData = this.activitiesMapData.find(amd => (amd.activity.getID() || '') === cursor.activityID);
         if (cursorActivityMapData && cursorActivityMapData.positions.length > 0) {
           // Use linear scan - more reliable than binary search for edge cases
           const position = cursorActivityMapData.positions.reduce((prev, curr) =>
@@ -393,7 +404,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   private async lineMouseMove(event: google.maps.MapMouseEvent, activityMapData: MapData) {
     if (!event.latLng) return;
 
-    this.activitiesCursors.set(activityMapData.activity.getID(), {
+    this.activitiesCursors.set(activityMapData.activity.getID() || '', {
       latitudeDegrees: event.latLng.lat(),
       longitudeDegrees: event.latLng.lng()
     });
@@ -411,7 +422,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     if (!nearest) return;
 
     this.activityCursorService.setCursor({
-      activityID: activityMapData.activity.getID(),
+      activityID: activityMapData.activity.getID() || '',
       time: nearest.time,
       byMap: true,
     });
@@ -485,8 +496,8 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
           laps.push({
             lap: lap,
             lapPosition: {
-              latitudeDegrees: lapPositionData[lapPositionData.length - 1].latitudeDegrees,
-              longitudeDegrees: lapPositionData[lapPositionData.length - 1].longitudeDegrees
+              latitudeDegrees: lapPositionData[lapPositionData.length - 1]?.latitudeDegrees || 0,
+              longitudeDegrees: lapPositionData[lapPositionData.length - 1]?.longitudeDegrees || 0
             }
           });
           return laps;
