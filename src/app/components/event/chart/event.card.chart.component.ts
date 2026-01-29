@@ -265,10 +265,10 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   private async checkForSettingsUpdates(settings: any, theme: any, units: any) {
-    if (!this.chart) return;
-
-    // Update local property
+    // Update local property - ALWAYS do this even if chart is not ready
     this.chartTheme = theme ?? ChartThemes.Material;
+
+    if (!this.chart) return;
 
     const currentState = {
       ...settings,
@@ -561,6 +561,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       // alert('Selected start ' + start + ' end ' + end);
       // Now since we know the actual start end we need end iterate over the visible series and calculate AVG, Max,Min, Gain and loss not an easy job I suppose
       this.logger.info('EventCardChartComponent: Iterating series to create labels');
+      if (!this.chart) {
+        return;
+      }
       this.chart.series.values.forEach(series => {
         try {
           if (!series.dummyData || !series.dummyData.stream) {
@@ -648,7 +651,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
 
     // Add watermark
-    chart.plotContainer.children.push(ChartHelper.getWaterMark(this.core, this.waterMark));
+    chart.plotContainer.children.push(ChartHelper.getWaterMark(this.core!, this.waterMark || ''));
 
     // watermark.fontWeight = 'bold';
 
@@ -796,9 +799,10 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       series.hidden = false;
       this.showSeriesYAxis(series);
 
-      if (this.getSeriesRangeLabelContainer(series)) {
-        this.getSeriesRangeLabelContainer(series).disabled = false;
-        this.getSeriesRangeLabelContainer(series).deepInvalidate();
+      const rangeLabelContainer = this.getSeriesRangeLabelContainer(series);
+      if (rangeLabelContainer) {
+        rangeLabelContainer.disabled = false;
+        rangeLabelContainer.deepInvalidate();
       }
 
       series.yAxis.height = this.core.percent(100);
@@ -821,8 +825,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         this.hideSeriesYAxis(series)
       }
 
-      if (this.getSeriesRangeLabelContainer(series)) {
-        this.getSeriesRangeLabelContainer(series).disabled = true;
+      const rangeLabelContainer = this.getSeriesRangeLabelContainer(series);
+      if (rangeLabelContainer) {
+        rangeLabelContainer.disabled = true;
       }
       // @todo should check for same visibel might need -1
       if (!this.getVisibleSeriesWithSameYAxis(series).length) {
@@ -1326,6 +1331,10 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   private getYAxisForSeries(series: XYSeries) {
+    if (!this.chart || !series.dummyData || !series.dummyData.stream) {
+      // Fallback if series is not fully initialized (should not happen in normal flow)
+      return this.chart?.yAxes.getIndex(0) as am4charts.ValueAxis;
+    }
     let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
     const sameTypeSeries = this.chart.series.values.find((serie) => serie.name === this.getSeriesName(series.dummyData.stream.type));
     if (sameTypeSeries) {
