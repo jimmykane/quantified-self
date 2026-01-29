@@ -11,34 +11,20 @@ export function convertIntensityZonesStatsToChartData(
   statsClassInstances: StatsClassInterface[],
   shortLabels: boolean = false
 ): any[] {
-  const statsTypeMap = ActivityUtilities.getIntensityZonesStatsAggregated(statsClassInstances).reduce((map, stat) => {
-    map[stat.getType()] = stat.getValue()
+  const statsTypeMap = ActivityUtilities.getIntensityZonesStatsAggregated(statsClassInstances).reduce((map: { [key: string]: number }, stat) => {
+    map[stat.getType()] = stat.getValue() as any;
     return map;
   }, {})
 
   const zoneLabel = (num: number) => shortLabels ? `Z${num}` : `Zone ${num}`;
 
-  return DynamicDataLoader.zoneStatsTypeMap.reduce((data, statsToTypeMapEntry) => {
-    data.push({
-      zone: zoneLabel(1),
-      type: statsToTypeMapEntry.type,
-      [statsToTypeMapEntry.type]: statsTypeMap[statsToTypeMapEntry.stats[0]],
-    }, {
-      zone: zoneLabel(2),
-      type: statsToTypeMapEntry.type,
-      [statsToTypeMapEntry.type]: statsTypeMap[statsToTypeMapEntry.stats[1]],
-    }, {
-      zone: zoneLabel(3),
-      type: statsToTypeMapEntry.type,
-      [statsToTypeMapEntry.type]: statsTypeMap[statsToTypeMapEntry.stats[2]],
-    }, {
-      zone: zoneLabel(4),
-      type: statsToTypeMapEntry.type,
-      [statsToTypeMapEntry.type]: statsTypeMap[statsToTypeMapEntry.stats[3]],
-    }, {
-      zone: zoneLabel(5),
-      type: statsToTypeMapEntry.type,
-      [statsToTypeMapEntry.type]: statsTypeMap[statsToTypeMapEntry.stats[4]],
+  return DynamicDataLoader.zoneStatsTypeMap.reduce((data: any[], statsToTypeMapEntry) => {
+    statsToTypeMapEntry.stats.forEach((statType, index) => {
+      data.push({
+        zone: zoneLabel(index + 1),
+        type: statsToTypeMapEntry.type,
+        [statsToTypeMapEntry.type]: statsTypeMap[statType],
+      });
     });
     return data;
   }, []);
