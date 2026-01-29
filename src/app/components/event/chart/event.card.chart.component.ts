@@ -1460,6 +1460,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   private shouldHideSeries(series: XYSeries) {
+    if (!series.dummyData || !series.dummyData.activity || !series.dummyData.stream) {
+      return false;
+    }
     if (this.hideAllSeriesOnInit) {
       return true
     } else if (this.chartSettingsLocalStorageService.getSeriesIDsToShow(this.event).length) {
@@ -1914,7 +1917,10 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
                   range.value = data[0].value || 0;
                 }
                 if (range) {
-                  range.grid.stroke = this.core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity) || '#000000');
+                  const defaultColor = (this.chartTheme === 'dark' || this.chartTheme === 'amchartsdark') ? '#ffffff' : '#000000';
+                  const activityColor = this.eventColorService.getActivityColor(this.event.getActivities(), activity);
+                  const strokeColor = activityColor ? this.core.color(activityColor) : this.core.color(defaultColor);
+                  range.grid.stroke = strokeColor;
 
                   range.grid.strokeWidth = 1.1;
                   range.grid.strokeOpacity = 1;
