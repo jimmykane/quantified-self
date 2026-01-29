@@ -13,6 +13,8 @@ import { TileChartComponent } from '../components/tile/chart/tile.chart.componen
 import { TileMapComponent } from '../components/tile/map/tile.map.component';
 import { TileChartActionsComponent } from '../components/tile/actions/chart/tile.chart.actions.component';
 import { TileMapActionsComponent } from '../components/tile/actions/map/tile.map.actions.component';
+import { TileActionsHeaderComponent } from '../components/tile/actions/header/tile.actions.header.component';
+import { TileActionsFooterComponent } from '../components/tile/actions/footer/tile.actions.footer.component';
 
 import { ChartsTimelineComponent } from '../components/charts/timeline/charts.timeline.component';
 import { ChartsIntensityZonesComponent } from '../components/charts/intensity-zones/charts.intensity-zones.component';
@@ -36,6 +38,8 @@ import { GoogleMapsModule } from '@angular/google-maps';
         SummariesComponent,
         TileChartActionsComponent,
         TileMapActionsComponent,
+        TileActionsHeaderComponent,
+        TileActionsFooterComponent,
         EventsExportFormComponent,
         EventTableComponent,
         EventTableActionsComponent,
