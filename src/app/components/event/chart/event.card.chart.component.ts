@@ -655,15 +655,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // Scrollbar
     // chart.scrollbarX = new am4charts.XYChartScrollbar();
 
-    // Add exporting options
-    chart.exporting.menu = new this.core.ExportMenu();
-
-    chart.exporting.extraSprites.push({
-      'sprite': chart.legend.parent,
-      'position': 'bottom',
-      'marginTop': 20
-    });
-
     // Add the anotation
     chart.plugins.push(new this.annotationPlugin.Annotation());
 
