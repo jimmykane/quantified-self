@@ -655,10 +655,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // Scrollbar
     // chart.scrollbarX = new am4charts.XYChartScrollbar();
 
-    // Add the anotation
-    chart.plugins.push(new this.annotationPlugin.Annotation());
-
-
     // Attach events
     chart.events.on('validated', (ev) => {
 
