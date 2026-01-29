@@ -7,6 +7,8 @@ export class TracksMapManager {
     private activeLayerIds: string[] = []; // Store IDs of added layers/sources
     private mapboxgl: any; // Mapbox GL JS library reference
     private terrainControl: any;
+    private pendingTerrainToggle: { enable: boolean; animate: boolean } | null = null;
+    private pendingTerrainListenerAttached = false;
 
     constructor(
         private zone: NgZone,
@@ -154,6 +156,12 @@ export class TracksMapManager {
 
         this.zone.runOutsideAngular(() => {
             try {
+                if (!this.isStyleReady()) {
+                    console.log('[TracksMapManager] Style not loaded yet. Deferring terrain toggle.');
+                    this.deferTerrainToggle(enable, animate);
+                    return;
+                }
+
                 if (enable) {
                     if (!this.map.getSource('mapbox-dem')) {
                         console.log('[TracksMapManager] Adding mapbox-dem source.');
@@ -188,10 +196,51 @@ export class TracksMapManager {
                 console.error('[TracksMapManager] Error toggling terrain:', error);
                 if (error?.message?.includes('Style is not done loading')) {
                     console.log('[TracksMapManager] Caught "Style is not done loading" error. Retrying on style.load.');
-                    this.map.once('style.load', () => this.toggleTerrain(enable, animate));
+                    this.deferTerrainToggle(enable, animate);
                 }
             }
         });
+    }
+
+    private isStyleReady(): boolean {
+        if (!this.map) return false;
+        if (typeof this.map.isStyleLoaded === 'function') {
+            return this.map.isStyleLoaded();
+        }
+        if (typeof this.map.loaded === 'function') {
+            return this.map.loaded();
+        }
+        return true;
+    }
+
+    private deferTerrainToggle(enable: boolean, animate: boolean) {
+        this.pendingTerrainToggle = { enable, animate };
+        if (this.pendingTerrainListenerAttached || !this.map?.on) return;
+        this.pendingTerrainListenerAttached = true;
+
+        const tryApply = () => {
+            if (!this.isStyleReady()) {
+                return;
+            }
+            this.pendingTerrainListenerAttached = false;
+            if (this.map?.off) {
+                this.map.off('style.load', tryApply);
+                this.map.off('styledata', tryApply);
+                this.map.off('load', tryApply);
+                this.map.off('idle', tryApply);
+            }
+            const pending = this.pendingTerrainToggle;
+            this.pendingTerrainToggle = null;
+            if (pending) {
+                this.toggleTerrain(pending.enable, pending.animate);
+            }
+        };
+
+        this.map.on('style.load', tryApply);
+        this.map.on('styledata', tryApply);
+        this.map.on('load', tryApply);
+        this.map.on('idle', tryApply);
+        tryApply();
     }
 
     public addControl(control: any, position?: string) {

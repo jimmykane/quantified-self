@@ -140,7 +140,16 @@ export class TracksComponent implements OnInit, OnDestroy {
       const mapboxgl = await this.mapboxLoader.loadMapbox();
       this.tracksMapManager.setMap(mapInstance, mapboxgl);
 
-      mapInstance.addControl(new (await this.mapboxLoader.loadMapbox()).FullscreenControl(), 'bottom-right');
+      mapInstance.addControl(new mapboxgl.FullscreenControl(), 'bottom-right');
+
+      // Standard Navigation Control for Zoom and Rotation (Pitch)
+      const navControl = new mapboxgl.NavigationControl({
+        visualizePitch: true,
+        showCompass: true,
+        showZoom: true
+      });
+      mapInstance.addControl(navControl, 'bottom-right');
+
       this.centerMapToStartingLocation(mapInstance);
       this.user = await this.authService.user$.pipe(take(1)).toPromise() as AppUserInterface;
 
@@ -152,6 +161,14 @@ export class TracksComponent implements OnInit, OnDestroy {
       this.terrainControl = new TerrainControl(!!initialSettings?.is3D, (is3D) => {
         // Toggle map locally immediately for responsiveness
         this.tracksMapManager.toggleTerrain(is3D, true);
+
+        if (is3D) {
+          this.snackBar.open('Use Ctrl + Left Click (or Right Click) + Drag to rotate and tilt the map in 3D.', 'OK', {
+            duration: 5000,
+            verticalPosition: 'top'
+          });
+        }
+
         // Persist 3D setting via service
         this.userSettingsQuery.updateMyTracksSettings({ is3D });
       });
@@ -392,6 +409,10 @@ export class TracksComponent implements OnInit, OnDestroy {
         try {
           events = events.filter((event) => event.getStat(DataStartPosition.type));
           if (!events || !events.length) {
+            if (this.promiseTime !== promiseTime) {
+              return;
+            }
+            this.tracksMapManager.clearAllTracks();
             this.clearProgressAndCloseBottomSheet();
             return;
           }
@@ -409,6 +430,7 @@ export class TracksComponent implements OnInit, OnDestroy {
             return;
           }
           let count = 0;
+          let addedTrackCount = 0;
           const allCoordinates: number[][] = [];
 
           for (const eventsChunk of chunckedEvents) {
@@ -445,6 +467,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
                       if (coordinates.length > 1) {
                         this.tracksMapManager.addTrackFromActivity(activity, coordinates);
+                        addedTrackCount++;
                         coordinates.forEach((c: any) => chunkCoordinates.push(c));
                       }
                     })
@@ -464,6 +487,9 @@ export class TracksComponent implements OnInit, OnDestroy {
           // Final fit bounds
           if (allCoordinates.length > 0) {
             this.tracksMapManager.fitBoundsToCoordinates(allCoordinates);
+          }
+          if (addedTrackCount === 0) {
+            this.tracksMapManager.clearAllTracks();
           }
         } catch (e) {
           console.error('Error loading tracks', e);

@@ -58,6 +58,7 @@ describe('TracksComponent', () => {
             getTerrain: vi.fn().mockReturnValue(null),
             setTerrain: vi.fn(),
             easeTo: vi.fn(),
+            setPitch: vi.fn(),
             remove: vi.fn(),
             off: vi.fn(),
             on: vi.fn(),
@@ -75,6 +76,7 @@ describe('TracksComponent', () => {
             createMap: vi.fn().mockResolvedValue(mockMap),
             loadMapbox: vi.fn().mockResolvedValue({
                 FullscreenControl: class { },
+                NavigationControl: class { },
                 LngLatBounds: class {
                     extend = vi.fn();
                 }
