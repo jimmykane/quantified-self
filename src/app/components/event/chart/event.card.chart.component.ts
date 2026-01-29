@@ -212,6 +212,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       // Defer logic to avoid ExpressionChangedAfterItHasChecked if strictly synchronous
       // But effect is async nature usually.
       // Call update checking logic
+      this.chartTheme = theme ?? ChartThemes.Material; // Update property immediately
       this.checkForSettingsUpdates(settings, theme, units);
     }, { injector: this.injector });
   }
@@ -2223,6 +2224,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         xAxis = <am4charts.ValueAxis>event.target.chart.xAxes.getIndex(0);
         if (xAxis.positionToValue) {
           const distance = xAxis.positionToValue(xAxis.pointToPosition(event.target.point));
+          if (distance === null || distance === undefined) {
+            return;
+          }
           this.selectedActivities.forEach(activity => {
             if (!activity.hasStreamData(DataDistance.type)) {
               return;
