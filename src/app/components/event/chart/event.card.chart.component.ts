@@ -242,7 +242,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     // Subscribe to cursor position changes with throttling
     this.cursorPositionSubscription = this.cursorPositionSubject.pipe(
-      throttleTime(1000, asyncScheduler, { leading: true, trailing: true })
+      throttleTime(2000, asyncScheduler, { leading: true, trailing: true })
     ).subscribe((event) => {
       this.handleCursorPositionChange(event);
     });

@@ -161,9 +161,29 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   ngAfterViewInit(): void {
     // Subscribe to cursor changes from chart
     this.activitiesCursorSubscription.add(this.activityCursorService.cursors.pipe(
-      throttleTime(1000, asyncScheduler, { leading: true, trailing: true })
+      throttleTime(2000, asyncScheduler, { leading: true, trailing: true })
     ).subscribe((cursors) => {
-      // ... (existing logic)
+      cursors.filter(cursor => cursor.byChart === true).forEach(cursor => {
+        const cursorActivityMapData = this.activitiesMapData.find(amd => amd.activity.getID() === cursor.activityID);
+        if (cursorActivityMapData && cursorActivityMapData.positions.length > 0) {
+          // Use linear scan - more reliable than binary search for edge cases
+          const position = cursorActivityMapData.positions.reduce((prev, curr) =>
+            Math.abs(curr.time - cursor.time) < Math.abs(prev.time - cursor.time) ? curr : prev);
+          if (position) {
+            this.activitiesCursors.set(cursor.activityID, {
+              latitudeDegrees: position.latitudeDegrees,
+              longitudeDegrees: position.longitudeDegrees
+            });
+            if (this.googleMap?.googleMap) {
+              this.googleMap.googleMap.panTo({
+                lat: position.latitudeDegrees,
+                lng: position.longitudeDegrees
+              });
+            }
+          }
+        }
+      });
+      this.changeDetectorRef.detectChanges();
     }));
 
     this.lineMouseMoveSubscription.add(this.lineMouseMoveSubject.subscribe(value => {
