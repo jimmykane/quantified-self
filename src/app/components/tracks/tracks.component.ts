@@ -27,6 +27,7 @@ import { AppUserSettingsQueryService } from '../../services/app.user-settings-qu
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppMyTracksSettings } from '../../models/app-user.interface';
 import { LoggerService } from '../../services/logger.service';
+import { TracksMapManager } from './tracks-map.manager'; // Imported Manager
 
 @Component({
   selector: 'app-tracks',
@@ -53,7 +54,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   public user!: AppUserInterface;
 
   private mapSignal = signal<any>(null); // Signal to hold map instance for reactive synchronization
-  private activeLayerIds: string[] = []; // Store IDs of added layers/sources
+  private tracksMapManager: TracksMapManager;
   private scrolled = false;
 
   private eventsSubscription: Subscription = new Subscription();
@@ -90,6 +91,8 @@ export class TracksComponent implements OnInit, OnDestroy {
     private mapboxLoader: MapboxLoaderService,
     private themeService: AppThemeService,
   ) {
+    this.tracksMapManager = new TracksMapManager(this.zone, this.eventColorService); // Initialize Manager
+
     const platformId = inject(PLATFORM_ID);
     this.platformId = platformId;
     effect(() => {
@@ -134,6 +137,9 @@ export class TracksComponent implements OnInit, OnDestroy {
       this.mapSignal.set(mapInstance);
       this.currentStyleUrl = initialStyleUrl; // Track so later checks don't re-apply
 
+      const mapboxgl = await this.mapboxLoader.loadMapbox();
+      this.tracksMapManager.setMap(mapInstance, mapboxgl);
+
       mapInstance.addControl(new (await this.mapboxLoader.loadMapbox()).FullscreenControl(), 'bottom-right');
       this.centerMapToStartingLocation(mapInstance);
       this.user = await this.authService.user$.pipe(take(1)).toPromise() as AppUserInterface;
@@ -143,17 +149,20 @@ export class TracksComponent implements OnInit, OnDestroy {
 
       // Restore terrain control (initialSettings already loaded above)
       // Initialize 3D state immediately for responsiveness and test compliance
-      if (initialSettings?.is3D) {
-        this.toggleTerrain(true, false);
-      }
-
       this.terrainControl = new TerrainControl(!!initialSettings?.is3D, (is3D) => {
         // Toggle map locally immediately for responsiveness
-        this.toggleTerrain(is3D, true);
+        this.tracksMapManager.toggleTerrain(is3D, true);
         // Persist 3D setting via service
         this.userSettingsQuery.updateMyTracksSettings({ is3D });
       });
       mapInstance.addControl(this.terrainControl, 'bottom-right');
+      this.tracksMapManager.setTerrainControl(this.terrainControl);
+
+      // Restore terrain control (initialSettings already loaded above)
+      // Initialize 3D state immediately for responsiveness and test compliance
+      if (initialSettings?.is3D) {
+        this.tracksMapManager.toggleTerrain(true, false);
+      }
 
 
       // Trigger a manual check with current signal value (already have initialSettings)
@@ -250,7 +259,8 @@ export class TracksComponent implements OnInit, OnDestroy {
       styleChanged = true;
       this.mapSignal().setStyle(targetStyle, { diff: false });
       await this.waitForStyleLoad();
-      this.activeLayerIds = []; // Sources wiped
+
+      this.tracksMapManager.clearAllTracks();
     }
 
     // 3. Terrain
@@ -259,7 +269,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     const is3D = !!targetSettings.is3D;
     // Note: toggleTerrain handles "add if missing".
     if (styleChanged || (this.currentSettings?.is3D !== is3D)) {
-      this.toggleTerrain(is3D, true);
+      this.tracksMapManager.toggleTerrain(is3D, true);
     }
 
     // 4. Data
@@ -434,79 +444,7 @@ export class TracksComponent implements OnInit, OnDestroy {
                         });
 
                       if (coordinates.length > 1) {
-                        const color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type);
-                        const activityId = activity.getID() ? activity.getID() : `temp-${Date.now()}-${Math.random()}`;
-                        const sourceId = `track-source-${activityId}`;
-                        const layerId = `track-layer-${activityId}`;
-                        const glowLayerId = `track-layer-glow-${activityId}`;
-
-                        // Run inside zone to ensure map updates are picked up? actually outside is better for perf
-                        this.zone.runOutsideAngular(() => {
-                          if (!map) return;
-                          if (map.getSource(sourceId)) return; // Prevent duplicates
-
-                          try {
-                            map.addSource(sourceId, {
-                              type: 'geojson',
-                              data: {
-                                type: 'Feature',
-                                properties: {},
-                                geometry: {
-                                  type: 'LineString',
-                                  coordinates: coordinates
-                                }
-                              }
-                            });
-
-                            // Add Glow Layer (Underneath)
-                            map.addLayer({
-                              id: glowLayerId,
-                              type: 'line',
-                              source: sourceId,
-                              layout: {
-                                'line-join': 'round',
-                                'line-cap': 'round'
-                              },
-                              paint: {
-                                'line-color': color,
-                                'line-width': 6, // Reduced from 8
-                                'line-blur': 3,  // Reduced from 4
-                                'line-opacity': 0.6 // Translucent
-                              }
-                            });
-
-                            // Add Main Track Layer
-                            map.addLayer({
-                              id: layerId,
-                              type: 'line',
-                              source: sourceId,
-                              layout: {
-                                'line-join': 'round',
-                                'line-cap': 'round'
-                              },
-                              paint: {
-                                'line-color': color,
-                                'line-width': 2.5, // Slightly thicker
-                                'line-opacity': 0.9 // High visibility
-                              }
-                            });
-
-                          } catch (error: any) {
-                            if (error?.message?.includes('Style is not done loading')) {
-                              console.log('Style loading in progress, retrying tracks...');
-                              map.once('style.load', () => {
-                                this.loadTracksMapForUserByDateRange(user, map, dateRange, activityTypes);
-                              });
-                            } else {
-                              console.warn('Failed to add track layer:', error);
-                            }
-                          }
-
-                          this.activeLayerIds.push(layerId);
-                          this.activeLayerIds.push(glowLayerId);
-                          this.activeLayerIds.push(sourceId); // Store source ID too for cleanup
-                        });
-
+                        this.tracksMapManager.addTrackFromActivity(activity, coordinates);
                         coordinates.forEach((c: any) => chunkCoordinates.push(c));
                       }
                     })
@@ -518,17 +456,14 @@ export class TracksComponent implements OnInit, OnDestroy {
             // Accumulate coordinates for final fitBounds
             chunkCoordinates.forEach(c => allCoordinates.push(c));
 
-            // Optional: pan to chunk as we load, like original? 
-            // Original did: panToLines(map, batchLines)
-            // We can do that here too.
             if (count < events.length && chunkCoordinates.length > 0) {
-              this.fitBoundsToCoordinates(map, chunkCoordinates);
+              this.tracksMapManager.fitBoundsToCoordinates(chunkCoordinates);
             }
           }
 
           // Final fit bounds
           if (allCoordinates.length > 0) {
-            this.fitBoundsToCoordinates(map, allCoordinates);
+            this.tracksMapManager.fitBoundsToCoordinates(allCoordinates);
           }
         } catch (e) {
           console.error('Error loading tracks', e);
@@ -541,57 +476,14 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   private clearAllPolylines() {
-    if (!this.mapSignal()) return;
-
-    // Reverse order: remove layers first, then sources
-    // We pushed layerId then sourceId, so we can iterate
-    // But 'activeLayerIds' mixes them.
-    // Mapbox requires removing layer before source.
-
-    // Let's filter
-    const layers = this.activeLayerIds.filter(id => id.startsWith('track-layer-'));
-    const sources = this.activeLayerIds.filter(id => id.startsWith('track-source-'));
-
-    layers.forEach(id => {
-      if (this.mapSignal().getLayer(id)) this.mapSignal().removeLayer(id);
-    });
-
-    sources.forEach(id => {
-      if (this.mapSignal().getSource(id)) this.mapSignal().removeSource(id);
-    });
-
-    this.activeLayerIds = [];
-  }
-
-  private async fitBoundsToCoordinates(map: any, coordinates: number[][]) {
-    if (!coordinates || !coordinates.length) return;
-
-    const mapboxgl = await this.mapboxLoader.loadMapbox();
-    const bounds = new mapboxgl.LngLatBounds();
-
-    coordinates.forEach(coord => {
-      bounds.extend(coord as [number, number]);
-    });
-
-    this.zone.runOutsideAngular(() => {
-      // Preserve current pitch/bearing so 3D view isn't lost
-      const currentPitch = map.getPitch();
-      const currentBearing = map.getBearing();
-
-      map.fitBounds(bounds, {
-        padding: 50,
-        animate: true,
-        pitch: currentPitch,
-        bearing: currentBearing
-      });
-    });
+    this.tracksMapManager.clearAllTracks();
   }
 
   private centerMapToStartingLocation(map: any) {
     if (isPlatformBrowser(this.platformId)) {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(pos => {
-          if (!this.scrolled && this.activeLayerIds.length === 0) {
+          if (!this.scrolled) {
             map.flyTo({
               center: [pos.coords.longitude, pos.coords.latitude], // Mapbox is [lng, lat]
               zoom: 9,
@@ -634,59 +526,6 @@ export class TracksComponent implements OnInit, OnDestroy {
   private isStyleLoaded(): boolean {
     return this.mapSignal() && this.mapSignal().isStyleLoaded();
   }
-
-  private addDemSource(map: any) {
-    if (map.getSource('mapbox-dem')) {
-      return;
-    }
-    map.addSource('mapbox-dem', {
-      'type': 'raster-dem',
-      'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
-      'tileSize': 512,
-      'maxzoom': 14
-    });
-  }
-
-  private toggleTerrain(enable: boolean, animate: boolean = true) {
-    if (!this.mapSignal()) return;
-
-    try {
-      // Ensure source exists just in case
-      if (enable && !this.mapSignal().getSource('mapbox-dem')) {
-        this.addDemSource(this.mapSignal());
-      }
-
-      if (enable) {
-        this.mapSignal().setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
-        if (animate) {
-          this.mapSignal().easeTo({ pitch: 60 });
-        } else {
-          // Instant
-          this.mapSignal().setPitch(60);
-        }
-      } else {
-        this.mapSignal().setTerrain(null);
-        if (animate) {
-          this.mapSignal().easeTo({ pitch: 0 });
-        } else {
-          this.mapSignal().setPitch(0);
-        }
-      }
-
-      this.terrainControl?.set3DState(enable);
-    } catch (error: any) {
-      if (error?.message?.includes('Style is not done loading')) {
-        console.log('Style loading in progress, deferring 3D terrain...');
-        this.mapSignal().once('style.load', () => this.toggleTerrain(enable, animate));
-      } else {
-        console.warn('Map style not ready for terrain toggle, deferring.', error);
-        // Still retry just in case it's a momentary glitch?
-        // Original logic was retry. Let's keep retry for generic errors if we want, or just fail.
-        // The original code passed unconditionally to retry.
-        // Checking error message explicitly is safer.
-      }
-    }
-  }
 }
 
 class TerrainControl {
@@ -722,13 +561,6 @@ class TerrainControl {
     btn.onclick = () => {
       const was3D = !!map.getTerrain();
       const isNow3D = !was3D;
-
-      // Use the component helper or duplicate logic? 
-      // Since this class is outside, pass the logic in or duplicate securely.
-      // We pass 'onToggle' which updates settings. 
-      // But we need to toggle the map here.
-
-      this.toggleMapTerrain(map, isNow3D);
       this.onToggle(isNow3D);
     };
 
@@ -748,24 +580,5 @@ class TerrainControl {
     }
   }
 
-  private toggleMapTerrain(map: any, enable: boolean) {
-    if (enable) {
-      // Check source
-      if (!map.getSource('mapbox-dem')) {
-        map.addSource('mapbox-dem', {
-          'type': 'raster-dem',
-          'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
-          'tileSize': 512,
-          'maxzoom': 14
-        });
-      }
-      map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
-      map.easeTo({ pitch: 60 });
-    } else {
-      map.setTerrain(null);
-      map.easeTo({ pitch: 0 });
-    }
-    // Update visual state
-    this.set3DState(enable);
-  }
+
 }
