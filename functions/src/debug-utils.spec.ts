@@ -46,18 +46,18 @@ describe('uploadDebugFile', () => {
     });
 
     it('should upload file to specific debug path', async () => {
-        await uploadDebugFile(fileData, extension, queueItemId, serviceName);
+        await uploadDebugFile(fileData, extension, queueItemId, serviceName, 'test-user-id');
 
         expect(mockBucketFn).toHaveBeenCalledWith('quantified-self-io-debug-files');
-        expect(mockBucket.file).toHaveBeenCalledWith('suunto/item-123.fit');
+        expect(mockBucket.file).toHaveBeenCalledWith('suunto/test-user-id/item-123.fit');
         expect(mockSave).toHaveBeenCalledWith(fileData);
     });
 
     it('should handle string data', async () => {
         const stringData = 'some text content';
-        await uploadDebugFile(stringData, 'json', queueItemId, 'coros');
+        await uploadDebugFile(stringData, 'json', queueItemId, 'coros', 'test-user-id');
 
-        expect(mockBucket.file).toHaveBeenCalledWith('coros/item-123.json');
+        expect(mockBucket.file).toHaveBeenCalledWith('coros/test-user-id/item-123.json');
         expect(mockSave).toHaveBeenCalledWith(stringData);
     });
 
@@ -65,7 +65,7 @@ describe('uploadDebugFile', () => {
         mockSave.mockRejectedValue(new Error('Storage failure'));
 
         // Should not throw
-        await uploadDebugFile('data', 'fit', 'id', 'garmin');
+        await uploadDebugFile('data', 'fit', 'id', 'garmin', 'test-user-id');
 
         expect(mockLoggerError).toHaveBeenCalled();
     });

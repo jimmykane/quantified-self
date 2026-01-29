@@ -10,11 +10,12 @@ import { config } from './config';
  * @param extension File extension (e.g. 'fit', 'xml')
  * @param queueItemId ID of the queue item that failed
  * @param serviceName Name of the service (e.g. 'suunto', 'coros', 'garmin')
+ * @param userId The Firebase user ID
  */
-export async function uploadDebugFile(fileData: any, extension: string, queueItemId: string, serviceName: string): Promise<void> {
+export async function uploadDebugFile(fileData: any, extension: string, queueItemId: string, serviceName: string, userId: string): Promise<void> {
     try {
         const bucket = admin.storage().bucket(config.debug.bucketName);
-        const fileName = `${serviceName}/${queueItemId}.${extension}`;
+        const fileName = `${serviceName}/${userId}/${queueItemId}.${extension}`;
         const file = bucket.file(fileName);
 
         await file.save(fileData);

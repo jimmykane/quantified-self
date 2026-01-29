@@ -362,7 +362,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
 
       // Attempt to upload debug file
       if (result) {
-        await uploadDebugFile(result, 'fit', queueItem.id, serviceName);
+        await uploadDebugFile(result, 'fit', queueItem.id, serviceName, parentID);
       }
 
       logger.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.openId || serviceToken.userName} to ${queueItem.retryCount + 1} due to ${e.message}`));

@@ -115,6 +115,9 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
     return increaseRetryCountForQueueItem(queueItem, e, 1, bulkWriter);
   }
 
+  // The parent of the token document is the 'tokens' collection, and its parent is the User document.
+  const firebaseUserID = tokenQuerySnapshots.docs[0].ref.parent.parent!.id;
+
   let result;
   // Use the ORIGINAL callback URL directly, do not reconstruct it
   const url = queueItem.callbackURL;
@@ -195,8 +198,6 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
       queueItem.manual || false,
       queueItem.startTimeInSeconds || 0, // 0 is ok here I suppose
       new Date());
-    // The parent of the token document is the 'tokens' collection, and its parent is the User document.
-    const firebaseUserID = tokenQuerySnapshots.docs[0].ref.parent.parent!.id;
     const eventID = await generateEventID(firebaseUserID, event.startDate);
     await setEvent(firebaseUserID, eventID, event, metaData, { data: result, extension: queueItem.activityFileType.toLowerCase(), startDate: event.startDate }, bulkWriter, usageCache, pendingWrites);
     logger.info(`Created Event ${event.getID()} for ${queueItem.id} user id ${firebaseUserID} and token user ${(serviceToken as any).userID}`);
@@ -218,7 +219,7 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
 
     // Attempt to upload the debug file if we have the result (file data)
     if (result) {
-      await uploadDebugFile(result, queueItem.activityFileType.toLowerCase(), queueItem.id, 'garmin');
+      await uploadDebugFile(result, queueItem.activityFileType.toLowerCase(), queueItem.id, 'garmin', firebaseUserID);
     }
 
     logger.info(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${(serviceToken as any).userID} to ${queueItem.retryCount + 1} due to ${err.message}`));
