@@ -172,7 +172,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   ngAfterViewInit(): void {
     // Subscribe to cursor changes from chart
     this.activitiesCursorSubscription.add(this.activityCursorService.cursors.pipe(
-      throttleTime(2000, asyncScheduler, { leading: true, trailing: true })
+      throttleTime(1000, asyncScheduler, { leading: true, trailing: true })
     ).subscribe((cursors) => {
       cursors.filter(cursor => cursor.byChart === true).forEach(cursor => {
         const cursorActivityMapData = this.activitiesMapData.find(amd => (amd.activity.getID() || '') === cursor.activityID);
