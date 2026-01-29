@@ -1341,10 +1341,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       yAxis = <am4charts.ValueAxis | am4charts.DurationAxis>sameTypeSeries.yAxis;
     } else {
       // Create a new axis
-      yAxis = this.chart.yAxes.push(this.createYAxisForSeries(series.dummyData.stream.type));
-      if (yAxis.tooltip) {
-        yAxis.tooltip.disabled = true;
-      }
+      yAxis = this.chart!.yAxes.push(this.createYAxisForSeries(series.dummyData.stream.type));
       // yAxis.interpolationDuration = 500;
       // yAxis.rangeChangeDuration = 500;
       yAxis.renderer.inside = false;
@@ -1928,7 +1925,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
                   range.grid.above = true;
                   range.grid.zIndex = 1;
-                  range.grid.tooltipText = `[${this.core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity) || '#000000').toString()} bold font-size: 1.2em]${activity.creator.name}[/]\n[bold font-size: 1.0em]Lap #${lapIndex + 1}[/]\n[bold font-size: 1.0em]Type:[/] [font-size: 0.8em]${lapType}[/]`;
+                  range.grid.tooltipText = `[${strokeColor.toString()} bold font-size: 1.2em]${activity.creator.name}[/]\n[bold font-size: 1.0em]Lap #${lapIndex + 1}[/]\n[bold font-size: 1.0em]Type:[/] [font-size: 0.8em]${lapType}[/]`;
                   range.grid.tooltipPosition = 'pointer';
 
                   range.label.tooltipText = range.grid.tooltipText;
