@@ -1,5 +1,6 @@
 import { NgModule } from '@angular/core';
-import { RouterModule, Routes, PreloadAllModules } from '@angular/router';
+import { RouterModule, Routes } from '@angular/router';
+import { NetworkAwarePreloadingStrategy } from './resolvers/network-aware-preloading.strategy';
 import { authGuard } from './authentication/app.auth.guard';
 import { proGuard } from './authentication/pro.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
@@ -101,7 +102,7 @@ const routes: Routes = [
 ];
 
 @NgModule({
-  imports: [RouterModule.forRoot(routes, { scrollPositionRestoration: 'enabled', preloadingStrategy: PreloadAllModules })],
+  imports: [RouterModule.forRoot(routes, { scrollPositionRestoration: 'enabled', preloadingStrategy: NetworkAwarePreloadingStrategy })],
   exports: [RouterModule],
 })
 
