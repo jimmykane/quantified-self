@@ -98,7 +98,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.platformId = platformId;
 
     // Track last settings to prevent redundant data fetching
-    let lastLoadedDataSettings: { dateRange: DateRanges, activityTypes?: ActivityTypes[] } | null = null;
+    let lastLoadedDataSettings: { dateRange: DateRanges, activityTypes?: ActivityTypes[], mapStyle?: string } | null = null;
 
     // Unified Reactive State: Combines Settings and Theme
     const viewState = computed(() => {
@@ -130,10 +130,11 @@ export class TracksComponent implements OnInit, OnDestroy {
 
       // 4. Data Loading
       // Check if data-impacting settings changed
-      const currentSnapshot = { dateRange: settings.dateRange, activityTypes: settings.activityTypes };
+      const currentSnapshot = { dateRange: settings.dateRange, activityTypes: settings.activityTypes, mapStyle: settings.mapStyle };
 
       const dataChanged = !lastLoadedDataSettings ||
         lastLoadedDataSettings.dateRange !== currentSnapshot.dateRange ||
+        lastLoadedDataSettings.mapStyle !== currentSnapshot.mapStyle ||
         JSON.stringify(lastLoadedDataSettings.activityTypes) !== JSON.stringify(currentSnapshot.activityTypes);
 
       if (dataChanged) {
