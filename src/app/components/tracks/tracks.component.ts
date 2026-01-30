@@ -62,9 +62,8 @@ export class TracksComponent implements OnInit, OnDestroy {
   private eventsSubscription: Subscription = new Subscription();
   private trackLoadingSubscription: Subscription = new Subscription();
 
-  private mapSynchronizer: MapboxStyleSynchronizer | undefined;
-
-  private terrainControl: any; // Using any to avoid forward reference issues if class is defined below
+  private mapSynchronizer = signal<MapboxStyleSynchronizer | undefined>(undefined);
+  private terrainControl = signal<any>(null); // Using any to avoid forward reference issues if class is defined below
   private platformId!: object;
 
   private promiseTime!: number;
@@ -112,20 +111,22 @@ export class TracksComponent implements OnInit, OnDestroy {
     effect(() => {
       const { settings, theme } = viewState();
       const map = this.mapSignal();
+      const synchronizer = this.mapSynchronizer();
+      const terrainControl = this.terrainControl();
 
-      if (!map || !this.mapSynchronizer || !settings) return;
+      if (!map || !synchronizer || !settings) return;
 
       // 1. Update Map Style via Synchronizer
       const mapStyle = settings.mapStyle || 'default';
       const resolved = this.mapStyleService.resolve(mapStyle, theme);
-      this.mapSynchronizer.update(resolved);
+      synchronizer.update(resolved);
 
       // 2. Update Tracks Colors (Theme based)
       this.tracksMapManager.setIsDarkTheme(theme === AppThemes.Dark);
       this.tracksMapManager.refreshTrackColors();
 
       // 3. Terrain (is3D)
-      if (this.terrainControl) {
+      if (terrainControl) {
         this.tracksMapManager.toggleTerrain(!!settings.is3D, !isFirstRun);
       }
       isFirstRun = false;
@@ -180,7 +181,7 @@ export class TracksComponent implements OnInit, OnDestroy {
         this.mapSignal.set(mapInstance);
 
         // Initialize Synchronizer
-        this.mapSynchronizer = this.mapStyleService.createSynchronizer(mapInstance);
+        this.mapSynchronizer.set(this.mapStyleService.createSynchronizer(mapInstance));
         // We don't call update(resolved) here because the effect will trigger automatically 
         // as soon as mapSignal and mapSynchronizer are both set.
 
@@ -203,7 +204,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
         // Restore terrain control (initialSettings already loaded above)
         // Initialize 3D state immediately for responsiveness and test compliance
-        this.terrainControl = new TerrainControl(!!initialSettings?.is3D, (is3D) => {
+        const control = new TerrainControl(!!initialSettings?.is3D, (is3D) => {
           // Toggle map locally immediately for responsiveness
           this.tracksMapManager.toggleTerrain(is3D, true);
 
@@ -219,8 +220,9 @@ export class TracksComponent implements OnInit, OnDestroy {
           // Persist 3D setting via service
           this.userSettingsQuery.updateMyTracksSettings({ is3D });
         });
-        mapInstance.addControl(this.terrainControl, 'bottom-right');
-        this.tracksMapManager.setTerrainControl(this.terrainControl);
+        this.terrainControl.set(control);
+        mapInstance.addControl(control, 'bottom-right');
+        this.tracksMapManager.setTerrainControl(control);
 
         // Restore terrain control (initialSettings already loaded above)
         // Initialize 3D state - The effect handles the initial toggleTerrain call.

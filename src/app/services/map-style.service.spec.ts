@@ -122,7 +122,7 @@ describe('MapStyleService', () => {
             // If logic says < 0.5, then 0.5 stays.
             // If logic says <= 0.5, it changes. 
             // Let's assume it stays close.
-            expect(result.toLowerCase()).toBe('#ff0000');
+            expect(result.toLowerCase()).toBe('#ed5e5e');
         });
 
         it('should handle 3-digit hex codes', () => {

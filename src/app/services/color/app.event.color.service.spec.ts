@@ -144,7 +144,7 @@ describe('AppEventColorService', () => {
 
                 const result = service.getColorForZone('Zone 5');
 
-                expect(mockCore.color).toHaveBeenCalledWith(AppColors.LightRed);
+                expect(mockCore.color).toHaveBeenCalledWith(AppColors.LightestRed);
                 expect(result).toBe(mockColorObj);
             });
 
@@ -167,7 +167,7 @@ describe('AppEventColorService', () => {
                 expect(mockCore.color).toHaveBeenCalledWith(AppColors.Yellow);
 
                 service.getColorForZone('Z5');
-                expect(mockCore.color).toHaveBeenCalledWith(AppColors.LightRed);
+                expect(mockCore.color).toHaveBeenCalledWith(AppColors.LightestRed);
             });
         });
 

@@ -157,6 +157,8 @@ describe('TracksComponent', () => {
         it('should add mapbox-dem source before setting terrain', async () => {
             mockMap.isStyleLoaded.mockReturnValue(true);
             await component.ngOnInit();
+            fixture.detectChanges();
+            await new Promise(resolve => setTimeout(resolve, 0));
 
             // Get the order of calls
             const addSourceCalls = mockMap.addSource.mock.invocationCallOrder;
@@ -182,6 +184,8 @@ describe('TracksComponent', () => {
             mockMap.getSource.mockReturnValue({}); // Source exists
 
             await component.ngOnInit();
+            fixture.detectChanges();
+            await new Promise(resolve => setTimeout(resolve, 0));
 
             // Should NOT be called for mapbox-dem
             expect(mockMap.addSource).not.toHaveBeenCalledWith('mapbox-dem', expect.anything());
@@ -189,6 +193,9 @@ describe('TracksComponent', () => {
 
         it('should initialize map synchronizer on init', async () => {
             await component.ngOnInit();
+            fixture.detectChanges();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
             expect(mockMapStyleService.createSynchronizer).toHaveBeenCalledWith(mockMap);
 
             const synchronizer = mockMapStyleService.createSynchronizer.mock.results[0].value;
