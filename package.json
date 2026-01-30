@@ -55,7 +55,7 @@
     "idb-keyval": "^6.2.2",
     "jszip": "^3.10.1",
     "mapbox-gl": "^3.10.0",
-    "material-design-icons-iconfont": "^6.7.0",
+    "material-symbols": "^0.40.2",
     "ng2-charts": "^8.0.0",
     "rxjs": "^7.8.2",
     "weeknumber": "^1.2.1",

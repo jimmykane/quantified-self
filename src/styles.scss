@@ -100,6 +100,29 @@ body.app-hydrated mat-icon {
   opacity: 1;
 }
 
+/* 
+  Material Symbols Rounded Support 
+  The default font-family for mat-icon is managed via MAT_ICON_DEFAULT_OPTIONS in app.module.ts
+  but we preserve the class helper for non-mat-icon elements if needed.
+*/
+.material-symbols-rounded {
+  font-family: 'Material Symbols Rounded' !important;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: 'liga';
+}
+
 .dark-theme {
   $dark-bg: map.get($app-dark-theme, background);
   $dark-fg: map.get($app-dark-theme, foreground);

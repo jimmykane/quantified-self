@@ -22,6 +22,7 @@ import { SharedModule } from './modules/shared.module';
 import { ClipboardModule } from '@angular/cdk/clipboard';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { MAT_DIALOG_DEFAULT_OPTIONS } from '@angular/material/dialog';
+import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { ServiceWorkerModule } from '@angular/service-worker';
 import { UploadActivitiesComponent } from './components/upload/upload-activities/upload-activities.component';
 import { GoogleMapsLoaderService } from './services/google-maps-loader.service';
@@ -119,6 +120,7 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
     })),
     provideRemoteConfig(() => getRemoteConfig()),
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
+    { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
     { provide: MAT_DIALOG_DEFAULT_OPTIONS, useValue: { panelClass: 'qs-dialog-container', hasBackdrop: true } },
     MAT_DATE_LOCALE_PROVIDER,
     { provide: LOCALE_ID, useFactory: getBrowserLocale },

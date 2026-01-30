@@ -497,7 +497,7 @@ class TerrainControl {
     btn.style.display = 'block';
 
     this.icon = document.createElement('span');
-    this.icon.className = 'material-icons';
+    this.icon.className = 'material-symbols-rounded';
     this.icon.style.fontSize = '20px';
     this.icon.style.lineHeight = '29px';
     this.icon.innerText = 'landscape';
