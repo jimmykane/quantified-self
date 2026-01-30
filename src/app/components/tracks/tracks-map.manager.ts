@@ -82,7 +82,8 @@ export class TracksMapManager {
                         'line-color': color,
                         'line-width': 6,
                         'line-blur': 3,
-                        'line-opacity': 0.6
+                        'line-opacity': 0.6,
+                        'line-emissive-strength': 1.0 // Ensures visibility on Mapbox Standard Night
                     }
                 });
 
@@ -95,7 +96,8 @@ export class TracksMapManager {
                     paint: {
                         'line-color': color,
                         'line-width': 2.5,
-                        'line-opacity': 0.9
+                        'line-opacity': 0.9,
+                        'line-emissive-strength': 1.0 // Ensures visibility on Mapbox Standard Night
                     }
                 });
 
@@ -153,6 +155,7 @@ export class TracksMapManager {
                 try {
                     const color = this.mapStyleService.adjustColorForTheme(baseColor, this.isDarkTheme ? AppThemes.Dark : AppThemes.Normal);
                     this.map.setPaintProperty(layerId, 'line-color', color);
+                    this.map.setPaintProperty(layerId, 'line-emissive-strength', 1.0);
                 } catch (error: any) {
                     if (error?.message?.includes('Style is not done loading')) {
                         this.map.once('style.load', () => this.refreshTrackColors());

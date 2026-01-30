@@ -124,11 +124,11 @@ export class MapStyleService implements MapStyleServiceInterface {
       h /= 6;
     }
 
-    const targetL = 0.5; // Was 0.7, which made everything pastel
-    const targetS = 0.6; // Was 0.8
+    const targetL = 0.65; // Balanced for Mapbox Standard Night visibility
+    const targetS = 0.8; // High saturation to contrast with dark map
     if (l < targetL) {
       l = targetL;
-      // Don't mess with saturation too much, just ensure visibility
+      s = targetS; // Ensure we also boost saturation if it's too dark
     }
 
     const hue2rgb = (p: number, q: number, t: number) => {
