@@ -59,7 +59,7 @@
   @if (user) {
   <mat-list-item routerLinkActive="active" [routerLink]="hasPaidAccess ? '/mytracks' : '/pricing'"
     (click)="sideNav.close();">
-    <mat-icon svgIcon="heat-map"></mat-icon>
+    <mat-icon>layers</mat-icon>
     <span>My Tracks <span class="mat-small">(Beta)</span></span>
     <span class="fill-space"></span>
     @if (!hasPaidAccess) {
@@ -102,7 +102,7 @@
   <div class="sidenav-section-header">Preferences</div>
 
   <mat-list-item (click)="$event.stopPropagation(); $event.preventDefault(); themeService.toggleTheme($event)">
-    <mat-icon svgIcon="dark-mode"></mat-icon>
+    <mat-icon>dark_mode</mat-icon>
     <span>Dark theme</span>
     <span class="fill-space"></span>
     <mat-slide-toggle [disabled]="!appTheme" [color]="'accent'" [checked]="appTheme === appThemes.Dark">

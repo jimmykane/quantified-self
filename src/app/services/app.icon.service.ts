@@ -27,17 +27,8 @@ export class AppIconService {
         { name: 'antigravity', path: 'assets/logos/antigravity.svg' },
 
         { name: 'heart_rate', path: 'assets/icons/heart-rate.svg' },
-        { name: 'heart_pulse', path: 'assets/icons/heart-pulse.svg' },
-        { name: 'energy', path: 'assets/icons/energy.svg' },
-        { name: 'power', path: 'assets/icons/power.svg' },
-        { name: 'arrow_up_right', path: 'assets/icons/arrow-up-right.svg' },
-        { name: 'arrow_down_right', path: 'assets/icons/arrow-down-right.svg' },
-        { name: 'swimmer', path: 'assets/icons/swimmer.svg' },
         { name: 'tte', path: 'assets/icons/tte.svg' },
         { name: 'epoc', path: 'assets/icons/epoc.svg' },
-        { name: 'gas', path: 'assets/icons/gas.svg' },
-        { name: 'gap', path: 'assets/icons/gap.svg' },
-        { name: 'heat-map', path: 'assets/icons/heat-map.svg' },
         { name: 'spiral', path: 'assets/icons/spiral.svg' },
         { name: 'chart', path: 'assets/icons/chart.svg' },
         { name: 'dashboard', path: 'assets/icons/dashboard.svg' },
@@ -46,12 +37,8 @@ export class AppIconService {
         { name: 'route', path: 'assets/icons/route.svg' },
         { name: 'watch-sync', path: 'assets/icons/watch-sync.svg' },
         { name: 'chart-types', path: 'assets/icons/chart-types.svg' },
-        { name: 'moving-time', path: 'assets/icons/moving-time.svg' },
         { name: 'file-csv', path: 'assets/icons/file-csv.svg' },
-        { name: 'dark-mode', path: 'assets/icons/dark-mode.svg' },
         { name: 'paypal', path: 'assets/icons/paypal.svg' },
-        { name: 'lap-type-manual', path: 'assets/icons/lap-types/manual.svg' },
-        { name: 'lap-type-interval', path: 'assets/icons/lap-types/interval.svg' }
     ];
 
     constructor(

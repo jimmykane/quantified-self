@@ -66,9 +66,9 @@ export class DataTypeIconComponent {
   getColumnHeaderIcon(statName): string {
     switch (statName) {
       case DataDistance.type:
-        return 'trending_flat';
+        return 'route';
       case DataDuration.type:
-        return 'access_time';
+        return 'timer';
       case 'Start Date':
         return 'date_range';
       case DataDeviceNames.type:
@@ -110,7 +110,7 @@ export class DataTypeIconComponent {
       case DataRecoveryTime.type:
         return 'update';
       case DataVO2Max.type:
-        return 'trending_up';
+        return 'vo2_max';
       case 'Type':
         return 'assignment';
       case 'Description':
@@ -146,35 +146,28 @@ export class DataTypeIconComponent {
         return 'input';
       case 'Cumulative Operating Time':
         return 'timer';
-      default:
-        return null;
-    }
-  }
-
-  getColumnHeaderSVGIcon(statName): string {
-    switch (statName) {
       case DataAscent.type:
-        return 'arrow_up_right';
+        return 'elevation';
       case DataDescent.type:
-        return 'arrow_down_right';
+        return 'south_east';
       case DataHeartRateAvg.type:
       case DataHeartRateMax.type:
       case DataHeartRateMin.type:
-        return 'heart_pulse';
+        return 'ecg_heart';
       case DataEnergy.type:
-        return 'energy';
+        return 'bolt';
       case DataSwimPaceAvg.type:
       case DataSwimPaceAvgMinutesPer100Yard.type:
-        return 'swimmer';
+        return 'pool';
       case DataAerobicTrainingEffect.type:
-        return 'tte';
+        return 'cardio_load';
       case DataMovingTime.type:
-        return 'moving-time';
+        return 'pace';
       case DataPeakEPOC.type:
-        return 'epoc';
+        return null;
       case DataGradeAdjustedPaceAvg.type:
       case DataGradeAdjustedPaceAvgMinutesPerMile.type:
-        return 'gap';
+        return 'directions_run';
       case DataGradeAdjustedSpeedAvg.type:
       case DataGradeAdjustedSpeedAvgFeetPerMinute.type:
       case DataGradeAdjustedSpeedAvgFeetPerSecond.type:
@@ -182,7 +175,16 @@ export class DataTypeIconComponent {
       case DataGradeAdjustedSpeedAvgMetersPerMinute.type:
       case DataGradeAdjustedSpeedAvgMilesPerHour.type:
       case DataGradeAdjustedSpeedAvgKnots.type:
-        return 'gas';
+        return 'speed';
+      default:
+        return null;
+    }
+  }
+
+  getColumnHeaderSVGIcon(statName): string {
+    switch (statName) {
+      case DataPeakEPOC.type:
+        return 'epoc';
       default:
         return null;
     }
