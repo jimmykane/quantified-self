@@ -806,6 +806,7 @@ export class AppEventService implements OnDestroy {
   }
 
   private _getEvents(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any): Observable<EventInterface[]> {
+    console.log('[AppEventService] _getEvents fetching. user:', user.uid, 'where:', JSON.stringify(whereClauses));
     const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount, startAfterDoc, endBeforeDoc);
 
     return runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })).pipe(
