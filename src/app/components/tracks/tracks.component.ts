@@ -122,6 +122,8 @@ export class TracksComponent implements OnInit, OnDestroy {
       const resolved = this.mapStyleService.resolve(prefMapStyle as any, initialTheme);
       const initialStyleUrl = resolved.styleUrl;
 
+      // Removed manualStyleOverride logic
+
       const mapOptions: any = {
         zoom: 1.5,
         center: [0, 20],
@@ -131,92 +133,118 @@ export class TracksComponent implements OnInit, OnDestroy {
         mapOptions.config = { basemap: { lightPreset: resolved.preset } };
       }
 
-      const mapInstance = await this.mapboxLoader.createMap(this.mapDiv.nativeElement, mapOptions);
-      this.mapSignal.set(mapInstance);
-      this.currentStyleUrl = initialStyleUrl; // Track so later checks don't re-apply
+      // Run Mapbox initialization entirely outside Angular to prevent Map events from triggering CD
+      await this.zone.runOutsideAngular(async () => {
+        const mapInstance = await this.mapboxLoader.createMap(this.mapDiv.nativeElement, mapOptions);
+        this.mapSignal.set(mapInstance);
+        this.currentStyleUrl = initialStyleUrl; // Track so later checks don't re-apply
 
-      const mapboxgl = await this.mapboxLoader.loadMapbox();
-      this.tracksMapManager.setMap(mapInstance, mapboxgl);
-      this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
+        const mapboxgl = await this.mapboxLoader.loadMapbox();
+        this.tracksMapManager.setMap(mapInstance, mapboxgl);
+        this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
+        // Removed desiredStandardLightPreset sync here, relying on service
 
-      // Enforce preset whenever style reloads (e.g. diff updates or lost context)
-      // We resolve the "desired" state dynamically from current settings/theme.
-      this.mapStyleService.enforcePresetOnStyleEvents(mapInstance, () => {
-        const currentTheme = this.themeService.appTheme();
-        // Use pending/current settings or fall back to initial if very early
-        const relevantSettings = this.currentSettings || this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
-        const styleName = relevantSettings?.mapStyle ?? 'default';
-        return this.mapStyleService.resolve(styleName as any, currentTheme);
-      });
-
-      mapInstance.addControl(new mapboxgl.FullscreenControl(), 'bottom-right');
-
-      // Standard Navigation Control for Zoom and Rotation (Pitch)
-      const navControl = new mapboxgl.NavigationControl({
-        visualizePitch: true,
-        showCompass: true,
-        showZoom: true
-      });
-      mapInstance.addControl(navControl, 'bottom-right');
-
-      this.centerMapToStartingLocation(mapInstance);
-      this.user = await this.authService.user$.pipe(take(1)).toPromise() as AppUserInterface;
-
-      // Restore terrain control (initialSettings already loaded above)
-      // Initialize 3D state immediately for responsiveness and test compliance
-      this.terrainControl = new TerrainControl(!!initialSettings?.is3D, (is3D) => {
-        // Toggle map locally immediately for responsiveness
-        this.tracksMapManager.toggleTerrain(is3D, true);
-
-        if (is3D) {
-          this.snackBar.open('Use Ctrl + Left Click (or Right Click) + Drag to rotate and tilt the map in 3D.', 'OK', {
-            duration: 5000,
-            verticalPosition: 'top'
+        // Re-apply preset anytime a new style finishes loading (e.g., after setStyle).
+        mapInstance.on('style.load', () => {
+          const theme = this.themeService.appTheme();
+          const isStandard = this.mapStyleService.isStandard(this.currentStyleUrl);
+          // Logging remains outside zone is fine, console.log doesn't trigger CD
+          this.logger.info('[TracksComponent] style.load fired', {
+            theme: AppThemes[theme],
+            currentStyleUrl: this.currentStyleUrl,
+            isStandard
           });
-        }
-
-        // Persist 3D setting via service
-        this.userSettingsQuery.updateMyTracksSettings({ is3D });
-      });
-      mapInstance.addControl(this.terrainControl, 'bottom-right');
-      this.tracksMapManager.setTerrainControl(this.terrainControl);
-
-      // Restore terrain control (initialSettings already loaded above)
-      // Initialize 3D state immediately for responsiveness and test compliance
-      if (initialSettings?.is3D) {
-        this.tracksMapManager.toggleTerrain(true, false);
-      }
-
-      // Subscribe to theme changes
-      this.eventsSubscription.add(this.themeService.getAppTheme().subscribe(theme => {
-        const map = this.mapSignal();
-        if (!map) return;
-
-        this.tracksMapManager.setIsDarkTheme(theme === AppThemes.Dark);
-        this.tracksMapManager.refreshTrackColors();
-
-        const settings = (this.currentSettings || this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings || {} as AppMyTracksSettings);
-        const mapStyle = settings?.mapStyle ?? 'default';
-        const resolved = this.mapStyleService.resolve(mapStyle as any, theme);
-
-        this.logger.info('[TracksComponent] Theme change detected', {
-          theme: AppThemes[theme],
-          mapStyle,
-          currentStyleUrl: this.currentStyleUrl
+          // enforcePresetOnStyleEvents is just logic, no UI update
         });
 
-        // If the URL itself needs changing (e.g. satellite vs standard, or if we were on a different style)
-        // Usually theme change only affects preset for Standard, but generic logic handles URL diffs too.
-        if (this.currentStyleUrl !== resolved.styleUrl) {
-          // scheduleSync will handle everything
-          this.scheduleSync({ ...settings, mapStyle });
-          return;
+        // Enforce preset whenever style reloads (e.g. diff updates or lost context)
+        // We resolve the "desired" state dynamically from current settings/theme.
+        this.mapStyleService.enforcePresetOnStyleEvents(mapInstance, () => {
+          const currentTheme = this.themeService.appTheme();
+          // Use pending/current settings or fall back to initial if very early
+          const relevantSettings = this.currentSettings || this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
+          const styleName = relevantSettings?.mapStyle ?? 'default';
+          return this.mapStyleService.resolve(styleName as any, currentTheme);
+        });
+
+        mapInstance.addControl(new mapboxgl.FullscreenControl(), 'bottom-right');
+
+        // Standard Navigation Control for Zoom and Rotation (Pitch)
+        const navControl = new mapboxgl.NavigationControl({
+          visualizePitch: true,
+          showCompass: true,
+          showZoom: true
+        });
+        mapInstance.addControl(navControl, 'bottom-right');
+
+        this.centerMapToStartingLocation(mapInstance);
+        this.user = await this.authService.user$.pipe(take(1)).toPromise() as AppUserInterface;
+
+        // Restore terrain control (initialSettings already loaded above)
+        // Initialize 3D state immediately for responsiveness and test compliance
+        this.terrainControl = new TerrainControl(!!initialSettings?.is3D, (is3D) => {
+          // Toggle map locally immediately for responsiveness
+          this.tracksMapManager.toggleTerrain(is3D, true);
+
+          if (is3D) {
+            this.zone.run(() => {
+              this.snackBar.open('Use Ctrl + Left Click (or Right Click) + Drag to rotate and tilt the map in 3D.', 'OK', {
+                duration: 5000,
+                verticalPosition: 'top'
+              });
+            });
+          }
+
+          // Persist 3D setting via service
+          this.userSettingsQuery.updateMyTracksSettings({ is3D });
+        });
+        mapInstance.addControl(this.terrainControl, 'bottom-right');
+        this.tracksMapManager.setTerrainControl(this.terrainControl);
+
+        // Restore terrain control (initialSettings already loaded above)
+        // Initialize 3D state immediately for responsiveness and test compliance
+        if (initialSettings?.is3D) {
+          this.tracksMapManager.toggleTerrain(true, false);
         }
 
-        // If URL is same, maybe we just need to update preset (Standard Day -> Night)
-        // usage of applyStandardPreset handles checks internally
-        this.mapStyleService.applyStandardPreset(map, resolved.styleUrl, resolved.preset);
-      }));
+        // Subscribe to theme changes - Subscription logic itself doesn't need to be outside zone,
+        // but the callback execution context matters.
+        // We are inside runOutsideAngular, so the subscription happens here.
+        // However, the Observable emission (from themeService) likely comes from inside Zone.
+        // So this callback likely runs IN Zone unless themeService is weird.
+        // That is fine, we want theme changes to be handled regularly.
+        this.eventsSubscription.add(this.themeService.getAppTheme().subscribe(theme => {
+          // ... existing logic ...
+          // If we manipulate map here, it's fine if it's in zone, theme changes are rare.
+
+          // Copying existing logic block:
+          const map = this.mapSignal();
+          if (!map) return;
+
+          this.tracksMapManager.setIsDarkTheme(theme === AppThemes.Dark);
+          this.tracksMapManager.refreshTrackColors();
+
+          const settings = (this.currentSettings || this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings || {} as AppMyTracksSettings);
+          const mapStyle = settings?.mapStyle ?? 'default';
+          const resolved = this.mapStyleService.resolve(mapStyle as any, theme);
+
+          this.logger.info('[TracksComponent] Theme change detected', {
+            theme: AppThemes[theme],
+            mapStyle,
+            currentStyleUrl: this.currentStyleUrl
+          });
+
+          if (this.currentStyleUrl !== resolved.styleUrl) {
+            // scheduleSync will handle everything
+            this.scheduleSync({ ...settings, mapStyle });
+            return;
+          }
+
+          // If URL is same, maybe we just need to update preset (Standard Day -> Night)
+          // usage of applyStandardPreset handles checks internally
+          this.mapStyleService.applyStandardPreset(map, resolved.styleUrl, resolved.preset);
+        }));
+      });
 
     } catch (error) {
       console.error('Failed to initialize Mapbox:', error);
