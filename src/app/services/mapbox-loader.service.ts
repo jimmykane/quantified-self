@@ -51,7 +51,7 @@ export class MapboxLoaderService {
         return this.zone.runOutsideAngular(() => {
             return new mapboxgl.Map({
                 container,
-                style: 'mapbox://styles/mapbox/dark-v11', // Default dark style
+                style: 'mapbox://styles/mapbox/standard', // Default standard style
                 center: [0, 0],
                 zoom: 2,
                 ...options

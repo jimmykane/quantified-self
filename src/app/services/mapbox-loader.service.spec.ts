@@ -77,7 +77,7 @@ describe('MapboxLoaderService', () => {
 
             expect(mapSpy).toHaveBeenCalledWith(expect.objectContaining({
                 container: container,
-                style: 'mapbox://styles/mapbox/dark-v11', // default check
+                style: 'mapbox://styles/mapbox/standard', // default check
                 zoom: 5,
                 pitch: 45
             }));

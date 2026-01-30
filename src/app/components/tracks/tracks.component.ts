@@ -28,6 +28,7 @@ import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppMyTracksSettings } from '../../models/app-user.interface';
 import { LoggerService } from '../../services/logger.service';
 import { TracksMapManager } from './tracks-map.manager'; // Imported Manager
+import { MapStyleService } from '../../services/map-style.service';
 
 @Component({
   selector: 'app-tracks',
@@ -60,16 +61,16 @@ export class TracksComponent implements OnInit, OnDestroy {
   private eventsSubscription: Subscription = new Subscription();
   private trackLoadingSubscription: Subscription = new Subscription();
   private currentStyleUrl: string | undefined;
-  public manualStyleOverride: string | null = null; // Track manual style selection
+  // public manualStyleOverride: string | null = null; // Removed as part of cleanup
+
   private terrainControl: any; // Using any to avoid forward reference issues if class is defined below
   private platformId!: object;
+  // Removed local preset state tracking in favor of service + settings source-of-truth
 
   private promiseTime!: number;
   private analyticsService = inject(AppAnalyticsService);
   private userSettingsQuery = inject(AppUserSettingsQueryService);
   private logger = inject(LoggerService);
-
-  // Track previous settings replaced by currentSettings/pendingSettings logic
 
   public isLoading: WritableSignal<boolean> = signal(false);
   private pendingSettings: AppMyTracksSettings | null = null;
@@ -90,8 +91,10 @@ export class TracksComponent implements OnInit, OnDestroy {
     private snackBar: MatSnackBar,
     private mapboxLoader: MapboxLoaderService,
     private themeService: AppThemeService,
+    private mapStyleService: MapStyleService,
   ) {
-    this.tracksMapManager = new TracksMapManager(this.zone, this.eventColorService); // Initialize Manager
+    this.tracksMapManager = new TracksMapManager(this.zone, this.eventColorService, this.mapStyleService); // Initialize Manager
+    this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
 
     const platformId = inject(PLATFORM_ID);
     this.platformId = platformId;
@@ -115,30 +118,36 @@ export class TracksComponent implements OnInit, OnDestroy {
       // Resolve user's preferred style BEFORE creating the map.
       const initialSettings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
       const prefMapStyle = initialSettings?.mapStyle || 'default';
-      let initialStyleUrl: string;
-      if (prefMapStyle === 'satellite') {
-        initialStyleUrl = 'mapbox://styles/mapbox/satellite-v9';
-        this.manualStyleOverride = initialStyleUrl;
-      } else if (prefMapStyle === 'outdoors') {
-        initialStyleUrl = 'mapbox://styles/mapbox/outdoors-v12';
-        this.manualStyleOverride = initialStyleUrl;
-      } else {
-        // 'default' - use theme
-        const theme = this.themeService.appTheme();
-        initialStyleUrl = theme === AppThemes.Dark ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11';
-        this.manualStyleOverride = null;
-      }
+      const initialTheme = this.themeService.appTheme();
+      const resolved = this.mapStyleService.resolve(prefMapStyle as any, initialTheme);
+      const initialStyleUrl = resolved.styleUrl;
 
-      const mapInstance = await this.mapboxLoader.createMap(this.mapDiv.nativeElement, {
+      const mapOptions: any = {
         zoom: 1.5,
         center: [0, 20],
         style: initialStyleUrl // Pass user's preferred style directly
-      });
+      };
+      if (this.mapStyleService.isStandard(initialStyleUrl) && resolved.preset) {
+        mapOptions.config = { basemap: { lightPreset: resolved.preset } };
+      }
+
+      const mapInstance = await this.mapboxLoader.createMap(this.mapDiv.nativeElement, mapOptions);
       this.mapSignal.set(mapInstance);
       this.currentStyleUrl = initialStyleUrl; // Track so later checks don't re-apply
 
       const mapboxgl = await this.mapboxLoader.loadMapbox();
       this.tracksMapManager.setMap(mapInstance, mapboxgl);
+      this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
+
+      // Enforce preset whenever style reloads (e.g. diff updates or lost context)
+      // We resolve the "desired" state dynamically from current settings/theme.
+      this.mapStyleService.enforcePresetOnStyleEvents(mapInstance, () => {
+        const currentTheme = this.themeService.appTheme();
+        // Use pending/current settings or fall back to initial if very early
+        const relevantSettings = this.currentSettings || this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
+        const styleName = relevantSettings?.mapStyle ?? 'default';
+        return this.mapStyleService.resolve(styleName as any, currentTheme);
+      });
 
       mapInstance.addControl(new mapboxgl.FullscreenControl(), 'bottom-right');
 
@@ -152,9 +161,6 @@ export class TracksComponent implements OnInit, OnDestroy {
 
       this.centerMapToStartingLocation(mapInstance);
       this.user = await this.authService.user$.pipe(take(1)).toPromise() as AppUserInterface;
-
-      // Settings are now handled by the effect, but we need to ensure the first load happens 
-      // if the effect ran before map was ready.
 
       // Restore terrain control (initialSettings already loaded above)
       // Initialize 3D state immediately for responsiveness and test compliance
@@ -181,34 +187,37 @@ export class TracksComponent implements OnInit, OnDestroy {
         this.tracksMapManager.toggleTerrain(true, false);
       }
 
-
-      // Trigger a manual check with current signal value (already have initialSettings)
-      // Removed redundant scheduleSync call here as it's handled by the effect in constructor
-
-
-
-
-      // ... (inside ngOnInit)
-
       // Subscribe to theme changes
       this.eventsSubscription.add(this.themeService.getAppTheme().subscribe(theme => {
         const map = this.mapSignal();
         if (!map) return;
 
-        // If manual override is active, do not apply theme style
-        if (this.manualStyleOverride) return;
+        this.tracksMapManager.setIsDarkTheme(theme === AppThemes.Dark);
+        this.tracksMapManager.refreshTrackColors();
 
-        const style = theme === AppThemes.Dark ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11';
+        const settings = (this.currentSettings || this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings || {} as AppMyTracksSettings);
+        const mapStyle = settings?.mapStyle ?? 'default';
+        const resolved = this.mapStyleService.resolve(mapStyle as any, theme);
 
-        // Robust check: Only update if the requested style is different from what we think it is
-        if (this.currentStyleUrl === style) {
+        this.logger.info('[TracksComponent] Theme change detected', {
+          theme: AppThemes[theme],
+          mapStyle,
+          currentStyleUrl: this.currentStyleUrl
+        });
+
+        // If the URL itself needs changing (e.g. satellite vs standard, or if we were on a different style)
+        // Usually theme change only affects preset for Standard, but generic logic handles URL diffs too.
+        if (this.currentStyleUrl !== resolved.styleUrl) {
+          // scheduleSync will handle everything
+          this.scheduleSync({ ...settings, mapStyle });
           return;
         }
 
-        this.scheduleSync({ ...this.userSettingsQuery.myTracksSettings(), mapStyle: 'default' }); // Trigger sync with default style
+        // If URL is same, maybe we just need to update preset (Standard Day -> Night)
+        // usage of applyStandardPreset handles checks internally
+        this.mapStyleService.applyStandardPreset(map, resolved.styleUrl, resolved.preset);
       }));
 
-      // Removed original manual addSource block as it is now handled in helper
     } catch (error) {
       console.error('Failed to initialize Mapbox:', error);
     }
@@ -216,7 +225,18 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   public setMapStyle(styleType: 'default' | 'satellite' | 'outdoors') {
     if (!this.mapSignal()) return;
-    this.userSettingsQuery.updateMyTracksSettings({ mapStyle: styleType });
+    const currentSettings = (this.currentSettings || this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings || {} as AppMyTracksSettings);
+    const merged = { ...currentSettings, mapStyle: styleType };
+
+    this.logger.info('[TracksComponent] User selected map style', {
+      styleType,
+      currentStyleUrl: this.currentStyleUrl
+    });
+
+    // We do NOT scheduleSync manually here.
+    // We update the settings, which triggers the signal->effect->scheduleSync path.
+    // This avoids double-sync race conditions.
+    void this.userSettingsQuery.updateMyTracksSettings(merged);
   }
 
   private scheduleSync(settings: AppMyTracksSettings) {
@@ -259,25 +279,33 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
 
     // 1. Resolve Style
-    let targetStyle = 'mapbox://styles/mapbox/streets-v11'; // fallback
-    if (targetSettings.mapStyle === 'satellite') targetStyle = 'mapbox://styles/mapbox/satellite-v9';
-    else if (targetSettings.mapStyle === 'outdoors') targetStyle = 'mapbox://styles/mapbox/outdoors-v12';
-    else {
-      const theme = this.themeService.appTheme();
-      targetStyle = theme === AppThemes.Dark ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11';
-      this.manualStyleOverride = null;
-    }
-    if (targetSettings.mapStyle !== 'default') this.manualStyleOverride = targetStyle;
+    const theme = this.themeService.appTheme();
+    const resolved = this.mapStyleService.resolve(targetSettings.mapStyle as any, theme);
+    const targetStyle = resolved.styleUrl;
 
     // 2. Apply Style if changed
     let styleChanged = false;
     if (this.currentStyleUrl !== targetStyle) {
       this.currentStyleUrl = targetStyle;
       styleChanged = true;
+      this.logger.info('[TracksComponent] Applying style change', {
+        targetStyle,
+        mapStyleSetting: targetSettings.mapStyle
+      });
+
+      // We set the style. MapStyleService.enforcePresetOnStyleEvents will catch the 'style.load' 
+      // and apply the correct preset automatically.
       this.mapSignal().setStyle(targetStyle, { diff: false });
-      await this.waitForStyleLoad();
+
+      // We don't strictly wait here; we let Mapbox load. 
+      // However, for tracks to re-render correctly, they might need the style to be ready?
+      // TracksMapManager handles "style loading" errors by retrying, so we are good.
 
       this.tracksMapManager.clearAllTracks();
+    } else {
+      // If style URL didn't change, we might still need to update preset (e.g. if settings changed but URL is same... 
+      // essentially redundant with theme subscription but harmless).
+      this.mapStyleService.applyStandardPreset(map, targetStyle, resolved.preset);
     }
 
     // 3. Terrain
@@ -296,21 +324,11 @@ export class TracksComponent implements OnInit, OnDestroy {
     const typesChanged = JSON.stringify(currentTypes.sort()) !== JSON.stringify(targetTypes.sort());
 
     if (styleChanged || dateChanged || typesChanged || !this.currentSettings) {
-      // We do NOT await tracks loading to prevent blocking the queue for too long,
-      // but we do trigger it. The isLoading signal covers the STYLE switch (synchronous part).
-      // If user wants tracks loading to block buttons, we should await it.
-      // Given "monkey pressing", let's await it so we don't start next job until tracks request is fired?
-      // No, loadTracks returns Promise<void> that awaits nothing crucial.
       // We call it.
       await this.loadTracksMapForUserByDateRange(this.user, this.mapSignal(), targetSettings.dateRange, targetSettings.activityTypes);
     }
 
     this.currentSettings = targetSettings;
-  }
-
-  private waitForStyleLoad(): Promise<void> {
-    if (this.mapSignal().isStyleLoaded()) return Promise.resolve();
-    return new Promise(resolve => this.mapSignal().once('style.load', () => resolve()));
   }
 
   public async search(event: { dateRange: DateRanges, activityTypes?: ActivityTypes[] }) {

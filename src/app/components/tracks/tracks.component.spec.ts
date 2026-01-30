@@ -14,6 +14,7 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import { LoggerService } from '../../services/logger.service';
+import { MapStyleService } from '../../services/map-style.service';
 import { of } from 'rxjs';
 import { DateRanges, AppThemes } from '@sports-alliance/sports-lib';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -29,6 +30,7 @@ describe('TracksComponent', () => {
     let mockThemeService: any;
     let mockEventService: any;
     let mockMap: any;
+    let mockMapStyleService: any;
 
     const mockUser = {
         settings: {
@@ -95,6 +97,14 @@ describe('TracksComponent', () => {
             attachStreamsToEventWithActivities: vi.fn().mockReturnValue(of({}))
         };
 
+        mockMapStyleService = {
+            resolve: vi.fn().mockReturnValue({ styleUrl: 'mapbox://styles/mapbox/standard', preset: 'night' }),
+            isStandard: vi.fn().mockReturnValue(true),
+            applyStandardPreset: vi.fn(),
+            enforcePresetOnStyleEvents: vi.fn(),
+            adjustColorForTheme: vi.fn().mockReturnValue('#ffffff')
+        };
+
         await TestBed.configureTestingModule({
             declarations: [TracksComponent],
             imports: [MaterialModule],
@@ -115,7 +125,8 @@ describe('TracksComponent', () => {
                 { provide: MatBottomSheet, useValue: { open: vi.fn(), dismiss: vi.fn() } },
                 { provide: MatSnackBar, useValue: { open: vi.fn() } },
                 { provide: Overlay, useValue: { scrollStrategies: { reposition: vi.fn() } } },
-                { provide: 'MatDialog', useValue: {} }
+                { provide: 'MatDialog', useValue: {} },
+                { provide: MapStyleService, useValue: mockMapStyleService }
             ],
             schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();
@@ -160,6 +171,16 @@ describe('TracksComponent', () => {
 
             // Should NOT be called for mapbox-dem
             expect(mockMap.addSource).not.toHaveBeenCalledWith('mapbox-dem', expect.anything());
+        });
+
+        it('should enforce map style presets on init', async () => {
+            await component.ngOnInit();
+            expect(mockMapStyleService.enforcePresetOnStyleEvents).toHaveBeenCalledWith(mockMap, expect.any(Function));
+
+            // Invoke the callback to ensure it calls resolve
+            const callback = mockMapStyleService.enforcePresetOnStyleEvents.mock.calls[0][1];
+            callback();
+            expect(mockMapStyleService.resolve).toHaveBeenCalled();
         });
     });
 });

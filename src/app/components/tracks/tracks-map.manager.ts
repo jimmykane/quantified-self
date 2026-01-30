@@ -1,6 +1,7 @@
 import { NgZone } from '@angular/core';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
-import { ActivityTypes, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES } from '@sports-alliance/sports-lib';
+import { ActivityTypes, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES, AppThemes } from '@sports-alliance/sports-lib';
+import { MapStyleService } from '../../services/map-style.service';
 
 export class TracksMapManager {
     private map: any; // Mapbox GL map instance
@@ -9,15 +10,22 @@ export class TracksMapManager {
     private terrainControl: any;
     private pendingTerrainToggle: { enable: boolean; animate: boolean } | null = null;
     private pendingTerrainListenerAttached = false;
+    private isDarkTheme = false;
+    private trackLayerBaseColors = new Map<string, string>();
 
     constructor(
         private zone: NgZone,
-        private eventColorService: AppEventColorService
+        private eventColorService: AppEventColorService,
+        private mapStyleService: MapStyleService
     ) { }
 
     public setMap(map: any, mapboxgl: any) {
         this.map = map;
         this.mapboxgl = mapboxgl;
+    }
+
+    public setIsDarkTheme(isDark: boolean) {
+        this.isDarkTheme = isDark;
     }
 
     public getMap(): any {
@@ -43,7 +51,8 @@ export class TracksMapManager {
         const sourceId = `track-source-${activityId}`;
         const layerId = `track-layer-${activityId}`;
         const glowLayerId = `track-layer-glow-${activityId}`;
-        const color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type);
+        const baseColor = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type);
+        const color = this.mapStyleService.adjustColorForTheme(baseColor, this.isDarkTheme ? AppThemes.Dark : AppThemes.Normal);
 
         this.zone.runOutsideAngular(() => {
             // Check duplicates inside zone to be safe, though outside is also fine.
@@ -93,6 +102,8 @@ export class TracksMapManager {
                 this.activeLayerIds.push(layerId);
                 this.activeLayerIds.push(glowLayerId);
                 this.activeLayerIds.push(sourceId);
+                this.trackLayerBaseColors.set(layerId, baseColor);
+                this.trackLayerBaseColors.set(glowLayerId, baseColor);
 
             } catch (error: any) {
                 if (error?.message?.includes('Style is not done loading')) {
@@ -121,11 +132,34 @@ export class TracksMapManager {
             });
 
             this.activeLayerIds = [];
+            this.trackLayerBaseColors.clear();
         });
     }
 
     public get hasTracks(): boolean {
         return this.activeLayerIds.length > 0;
+    }
+
+    public refreshTrackColors() {
+        if (!this.map || !this.trackLayerBaseColors.size) return;
+        if (!this.isStyleReady()) {
+            this.map.once('style.load', () => this.refreshTrackColors());
+            return;
+        }
+
+        this.zone.runOutsideAngular(() => {
+            this.trackLayerBaseColors.forEach((baseColor, layerId) => {
+                if (!this.map.getLayer?.(layerId) || !this.map.setPaintProperty) return;
+                try {
+                    const color = this.mapStyleService.adjustColorForTheme(baseColor, this.isDarkTheme ? AppThemes.Dark : AppThemes.Normal);
+                    this.map.setPaintProperty(layerId, 'line-color', color);
+                } catch (error: any) {
+                    if (error?.message?.includes('Style is not done loading')) {
+                        this.map.once('style.load', () => this.refreshTrackColors());
+                    }
+                }
+            });
+        });
     }
 
     public fitBoundsToCoordinates(coordinates: number[][]) {

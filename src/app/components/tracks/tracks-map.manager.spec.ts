@@ -1,6 +1,8 @@
 import { TracksMapManager } from './tracks-map.manager';
 import { NgZone } from '@angular/core';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
+import { MapStyleService } from '../../services/map-style.service';
+import { AppThemes } from '@sports-alliance/sports-lib';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 
 // Mock dependencies
@@ -30,6 +32,9 @@ const mockMap = {
     addControl: vi.fn(),
     isStyleLoaded: vi.fn().mockReturnValue(true),
     once: vi.fn(),
+    setPaintProperty: vi.fn(),
+    off: vi.fn(),
+    on: vi.fn(),
 };
 
 const mockMapboxGL = {
@@ -42,19 +47,26 @@ const mockEventColorService = {
     getColorForActivityTypeByActivityTypeGroup: vi.fn().mockReturnValue('#ff0000')
 } as unknown as AppEventColorService;
 
+const mockMapStyleService = {
+    adjustColorForTheme: vi.fn().mockReturnValue('#adjustedColor')
+} as unknown as MapStyleService;
+
 describe('TracksMapManager', () => {
     let manager: TracksMapManager;
     let zone: NgZone;
 
     beforeEach(() => {
         zone = new MockNgZone();
-        manager = new TracksMapManager(zone, mockEventColorService);
+        manager = new TracksMapManager(zone, mockEventColorService, mockMapStyleService);
         manager.setMap(mockMap, mockMapboxGL);
 
         // Reset mocks
         vi.clearAllMocks();
         mockMap.getSource.mockReset();
         mockMap.getLayer.mockReset();
+        // Reset default return values that might be cleared
+        mockEventColorService.getColorForActivityTypeByActivityTypeGroup = vi.fn().mockReturnValue('#ff0000');
+        mockMapStyleService.adjustColorForTheme = vi.fn().mockReturnValue('#adjustedColor');
     });
 
     it('should be created', () => {
@@ -77,6 +89,20 @@ describe('TracksMapManager', () => {
             );
             expect(mockMap.addLayer).toHaveBeenCalledTimes(2); // Glow + Line
             expect(mockEventColorService.getColorForActivityTypeByActivityTypeGroup).toHaveBeenCalledWith('running');
+            expect(mockMapStyleService.adjustColorForTheme).toHaveBeenCalledWith('#ff0000', AppThemes.Normal);
+        });
+
+        it('should use Dark theme when manager is set to dark', () => {
+            const mockActivity = {
+                getID: () => '1234',
+                type: 'cycling'
+            };
+            const coordinates = [[0, 0], [1, 1]];
+
+            manager.setIsDarkTheme(true);
+            manager.addTrackFromActivity(mockActivity, coordinates);
+
+            expect(mockMapStyleService.adjustColorForTheme).toHaveBeenCalledWith('#ff0000', AppThemes.Dark);
         });
 
         it('should not add track if coordinates are insufficient', () => {

@@ -19,12 +19,11 @@
   <div #mapDiv id="map"></div>
   <div class="map-style-controls">
     <mat-button-toggle-group appearance="legacy" name="mapStyle" aria-label="Map Style" [disabled]="isLoading()"
+      [value]="user?.settings?.myTracksSettings?.mapStyle || 'default'"
       (change)="setMapStyle($any($event).value)">
-      <mat-button-toggle value="default" [checked]="!manualStyleOverride">Default</mat-button-toggle>
-      <mat-button-toggle value="satellite"
-        [checked]="manualStyleOverride === 'mapbox://styles/mapbox/satellite-v9'">Satellite</mat-button-toggle>
-      <mat-button-toggle value="outdoors"
-        [checked]="manualStyleOverride === 'mapbox://styles/mapbox/outdoors-v12'">Outdoors</mat-button-toggle>
+      <mat-button-toggle value="default">Default</mat-button-toggle>
+      <mat-button-toggle value="satellite">Satellite</mat-button-toggle>
+      <mat-button-toggle value="outdoors">Outdoors</mat-button-toggle>
     </mat-button-toggle-group>
     @if (isLoading()) {
     <mat-spinner diameter="24"></mat-spinner>
