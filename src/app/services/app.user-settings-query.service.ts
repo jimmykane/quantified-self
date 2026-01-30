@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
+import { Observable } from 'rxjs';
 import { map, distinctUntilChanged, tap } from 'rxjs/operators';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { AppUserService } from './app.user.service';
@@ -10,7 +11,7 @@ import {
     AppThemes
 } from '@sports-alliance/sports-lib';
 import equal from 'fast-deep-equal';
-import { AppMyTracksSettings } from '../models/app-user.interface';
+import { AppMyTracksSettings, AppUserInterface } from '../models/app-user.interface';
 
 import { LoggerService } from './logger.service';
 
@@ -26,7 +27,7 @@ export class AppUserSettingsQueryService {
      * Base user stream, distinct until the user object identity modification or deep content change.
      * However, we primarily use this to derive granular settings.
      */
-    private user$ = this.authService.user$;
+    private user$ = this.authService.user$ as Observable<AppUserInterface | null>;
 
     /**
      * Chart Settings Signal
@@ -83,6 +84,17 @@ export class AppUserSettingsQueryService {
     public readonly appThemeSetting = toSignal(
         this.user$.pipe(
             map(user => user?.settings?.appSettings?.theme),
+            distinctUntilChanged()
+        ),
+        { initialValue: undefined }
+    );
+
+    /**
+     * Last Seen Changelog Date Signal
+     */
+    public readonly lastSeenChangelogDate = toSignal(
+        this.user$.pipe(
+            map(user => user?.settings?.appSettings?.lastSeenChangelogDate),
             distinctUntilChanged()
         ),
         { initialValue: undefined }
@@ -169,6 +181,28 @@ export class AppUserSettingsQueryService {
         return this.userService.updateUserProperties(user, { settings: updatedSettings })
             .then(() => this.logger.info(`[AppUserSettingsQueryService] App Theme updated successfully.`))
             .catch(err => this.logger.error(`[AppUserSettingsQueryService] Failed to update App Theme:`, err));
+    }
+
+    /**
+     * Updates Last Seen Changelog Date.
+     */
+    public async updateAppLastSeenChangelogDate(date: Date): Promise<void> {
+        this.logger.info(`[AppUserSettingsQueryService] Updating Last Seen Changelog Date:`, date);
+        const user = await this.getCurrentUser();
+        if (!user) {
+            this.logger.warn(`[AppUserSettingsQueryService] Cannot update Last Seen Changelog Date. No user logged in.`);
+            return;
+        }
+
+        const updatedSettings = {
+            appSettings: {
+                lastSeenChangelogDate: date
+            }
+        };
+
+        return this.userService.updateUserProperties(user, { settings: updatedSettings })
+            .then(() => this.logger.info(`[AppUserSettingsQueryService] Last Seen Changelog Date updated successfully.`))
+            .catch(err => this.logger.error(`[AppUserSettingsQueryService] Failed to update Last Seen Changelog Date:`, err));
     }
 
     /**

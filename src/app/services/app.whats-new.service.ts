@@ -7,6 +7,7 @@ import { AppUserService } from './app.user.service';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { LoggerService } from './logger.service';
 import { BehaviorSubject } from 'rxjs';
+import { AppUserInterface } from '../models/app-user.interface';
 
 export interface ChangelogPost {
     id: string;
@@ -70,7 +71,7 @@ export class AppWhatsNewService {
         }
 
         // Check nested generic settings first, if we move it there as per plan
-        const settings = user.settings?.appSettings as any;
+        const settings = user.settings?.appSettings;
         if (settings && settings.lastSeenChangelogDate) {
             // It might be a Firestore Timestamp or a serialized date string/object
             // Safe handle:

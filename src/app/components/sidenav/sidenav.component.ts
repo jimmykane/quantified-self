@@ -11,6 +11,7 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppWindowService } from '../../services/app.window.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserService } from '../../services/app.user.service';
+import { AppWhatsNewService } from '../../services/app.whats-new.service';
 import { environment } from '../../../environments/environment';
 
 @Component({
@@ -38,6 +39,7 @@ export class SideNavComponent implements OnInit, OnDestroy {
     public userService: AppUserService,
     public sideNav: AppSideNavService,
     public themeService: AppThemeService,
+    public whatsNewService: AppWhatsNewService,
     private windowService: AppWindowService,
     private snackBar: MatSnackBar,
     private router: Router) {

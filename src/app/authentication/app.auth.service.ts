@@ -10,11 +10,13 @@ import { LocalStorageService } from '../services/storage/app.local.storage.servi
 import { LoggerService } from '../services/logger.service';
 import { environment } from '../../environments/environment';
 
+import { AppUserInterface } from '../models/app-user.interface';
+
 @Injectable({
   providedIn: 'root'
 })
 export class AppAuthService {
-  public user$: Observable<User | null>;
+  public user$: Observable<AppUserInterface | null>;
   public authState$: Observable<any | null>;
   // store the URL so we can redirect after logging in
   redirectUrl: string = '';
