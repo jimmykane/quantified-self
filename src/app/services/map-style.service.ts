@@ -26,7 +26,8 @@ export class MapStyleService implements MapStyleServiceInterface {
     const style = mapStyle ?? 'default';
     switch (style) {
       case 'satellite':
-        return { styleUrl: this.standardSatellite, preset: this.getPreset(theme) };
+        // User requested no dark style for satellite
+        return { styleUrl: this.standardSatellite, preset: 'day' };
       case 'outdoors':
         return { styleUrl: this.outdoors };
       case 'default':

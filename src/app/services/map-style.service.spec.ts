@@ -35,10 +35,10 @@ describe('MapStyleService', () => {
             expect(result.preset).toBe('day');
         });
 
-        it('should return standard satellite style with preset for satellite', () => {
+        it('should return standard satellite style with day preset even in Dark theme', () => {
             const result = service.resolve('satellite', AppThemes.Dark);
             expect(result.styleUrl).toBe(service.standardSatellite);
-            expect(result.preset).toBe('night');
+            expect(result.preset).toBe('day'); // Forced day
         });
 
         it('should return outdoors style without preset', () => {
