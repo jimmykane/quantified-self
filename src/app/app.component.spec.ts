@@ -112,7 +112,8 @@ describe('AppComponent', () => {
                 {
                     provide: AppWhatsNewService, useValue: {
                         unreadCount: signal(0),
-                        markAsRead: vi.fn()
+                        markAsRead: vi.fn(),
+                        setAdminMode: vi.fn()
                     }
                 },
                 {
