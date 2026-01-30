@@ -1,0 +1,27 @@
+<div class="feed-container">
+    <mat-card *ngFor="let log of changelogs()" class="changelog-card" (click)="navigateToReleases()">
+        <mat-card-header>
+            <div class="header-line">
+                <div class="header-left">
+                    <span *ngIf="isUnread(log)" class="unread-dot" matTooltip="Unread"></span>
+                    <span class="post-title">{{ log.title }}</span>
+                    <span class="header-separator">-</span>
+                    <span class="header-date">{{ log.date.toDate() | date:'mediumDate' }}</span>
+                </div>
+                <div class="header-right">
+                    <span *ngIf="log.version" class="version-tag">{{ log.version }}</span>
+                    <span class="unpublished-tag" *ngIf="!log.published">Unpublished</span>
+                </div>
+            </div>
+        </mat-card-header>
+        <img mat-card-image *ngIf="displayMode() === 'full' && log.image" [src]="log.image" alt="Update image">
+        <mat-card-content *ngIf="displayMode() === 'full'">
+            <div class="description" [innerHTML]="log.description | markdown | async"></div>
+        </mat-card-content>
+    </mat-card>
+
+    <div *ngIf="changelogs().length === 0" class="empty-state">
+        <mat-icon class="empty-icon">history_edu</mat-icon>
+        <p>No updates yet.</p>
+    </div>
+</div>

@@ -31,6 +31,9 @@ import { AppAnalyticsService } from './services/app.analytics.service';
 import { SeoService } from './services/seo.service';
 import { AppIconService } from './services/app.icon.service';
 import { AppThemeService } from './services/app.theme.service';
+import { AppWhatsNewService } from './services/app.whats-new.service';
+import { MatDialog } from '@angular/material/dialog';
+import { WhatsNewDialogComponent } from './components/whats-new/whats-new-dialog.component';
 
 @Component({
   selector: 'app-root',
@@ -84,6 +87,8 @@ export class AppComponent implements OnInit, OnDestroy {
     private seoService: SeoService,
     private iconService: AppIconService,
     private themeService: AppThemeService,
+    private whatsNewService: AppWhatsNewService,
+    public dialog: MatDialog
   ) {
     // this.afa.setAnalyticsCollectionEnabled(true)
     this.iconService.registerIcons();
@@ -110,11 +115,14 @@ export class AppComponent implements OnInit, OnDestroy {
       if (user) {
         try {
           this.isAdminUser = await this.userService.isAdmin();
+          this.whatsNewService.setAdminMode(this.isAdminUser);
         } catch {
           this.isAdminUser = false;
+          this.whatsNewService.setAdminMode(false);
         }
       } else {
         this.isAdminUser = false;
+        this.whatsNewService.setAdminMode(false);
       }
     });
     this.routerEventSubscription = this.router.events.subscribe((event) => {
@@ -253,6 +261,17 @@ export class AppComponent implements OnInit, OnDestroy {
       this.themeOverlayActive = false;
       this.changeDetectorRef.detectChanges();
     }, 600); // Match animation duration
+  }
+
+  public openWhatsNew() {
+    this.dialog.open(WhatsNewDialogComponent, {
+      width: '600px',
+      autoFocus: false
+    });
+  }
+
+  get unreadWhatsNewCount() {
+    return this.whatsNewService.unreadCount();
   }
 
   ngOnDestroy(): void {

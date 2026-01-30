@@ -1,0 +1,160 @@
+<div class="admin-container">
+    <div class="header-container">
+        <div class="header-content">
+            <button mat-icon-button routerLink="/admin" matTooltip="Back to Dashboard">
+                <mat-icon>arrow_back</mat-icon>
+            </button>
+            <div>
+                <h1 class="app-text-gradient">Changelog Management</h1>
+                <p class="premium-subtitle">Manage application release notes and updates</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-section">
+        <!-- Editor Section -->
+        <div class="glass-card" *ngIf="isNew || editingPost">
+            <div class="section-title">
+                <h2>
+                    <mat-icon>{{ isNew ? 'add_circle' : 'edit' }}</mat-icon>
+                    {{ isNew ? 'New Entry' : 'Edit Entry' }}
+                </h2>
+            </div>
+
+            <form [formGroup]="form" (ngSubmit)="save()" class="changelog-form">
+                <div class="form-row">
+                    <mat-form-field appearance="outline">
+                        <mat-label>Title</mat-label>
+                        <input matInput formControlName="title" placeholder="v1.0.0 Release">
+                        <mat-error *ngIf="form.get('title')?.hasError('required')">Title is required</mat-error>
+                    </mat-form-field>
+
+                    <mat-form-field appearance="outline">
+                        <mat-label>Version</mat-label>
+                        <input matInput formControlName="version" placeholder="1.0.0">
+                    </mat-form-field>
+
+                    <mat-form-field appearance="outline">
+                        <mat-label>Date</mat-label>
+                        <input matInput [matDatepicker]="picker" formControlName="date">
+                        <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+                        <mat-datepicker #picker></mat-datepicker>
+                    </mat-form-field>
+                </div>
+
+                <div class="form-row">
+                    <mat-form-field appearance="outline">
+                        <mat-label>Type</mat-label>
+                        <mat-select formControlName="type">
+                            <mat-option value="major">Major</mat-option>
+                            <mat-option value="minor">Minor</mat-option>
+                            <mat-option value="patch">Patch</mat-option>
+                        </mat-select>
+                    </mat-form-field>
+
+                    <mat-checkbox formControlName="published">Published</mat-checkbox>
+                </div>
+
+                <mat-form-field appearance="outline" class="full-width">
+                    <mat-label>Description (Markdown supported)</mat-label>
+                    <textarea matInput formControlName="description" rows="5"></textarea>
+                    <mat-error *ngIf="form.get('description')?.hasError('required')">Description is required</mat-error>
+                </mat-form-field>
+
+                <div class="form-actions">
+                    <button mat-button type="button" (click)="cancel()">Cancel</button>
+                    <button mat-raised-button color="primary" type="submit" [disabled]="form.invalid || saving">
+                        {{ saving ? 'Saving...' : 'Save' }}
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Add Button (Only visible when not editing) -->
+        <div class="section-title" *ngIf="!isNew && !editingPost">
+            <h2>
+                <mat-icon>history_edu</mat-icon>
+                Entries
+            </h2>
+            <button mat-raised-button color="primary" (click)="createNew()">
+                <mat-icon>add</mat-icon>
+                New Entry
+            </button>
+        </div>
+
+        <!-- Table Section -->
+        <div class="glass-card table-container">
+            <div class="table-wrapper">
+                <table mat-table [dataSource]="changelogs() || []">
+                    <!-- Date Column -->
+                    <ng-container matColumnDef="date">
+                        <th mat-header-cell *matHeaderCellDef> Date </th>
+                        <td mat-cell *matCellDef="let post"> {{ postDate(post) | date:'mediumDate' }} </td>
+                    </ng-container>
+
+                    <!-- Type Column -->
+                    <ng-container matColumnDef="type">
+                        <th mat-header-cell *matHeaderCellDef> Type </th>
+                        <td mat-cell *matCellDef="let post">
+                            <span class="type-badge" [ngClass]="post.type">{{ post.type }}</span>
+                        </td>
+                    </ng-container>
+
+                    <!-- Version Column -->
+                    <ng-container matColumnDef="version">
+                        <th mat-header-cell *matHeaderCellDef> Version </th>
+                        <td mat-cell *matCellDef="let post"> {{ post.version || '-' }} </td>
+                    </ng-container>
+
+                    <!-- Title Column -->
+                    <ng-container matColumnDef="title">
+                        <th mat-header-cell *matHeaderCellDef> Title </th>
+                        <td mat-cell *matCellDef="let post">
+                            <strong>{{ post.title }}</strong>
+                            <p
+                                style="margin: 0; font-size: 0.85em; color: var(--mat-sys-on-surface-variant); opacity: 0.8;">
+                                {{ post.description | slice:0:100 }}{{ post.description.length > 100 ? '...' : '' }}
+                            </p>
+                        </td>
+                    </ng-container>
+
+                    <!-- Status Column -->
+                    <ng-container matColumnDef="published">
+                        <th mat-header-cell *matHeaderCellDef> Status </th>
+                        <td mat-cell *matCellDef="let post">
+                            <span class="status-badge" [ngClass]="post.published ? 'published' : 'draft'">
+                                {{ post.published ? 'Published' : 'Draft' }}
+                            </span>
+                        </td>
+                    </ng-container>
+
+                    <!-- Actions Column -->
+                    <ng-container matColumnDef="actions">
+                        <th mat-header-cell *matHeaderCellDef> Actions </th>
+                        <td mat-cell *matCellDef="let post">
+                            <div class="form-actions" style="margin-top: 0; justify-content: flex-start;">
+                                <button mat-icon-button color="primary" (click)="edit(post)" matTooltip="Edit">
+                                    <mat-icon>edit</mat-icon>
+                                </button>
+                                <button mat-icon-button color="warn" (click)="delete(post)" matTooltip="Delete">
+                                    <mat-icon>delete</mat-icon>
+                                </button>
+                            </div>
+                        </td>
+                    </ng-container>
+
+                    <tr mat-header-row *matHeaderRowDef="['date', 'type', 'version', 'title', 'published', 'actions']">
+                    </tr>
+                    <tr mat-row
+                        *matRowDef="let row; columns: ['date', 'type', 'version', 'title', 'published', 'actions'];">
+                    </tr>
+                </table>
+
+                <div *ngIf="!changelogs()?.length"
+                    style="padding: 2rem; text-align: center; color: var(--mat-sys-on-surface-variant);">
+                    No changelog entries found.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

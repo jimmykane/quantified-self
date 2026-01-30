@@ -218,4 +218,39 @@ describe('SeoService', () => {
         expect(mockDocument.createElement).not.toHaveBeenCalled();
         expect(mockLink.setAttribute).toHaveBeenCalledWith('href', 'https://quantified-self.io/updated');
     });
+    it('should inject custom JSON-LD from route data', () => {
+        const customJsonLd = {
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            "name": "Custom List"
+        };
+
+        mockRouter.url = '/releases';
+        mockRouter.parseUrl = vi.fn().mockReturnValue({
+            queryParams: {},
+            fragment: null,
+            toString: () => '/releases'
+        });
+        mockActivatedRoute.data = of({
+            title: 'Releases',
+            jsonLd: customJsonLd
+        });
+
+        // Mock querySelector to return null so it creates new script
+        mockDocument.querySelector = vi.fn().mockReturnValue(null);
+        const mockScript = {
+            setAttribute: vi.fn(),
+            textContent: ''
+        };
+        mockDocument.createElement = vi.fn().mockReturnValue(mockScript);
+        mockDocument.head.appendChild = vi.fn();
+
+        service.init();
+        routerEventsSubject.next(new NavigationEnd(1, '/releases', '/releases'));
+
+        expect(mockDocument.createElement).toHaveBeenCalledWith('script');
+        expect(mockScript.setAttribute).toHaveBeenCalledWith('type', 'application/ld+json');
+        expect(mockDocument.head.appendChild).toHaveBeenCalledWith(mockScript);
+        expect(mockScript.textContent).toBe(JSON.stringify(customJsonLd));
+    });
 });

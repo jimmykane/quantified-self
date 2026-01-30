@@ -30,6 +30,14 @@
       Loading
     </button>
     }
+    @if (authState !== null) {
+    <button mat-icon-button class="right" (click)="openWhatsNew()" matTooltip="What's New"
+      aria-label="View recent updates">
+      <mat-icon [matBadge]="unreadWhatsNewCount" [matBadgeHidden]="unreadWhatsNewCount === 0" matBadgeColor="warn"
+        aria-hidden="false">campaign</mat-icon>
+    </button>
+    }
+
     @if (authState === true && !isDashboardRoute) {
     <button mat-flat-button class="right" color="accent" (click)="router.navigate(['/dashboard']);"
       [matTooltip]="isHandset() ? 'Dashboard' : ''" [class.icon-only]="isHandset()">

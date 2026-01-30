@@ -34,7 +34,7 @@ export class SeoService {
             this.updateTitle(data['title']);
             this.updateMetaTags(data);
             this.updateCanonicalTag();
-            this.updateJsonLd();
+            this.updateJsonLd(data);
         });
     }
 
@@ -116,7 +116,12 @@ export class SeoService {
         return `${origin}${cleanPath}`;
     }
 
-    private updateJsonLd() {
+    private updateJsonLd(data: any) {
+        if (data['jsonLd']) {
+            this.setJsonLd(data['jsonLd']);
+            return;
+        }
+
         if (this.router.url === '/') {
             this.setJsonLd({
                 "@context": "https://schema.org",

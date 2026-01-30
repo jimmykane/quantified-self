@@ -47,6 +47,22 @@ const routes: Routes = [
     data: { title: 'Payment Success' }
   },
   {
+    path: 'releases',
+    loadComponent: () => import('./components/whats-new/whats-new-page.component').then(m => m.WhatsNewPageComponent),
+    data: {
+      title: 'Release Notes',
+      description: 'Stay up to date with the latest features, improvements, and bug fixes in Quantified Self.',
+      keywords: 'release notes, changelog, updates, new features, quantified self updates',
+      jsonLd: {
+        "@context": "https://schema.org",
+        "@type": "ItemList",
+        "name": "Quantified Self Release Notes",
+        "description": "Chronological list of updates and changes to the Quantified Self application.",
+        "itemListElement": [] // We could populate this dynamically if we were rendering on server, but static metadata is better than nothing for the list page itself.
+      }
+    }
+  },
+  {
     path: 'payment/cancel',
     loadComponent: () => import('./components/payment-cancel/payment-cancel.component').then(m => m.PaymentCancelComponent),
     canMatch: [authGuard],

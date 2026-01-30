@@ -159,6 +159,11 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow write: if false;
     }
+    
+    match /changelogs/{docId} {
+      allow read: if resource.data.published == true || isAdmin();
+      allow write: if isAdmin();
+    }
   }
 }
 

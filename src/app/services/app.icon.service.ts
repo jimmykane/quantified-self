@@ -26,18 +26,7 @@ export class AppIconService {
         { name: 'github_logo', path: 'assets/logos/github_logo.svg' },
         { name: 'antigravity', path: 'assets/logos/antigravity.svg' },
 
-        { name: 'heart_rate', path: 'assets/icons/heart-rate.svg' },
-        { name: 'tte', path: 'assets/icons/tte.svg' },
         { name: 'epoc', path: 'assets/icons/epoc.svg' },
-        { name: 'spiral', path: 'assets/icons/spiral.svg' },
-        { name: 'chart', path: 'assets/icons/chart.svg' },
-        { name: 'dashboard', path: 'assets/icons/dashboard.svg' },
-        { name: 'stacked-chart', path: 'assets/icons/stacked-chart.svg' },
-        { name: 'bar-chart', path: 'assets/icons/bar-chart.svg' },
-        { name: 'route', path: 'assets/icons/route.svg' },
-        { name: 'watch-sync', path: 'assets/icons/watch-sync.svg' },
-        { name: 'chart-types', path: 'assets/icons/chart-types.svg' },
-        { name: 'file-csv', path: 'assets/icons/file-csv.svg' },
         { name: 'paypal', path: 'assets/icons/paypal.svg' },
     ];
 
