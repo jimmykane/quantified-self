@@ -1,4 +1,4 @@
-import { Component, Inject, ViewChild, ElementRef, ChangeDetectorRef, NgZone, effect, signal, WritableSignal, PLATFORM_ID, OnInit, OnDestroy, inject } from '@angular/core';
+import { Component, Inject, ViewChild, ElementRef, ChangeDetectorRef, NgZone, effect, signal, WritableSignal, computed, PLATFORM_ID, OnInit, OnDestroy, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
@@ -29,6 +29,7 @@ import { AppMyTracksSettings } from '../../models/app-user.interface';
 import { LoggerService } from '../../services/logger.service';
 import { TracksMapManager } from './tracks-map.manager'; // Imported Manager
 import { MapStyleService } from '../../services/map-style.service';
+import { MapboxStyleSynchronizer } from '../../services/map/mapbox-style-synchronizer';
 
 @Component({
   selector: 'app-tracks',
@@ -60,12 +61,11 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   private eventsSubscription: Subscription = new Subscription();
   private trackLoadingSubscription: Subscription = new Subscription();
-  private currentStyleUrl: string | undefined;
-  // public manualStyleOverride: string | null = null; // Removed as part of cleanup
+
+  private mapSynchronizer: MapboxStyleSynchronizer | undefined;
 
   private terrainControl: any; // Using any to avoid forward reference issues if class is defined below
   private platformId!: object;
-  // Removed local preset state tracking in favor of service + settings source-of-truth
 
   private promiseTime!: number;
   private analyticsService = inject(AppAnalyticsService);
@@ -73,9 +73,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   private logger = inject(LoggerService);
 
   public isLoading: WritableSignal<boolean> = signal(false);
-  private pendingSettings: AppMyTracksSettings | null = null;
-  private currentSettings: AppMyTracksSettings | null = null;
-  private isProcessingQueue = false;
+  // Removed legacy state tracking
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
@@ -98,13 +96,53 @@ export class TracksComponent implements OnInit, OnDestroy {
 
     const platformId = inject(PLATFORM_ID);
     this.platformId = platformId;
-    effect(() => {
-      const settings = this.userSettingsQuery.myTracksSettings();
-      const map = this.mapSignal();
-      // Guard: check for map presence and valid settings
-      if (!map || !settings || settings.dateRange === undefined) return;
 
-      this.scheduleSync(settings as AppMyTracksSettings);
+    // Track last settings to prevent redundant data fetching
+    let lastLoadedDataSettings: { dateRange: DateRanges, activityTypes?: ActivityTypes[] } | null = null;
+
+    // Unified Reactive State: Combines Settings and Theme
+    const viewState = computed(() => {
+      const settings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
+      const theme = this.themeService.appTheme();
+      return { settings, theme };
+    });
+
+    // Single Effect to drive Map State
+    effect(() => {
+      const { settings, theme } = viewState();
+      const map = this.mapSignal();
+
+      if (!map || !this.mapSynchronizer || !settings) return;
+
+      // 1. Update Map Style via Synchronizer
+      const mapStyle = settings.mapStyle || 'default';
+      const resolved = this.mapStyleService.resolve(mapStyle, theme);
+      this.mapSynchronizer.update(resolved);
+
+      // 2. Update Tracks Colors (Theme based)
+      this.tracksMapManager.setIsDarkTheme(theme === AppThemes.Dark);
+      this.tracksMapManager.refreshTrackColors();
+
+      // 3. Terrain (is3D)
+      if (this.terrainControl) {
+        this.tracksMapManager.toggleTerrain(!!settings.is3D, true);
+      }
+
+      // 4. Data Loading
+      // Check if data-impacting settings changed
+      const currentSnapshot = { dateRange: settings.dateRange, activityTypes: settings.activityTypes };
+
+      const dataChanged = !lastLoadedDataSettings ||
+        lastLoadedDataSettings.dateRange !== currentSnapshot.dateRange ||
+        JSON.stringify(lastLoadedDataSettings.activityTypes) !== JSON.stringify(currentSnapshot.activityTypes);
+
+      if (dataChanged) {
+        lastLoadedDataSettings = currentSnapshot;
+        this.isLoading.set(true);
+        this.loadTracksMapForUserByDateRange(this.user, map, settings.dateRange, settings.activityTypes)
+          .catch(err => console.error('Error loading tracks', err))
+          .finally(() => this.isLoading.set(false));
+      }
     });
   }
 
@@ -137,35 +175,15 @@ export class TracksComponent implements OnInit, OnDestroy {
       await this.zone.runOutsideAngular(async () => {
         const mapInstance = await this.mapboxLoader.createMap(this.mapDiv.nativeElement, mapOptions);
         this.mapSignal.set(mapInstance);
-        this.currentStyleUrl = initialStyleUrl; // Track so later checks don't re-apply
+
+        // Initialize Synchronizer
+        this.mapSynchronizer = this.mapStyleService.createSynchronizer(mapInstance);
+        // Ensure synchronizer knows about the initial state we just created
+        this.mapSynchronizer.update(resolved);
 
         const mapboxgl = await this.mapboxLoader.loadMapbox();
         this.tracksMapManager.setMap(mapInstance, mapboxgl);
         this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
-        // Removed desiredStandardLightPreset sync here, relying on service
-
-        // Re-apply preset anytime a new style finishes loading (e.g., after setStyle).
-        mapInstance.on('style.load', () => {
-          const theme = this.themeService.appTheme();
-          const isStandard = this.mapStyleService.isStandard(this.currentStyleUrl);
-          // Logging remains outside zone is fine, console.log doesn't trigger CD
-          this.logger.info('[TracksComponent] style.load fired', {
-            theme: AppThemes[theme],
-            currentStyleUrl: this.currentStyleUrl,
-            isStandard
-          });
-          // enforcePresetOnStyleEvents is just logic, no UI update
-        });
-
-        // Enforce preset whenever style reloads (e.g. diff updates or lost context)
-        // We resolve the "desired" state dynamically from current settings/theme.
-        this.mapStyleService.enforcePresetOnStyleEvents(mapInstance, () => {
-          const currentTheme = this.themeService.appTheme();
-          // Use pending/current settings or fall back to initial if very early
-          const relevantSettings = this.currentSettings || this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
-          const styleName = relevantSettings?.mapStyle ?? 'default';
-          return this.mapStyleService.resolve(styleName as any, currentTheme);
-        });
 
         mapInstance.addControl(new mapboxgl.FullscreenControl(), 'bottom-right');
 
@@ -206,44 +224,6 @@ export class TracksComponent implements OnInit, OnDestroy {
         if (initialSettings?.is3D) {
           this.tracksMapManager.toggleTerrain(true, false);
         }
-
-        // Subscribe to theme changes - Subscription logic itself doesn't need to be outside zone,
-        // but the callback execution context matters.
-        // We are inside runOutsideAngular, so the subscription happens here.
-        // However, the Observable emission (from themeService) likely comes from inside Zone.
-        // So this callback likely runs IN Zone unless themeService is weird.
-        // That is fine, we want theme changes to be handled regularly.
-        this.eventsSubscription.add(this.themeService.getAppTheme().subscribe(theme => {
-          // ... existing logic ...
-          // If we manipulate map here, it's fine if it's in zone, theme changes are rare.
-
-          // Copying existing logic block:
-          const map = this.mapSignal();
-          if (!map) return;
-
-          this.tracksMapManager.setIsDarkTheme(theme === AppThemes.Dark);
-          this.tracksMapManager.refreshTrackColors();
-
-          const settings = (this.currentSettings || this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings || {} as AppMyTracksSettings);
-          const mapStyle = settings?.mapStyle ?? 'default';
-          const resolved = this.mapStyleService.resolve(mapStyle as any, theme);
-
-          this.logger.info('[TracksComponent] Theme change detected', {
-            theme: AppThemes[theme],
-            mapStyle,
-            currentStyleUrl: this.currentStyleUrl
-          });
-
-          if (this.currentStyleUrl !== resolved.styleUrl) {
-            // scheduleSync will handle everything
-            this.scheduleSync({ ...settings, mapStyle });
-            return;
-          }
-
-          // If URL is same, maybe we just need to update preset (Standard Day -> Night)
-          // usage of applyStandardPreset handles checks internally
-          this.mapStyleService.applyStandardPreset(map, resolved.styleUrl, resolved.preset);
-        }));
       });
 
     } catch (error) {
@@ -252,117 +232,16 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   public setMapStyle(styleType: 'default' | 'satellite' | 'outdoors') {
-    if (!this.mapSignal()) return;
-    const currentSettings = (this.currentSettings || this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings || {} as AppMyTracksSettings);
-    const merged = { ...currentSettings, mapStyle: styleType };
-
-    this.logger.info('[TracksComponent] User selected map style', {
-      styleType,
-      currentStyleUrl: this.currentStyleUrl
-    });
-
-    // We do NOT scheduleSync manually here.
-    // We update the settings, which triggers the signal->effect->scheduleSync path.
-    // This avoids double-sync race conditions.
-    void this.userSettingsQuery.updateMyTracksSettings(merged);
-  }
-
-  private scheduleSync(settings: AppMyTracksSettings) {
-    this.pendingSettings = settings;
-    if (!this.isProcessingQueue) {
-      this.processQueue();
-    }
-  }
-
-  private async processQueue() {
-    this.isProcessingQueue = true;
-    while (this.pendingSettings) {
-      const distinctSettings = this.pendingSettings;
-      this.pendingSettings = null; // consume job
-
-      if (JSON.stringify(distinctSettings) === JSON.stringify(this.currentSettings)) {
-        continue;
-      }
-
-      // Only show loading if style is actually changing, or simpler: just show it.
-      // User wants feedback.
-      this.isLoading.set(true);
-      try {
-        await this.synchronizeMap(distinctSettings);
-      } catch (e) {
-        console.error('Map sync error', e);
-      }
-      this.isLoading.set(false);
-    }
-    this.isProcessingQueue = false;
-  }
-
-  private async synchronizeMap(targetSettings: AppMyTracksSettings) {
-    const map = this.mapSignal();
-    if (!map) return;
-
-    // Update local user state immediately to avoid desyncs during search() persisting stale settings
-    if (this.user && this.user.settings) {
-      this.user.settings.myTracksSettings = targetSettings;
-    }
-
-    // 1. Resolve Style
-    const theme = this.themeService.appTheme();
-    const resolved = this.mapStyleService.resolve(targetSettings.mapStyle as any, theme);
-    const targetStyle = resolved.styleUrl;
-
-    // 2. Apply Style if changed
-    let styleChanged = false;
-    if (this.currentStyleUrl !== targetStyle) {
-      this.currentStyleUrl = targetStyle;
-      styleChanged = true;
-      this.logger.info('[TracksComponent] Applying style change', {
-        targetStyle,
-        mapStyleSetting: targetSettings.mapStyle
-      });
-
-      // We set the style. MapStyleService.enforcePresetOnStyleEvents will catch the 'style.load' 
-      // and apply the correct preset automatically.
-      this.mapSignal().setStyle(targetStyle, { diff: false });
-
-      // We don't strictly wait here; we let Mapbox load. 
-      // However, for tracks to re-render correctly, they might need the style to be ready?
-      // TracksMapManager handles "style loading" errors by retrying, so we are good.
-
-      this.tracksMapManager.clearAllTracks();
-    } else {
-      // If style URL didn't change, we might still need to update preset (e.g. if settings changed but URL is same... 
-      // essentially redundant with theme subscription but harmless).
-      this.mapStyleService.applyStandardPreset(map, targetStyle, resolved.preset);
-    }
-
-    // 3. Terrain
-    // If style changed, IS3D must be re-applied.
-    // If IS3D changed, apply it.
-    const is3D = !!targetSettings.is3D;
-    // Note: toggleTerrain handles "add if missing".
-    if (styleChanged || (this.currentSettings?.is3D !== is3D)) {
-      this.tracksMapManager.toggleTerrain(is3D, true);
-    }
-
-    // 4. Data
-    const dateChanged = this.currentSettings?.dateRange !== targetSettings.dateRange;
-    const currentTypes = this.currentSettings?.activityTypes || [];
-    const targetTypes = targetSettings.activityTypes || [];
-    const typesChanged = JSON.stringify(currentTypes.sort()) !== JSON.stringify(targetTypes.sort());
-
-    if (styleChanged || dateChanged || typesChanged || !this.currentSettings) {
-      // We call it.
-      await this.loadTracksMapForUserByDateRange(this.user, this.mapSignal(), targetSettings.dateRange, targetSettings.activityTypes);
-    }
-
-    this.currentSettings = targetSettings;
+    // Just update settings. The effect handles the rest.
+    this.userSettingsQuery.updateMyTracksSettings({ mapStyle: styleType });
+    this.logger.info('[TracksComponent] User selected map style', { styleType });
   }
 
   public async search(event: { dateRange: DateRanges, activityTypes?: ActivityTypes[] }) {
     if (!isPlatformBrowser(this.platformId)) return;
 
-    // Update user settings - this will trigger signal -> effect -> handleSettingsChange -> loadTracks
+    // Update user settings - this will trigger signal -> effect
+    // AppUserSettingsQueryService handles persistence to backend.
     this.userSettingsQuery.updateMyTracksSettings({
       dateRange: event.dateRange,
       activityTypes: event.activityTypes
@@ -373,7 +252,6 @@ export class TracksComponent implements OnInit, OnDestroy {
       this.trackLoadingSubscription.unsubscribe();
     }
 
-    await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
     this.analyticsService.logEvent('my_tracks_search', { method: DateRanges[event.dateRange] });
   }
 

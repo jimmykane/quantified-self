@@ -1,24 +1,23 @@
 import { Injectable } from '@angular/core';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { LoggerService } from './logger.service';
-
-export type MapStyleName = 'default' | 'satellite' | 'outdoors';
-
-export interface MapStyleState {
-  styleUrl: string;
-  preset?: 'day' | 'night'; // Only for Standard styles
-}
+import { MapStyleName, MapStyleState, MapStyleServiceInterface } from './map/map-style.types';
+import { MapboxStyleSynchronizer } from './map/mapbox-style-synchronizer';
 
 @Injectable({
   providedIn: 'root'
 })
-export class MapStyleService {
+export class MapStyleService implements MapStyleServiceInterface {
   // Canonical style URLs
   readonly standard = 'mapbox://styles/mapbox/standard';
   readonly standardSatellite = 'mapbox://styles/mapbox/standard-satellite';
   readonly outdoors = 'mapbox://styles/mapbox/outdoors-v12';
 
   constructor(private logger: LoggerService) { }
+
+  public createSynchronizer(map: any): MapboxStyleSynchronizer {
+    return new MapboxStyleSynchronizer(map, this, this.logger);
+  }
 
   /**
    * Resolve the style URL (and preset, if applicable) given a logical style + theme.
@@ -48,13 +47,21 @@ export class MapStyleService {
    * Apply the Standard preset if applicable. No retries; logs success/failure.
    */
   public applyStandardPreset(map: any, styleUrl: string | undefined, preset: 'day' | 'night' | undefined) {
-    if (!map || typeof map.setConfigProperty !== 'function') {
-      this.logger.warn('[MapStyleService] setConfigProperty unavailable; cannot apply preset');
+    if (!map || typeof map.setConfigProperty !== 'function' || typeof map.getConfigProperty !== 'function') {
+      if (!map || typeof map.setConfigProperty !== 'function') {
+        this.logger.warn('[MapStyleService] setConfigProperty unavailable; cannot apply preset');
+      }
       return;
     }
     if (!this.isStandard(styleUrl) || !preset) return;
 
     try {
+      const current = map.getConfigProperty('basemap', 'lightPreset');
+      if (current === preset) {
+        // Already set, avoid redundant call which triggers 'styledata' and causes infinite loops
+        return;
+      }
+
       map.setConfigProperty('basemap', 'lightPreset', preset);
       this.logger.info('[MapStyleService] Applied standard lightPreset', { preset, styleUrl });
     } catch (error) {
@@ -85,7 +92,15 @@ export class MapStyleService {
     let hex = color.trim().toLowerCase();
     if (hex.startsWith('#')) hex = hex.slice(1);
     if (hex.length === 3) hex = `${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`;
-    if (hex.length !== 6 || !/^[0-9a-f]{6}$/.test(hex)) return color;
+
+    // Simple check for "black" or "white" names if they slip through
+    if (hex === 'black') hex = '000000';
+    if (hex === 'white') hex = 'ffffff';
+
+    if (hex.length !== 6 || !/^[0-9a-f]{6}$/.test(hex)) {
+      // Fallback for invalid/unsupported formats in Dark Mode to ensure visibility
+      return '#aaaaaa';
+    }
 
     const r = parseInt(hex.slice(0, 2), 16) / 255;
     const g = parseInt(hex.slice(2, 4), 16) / 255;
@@ -108,11 +123,11 @@ export class MapStyleService {
       h /= 6;
     }
 
-    const targetL = 0.70;
-    const targetS = 0.8;
+    const targetL = 0.5; // Was 0.7, which made everything pastel
+    const targetS = 0.6; // Was 0.8
     if (l < targetL) {
       l = targetL;
-      s = Math.min(1, Math.max(s, targetS * 0.6));
+      // Don't mess with saturation too much, just ensure visibility
     }
 
     const hue2rgb = (p: number, q: number, t: number) => {

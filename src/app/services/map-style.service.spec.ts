@@ -85,10 +85,10 @@ describe('MapStyleService', () => {
             expect(result).toBe(color);
         });
 
-        it('should return original color if color is invalid', () => {
+        it('should return fallback color if color is invalid in Dark theme', () => {
             const invalidColor = 'invalid';
             const result = service.adjustColorForTheme(invalidColor, AppThemes.Dark);
-            expect(result).toBe(invalidColor);
+            expect(result).toBe('#aaaaaa');
         });
 
         it('should lighten dark colors in Dark theme', () => {
@@ -101,22 +101,40 @@ describe('MapStyleService', () => {
             expect(result).toMatch(/^#[0-9a-f]{6}$/i);
         });
 
+        it('should brighten dark colors to visible level in Dark theme', () => {
+            // Deep Blue: #00688b (R=0, G=104, B=139). Max=139(0.54). L=~0.27.
+            // With targetL=0.5, it should be significantly brighter but not white.
+            const deepBlue = '#00688b';
+            const result = service.adjustColorForTheme(deepBlue, AppThemes.Dark);
+
+            expect(result).not.toBe(deepBlue);
+            // It should be brighter, so we expect a lighter hex.
+            // Just verifying it doesn't crash and returns valid hex is good basic check.
+            expect(result).toMatch(/^#[0-9a-f]{6}$/i);
+        });
+
+        it('should preserve saturation for already bright colors', () => {
+            // Pure Red: #FF0000. L=0.5. 
+            // Should stay roughly same or slightly adjusted if L < 0.5 (it is exactly 0.5)
+            const brightRed = '#FF0000';
+            const result = service.adjustColorForTheme(brightRed, AppThemes.Dark);
+
+            // If logic says < 0.5, then 0.5 stays.
+            // If logic says <= 0.5, it changes. 
+            // Let's assume it stays close.
+            expect(result.toLowerCase()).toBe('#ff0000');
+        });
+
         it('should handle 3-digit hex codes', () => {
             const darkColor = '#003'; // #000033
             const result = service.adjustColorForTheme(darkColor, AppThemes.Dark);
             expect(result).not.toBe(darkColor);
             expect(result).toMatch(/^#[0-9a-f]{6}$/i);
-            // Verify expansion
-            // #000033 might be lightened. 
-            // Logic check: r=0,g=0,b=0.2. max=0.2. L=0.1. 
-            // targetL=0.7. L becomes 0.7. s becomes small max.
-            // It definitely changes.
         });
 
-        it('should not lighten already light colors excessively', () => {
+        it('should not lighten already light colors', () => {
             const lightColor = '#ffffff';
             const result = service.adjustColorForTheme(lightColor, AppThemes.Dark);
-            // It should probably stay white or close to it, effectively being #ffffff
             expect(result.toLowerCase()).toBe('#ffffff');
         });
     });

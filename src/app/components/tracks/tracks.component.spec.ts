@@ -15,6 +15,7 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { BrowserCompatibilityService } from '../../services/browser.compatibility.service';
 import { LoggerService } from '../../services/logger.service';
 import { MapStyleService } from '../../services/map-style.service';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { of } from 'rxjs';
 import { DateRanges, AppThemes } from '@sports-alliance/sports-lib';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -98,11 +99,23 @@ describe('TracksComponent', () => {
         };
 
         mockMapStyleService = {
-            resolve: vi.fn().mockReturnValue({ styleUrl: 'mapbox://styles/mapbox/standard', preset: 'night' }),
+            resolve: vi.fn().mockReturnValue({ styleUrl: 'mapbox://styles/mapbox/standard', preset: 'day' }),
             isStandard: vi.fn().mockReturnValue(true),
             applyStandardPreset: vi.fn(),
             enforcePresetOnStyleEvents: vi.fn(),
-            adjustColorForTheme: vi.fn().mockReturnValue('#ffffff')
+            adjustColorForTheme: vi.fn().mockReturnValue('#ffffff'),
+            createSynchronizer: vi.fn().mockReturnValue({
+                update: vi.fn()
+            })
+        };
+
+        const mockUserSettingsQuery = {
+            myTracksSettings: signal({
+                dateRange: DateRanges.thisWeek,
+                is3D: true,
+                activityTypes: []
+            }),
+            updateMyTracksSettings: vi.fn()
         };
 
         await TestBed.configureTestingModule({
@@ -114,7 +127,7 @@ describe('TracksComponent', () => {
                 { provide: MapboxLoaderService, useValue: mockMapboxLoader },
                 { provide: AppThemeService, useValue: mockThemeService },
                 { provide: AppEventService, useValue: mockEventService },
-                { provide: AppEventColorService, useValue: { getColorForActivityTypeByActivityTypeGroup: () => '#ff0000' } },
+                { provide: AppEventColorService, useValue: { getTrackColor: vi.fn() } },
                 { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
                 { provide: BrowserCompatibilityService, useValue: { checkCompressionSupport: vi.fn().mockReturnValue(true) } },
                 { provide: LoggerService, useValue: { log: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn(), info: vi.fn() } },
@@ -126,7 +139,8 @@ describe('TracksComponent', () => {
                 { provide: MatSnackBar, useValue: { open: vi.fn() } },
                 { provide: Overlay, useValue: { scrollStrategies: { reposition: vi.fn() } } },
                 { provide: 'MatDialog', useValue: {} },
-                { provide: MapStyleService, useValue: mockMapStyleService }
+                { provide: MapStyleService, useValue: mockMapStyleService },
+                { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQuery }
             ],
             schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();
@@ -173,14 +187,12 @@ describe('TracksComponent', () => {
             expect(mockMap.addSource).not.toHaveBeenCalledWith('mapbox-dem', expect.anything());
         });
 
-        it('should enforce map style presets on init', async () => {
+        it('should initialize map synchronizer on init', async () => {
             await component.ngOnInit();
-            expect(mockMapStyleService.enforcePresetOnStyleEvents).toHaveBeenCalledWith(mockMap, expect.any(Function));
+            expect(mockMapStyleService.createSynchronizer).toHaveBeenCalledWith(mockMap);
 
-            // Invoke the callback to ensure it calls resolve
-            const callback = mockMapStyleService.enforcePresetOnStyleEvents.mock.calls[0][1];
-            callback();
-            expect(mockMapStyleService.resolve).toHaveBeenCalled();
+            const synchronizer = mockMapStyleService.createSynchronizer.mock.results[0].value;
+            expect(synchronizer.update).toHaveBeenCalled();
         });
     });
 });
