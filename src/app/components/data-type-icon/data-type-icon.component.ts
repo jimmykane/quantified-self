@@ -149,7 +149,7 @@ export class DataTypeIconComponent {
       case DataAscent.type:
         return 'elevation';
       case DataDescent.type:
-        return 'south_east';
+        return 'trending_down';
       case DataHeartRateAvg.type:
       case DataHeartRateMax.type:
       case DataHeartRateMin.type:
