@@ -91,7 +91,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     private themeService: AppThemeService,
     private mapStyleService: MapStyleService,
   ) {
-    this.tracksMapManager = new TracksMapManager(this.zone, this.eventColorService, this.mapStyleService); // Initialize Manager
+    this.tracksMapManager = new TracksMapManager(this.zone, this.eventColorService, this.mapStyleService, this.logger); // Initialize Manager
     this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
 
     const platformId = inject(PLATFORM_ID);
@@ -99,6 +99,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
     // Track last settings to prevent redundant data fetching
     let lastLoadedDataSettings: { dateRange: DateRanges, activityTypes?: ActivityTypes[], mapStyle?: string } | null = null;
+    let isFirstRun = true;
 
     // Unified Reactive State: Combines Settings and Theme
     const viewState = computed(() => {
@@ -125,8 +126,9 @@ export class TracksComponent implements OnInit, OnDestroy {
 
       // 3. Terrain (is3D)
       if (this.terrainControl) {
-        this.tracksMapManager.toggleTerrain(!!settings.is3D, true);
+        this.tracksMapManager.toggleTerrain(!!settings.is3D, !isFirstRun);
       }
+      isFirstRun = false;
 
       // 4. Data Loading
       // Check if data-impacting settings changed
@@ -179,8 +181,8 @@ export class TracksComponent implements OnInit, OnDestroy {
 
         // Initialize Synchronizer
         this.mapSynchronizer = this.mapStyleService.createSynchronizer(mapInstance);
-        // Ensure synchronizer knows about the initial state we just created
-        this.mapSynchronizer.update(resolved);
+        // We don't call update(resolved) here because the effect will trigger automatically 
+        // as soon as mapSignal and mapSynchronizer are both set.
 
         const mapboxgl = await this.mapboxLoader.loadMapbox();
         this.tracksMapManager.setMap(mapInstance, mapboxgl);
@@ -221,10 +223,7 @@ export class TracksComponent implements OnInit, OnDestroy {
         this.tracksMapManager.setTerrainControl(this.terrainControl);
 
         // Restore terrain control (initialSettings already loaded above)
-        // Initialize 3D state immediately for responsiveness and test compliance
-        if (initialSettings?.is3D) {
-          this.tracksMapManager.toggleTerrain(true, false);
-        }
+        // Initialize 3D state - The effect handles the initial toggleTerrain call.
       });
 
     } catch (error) {

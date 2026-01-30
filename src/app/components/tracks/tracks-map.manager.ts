@@ -2,6 +2,7 @@ import { NgZone } from '@angular/core';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { ActivityTypes, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES, AppThemes } from '@sports-alliance/sports-lib';
 import { MapStyleService } from '../../services/map-style.service';
+import { LoggerService } from '../../services/logger.service';
 
 export class TracksMapManager {
     private map: any; // Mapbox GL map instance
@@ -16,7 +17,8 @@ export class TracksMapManager {
     constructor(
         private zone: NgZone,
         private eventColorService: AppEventColorService,
-        private mapStyleService: MapStyleService
+        private mapStyleService: MapStyleService,
+        private logger: LoggerService
     ) { }
 
     public setMap(map: any, mapboxgl: any) {
@@ -230,9 +232,9 @@ export class TracksMapManager {
                 }
 
             } catch (error: any) {
-                console.error('[TracksMapManager] Error toggling terrain:', error);
-                if (error?.message?.includes('Style is not done loading')) {
-                    console.log('[TracksMapManager] Caught "Style is not done loading" error. Retrying on style.load.');
+                this.logger.error('[TracksMapManager] Error toggling terrain:', error);
+                if (error?.message?.includes('Style is not done loading') || !this.isStyleReady()) {
+                    console.log('[TracksMapManager] Style/Map state not ready, deferring terrain toggle.');
                     this.deferTerrainToggle(enable, animate);
                 }
             }

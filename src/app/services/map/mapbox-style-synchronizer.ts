@@ -46,7 +46,10 @@ export class MapboxStyleSynchronizer {
 
         // Check if Style URL needs changing
         if (this.currentStyleUrl !== styleUrl) {
-            this.logger.info('[MapboxStyleSynchronizer] Setting new style', { from: this.currentStyleUrl, to: styleUrl });
+            this.logger.info('[MapboxStyleSynchronizer] Style URL mismatch, will setStyle', {
+                current: this.currentStyleUrl,
+                target: styleUrl
+            });
 
             this.isLoading = true;
             this.currentStyleUrl = styleUrl;
@@ -122,7 +125,10 @@ export class MapboxStyleSynchronizer {
         // If the pending state requests a DIFFERENT style URL than what we just loaded,
         // we must start over.
         if (next.styleUrl !== this.currentStyleUrl) {
-            this.logger.info('[MapboxStyleSynchronizer] Reconcile: style mismatch, re-applying', next);
+            this.logger.info('[MapboxStyleSynchronizer] Reconcile style URL mismatch', {
+                current: this.currentStyleUrl,
+                target: next.styleUrl
+            });
             this.applyState(next); // This will set isLoading=true again
             return;
         }
