@@ -328,7 +328,7 @@ describe('EventsMapComponent', () => {
                 // The mock implementation we defined: (event, handler) => { (this as any)._clickHandler = handler; }
                 // BUT 'this' in arrow function might not be what we expect.
                 // Let's rely on the call arguments to get the handler.
-                expect(addListenerSpy).toHaveBeenCalled();
+                expect(addListenerSpy).toHaveBeenCalledWith('gmp-click', expect.any(Function));
                 const handler = addListenerSpy.mock.calls[0][1];
 
                 expect(handler).toBeDefined();

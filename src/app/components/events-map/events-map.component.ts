@@ -341,7 +341,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
 
         markersArray.push(marker);
 
-        marker.addListener('click', async () => {
+        marker.addListener('gmp-click', async () => {
           this.loading();
           this.selectedEventPositionsByActivity = [];
 
