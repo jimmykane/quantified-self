@@ -179,15 +179,22 @@ td.mat-cell {
 .description-tabs {
     margin-top: 8px;
     border-radius: 12px;
-    overflow: hidden;
+    overflow: visible;
 
     ::ng-deep {
         .mat-mdc-tab-body-wrapper {
-            padding-top: 16px;
+            // Ensure wrapper allows visible overflow if possible, but crucial part is spacing
+            overflow: visible;
+        }
+
+        .mat-mdc-tab-body-content {
+            // Add significant padding to push content away from clipping edges
+            padding: 24px;
+            overflow: visible !important;
         }
 
         .mat-mdc-tab-header {
-            margin-bottom: 8px;
+            margin-bottom: 0; // Spacing handled by padding now
         }
     }
 }
