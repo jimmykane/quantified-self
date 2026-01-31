@@ -5,9 +5,9 @@
   @if (pendingImportResult()) {
   <app-status-info type="success" title="Import Queued">
     {{ pendingImportResult()!.successCount }} activities queued.
-    Estimated completion in {{ Math.ceil(pendingImportResult()!.successCount / activitiesPerDayLimit) || 1 }} {{
-    (Math.ceil(pendingImportResult()!.successCount / activitiesPerDayLimit) || 1) === 1 ? 'day' : 'days' }}.
-    (~{{ activitiesPerDayLimit }} / day)
+    {{ estimatedCompletionVerbal }}
+    <div style="font-size: 0.9em; opacity: 0.8; margin-top: 4px;">(~{{ processingCapacityPerDay | number }} / day
+      capacity)</div>
     @if (formGroup.get('startDate')?.value && formGroup.get('endDate')?.value) {
     <div style="margin-top: 8px; opacity: 0.8; font-size: 0.9em;">
       Last import range: {{ formGroup.get('startDate')?.value | date: 'mediumDate' }} - {{

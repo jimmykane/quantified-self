@@ -18,8 +18,11 @@ import { User } from '@sports-alliance/sports-lib';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT } from '../../../../functions/src/shared/history-import.constants';
+import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY } from '../../../../functions/src/shared/history-import.constants';
 import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+
+dayjs.extend(relativeTime);
 
 /** Response from COROS/Suunto history import */
 export interface HistoryImportResult {
@@ -55,6 +58,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public isPro = false;
   public corosHistoryLimitMonths = COROS_HISTORY_IMPORT_LIMIT_MONTHS;
   public activitiesPerDayLimit = HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT;
+  public processingCapacityPerDay = HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY;
   public garminCooldownDays = GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS;
   /** Optimistic UI flag - blocks re-submission immediately after success */
   public isHistoryImportPending = signal(false);
@@ -287,6 +291,33 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
   get userMeta(): any {
     return this.userMetaForService;
+  }
+
+  get estimatedCompletionVerbal(): string {
+    const stats = this.pendingImportResult();
+    if (!stats || stats.successCount === 0) {
+      return '';
+    }
+
+    const count = stats.successCount;
+    // Calculate total days (decimals allowed)
+    // e.g. 500 / 24000 = 0.02 days
+    const totalDays = count / this.processingCapacityPerDay;
+    const totalHours = totalDays * 24;
+
+    if (totalHours < 1) {
+      return 'Should be done very soon! 🚀';
+    }
+
+    if (totalHours < 24) {
+      // "Estimated to finish by 4:00 PM today/tomorrow"
+      const completionDate = dayjs().add(totalHours, 'hour');
+      return `Estimated to finish by ${completionDate.format('h:mm A')} ${completionDate.fromNow()}.`;
+    }
+
+    // > 1 day
+    const completionDate = dayjs().add(totalDays, 'day');
+    return `Estimated to finish ${completionDate.fromNow()} (${completionDate.format('dddd')}).`;
   }
 }
 
