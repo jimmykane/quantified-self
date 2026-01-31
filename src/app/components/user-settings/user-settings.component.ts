@@ -26,7 +26,7 @@ import {
   UserUnitSettingsInterface,
   VerticalSpeedUnits
 } from '@sports-alliance/sports-lib';
-import { UserDashboardSettingsInterface } from '@sports-alliance/sports-lib';
+import { UserDashboardSettingsInterface, ACTIVITIES_EXCLUDED_FROM_ASCENT } from '@sports-alliance/sports-lib';
 import { LapTypesHelper } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
@@ -42,6 +42,8 @@ import {
   standalone: false
 })
 export class UserSettingsComponent implements OnChanges {
+
+  public mandatoryAscentExclusions = ACTIVITIES_EXCLUDED_FROM_ASCENT;
 
   @Input() user: AppUserInterface;
   public privacy = Privacy;
@@ -128,184 +130,80 @@ export class UserSettingsComponent implements OnChanges {
     this.userSettingsFormGroup = new UntypedFormGroup({
       displayName: new UntypedFormControl(this.user.displayName, [
         Validators.required,
-        // Validators.minLength(4),
       ]),
       privacy: new UntypedFormControl(this.user.privacy || Privacy.Private, [
         Validators.required,
-        // Validators.minLength(4),
       ]),
-      description: new UntypedFormControl(this.user.description, [
-        // Validators.required,
-        // Validators.minLength(4),
-      ]),
+      description: new UntypedFormControl(this.user.description, []),
       dataTypesToUse: new UntypedFormControl(dataTypesToUse, [
         Validators.required,
-        // Validators.minLength(1),
       ]),
-
       appTheme: new UntypedFormControl(this.user.settings.appSettings.theme, [
         Validators.required,
-        // Validators.minLength(1),
       ]),
-      acceptedTrackingPolicy: new UntypedFormControl(this.user.acceptedTrackingPolicy, [
-        // Validators.required,
-      ]),
-      acceptedMarketingPolicy: new UntypedFormControl(this.user.acceptedMarketingPolicy || false, [
-        // Validators.required,
-      ]),
-
+      acceptedTrackingPolicy: new UntypedFormControl(this.user.acceptedTrackingPolicy, []),
+      acceptedMarketingPolicy: new UntypedFormControl(this.user.acceptedMarketingPolicy || false, []),
       chartTheme: new UntypedFormControl(this.user.settings.chartSettings.theme, [
         Validators.required,
-        // Validators.minLength(1),
       ]),
       chartDownSamplingLevel: new UntypedFormControl(this.user.settings.chartSettings.downSamplingLevel, [
         Validators.required,
-        // Validators.minLength(1),
       ]),
       chartStrokeWidth: new UntypedFormControl(this.user.settings.chartSettings.strokeWidth, [
         Validators.required,
-        // Validators.minLength(1),
       ]),
       chartGainAndLossThreshold: new UntypedFormControl(this.user.settings.chartSettings.gainAndLossThreshold, [
         Validators.required,
-        // Validators.minLength(1),
       ]),
-
       chartStrokeOpacity: new UntypedFormControl(this.user.settings.chartSettings.strokeOpacity, [
         Validators.required,
-        // Validators.minLength(1),
       ]),
-
       chartExtraMaxForPower: new UntypedFormControl(this.user.settings.chartSettings.extraMaxForPower, [
         Validators.required,
-        // Validators.minLength(1),
       ]),
-
       chartExtraMaxForPace: new UntypedFormControl(this.user.settings.chartSettings.extraMaxForPace, [
         Validators.required,
-        // Validators.minLength(1),
       ]),
-
       chartFillOpacity: new UntypedFormControl(this.user.settings.chartSettings.fillOpacity, [
         Validators.required,
-        // Validators.minLength(1),
       ]),
-
-      chartLapTypes: new UntypedFormControl(this.user.settings.chartSettings.lapTypes, [
-        // Validators.required,
-        // Validators.minLength(1),
-      ]),
-
-      showChartLaps: new UntypedFormControl(this.user.settings.chartSettings.showLaps, [
-        // Validators.required,
-        // Validators.minLength(1),
-      ]),
-
-      showChartGrid: new UntypedFormControl(this.user.settings.chartSettings.showGrid, [
-        // Validators.required,
-        // Validators.minLength(1),
-      ]),
-
-      stackYAxes: new UntypedFormControl(this.user.settings.chartSettings.stackYAxes, [
-        // Validators.required,
-        // Validators.minLength(1),
-      ]),
-
+      chartLapTypes: new UntypedFormControl(this.user.settings.chartSettings.lapTypes, []),
+      showChartLaps: new UntypedFormControl(this.user.settings.chartSettings.showLaps, []),
+      showChartGrid: new UntypedFormControl(this.user.settings.chartSettings.showGrid, []),
+      stackYAxes: new UntypedFormControl(this.user.settings.chartSettings.stackYAxes, []),
       xAxisType: new UntypedFormControl(this.user.settings.chartSettings.xAxisType, [
         Validators.required,
-        // Validators.minLength(1),
       ]),
-
-      useAnimations: new UntypedFormControl(this.user.settings.chartSettings.useAnimations, [
-        // Validators.required,
-        // Validators.minLength(1),
-      ]),
-
-      chartHideAllSeriesOnInit: new UntypedFormControl(this.user.settings.chartSettings.hideAllSeriesOnInit, [
-        // Validators.required,
-        // Validators.minLength(1),
-      ]),
-
-      showAllData: new UntypedFormControl(this.user.settings.chartSettings.showAllData, [
-        // Validators.required,
-        // Validators.minLength(1),
-      ]),
-
-      chartDisableGrouping: new UntypedFormControl(this.user.settings.chartSettings.disableGrouping, [
-        // Validators.required,
-        // Validators.minLength(1),
-      ]),
-
-      chartCursorBehaviour: new UntypedFormControl(this.user.settings.chartSettings.chartCursorBehaviour === ChartCursorBehaviours.SelectX, [
-        // Validators.required,
-        // Validators.minLength(1),
-      ]),
-
+      useAnimations: new UntypedFormControl(this.user.settings.chartSettings.useAnimations, []),
+      chartHideAllSeriesOnInit: new UntypedFormControl(this.user.settings.chartSettings.hideAllSeriesOnInit, []),
+      showAllData: new UntypedFormControl(this.user.settings.chartSettings.showAllData, []),
+      chartDisableGrouping: new UntypedFormControl(this.user.settings.chartSettings.disableGrouping, []),
+      removeAscentForActivitiesSummaries: new UntypedFormControl([...new Set([...(this.user.settings.summariesSettings?.removeAscentForEventTypes || []), ...this.mandatoryAscentExclusions])], []),
+      chartCursorBehaviour: new UntypedFormControl(this.user.settings.chartSettings.chartCursorBehaviour === ChartCursorBehaviours.SelectX, []),
       startOfTheWeek: new UntypedFormControl(this.user.settings.unitSettings.startOfTheWeek, [
         Validators.required,
-        // Validators.minLength(1),
       ]),
-
       speedUnitsToUse: new UntypedFormControl(this.user.settings.unitSettings.speedUnits, [
         Validators.required,
-        // Validators.minLength(1),
       ]),
-
       paceUnitsToUse: new UntypedFormControl(this.user.settings.unitSettings.paceUnits, [
         Validators.required,
-        // Validators.minLength(1),
       ]),
-
       swimPaceUnitsToUse: new UntypedFormControl(this.user.settings.unitSettings.swimPaceUnits, [
         Validators.required,
-        // Validators.minLength(1),
       ]),
-
       verticalSpeedUnitsToUse: new UntypedFormControl(this.user.settings.unitSettings.verticalSpeedUnits, [
         Validators.required,
-        // Validators.minLength(1),
       ]),
-
-      removeAscentForActivitiesSummaries: new UntypedFormControl(this.user.settings.summariesSettings.removeAscentForEventTypes, [
-        // Validators.required,
-        // Validators.minLength(1),
-      ]),
-
-
-      mapType: new UntypedFormControl(this.user.settings.mapSettings.mapType, [
-        // Validators.required,
-        // Validators.minLength(1),
-      ]),
-
-      mapStrokeWidth: new UntypedFormControl(this.user.settings.mapSettings.strokeWidth, [
-        // Validators.required,
-        // Validators.minLength(1),
-      ]),
-
-      showMapLaps: new UntypedFormControl(this.user.settings.mapSettings.showLaps, [
-        // Validators.required,
-        // Validators.minLength(1),
-      ]),
-
-
-
-      showMapArrows: new UntypedFormControl(this.user.settings.mapSettings.showArrows, [
-        // Validators.required,
-        // Validators.minLength(1),
-      ]),
-
-      mapLapTypes: new UntypedFormControl(this.user.settings.mapSettings.lapTypes, [
-        // Validators.required,
-        // Validators.minLength(1),
-      ]),
-
+      mapType: new UntypedFormControl(this.user.settings.mapSettings.mapType, []),
+      mapStrokeWidth: new UntypedFormControl(this.user.settings.mapSettings.strokeWidth, []),
+      showMapLaps: new UntypedFormControl(this.user.settings.mapSettings.showLaps, []),
+      showMapArrows: new UntypedFormControl(this.user.settings.mapSettings.showArrows, []),
+      mapLapTypes: new UntypedFormControl(this.user.settings.mapSettings.lapTypes, []),
       eventsPerPage: new UntypedFormControl(this.user.settings.dashboardSettings.tableSettings.eventsPerPage, [
         Validators.required,
-        // Validators.minLength(1),
       ]),
-
     });
-
   }
 
   hasError(field?: string) {
@@ -313,6 +211,10 @@ export class UserSettingsComponent implements OnChanges {
       return !this.userSettingsFormGroup.valid;
     }
     return !(this.userSettingsFormGroup.get(field).valid && this.userSettingsFormGroup.get(field).touched);
+  }
+
+  isMandatoryExclusion(type: any): boolean {
+    return this.mandatoryAscentExclusions.indexOf(type) >= 0;
   }
 
   async onSubmit(event) {

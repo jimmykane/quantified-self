@@ -4,14 +4,12 @@ import { AppWhatsNewService, ChangelogPost } from '../../services/app.whats-new.
 import { MaterialModule } from '../../modules/material.module';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
-import { MarkdownPipe } from '../../helpers/markdown.pipe';
-
 import { WhatsNewItemComponent } from './whats-new-item.component';
 
 @Component({
     selector: 'app-whats-new-feed',
     standalone: true,
-    imports: [CommonModule, MaterialModule, MarkdownPipe, WhatsNewItemComponent],
+    imports: [CommonModule, MaterialModule, WhatsNewItemComponent],
     templateUrl: './whats-new-feed.component.html',
     styleUrls: ['./whats-new-feed.component.scss']
 })

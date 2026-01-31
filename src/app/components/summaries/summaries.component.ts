@@ -38,6 +38,8 @@ import equal from 'fast-deep-equal';
 import { DataAscent } from '@sports-alliance/sports-lib';
 import * as weeknumber from 'weeknumber'
 import { convertIntensityZonesStatsToChartData } from '../../helpers/intensity-zones-chart-data-helper';
+import { AppEventUtilities } from '../../utils/app.event.utilities';
+import { DataDescent } from '@sports-alliance/sports-lib';
 
 @Component({
   selector: 'app-summaries',
@@ -295,8 +297,15 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     // Return empty if ascent is to be skipped
     if (dataType === DataAscent.type) {
       events = events.filter(event => {
-        return event.getActivityTypesAsArray().filter(eventActivityType => this.user.settings.summariesSettings.removeAscentForEventTypes.indexOf(ActivityTypes[eventActivityType]) === -1).length
+        const types = event.getActivityTypesAsArray() as ActivityTypes[];
+        const isAutoExcluded = AppEventUtilities.shouldExcludeAscent(types);
+        const isManuallyExcluded = this.user?.settings?.summariesSettings?.removeAscentForEventTypes?.some(t => types.indexOf(t) >= 0);
+        return !isAutoExcluded && !isManuallyExcluded;
       })
+    }
+    // Return empty if descent is to be skipped
+    if (dataType === DataDescent.type) {
+      events = events.filter(event => !AppEventUtilities.shouldExcludeDescent(event.getActivityTypesAsArray() as ActivityTypes[]))
     }
     // @todo can the below if be better ? we need return there for switch
     // We care sums to ommit 0s

@@ -201,7 +201,7 @@
             <mat-label>Exclude Elevation for Sport Types</mat-label>
             <mat-select formControlName="removeAscentForActivitiesSummaries" multiple>
               @for (type of activityTypes; track type) {
-              <mat-option [value]="type">{{type}}</mat-option>
+              <mat-option [value]="type" [disabled]="isMandatoryExclusion(type)">{{type}}</mat-option>
               }
             </mat-select>
             <mat-hint>Elevation data will be hidden for these activities in summaries.</mat-hint>
