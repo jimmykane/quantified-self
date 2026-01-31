@@ -93,8 +93,6 @@ describe('EventCardChartComponent', () => {
                 { provide: AppActivityCursorService, useValue: mockActivityCursorService },
                 { provide: MatSnackBar, useValue: mockSnackBar },
                 { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn(), log: vi.fn(), info: vi.fn() } },
-                { provide: NgZone, useValue: { run: (fn: any) => fn(), runOutsideAngular: (fn: any) => fn() } },
-                { provide: ChangeDetectorRef, useValue: { detectChanges: vi.fn(), markForCheck: vi.fn() } }
             ]
         }).compileComponents();
 
@@ -103,10 +101,26 @@ describe('EventCardChartComponent', () => {
 
         // Mock the core and charts objects
         (component as any).core = {
-            Container: function () { return { createChild: vi.fn().mockReturnValue({ createChild: vi.fn().mockReturnValue({}), id: '' }) }; },
-            Color: vi.fn(),
+            Container: function () {
+                return {
+                    createChild: vi.fn().mockReturnValue({}),
+                    id: '',
+                    background: {
+                        fillOpacity: 0,
+                        fill: {},
+                        stroke: {},
+                        strokeOpacity: 0,
+                        strokeWidth: 0
+                    },
+                    padding: vi.fn(),
+                    filters: { push: vi.fn() }
+                };
+            },
+            Color: vi.fn().mockReturnValue({}),
+            color: vi.fn().mockReturnValue({}),
             InterfaceColorSet: function () { this.getFor = vi.fn(); },
-            Label: function () { },
+            Label: function () { return { align: '', text: '' }; },
+            DropShadowFilter: function () { return { dy: 0, dx: 0, opacity: 0, blur: 0 }; },
             options: {}
         };
         (component as any).charts = {
@@ -127,12 +141,14 @@ describe('EventCardChartComponent', () => {
     describe('createLabel', () => {
         it('should include gain and loss for Running', () => {
             component.event = {
-                getActivityTypesAsArray: () => [ActivityTypes.Running]
+                getActivityTypesAsArray: () => [ActivityTypes.Running],
+                getActivities: () => []
             } as any;
 
             const series = {
                 dummyData: {
-                    stream: { type: DataAltitude.type }
+                    stream: { type: DataAltitude.type },
+                    activity: { creator: { name: 'Test' } }
                 }
             } as any;
 
@@ -140,13 +156,33 @@ describe('EventCardChartComponent', () => {
             const mockContainer = {
                 createChild: vi.fn().mockReturnValue({
                     createChild: vi.fn().mockReturnValue({}),
-                    id: ''
+                    id: '',
+                    background: {
+                        fillOpacity: 0,
+                        fill: {},
+                        stroke: {},
+                        strokeOpacity: 0,
+                        strokeWidth: 0
+                    },
+                    padding: vi.fn(),
+                    filters: { push: vi.fn() }
                 })
             };
 
-            const labelData = (component as any).createLabel(mockContainer, series, { gain: 10, loss: 10 });
+            const labelDataMock: any = {
+                name: 'Test Label',
+                average: { value: 10, unit: 'u' },
+                max: { value: 20, unit: 'u' },
+                min: { value: 5, unit: 'u' },
+                minToMaxDiff: { value: 15, unit: 'u' },
+                gain: { value: 10, unit: 'u' },
+                loss: { value: 10, unit: 'u' },
+                slopePercentage: { value: 5 }
+            };
 
-            expect(labelData).toBeDefined();
+            const label = (component as any).createLabel(mockContainer, series, labelDataMock);
+
+            expect(label).toBeDefined();
         });
     });
 });
