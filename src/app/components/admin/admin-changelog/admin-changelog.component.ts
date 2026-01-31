@@ -14,11 +14,11 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTableModule } from '@angular/material/table';
 import { MatTabsModule } from '@angular/material/tabs';
+import { TextFieldModule } from '@angular/cdk/text-field';
 import { RouterModule } from '@angular/router';
 import { AppWhatsNewService, ChangelogPost } from '../../../services/app.whats-new.service';
 import { Timestamp } from '@angular/fire/firestore';
 import { LoggerService } from '../../../services/logger.service';
-import { MarkdownPipe } from '../../../helpers/markdown.pipe';
 import { WhatsNewItemComponent } from '../../whats-new/whats-new-item.component';
 
 @Component({
@@ -40,7 +40,7 @@ import { WhatsNewItemComponent } from '../../whats-new/whats-new-item.component'
         MatTooltipModule,
         MatTableModule,
         MatTabsModule,
-        MarkdownPipe,
+        TextFieldModule,
         WhatsNewItemComponent
     ],
     templateUrl: './admin-changelog.component.html',

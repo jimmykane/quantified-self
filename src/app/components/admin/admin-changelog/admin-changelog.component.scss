@@ -87,17 +87,7 @@
     }
 }
 
-// Form Styles
-.changelog-form {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-
-    .full-width {
-        width: 100%;
-    }
-}
-
+// Custom Form Row override for specifically 3-item row
 .form-row {
     display: flex;
     gap: 16px;
@@ -114,12 +104,6 @@
     }
 }
 
-.form-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    margin-top: 16px;
-}
 
 // Table Styles
 .table-container {

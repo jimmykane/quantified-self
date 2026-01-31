@@ -21,7 +21,7 @@
                 </h2>
             </div>
 
-            <form [formGroup]="form" (ngSubmit)="save()" class="changelog-form">
+            <form [formGroup]="form" (ngSubmit)="save()" class="qs-form changelog-form">
                 <div class="form-row">
                     <mat-form-field appearance="outline">
                         <mat-label>Title</mat-label>
@@ -59,7 +59,8 @@
                     <mat-tab label="Write">
                         <mat-form-field appearance="outline" class="full-width editor-field">
                             <mat-label>Description (Markdown supported)</mat-label>
-                            <textarea matInput formControlName="description" rows="10"></textarea>
+                            <textarea matInput formControlName="description" cdkTextareaAutosize cdkAutosizeMinRows="5"
+                                cdkAutosizeMaxRows="30"></textarea>
                             <mat-error *ngIf="form.get('description')?.hasError('required')">Description is
                                 required</mat-error>
                         </mat-form-field>
@@ -75,7 +76,7 @@
                     </mat-tab>
                 </mat-tab-group>
 
-                <div class="form-actions">
+                <div class="qs-form-actions">
                     <button mat-button type="button" (click)="cancel()">Cancel</button>
                     <button mat-raised-button color="primary" type="submit" [disabled]="form.invalid || saving">
                         {{ saving ? 'Saving...' : 'Save' }}
@@ -145,7 +146,7 @@
                     <ng-container matColumnDef="actions">
                         <th mat-header-cell *matHeaderCellDef> Actions </th>
                         <td mat-cell *matCellDef="let post">
-                            <div class="form-actions" style="margin-top: 0; justify-content: flex-start;">
+                            <div class="qs-form-actions" style="margin-top: 0; justify-content: flex-start;">
                                 <button mat-icon-button color="primary" (click)="edit(post)" matTooltip="Edit">
                                     <mat-icon>edit</mat-icon>
                                 </button>
