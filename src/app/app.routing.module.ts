@@ -1,10 +1,11 @@
 import { NgModule } from '@angular/core';
-import { RouterModule, Routes, PreloadAllModules } from '@angular/router';
+import { RouterModule, Routes } from '@angular/router';
+import { NetworkAwarePreloadingStrategy } from './resolvers/network-aware-preloading.strategy';
 import { authGuard } from './authentication/app.auth.guard';
 import { proGuard } from './authentication/pro.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { adminGuard } from './authentication/admin.guard';
-import { guestGuard } from './authentication/guest.guard';
+import { loggedInGuard } from './authentication/logged-in.guard';
 
 const routes: Routes = [
   {
@@ -34,9 +35,9 @@ const routes: Routes = [
     loadComponent: () => import('./components/pricing/pricing.component').then(m => m.PricingComponent),
     // Public route
     data: {
-      title: 'Pricing',
-      description: 'Choose the right plan for your fitness data analysis needs. Free, Basic, and Pro tiers available.',
-      keywords: 'pricing, subscription, fitness analytics, strava alternative, garmin connect alternative'
+      title: 'Membership',
+      description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Suunto, Garmin, and COROS while helping keep the project independent.',
+      keywords: 'support, membership, fitness analytics, suunto sync, garmin connect sync, coros integration, independent software'
     }
   },
   {
@@ -44,6 +45,22 @@ const routes: Routes = [
     loadComponent: () => import('./components/payment-success/payment-success.component').then(m => m.PaymentSuccessComponent),
     canMatch: [authGuard],
     data: { title: 'Payment Success' }
+  },
+  {
+    path: 'releases',
+    loadComponent: () => import('./components/whats-new/whats-new-page.component').then(m => m.WhatsNewPageComponent),
+    data: {
+      title: 'Release Notes',
+      description: 'Stay up to date with the latest features, improvements, and bug fixes in Quantified Self.',
+      keywords: 'release notes, changelog, updates, new features, quantified self updates',
+      jsonLd: {
+        "@context": "https://schema.org",
+        "@type": "ItemList",
+        "name": "Quantified Self Release Notes",
+        "description": "Chronological list of updates and changes to the Quantified Self application.",
+        "itemListElement": [] // We could populate this dynamically if we were rendering on server, but static metadata is better than nothing for the list page itself.
+      }
+    }
   },
   {
     path: 'payment/cancel',
@@ -90,19 +107,18 @@ const routes: Routes = [
     path: '',
     loadChildren: () => import('./modules/home.module').then(module => module.HomeModule),
     data: {
-      title: 'Home',
       animation: 'Home',
-      description: 'Quantified Self is a premium analytical tool for your activity data. aggregatde data from Garmin, Suunto, Coros and more.',
-      keywords: 'quantified self, fitness tracker, activity analysis, garmin, suunto, coros, strava'
+      description: 'Quantified Self: Premium fitness analytics for Suunto, Garmin, and COROS. Jump into your data with full history imports or watch your activities sync automatically.',
+      keywords: 'quantified self, fitness tracker, activity analysis, garmin connect sync, suunto app, coros integration, strava alternative, history import, suunto routes, activity sync, fit file viewer, gpx parser'
     },
-    canMatch: [guestGuard, onboardingGuard],
+    canMatch: [loggedInGuard, onboardingGuard],
     pathMatch: 'full'
   },
   { path: '**', redirectTo: '/', pathMatch: 'full' },
 ];
 
 @NgModule({
-  imports: [RouterModule.forRoot(routes, { scrollPositionRestoration: 'enabled', preloadingStrategy: PreloadAllModules })],
+  imports: [RouterModule.forRoot(routes, { scrollPositionRestoration: 'enabled', preloadingStrategy: NetworkAwarePreloadingStrategy })],
   exports: [RouterModule],
 })
 

@@ -1,15 +1,14 @@
-import { ChangeDetectorRef, Component, ElementRef, NgZone, OnDestroy, OnInit, ViewChild, inject, Inject, PLATFORM_ID } from '@angular/core';
+import { Component, Inject, ViewChild, ElementRef, ChangeDetectorRef, NgZone, effect, signal, WritableSignal, computed, PLATFORM_ID, OnInit, OnDestroy, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
-// Leaflet imports removed for SSR safety - imported dynamically
 import { AppEventService } from '../../services/app.event.service';
-import { take } from 'rxjs/operators';
+import { take, debounceTime } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { User } from '@sports-alliance/sports-lib';
+import { AppUserInterface } from '../../models/app-user.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { Subject, Subscription } from 'rxjs';
-import { DateRanges } from '@sports-alliance/sports-lib';
+import { DateRanges, ActivityTypes } from '@sports-alliance/sports-lib';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { AppFileService } from '../../services/app.file.service';
@@ -22,6 +21,15 @@ import { Overlay } from '@angular/cdk/overlay';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppUserService } from '../../services/app.user.service';
 import { WhereFilterOp } from 'firebase/firestore';
+import { MapboxLoaderService } from '../../services/mapbox-loader.service';
+import { AppThemeService } from '../../services/app.theme.service';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
+import { AppThemes } from '@sports-alliance/sports-lib';
+import { AppMyTracksSettings } from '../../models/app-user.interface';
+import { LoggerService } from '../../services/logger.service';
+import { TracksMapManager } from './tracks-map.manager'; // Imported Manager
+import { MapStyleService } from '../../services/map-style.service';
+import { MapboxStyleSynchronizer } from '../../services/map/mapbox-style-synchronizer';
 
 @Component({
   selector: 'app-tracks',
@@ -34,26 +42,37 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   public dateRangesToShow: DateRanges[] = [
     DateRanges.thisWeek,
+    DateRanges.lastWeek,
+    DateRanges.lastSevenDays,
     DateRanges.thisMonth,
+    DateRanges.lastMonth,
     DateRanges.lastThirtyDays,
     DateRanges.thisYear,
+    DateRanges.all
   ]
   bufferProgress = new Subject<number>();
   totalProgress = new Subject<number>();
 
-  public user!: User;
+  public user!: AppUserInterface;
 
-
-
-  private map!: any; // Typed as any to avoid importing L.Map in SSR
-  private polyLines: any[] = []; // Typed as any to avoid importing L.Polyline in SSR
-  // private viewAllButton: L.Control.EasyButton;
+  private mapSignal = signal<any>(null); // Signal to hold map instance for reactive synchronization
+  private tracksMapManager: TracksMapManager;
   private scrolled = false;
 
-  private eventsSubscription!: Subscription;
+  private eventsSubscription: Subscription = new Subscription();
+  private trackLoadingSubscription: Subscription = new Subscription();
+
+  private mapSynchronizer = signal<MapboxStyleSynchronizer | undefined>(undefined);
+  private terrainControl = signal<any>(null); // Using any to avoid forward reference issues if class is defined below
+  private platformId!: object;
 
   private promiseTime!: number;
   private analyticsService = inject(AppAnalyticsService);
+  private userSettingsQuery = inject(AppUserSettingsQueryService);
+  private logger = inject(LoggerService);
+
+  public isLoading: WritableSignal<boolean> = signal(false);
+  // Removed legacy state tracking
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
@@ -67,8 +86,68 @@ export class TracksComponent implements OnInit, OnDestroy {
     private overlay: Overlay,
     private userService: AppUserService,
     private snackBar: MatSnackBar,
-    @Inject(PLATFORM_ID) private platformId: object
+    private mapboxLoader: MapboxLoaderService,
+    private themeService: AppThemeService,
+    private mapStyleService: MapStyleService,
   ) {
+    this.tracksMapManager = new TracksMapManager(this.zone, this.eventColorService, this.mapStyleService, this.logger); // Initialize Manager
+    this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
+
+    const platformId = inject(PLATFORM_ID);
+    this.platformId = platformId;
+
+    // Track last settings to prevent redundant data fetching
+    let lastLoadedDataSettings: { dateRange: DateRanges, activityTypes?: ActivityTypes[], mapStyle?: string } | null = null;
+    let isFirstRun = true;
+
+    // Unified Reactive State: Combines Settings and Theme
+    const viewState = computed(() => {
+      const settings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
+      const theme = this.themeService.appTheme();
+      return { settings, theme };
+    });
+
+    // Single Effect to drive Map State
+    effect(() => {
+      const { settings, theme } = viewState();
+      const map = this.mapSignal();
+      const synchronizer = this.mapSynchronizer();
+      const terrainControl = this.terrainControl();
+
+      if (!map || !synchronizer || !settings) return;
+
+      // 1. Update Map Style via Synchronizer
+      const mapStyle = settings.mapStyle || 'default';
+      const resolved = this.mapStyleService.resolve(mapStyle, theme);
+      synchronizer.update(resolved);
+
+      // 2. Update Tracks Colors (Theme based)
+      this.tracksMapManager.setIsDarkTheme(theme === AppThemes.Dark);
+      this.tracksMapManager.refreshTrackColors();
+
+      // 3. Terrain (is3D)
+      if (terrainControl) {
+        this.tracksMapManager.toggleTerrain(!!settings.is3D, !isFirstRun);
+      }
+      isFirstRun = false;
+
+      // 4. Data Loading
+      // Check if data-impacting settings changed
+      const currentSnapshot = { dateRange: settings.dateRange, activityTypes: settings.activityTypes, mapStyle: settings.mapStyle };
+
+      const dataChanged = !lastLoadedDataSettings ||
+        lastLoadedDataSettings.dateRange !== currentSnapshot.dateRange ||
+        lastLoadedDataSettings.mapStyle !== currentSnapshot.mapStyle ||
+        JSON.stringify(lastLoadedDataSettings.activityTypes) !== JSON.stringify(currentSnapshot.activityTypes);
+
+      if (dataChanged) {
+        lastLoadedDataSettings = currentSnapshot;
+        this.isLoading.set(true);
+        this.loadTracksMapForUserByDateRange(this.user, map, settings.dateRange, settings.activityTypes)
+          .catch(err => console.error('Error loading tracks', err))
+          .finally(() => this.isLoading.set(false));
+      }
+    });
   }
 
   async ngOnInit() {
@@ -76,44 +155,124 @@ export class TracksComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Load Leaflet and plugins dynamically in browser only
-    const leafletModule = await import('leaflet');
-    const L = leafletModule.default || leafletModule;
-    await import('leaflet-providers');
-    await import('leaflet-easybutton');
-    await import('leaflet-fullscreen');
+    try {
+      // --- Constructor Style Injection ---
+      // Resolve user's preferred style BEFORE creating the map.
+      const initialSettings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
+      const prefMapStyle = initialSettings?.mapStyle || 'default';
+      const initialTheme = this.themeService.appTheme();
+      const resolved = this.mapStyleService.resolve(prefMapStyle as any, initialTheme);
+      const initialStyleUrl = resolved.styleUrl;
 
-    this.map = this.initMap(L)
-    this.centerMapToStartingLocation(this.map);
-    this.user = await this.authService.user$.pipe(take(1)).toPromise();
-    // Force default to This Week for performance/UX
-    this.user.settings.myTracksSettings = {
-      dateRange: DateRanges.thisWeek
-    };
-    await this.loadTracksMapForUserByDateRange(L, this.user, this.map, this.user.settings.myTracksSettings.dateRange)
+      // Removed manualStyleOverride logic
+
+      const mapOptions: any = {
+        zoom: 1.5,
+        center: [0, 20],
+        style: initialStyleUrl // Pass user's preferred style directly
+      };
+      if (this.mapStyleService.isStandard(initialStyleUrl) && resolved.preset) {
+        mapOptions.config = { basemap: { lightPreset: resolved.preset } };
+      }
+
+      // Run Mapbox initialization entirely outside Angular to prevent Map events from triggering CD
+      await this.zone.runOutsideAngular(async () => {
+        const mapInstance = await this.mapboxLoader.createMap(this.mapDiv.nativeElement, mapOptions);
+        this.mapSignal.set(mapInstance);
+
+        // Initialize Synchronizer
+        this.mapSynchronizer.set(this.mapStyleService.createSynchronizer(mapInstance));
+        // We don't call update(resolved) here because the effect will trigger automatically 
+        // as soon as mapSignal and mapSynchronizer are both set.
+
+        const mapboxgl = await this.mapboxLoader.loadMapbox();
+        this.tracksMapManager.setMap(mapInstance, mapboxgl);
+        this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
+
+        mapInstance.addControl(new mapboxgl.FullscreenControl(), 'bottom-right');
+
+        // Standard Navigation Control for Zoom and Rotation (Pitch)
+        const navControl = new mapboxgl.NavigationControl({
+          visualizePitch: true,
+          showCompass: true,
+          showZoom: true
+        });
+        mapInstance.addControl(navControl, 'bottom-right');
+
+        this.centerMapToStartingLocation(mapInstance);
+        this.user = await this.authService.user$.pipe(take(1)).toPromise() as AppUserInterface;
+
+        // Restore terrain control (initialSettings already loaded above)
+        // Initialize 3D state immediately for responsiveness and test compliance
+        const control = new TerrainControl(!!initialSettings?.is3D, (is3D) => {
+          // Toggle map locally immediately for responsiveness
+          this.tracksMapManager.toggleTerrain(is3D, true);
+
+          if (is3D) {
+            this.zone.run(() => {
+              this.snackBar.open('Use Ctrl + Left Click (or Right Click) + Drag to rotate and tilt the map in 3D.', 'OK', {
+                duration: 5000,
+                verticalPosition: 'top'
+              });
+            });
+          }
+
+          // Persist 3D setting via service
+          this.userSettingsQuery.updateMyTracksSettings({ is3D });
+        });
+        this.terrainControl.set(control);
+        mapInstance.addControl(control, 'bottom-right');
+        this.tracksMapManager.setTerrainControl(control);
+
+        // Restore terrain control (initialSettings already loaded above)
+        // Initialize 3D state - The effect handles the initial toggleTerrain call.
+      });
+
+    } catch (error) {
+      console.error('Failed to initialize Mapbox:', error);
+    }
   }
 
-  public async search(event) {
+  public setMapStyle(styleType: 'default' | 'satellite' | 'outdoors') {
+    // Just update settings. The effect handles the rest.
+    this.userSettingsQuery.updateMyTracksSettings({ mapStyle: styleType });
+    this.logger.info('[TracksComponent] User selected map style', { styleType });
+  }
+
+  public async search(event: { dateRange: DateRanges, activityTypes?: ActivityTypes[] }) {
     if (!isPlatformBrowser(this.platformId)) return;
-    const leafletModule = await import('leaflet');
-    const L = leafletModule.default || leafletModule;
-    this.unsubscribeFromAll();
-    this.user.settings.myTracksSettings.dateRange = event.dateRange;
-    await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
-    this.clearAllPolylines();
-    this.centerMapToStartingLocation(this.map)
-    await this.loadTracksMapForUserByDateRange(L, this.user, this.map, this.user.settings.myTracksSettings.dateRange)
+
+    // Update user settings - this will trigger signal -> effect
+    // AppUserSettingsQueryService handles persistence to backend.
+    this.userSettingsQuery.updateMyTracksSettings({
+      dateRange: event.dateRange,
+      activityTypes: event.activityTypes
+    });
+
+    // Manually clean legacy subscription if it exists, though effect handles fresh load
+    if (this.trackLoadingSubscription) {
+      this.trackLoadingSubscription.unsubscribe();
+    }
+
     this.analyticsService.logEvent('my_tracks_search', { method: DateRanges[event.dateRange] });
   }
 
   public ngOnDestroy() {
     this.unsubscribeFromAll()
     this.bottomSheet.dismiss();
+    if (this.mapSignal()) {
+      this.mapSignal().remove();
+    }
   }
 
   private unsubscribeFromAll() {
     if (this.eventsSubscription) {
-      this.eventsSubscription.unsubscribe()
+      this.eventsSubscription.unsubscribe();
+      // No need to re-initialize eventsSubscription here, as it's a parent for all component-level subscriptions
+      // and will be fully disposed on ngOnDestroy.
+    }
+    if (this.trackLoadingSubscription) {
+      this.trackLoadingSubscription.unsubscribe();
     }
   }
 
@@ -140,11 +299,14 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
   }
 
-  private async loadTracksMapForUserByDateRange(L: any, user: User, map: any, dateRange: DateRanges) {
+
+
+
+  private async loadTracksMapForUserByDateRange(user: AppUserInterface, map: any, dateRange: DateRanges, activityTypes?: ActivityTypes[]) {
     const promiseTime = new Date().getTime();
     this.promiseTime = promiseTime
     this.clearProgressAndOpenBottomSheet();
-    const dates = getDatesForDateRange(dateRange, user.settings.unitSettings.startOfTheWeek);
+    const dates = getDatesForDateRange(dateRange, user.settings?.unitSettings?.startOfTheWeek || 1);
     const where = []
     if (dates.startDate) {
       where.push({
@@ -161,105 +323,125 @@ export class TracksComponent implements OnInit, OnDestroy {
       })
     }
 
-    this.eventsSubscription = this.eventService.getEventsBy(user, where, 'startDate', true, 0).subscribe(async (events) => {
-      events = events.filter((event) => event.getStat(DataStartPosition.type));
-      if (!events || !events.length) {
-        return this.clearProgressAndCloseBottomSheet()
-      }
+    this.logger.log(`[TracksComponent] Initializing fetch from event service for dateRange: ${DateRanges[dateRange]}, activityTypes: ${activityTypes?.[0] || 'all'}, promiseTime: ${promiseTime}`);
 
-      const chuckArraySize = 15;
-      const chunckedEvents = events.reduce((all, one, i) => {
-        const ch = Math.floor(i / chuckArraySize);
-        all[ch] = [].concat((all[ch] || []), one);
-        return all
-      }, [])
+    this.trackLoadingSubscription = this.eventService.getEventsBy(user, where, 'startDate', true, 0)
+      .pipe(
+        debounceTime(300),
+        take(1), // Fix: Avoid double emission (cache + server) and prevent memory leaks if subscription is not cleared
+      )
+      .subscribe(async (events) => {
+        this.logger.log(`[TracksComponent] eventService.getEventsBy emitted ${events?.length || 0} events for promiseTime: ${promiseTime}`);
+        try {
+          events = events.filter((event) => event.getStat(DataStartPosition.type));
+          if (!events || !events.length) {
+            if (this.promiseTime !== promiseTime) {
+              return;
+            }
+            this.tracksMapManager.clearAllTracks();
+            this.clearProgressAndCloseBottomSheet();
+            return;
+          }
 
-      this.updateBufferProgress(100);
+          const chuckArraySize = 15;
+          const chunckedEvents: any[][] = events.reduce((all: any[][], one: any, i: number) => {
+            const ch = Math.floor(i / chuckArraySize);
+            all[ch] = ([] as any[]).concat((all[ch] || []), one);
+            return all
+          }, [])
 
-      if (this.promiseTime !== promiseTime) {
-        return
-      }
-      let count = 0;
-      for (const eventsChunk of chunckedEvents) {
-        if (this.promiseTime !== promiseTime) {
-          return
-        }
-        const batchLines = [];
-        await Promise.all(eventsChunk.map(async (event) => {
-          event.addActivities(await this.eventService.getActivities(user, event.getID()).pipe(take(1)).toPromise())
-          return this.eventService.attachStreamsToEventWithActivities(user, event, [
-            DataLatitudeDegrees.type,
-            DataLongitudeDegrees.type,
-          ]).pipe(take(1)).toPromise()
-            .then((fullEvent) => {
-              if (this.promiseTime !== promiseTime) {
-                return
-              }
-              const lineOptions = Object.assign({}, DEFAULT_OPTIONS.lineOptions);
-              fullEvent.getActivities()
-                .filter((activity) => activity.hasPositionData())
-                .forEach((activity) => {
-                  const positionalData = activity.getPositionData().filter((position) => position).map((position) => {
-                    return {
-                      lat: Math.round(position.latitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES),
-                      lng: Math.round(position.longitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)
-                    }
-                  });
-                  lineOptions.color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type)
-                  const line = L.polyline(positionalData, lineOptions).addTo(map)
-                  this.polyLines.push(line);
-                  batchLines.push(line)
+          this.updateBufferProgress(100);
+
+          if (this.promiseTime !== promiseTime) {
+            return;
+          }
+          let count = 0;
+          let addedTrackCount = 0;
+          const allCoordinates: number[][] = [];
+
+          for (const eventsChunk of chunckedEvents) {
+            if (this.promiseTime !== promiseTime) {
+              return;
+            }
+
+            const chunkCoordinates: number[][] = [];
+
+            await Promise.all(eventsChunk.map(async (event: any) => {
+              this.logger.log(`[TracksComponent] Fetching activities and streams for event: ${event.getID()}, promiseTime: ${promiseTime}`);
+              event.addActivities(await this.eventService.getActivities(user, event.getID()).pipe(take(1)).toPromise())
+              return this.eventService.attachStreamsToEventWithActivities(user, event, [
+                DataLatitudeDegrees.type,
+                DataLongitudeDegrees.type,
+              ]).pipe(take(1)).toPromise()
+                .then((fullEvent: any) => {
+                  this.logger.log(`[TracksComponent] Attached streams for event: ${event.getID()}, promiseTime: ${promiseTime}`);
+                  if (this.promiseTime !== promiseTime) {
+                    return
+                  }
+                  fullEvent.getActivities()
+                    .filter((activity: any) => activity.hasPositionData())
+                    .filter((activity: any) => !activityTypes || activityTypes.length === 0 || activityTypes.includes(activity.type))
+                    .forEach((activity: any) => {
+                      const coordinates = activity.getPositionData()
+                        .filter((position: any) => position)
+                        .map((position: any) => {
+                          // Mapbox uses [lng, lat]
+                          const lng = Math.round(position.longitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
+                          const lat = Math.round(position.latitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
+                          return [lng, lat];
+                        });
+
+                      if (coordinates.length > 1) {
+                        this.tracksMapManager.addTrackFromActivity(activity, coordinates);
+                        addedTrackCount++;
+                        coordinates.forEach((c: any) => chunkCoordinates.push(c));
+                      }
+                    })
+                  count++;
+                  this.updateTotalProgress(Math.ceil((count / events.length) * 100))
                 })
-              count++;
-              this.updateTotalProgress(Math.ceil((count / events.length) * 100))
-            })
-        }))
-        if (count < events.length) {
-          this.panToLines(map, batchLines)
+            }))
+
+            // Accumulate coordinates for final fitBounds
+            chunkCoordinates.forEach(c => allCoordinates.push(c));
+
+            if (count < events.length && chunkCoordinates.length > 0) {
+              this.tracksMapManager.fitBoundsToCoordinates(chunkCoordinates);
+            }
+          }
+
+          // Final fit bounds
+          if (allCoordinates.length > 0) {
+            this.tracksMapManager.fitBoundsToCoordinates(allCoordinates);
+          }
+          if (addedTrackCount === 0) {
+            this.tracksMapManager.clearAllTracks();
+          }
+        } catch (e) {
+          console.error('Error loading tracks', e);
+        } finally {
+          if (this.promiseTime === promiseTime) {
+            this.clearProgressAndCloseBottomSheet();
+          }
         }
-      }
-      this.panToLines(map, this.polyLines)
-    });
+      });
   }
 
   private clearAllPolylines() {
-    this.polyLines.forEach(line => line.remove());
-    this.polyLines = [];
-  }
-
-  private panToLines(map: any, lines: any[]) {
-    if (!lines || !lines.length) {
-      return;
-    }
-    // We need L here, but panToLines is called from loadTracksMapForUserByDateRange where we have L available? 
-    // Wait, panToLines is called inside the subscription.
-    // Ideally we pass L or use the dynamic import. 
-    // To simplify and avoid changing signature everywhere significantly and since panToLines is called from context where L is loaded (browser),
-    // we can import L dynamically here again (it's cached) OR pass it.
-    // Let's pass it or assume global L if the library exposes it, but dynamic import is safer.
-    // Actually, panToLines uses L.featureGroup.
-    import('leaflet').then(leafletModule => {
-      const L = leafletModule.default || leafletModule;
-      this.zone.runOutsideAngular(() => {
-        // Perhaps use panto with the lat,lng
-        map.fitBounds((L.featureGroup(lines)).getBounds(), {
-          noMoveStart: false,
-          animate: true,
-          padding: [25, 25],
-        });
-      })
-    });
+    this.tracksMapManager.clearAllTracks();
   }
 
   private centerMapToStartingLocation(map: any) {
     if (isPlatformBrowser(this.platformId)) {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(pos => {
-          if (!this.scrolled && this.polyLines.length === 0) {
-            map.panTo([pos.coords.latitude, pos.coords.longitude], {
-              noMoveStart: true,
-              animate: false,
+          if (!this.scrolled) {
+            map.flyTo({
+              center: [pos.coords.longitude, pos.coords.latitude], // Mapbox is [lng, lat]
+              zoom: 9,
+              essential: true
             });
+
             // noMoveStart doesn't seem to have an effect, see Leaflet
             // issue: https://github.com/Leaflet/Leaflet/issues/5396
             this.clearScroll(map);
@@ -269,67 +451,19 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
   }
 
-  private markScrolled(map) {
-    map.removeEventListener('movestart', () => {
-      this.markScrolled(map)
-    });
+  private markScrolled(map: any) {
+    map.off('movestart', this.onMoveStart);
     this.scrolled = true;
   }
 
-  private clearScroll(map) {
-    this.scrolled = false;
-    map.addEventListener('movestart', () => {
-      this.markScrolled(map)
-    })
+  // Bound function to be able to remove listener
+  private onMoveStart = () => {
+    this.markScrolled(this.mapSignal());
   }
 
-  private initMap(L: any): any {
-    return this.zone.runOutsideAngular(() => {
-      const map = L.map(this.mapDiv.nativeElement, {
-        center: [0, 0],
-        fadeAnimation: true,
-        zoomAnimation: true,
-        zoom: 3.5,
-        preferCanvas: false,
-        fullscreenControl: true,
-        // OR
-        // fullscreenControl: {
-        //   pseudoFullscreen: false // if true, fullscreen to page width and height
-        // }
-        // dragging: !L.Browser.mobile
-      });
-
-      map.getContainer().focus = () => {
-      } // Fix fullscreen switch
-
-      const tiles = L.tileLayer.provider(AVAILABLE_THEMES[0], { detectRetina: true })
-      tiles.addTo(map);
-      // L.easyButton({
-      //   type: 'animate',
-      //   states: [{
-      //     icon: `<img style="padding-top: 3px;width: 16px;height: 16px;"
-      //               src="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2218%22%20height%3D%2218%22%20viewBox%3D%220%20018%2018%22%3E%0A%20%20%3Cpath%20fill%3D%22%23666%22%20d%3D%22M0%2C0v2v4h2V2h4V0H2H0z%20M16%2C0h-4v2h4v4h2V2V0H16z%20M16%2C16h-4v2h4h2v-2v-4h-2V16z%20M2%2C12H0v4v2h2h4v-2H2V12z%22%2F%3E%0A%3C%2Fsvg%3E%0A" alt="zoom in"/>`,
-      //     stateName: 'default',
-      //     title: 'Zoom to all tracks',
-      //     onClick: () => {
-      //       this.panToLines(map, this.polyLines);
-      //     },
-      //   }],
-      // }).addTo(map);
-      //
-      // L.easyButton({
-      //   type: 'animate',
-      //   states: [{
-      //     icon: 'fa-camera fa-lg',
-      //     stateName: 'default',
-      //     title: 'Export as png',
-      //     onClick: () => {
-      //       screenshot(map, 'svg');
-      //     }
-      //   }]
-      // }).addTo(map);
-      return map
-    })
+  private clearScroll(map: any) {
+    this.scrolled = false;
+    map.on('movestart', this.onMoveStart);
   }
 
   private updateBufferProgress(value: number) {
@@ -337,43 +471,66 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   private updateTotalProgress(value: number) {
-    this.totalProgress.next(value)
+    this.totalProgress.next(value);
+  }
+
+  // Refactored helpers
+  private isStyleLoaded(): boolean {
+    return this.mapSignal() && this.mapSignal().isStyleLoaded();
   }
 }
 
-// Los Angeles is the center of the universe
-const DEFAULT_OPTIONS = {
-  theme: 'CartoDB.DarkMatter', // Should be based on app theme b&w
-  lineOptions: {
-    color: '#0CB1E8',
-    weight: 1,
-    opacity: 0.5,
-    smoothFactor: 1,
-    overrideExisting: true,
-    detectColors: true,
-  },
-  markerOptions: {
-    color: '#00FF00',
-    weight: 3,
-    radius: 5,
-    opacity: 0.5
-  }
-};
+class TerrainControl {
+  private map: any;
+  private container: HTMLElement | undefined;
+  private icon: HTMLElement | undefined;
 
-const AVAILABLE_THEMES = [
-  'CartoDB.DarkMatter',
-  'CartoDB.DarkMatterNoLabels',
-  'CartoDB.Positron',
-  'CartoDB.PositronNoLabels',
-  'Esri.WorldImagery',
-  'OpenStreetMap.Mapnik',
-  'OpenStreetMap.BlackAndWhite',
-  'OpenTopoMap',
-  'Stamen.Terrain',
-  'Stamen.TerrainBackground',
-  'Stamen.Toner',
-  'Stamen.TonerLite',
-  'Stamen.TonerBackground',
-  'Stamen.Watercolor',
-  'No map',
-];
+  constructor(private is3D: boolean, private onToggle: (val: boolean) => void) { }
+
+  onAdd(map: any) {
+    this.map = map;
+    this.container = document.createElement('div');
+    this.container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
+    const btn = document.createElement('button');
+    btn.className = 'mapboxgl-ctrl-icon mapboxgl-ctrl-terrain';
+    btn.type = 'button';
+    btn.title = 'Toggle 3D Terrain';
+    btn.style.display = 'block';
+
+    this.icon = document.createElement('span');
+    this.icon.className = 'material-symbols-rounded';
+    this.icon.style.fontSize = '20px';
+    this.icon.style.lineHeight = '29px';
+    this.icon.innerText = 'landscape';
+
+    // Set initial state
+    if (this.is3D) {
+      this.icon.style.color = '#4264fb';
+    }
+
+    btn.appendChild(this.icon);
+
+    btn.onclick = () => {
+      const was3D = !!map.getTerrain();
+      const isNow3D = !was3D;
+      this.onToggle(isNow3D);
+    };
+
+    this.container.appendChild(btn);
+    return this.container;
+  }
+
+  onRemove() {
+    this.container?.parentNode?.removeChild(this.container);
+    this.map = undefined;
+  }
+
+  public set3DState(is3D: boolean) {
+    this.is3D = is3D;
+    if (this.icon) {
+      this.icon.style.color = is3D ? '#4264fb' : '';
+    }
+  }
+
+
+}

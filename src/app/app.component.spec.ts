@@ -10,6 +10,8 @@ import { AppAnalyticsService } from './services/app.analytics.service';
 import { SeoService } from './services/seo.service';
 import { AppIconService } from './services/app.icon.service';
 import { AppThemeService } from './services/app.theme.service';
+import { AppWhatsNewService } from './services/app.whats-new.service';
+import { MatDialog } from '@angular/material/dialog';
 
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { Router, RouterModule, ActivatedRoute } from '@angular/router';
@@ -103,7 +105,20 @@ describe('AppComponent', () => {
                     provide: AppUserService, useValue: {
                         updateUserProperties: vi.fn().mockReturnValue(Promise.resolve()),
                         getSubscriptionRole: vi.fn().mockReturnValue(Promise.resolve('free')),
-                        getGracePeriodUntil: vi.fn().mockReturnValue(of(null))
+                        getGracePeriodUntil: vi.fn().mockReturnValue(of(null)),
+                        isAdmin: vi.fn().mockReturnValue(Promise.resolve(false))
+                    }
+                },
+                {
+                    provide: AppWhatsNewService, useValue: {
+                        unreadCount: signal(0),
+                        markAsRead: vi.fn(),
+                        setAdminMode: vi.fn()
+                    }
+                },
+                {
+                    provide: MatDialog, useValue: {
+                        open: vi.fn()
                     }
                 },
                 ChangeDetectorRef

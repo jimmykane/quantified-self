@@ -34,8 +34,10 @@
   <!-- Navigation Section -->
   <div class="sidenav-section-header">Navigation</div>
 
+
   @if (!user) {
-  <mat-list-item routerLinkActive="active" routerLink="/" (click)="sideNav.close();">
+  <mat-list-item routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" routerLink="/"
+    (click)="sideNav.close();">
     <mat-icon>home</mat-icon>
     <span>Home</span>
   </mat-list-item>
@@ -58,7 +60,7 @@
   @if (user) {
   <mat-list-item routerLinkActive="active" [routerLink]="hasPaidAccess ? '/mytracks' : '/pricing'"
     (click)="sideNav.close();">
-    <mat-icon svgIcon="heat-map"></mat-icon>
+    <mat-icon>layers</mat-icon>
     <span>My Tracks <span class="mat-small">(Beta)</span></span>
     <span class="fill-space"></span>
     @if (!hasPaidAccess) {
@@ -73,14 +75,12 @@
   <!-- Account Section -->
   @if (user) {
   <div class="sidenav-section-header">Account</div>
-  }
 
   <mat-list-item routerLinkActive="active" routerLink="/services" (click)="sideNav.close();">
     <mat-icon>leak_add</mat-icon>
     <span>Services</span>
   </mat-list-item>
 
-  @if (user) {
   <mat-list-item routerLinkActive="active" [routerLink]="'/settings'" (click)="sideNav.close();">
     <mat-icon>settings</mat-icon>
     <span>Settings</span>
@@ -91,64 +91,52 @@
     <span>Subscription</span>
   </mat-list-item>
 
-  @if (isAdminUser) {
-  <mat-list-item routerLinkActive="active" routerLink="/admin" (click)="sideNav.close();">
-    <mat-icon>admin_panel_settings</mat-icon>
-    <span>Admin</span>
-  </mat-list-item>
-  }
   }
 
   <!-- Preferences Section -->
   <div class="sidenav-section-header">Preferences</div>
 
   <mat-list-item (click)="$event.stopPropagation(); $event.preventDefault(); themeService.toggleTheme($event)">
-    <mat-icon svgIcon="dark-mode"></mat-icon>
+    <mat-icon>dark_mode</mat-icon>
     <span>Dark theme</span>
     <span class="fill-space"></span>
     <mat-slide-toggle [disabled]="!appTheme" [color]="'accent'" [checked]="appTheme === appThemes.Dark">
     </mat-slide-toggle>
   </mat-list-item>
 
-  <!-- Support Section -->
-  <div class="sidenav-section-header">Support</div>
 
 
 
-  <mat-list-item (click)="gitHubStar()">
-    <mat-icon>star</mat-icon>
-    <span>Star on GitHub</span><span class="fill-space"></span>
-    <mat-icon>open_in_new</mat-icon>
-  </mat-list-item>
-
-  <mat-list-item onclick="window.open('mailto:support@quantified-self.io')">
-    <mat-icon>email</mat-icon>
-    <span>Contact</span><span class="fill-space"></span>
-    <mat-icon>open_in_new</mat-icon>
-  </mat-list-item>
-
-  <mat-list-item onclick="window.open('https://github.com/jimmykane/quantified-self/issues')">
-    <mat-icon>bug_report</mat-icon>
-    <span>File a bug</span><span class="fill-space"></span>
-    <mat-icon>open_in_new</mat-icon>
-  </mat-list-item>
-
-  <!-- Legal Section -->
-  <div class="sidenav-section-header">Legal</div>
-
-  <mat-list-item routerLink="/policies" (click)="sideNav.close();">
-    <mat-icon>policy</mat-icon>
-    <span>Policies</span>
-  </mat-list-item>
-
-  <!-- Logout -->
   @if (user) {
   <mat-divider></mat-divider>
-
   <mat-list-item (click)="logout()">
     <mat-icon>power_settings_new</mat-icon>
     <span>Logout</span>
   </mat-list-item>
   }
+
+  <!-- Compact Footer -->
+  <div class="sidenav-footer">
+    <div class="sidenav-footer-links">
+      <button mat-icon-button matTooltip="Release Notes" routerLink="/releases" (click)="sideNav.close();">
+        <mat-icon [matBadge]="whatsNewService.unreadCount()" [matBadgeHidden]="whatsNewService.unreadCount() === 0"
+          matBadgeColor="warn" matBadgeSize="small" aria-hidden="false">campaign</mat-icon>
+      </button>
+      <button mat-icon-button matTooltip="Star on GitHub" (click)="gitHubStar()">
+        <mat-icon>star</mat-icon>
+      </button>
+      <button mat-icon-button matTooltip="Contact Support" onclick="window.open('mailto:support@quantified-self.io')">
+        <mat-icon>email</mat-icon>
+      </button>
+      <button mat-icon-button matTooltip="Report a Bug"
+        onclick="window.open('https://github.com/jimmykane/quantified-self/issues')">
+        <mat-icon>bug_report</mat-icon>
+      </button>
+      <button mat-icon-button matTooltip="Policies" routerLink="/policies" (click)="sideNav.close();">
+        <mat-icon>policy</mat-icon>
+      </button>
+    </div>
+  </div>
+
 
 </mat-nav-list>

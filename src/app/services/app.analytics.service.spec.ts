@@ -9,10 +9,14 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { LoggerService } from './logger.service';
 
 // Mock firebase/analytics (not @angular/fire/analytics)
-vi.mock('firebase/analytics', () => ({
-    logEvent: vi.fn(),
-    setAnalyticsCollectionEnabled: vi.fn()
-}));
+vi.mock('firebase/analytics', async (importOriginal) => {
+    const actual = await importOriginal<any>();
+    return {
+        ...actual,
+        logEvent: vi.fn(),
+        setAnalyticsCollectionEnabled: vi.fn()
+    };
+});
 
 // Mock environment
 vi.mock('../../environments/environment', () => ({

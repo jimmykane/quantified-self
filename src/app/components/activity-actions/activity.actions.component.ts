@@ -65,17 +65,19 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
     this.snackBar.open('Re-calculating activity statistics', undefined, {
       duration: 2000,
     });
-    // To use this component we need the full hydrated object and we might not have it
-    // We attach streams from the original file (if exists) instead of Firestore
-    const hydratedEvent = await this.eventService.attachStreamsToEventWithActivities(this.user, this.event as any).pipe(take(1)).toPromise();
-    const hydratedActivity = hydratedEvent.getActivities().find(a => a.getID() === this.activity.getID());
-    if (hydratedActivity) {
-      this.activity.clearStreams();
-      this.activity.addStreams(hydratedActivity.getAllStreams());
+    // We re-parse original file(s) to get the most accurate streams and statistics.
+    // This replaces activities in this.event with fresh ones from the parser.
+    await this.eventService.attachStreamsToEventWithActivities(this.user, this.event as any).pipe(take(1)).toPromise();
+
+    // Update local activity reference to the newly parsed one
+    const newActivity = this.event.getActivities().find(a => a.getID() === this.activity.getID());
+    if (newActivity) {
+      this.activity = newActivity;
     }
-    this.activity.clearStats();
-    ActivityUtilities.generateMissingStreamsAndStatsForActivity(this.activity);
+
+    // Refresh event-level stats from the new activity
     EventUtilities.reGenerateStatsForEvent(this.event);
+
     await this.eventService.writeAllEventData(this.user, this.event);
     this.snackBar.open('Activity and event statistics have been recalculated', undefined, {
       duration: 2000,

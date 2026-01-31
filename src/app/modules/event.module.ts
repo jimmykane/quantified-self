@@ -25,6 +25,7 @@ import { EventDetailsSummaryBottomSheetComponent } from '../components/event-sum
 import { EventStatsBottomSheetComponent } from '../components/event/stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
 import { EventDevicesBottomSheetComponent } from '../components/event/devices/event-devices-bottom-sheet/event-devices-bottom-sheet.component';
 
+import { JumpMarkerPopupComponent } from '../components/event/map/popups/jump-marker-popup/jump-marker-popup.component';
 
 @NgModule({
     imports: [
@@ -58,6 +59,7 @@ import { EventDevicesBottomSheetComponent } from '../components/event/devices/ev
         MapActionsComponent,
         EventIntensityZonesComponent,
         LapTypeIconComponent,
+        JumpMarkerPopupComponent
     ]
 })
 

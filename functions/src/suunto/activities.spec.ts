@@ -128,16 +128,16 @@ describe('importActivityToSuuntoApp', () => {
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
 
         // Mock init upload (POST)
-        requestMocks.post.mockResolvedValue(JSON.stringify({
+        requestMocks.post.mockResolvedValue({
             id: 'test-upload-id',
             url: 'https://storage.suunto.com/upload-url',
             headers: { 'x-ms-blob-type': 'BlockBlob', 'Custom-Header': 'Value' }
-        }));
+        });
 
         // Mock status check (GET) - Polling simulation
         requestMocks.get
-            .mockResolvedValueOnce(JSON.stringify({ status: 'NEW' }))
-            .mockResolvedValueOnce(JSON.stringify({ status: 'PROCESSED', workoutKey: 'test-workout-key' }));
+            .mockResolvedValueOnce({ status: 'NEW' })
+            .mockResolvedValueOnce({ status: 'PROCESSED', workoutKey: 'test-workout-key' });
 
         // Mock binary upload (PUT)
         requestMocks.put.mockResolvedValue({});
@@ -185,17 +185,17 @@ describe('importActivityToSuuntoApp', () => {
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
 
         // Mock init upload (POST)
-        requestMocks.post.mockResolvedValue(JSON.stringify({
+        requestMocks.post.mockResolvedValue({
             id: 'test-upload-id-dup',
             url: 'https://storage.suunto.com/upload-url-dup',
             headers: {}
-        }));
+        });
 
         // Mock binary upload (PUT)
         requestMocks.put.mockResolvedValue({});
 
         // Mock status check (GET) - Returning "Already exists"
-        requestMocks.get.mockResolvedValue(JSON.stringify({ status: 'ERROR', message: 'Already exists' }));
+        requestMocks.get.mockResolvedValue({ status: 'ERROR', message: 'Already exists' });
 
         const fileContent = Buffer.from('data');
         const base64File = fileContent.toString('base64');
@@ -211,6 +211,84 @@ describe('importActivityToSuuntoApp', () => {
             code: 'ALREADY_EXISTS'
         }));
     }, 30000);
+
+    it('should throw internal error if initialization response is missing url or id', async () => {
+        // Setup Mocks
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+
+        // Mock init upload (POST) - MISSING URL/ID
+        requestMocks.post.mockResolvedValue({
+            // Missing url and id
+            headers: {}
+        });
+
+        const fileContent = Buffer.from('data');
+        const base64File = fileContent.toString('base64');
+        const request = createMockRequest({ data: { file: base64File } });
+
+        try {
+            await importActivityToSuuntoApp(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('internal');
+            expect(e.message).toContain('Invalid response from Suunto initialization');
+        }
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toThrow('Invalid response from Suunto initialization');
+    });
+
+    it('should handle polling response missing status', async () => {
+        // Setup Mocks
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+
+        requestMocks.post.mockResolvedValue({
+            id: 'valid-id',
+            url: 'https://valid-url',
+            headers: {}
+        });
+        requestMocks.put.mockResolvedValue({});
+
+        // Mock status check (GET) - MISSING STATUS
+        // Then eventually succeeds to break loop or fails. 
+        // If status is missing, code logs warn and loop continues/finishes. 
+        // We simulate it missing once, then PROCESSED.
+        requestMocks.get
+            .mockResolvedValueOnce({}) // Missing status -> Status is undefined -> Loop continues or errors
+            .mockResolvedValueOnce({ status: 'PROCESSED', workoutKey: 'key' });
+
+        const fileContent = Buffer.from('data');
+        const base64File = fileContent.toString('base64');
+        const request = createMockRequest({ data: { file: base64File } });
+
+        const result = await importActivityToSuuntoApp(request as any);
+        // It should recover if subsequent call works
+        expect(result).toEqual(expect.objectContaining({ status: 'success' }));
+    });
+
+    it('should throw internal error if polling returns ERROR status (not already exists)', async () => {
+        // Setup Mocks
+        tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
+
+        requestMocks.post.mockResolvedValue({
+            id: 'valid-id',
+            url: 'https://valid-url',
+            headers: {}
+        });
+        requestMocks.put.mockResolvedValue({});
+
+        // Mock status check (GET) - ERROR
+        requestMocks.get.mockResolvedValue({ status: 'ERROR', message: 'Something went wrong' });
+
+        const fileContent = Buffer.from('data');
+        const base64File = fileContent.toString('base64');
+        const request = createMockRequest({ data: { file: base64File } });
+
+        try {
+            await importActivityToSuuntoApp(request as any);
+        } catch (e: any) {
+            expect(e.code).toBe('internal');
+            expect(e.message).toContain('Something went wrong');
+        }
+        await expect(importActivityToSuuntoApp(request as any)).rejects.toThrow('Something went wrong');
+    });
 
     it('should block unauthenticated requests', async () => {
         const request = createMockRequest({
@@ -315,7 +393,7 @@ describe('importActivityToSuuntoApp', () => {
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
 
         // Mock init upload (POST) SUCCESS
-        requestMocks.post.mockResolvedValue(JSON.stringify({ url: 'https://url', id: 'test-id', headers: {} }));
+        requestMocks.post.mockResolvedValue({ url: 'https://url', id: 'test-id', headers: {} });
 
         // Mock binary upload (PUT) FAILURE
         requestMocks.put.mockRejectedValue(new Error('Upload failed'));
@@ -341,17 +419,17 @@ describe('importActivityToSuuntoApp', () => {
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
 
         // Mock init upload (POST)
-        requestMocks.post.mockResolvedValue(JSON.stringify({
+        requestMocks.post.mockResolvedValue({
             id: 'test-upload-id',
             url: 'https://storage.suunto.com/upload-url',
             headers: {}
-        }));
+        });
 
         // Mock binary upload (PUT)
         requestMocks.put.mockResolvedValue({});
 
         // Mock status check (GET)
-        requestMocks.get.mockResolvedValue(JSON.stringify({ status: 'PROCESSED', workoutKey: 'test-workout-key' }));
+        requestMocks.get.mockResolvedValue({ status: 'PROCESSED', workoutKey: 'test-workout-key' });
 
         const fileContent = Buffer.from('data');
         const base64File = fileContent.toString('base64');

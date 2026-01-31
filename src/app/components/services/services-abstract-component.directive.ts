@@ -36,7 +36,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
   public abstract serviceName: ServiceNames;
 
   @Input() user!: User;
-  @Input() isGuest!: boolean;
+
   @Input() hasProAccess!: boolean;
   @Input() isAdmin: boolean = false;
   public isLoading = false;
@@ -75,7 +75,7 @@ export abstract class ServicesAbstractComponentDirective implements OnInit, OnDe
       this.serviceDataSubscription.unsubscribe()
     }
     // Noop if no user
-    if (!this.user || this.isGuest) {
+    if (!this.user) {
       return;
     }
     this.isLoading = true;

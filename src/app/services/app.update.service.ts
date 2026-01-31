@@ -1,4 +1,4 @@
-import { ApplicationRef, Injectable } from '@angular/core';
+import { ApplicationRef, Injectable, signal } from '@angular/core';
 import { SwUpdate, VersionReadyEvent } from '@angular/service-worker';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { concat, interval } from 'rxjs';
@@ -11,6 +11,8 @@ import { AppWindowService } from './app.window.service';
   providedIn: 'root',
 })
 export class AppUpdateService {
+  public isUpdateAvailable = signal(false);
+
   constructor(appRef: ApplicationRef, updates: SwUpdate, private snackbar: MatSnackBar, private logger: LoggerService, private windowService: AppWindowService) {
     if (!updates.isEnabled) {
       return;
@@ -24,6 +26,7 @@ export class AppUpdateService {
     updates.versionUpdates
       .pipe(filter((evt): evt is VersionReadyEvent => evt.type === 'VERSION_READY'))
       .subscribe(() => {
+        this.isUpdateAvailable.set(true);
         const snack = this.snackbar.open('There is a new version available', 'Reload', {
           duration: 0,
         });
@@ -42,6 +45,10 @@ export class AppUpdateService {
       );
       this.windowService.windowRef.location.reload();
     });
+  }
+
+  public activateUpdate() {
+    this.windowService.windowRef.location.reload();
   }
 
 }

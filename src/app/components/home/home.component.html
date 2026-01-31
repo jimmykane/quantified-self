@@ -1,310 +1,211 @@
-<div class="split-container">
+<div class="landing-page">
 
-  <!-- Left Column: Hero -->
-  <div class="hero-section">
-    <div class="brand-header">
-      <mat-icon class="brand-logo" svgIcon="logo"></mat-icon>
-      <span class="brand-name">Quantified Self</span>
-    </div>
+  <!-- 1. Hero Section -->
+  <section class="hero-section">
+    <div class="hero-content">
+      <div class="brand-badge">
+        <mat-icon svgIcon="logo" class="brand-logo"></mat-icon>
+        <span class="brand-name">Quantified Self</span>
+      </div>
 
-    <h1 class="app-text-gradient">Professional Grade <br>Fitness Analytics.</h1>
-    <p class="subtitle">
-      Unlock the full potential of your performance data.
-      Advanced analytics with zero platform lock-in.
-      <br><br>
-      Join a community of athletes who own their data.
-    </p>
+      <h1 class="hero-title">
+        Quantify. Analyze. Improve.<br>
+        <span class="highlight-text">Fitness Analytics Platform</span>
+      </h1>
 
-    <div class="cta-container">
-      <button mat-flat-button color="accent" class="btn-large" (click)="navigateToDashboardOrLogin()">
-        Get Started Free
-        <mat-icon>arrow_forward</mat-icon>
-      </button>
-    </div>
+      <p class="hero-subtitle">
+        Unlock the full potential of your performance data.<br>
+        Seamlessly sync activities and routes to Suunto. Full history imports supported.
+      </p>
 
-    <!-- How It Works -->
-    <div class="how-it-works">
-      <div class="step">
-        <div class="step-icon">
-          <mat-icon>link</mat-icon>
+      <div class="hero-actions">
+        <button mat-flat-button color="primary" class="cta-button primary" (click)="navigateToDashboardOrLogin()">
+          Get Started Free
+          <mat-icon iconPositionEnd>arrow_forward</mat-icon>
+        </button>
+        <button mat-stroked-button class="cta-button secondary" routerLink="/policies">
+          Learn More
+        </button>
+      </div>
+
+      <!-- Quick Trust Indicators -->
+      <div class="trust-indicators">
+        <div class="indicator">
+          <mat-icon>check_circle</mat-icon>
+          <span>100% Data Ownership</span>
         </div>
-        <span class="step-label">Connect</span>
-      </div>
-      <mat-icon class="step-arrow">arrow_forward</mat-icon>
-      <div class="step">
-        <div class="step-icon">
-          <mat-icon>sync</mat-icon>
+        <div class="indicator">
+          <mat-icon>verified_user</mat-icon>
+          <span>Privacy Focused</span>
         </div>
-        <span class="step-label">Sync</span>
-      </div>
-      <mat-icon class="step-arrow">arrow_forward</mat-icon>
-      <div class="step">
-        <div class="step-icon">
-          <mat-icon>insights</mat-icon>
-        </div>
-        <span class="step-label">Analyze</span>
       </div>
     </div>
+  </section>
 
-    <!-- File Formats -->
-    <div class="file-formats">
-      <span class="format-badge">
-        <mat-icon>description</mat-icon>
-        FIT
-      </span>
-      <span class="format-badge">
-        <mat-icon>description</mat-icon>
-        TCX
-      </span>
-      <span class="format-badge">
-        <mat-icon>description</mat-icon>
-        GPX
-      </span>
+  <!-- 1.5 Fast Track Section -->
+  <section class="fast-track-section container animate-on-scroll">
+    <div class="fast-track-grid">
+      <mat-card class="fast-track-card glass-panel" appearance="outlined">
+        <mat-card-header>
+          <div mat-card-avatar class="fast-track-icon-container import">
+            <mat-icon>history</mat-icon>
+          </div>
+          <mat-card-title>Import History</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>Bring years of data in minutes. Jump directly into your analytics with our powerful history import engine.
+          </p>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="fast-track-card glass-panel" appearance="outlined">
+        <mat-card-header>
+          <div mat-card-avatar class="fast-track-icon-container sync">
+            <mat-icon>sync</mat-icon>
+          </div>
+          <mat-card-title>Seamless Sync</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>New activities appear instantly. Watch your new activities and routes sync automatically to Suunto.</p>
+        </mat-card-content>
+      </mat-card>
     </div>
-  </div>
+  </section>
 
-  <!-- Right Side: Grid Feature List -->
-  <div class="features-section">
-
-    <!-- Feature 1 -->
-    <div class="feature-card glass-card">
-      <div class="card-header">
-        <mat-icon class="card-icon" svgIcon="dashboard"></mat-icon>
-        <h3 class="card-title">Customizable Environment</h3>
-      </div>
-      <p class="card-text">
-        Engineer your perfect analytical workspace. Configure tailored widgets to visualize what
-        matters.
-      </p>
-      <div class="tag-list">
-        <span class="tag">
-          <mat-icon>table_chart</mat-icon>
-          Widgets
-        </span>
-        <span class="tag">
-          <mat-icon>tune</mat-icon>
-          Personalized
-        </span>
-      </div>
-    </div>
-
-    <!-- Feature 2 -->
-    <div class="feature-card glass-card">
-      <div class="card-header">
-        <mat-icon class="card-icon" svgIcon="chart"></mat-icon>
-        <h3 class="card-title">Multi-dimensional Analysis</h3>
-      </div>
-      <p class="card-text">
-        Visualize gradient and speed across 12 distinct map styles and advanced charts.
-      </p>
-      <div class="tag-list">
-        <span class="tag">
-          <mat-icon svgIcon="chart-types"></mat-icon>
-          7 Chart Types
-        </span>
-        <span class="tag">
-          <mat-icon svgIcon="heat-map"></mat-icon>
-          Heatmaps
-        </span>
-        <span class="tag">
-          <mat-icon svgIcon="spiral"></mat-icon>
-          Clusters
-        </span>
+  <!-- 2. Integration / Ecosystem Ticker -->
+  <section class="integrations-section animate-on-scroll">
+    <p class="section-label">Seamless Integration With</p>
+    <div class="logos-container">
+      <mat-icon svgIcon="garmin" class="partner-logo" matTooltip="Garmin Connect"></mat-icon>
+      <mat-icon svgIcon="suunto" class="partner-logo" matTooltip="Suunto App - Sync Routes & Activities"></mat-icon>
+      <mat-icon svgIcon="coros" class="partner-logo wide" matTooltip="COROS"></mat-icon>
+      <div class="divider"></div>
+      <div class="file-formats">
+        <span class="format">FIT</span>
+        <span class="format">TCX</span>
+        <span class="format">GPX</span>
       </div>
     </div>
+  </section>
 
-    <!-- Feature 3 -->
-    <div class="feature-card glass-card">
-      <div class="card-header">
-        <mat-icon class="card-icon" svgIcon="bar-chart"></mat-icon>
-        <h3 class="card-title">Granular Zone Metrics</h3>
-      </div>
-      <p class="card-text">
-        Deep dive into physiological output. Analyze precise Heart Rate, Power, and Speed distributions.
-      </p>
-      <div class="tag-list">
-        <span class="tag">
-          <mat-icon svgIcon="bar-chart"></mat-icon>
-          HR Analysis
-        </span>
-        <span class="tag">
-          <mat-icon svgIcon="moving-time"></mat-icon>
-          Speed Dist.
-        </span>
-      </div>
+  <!-- 3. Key Features Grid -->
+  <section class="features-section">
+    <h2 class="section-title animate-on-scroll">Engineered for Performance</h2>
+
+    <div class="features-grid">
+      <!-- Feature 1: Environment -->
+      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
+        <mat-card-header>
+          <div mat-card-avatar class="feature-icon-container">
+            <mat-icon>scatter_plot</mat-icon>
+          </div>
+          <mat-card-title>Customizable Environment</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>Engineer your perfect analytical workspace. Configure tailored widgets and dashboards to visualize exactly
+            what matters to your training.</p>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Feature 2: Analysis -->
+      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
+        <mat-card-header>
+          <div mat-card-avatar class="feature-icon-container">
+            <mat-icon>layers</mat-icon>
+          </div>
+          <mat-card-title>Deep Analysis</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>Multi-dimensional analysis with 7 chart types, heatmaps, and clustering. Visualize gradient and speed
+            across 12 distinct map styles.</p>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Feature 3: Physiology -->
+      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
+        <mat-card-header>
+          <div mat-card-avatar class="feature-icon-container">
+            <mat-icon>monitor_heart</mat-icon>
+          </div>
+          <mat-card-title>Granular Metrics</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>Deep dive into physiological output. Analyze precise Heart Rate, Power, and Speed distributions with
+            granular zone metrics.</p>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Feature 4: Connectivity -->
+      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
+        <mat-card-header>
+          <div mat-card-avatar class="feature-icon-container">
+            <mat-icon>sync</mat-icon>
+          </div>
+          <mat-card-title>Ecosystem Connectivity</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <p>The ultimate Suunto companion. Sync routes and activities directly to your watch. Perform full history
+            imports from major platforms with ease.</p>
+        </mat-card-content>
+      </mat-card>
     </div>
+  </section>
 
-    <!-- Integration: Garmin -->
-    <div class="feature-card glass-card service-garmin">
-      <div class="card-header">
-        <mat-icon class="card-icon" svgIcon="garmin"></mat-icon>
-        <h3 class="card-title">Garmin</h3>
-      </div>
-      <p class="card-text">
-        Seamless integration with Garmin Connect for automatic activity synchronization.
-      </p>
-      <div class="tag-list">
-        <span class="tag"
-          (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.GarminAPI }});"
-          style="cursor: pointer;">
-          <mat-icon>sync</mat-icon>
-          Activity Sync
-        </span>
-        <span class="tag"
-          (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.GarminAPI }});"
-          style="cursor: pointer;">
-          <mat-icon>history</mat-icon>
-          History Import
-        </span>
-      </div>
-    </div>
-
-    <!-- Integration: Suunto -->
-    <div class="feature-card glass-card service-suunto">
-      <div class="card-header">
-        <mat-icon class="card-icon" svgIcon="suunto"></mat-icon>
-        <h3 class="card-title">Suunto</h3>
-      </div>
-      <p class="card-text">
-        Full Suunto integration with additional features like route upload and link import.
-      </p>
-      <div class="tag-list">
-        <span class="tag"
-          (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.SuuntoApp } });"
-          style="cursor: pointer;">
-          <mat-icon>sync</mat-icon>
-          Activity Sync
-        </span>
-        <span class="tag"
-          (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.SuuntoApp } });"
-          style="cursor: pointer;">
-          <mat-icon>history</mat-icon>
-          History Import
-        </span>
-        <span class="tag"
-          (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.SuuntoApp } });"
-          style="cursor: pointer;">
-          <mat-icon>link</mat-icon>
-          Link Import
-        </span>
-        <span class="tag"
-          (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.SuuntoApp } });"
-          style="cursor: pointer;">
-          <mat-icon>route</mat-icon>
-          Route Upload
-        </span>
+  <!-- 3.5 See Your Footprint (MyTracks Highlight) -->
+  <section class="footprint-section animate-on-scroll">
+    <div class="footprint-content">
+      <div class="footprint-text">
+        <mat-icon class="footprint-icon">map</mat-icon>
+        <h2>See Your Footprint</h2>
+        <p>
+          Every run, ride, and hike — visualized on a single map.
+          Explore your entire athletic history.
+        </p>
+        <button mat-stroked-button (click)="navigateToDashboardOrLogin()">
+          Explore MyTracks
+          <mat-icon iconPositionEnd>explore</mat-icon>
+        </button>
       </div>
     </div>
+  </section>
 
-    <!-- Integration: COROS -->
-    <div class="feature-card glass-card service-coros">
-      <div class="card-header">
-        <mat-icon class="card-icon" svgIcon="coros"></mat-icon>
-        <h3 class="card-title">COROS</h3>
-      </div>
-      <p class="card-text">
-        Connect your COROS account for automatic sync and full history access.
-      </p>
-      <div class="tag-list">
-        <span class="tag"
-          (click)="router.navigate(['/services'],{ queryParams: { serviceName: serviceNames.COROSAPI }});"
-          style="cursor: pointer;">
-          <mat-icon>sync</mat-icon>
-          Activity Sync
-        </span>
-        <span class="tag"
-          (click)="router.navigate(['/services'],{ queryParams: { serviceName: serviceNames.COROSAPI }});"
-          style="cursor: pointer;">
-          <mat-icon>history</mat-icon>
-          History Import
-        </span>
+  <!-- 4. Data Sovereignty (Full Width) -->
+  <section class="sovereignty-section">
+    <div class="content-wrapper">
+      <div class="text-content">
+        <mat-icon class="large-icon">security</mat-icon>
+        <h2>Your Data, Your Rules</h2>
+        <p>
+          We believe athletes should own their performance data. Export your original files anytime.
+          No hidden mining, no lock-in, just pure analytics.
+        </p>
+        <button mat-stroked-button (click)="navigateToDashboardOrLogin()">
+          Start Analyzing Now
+        </button>
       </div>
     </div>
+  </section>
 
+  <!-- 5. Modern Footer -->
+  <footer class="app-footer">
+    <div class="footer-content">
+      <div class="maker-info">
+        <span>Built by <a href="https://dimitrioskanellopoulos.com" target="_blank" class="maker-link">Dimitrios
+            Kanellopoulos</a></span>
+      </div>
 
+      <div class="tech-stack">
+        <mat-icon svgIcon="firebase" matTooltip="Built with Firebase"></mat-icon>
 
-  </div>
+        <mat-icon svgIcon="antigravity" matTooltip="Coded with Antigravity"></mat-icon>
+        <mat-icon svgIcon="amcharts" matTooltip="Charts by amCharts"></mat-icon>
+      </div>
 
-  <!-- Feature 5 (Spans full width) -->
-  <div class="feature-card glass-card full-width">
-    <div class="card-header">
-      <mat-icon class="card-icon">security</mat-icon>
-      <h3 class="card-title">Data Sovereignty & Privacy</h3>
-    </div>
-    <div class="card-content-wrapper">
-      <p class="card-text">
-        Your data belongs to you. Export your original files (FIT, TCX, GPX) anytime. Transparent policies, simple
-        pricing and no data mining.
-      </p>
-      <div class="tag-list">
-        <span class="tag">
-          <mat-icon>cloud_upload</mat-icon>
-          FIT/TCX/GPX Imports
-        </span>
-        <span class="tag">
-          <mat-icon>security</mat-icon>
-          Strict Privacy
-        </span>
-        <span class="tag" routerLink="/policies" style="cursor: pointer;">
-          <mat-icon>policy</mat-icon>
-          Privacy Policy
-        </span>
+      <div class="legal-links">
+        <a routerLink="/policies">Privacy & Policies</a>
+        <span class="copyright">&copy; {{ currentYear }} Quantified Self</span>
       </div>
     </div>
-  </div>
-</div>
-
-<div class="footer rich-footer">
-
-  <!-- 1. Maker Section (Primary Focus) -->
-  <div class="footer-section maker-profile">
-
-    <div class="maker-info">
-      <span>Made by</span>
-      <a href="https://dimitrioskanellopoulos.com?utm_source=quantified-self-io" target="_blank"
-        class="maker-link app-text-gradient">Dimitrios Kanellopoulos</a>
-    </div>
-  </div>
-
-  <!-- 2. Combined Ecosystem Row -->
-  <div class="footer-section ecosystem">
-    <!-- Integrations -->
-    <div class="logo-group">
-      <mat-icon class="partner-logo" svgIcon="garmin"
-        (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.GarminAPI }})"
-        matTooltip="Garmin Integration"></mat-icon>
-      <mat-icon class="partner-logo" svgIcon="suunto"
-        (click)="router.navigate(['/services'], { queryParams: { serviceName: serviceNames.SuuntoApp } })"
-        matTooltip="Suunto Integration"></mat-icon>
-      <mat-icon class="partner-logo wide" svgIcon="coros"
-        (click)="router.navigate(['/services'],{ queryParams: { serviceName: serviceNames.COROSAPI }})"
-        matTooltip="COROS Integration"></mat-icon>
-    </div>
-
-    <div class="vertical-divider"></div>
-
-    <!-- Built With -->
-    <div class="logo-group">
-      <mat-icon class="partner-logo wide" svgIcon="firebase"
-        onclick="window.open('https://firebase.google.com/?ref=quantified-self.io')"
-        matTooltip="Built with Firebase"></mat-icon>
-      <mat-icon class="partner-logo" svgIcon="jetbrains_logo"
-        onclick="window.open('https://jetbrains.com/?ref=quantified-self.io')"
-        matTooltip="Coded in WebStorm"></mat-icon>
-      <mat-icon class="partner-logo wide" svgIcon="antigravity"
-        onclick="window.open('https://antigravity.codes/?ref=quantified-self.io')"
-        matTooltip="Coded with Antigravity"></mat-icon>
-      <mat-icon class="partner-logo wide" svgIcon="amcharts"
-        onclick="window.open('https://amcharts.com/?ref=quantified-self.io')"
-        matTooltip="Charts by amCharts"></mat-icon>
-    </div>
-  </div>
-
-  <!-- 3. Legal / Bottom -->
-  <div class="footer-section bottom-legal">
-    <span class="privacy-link" routerLink="/policies">Privacy & Policies</span>
-    <span class="dot-separator">&bull;</span>
-    <span class="copyright">&copy; {{ currentYear }} Quantified Self</span>
-  </div>
+  </footer>
 
 </div>

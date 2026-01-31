@@ -9,10 +9,12 @@ import {
   OnDestroy,
   SimpleChanges,
 } from '@angular/core';
+
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { AmChartsService } from '../../../services/am-charts.service';
 import type * as am4core from '@amcharts/amcharts4/core';
 import type * as am4charts from '@amcharts/amcharts4/charts';
+import { firstValueFrom } from 'rxjs';
 
 
 import { ActivityInterface } from '@sports-alliance/sports-lib';
@@ -23,8 +25,9 @@ import { DataSpeed } from '@sports-alliance/sports-lib';
 import { AppColors } from '../../../services/color/app.colors';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { convertIntensityZonesStatsToChartData } from '../../../helpers/intensity-zones-chart-data-helper';
+import { convertIntensityZonesStatsToChartData, getActiveDataTypes } from '../../../helpers/intensity-zones-chart-data-helper';
 import { AppDataColors } from '../../../services/color/app.data.colors';
+import { DataDuration } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../../services/logger.service';
 import { AppBreakpoints } from '../../../constants/breakpoints';
 import { Subscription } from 'rxjs';
@@ -38,14 +41,13 @@ import { Subscription } from 'rxjs';
   standalone: false
 })
 export class EventIntensityZonesComponent extends ChartAbstractDirective implements AfterViewInit, OnChanges, OnDestroy {
-  @Input() activities: ActivityInterface[];
+  @Input() activities!: ActivityInterface[];
 
   protected declare chart: am4charts.XYChart;
-  private core: typeof am4core;
-  private charts: typeof am4charts;
+  private core!: typeof am4core;
+  private charts!: typeof am4charts;
   private isMobile = false;
   private breakpointSubscription: Subscription;
-
 
   private getData(): any[] {
     return convertIntensityZonesStatsToChartData(this.activities, this.isMobile);
@@ -149,10 +151,13 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
     categoryAxis.renderer.axisFills.template.disabled = false;
     categoryAxis.renderer.axisFills.template.fillOpacity = 0.1;
     categoryAxis.fillRule = (dataItem) => {
-      dataItem.axisFill.visible = true;
+      if (dataItem.axisFill) {
+        dataItem.axisFill.visible = true;
+      }
     };
     categoryAxis.renderer.axisFills.template.adapter.add('fill', (fill, target) => {
-      return target.dataItem && target.dataItem.dataContext ? this.eventColorService.getColorForZone(target.dataItem.dataContext['zone']) : null;
+      const dataContext = target.dataItem?.dataContext as any;
+      return dataContext ? (this.eventColorService.getColorForZone(dataContext['zone']) as am4core.Color) : (fill as am4core.Color);
     });
 
 
@@ -162,20 +167,34 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
 
   private updateChart(data: any) {
     this.chart.series.clear();
-    this.createChartSeries();
+    this.createChartSeries(getActiveDataTypes(data));
     this.chart.data = data
   }
 
-  private createChartSeries() {
+  private createChartSeries(activeTypes: Set<string>) {
     DynamicDataLoader.zoneStatsTypeMap.forEach(statsTypeMap => {
+      if (!activeTypes.has(statsTypeMap.type)) {
+        return;
+      }
       const series = this.chart.series.push(new this.charts.ColumnSeries());
 
       // series.clustered = false;
       series.dataFields.valueX = statsTypeMap.type;
       series.dataFields.categoryY = 'zone';
       series.calculatePercent = true;
-      series.legendSettings.labelText = `${statsTypeMap.type}`;
+      series.legendSettings.labelText = statsTypeMap.type === DataHeartRate.type ? 'HR' : `${statsTypeMap.type}`;
       series.columns.template.tooltipText = `[bold font-size: 1.05em]{categoryY}[/]\n ${statsTypeMap.type}: [bold]{valueX.percent.formatNumber('#.')}%[/]\n Time: [bold]{valueX.formatDuration()}[/]`;
+
+      series.adapter.add('tooltipText', (text, target) => {
+        const dataItem = target.tooltipDataItem;
+        if (!dataItem || !dataItem.values.valueX) {
+          return text;
+        }
+        const value = dataItem.values.valueX.value;
+        const percent = dataItem.values.valueX.percent;
+        const duration = new DataDuration(value).getDisplayValue();
+        return `[bold font-size: 1.05em]{categoryY}[/]\n ${statsTypeMap.type}: [bold]${Math.round(percent)}%[/]\n Time: [bold]${duration}[/]`;
+      });
       series.columns.template.strokeWidth = 0;
       series.columns.template.height = this.core.percent(80);
 
@@ -185,30 +204,59 @@ export class EventIntensityZonesComponent extends ChartAbstractDirective impleme
       const categoryLabel = series.bullets.push(new this.charts.LabelBullet());
 
       categoryLabel.label.adapter.add('text', (text, target) => {
-        return `[bold]${Math.round(target.dataItem.values.valueX.percent)}[/]%`;
+        if (!target.dataItem || !target.dataItem.values || !target.dataItem.values.valueX) {
+          return text;
+        }
+        const value = target.dataItem.values.valueX.value;
+        if (value < 0.1) {
+          return '';
+        }
+        const duration = new DataDuration(value).getDisplayValue();
+        const percent = Math.round(target.dataItem.values.valueX.percent);
+        return `[bold]${duration}[/] (${percent}%)`;
       });
+      // Hide bullet if value is near 0
+      categoryLabel.adapter.add('visible', (visible, target) => {
+        const value = target.dataItem?.values?.valueX?.value;
+        return (value !== undefined && value > 0.1);
+      });
+      categoryLabel.adapter.add('opacity', (opacity, target) => {
+        const value = target.dataItem?.values?.valueX?.value;
+        return (value !== undefined && value > 0.1) ? 1 : 0;
+      });
+      // Also ensure the label itself is hidden
+      categoryLabel.label.adapter.add('visible', (visible, target) => {
+        const value = target.dataItem?.values?.valueX?.value;
+        return (value !== undefined && value > 0.1);
+      });
+      categoryLabel.locationX = 0;
       categoryLabel.label.horizontalCenter = 'left';
       categoryLabel.label.verticalCenter = 'middle';
+      categoryLabel.label.textAlign = 'middle';
       categoryLabel.label.truncate = false;
       categoryLabel.label.hideOversized = false;
       categoryLabel.label.fontSize = '0.75em';
-      categoryLabel.label.dx = 10;
+      categoryLabel.label.dx = 6;
       categoryLabel.label.fill = this.core.color('#ffffff');
-      categoryLabel.label.padding(1, 4, 1, 4);
+      categoryLabel.label.padding(0, 4, 0, 4);
 
       categoryLabel.label.background = new this.core.RoundedRectangle();
-
       categoryLabel.label.background.fillOpacity = 1;
       categoryLabel.label.background.strokeOpacity = 1;
+
       categoryLabel.label.background.adapter.add('fill', (fill, target) => {
-        return target.dataItem && target.dataItem.dataContext ? this.eventColorService.getColorForZone(target.dataItem.dataContext['zone']) : null;
+        const dataContext = target.dataItem?.dataContext as any;
+        return dataContext ? (this.eventColorService.getColorForZone(dataContext['zone']) as am4core.Color) : (fill as am4core.Color);
       });
       categoryLabel.label.background.adapter.add('stroke', (stroke, target) => {
-        return target.dataItem && target.dataItem.dataContext ? this.eventColorService.getColorForZone(target.dataItem.dataContext['zone']) : null;
+        const dataContext = target.dataItem?.dataContext as any;
+        return dataContext ? (this.eventColorService.getColorForZone(dataContext['zone']) as am4core.Color) : (stroke as am4core.Color);
       });
       // (<am4core.RoundedRectangle>(categoryLabel.label.background)).cornerRadius(2, 2, 2, 2);
 
-      series.fill = this.core.color(AppDataColors[statsTypeMap.type]);
+      // (<am4core.RoundedRectangle>(categoryLabel.label.background)).cornerRadius(2, 2, 2, 2);
+
+      series.fill = this.core.color((AppDataColors as any)[statsTypeMap.type] || AppColors.Blue);
 
     });
   }

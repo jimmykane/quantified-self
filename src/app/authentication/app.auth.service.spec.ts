@@ -12,6 +12,7 @@ vi.mock('@angular/fire/auth', async () => {
     return {
         ...actual,
         user: mockUserFunction,
+        authState: vi.fn(() => of(null)),
         signInWithPopup: vi.fn(),
         signInWithRedirect: vi.fn(),
         signInWithCustomToken: vi.fn(),

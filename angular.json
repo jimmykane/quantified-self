@@ -28,9 +28,8 @@
               "src/sitemap.xml"
             ],
             "styles": [
-              "./node_modules/material-design-icons-iconfont/dist/material-design-icons.css",
-              "./node_modules/leaflet/dist/leaflet.css",
-              "./node_modules/leaflet-fullscreen/dist/leaflet.fullscreen.css",
+              "./node_modules/material-symbols/rounded.css",
+              "./node_modules/mapbox-gl/dist/mapbox-gl.css",
               "./src/styles.scss"
             ],
             "scripts": [],

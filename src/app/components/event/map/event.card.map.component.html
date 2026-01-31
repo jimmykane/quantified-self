@@ -28,10 +28,10 @@
 
     <!-- Google Map -->
     @defer (on viewport) {
-    @if (activitiesMapData.length > 0 && apiLoaded()) {
+    @if (activitiesMapData.length > 0 && apiLoaded() && isMapVisible()) {
     <google-map height="100%" width="100%" [center]="mapCenter()" [zoom]="mapZoom()" [mapTypeId]="mapTypeId()"
       [options]="mapOptions()" (mapInitialized)="onMapReady($event)" (zoomChanged)="onZoomChanged()"
-      (centerChanged)="onCenterChanged()">
+      (centerChanged)="onCenterChanged()" (mapClick)="onMapClick($event)">
       @for (activityMapData of activitiesMapData; track activityMapData.activity.getID()) {
       <!-- Start Marker -->
       @if (activityMapData.positions.length > 0) {
@@ -41,9 +41,9 @@
       </map-advanced-marker>
       }
       <!-- Cursor Marker -->
-      @if (activitiesCursors.get(activityMapData.activity.getID())) {
+      @if (activitiesCursors.get(activityMapData.activity.getID() || '')) {
       <map-advanced-marker
-        [position]="{lat: activitiesCursors.get(activityMapData.activity.getID()).latitudeDegrees, lng: activitiesCursors.get(activityMapData.activity.getID()).longitudeDegrees}"
+        [position]="{lat: activitiesCursors.get(activityMapData.activity.getID() || '').latitudeDegrees, lng: activitiesCursors.get(activityMapData.activity.getID() || '').longitudeDegrees}"
         [options]="getCursorMarkerOptions(activityMapData.activity, activityMapData.strokeColor)">
       </map-advanced-marker>
       }
@@ -64,14 +64,24 @@
         [options]="getLapMarkerOptions(activityMapData.activity, activityMapData.strokeColor, i)">
       </map-advanced-marker>
       }
-      <!-- Point Markers (optional) -->
-      @if (showPoints) {
-      @for (position of activityMapData.positions; track position.time) {
-      <map-advanced-marker [position]="{lat: position.latitudeDegrees, lng: position.longitudeDegrees}"
-        [content]="pointMarkerContent(activityMapData.strokeColor)">
+      <!-- Jump Markers -->
+      @for (jump of activityMapData.jumps; track jump.event.timestamp) {
+      <map-advanced-marker #marker="mapAdvancedMarker"
+        [position]="{lat: jump.position.latitudeDegrees, lng: jump.position.longitudeDegrees}"
+        [options]="getJumpMarkerOptions(jump.event, activityMapData.strokeColor)"
+        (mapClick)="openJumpMarkerInfoWindow(jump.event, marker)"
+        (click)="openJumpMarkerInfoWindow(jump.event, marker)">
       </map-advanced-marker>
       }
-      }
+
+      <map-info-window>
+        @if (openedJumpMarkerInfoWindow) {
+        <app-jump-marker-popup [jump]="openedJumpMarkerInfoWindow"
+          (dismiss)="infoWindow.close()"></app-jump-marker-popup>
+        }
+      </map-info-window>
+
+
       }
     </google-map>
     }

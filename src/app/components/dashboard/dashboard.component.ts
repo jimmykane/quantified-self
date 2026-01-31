@@ -101,7 +101,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         return of({ user: null, events: null });
       }
 
-      // this.showUpload = this.authService.isGuest();
+
 
       if (this.user && (
         this.user.settings.dashboardSettings.dateRange !== user.settings.dashboardSettings.dateRange

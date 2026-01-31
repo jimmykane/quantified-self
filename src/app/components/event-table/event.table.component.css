@@ -186,6 +186,20 @@ mat-paginator {
 }
 
 /* Align activity type icon and text */
+.data-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.excluded-icon {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+  opacity: 0.6;
+  cursor: help;
+}
+
 .activity-type-cell {
   display: flex;
   align-items: center;

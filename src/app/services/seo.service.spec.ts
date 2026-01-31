@@ -25,7 +25,12 @@ describe('SeoService', () => {
         // Mock Router
         mockRouter = {
             events: routerEventsSubject.asObservable(),
-            url: '/'
+            url: '/',
+            parseUrl: vi.fn().mockImplementation((url) => ({
+                queryParams: {},
+                fragment: null,
+                toString: () => url.split('?')[0] // Simple default behavior
+            }))
         };
 
         // Mock ActivatedRoute
@@ -47,7 +52,8 @@ describe('SeoService', () => {
             },
             querySelector: vi.fn(),
             location: {
-                href: 'https://quantified-self.io/'
+                href: 'https://quantified-self.io/',
+                origin: 'https://quantified-self.io'
             }
         };
 
@@ -76,8 +82,14 @@ describe('SeoService', () => {
             description: 'Test Description',
             keywords: 'test, seo'
         });
-        // Need to handle the "while (route.firstChild)" loop in service
-        // For this simple test, our mockActivatedRoute has no firstChild, so it uses itself.
+
+        // Mock router.parseUrl
+        mockRouter.url = '/test';
+        mockRouter.parseUrl = vi.fn().mockReturnValue({
+            queryParams: {},
+            fragment: null,
+            toString: () => '/test'
+        });
 
         service.init();
 
@@ -88,20 +100,25 @@ describe('SeoService', () => {
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ name: 'keywords', content: 'test, seo' });
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:title', content: 'Test Page - Quantified Self' });
         expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:description', content: 'Test Description' });
-        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({ property: 'og:url', content: 'https://quantified-self.io/' });
     });
 
     it('should inject JSON-LD on home page', () => {
         mockRouter.url = '/';
+        mockRouter.parseUrl = vi.fn().mockReturnValue({
+            queryParams: {},
+            fragment: null,
+            toString: () => '/'
+        });
         mockActivatedRoute.data = of({ title: 'Home' });
 
         // Mock querySelector to return null so it creates new script
-        mockDocument.querySelector.mockReturnValue(null);
+        mockDocument.querySelector = vi.fn().mockReturnValue(null);
         const mockScript = {
             setAttribute: vi.fn(),
             textContent: ''
         };
-        mockDocument.createElement.mockReturnValue(mockScript);
+        mockDocument.createElement = vi.fn().mockReturnValue(mockScript);
+        mockDocument.head.appendChild = vi.fn();
 
         service.init();
         routerEventsSubject.next(new NavigationEnd(1, '/', '/'));
@@ -114,14 +131,126 @@ describe('SeoService', () => {
 
     it('should remove JSON-LD on non-home page', () => {
         mockRouter.url = '/other';
+        mockRouter.parseUrl = vi.fn().mockReturnValue({
+            queryParams: {},
+            fragment: null,
+            toString: () => '/other'
+        });
         mockActivatedRoute.data = of({ title: 'Other' });
 
         const mockScript = {};
-        mockDocument.querySelector.mockReturnValue(mockScript);
+
+        // Smarter mock to handle multiple selectors
+        mockDocument.querySelector = vi.fn().mockImplementation((selector) => {
+            if (selector === 'script[type="application/ld+json"]') {
+                return mockScript;
+            }
+            if (selector === 'link[rel="canonical"]') {
+                // Return a mock link with setAttribute
+                return { setAttribute: vi.fn() };
+            }
+            return null;
+        });
+
+        mockDocument.head.removeChild = vi.fn();
 
         service.init();
         routerEventsSubject.next(new NavigationEnd(1, '/other', '/other'));
 
         expect(mockDocument.head.removeChild).toHaveBeenCalledWith(mockScript);
+    });
+
+    it('should set canonical url without query params', () => {
+        mockActivatedRoute.data = of({ title: 'Canonical Test' });
+
+        // Simulate a URL with query params
+        mockRouter.url = '/products?foo=bar&utm_source=test';
+
+        // Mock the parseUrl behavior to return a tree that can be stripped
+        const mockUrlTree = {
+            queryParams: { foo: 'bar' },
+            fragment: null,
+            toString: vi.fn().mockReturnValue('/products') // After stripping
+        };
+        mockRouter.parseUrl = vi.fn().mockReturnValue(mockUrlTree);
+
+        // Mock document.querySelector for existing canonical
+        mockDocument.querySelector = vi.fn().mockReturnValue(null);
+
+        const mockLink = { setAttribute: vi.fn() };
+        mockDocument.createElement = vi.fn().mockReturnValue(mockLink);
+        mockDocument.head.appendChild = vi.fn();
+
+        service.init();
+        routerEventsSubject.next(new NavigationEnd(1, '/products?foo=bar', '/products?foo=bar'));
+
+        // Verify query params were cleared on the tree
+        expect(mockUrlTree.queryParams).toEqual({});
+
+        // Verify canonical link creation
+        expect(mockDocument.createElement).toHaveBeenCalledWith('link');
+        expect(mockLink.setAttribute).toHaveBeenCalledWith('rel', 'canonical');
+        expect(mockLink.setAttribute).toHaveBeenCalledWith('href', 'https://quantified-self.io/products');
+
+        // Verify og:url
+        expect(metaServiceSpy.updateTag).toHaveBeenCalledWith({
+            property: 'og:url',
+            content: 'https://quantified-self.io/products'
+        });
+    });
+
+    it('should update existing canonical tag', () => {
+        mockActivatedRoute.data = of({ title: 'Update Test' });
+
+        mockRouter.url = '/updated';
+        mockRouter.parseUrl = vi.fn().mockReturnValue({
+            queryParams: {},
+            fragment: null,
+            toString: () => '/updated'
+        });
+
+        const mockLink = { setAttribute: vi.fn() };
+        mockDocument.querySelector = vi.fn().mockReturnValue(mockLink);
+
+        service.init();
+        routerEventsSubject.next(new NavigationEnd(1, '/updated', '/updated'));
+
+        expect(mockDocument.createElement).not.toHaveBeenCalled();
+        expect(mockLink.setAttribute).toHaveBeenCalledWith('href', 'https://quantified-self.io/updated');
+    });
+    it('should inject custom JSON-LD from route data', () => {
+        const customJsonLd = {
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            "name": "Custom List"
+        };
+
+        mockRouter.url = '/releases';
+        mockRouter.parseUrl = vi.fn().mockReturnValue({
+            queryParams: {},
+            fragment: null,
+            toString: () => '/releases'
+        });
+        mockActivatedRoute.data = of({
+            title: 'Releases',
+            jsonLd: customJsonLd
+        });
+
+        // Mock querySelector to return null so it creates new script
+        mockDocument.querySelector = vi.fn().mockReturnValue(null);
+        const mockScript = {
+            setAttribute: vi.fn(),
+            textContent: ''
+        };
+        mockDocument.createElement = vi.fn().mockReturnValue(mockScript);
+        mockDocument.head.appendChild = vi.fn();
+
+        service.init();
+        routerEventsSubject.next(new NavigationEnd(1, '/releases', '/releases'));
+
+        expect(mockDocument.createElement).toHaveBeenCalledWith('script');
+        expect(mockScript.setAttribute).toHaveBeenCalledWith('type', 'application/ld+json');
+        expect(mockDocument.head.appendChild).toHaveBeenCalledWith(mockScript);
+        expect(mockScript.textContent).toBe(JSON.stringify(customJsonLd));
     });
 });

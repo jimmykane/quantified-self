@@ -1,0 +1,234 @@
+@use '../../../../styles/breakpoints' as bp;
+
+:host {
+    display: block;
+    min-height: 100%;
+}
+
+.admin-container {
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+
+    @include bp.xsmall {
+        padding: 1rem;
+    }
+}
+
+.header-container {
+    margin-bottom: 2rem;
+    animation: fadeIn 0.5s ease-out;
+
+    .header-content {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+
+        h1 {
+            margin: 0;
+            font: var(--mat-sys-headline-large);
+
+            @include bp.xsmall {
+                font: var(--mat-sys-headline-medium);
+            }
+        }
+    }
+}
+
+.post-summary {
+    margin: 0;
+    font: var(--mat-sys-body-small);
+    color: var(--mat-sys-on-surface-variant);
+    opacity: 0.8;
+}
+
+.premium-subtitle {
+    margin: 4px 0 0 0;
+    color: var(--mat-sys-on-surface-variant);
+    opacity: 0.8;
+}
+
+.dashboard-section {
+    animation: fadeIn 0.6s ease-out;
+}
+
+.section-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    margin-top: 2rem;
+
+    h2 {
+        font: var(--mat-sys-headline-small);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+
+        @include bp.xsmall {
+            font: var(--mat-sys-title-medium);
+        }
+    }
+}
+
+.glass-card {
+    background: var(--mat-sys-surface);
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+    border: 1px solid var(--mat-sys-outline-variant);
+    backdrop-filter: blur(10px);
+    margin-bottom: 24px;
+
+    :host-context(.dark-theme) & {
+        background: rgba(var(--mat-sys-surface-rgb), 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+}
+
+// Custom Form Row override for specifically 3-item row
+.form-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+
+    mat-form-field {
+        flex: 1;
+        min-width: 200px;
+    }
+
+    mat-checkbox {
+        display: flex;
+        align-items: center;
+    }
+}
+
+
+// Table Styles
+.table-container {
+    padding: 0; // Table takes full width of card
+    overflow: hidden;
+}
+
+.table-wrapper {
+    overflow-x: auto;
+    width: 100%;
+}
+
+table {
+    width: 100%;
+    background: transparent !important;
+}
+
+th.mat-header-cell {
+    background: rgba(var(--mat-sys-on-surface-rgb), 0.03);
+    font: var(--mat-sys-label-medium);
+    text-transform: uppercase;
+
+    :host-context(.dark-theme) & {
+        background: rgba(255, 255, 255, 0.05);
+    }
+}
+
+td.mat-cell {
+    padding: 16px;
+}
+
+.type-badge {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font: var(--mat-sys-label-small);
+    text-transform: uppercase;
+    display: inline-block;
+
+    &.major {
+        background: rgba(var(--mat-sys-error-rgb), 0.1);
+        color: var(--mat-sys-error);
+    }
+
+    &.minor {
+        background: rgba(var(--mat-sys-primary-rgb), 0.1);
+        color: var(--mat-sys-primary);
+    }
+
+    &.patch {
+        background: rgba(var(--mat-sys-tertiary-rgb), 0.1);
+        color: var(--mat-sys-tertiary);
+    }
+}
+
+.status-badge {
+    padding: 4px 10px;
+    border-radius: 20px;
+    font: var(--mat-sys-label-small);
+    display: inline-block;
+
+    &.published {
+        background: rgba(76, 175, 80, 0.1);
+        color: #4caf50;
+    }
+
+    &.draft {
+        background: rgba(158, 158, 158, 0.1);
+        color: #9e9e9e;
+    }
+}
+
+// Editor & Preview Tabs
+.description-tabs {
+    margin-top: 8px;
+    border-radius: 12px;
+    overflow: visible;
+
+    ::ng-deep {
+        .mat-mdc-tab-body-wrapper {
+            // Ensure wrapper allows visible overflow if possible, but crucial part is spacing
+            overflow: visible;
+        }
+
+        .mat-mdc-tab-body-content {
+            // Add significant padding to push content away from clipping edges
+            padding: 24px;
+            overflow: visible !important;
+        }
+
+        .mat-mdc-tab-header {
+            margin-bottom: 0; // Spacing handled by padding now
+        }
+    }
+}
+
+.preview-container {
+    min-height: 250px;
+    max-height: 500px;
+    overflow-y: auto;
+    padding: 12px;
+    border-radius: 12px;
+    background: var(--mat-sys-surface-container-lowest);
+
+    .preview-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        min-height: 150px;
+        color: var(--mat-sys-on-surface-variant);
+        opacity: 0.5;
+        font-style: italic;
+        font: var(--mat-sys-body-small);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

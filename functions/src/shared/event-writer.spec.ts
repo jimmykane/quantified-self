@@ -272,7 +272,7 @@ describe('EventWriter', () => {
             );
             // Should log upload complete
             expect(mockLogger.info).toHaveBeenCalledWith(
-                expect.stringContaining('Upload complete')
+                expect.stringContaining('All uploads complete')
             );
         });
 

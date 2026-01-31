@@ -88,6 +88,9 @@ export class AppThemeService implements OnDestroy {
   }
 
   public setAppTheme(appTheme: AppThemes, saveToStorage: boolean = true) {
+    if (this.appThemeSubject.getValue() === appTheme) {
+      return;
+    }
     if (appTheme === AppThemes.Normal) {
       document.body.classList.remove('dark-theme');
     } else {
@@ -100,6 +103,9 @@ export class AppThemeService implements OnDestroy {
   }
 
   public setChartTheme(chartTheme: ChartThemes) {
+    if (this.chartTheme.getValue() === chartTheme) {
+      return;
+    }
     localStorage.setItem('chartTheme', chartTheme);
     this.chartTheme.next(chartTheme);
   }

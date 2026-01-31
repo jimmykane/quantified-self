@@ -85,4 +85,20 @@ export class AppAnalyticsService {
     logRestorePurchases(status: 'initiated' | 'success' | 'failure', role?: string, error?: string): void {
         this.logEvent('restore_purchases', { status, role, error });
     }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // What's New Events
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    logViewWhatsNewBadge(): void {
+        this.logEvent('view_whats_new_badge');
+    }
+
+    logClickWhatsNew(): void {
+        this.logEvent('click_whats_new');
+    }
+
+    logDismissWhatsNew(): void {
+        this.logEvent('dismiss_whats_new');
+    }
 }

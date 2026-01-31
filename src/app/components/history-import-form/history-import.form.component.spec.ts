@@ -97,6 +97,10 @@ describe('HistoryImportFormComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('should have correct processing capacity constant', () => {
+        expect(component.processingCapacityPerDay).toBe(24000);
+    });
+
     it('should calculate cooldownDays correctly', () => {
         // Hardcoded 500 to match constant HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT
         const limit = 500;
@@ -207,11 +211,13 @@ describe('HistoryImportFormComponent', () => {
             await component.onSubmit(mockEvent);
 
             expect(component.pendingImportResult()).toEqual(mockStats);
-            expect(snackBar.open).toHaveBeenCalledWith(
-                `History import queued: ${mockStats.successCount} activities found.`,
-                undefined,
-                { duration: 3000 }
-            );
+            // We now check for the verbal estimation
+            // 150 / 24000 = very small fraction of a day -> very soon
+            expect(component.estimatedCompletionVerbal).toContain('Should be done very soon! 🚀');
+
+            // Should also display the capacity
+            const compiled = fixture.nativeElement;
+            expect(compiled.textContent).toContain('24,000 / day capacity');
         });
 
         it('should show "No new activities" snackbar when successCount is 0', async () => {

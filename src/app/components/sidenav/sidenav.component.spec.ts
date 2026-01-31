@@ -12,6 +12,9 @@ import { of } from 'rxjs';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 
+import { AppWhatsNewService } from '../../services/app.whats-new.service';
+import { signal } from '@angular/core';
+
 describe('SideNavComponent', () => {
     let component: SideNavComponent;
     let fixture: ComponentFixture<SideNavComponent>;
@@ -37,6 +40,7 @@ describe('SideNavComponent', () => {
                 { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
                 { provide: MatSnackBar, useValue: {} },
                 { provide: Router, useValue: {} },
+                { provide: AppWhatsNewService, useValue: { unreadCount: signal(0) } },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();

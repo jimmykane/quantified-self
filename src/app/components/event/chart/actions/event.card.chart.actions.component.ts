@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output, inject } from '@angular/core';
 import { XAxisTypes } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
-import { AppUserService } from '../../../../services/app.user.service';
+import { AppUserSettingsQueryService } from '../../../../services/app.user-settings-query.service';
 import { AppAnalyticsService } from '../../../../services/app.analytics.service';
 import { EventInterface } from '@sports-alliance/sports-lib';
 
@@ -29,8 +29,9 @@ export class EventCardChartActionsComponent implements OnChanges {
   public xAxisTypes = XAxisTypes;
   private analyticsService = inject(AppAnalyticsService);
 
-  constructor(
-    private userService: AppUserService) {
+  private userSettingsQuery = inject(AppUserSettingsQueryService);
+
+  constructor() {
   }
 
   async somethingChanged(event) {
@@ -39,11 +40,12 @@ export class EventCardChartActionsComponent implements OnChanges {
     this.showLapsChange.emit(this.showLaps);
     this.stackYAxesChange.emit(this.stackYAxes);
     if (this.user) {
-      this.user.settings.chartSettings.xAxisType = this.xAxisType;
-      this.user.settings.chartSettings.showAllData = this.showAllData;
-      this.user.settings.chartSettings.showLaps = this.showLaps;
-      this.user.settings.chartSettings.stackYAxes = this.stackYAxes;
-      await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
+      this.userSettingsQuery.updateChartSettings({
+        xAxisType: this.xAxisType,
+        showAllData: this.showAllData,
+        showLaps: this.showLaps,
+        stackYAxes: this.stackYAxes
+      });
     }
     this.analyticsService.logEvent('event_chart_settings_change');
   }

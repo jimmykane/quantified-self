@@ -1,0 +1,21 @@
+<div class="feed-container">
+    <!-- FULL MODE: Expansion Panels (Releases Page) -->
+    <mat-accordion *ngIf="displayMode() === 'full'" class="full-accordion" multi="true">
+        <app-whats-new-item *ngFor="let log of changelogs(); let first = first" [post]="log" [displayMode]="'full'"
+            [isUnread]="isUnread(log)" [expanded]="first">
+        </app-whats-new-item>
+    </mat-accordion>
+
+    <!-- COMPACT MODE: Cards (Dialog) -->
+    <div *ngIf="displayMode() === 'compact'" class="compact-feed">
+        <app-whats-new-item *ngFor="let log of changelogs()" [post]="log" [displayMode]="'compact'"
+            [isUnread]="isUnread(log)" (postClick)="navigateToReleases()">
+        </app-whats-new-item>
+    </div>
+
+    <!-- Empty State -->
+    <div *ngIf="changelogs().length === 0" class="empty-state">
+        <mat-icon class="empty-icon">history_edu</mat-icon>
+        <p>No updates yet.</p>
+    </div>
+</div>
