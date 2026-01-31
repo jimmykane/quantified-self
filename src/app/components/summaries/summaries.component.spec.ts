@@ -176,5 +176,37 @@ describe('SummariesComponent', () => {
 
             expect(result.length).toBe(0);
         });
+
+        it('should filter out descent data if manually excluded by user setting', () => {
+            component.user = {
+                settings: {
+                    summariesSettings: {
+                        removeDescentForEventTypes: [ActivityTypes.Running]
+                    }
+                }
+            } as any;
+
+            const mockEvents = [
+                {
+                    getActivityTypesAsArray: () => [ActivityTypes.Running],
+                    getStat: vi.fn().mockReturnValue({ getValue: () => 100 }),
+                    startDate: new Date(),
+                    isMerge: false
+                }
+            ] as any;
+
+            vi.spyOn(component as any, 'getEventCategoryKey').mockReturnValue('key');
+            vi.spyOn(component as any, 'getValueSum').mockReturnValue(100);
+
+            const result = (component as any).getChartData(
+                mockEvents,
+                DataDescent.type,
+                ChartDataValueTypes.Total,
+                ChartDataCategoryTypes.ActivityType,
+                TimeIntervals.Daily
+            );
+
+            expect(result.length).toBe(0);
+        });
     });
 });

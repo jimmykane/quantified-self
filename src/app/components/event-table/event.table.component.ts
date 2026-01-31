@@ -584,6 +584,18 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       );
       statRowElement['Event'] = event;
 
+      const activityTypes = event.getActivityTypesAsArray();
+
+      statRowElement.isAscentExcluded = activityTypes.some(type =>
+        AppEventUtilities.shouldExcludeAscent(type as ActivityTypes) ||
+        (this.user.settings.summariesSettings?.removeAscentForEventTypes || []).includes(type as any)
+      );
+
+      statRowElement.isDescentExcluded = activityTypes.some(type =>
+        AppEventUtilities.shouldExcludeDescent(type as ActivityTypes) ||
+        ((this.user.settings.summariesSettings as any)?.removeDescentForEventTypes || []).includes(type as any)
+      );
+
       // Add the sorts
       statRowElement['sort.Start Date'] = event.startDate.getTime();
       statRowElement['sort.Activity Types'] = statRowElement['Activity Types'];

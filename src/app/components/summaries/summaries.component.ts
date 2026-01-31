@@ -305,7 +305,12 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
     // Return empty if descent is to be skipped
     if (dataType === DataDescent.type) {
-      events = events.filter(event => !AppEventUtilities.shouldExcludeDescent(event.getActivityTypesAsArray() as ActivityTypes[]))
+      events = events.filter(event => {
+        const types = event.getActivityTypesAsArray() as ActivityTypes[];
+        const isAutoExcluded = AppEventUtilities.shouldExcludeDescent(types);
+        const isManuallyExcluded = (this.user?.settings?.summariesSettings as any)?.removeDescentForEventTypes?.some(t => types.indexOf(t) >= 0);
+        return !isAutoExcluded && !isManuallyExcluded;
+      });
     }
     // @todo can the below if be better ? we need return there for switch
     // We care sums to ommit 0s

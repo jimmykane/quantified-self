@@ -15,7 +15,7 @@ import { MaterialModule } from '../../modules/material.module';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { of } from 'rxjs';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
-import { Privacy, User, ACTIVITIES_EXCLUDED_FROM_ASCENT } from '@sports-alliance/sports-lib';
+import { Privacy, User, ACTIVITIES_EXCLUDED_FROM_ASCENT, ACTIVITIES_EXCLUDED_FROM_DESCENT } from '@sports-alliance/sports-lib';
 
 
 
@@ -231,6 +231,25 @@ describe('UserSettingsComponent', () => {
 
         // Should contain mandatory exclusions (e.g., Alpine Skiing)
         ACTIVITIES_EXCLUDED_FROM_ASCENT.forEach(type => {
+            expect(formValue).toContain(type);
+        });
+
+        // Should be unique
+        expect(new Set(formValue).size).toBe(formValue.length);
+    });
+    it('should initialize removeDescentForActivitiesSummaries with mandatory exclusions merged with user settings', () => {
+        component.user.settings.summariesSettings = {
+            removeDescentForEventTypes: ['Running']
+        } as any;
+        component.ngOnChanges();
+
+        const formValue = component.userSettingsFormGroup.get('removeDescentForActivitiesSummaries').value;
+
+        // Should contain 'Running' (from user)
+        expect(formValue).toContain('Running');
+
+        // Should contain mandatory exclusions
+        ACTIVITIES_EXCLUDED_FROM_DESCENT.forEach(type => {
             expect(formValue).toContain(type);
         });
 

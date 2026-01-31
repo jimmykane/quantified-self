@@ -26,7 +26,7 @@ import {
   UserUnitSettingsInterface,
   VerticalSpeedUnits
 } from '@sports-alliance/sports-lib';
-import { UserDashboardSettingsInterface, ACTIVITIES_EXCLUDED_FROM_ASCENT } from '@sports-alliance/sports-lib';
+import { UserDashboardSettingsInterface, ACTIVITIES_EXCLUDED_FROM_ASCENT, ACTIVITIES_EXCLUDED_FROM_DESCENT } from '@sports-alliance/sports-lib';
 import { LapTypesHelper } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
@@ -44,6 +44,7 @@ import {
 export class UserSettingsComponent implements OnChanges {
 
   public mandatoryAscentExclusions = ACTIVITIES_EXCLUDED_FROM_ASCENT;
+  public mandatoryDescentExclusions = ACTIVITIES_EXCLUDED_FROM_DESCENT;
 
   @Input() user: AppUserInterface;
   public privacy = Privacy;
@@ -179,6 +180,7 @@ export class UserSettingsComponent implements OnChanges {
       showAllData: new UntypedFormControl(this.user.settings.chartSettings.showAllData, []),
       chartDisableGrouping: new UntypedFormControl(this.user.settings.chartSettings.disableGrouping, []),
       removeAscentForActivitiesSummaries: new UntypedFormControl([...new Set([...(this.user.settings.summariesSettings?.removeAscentForEventTypes || []), ...this.mandatoryAscentExclusions])], []),
+      removeDescentForActivitiesSummaries: new UntypedFormControl([...new Set([...((this.user.settings.summariesSettings as any)?.removeDescentForEventTypes || []), ...this.mandatoryDescentExclusions])], []),
       chartCursorBehaviour: new UntypedFormControl(this.user.settings.chartSettings.chartCursorBehaviour === ChartCursorBehaviours.SelectX, []),
       startOfTheWeek: new UntypedFormControl(this.user.settings.unitSettings.startOfTheWeek, [
         Validators.required,
@@ -215,6 +217,10 @@ export class UserSettingsComponent implements OnChanges {
 
   isMandatoryExclusion(type: any): boolean {
     return this.mandatoryAscentExclusions.indexOf(type) >= 0;
+  }
+
+  isMandatoryDescentExclusion(type: any): boolean {
+    return this.mandatoryDescentExclusions.indexOf(type) >= 0;
   }
 
   async onSubmit(event) {
@@ -299,7 +305,8 @@ export class UserSettingsComponent implements OnChanges {
             }
           },
           summariesSettings: {
-            removeAscentForEventTypes: this.userSettingsFormGroup.get('removeAscentForActivitiesSummaries').value
+            removeAscentForEventTypes: this.userSettingsFormGroup.get('removeAscentForActivitiesSummaries').value,
+            removeDescentForEventTypes: this.userSettingsFormGroup.get('removeDescentForActivitiesSummaries').value
           },
           exportToCSVSettings: this.user.settings.exportToCSVSettings
         }

@@ -87,8 +87,14 @@
           </span>
           }
           @if (column !== 'Checkbox' && column !== 'Actions' && column !== 'Activity Types' && column!=='Privacy') {
-          <span>
+          <span class="data-cell">
             {{ row[column] }}
+            @if (column === 'Ascent' && row.isAscentExcluded) {
+            <mat-icon class="excluded-icon" matTooltip="Ascent excluded by settings">info</mat-icon>
+            }
+            @if (column === 'Descent' && row.isDescentExcluded) {
+            <mat-icon class="excluded-icon" matTooltip="Descent excluded by settings">info</mat-icon>
+            }
           </span>
           }
         </td>
