@@ -55,11 +55,25 @@
                     <mat-checkbox formControlName="published">Published</mat-checkbox>
                 </div>
 
-                <mat-form-field appearance="outline" class="full-width">
-                    <mat-label>Description (Markdown supported)</mat-label>
-                    <textarea matInput formControlName="description" rows="5"></textarea>
-                    <mat-error *ngIf="form.get('description')?.hasError('required')">Description is required</mat-error>
-                </mat-form-field>
+                <mat-tab-group class="description-tabs">
+                    <mat-tab label="Write">
+                        <mat-form-field appearance="outline" class="full-width editor-field">
+                            <mat-label>Description (Markdown supported)</mat-label>
+                            <textarea matInput formControlName="description" rows="10"></textarea>
+                            <mat-error *ngIf="form.get('description')?.hasError('required')">Description is
+                                required</mat-error>
+                        </mat-form-field>
+                    </mat-tab>
+                    <mat-tab label="Preview">
+                        <div class="preview-container qs-scrollbar">
+                            <app-whats-new-item [post]="previewPost" [displayMode]="'full'" [expanded]="true">
+                            </app-whats-new-item>
+                            <div *ngIf="!form.get('description')?.value" class="preview-empty">
+                                Nothing to preview
+                            </div>
+                        </div>
+                    </mat-tab>
+                </mat-tab-group>
 
                 <div class="form-actions">
                     <button mat-button type="button" (click)="cancel()">Cancel</button>
@@ -111,8 +125,7 @@
                         <th mat-header-cell *matHeaderCellDef> Title </th>
                         <td mat-cell *matCellDef="let post">
                             <strong>{{ post.title }}</strong>
-                            <p
-                                style="margin: 0; font-size: 0.85em; color: var(--mat-sys-on-surface-variant); opacity: 0.8;">
+                            <p class="post-summary">
                                 {{ post.description | slice:0:100 }}{{ post.description.length > 100 ? '...' : '' }}
                             </p>
                         </td>

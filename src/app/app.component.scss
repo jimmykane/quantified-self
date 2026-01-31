@@ -104,8 +104,7 @@ mat-icon.header-logo {
 
 /* Buttons inside nav */
 nav button[mat-flat-button],
-nav button[mat-stroked-button],
-nav button[mat-icon-button] {
+nav button[mat-stroked-button] {
   border-radius: 20px;
   /* Rounded pill shape */
   padding: 0 24px;
@@ -119,6 +118,18 @@ nav button[mat-icon-button] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+nav button[mat-icon-button] {
+  padding: 0;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
 }
 
 nav button.icon-only {

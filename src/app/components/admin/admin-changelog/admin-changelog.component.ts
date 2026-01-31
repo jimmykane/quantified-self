@@ -1,5 +1,5 @@
 
-import { Component, inject, signal, OnDestroy } from '@angular/core';
+import { Component, inject, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -13,10 +13,13 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTableModule } from '@angular/material/table';
+import { MatTabsModule } from '@angular/material/tabs';
 import { RouterModule } from '@angular/router';
 import { AppWhatsNewService, ChangelogPost } from '../../../services/app.whats-new.service';
 import { Timestamp } from '@angular/fire/firestore';
 import { LoggerService } from '../../../services/logger.service';
+import { MarkdownPipe } from '../../../helpers/markdown.pipe';
+import { WhatsNewItemComponent } from '../../whats-new/whats-new-item.component';
 
 @Component({
     selector: 'app-admin-changelog',
@@ -35,7 +38,10 @@ import { LoggerService } from '../../../services/logger.service';
         MatIconModule,
         MatCheckboxModule,
         MatTooltipModule,
-        MatTableModule
+        MatTableModule,
+        MatTabsModule,
+        MarkdownPipe,
+        WhatsNewItemComponent
     ],
     templateUrl: './admin-changelog.component.html',
     styleUrls: ['./admin-changelog.component.scss']
@@ -60,6 +66,21 @@ export class AdminChangelogComponent implements OnDestroy {
         published: [false] // Default to draft
     });
 
+    get previewPost(): ChangelogPost {
+        const values = this.form.getRawValue();
+        return {
+            id: 'preview',
+            title: values.title || 'Release Title',
+            description: values.description || '',
+            date: values.date ? Timestamp.fromDate(values.date) : Timestamp.now(),
+            type: values.type || 'minor',
+            version: values.version || '',
+            published: values.published ?? false,
+            // Keep image if editing and it exists, though currently not in form
+            image: this.editingPost?.image
+        } as ChangelogPost;
+    }
+
     constructor() {
         this.whatsNewService.setAdminMode(true);
     }
@@ -78,7 +99,7 @@ export class AdminChangelogComponent implements OnDestroy {
 
     createNew() {
         this.isNew = true;
-        this.editingPost = {} as any; // Temporary placeholder
+        this.editingPost = null;
         this.form.reset({
             title: '',
             description: '',

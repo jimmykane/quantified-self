@@ -1,0 +1,165 @@
+:host {
+    display: block;
+    width: 100%;
+}
+
+// Full Mode (Expansion Panels)
+.changelog-panel {
+    background: var(--mat-sys-surface-container-low) !important;
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 12px !important;
+    margin-bottom: 12px;
+    overflow: hidden;
+    box-shadow: none !important;
+
+    &.mat-expanded {
+        border-color: var(--mat-sys-outline);
+        background: var(--mat-sys-surface-container) !important;
+    }
+
+    ::ng-deep .mat-expansion-panel-body {
+        padding: 0 24px 24px 24px;
+    }
+}
+
+.mat-expansion-panel-header {
+    height: 64px !important;
+    padding: 0 24px;
+}
+
+.mat-panel-title {
+    flex-grow: 1;
+    margin-right: 16px;
+}
+
+.mat-panel-description {
+    flex-grow: 0;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.expandable-image {
+    max-width: 100%;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    display: block;
+    border: 1px solid var(--mat-sys-outline-variant);
+}
+
+// Compact Mode (Cards)
+.changelog-card {
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid var(--mat-sys-outline-variant);
+    background: var(--mat-sys-surface-container-low) !important;
+    border-radius: 12px;
+    overflow: hidden;
+
+    &:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        border-color: var(--mat-sys-primary);
+
+        :host-context(.dark-theme) & {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+    }
+
+    mat-card-header {
+        padding: 12px 16px;
+    }
+}
+
+// Shared Header Elements
+.header-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+
+.header-left,
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.post-title {
+    margin: 0;
+    font: var(--mat-sys-title-medium);
+    color: var(--mat-sys-on-surface);
+}
+
+.header-separator {
+    font: var(--mat-sys-label-medium);
+    color: var(--mat-sys-outline-variant);
+}
+
+.header-date {
+    font: var(--mat-sys-label-medium);
+    color: var(--mat-sys-on-surface-variant);
+    white-space: nowrap;
+}
+
+.unread-dot {
+    width: 8px;
+    height: 8px;
+    background-color: var(--mat-sys-error);
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 6px var(--mat-sys-error);
+}
+
+.version-tag,
+.unpublished-tag {
+    font: var(--mat-sys-label-small);
+    padding: 2px 10px;
+    border-radius: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.version-tag {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+}
+
+.unpublished-tag {
+    background: var(--mat-sys-error-container);
+    color: var(--mat-sys-on-error-container);
+}
+
+// Content Elements
+.description {
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface-variant);
+
+    ::ng-deep {
+        p {
+            margin: 0 0 16px 0;
+        }
+
+        p:last-child {
+            margin-bottom: 0;
+        }
+
+        ul,
+        ol {
+            padding-left: 24px;
+            margin-bottom: 16px;
+        }
+
+        li {
+            margin-bottom: 6px;
+        }
+
+        code {
+            background: var(--mat-sys-surface-container-highest);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Roboto Mono', monospace;
+            font-size: 0.9em;
+        }
+    }
+}

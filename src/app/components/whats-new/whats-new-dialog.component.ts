@@ -28,7 +28,7 @@ import { computed } from '@angular/core';
       <span class="header-text">What's New</span>
     </div>
     <mat-divider></mat-divider>
-    <mat-dialog-content class="dialog-content">
+    <mat-dialog-content class="dialog-content qs-scrollbar">
       @if (isUpdateAvailable()) {
         <div class="update-banner">
             <mat-icon>system_update</mat-icon>
