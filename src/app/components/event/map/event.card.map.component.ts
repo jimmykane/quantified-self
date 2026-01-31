@@ -99,7 +99,8 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       mapTypeIds: ['roadmap', 'hybrid', 'terrain']
     },
     mapId: environment.googleMapsMapId,
-    colorScheme: this.mapColorScheme()
+    colorScheme: this.mapColorScheme(),
+    clickableIcons: false
   }));
 
   private activitiesCursorSubscription: Subscription = new Subscription();

@@ -72,7 +72,8 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       mapTypeIds: ['roadmap', 'hybrid', 'terrain']
     },
     mapId: environment.googleMapsMapId,
-    colorScheme: this.mapColorScheme()
+    colorScheme: this.mapColorScheme(),
+    clickableIcons: false
   }));
 
   onZoomChanged() {
