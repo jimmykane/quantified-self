@@ -635,19 +635,17 @@ export class AppEventService implements OnDestroy {
       const validEvents = parsedEvents.filter(e => !!e);
       if (validEvents.length === 0) return null;
 
-      if (validEvents.length === 1) return validEvents[0];
+      const finalEvent = validEvents.length === 1 ? validEvents[0] : EventUtilities.mergeEvents(validEvents);
 
-      const merged = EventUtilities.mergeEvents(validEvents);
-      const activityIDs = new Set<string>();
-      merged.getActivities().forEach((activity, index) => {
-        const currentID = activity.getID();
-        if (activityIDs.has(currentID)) {
-          // Only append if collision detected
-          activity.setID(`${currentID}_${index}`);
+      // Basic transfer of IDs from Firestore activities to re-parsed activities
+      const existingActivities = event.getActivities();
+      finalEvent.getActivities().forEach((activity, index) => {
+        if (existingActivities[index]) {
+          activity.setID(existingActivities[index].getID());
         }
-        activityIDs.add(activity.getID());
       });
-      return merged;
+
+      return finalEvent;
     }
 
     // 2. Legacy Single Strategy
@@ -656,7 +654,16 @@ export class AppEventService implements OnDestroy {
       this.logger.warn('Original file path missing', originalFile);
       return null;
     }
-    return this.fetchAndParseOneFile(originalFile, skipEnrichment);
+    const res = await this.fetchAndParseOneFile(originalFile, skipEnrichment);
+    if (res && res.getActivities().length > 0) {
+      const existingActivities = event.getActivities();
+      res.getActivities().forEach((activity, index) => {
+        if (existingActivities[index]) {
+          activity.setID(existingActivities[index].getID());
+        }
+      });
+    }
+    return res;
   }
 
   private cacheService = inject(AppCacheService);

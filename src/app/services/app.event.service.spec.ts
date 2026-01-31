@@ -361,4 +361,149 @@ describe('AppEventService', () => {
             expect(result).toBe(testBuffer);
         });
     });
+
+    describe('activity ID transfer', () => {
+        it('should transfer activity IDs from existing activities during client-side parsing (Single File)', async () => {
+            const activityId = 'act1';
+
+            // Mock activities from Firestore
+            const mockActivity = {
+                getID: vi.fn().mockReturnValue(activityId),
+                setID: vi.fn().mockReturnThis(),
+            } as any;
+
+            const mockEvent = {
+                getActivities: vi.fn().mockReturnValue([mockActivity]),
+                originalFile: { path: 'path/to/file.fit' },
+                getID: vi.fn().mockReturnValue('event1')
+            } as any;
+
+            // Mock re-parsed activity (without ID)
+            const parsedActivity = {
+                getID: vi.fn().mockReturnValue(null),
+                setID: vi.fn().mockReturnThis(),
+            } as any;
+            const parsedEvent = {
+                getActivities: vi.fn().mockReturnValue([parsedActivity]),
+            } as any;
+
+            // Mock fetchAndParseOneFile helper
+            vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue(parsedEvent);
+
+            // Call calculateStreamsFromWithOrchestration
+            const result = await (service as any).calculateStreamsFromWithOrchestration(mockEvent);
+
+            expect(result).toBe(parsedEvent);
+            expect(parsedActivity.setID).toHaveBeenCalledWith(activityId);
+        });
+
+        it('should transfer activity IDs in merged events scenario (Multiple Files)', async () => {
+            // Firestore activities
+            const mockActivity1 = { getID: () => 'act1' } as any;
+            const mockActivity2 = { getID: () => 'act2' } as any;
+
+            const mockEvent = {
+                getID: () => 'event1',
+                getActivities: () => [mockActivity1, mockActivity2],
+                originalFiles: [{ path: 'f1.fit' }, { path: 'f2.fit' }]
+            } as any;
+
+            // Mock re-parsed activities (without IDs)
+            const parsedActivity1 = {
+                getID: vi.fn().mockReturnValue(null),
+                setID: vi.fn().mockReturnThis(),
+            } as any;
+            const parsedActivity2 = {
+                getID: vi.fn().mockReturnValue(null),
+                setID: vi.fn().mockReturnThis(),
+            } as any;
+
+            const parsedEvent1 = { getActivities: () => [parsedActivity1] } as any;
+            const parsedEvent2 = { getActivities: () => [parsedActivity2] } as any;
+
+            vi.spyOn(service as any, 'fetchAndParseOneFile')
+                .mockResolvedValueOnce(parsedEvent1)
+                .mockResolvedValueOnce(parsedEvent2);
+
+            // Mock EventUtilities.mergeEvents
+            const mergedEvent = {
+                getActivities: () => [parsedActivity1, parsedActivity2]
+            } as any;
+
+            const { EventUtilities } = await import('@sports-alliance/sports-lib');
+            vi.spyOn(EventUtilities, 'mergeEvents').mockReturnValue(mergedEvent);
+
+            // Call calculateStreamsFromWithOrchestration
+            const result = await (service as any).calculateStreamsFromWithOrchestration(mockEvent);
+
+            expect(result).toBe(mergedEvent);
+            expect(parsedActivity1.setID).toHaveBeenCalledWith('act1');
+            expect(parsedActivity2.setID).toHaveBeenCalledWith('act2');
+        });
+
+        it('should handle mismatched activity counts gracefully (More parsed than Firestore)', async () => {
+            const mockActivity1 = { getID: () => 'act1' } as any;
+            const mockEvent = {
+                getActivities: () => [mockActivity1],
+                originalFile: { path: 'path/to/file.fit' },
+                getID: () => 'event1'
+            } as any;
+
+            const parsedActivity1 = { getID: () => null, setID: vi.fn().mockReturnThis() } as any;
+            const parsedActivity2 = { getID: () => null, setID: vi.fn().mockReturnThis() } as any;
+            const parsedEvent = {
+                getActivities: () => [parsedActivity1, parsedActivity2],
+            } as any;
+
+            vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue(parsedEvent);
+
+            const result = await (service as any).calculateStreamsFromWithOrchestration(mockEvent);
+
+            expect(result).toBe(parsedEvent);
+            expect(parsedActivity1.setID).toHaveBeenCalledWith('act1');
+            expect(parsedActivity2.setID).not.toHaveBeenCalled(); // No corresponding Firestore activity
+        });
+
+        it('should handle mismatched activity counts gracefully (Fewer parsed than Firestore)', async () => {
+            const mockActivity1 = { getID: () => 'act1' } as any;
+            const mockActivity2 = { getID: () => 'act2' } as any;
+            const mockEvent = {
+                getActivities: () => [mockActivity1, mockActivity2],
+                originalFile: { path: 'path/to/file.fit' },
+                getID: () => 'event1'
+            } as any;
+
+            const parsedActivity1 = { getID: () => null, setID: vi.fn().mockReturnThis() } as any;
+            const parsedEvent = {
+                getActivities: () => [parsedActivity1],
+            } as any;
+
+            vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue(parsedEvent);
+
+            const result = await (service as any).calculateStreamsFromWithOrchestration(mockEvent);
+
+            expect(result).toBe(parsedEvent);
+            expect(parsedActivity1.setID).toHaveBeenCalledWith('act1');
+        });
+
+        it('should not crash if Firestore has no activities', async () => {
+            const mockEvent = {
+                getActivities: () => [],
+                originalFile: { path: 'path/to/file.fit' },
+                getID: () => 'event1'
+            } as any;
+
+            const parsedActivity1 = { getID: () => null, setID: vi.fn().mockReturnThis() } as any;
+            const parsedEvent = {
+                getActivities: () => [parsedActivity1],
+            } as any;
+
+            vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue(parsedEvent);
+
+            const result = await (service as any).calculateStreamsFromWithOrchestration(mockEvent);
+
+            expect(result).toBe(parsedEvent);
+            expect(parsedActivity1.setID).not.toHaveBeenCalled();
+        });
+    });
 });
