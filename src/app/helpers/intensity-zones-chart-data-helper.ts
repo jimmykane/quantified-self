@@ -20,11 +20,14 @@ export function convertIntensityZonesStatsToChartData(
 
   return DynamicDataLoader.zoneStatsTypeMap.reduce((data: any[], statsToTypeMapEntry) => {
     statsToTypeMapEntry.stats.forEach((statType, index) => {
-      data.push({
-        zone: zoneLabel(index + 1),
-        type: statsToTypeMapEntry.type,
-        [statsToTypeMapEntry.type]: statsTypeMap[statType],
-      });
+      const value = statsTypeMap[statType];
+      if (value !== undefined && value > 0) {
+        data.push({
+          zone: zoneLabel(index + 1),
+          type: statsToTypeMapEntry.type,
+          [statsToTypeMapEntry.type]: value,
+        });
+      }
     });
     return data;
   }, []);
