@@ -120,7 +120,7 @@
     <div class="sidenav-footer-links">
       <button mat-icon-button matTooltip="Release Notes" routerLink="/releases" (click)="sideNav.close();">
         <mat-icon [matBadge]="whatsNewService.unreadCount()" [matBadgeHidden]="whatsNewService.unreadCount() === 0"
-          matBadgeColor="warn" matBadgeSize="small">campaign</mat-icon>
+          matBadgeColor="warn" matBadgeSize="small" aria-hidden="false">campaign</mat-icon>
       </button>
       <button mat-icon-button matTooltip="Star on GitHub" (click)="gitHubStar()">
         <mat-icon>star</mat-icon>
