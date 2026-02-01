@@ -98,7 +98,7 @@ describe('HistoryImportFormComponent', () => {
     });
 
     it('should have correct processing capacity constant', () => {
-        expect(component.processingCapacityPerDay).toBe(24000);
+        expect(component.processingCapacityPerDay).toBe(5000);
     });
 
     it('should calculate cooldownDays correctly', () => {
@@ -217,7 +217,7 @@ describe('HistoryImportFormComponent', () => {
 
             // Should also display the capacity
             const compiled = fixture.nativeElement;
-            expect(compiled.textContent).toContain('24,000 / day capacity');
+            expect(compiled.textContent).toContain('5,000 / day capacity');
         });
 
         it('should show "No new activities" snackbar when successCount is 0', async () => {
