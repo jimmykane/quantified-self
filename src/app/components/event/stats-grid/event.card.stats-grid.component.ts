@@ -76,7 +76,7 @@ export class EventCardStatsGridComponent implements OnChanges {
       return;
     }
 
-    const activityTypes = (this.selectedActivities || []).map((activity: ActivityInterface) => Object.keys(ActivityTypes).find((key: string) => ActivityTypes[key as keyof typeof ActivityTypes] === activity.type)).filter(type => !!type) as string[];
+    const activityTypes = (this.selectedActivities || []).map((activity: ActivityInterface) => activity.type).filter(type => !!type) as ActivityTypes[];
 
     // the order here is important
     this.displayedStatsToShow = [
@@ -99,18 +99,18 @@ export class EventCardStatsGridComponent implements OnChanges {
       DataTemperatureAvg.type,
     ].reduce((statsAccu: string[], statType: string) => {
       if (statType === DataAscent.type) {
-        if (AppEventUtilities.shouldExcludeAscent(activityTypes as ActivityTypes[]) || (this.summariesSettings?.removeAscentForEventTypes || []).some((type: string) => (activityTypes as string[]).includes(type))) {
+        if (AppEventUtilities.shouldExcludeAscent(activityTypes) || (this.summariesSettings?.removeAscentForEventTypes || []).some((type: string) => (activityTypes as string[]).includes(type))) {
           return statsAccu;
         }
       }
       if (statType === DataDescent.type) {
-        if (AppEventUtilities.shouldExcludeDescent(activityTypes as ActivityTypes[]) || ((this.summariesSettings as any)?.removeDescentForEventTypes || []).some((type: string) => (activityTypes as string[]).includes(type))) {
+        if (AppEventUtilities.shouldExcludeDescent(activityTypes) || ((this.summariesSettings as any)?.removeDescentForEventTypes || []).some((type: string) => (activityTypes as string[]).includes(type))) {
           return statsAccu;
         }
       }
       if (statType === DataSpeedAvg.type) {
-        const speedMetrics = activityTypes.reduce((speedMetricsAccu: string[], activityType: string) => {
-          const metrics = ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(ActivityTypes[activityType as keyof typeof ActivityTypes]);
+        const speedMetrics = activityTypes.reduce((speedMetricsAccu: string[], activityType: ActivityTypes) => {
+          const metrics = ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(activityType);
           return [...new Set([...speedMetricsAccu, ...(metrics || [])]).values()];
         }, [] as string[]);
         return [...statsAccu, ...speedMetrics];

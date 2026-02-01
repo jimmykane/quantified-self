@@ -137,4 +137,30 @@ describe('EventCardStatsGridComponent', () => {
         expect(component.displayedStatsToShow).toContain(DataAscent.type);
         expect(component.displayedStatsToShow).toContain(DataDescent.type);
     });
+
+    it('should auto-exclude ascent for Alpine Skiing', () => {
+        const activityTypes = [ActivityTypes.AlpineSki];
+        const mockEvent = {
+            getActivities: () => [{ type: ActivityTypes.AlpineSki }],
+            getActivityTypesAsArray: () => activityTypes,
+            getStat: (type: string) => ({ getDisplayValue: () => 100, getDisplayUnit: () => 'm', getValue: () => 100 }),
+            getStats: () => [],
+        } as any;
+        component.event = mockEvent;
+        component.selectedActivities = mockEvent.getActivities();
+
+        mockUserSettingsQueryService.summariesSettings.set({
+            removeAscentForEventTypes: [],
+            removeDescentForEventTypes: [],
+        });
+
+        component.ngOnChanges({
+            event: new SimpleChange(null, mockEvent, true),
+            selectedActivities: new SimpleChange(null, component.selectedActivities, true),
+        });
+
+        expect(component.displayedStatsToShow).not.toContain(DataAscent.type);
+        expect(component.displayedStatsToShow).toContain(DataDescent.type); // Descent should still be there for alpine skiing
+    });
 });
+
