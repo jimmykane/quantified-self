@@ -55,6 +55,7 @@ import {
 import { DataDuration } from '@sports-alliance/sports-lib';
 import { DataDistance } from '@sports-alliance/sports-lib';
 import { DataAscent } from '@sports-alliance/sports-lib';
+import { AppUserUtilities } from '../utils/app.user.utilities';
 import {
   MapThemes,
   MapTypes,
@@ -89,7 +90,9 @@ import { FunctionName } from '../../shared/functions-manifest';
 
 
 /**
- * @todo  break up to partners (Services) and user
+ * Service for managing user data, subscription roles, and settings.
+ * Handles merging Firebase Authentication data with Firestore user profiles.
+ * Provides reactive signals for user state across the application.
  */
 @Injectable({
   providedIn: 'root',
@@ -133,7 +136,7 @@ export class AppUserService implements OnDestroy {
       displayName: firebaseUser.displayName,
       photoURL: firebaseUser.photoURL,
       emailVerified: firebaseUser.emailVerified,
-      settings: this.fillMissingAppSettings({} as any),
+      settings: AppUserUtilities.fillMissingAppSettings({} as any),
       acceptedPrivacyPolicy: false,
       acceptedDataPolicy: false,
       acceptedTrackingPolicy: false,
@@ -176,12 +179,12 @@ export class AppUserService implements OnDestroy {
 
   public readonly stripeRoleSignal = computed(() => (this.user() as any)?.stripeRole as StripeRole || null);
   public readonly isAdminSignal = computed(() => (this.user() as any)?.admin === true);
-  public readonly isProSignal = computed(() => AppUserService.hasProAccess(this.user(), this.isAdminSignal()));
-  public readonly isBasicSignal = computed(() => AppUserService.isBasicUser(this.user()));
+  public readonly isProSignal = computed(() => AppUserUtilities.hasProAccess(this.user(), this.isAdminSignal()));
+  public readonly isBasicSignal = computed(() => AppUserUtilities.isBasicUser(this.user()));
 
-  public readonly isGracePeriodActiveSignal = computed(() => AppUserService.isGracePeriodActive(this.user()));
-  public readonly hasPaidAccessSignal = computed(() => AppUserService.hasPaidAccessUser(this.user(), this.isAdminSignal()));
-  public readonly hasProAccessSignal = computed(() => AppUserService.hasProAccess(this.user(), this.isAdminSignal()));
+  public readonly isGracePeriodActiveSignal = computed(() => AppUserUtilities.isGracePeriodActive(this.user()));
+  public readonly hasPaidAccessSignal = computed(() => AppUserUtilities.hasPaidAccessUser(this.user(), this.isAdminSignal()));
+  public readonly hasProAccessSignal = computed(() => AppUserUtilities.hasProAccess(this.user(), this.isAdminSignal()));
 
   public readonly gracePeriodUntil = computed(() => {
     const user = this.user();
@@ -200,241 +203,6 @@ export class AppUserService implements OnDestroy {
     return new Date(gracePeriodUntil);
   });
 
-  static getDefaultChartTheme(): ChartThemes {
-    return ChartThemes.Material;
-  }
-
-  static getDefaultAppTheme(): AppThemes {
-    return AppThemes.Normal;
-  }
-
-
-  static getDefaultChartCursorBehaviour(): ChartCursorBehaviours {
-    return ChartCursorBehaviours.ZoomX;
-  }
-
-  static getDefaultMapStrokeWidth(): number {
-    return 4;
-  }
-
-  static getDefaultChartDataTypesToShowOnLoad(): string[] {
-    return [
-      DataAltitude.type,
-      DataHeartRate.type,
-    ]
-  }
-
-  static getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
-    return DynamicDataLoader.basicDataTypes.reduce((dataTypeSettings: DataTypeSettings, dataTypeToUse: string) => {
-      dataTypeSettings[dataTypeToUse] = { enabled: true };
-      return dataTypeSettings
-    }, {})
-  }
-
-  static getDefaultUserDashboardChartTile(): TileChartSettingsInterface {
-    return {
-      name: 'Distance',
-      order: 0,
-      type: TileTypes.Chart,
-      chartType: ChartTypes.ColumnsHorizontal,
-      dataType: DataDistance.type,
-      dataTimeInterval: TimeIntervals.Auto,
-      dataCategoryType: ChartDataCategoryTypes.ActivityType,
-      dataValueType: ChartDataValueTypes.Total,
-      size: { columns: 1, rows: 1 },
-    };
-  }
-
-  static getDefaultUserDashboardMapTile(): TileMapSettingsInterface {
-    return {
-      name: 'Clustered HeatMap',
-      order: 0,
-      type: TileTypes.Map,
-      mapType: MapTypes.Terrain,
-      mapTheme: MapThemes.Normal,
-      showHeatMap: true,
-      clusterMarkers: true,
-      size: { columns: 1, rows: 1 },
-    };
-  }
-
-  static getDefaultUserDashboardTiles(): TileSettingsInterface[] {
-    return [<TileMapSettingsInterface>{
-      name: 'Clustered HeatMap',
-      order: 0,
-      type: TileTypes.Map,
-      mapType: MapTypes.RoadMap,
-      mapTheme: MapThemes.Normal,
-      showHeatMap: true,
-      clusterMarkers: true,
-      size: { columns: 1, rows: 1 },
-    }, <TileChartSettingsInterface>{
-      name: 'Duration',
-      order: 1,
-      type: TileTypes.Chart,
-      chartType: ChartTypes.Pie,
-      dataCategoryType: ChartDataCategoryTypes.ActivityType,
-      dataType: DataDuration.type,
-      dataTimeInterval: TimeIntervals.Auto,
-      dataValueType: ChartDataValueTypes.Total,
-      size: { columns: 1, rows: 1 },
-    }, <TileChartSettingsInterface>{
-      name: 'Distance',
-      order: 2,
-      type: TileTypes.Chart,
-      chartType: ChartTypes.ColumnsHorizontal,
-      dataType: DataDistance.type,
-      dataTimeInterval: TimeIntervals.Auto,
-      dataCategoryType: ChartDataCategoryTypes.ActivityType,
-      dataValueType: ChartDataValueTypes.Total,
-      size: { columns: 1, rows: 1 },
-    }, <TileChartSettingsInterface>{
-      name: 'Ascent',
-      order: 3,
-      type: TileTypes.Chart,
-      chartType: ChartTypes.PyramidsVertical,
-      dataCategoryType: ChartDataCategoryTypes.DateType,
-      dataType: DataAscent.type,
-      dataTimeInterval: TimeIntervals.Auto,
-      dataValueType: ChartDataValueTypes.Total,
-      size: { columns: 1, rows: 1 },
-    }]
-  }
-
-  static getDefaultMapLapTypes(): LapTypes[] {
-    return [LapTypes.AutoLap, LapTypes.Distance, LapTypes.Manual];
-  }
-
-  static getDefaultChartLapTypes(): LapTypes[] {
-    return [LapTypes.AutoLap, LapTypes.Distance, LapTypes.Manual];
-  }
-
-  static getDefaultDownSamplingLevel(): number {
-    return 4;
-  }
-
-  static getDefaultGainAndLossThreshold(): number {
-    return 1;
-  }
-
-  static getDefaultExtraMaxForPower(): number {
-    return 0;
-  }
-
-  static getDefaultExtraMaxForPace(): number {
-    return -0.25;
-  }
-
-  static getDefaultMapType(): MapTypes {
-    return MapTypes.RoadMap;
-  }
-
-  static getDefaultDateRange(): DateRanges {
-    return DateRanges.all;
-  }
-
-  static getDefaultXAxisType(): XAxisTypes {
-    return XAxisTypes.Time;
-  }
-
-  static getDefaultSpeedUnits(): SpeedUnits[] {
-    return [SpeedUnits.KilometersPerHour];
-  }
-
-  static getDefaultGradeAdjustedSpeedUnits(): GradeAdjustedSpeedUnits[] {
-    return this.getGradeAdjustedSpeedUnitsFromSpeedUnits(this.getDefaultSpeedUnits());
-  }
-
-  static getGradeAdjustedSpeedUnitsFromSpeedUnits(speedUnits: SpeedUnits[]): GradeAdjustedSpeedUnits[] {
-    return speedUnits.map(speedUnit => GradeAdjustedSpeedUnits[SpeedUnitsToGradeAdjustedSpeedUnits[speedUnit]]);
-  }
-
-  static getDefaultPaceUnits(): PaceUnits[] {
-    return [PaceUnits.MinutesPerKilometer];
-  }
-
-  static getDefaultGradeAdjustedPaceUnits(): GradeAdjustedPaceUnits[] {
-    return this.getGradeAdjustedPaceUnitsFromPaceUnits(this.getDefaultPaceUnits());
-  }
-
-  static getGradeAdjustedPaceUnitsFromPaceUnits(paceUnits: PaceUnits[]): GradeAdjustedPaceUnits[] {
-    return paceUnits.map(paceUnit => GradeAdjustedPaceUnits[PaceUnitsToGradeAdjustedPaceUnits[paceUnit]]);
-  }
-
-  static getDefaultSwimPaceUnits(): SwimPaceUnits[] {
-    return [SwimPaceUnits.MinutesPer100Meter];
-  }
-
-  static getDefaultVerticalSpeedUnits(): VerticalSpeedUnits[] {
-    return [VerticalSpeedUnits.MetersPerSecond];
-  }
-
-  static getDefaultUserUnitSettings(): UserUnitSettingsInterface {
-    const unitSettings = <UserUnitSettingsInterface>{};
-    unitSettings.speedUnits = AppUserService.getDefaultSpeedUnits();
-    unitSettings.gradeAdjustedSpeedUnits = AppUserService.getDefaultGradeAdjustedSpeedUnits();
-    unitSettings.paceUnits = AppUserService.getDefaultPaceUnits();
-    unitSettings.gradeAdjustedPaceUnits = AppUserService.getDefaultGradeAdjustedPaceUnits();
-    unitSettings.swimPaceUnits = AppUserService.getDefaultSwimPaceUnits();
-    unitSettings.verticalSpeedUnits = AppUserService.getDefaultVerticalSpeedUnits();
-    unitSettings.startOfTheWeek = AppUserService.getDefaultStartOfTheWeek();
-    return unitSettings;
-  }
-
-  static getDefaultStartOfTheWeek(): DaysOfTheWeek {
-    return DaysOfTheWeek.Monday;
-  }
-
-  static getDefaultChartStrokeWidth(): number {
-    return 1.15;
-  }
-
-  static getDefaultChartStrokeOpacity(): number {
-    return 1;
-  }
-
-  static getDefaultChartFillOpacity(): number {
-    return 0.35;
-  }
-
-  static getDefaultTableSettings(): TableSettings {
-    return {
-      eventsPerPage: 10,
-      active: 'startDate',
-      direction: 'desc',
-      selectedColumns: this.getDefaultSelectedTableColumns()
-    }
-  }
-
-  static getDefaultSelectedTableColumns(): string[] {
-    return [
-      DataDescription.type,
-      DataActivityTypes.type,
-      DataDuration.type,
-      DataDistance.type,
-      DataAscent.type,
-      DataDescent.type,
-      DataEnergy.type,
-      DataHeartRateAvg.type,
-      DataSpeedAvg.type,
-      DataPowerAvg.type,
-      // DataPowerMax.type,
-      DataVO2Max.type,
-      DataAerobicTrainingEffect.type,
-      DataRecoveryTime.type,
-      DataPeakEPOC.type,
-      DataDeviceNames.type,
-    ]
-  }
-
-  static getDefaultMyTracksDateRange(): DateRanges {
-    return DateRanges.lastThirtyDays
-  }
-
-  static getDefaultActivityTypesToRemoveAscentFromSummaries(): ActivityTypes[] {
-    return [ActivityTypes.AlpineSki, ActivityTypes.Snowboard]
-  }
-
   public static readonly legalFields = [
     'acceptedPrivacyPolicy',
     'acceptedDataPolicy',
@@ -444,49 +212,7 @@ export class AppUserService implements OnDestroy {
     'acceptedTos',
   ];
 
-  public static isGracePeriodActive(user: AppUserInterface | User | null): boolean {
-    if (!user) return false;
-    const gracePeriodUntil = (user as any).gracePeriodUntil;
-    if (!gracePeriodUntil) return false;
 
-    // Handle Firestore Timestamp, Date, or Unix number from Claims
-    const expiryMillis = typeof gracePeriodUntil.toMillis === 'function'
-      ? gracePeriodUntil.toMillis()
-      : typeof gracePeriodUntil.getTime === 'function'
-        ? gracePeriodUntil.getTime()
-        : typeof gracePeriodUntil === 'object' && gracePeriodUntil.seconds
-          ? gracePeriodUntil.seconds * 1000
-          : gracePeriodUntil;
-
-    return expiryMillis > Date.now();
-  }
-
-  /**
-   * Returns true if the user has Pro access (Pro role, Admin, or Active Grace Period).
-   */
-  public static hasProAccess(user: AppUserInterface | User | null, isAdmin: boolean = false): boolean {
-    return AppUserService.isProUser(user, isAdmin) || AppUserService.isGracePeriodActive(user);
-  }
-
-  public static isProUser(user: AppUserInterface | User | null, isAdmin: boolean = false): boolean {
-    if (!user) return false;
-    const stripeRole = (user as any).stripeRole;
-    return stripeRole === 'pro' || isAdmin || (user as any).isPro === true;
-  }
-
-  public static isBasicUser(user: User | null): boolean {
-    if (!user) return false;
-    const stripeRole = (user as any).stripeRole;
-    return stripeRole === 'basic';
-  }
-
-  /**
-   * Returns true if the user has at least Basic paid access OR is in a Grace Period.
-   */
-  public static hasPaidAccessUser(user: User | null, isAdmin: boolean = false): boolean {
-    if (!user) return false;
-    return AppUserService.isProUser(user, isAdmin) || AppUserService.isBasicUser(user) || AppUserService.isGracePeriodActive(user);
-  }
 
   constructor() {
     authState(this.auth).subscribe((user) => {
@@ -533,7 +259,7 @@ export class AppUserService implements OnDestroy {
             u.settings = settings as any;
           }
 
-          u.settings = this.fillMissingAppSettings(u);
+          u.settings = AppUserUtilities.fillMissingAppSettings(u);
 
           return u;
         }));
@@ -854,7 +580,7 @@ export class AppUserService implements OnDestroy {
 
   public async isPro(): Promise<boolean> {
     const user = await firstValueFrom(this.user$.pipe(take(1)));
-    return AppUserService.hasProAccess(user, await this.isAdmin());
+    return AppUserUtilities.hasProAccess(user, await this.isAdmin());
   }
 
   public async isAdmin(): Promise<boolean> {
@@ -874,7 +600,7 @@ export class AppUserService implements OnDestroy {
    */
   public async hasPaidAccess(): Promise<boolean> {
     const user = await firstValueFrom(this.user$.pipe(take(1)));
-    return AppUserService.hasPaidAccessUser(user, await this.isAdmin());
+    return AppUserUtilities.hasPaidAccessUser(user, await this.isAdmin());
   }
 
 
@@ -933,95 +659,4 @@ export class AppUserService implements OnDestroy {
     });
   }
 
-  public fillMissingAppSettings(user: User): UserSettingsInterface {
-    const settings: UserSettingsInterface = user.settings || {};
-    // App
-    settings.appSettings = settings.appSettings || <UserAppSettingsInterface>{};
-    settings.appSettings.theme = settings.appSettings.theme || AppUserService.getDefaultAppTheme();
-    // Chart
-    settings.chartSettings = settings.chartSettings || <UserChartSettingsInterface>{};
-    settings.chartSettings.dataTypeSettings = settings.chartSettings.dataTypeSettings || AppUserService.getDefaultUserChartSettingsDataTypeSettings();
-    settings.chartSettings.theme = settings.chartSettings.theme || AppUserService.getDefaultChartTheme();
-    settings.chartSettings.useAnimations = settings.chartSettings.useAnimations === true;
-    settings.chartSettings.xAxisType = XAxisTypes[settings.chartSettings.xAxisType] || AppUserService.getDefaultXAxisType();
-    settings.chartSettings.showAllData = settings.chartSettings.showAllData === true;
-    settings.chartSettings.downSamplingLevel = settings.chartSettings.downSamplingLevel || AppUserService.getDefaultDownSamplingLevel();
-    settings.chartSettings.chartCursorBehaviour = settings.chartSettings.chartCursorBehaviour || AppUserService.getDefaultChartCursorBehaviour();
-    settings.chartSettings.strokeWidth = settings.chartSettings.strokeWidth || AppUserService.getDefaultChartStrokeWidth();
-    settings.chartSettings.strokeOpacity = isNumber(settings.chartSettings.strokeOpacity) ? settings.chartSettings.strokeOpacity : AppUserService.getDefaultChartStrokeOpacity();
-    settings.chartSettings.fillOpacity = isNumber(settings.chartSettings.fillOpacity) ? settings.chartSettings.fillOpacity : AppUserService.getDefaultChartFillOpacity();
-    settings.chartSettings.extraMaxForPower = isNumber(settings.chartSettings.extraMaxForPower) ? settings.chartSettings.extraMaxForPower : AppUserService.getDefaultExtraMaxForPower();
-    settings.chartSettings.extraMaxForPace = isNumber(settings.chartSettings.extraMaxForPace) ? settings.chartSettings.extraMaxForPace : AppUserService.getDefaultExtraMaxForPace();
-    settings.chartSettings.lapTypes = settings.chartSettings.lapTypes || AppUserService.getDefaultChartLapTypes();
-    settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
-    settings.chartSettings.showGrid = settings.chartSettings.showGrid !== false;
-    settings.chartSettings.stackYAxes = settings.chartSettings.stackYAxes !== false;
-    settings.chartSettings.disableGrouping = settings.chartSettings.disableGrouping === true;
-    settings.chartSettings.hideAllSeriesOnInit = settings.chartSettings.hideAllSeriesOnInit === true;
-    settings.chartSettings.gainAndLossThreshold = settings.chartSettings.gainAndLossThreshold || AppUserService.getDefaultGainAndLossThreshold();
-    // Units
-    settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};
-    settings.unitSettings.speedUnits = settings.unitSettings.speedUnits || AppUserService.getDefaultSpeedUnits();
-    settings.unitSettings.paceUnits = settings.unitSettings.paceUnits || AppUserService.getDefaultPaceUnits();
-    settings.unitSettings.gradeAdjustedSpeedUnits = settings.unitSettings.gradeAdjustedSpeedUnits || AppUserService.getGradeAdjustedSpeedUnitsFromSpeedUnits(settings.unitSettings.speedUnits);
-    settings.unitSettings.gradeAdjustedPaceUnits = settings.unitSettings.gradeAdjustedPaceUnits || AppUserService.getGradeAdjustedPaceUnitsFromPaceUnits(settings.unitSettings.paceUnits);
-    settings.unitSettings.swimPaceUnits = settings.unitSettings.swimPaceUnits || AppUserService.getDefaultSwimPaceUnits();
-    settings.unitSettings.verticalSpeedUnits = settings.unitSettings.verticalSpeedUnits || AppUserService.getDefaultVerticalSpeedUnits()
-    settings.unitSettings.startOfTheWeek = isNumber(settings.unitSettings.startOfTheWeek) ? settings.unitSettings.startOfTheWeek : AppUserService.getDefaultStartOfTheWeek();
-    // Dashboard
-    settings.dashboardSettings = settings.dashboardSettings || <UserDashboardSettingsInterface>{};
-    settings.dashboardSettings.dateRange = isNumber(settings.dashboardSettings.dateRange) ? settings.dashboardSettings.dateRange : AppUserService.getDefaultDateRange();
-    settings.dashboardSettings.startDate = settings.dashboardSettings.startDate || null;
-    settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
-    settings.dashboardSettings.activityTypes = settings.dashboardSettings.activityTypes || [];
-    settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserService.getDefaultUserDashboardTiles();
-    // Patch missing defaults
-    settings.dashboardSettings.tableSettings = settings.dashboardSettings.tableSettings || AppUserService.getDefaultTableSettings();
-    settings.dashboardSettings.tableSettings.selectedColumns = settings.dashboardSettings.tableSettings.selectedColumns || AppUserService.getDefaultSelectedTableColumns()
-
-    // Summaries
-    settings.summariesSettings = settings.summariesSettings || <UserSummariesSettingsInterface>{};
-    settings.summariesSettings.removeAscentForEventTypes = settings.summariesSettings.removeAscentForEventTypes || AppUserService.getDefaultActivityTypesToRemoveAscentFromSummaries();
-    // Map
-    settings.mapSettings = settings.mapSettings || <UserMapSettingsInterface>{};
-    settings.mapSettings.theme = settings.mapSettings.theme || MapThemes.Normal;
-    settings.mapSettings.showLaps = settings.mapSettings.showLaps !== false;
-
-    settings.mapSettings.showArrows = settings.mapSettings.showArrows !== false;
-    settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || AppUserService.getDefaultMapLapTypes();
-    settings.mapSettings.mapType = settings.mapSettings.mapType || AppUserService.getDefaultMapType();
-    settings.mapSettings.strokeWidth = settings.mapSettings.strokeWidth || AppUserService.getDefaultMapStrokeWidth();
-    // MyTracks
-    settings.myTracksSettings = settings.myTracksSettings || <UserMyTracksSettingsInterface>{};
-    settings.myTracksSettings.dateRange = isNumber(settings.myTracksSettings.dateRange)
-      ? settings.myTracksSettings.dateRange
-      : AppUserService.getDefaultMyTracksDateRange();
-
-    // Export to CSV
-    settings.exportToCSVSettings = settings.exportToCSVSettings || <UserExportToCsvSettingsInterface>{};
-    settings.exportToCSVSettings.startDate = settings.exportToCSVSettings.startDate !== false;
-    settings.exportToCSVSettings.name = settings.exportToCSVSettings.name !== false;
-    settings.exportToCSVSettings.description = settings.exportToCSVSettings.description !== false;
-    settings.exportToCSVSettings.activityTypes = settings.exportToCSVSettings.activityTypes !== false;
-    settings.exportToCSVSettings.distance = settings.exportToCSVSettings.distance !== false;
-    settings.exportToCSVSettings.duration = settings.exportToCSVSettings.duration !== false;
-    settings.exportToCSVSettings.ascent = settings.exportToCSVSettings.ascent !== false;
-    settings.exportToCSVSettings.descent = settings.exportToCSVSettings.descent !== false;
-    settings.exportToCSVSettings.calories = settings.exportToCSVSettings.calories !== false;
-    settings.exportToCSVSettings.feeling = settings.exportToCSVSettings.feeling !== false;
-    settings.exportToCSVSettings.rpe = settings.exportToCSVSettings.rpe !== false;
-    settings.exportToCSVSettings.averageSpeed = settings.exportToCSVSettings.averageSpeed !== false;
-    settings.exportToCSVSettings.averagePace = settings.exportToCSVSettings.averagePace !== false;
-    settings.exportToCSVSettings.averageSwimPace = settings.exportToCSVSettings.averageSwimPace !== false;
-    settings.exportToCSVSettings.averageGradeAdjustedPace = settings.exportToCSVSettings.averageGradeAdjustedPace !== false;
-    settings.exportToCSVSettings.averageHeartRate = settings.exportToCSVSettings.averageHeartRate !== false;
-    settings.exportToCSVSettings.maximumHeartRate = settings.exportToCSVSettings.maximumHeartRate !== false;
-    settings.exportToCSVSettings.averagePower = settings.exportToCSVSettings.averagePower !== false;
-    settings.exportToCSVSettings.maximumPower = settings.exportToCSVSettings.maximumPower !== false;
-    settings.exportToCSVSettings.vO2Max = settings.exportToCSVSettings.vO2Max !== false;
-    settings.exportToCSVSettings.includeLink = settings.exportToCSVSettings.includeLink !== false;
-
-    // @warning !!!!!! Enums with 0 as start value default to the override
-    return settings;
-  }
 }
