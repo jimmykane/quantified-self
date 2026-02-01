@@ -7,7 +7,7 @@ import { StripeRole } from '../models/stripe-role.model';
 import { User } from '@sports-alliance/sports-lib';
 import { Privacy } from '@sports-alliance/sports-lib';
 import { AppEventService } from './app.event.service';
-import { catchError, map, take, switchMap } from 'rxjs/operators';
+import { catchError, map, take, switchMap, shareReplay } from 'rxjs/operators';
 import {
   AppThemes,
   UserAppSettingsInterface
@@ -33,7 +33,7 @@ import {
   UserUnitSettingsInterface,
   VerticalSpeedUnits
 } from '@sports-alliance/sports-lib';
-import { Auth, authState } from '@angular/fire/auth';
+import { Auth, authState, user } from '@angular/fire/auth';
 import { HttpClient } from '@angular/common/http';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import {
@@ -105,10 +105,70 @@ export class AppUserService implements OnDestroy {
   private http = inject(HttpClient);
   private windowService = inject(AppWindowService);
 
-  private user$ = runInInjectionContext(this.injector, () => authState(this.auth).pipe(
-    switchMap(u => u ? this.getUserByID(u.uid) : of(null)),
-    distinctUntilChanged((p, c) => JSON.stringify(p) === JSON.stringify(c))
+  public readonly user$ = runInInjectionContext(this.injector, () => user(this.auth).pipe(
+    switchMap(u => {
+      if (!u) return of(null);
+      return this.getUserByID(u.uid).pipe(
+        switchMap(dbUser => from(this.mergeClaims(u, dbUser)))
+      );
+    }),
+    distinctUntilChanged((p, c) => JSON.stringify(p) === JSON.stringify(c)),
+    shareReplay(1)
   ));
+
+  /**
+   * Merges Firebase Auth User claims (stripeRole, gracePeriodUntil) with Firestore database data.
+   * Also handles force-refreshing the ID token if claims are outdated.
+   */
+  private async mergeClaims(firebaseUser: any, dbUser: AppUserInterface | null): Promise<AppUserInterface | null> {
+    const tokenResult = await firebaseUser.getIdTokenResult();
+    const claims = tokenResult.claims;
+    const stripeRole = (claims['stripeRole'] as StripeRole) || null;
+    const gracePeriodUntil = (claims['gracePeriodUntil'] as number) || null;
+
+    // Use current DB user or create a synthetic one for new accounts/loading states
+    const identity: AppUserInterface = dbUser ? { ...dbUser } : {
+      uid: firebaseUser.uid,
+      email: firebaseUser.email,
+      displayName: firebaseUser.displayName,
+      photoURL: firebaseUser.photoURL,
+      emailVerified: firebaseUser.emailVerified,
+      settings: this.fillMissingAppSettings({} as any),
+      acceptedPrivacyPolicy: false,
+      acceptedDataPolicy: false,
+      acceptedTrackingPolicy: false,
+      acceptedDiagnosticsPolicy: true,
+      privacy: Privacy.Private,
+      isAnonymous: false,
+      creationDate: new Date(firebaseUser.metadata.creationTime!),
+      lastSignInDate: new Date(firebaseUser.metadata.lastSignInTime!)
+    } as any;
+
+    // Always prioritize Claims for role and grace period
+    identity.uid = firebaseUser.uid;
+    (identity as any).stripeRole = stripeRole;
+    (identity as any).gracePeriodUntil = identity.gracePeriodUntil || gracePeriodUntil;
+
+    // Check for force-refresh (if DB was updated more recently than token issuance)
+    const claimsUpdatedAt = (identity as any).claimsUpdatedAt;
+    if (claimsUpdatedAt) {
+      const updatedAtDate = claimsUpdatedAt.toDate ? claimsUpdatedAt.toDate() : new Date(claimsUpdatedAt.seconds * 1000);
+      const iat = (claims['iat'] as number) * 1000;
+      if (updatedAtDate.getTime() > iat + 2000) {
+        this.logger.log(`[AppUserService] Refreshing token for ${firebaseUser.uid}...`);
+        try {
+          await firebaseUser.getIdToken(true);
+          const freshToken = await firebaseUser.getIdTokenResult();
+          (identity as any).stripeRole = (freshToken.claims['stripeRole'] as StripeRole) || null;
+          (identity as any).gracePeriodUntil = (freshToken.claims['gracePeriodUntil'] as number) || gracePeriodUntil;
+        } catch (e) {
+          this.logger.error('[AppUserService] Token refresh failed', e);
+        }
+      }
+    }
+
+    return identity;
+  }
 
   public readonly user = toSignal(this.user$,
     { initialValue: null, injector: this.injector }
@@ -128,7 +188,16 @@ export class AppUserService implements OnDestroy {
     if (!user) return null;
     const gracePeriodUntil = (user as any).gracePeriodUntil;
     if (!gracePeriodUntil) return null;
-    return typeof gracePeriodUntil.toDate === 'function' ? gracePeriodUntil.toDate() : new Date(gracePeriodUntil);
+    // Handle Firestore Timestamp
+    if (typeof gracePeriodUntil.toDate === 'function') {
+      return gracePeriodUntil.toDate();
+    }
+    // Handle seconds/nanoseconds object
+    if (typeof gracePeriodUntil === 'object' && gracePeriodUntil.seconds) {
+      return new Date(gracePeriodUntil.seconds * 1000);
+    }
+    // Handle Date or number
+    return new Date(gracePeriodUntil);
   });
 
   static getDefaultChartTheme(): ChartThemes {
@@ -438,16 +507,16 @@ export class AppUserService implements OnDestroy {
 
   public getUserByID(userID: string): Observable<AppUserInterface | null> {
     return runInInjectionContext(this.injector, () => {
-      const userDoc = doc(this.firestore, 'users', userID);
-      const legalDoc = doc(this.firestore, `users/${userID}/legal/agreements`);
-      const systemDoc = doc(this.firestore, `users/${userID}/system/status`);
-      const settingsDoc = doc(this.firestore, `users/${userID}/config/settings`);
+      const userDoc = doc(this.firestore, 'users', userID) as any;
+      const legalDoc = doc(this.firestore, `users/${userID}/legal/agreements`) as any;
+      const systemDoc = doc(this.firestore, `users/${userID}/system/status`) as any;
+      const settingsDoc = doc(this.firestore, `users/${userID}/config/settings`) as any;
 
       return combineLatest({
-        user: docData(userDoc),
-        legal: docData(legalDoc).pipe(catchError((err) => { this.logger.error('Error fetching legal:', err); return of({}); })),
-        system: docData(systemDoc).pipe(catchError((err) => { this.logger.error('Error fetching system:', err); return of({}); })),
-        settings: docData(settingsDoc).pipe(catchError((err) => { this.logger.error('Error fetching settings:', err); return of({}); }))
+        user: docData(userDoc) as Observable<AppUserInterface | null>,
+        legal: (docData(legalDoc) as Observable<any>).pipe(catchError((err) => { this.logger.error('Error fetching legal:', err); return of({}); })),
+        system: (docData(systemDoc) as Observable<any>).pipe(catchError((err) => { this.logger.error('Error fetching system:', err); return of({}); })),
+        settings: (docData(settingsDoc) as Observable<any>).pipe(catchError((err) => { this.logger.error('Error fetching settings:', err); return of({}); }))
       }).pipe(
         distinctUntilChanged((prev, curr) => JSON.stringify(prev) === JSON.stringify(curr)),
         map(({ user, legal, system, settings }) => {
