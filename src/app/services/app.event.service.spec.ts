@@ -13,6 +13,17 @@ import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
 import { of } from 'rxjs';
 import { AppCacheService } from './app.cache.service';
 import { getMetadata } from '@angular/fire/storage';
+import { webcrypto } from 'node:crypto';
+
+// Polyfill crypto for JSDOM environment
+if (!globalThis.crypto || !globalThis.crypto.subtle) {
+    Object.defineProperty(globalThis, 'crypto', {
+        value: webcrypto,
+        configurable: true,
+        enumerable: true,
+        writable: true
+    });
+}
 
 // Hoist mocks
 const mocks = vi.hoisted(() => {
@@ -245,6 +256,63 @@ describe('AppEventService', () => {
         await service.writeAllEventData(user, mockEvent);
 
         expect(mocks.writeAllEventData).toHaveBeenCalled();
+    });
+
+    describe('ID generation with zero bucketing', () => {
+        it('should call generateEventID with thresholdMs=0 for frontend uploads', async () => {
+            // Mock generateEventID to track calls
+            const { generateEventID } = await import('../../../functions/src/shared/id-generator');
+            const generateEventIDSpy = vi.spyOn(await import('../../../functions/src/shared/id-generator'), 'generateEventID');
+            generateEventIDSpy.mockResolvedValue('mock-event-id');
+
+            const mockEvent = {
+                getID: () => null, // No ID yet - should trigger generation
+                startDate: new Date('2025-12-28T12:00:00.000Z'),
+                getActivities: () => [],
+                setID: vi.fn()
+            } as any;
+            const user = { uid: 'user1' } as any;
+
+            await service.writeAllEventData(user, mockEvent);
+
+            expect(generateEventIDSpy).toHaveBeenCalledWith('user1', mockEvent.startDate, 0);
+            expect(mockEvent.setID).toHaveBeenCalledWith('mock-event-id');
+
+            generateEventIDSpy.mockRestore();
+        });
+
+        it('should generate unique IDs for events with same startDate (no bucketing)', async () => {
+            const { generateEventID } = await import('../../../functions/src/shared/id-generator');
+
+            // Same timestamp, different milliseconds shouldn't matter with threshold=0
+            const date1 = new Date('2025-12-28T12:00:00.000Z');
+            const date2 = new Date('2025-12-28T12:00:00.001Z'); // 1ms later
+
+            const id1 = await generateEventID('user1', date1, 0);
+            const id2 = await generateEventID('user1', date2, 0);
+
+            expect(id1).not.toBe(id2);
+        });
+
+        it('should skip ID generation if event already has ID', async () => {
+            const { generateEventID } = await import('../../../functions/src/shared/id-generator');
+            const generateEventIDSpy = vi.spyOn(await import('../../../functions/src/shared/id-generator'), 'generateEventID');
+
+            const mockEvent = {
+                getID: () => 'existing-id', // Already has ID
+                startDate: new Date(),
+                getActivities: () => [],
+                setID: vi.fn()
+            } as any;
+            const user = { uid: 'user1' } as any;
+
+            await service.writeAllEventData(user, mockEvent);
+
+            expect(generateEventIDSpy).not.toHaveBeenCalled();
+            expect(mockEvent.setID).not.toHaveBeenCalled();
+
+            generateEventIDSpy.mockRestore();
+        });
     });
 
     // Note: Testing compressed file size rejection would require complex mocking
