@@ -1,4 +1,4 @@
-<ng-container *ngIf="(gracePeriodUntil$ | async) as gracePeriodUntil">
+<ng-container *ngIf="gracePeriodUntil() as gracePeriodUntil">
     <div #bannerElement *ngIf="!isDismissed" class="grace-period-banner mat-typography">
         <mat-icon class="banner-warning-icon">warning</mat-icon>
         <span class="banner-text">

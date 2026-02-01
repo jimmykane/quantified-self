@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { GracePeriodBannerComponent } from './grace-period-banner.component';
 import { AppUserService } from '../../services/app.user.service';
 import { of } from 'rxjs';
+import { signal } from '@angular/core';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { RouterTestingModule } from '@angular/router/testing';
 
@@ -11,7 +12,7 @@ describe('GracePeriodBannerComponent', () => {
     let fixture: ComponentFixture<GracePeriodBannerComponent>;
 
     const mockUserService = {
-        getGracePeriodUntil: vi.fn().mockReturnValue(of(null))
+        gracePeriodUntil: signal<Date | null>(null)
     };
 
     beforeEach(async () => {
@@ -41,9 +42,8 @@ describe('GracePeriodBannerComponent', () => {
 
     it('should show banner when grace period date is present', async () => {
         const mockDate = new Date();
-        mockUserService.getGracePeriodUntil.mockReturnValue(of(mockDate));
+        mockUserService.gracePeriodUntil.set(mockDate);
 
-        component.ngOnInit();
         fixture.detectChanges();
         await fixture.whenStable();
 
@@ -53,9 +53,8 @@ describe('GracePeriodBannerComponent', () => {
     });
 
     it('should hide banner when grace period date is null', () => {
-        mockUserService.getGracePeriodUntil.mockReturnValue(of(null));
+        mockUserService.gracePeriodUntil.set(null);
 
-        component.ngOnInit();
         fixture.detectChanges();
 
         const banner = fixture.nativeElement.querySelector('.grace-period-banner');
@@ -64,9 +63,8 @@ describe('GracePeriodBannerComponent', () => {
 
     it('should hide banner when dismissed', async () => {
         const mockDate = new Date();
-        mockUserService.getGracePeriodUntil.mockReturnValue(of(mockDate));
+        mockUserService.gracePeriodUntil.set(mockDate);
 
-        component.ngOnInit();
         fixture.detectChanges();
         await fixture.whenStable();
 

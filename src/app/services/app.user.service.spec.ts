@@ -20,10 +20,11 @@ vi.mock('@angular/fire/auth', async (importOriginal) => {
 
 vi.mock('@angular/fire/firestore', async (importOriginal) => {
     const actual: any = await importOriginal();
+    const { of } = await import('rxjs');
     return {
         ...actual,
         doc: vi.fn().mockReturnValue({}),
-        docData: vi.fn(),
+        docData: vi.fn().mockReturnValue(of({})),
         setDoc: vi.fn().mockResolvedValue(undefined),
         updateDoc: vi.fn().mockResolvedValue(undefined),
     };
@@ -63,10 +64,10 @@ describe('AppUserService', () => {
                 { provide: AppWindowService, useValue: {} }
             ]
         });
-        service = TestBed.inject(AppUserService);
     });
 
     it('should be created', () => {
+        service = TestBed.inject(AppUserService);
         expect(service).toBeTruthy();
     });
 
@@ -79,6 +80,7 @@ describe('AppUserService', () => {
 
             // Note: because authState is mocked to return the user, we need to ensure firstValueFrom works
             // But AppUserService.getSubscriptionRole uses authState(this.auth)
+            service = TestBed.inject(AppUserService);
         });
 
         it('should return basic role', async () => {
@@ -108,43 +110,47 @@ describe('AppUserService', () => {
             mockAuth.currentUser.getIdTokenResult.mockReturnValue(Promise.resolve({
                 claims: { stripeRole: 'pro' }
             }));
+            service = TestBed.inject(AppUserService);
             const hasAccess = await service.hasPaidAccess();
             expect(hasAccess).toBe(true);
         });
     });
 
-    describe('getGracePeriodUntil', () => {
+    describe('gracePeriodUntil signal', () => {
         it('should return null if user is not logged in', async () => {
-            mockAuth.currentUser = null;
-            const res = await firstValueFrom(service.getGracePeriodUntil());
-            expect(res).toBeNull();
+            (authState as any).mockReturnValue(of(null));
+            service = TestBed.inject(AppUserService);
+            expect(service.gracePeriodUntil()).toBeNull();
         });
 
         it('should return null if no grace period is set', async () => {
-            mockAuth.currentUser = {
+            (authState as any).mockReturnValue(of({
                 uid: 'u1',
                 getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} })
-            };
+            }));
             (docData as any).mockReturnValue(of({}));
-            const res = await firstValueFrom(service.getGracePeriodUntil());
-            expect(res).toBeNull();
+            service = TestBed.inject(AppUserService);
+            expect(service.gracePeriodUntil()).toBeNull();
         });
 
         it('should return Date if grace period is set', async () => {
             const mockDate = new Date();
-            mockAuth.currentUser = {
+            (authState as any).mockReturnValue(of({
                 uid: 'u1',
                 getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} })
-            };
+            }));
             (docData as any).mockReturnValue(of({
                 gracePeriodUntil: { toDate: () => mockDate }
             }));
 
-            const res = await firstValueFrom(service.getGracePeriodUntil());
-            expect(res).toEqual(mockDate);
+            service = TestBed.inject(AppUserService);
+            expect(service.gracePeriodUntil()).toEqual(mockDate);
         });
     });
     describe('updateUserProperties', () => {
+        beforeEach(() => {
+            service = TestBed.inject(AppUserService);
+        });
         it('should split settings and other properties', async () => {
             const user = { uid: 'u1' } as any;
             const settings = { theme: 'dark' };
@@ -216,6 +222,9 @@ describe('AppUserService', () => {
     });
 
     describe('static user role checks', () => {
+        beforeEach(() => {
+            service = TestBed.inject(AppUserService);
+        });
         const mockUser = { uid: 'u1' } as any;
 
         describe('isProUser', () => {
@@ -302,6 +311,9 @@ describe('AppUserService', () => {
         });
     });
     describe('deleteAllUserData', () => {
+        beforeEach(() => {
+            service = TestBed.inject(AppUserService);
+        });
         it('should call deleteSelf cloud function and sign out', async () => {
             await service.deleteAllUserData({ uid: 'u1' } as any);
 
@@ -319,7 +331,10 @@ describe('AppUserService', () => {
         });
     });
 
-    describe('Service Integrations', () => {
+    describe('Service Integration', () => {
+        beforeEach(() => {
+            service = TestBed.inject(AppUserService);
+        });
         const startDate = new Date('2023-01-01');
         const endDate = new Date('2023-01-31');
 

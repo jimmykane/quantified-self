@@ -1,4 +1,5 @@
 import { inject, Injectable, OnDestroy, EnvironmentInjector, runInInjectionContext } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 
 
 import { Observable, from, firstValueFrom, of, combineLatest, distinctUntilChanged } from 'rxjs';
@@ -6,7 +7,7 @@ import { StripeRole } from '../models/stripe-role.model';
 import { User } from '@sports-alliance/sports-lib';
 import { Privacy } from '@sports-alliance/sports-lib';
 import { AppEventService } from './app.event.service';
-import { catchError, map, take } from 'rxjs/operators';
+import { catchError, map, take, switchMap } from 'rxjs/operators';
 import {
   AppThemes,
   UserAppSettingsInterface
@@ -99,6 +100,33 @@ export class AppUserService implements OnDestroy {
   private auth = inject(Auth);
   private functionsService = inject(AppFunctionsService);
   private injector = inject(EnvironmentInjector);
+  private logger = inject(LoggerService);
+  private eventService = inject(AppEventService);
+  private http = inject(HttpClient);
+  private windowService = inject(AppWindowService);
+
+  public readonly gracePeriodUntil = toSignal(
+    authState(this.auth).pipe(
+      switchMap(user => {
+        this.logger.log('[AppUserService] gracePeriodUntil signal init - Current auth user:', user?.uid || 'null');
+        if (!user) return of(null);
+        const systemDoc = doc(this.firestore, `users/${user.uid}/system/status`);
+        return docData(systemDoc).pipe(
+          map((systemData: any) => {
+            if (systemData?.gracePeriodUntil) {
+              return (systemData.gracePeriodUntil as any).toDate();
+            }
+            return null;
+          }),
+          catchError((error) => {
+            this.logger.error('[AppUserService] gracePeriodUntil signal error:', error);
+            return of(null);
+          })
+        );
+      })
+    ),
+    { initialValue: null, injector: this.injector }
+  );
 
   static getDefaultChartTheme(): ChartThemes {
     return ChartThemes.Material;
@@ -361,12 +389,7 @@ export class AppUserService implements OnDestroy {
     return AppUserService.isProUser(user, isAdmin) || AppUserService.isBasicUser(user);
   }
 
-  constructor(
-    private eventService: AppEventService,
-    private http: HttpClient,
-    private windowService: AppWindowService,
-    private logger: LoggerService
-  ) {
+  constructor() {
     authState(this.auth).subscribe((user) => {
       if (user) {
         this.logger.setUser({ id: user.uid, email: user.email || undefined });
@@ -761,33 +784,6 @@ export class AppUserService implements OnDestroy {
     return role === 'pro' || role === 'basic';
   }
 
-  public getGracePeriodUntil(): Observable<Date | null> {
-    const user = this.auth.currentUser;
-    this.logger.log('[AppUserService] getGracePeriodUntil - Current auth user:', user?.uid || 'null');
-    if (!user) return from([null]);
-
-    return runInInjectionContext(this.injector, () => {
-      // Logic refactored: gracePeriodUntil is now in system/status and merged onto user
-      // so this can technically just call getUserByID, but that's heavy.
-      // Let's read directly from system/status for efficiency
-      const systemDoc = doc(this.firestore, `users/${user.uid}/system/status`);
-      return docData(systemDoc).pipe(
-        map((systemData: any) => {
-          if (systemData?.gracePeriodUntil) {
-            // Firebase Timestamp to Date
-            const date = (systemData.gracePeriodUntil as any).toDate();
-            // this.logger.log('[AppUserService] getGracePeriodUntil - Returning grace period date:', date);
-            return date;
-          }
-          return null;
-        }),
-        catchError((error) => {
-          this.logger.error('[AppUserService] getGracePeriodUntil - Error fetching system document:', error);
-          return from([null]);
-        })
-      );
-    });
-  }
 
   public async deleteAllUserData(_user: User) {
     try {

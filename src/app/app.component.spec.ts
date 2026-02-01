@@ -105,7 +105,7 @@ describe('AppComponent', () => {
                     provide: AppUserService, useValue: {
                         updateUserProperties: vi.fn().mockReturnValue(Promise.resolve()),
                         getSubscriptionRole: vi.fn().mockReturnValue(Promise.resolve('free')),
-                        getGracePeriodUntil: vi.fn().mockReturnValue(of(null)),
+                        gracePeriodUntil: signal(null),
                         isAdmin: vi.fn().mockReturnValue(Promise.resolve(false))
                     }
                 },
