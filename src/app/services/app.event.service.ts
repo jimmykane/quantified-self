@@ -331,8 +331,10 @@ export class AppEventService implements OnDestroy {
 
   public async writeAllEventData(user: User, event: AppEventInterface, originalFiles?: OriginalFile[] | OriginalFile) {
     // 0. Ensure deterministic IDs to prevent duplicates
+    // Frontend uploads use thresholdMs=0 for exact timestamps (no bucketing)
+    // Backend sync services use default 100ms bucketing for cross-device deduplication
     if (!event.getID()) {
-      event.setID(await generateEventID(user.uid, event.startDate));
+      event.setID(await generateEventID(user.uid, event.startDate, 0));
     }
     const eventID = event.getID();
     const activities = event.getActivities();

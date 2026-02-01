@@ -81,4 +81,40 @@ describe('ID Generator', () => {
         // sha256('test') = 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
         expect(id).toBe('9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08');
     });
+
+    // Zero-threshold tests (for frontend uploads)
+    describe('with thresholdMs = 0 (no bucketing)', () => {
+        it('should use exact timestamp when thresholdMs is 0', async () => {
+            const date = new Date('2025-12-28T12:00:00.000Z');
+            const id1 = await generateEventID(userID, date, 0);
+            const id2 = await generateEventID(userID, date, 0);
+
+            expect(id1).toBe(id2); // Same timestamp = same ID
+        });
+
+        it('should generate different IDs for events 1ms apart when thresholdMs is 0', async () => {
+            const date1 = new Date('2025-12-28T12:00:00.000Z');
+            const date2 = new Date('2025-12-28T12:00:00.001Z'); // 1ms later
+
+            const id1 = await generateEventID(userID, date1, 0);
+            const id2 = await generateEventID(userID, date2, 0);
+
+            expect(id1).not.toBe(id2); // Different timestamps = different IDs
+        });
+
+        it('should generate same ID with default bucketing but different with thresholdMs=0', async () => {
+            const date1 = new Date(50); // 50ms
+            const date2 = new Date(60); // 60ms (within default 100ms bucket)
+
+            // Default bucketing: same bucket
+            const idDefault1 = await generateEventID(userID, date1);
+            const idDefault2 = await generateEventID(userID, date2);
+            expect(idDefault1).toBe(idDefault2);
+
+            // No bucketing: different timestamps
+            const idExact1 = await generateEventID(userID, date1, 0);
+            const idExact2 = await generateEventID(userID, date2, 0);
+            expect(idExact1).not.toBe(idExact2);
+        });
+    });
 });
