@@ -363,7 +363,7 @@ export const PRO_REQUIRED_MESSAGE = 'Service sync is a Pro feature. Please upgra
 /**
  * Checks if the user has Pro access (either 'pro' role or active grace period).
  */
-export async function isProUser(userID: string): Promise<boolean> {
+export async function hasProAccess(userID: string): Promise<boolean> {
   const { role, gracePeriodUntil } = await getUserRoleAndGracePeriod(userID);
   return role === 'pro' || isGracePeriodActive(gracePeriodUntil);
 }

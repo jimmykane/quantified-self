@@ -1,6 +1,6 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
-import { isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
+import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 
 import * as requestPromise from '../request-helper';
 import * as admin from 'firebase-admin';
@@ -44,7 +44,7 @@ export const backfillGarminAPIActivities = functions.region(FUNCTIONS_MANIFEST.b
 
   const userID = context.auth.uid;
 
-  if (!(await isProUser(userID))) {
+  if (!(await hasProAccess(userID))) {
     logger.warn(`Blocking history import for non-pro user ${userID}`);
     throw new functions.https.HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }

@@ -26,7 +26,7 @@ vi.mock('../../utils', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../../utils')>();
     return {
         ...actual,
-        isProUser: vi.fn().mockResolvedValue(true),
+        hasProAccess: vi.fn().mockResolvedValue(true),
     };
 });
 
@@ -60,7 +60,7 @@ function createMockRequest(overrides: Partial<{
 describe('Suunto Auth Wrapper', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        (utils.isProUser as any).mockResolvedValue(true);
+        (utils.hasProAccess as any).mockResolvedValue(true);
     });
 
     describe('getSuuntoAPIAuthRequestTokenRedirectURI', () => {
@@ -71,7 +71,7 @@ describe('Suunto Auth Wrapper', () => {
 
             const result = await getSuuntoAPIAuthRequestTokenRedirectURI(request as any);
 
-            expect(utils.isProUser).toHaveBeenCalledWith('testUserID');
+            expect(utils.hasProAccess).toHaveBeenCalledWith('testUserID');
             expect(oauth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith(
                 'testUserID',
                 ServiceNames.SuuntoApp,
@@ -81,7 +81,7 @@ describe('Suunto Auth Wrapper', () => {
         });
 
         it('should throw error for non-pro user', async () => {
-            (utils.isProUser as any).mockResolvedValue(false);
+            (utils.hasProAccess as any).mockResolvedValue(false);
             const request = createMockRequest({
                 data: { redirectUri: 'https://app.com/callback' }
             });

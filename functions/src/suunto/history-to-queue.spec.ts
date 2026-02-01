@@ -26,7 +26,7 @@ vi.mock('../utils', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../utils')>();
     return {
         ...actual,
-        isProUser: vi.fn().mockResolvedValue(true),
+        hasProAccess: vi.fn().mockResolvedValue(true),
     };
 });
 
@@ -54,7 +54,7 @@ function createMockRequest(overrides: Partial<{
 describe('Suunto History to Queue', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        (utils.isProUser as any).mockResolvedValue(true);
+        (utils.hasProAccess as any).mockResolvedValue(true);
         (history.getNextAllowedHistoryImportDate as any).mockResolvedValue(null);
     });
 
@@ -158,7 +158,7 @@ describe('Suunto History to Queue', () => {
         });
 
         it('should throw error for non-pro user', async () => {
-            (utils.isProUser as any).mockResolvedValue(false);
+            (utils.hasProAccess as any).mockResolvedValue(false);
             const request = createMockRequest({
                 data: {
                     startDate: new Date().toISOString(),

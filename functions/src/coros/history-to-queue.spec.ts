@@ -29,7 +29,7 @@ vi.mock('firebase-functions/v1', () => ({
 }));
 
 vi.mock('../utils', () => ({
-    isProUser: vi.fn().mockResolvedValue(true),
+    hasProAccess: vi.fn().mockResolvedValue(true),
     PRO_REQUIRED_MESSAGE: 'Service sync is a Pro feature.'
 }));
 
@@ -47,7 +47,7 @@ describe('COROS History to Queue', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        (utils.isProUser as any).mockResolvedValue(true);
+        (utils.hasProAccess as any).mockResolvedValue(true);
         (history.getNextAllowedHistoryImportDate as any).mockResolvedValue(null);
 
         const recentDate = new Date();
@@ -177,7 +177,7 @@ describe('COROS History to Queue', () => {
         });
 
         it('should throw error for non-pro user', async () => {
-            (utils.isProUser as any).mockResolvedValue(false);
+            (utils.hasProAccess as any).mockResolvedValue(false);
 
             await expect(addCOROSAPIHistoryToQueue(data, context))
                 .rejects.toThrow('Service sync is a Pro feature.');

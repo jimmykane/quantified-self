@@ -5,7 +5,7 @@ import { config } from '../config';
 import * as admin from 'firebase-admin';
 import * as requestPromise from '../request-helper';
 import { executeWithTokenRetry } from './retry-helper';
-import { isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
+import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 
 
@@ -36,7 +36,7 @@ export const importActivityToSuuntoApp = onCall({
 
   const userID = request.auth.uid;
 
-  if (!(await isProUser(userID))) {
+  if (!(await hasProAccess(userID))) {
     logger.warn(`Blocking activity upload for non-pro user ${userID}`);
     throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }

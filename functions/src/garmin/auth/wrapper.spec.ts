@@ -62,7 +62,7 @@ vi.mock('../../utils', () => ({
     isCorsAllowed: vi.fn(),
     setAccessControlHeadersOnResponse: vi.fn().mockImplementation((req, res) => res),
     getUserIDFromFirebaseToken: vi.fn(),
-    isProUser: vi.fn(),
+    hasProAccess: vi.fn(),
     determineRedirectURI: vi.fn((req) => req.body?.redirectUri || req.query?.redirect_uri),
     PRO_REQUIRED_MESSAGE: 'Service sync is a Pro feature.',
 }));
@@ -92,7 +92,7 @@ describe('Garmin Auth Wrapper', () => {
 
         vi.mocked(utils.isCorsAllowed).mockReturnValue(true);
         vi.mocked(utils.getUserIDFromFirebaseToken).mockResolvedValue('testUserID');
-        vi.mocked(utils.isProUser).mockResolvedValue(true);
+        vi.mocked(utils.hasProAccess).mockResolvedValue(true);
         vi.mocked(utils.determineRedirectURI).mockReturnValue('https://callback');
 
         context = {
@@ -113,7 +113,7 @@ describe('Garmin Auth Wrapper', () => {
         });
 
         it('should throw permission-denied for non-pro user', async () => {
-            vi.mocked(utils.isProUser).mockResolvedValue(false);
+            vi.mocked(utils.hasProAccess).mockResolvedValue(false);
             const data = { redirectUri: 'https://callback' };
 
             await expect((getGarminAPIAuthRequestTokenRedirectURI as any)(data, context)).rejects.toThrow('Service sync is a Pro feature.');

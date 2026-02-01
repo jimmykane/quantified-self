@@ -1,7 +1,7 @@
 import * as functions from 'firebase-functions/v1';
 import * as logger from 'firebase-functions/logger';
 import {
-  isProUser,
+  hasProAccess,
   PRO_REQUIRED_MESSAGE
 } from '../../utils';
 import {
@@ -48,7 +48,7 @@ export const getGarminAPIAuthRequestTokenRedirectURI = functions.region(FUNCTION
   const userID = context.auth.uid;
 
   // 3. Enforce Pro Access
-  if (!(await isProUser(userID))) {
+  if (!(await hasProAccess(userID))) {
     logger.warn(`Blocking Garmin Auth for non-pro user ${userID}`);
     throw new functions.https.HttpsError(
       'permission-denied',
@@ -96,7 +96,7 @@ export const requestAndSetGarminAPIAccessToken = functions.region(FUNCTIONS_MANI
   const userID = context.auth.uid;
 
   // 3. Enforce Pro Access
-  if (!(await isProUser(userID))) {
+  if (!(await hasProAccess(userID))) {
     logger.warn(`Blocking Garmin Token Set for non-pro user ${userID}`);
     throw new functions.https.HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }

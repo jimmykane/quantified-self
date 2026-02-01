@@ -28,7 +28,7 @@ vi.mock('firebase-functions/v1', () => ({
 }));
 
 vi.mock('../../utils', () => ({
-    isProUser: vi.fn().mockResolvedValue(true),
+    hasProAccess: vi.fn().mockResolvedValue(true),
     PRO_REQUIRED_MESSAGE: 'Service sync is a Pro feature.'
 }));
 
@@ -52,7 +52,7 @@ describe('COROS Auth Wrapper', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-        (utils.isProUser as any).mockResolvedValue(true);
+        (utils.hasProAccess as any).mockResolvedValue(true);
 
         context = {
             app: { appId: 'test-app' },
@@ -67,7 +67,7 @@ describe('COROS Auth Wrapper', () => {
         it('should return redirect URI for pro user', async () => {
             const result = await getCOROSAPIAuthRequestTokenRedirectURI(data, context);
 
-            expect(utils.isProUser).toHaveBeenCalledWith('testUserID');
+            expect(utils.hasProAccess).toHaveBeenCalledWith('testUserID');
             expect(oauth2.getServiceOAuth2CodeRedirectAndSaveStateToUser).toHaveBeenCalledWith(
                 'testUserID',
                 SERVICE_NAME,
@@ -77,7 +77,7 @@ describe('COROS Auth Wrapper', () => {
         });
 
         it('should throw error for non-pro user', async () => {
-            (utils.isProUser as any).mockResolvedValue(false);
+            (utils.hasProAccess as any).mockResolvedValue(false);
 
             await expect(getCOROSAPIAuthRequestTokenRedirectURI(data, context))
                 .rejects.toThrow('Service sync is a Pro feature.');

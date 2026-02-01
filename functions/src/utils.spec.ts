@@ -450,31 +450,31 @@ describe('utils', () => {
             });
         });
 
-        describe('isProUser', () => {
+        describe('hasProAccess', () => {
             it('should return true for pro users', async () => {
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
-                const { isProUser } = await getUtils();
-                await expect(isProUser('user1')).resolves.toBe(true);
+                const { hasProAccess } = await getUtils();
+                await expect(hasProAccess('user1')).resolves.toBe(true);
             });
 
             it('should return true for users in active grace period', async () => {
                 const futureDate = Date.now() + 60000;
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free', gracePeriodUntil: futureDate } });
-                const { isProUser } = await getUtils();
-                await expect(isProUser('user1')).resolves.toBe(true);
+                const { hasProAccess } = await getUtils();
+                await expect(hasProAccess('user1')).resolves.toBe(true);
             });
 
             it('should return false for free users without grace period', async () => {
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
-                const { isProUser } = await getUtils();
-                await expect(isProUser('user1')).resolves.toBe(false);
+                const { hasProAccess } = await getUtils();
+                await expect(hasProAccess('user1')).resolves.toBe(false);
             });
 
             it('should return false for free users with expired grace period', async () => {
                 const pastDate = Date.now() - 60000;
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free', gracePeriodUntil: pastDate } });
-                const { isProUser } = await getUtils();
-                await expect(isProUser('user1')).resolves.toBe(false);
+                const { hasProAccess } = await getUtils();
+                await expect(hasProAccess('user1')).resolves.toBe(false);
             });
         });
 
