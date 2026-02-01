@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges, inject } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { DataDistance } from '@sports-alliance/sports-lib';
@@ -23,6 +23,8 @@ import { DataMovingTime } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { ActivityUtilities } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../../services/app.user.service';
+import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
+import { AppEventUtilities } from '../../../utils/app.event.utilities';
 
 @Component({
   selector: 'app-event-card-stats-grid',
@@ -36,12 +38,22 @@ import { AppUserService } from '../../../services/app.user.service';
 export class EventCardStatsGridComponent implements OnChanges {
   @Input() event!: EventInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
-  @Input() unitSettings = AppUserService.getDefaultUserUnitSettings();
+  // @Input() unitSettings = AppUserService.getDefaultUserUnitSettings(); // Removed, using service signal
   @Input() statsToShow?: string[]; // Optional override
   @Input() layout: 'grid' | 'condensed' = 'grid';
 
   public displayedStatsToShow: string[] = [];
   public stats: DataInterface[] = [];
+
+  private userSettingsQuery = inject(AppUserSettingsQueryService);
+
+  public get unitSettings() {
+    return this.userSettingsQuery.unitSettings();
+  }
+
+  public get summariesSettings() {
+    return this.userSettingsQuery.summariesSettings();
+  }
 
   ngOnChanges(simpleChanges: SimpleChanges) {
     if (!this.selectedActivities.length) {
@@ -64,7 +76,7 @@ export class EventCardStatsGridComponent implements OnChanges {
       return;
     }
 
-    const activityTypes = (<DataActivityTypes>this.event.getStat(DataActivityTypes.type)).getValue();
+    const activityTypes = (this.selectedActivities || []).map((activity: ActivityInterface) => Object.keys(ActivityTypes).find((key: string) => ActivityTypes[key as keyof typeof ActivityTypes] === activity.type)).filter(type => !!type) as string[];
 
     // the order here is important
     this.displayedStatsToShow = [
@@ -86,10 +98,22 @@ export class EventCardStatsGridComponent implements OnChanges {
       DataVO2Max.type,
       DataTemperatureAvg.type,
     ].reduce((statsAccu: string[], statType: string) => {
+      if (statType === DataAscent.type) {
+        if (AppEventUtilities.shouldExcludeAscent(activityTypes as ActivityTypes[]) || (this.summariesSettings?.removeAscentForEventTypes || []).some((type: string) => (activityTypes as string[]).includes(type))) {
+          return statsAccu;
+        }
+      }
+      if (statType === DataDescent.type) {
+        if (AppEventUtilities.shouldExcludeDescent(activityTypes as ActivityTypes[]) || ((this.summariesSettings as any)?.removeDescentForEventTypes || []).some((type: string) => (activityTypes as string[]).includes(type))) {
+          return statsAccu;
+        }
+      }
       if (statType === DataSpeedAvg.type) {
-        return [...statsAccu, ...activityTypes.reduce((speedMetricsAccu: string[], activityType: string) => {
-          return [...new Set([...speedMetricsAccu, ...ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(ActivityTypes[activityType as keyof typeof ActivityTypes])]).values()];
-        }, [] as string[])];
+        const speedMetrics = activityTypes.reduce((speedMetricsAccu: string[], activityType: string) => {
+          const metrics = ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(ActivityTypes[activityType as keyof typeof ActivityTypes]);
+          return [...new Set([...speedMetricsAccu, ...(metrics || [])]).values()];
+        }, [] as string[]);
+        return [...statsAccu, ...speedMetrics];
       }
       return [...statsAccu, statType];
     }, [] as string[])

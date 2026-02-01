@@ -8,6 +8,7 @@ import {
     UserChartSettingsInterface,
     UserMapSettingsInterface,
     UserMyTracksSettingsInterface,
+    UserSummariesSettingsInterface,
     AppThemes
 } from '@sports-alliance/sports-lib';
 import equal from 'fast-deep-equal';
@@ -75,6 +76,17 @@ export class AppUserSettingsQueryService {
             tap(settings => this.logger.info('[AppUserSettingsQueryService] Only Emitting My Tracks Settings Change:', settings))
         ),
         { initialValue: {} as UserMyTracksSettingsInterface }
+    );
+
+    /**
+     * Summaries Settings Signal
+     */
+    public readonly summariesSettings = toSignal(
+        this.user$.pipe(
+            map(user => user?.settings?.summariesSettings ?? {} as UserSummariesSettingsInterface),
+            distinctUntilChanged((prev, curr) => equal(prev, curr))
+        ),
+        { initialValue: {} as UserSummariesSettingsInterface }
     );
 
     /**
@@ -159,6 +171,26 @@ export class AppUserSettingsQueryService {
         return this.userService.updateUserProperties(user, { settings: updatedSettings })
             .then(() => this.logger.info(`[AppUserSettingsQueryService] Chart Settings updated successfully.`))
             .catch(err => this.logger.error(`[AppUserSettingsQueryService] Failed to update Chart Settings:`, err));
+    }
+
+    /**
+     * Updates Summaries settings by merging the provided partial settings.
+     */
+    public async updateSummariesSettings(settings: Partial<UserSummariesSettingsInterface>): Promise<void> {
+        this.logger.info(`[AppUserSettingsQueryService] Updating Summaries Settings:`, settings);
+        const user = await this.getCurrentUser();
+        if (!user) {
+            this.logger.warn(`[AppUserSettingsQueryService] Cannot update Summaries Settings. No user logged in.`);
+            return;
+        }
+
+        const updatedSettings = {
+            summariesSettings: settings
+        };
+
+        return this.userService.updateUserProperties(user, { settings: updatedSettings })
+            .then(() => this.logger.info(`[AppUserSettingsQueryService] Summaries Settings updated successfully.`))
+            .catch(err => this.logger.error(`[AppUserSettingsQueryService] Failed to update Summaries Settings:`, err));
     }
 
     /**

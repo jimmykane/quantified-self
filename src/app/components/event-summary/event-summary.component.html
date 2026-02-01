@@ -61,8 +61,7 @@
   <!-- Stats Grid Section -->
   <div class="summary-stats-area">
     <div class="stats-container">
-      <app-event-card-stats-grid [event]="event" [selectedActivities]="selectedActivities"
-        [unitSettings]="unitSettings">
+      <app-event-card-stats-grid [event]="event" [selectedActivities]="selectedActivities">
         @if (hasDevices) {
         <div stats-suffix class="stat-item devices-item" (click)="openDevices()" matTooltip="View sensors & devices">
           <div class="stat-avatar">
