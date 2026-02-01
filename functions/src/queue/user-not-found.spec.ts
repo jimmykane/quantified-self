@@ -108,7 +108,7 @@ vi.mock('firebase-admin', () => ({
 import * as admin from 'firebase-admin';
 
 // Import subject under test
-import { getUserRole, UserNotFoundError } from '../utils';
+import { getUserRoleAndGracePeriod, UserNotFoundError } from '../utils';
 import { parseWorkoutQueueItemForServiceName } from '../queue';
 import { processGarminAPIActivityQueueItem } from '../garmin/queue';
 
@@ -154,13 +154,13 @@ describe('User Not Found Scenarios', () => {
         });
     });
 
-    describe('getUserRole', () => {
+    describe('getUserRoleAndGracePeriod', () => {
         it('should throw UserNotFoundError when auth/user-not-found error occurs', async () => {
             (admin.auth as any).mockReturnValue({
                 getUser: vi.fn().mockRejectedValue({ code: 'auth/user-not-found' })
             });
 
-            await expect(getUserRole('missing-uid')).rejects.toThrow(UserNotFoundError);
+            await expect(getUserRoleAndGracePeriod('missing-uid')).rejects.toThrow(UserNotFoundError);
         });
 
         it('should return "free" (safe default) for other errors', async () => {
@@ -168,7 +168,7 @@ describe('User Not Found Scenarios', () => {
                 getUser: vi.fn().mockRejectedValue({ code: 'auth/internal-error' })
             });
 
-            const role = await getUserRole('error-uid');
+            const { role } = await getUserRoleAndGracePeriod('error-uid');
             expect(role).toBe('free');
         });
     });

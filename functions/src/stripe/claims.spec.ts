@@ -1,13 +1,16 @@
-import { onCall, HttpsError } from 'firebase-functions/v2/https'; // Ensure HttpsError is imported
-
-// ... existing code ...
-
-// ... existing code ...
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
 
 // Mock dependencies
 const mockSetCustomUserClaims = vi.fn();
 const mockSet = vi.fn();
-const mockDoc = vi.fn().mockReturnValue({ set: mockSet });
+const mockUpdate = vi.fn();
+const mockGetDoc = vi.fn();
+const mockDoc = vi.fn().mockReturnValue({
+    set: mockSet,
+    get: mockGetDoc,
+    update: mockUpdate
+});
 const mockAuth = {
     setCustomUserClaims: mockSetCustomUserClaims,
     getUser: vi.fn().mockResolvedValue({ customClaims: {}, email: 'test@example.com' })
@@ -95,12 +98,15 @@ describe('reconcileClaims', () => {
         mockAuth.getUser.mockResolvedValue({ customClaims: {}, email: 'test@example.com' });
     });
 
-    it('should throw "not-found" if no active subscription exists locally or in Stripe', async () => {
+    it('should return "free" if no active subscription exists locally or in Stripe', async () => {
         mockGet.mockResolvedValue({ empty: true });
         mockStripeCustomersSearch.mockResolvedValue({ data: [] });
+        mockGetDoc.mockResolvedValue({ data: () => ({}) });
 
-        await expect(reconcileClaims('user1')).rejects.toThrow('No active subscription found');
+        const result = await reconcileClaims('user1');
+        expect(result.role).toBe('free');
         expect(mockStripeCustomersSearch).toHaveBeenCalled();
+        expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', expect.objectContaining({ stripeRole: 'free' }));
     });
 
     it('should set claims based on role field (Local)', async () => {
@@ -195,7 +201,7 @@ describe('reconcileClaims', () => {
         expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', expect.objectContaining({ stripeRole: 'pro' }));
     });
 
-    it('should throw failed-precondition if no firebaseRole OR role found', async () => {
+    it('should default to "free" role if no firebaseRole OR role found in subscription', async () => {
         mockGet.mockResolvedValue({
             empty: false,
             docs: [{
@@ -206,8 +212,11 @@ describe('reconcileClaims', () => {
                 })
             }]
         });
+        mockGetDoc.mockResolvedValue({ data: () => ({}) });
 
-        await expect(reconcileClaims('user1')).rejects.toThrow('Subscription found but no role defined in document');
+        const result = await reconcileClaims('user1');
+        expect(result.role).toBe('free');
+        expect(mockSetCustomUserClaims).toHaveBeenCalledWith('user1', expect.objectContaining({ stripeRole: 'free' }));
     });
 
     it('should fallback to product metadata if subscription metadata is missing role', async () => {
@@ -348,13 +357,16 @@ describe('restoreUserClaims', () => {
         await expect((restoreUserClaims as any)(req)).rejects.toThrow('DB Fail');
     });
 
-    it('should rethrow HttpsError as is', async () => {
-        // Mock reconcileClaims to throw HttpsError
+    it('should return "free" role via restoreUserClaims if no active subscription found', async () => {
+        // Mock reconcileClaims to return 'free' (indirectly by mocking the database states it depends on)
         mockGet.mockResolvedValue({ empty: true });
         mockStripeCustomersSearch.mockResolvedValue({ data: [] });
+        mockGetDoc.mockResolvedValue({ data: () => ({}) });
 
         const req = { auth: { uid: 'user1' }, app: { appId: 'test' } } as any;
-        await expect((restoreUserClaims as any)(req)).rejects.toThrow('No active subscription found');
+        const result = await (restoreUserClaims as any)(req);
+
+        expect(result).toEqual({ success: true, role: 'free' });
     });
 
     it('should use default error message if error has no message property', async () => {
@@ -368,14 +380,16 @@ describe('restoreUserClaims', () => {
 
 // Mock for findAndLinkStripeCustomerByEmail coverage (No active sub found for existing customer)
 describe('reconcileClaims (Complex Scenarios)', () => {
-    it('should ignore Stripe customer if no active subscription found (findAndLink... return false)', async () => {
+    it('should return "free" role if Stripe customer found but no active subscription', async () => {
         mockGet.mockResolvedValue({ empty: true });
         mockStripeCustomersSearch.mockResolvedValue({
             data: [{ id: 'cus_no_sub', email: 'test@example.com' }]
         });
         mockStripeSubscriptionsList.mockResolvedValue({ data: [] }); // No subs
+        mockGetDoc.mockResolvedValue({ data: () => ({}) });
 
-        await expect(reconcileClaims('user1')).rejects.toThrow('No active subscription found');
+        const result = await reconcileClaims('user1');
+        expect(result.role).toBe('free');
     });
 
     it('should handle expanded product object in subscription item', async () => {
