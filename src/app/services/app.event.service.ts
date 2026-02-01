@@ -344,10 +344,9 @@ export class AppEventService implements OnDestroy {
       }
     }
 
-    // 1. Check Pro Status
+    // 1. Check Pro Status & Grace Period
     const userService = this.injector.get(AppUserService);
-    const isPro = await userService.isPro();
-    if (!isPro) {
+    if (!AppUserService.hasProAccess(user)) {
       // 2. Check Limits
       const role = await userService.getSubscriptionRole() || 'free';
       const limit = USAGE_LIMITS[role] || USAGE_LIMITS['free'];

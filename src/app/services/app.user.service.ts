@@ -1,4 +1,4 @@
-import { inject, Injectable, OnDestroy, EnvironmentInjector, runInInjectionContext } from '@angular/core';
+import { inject, Injectable, OnDestroy, EnvironmentInjector, runInInjectionContext, computed } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 
 
@@ -105,28 +105,31 @@ export class AppUserService implements OnDestroy {
   private http = inject(HttpClient);
   private windowService = inject(AppWindowService);
 
-  public readonly gracePeriodUntil = toSignal(
-    authState(this.auth).pipe(
-      switchMap(user => {
-        this.logger.log('[AppUserService] gracePeriodUntil signal init - Current auth user:', user?.uid || 'null');
-        if (!user) return of(null);
-        const systemDoc = doc(this.firestore, `users/${user.uid}/system/status`);
-        return docData(systemDoc).pipe(
-          map((systemData: any) => {
-            if (systemData?.gracePeriodUntil) {
-              return (systemData.gracePeriodUntil as any).toDate();
-            }
-            return null;
-          }),
-          catchError((error) => {
-            this.logger.error('[AppUserService] gracePeriodUntil signal error:', error);
-            return of(null);
-          })
-        );
-      })
-    ),
+  private user$ = runInInjectionContext(this.injector, () => authState(this.auth).pipe(
+    switchMap(u => u ? this.getUserByID(u.uid) : of(null)),
+    distinctUntilChanged((p, c) => JSON.stringify(p) === JSON.stringify(c))
+  ));
+
+  public readonly user = toSignal(this.user$,
     { initialValue: null, injector: this.injector }
   );
+
+  public readonly stripeRoleSignal = computed(() => (this.user() as any)?.stripeRole as StripeRole || null);
+  public readonly isAdminSignal = computed(() => (this.user() as any)?.admin === true);
+  public readonly isProSignal = computed(() => AppUserService.hasProAccess(this.user(), this.isAdminSignal()));
+  public readonly isBasicSignal = computed(() => AppUserService.isBasicUser(this.user()));
+
+  public readonly isGracePeriodActiveSignal = computed(() => AppUserService.isGracePeriodActive(this.user()));
+  public readonly hasPaidAccessSignal = computed(() => AppUserService.hasPaidAccessUser(this.user(), this.isAdminSignal()));
+  public readonly hasProAccessSignal = computed(() => AppUserService.hasProAccess(this.user(), this.isAdminSignal()));
+
+  public readonly gracePeriodUntil = computed(() => {
+    const user = this.user();
+    if (!user) return null;
+    const gracePeriodUntil = (user as any).gracePeriodUntil;
+    if (!gracePeriodUntil) return null;
+    return typeof gracePeriodUntil.toDate === 'function' ? gracePeriodUntil.toDate() : new Date(gracePeriodUntil);
+  });
 
   static getDefaultChartTheme(): ChartThemes {
     return ChartThemes.Material;
@@ -372,7 +375,31 @@ export class AppUserService implements OnDestroy {
     'acceptedTos',
   ];
 
-  public static isProUser(user: User | null, isAdmin: boolean = false): boolean {
+  public static isGracePeriodActive(user: AppUserInterface | User | null): boolean {
+    if (!user) return false;
+    const gracePeriodUntil = (user as any).gracePeriodUntil;
+    if (!gracePeriodUntil) return false;
+
+    // Handle Firestore Timestamp, Date, or Unix number from Claims
+    const expiryMillis = typeof gracePeriodUntil.toMillis === 'function'
+      ? gracePeriodUntil.toMillis()
+      : typeof gracePeriodUntil.getTime === 'function'
+        ? gracePeriodUntil.getTime()
+        : typeof gracePeriodUntil === 'object' && gracePeriodUntil.seconds
+          ? gracePeriodUntil.seconds * 1000
+          : gracePeriodUntil;
+
+    return expiryMillis > Date.now();
+  }
+
+  /**
+   * Returns true if the user has Pro access (Pro role, Admin, or Active Grace Period).
+   */
+  public static hasProAccess(user: AppUserInterface | User | null, isAdmin: boolean = false): boolean {
+    return AppUserService.isProUser(user, isAdmin) || AppUserService.isGracePeriodActive(user);
+  }
+
+  public static isProUser(user: AppUserInterface | User | null, isAdmin: boolean = false): boolean {
     if (!user) return false;
     const stripeRole = (user as any).stripeRole;
     return stripeRole === 'pro' || isAdmin || (user as any).isPro === true;
@@ -384,9 +411,12 @@ export class AppUserService implements OnDestroy {
     return stripeRole === 'basic';
   }
 
+  /**
+   * Returns true if the user has at least Basic paid access OR is in a Grace Period.
+   */
   public static hasPaidAccessUser(user: User | null, isAdmin: boolean = false): boolean {
     if (!user) return false;
-    return AppUserService.isProUser(user, isAdmin) || AppUserService.isBasicUser(user);
+    return AppUserService.isProUser(user, isAdmin) || AppUserService.isBasicUser(user) || AppUserService.isGracePeriodActive(user);
   }
 
   constructor() {
@@ -754,17 +784,13 @@ export class AppUserService implements OnDestroy {
   }
 
   public async isPro(): Promise<boolean> {
-    const isAdmin = await this.isAdmin();
-    if (isAdmin) return true;
-    const role = await this.getSubscriptionRole();
-    return role === 'pro';
+    const user = await firstValueFrom(this.user$.pipe(take(1)));
+    return AppUserService.hasProAccess(user, await this.isAdmin());
   }
 
   public async isAdmin(): Promise<boolean> {
     const user = await runInInjectionContext(this.injector, () => firstValueFrom(authState(this.auth).pipe(take(1))));
-    if (!user) {
-      return false;
-    }
+    if (!user) return false;
     try {
       const tokenResult = await user.getIdTokenResult();
       return tokenResult.claims['admin'] === true;
@@ -778,10 +804,8 @@ export class AppUserService implements OnDestroy {
    * Returns true if the user has any level of paid access (basic or pro)
    */
   public async hasPaidAccess(): Promise<boolean> {
-    const isAdmin = await this.isAdmin();
-    if (isAdmin) return true;
-    const role = await this.getSubscriptionRole();
-    return role === 'pro' || role === 'basic';
+    const user = await firstValueFrom(this.user$.pipe(take(1)));
+    return AppUserService.hasPaidAccessUser(user, await this.isAdmin());
   }
 
 

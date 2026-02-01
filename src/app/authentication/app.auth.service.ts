@@ -68,12 +68,15 @@ export class AppAuthService {
     // Get current claims
     const tokenResult = await firebaseUser.getIdTokenResult();
     const stripeRole = tokenResult.claims['stripeRole'] as string || null;
+    const gracePeriodUntil = tokenResult.claims['gracePeriodUntil'] as number || null;
 
     if (dbUser) {
       // Attach the uid to the object
       dbUser.uid = firebaseUser.uid;
       // Merge the stripe role from the token claims
       (dbUser as any).stripeRole = stripeRole;
+      // Merge grace period until from token claims if not already present on dbUser (e.g. from Firestore merge)
+      (dbUser as any).gracePeriodUntil = (dbUser as any).gracePeriodUntil || gracePeriodUntil;
 
       // Check if we need to force refresh the token
       // We do this if the DB says claims were updated AFTER our token was issued
@@ -129,6 +132,7 @@ export class AppAuthService {
         privacy: Privacy.Private,
         isAnonymous: false,
         stripeRole: stripeRole,
+        gracePeriodUntil: gracePeriodUntil,
         claimsUpdatedAt: (dbUser as any)?.claimsUpdatedAt, // Pass it through if it exists on synthetic user (unlikely but good for types)
         creationDate: new Date(firebaseUser.metadata.creationTime!),
         lastSignInDate: new Date(firebaseUser.metadata.lastSignInTime!)

@@ -37,13 +37,11 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
   protected overlay = inject(Overlay);
   protected eventService = inject(AppEventService);
   protected fileService = inject(AppFileService);
-  protected userService = inject(AppUserService);
   protected analyticsService = inject(AppAnalyticsService);
   protected authService = inject(AppAuthService);
 
   public uploadCount: number | null = null;
   public uploadLimit: number | null = null;
-  public isPro: boolean = false;
 
   constructor() {
     super();
@@ -61,16 +59,14 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
   async calculateRemainingUploads() {
     if (!this.user) return;
 
-    // Fetch Role
-    this.isPro = await this.userService.isPro();
-    if (this.isPro) return; // Unlimited
+    // Fetch Pro Access Status (Pro or Grace Period)
+    if (this.userService.hasProAccessSignal()) return;
 
     // Fetch Count
     this.uploadCount = await this.eventService.getEventCount(this.user);
 
     // Get Limit
     const role = await this.userService.getSubscriptionRole() || 'free';
-    // Import dynamically or use a known path if possible, but for now let's rely on the import I will add
     this.uploadLimit = USAGE_LIMITS[role] || USAGE_LIMITS['free'];
   }
 

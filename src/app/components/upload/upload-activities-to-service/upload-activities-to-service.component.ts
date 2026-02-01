@@ -24,16 +24,10 @@ import { AppFunctionsService } from '../../../services/app.functions.service';
 })
 
 export class UploadActivitiesToServiceComponent extends UploadAbstractDirective {
-  protected snackBar = inject(MatSnackBar);
-  protected dialog = inject(MatDialog);
-  protected processingService = inject(AppProcessingService);
-  protected router = inject(Router);
-  protected logger = inject(LoggerService);
   public data = inject(MAT_DIALOG_DATA, { optional: true });
   public dialogRef = inject(MatDialogRef<UploadActivitiesToServiceComponent>, { optional: true });
   private auth = inject(Auth);
   private eventService = inject(AppEventService);
-  private userService = inject(AppUserService);
   private analyticsService = inject(AppAnalyticsService);
 
   private functionsService = inject(AppFunctionsService);

@@ -33,13 +33,13 @@ class PermissionsService {
 
             const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
             const stripeRole = (user as any).stripeRole;
-            const hasPaidAccess = AppUserService.hasPaidAccessUser(user, false);
+            const hasPaidAccess = this.userService.hasPaidAccessSignal();
 
             this.logger.log('[ProGuard] Status:', { termsAccepted, hasSubscribedOnce, stripeRole, hasPaidAccess });
 
             // If they have any level of paid access, they are always allowed
             if (hasPaidAccess) {
-                this.logger.log('[ProGuard] Access GRANTED (Pro/Basic)');
+                this.logger.log('[ProGuard] Access GRANTED (Pro/Basic/Grace)');
                 return true;
             }
 

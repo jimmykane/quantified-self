@@ -1,6 +1,5 @@
-import { Directive, Input, TemplateRef, ViewContainerRef, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
+import { Directive, Input, TemplateRef, ViewContainerRef, OnInit, inject, effect } from '@angular/core';
 import { AppUserService } from '../services/app.user.service';
-import { Subscription } from 'rxjs';
 import { LoggerService } from '../services/logger.service';
 
 @Directive({
@@ -14,40 +13,39 @@ export class HasRoleDirective implements OnInit {
         private templateRef: TemplateRef<any>,
         private viewContainer: ViewContainerRef,
         private userService: AppUserService,
-        private cdr: ChangeDetectorRef,
         private logger: LoggerService
-    ) { }
-
-    async ngOnInit() {
-        this.viewContainer.clear();
-        try {
-            const hasAccess = await this.checkAccess();
-            if (hasAccess) {
-                this.viewContainer.createEmbeddedView(this.templateRef);
-            } else {
+    ) {
+        effect(() => {
+            try {
+                const hasAccess = this.checkAccessSync();
+                this.viewContainer.clear();
+                if (hasAccess) {
+                    this.viewContainer.createEmbeddedView(this.templateRef);
+                }
+            } catch (e) {
+                this.logger.error('Error in HasRoleDirective', e);
                 this.viewContainer.clear();
             }
-            this.cdr.markForCheck();
-        } catch (e) {
-            this.logger.error('Error in HasRoleDirective', e);
-            this.viewContainer.clear();
-        }
+        });
     }
 
-    private async checkAccess(): Promise<boolean> {
+    ngOnInit() {
+        // Handled by effect
+    }
+
+    private checkAccessSync(): boolean {
         if (!this.requiredRole) {
             return false;
         }
 
         if (this.requiredRole === 'basic') {
-            // Basic role requirement is satisfied by 'basic' OR 'pro'
-            return this.userService.hasPaidAccess();
+            return this.userService.hasPaidAccessSignal();
         }
 
         if (this.requiredRole === 'pro') {
-            // Pro requirement is strict
-            return this.userService.isPro();
+            return this.userService.isProSignal();
         }
 
+        return false;
     }
 }

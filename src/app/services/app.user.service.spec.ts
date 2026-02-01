@@ -89,6 +89,7 @@ describe('AppUserService', () => {
         });
 
         it('hasPaidAccess should return true for basic', async () => {
+            (docData as any).mockReturnValue(of({ stripeRole: 'basic' }));
             const hasAccess = await service.hasPaidAccess();
             expect(hasAccess).toBe(true);
         });
@@ -98,7 +99,20 @@ describe('AppUserService', () => {
             expect(isPro).toBe(false);
         });
 
+        it('isPro should return true for free user in active grace period', async () => {
+            // Mock docData to have active grace period
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + 1);
+            (docData as any).mockReturnValue(of({
+                stripeRole: 'free',
+                gracePeriodUntil: { toMillis: () => futureDate.getTime() }
+            }));
+            const isPro = await service.isPro();
+            expect(isPro).toBe(true);
+        });
+
         it('should return pro role', async () => {
+            (docData as any).mockReturnValue(of({ stripeRole: 'pro' }));
             mockAuth.currentUser.getIdTokenResult.mockReturnValue(Promise.resolve({
                 claims: { stripeRole: 'pro' }
             }));
@@ -107,12 +121,41 @@ describe('AppUserService', () => {
         });
 
         it('hasPaidAccess should return true for pro', async () => {
+            (docData as any).mockReturnValue(of({ stripeRole: 'pro' }));
             mockAuth.currentUser.getIdTokenResult.mockReturnValue(Promise.resolve({
                 claims: { stripeRole: 'pro' }
             }));
             service = TestBed.inject(AppUserService);
             const hasAccess = await service.hasPaidAccess();
             expect(hasAccess).toBe(true);
+        });
+
+        it('signals should reflect basic role', async () => {
+            (docData as any).mockReturnValue(of({ stripeRole: 'basic' }));
+            service = TestBed.inject(AppUserService);
+            const role = await service.getSubscriptionRole();
+            expect(role).toBe('basic');
+            expect(await service.isBasic()).toBe(true);
+            expect(await service.hasPaidAccess()).toBe(true);
+        });
+
+        it('signals should reflect pro role', async () => {
+            (docData as any).mockReturnValue(of({ stripeRole: 'pro' }));
+            service = TestBed.inject(AppUserService);
+            expect(await service.isPro()).toBe(true);
+            expect(await service.hasPaidAccess()).toBe(true);
+        });
+
+        it('signals should reflect grace period as pro access', async () => {
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + 1);
+            (docData as any).mockReturnValue(of({
+                stripeRole: 'free',
+                gracePeriodUntil: { toMillis: () => futureDate.getTime() }
+            }));
+            service = TestBed.inject(AppUserService);
+            expect(await service.isPro()).toBe(true);
+            expect(await service.hasPaidAccess()).toBe(true);
         });
     });
 
@@ -227,6 +270,58 @@ describe('AppUserService', () => {
         });
         const mockUser = { uid: 'u1' } as any;
 
+        describe('isGracePeriodActive', () => {
+            it('should return false for null user', () => {
+                expect(AppUserService.isGracePeriodActive(null)).toBe(false);
+            });
+
+            it('should return true for future date (Timestamp)', () => {
+                const futureDate = new Date();
+                futureDate.setDate(futureDate.getDate() + 1);
+                const user = { ...mockUser, gracePeriodUntil: { toMillis: () => futureDate.getTime() } };
+                expect(AppUserService.isGracePeriodActive(user)).toBe(true);
+            });
+
+            it('should return true for future date (Date)', () => {
+                const futureDate = new Date();
+                futureDate.setDate(futureDate.getDate() + 1);
+                const user = { ...mockUser, gracePeriodUntil: futureDate };
+                expect(AppUserService.isGracePeriodActive(user)).toBe(true);
+            });
+
+            it('should return true for future date (seconds)', () => {
+                const futureSeconds = (Date.now() / 1000) + 1000;
+                const user = { ...mockUser, gracePeriodUntil: { seconds: futureSeconds } };
+                expect(AppUserService.isGracePeriodActive(user)).toBe(true);
+            });
+
+            it('should return false for past date', () => {
+                const pastDate = new Date();
+                pastDate.setDate(pastDate.getDate() - 1);
+                const user = { ...mockUser, gracePeriodUntil: pastDate };
+                expect(AppUserService.isGracePeriodActive(user)).toBe(false);
+            });
+        });
+
+        describe('hasProAccess', () => {
+            it('should return true if isProUser is true', () => {
+                const user = { ...mockUser, stripeRole: 'pro' };
+                expect(AppUserService.hasProAccess(user)).toBe(true);
+            });
+
+            it('should return true if in active grace period', () => {
+                const futureDate = new Date();
+                futureDate.setDate(futureDate.getDate() + 1);
+                const user = { ...mockUser, stripeRole: 'free', gracePeriodUntil: futureDate };
+                expect(AppUserService.hasProAccess(user)).toBe(true);
+            });
+
+            it('should return false for free user with no grace period', () => {
+                const user = { ...mockUser, stripeRole: 'free' };
+                expect(AppUserService.hasProAccess(user)).toBe(false);
+            });
+        });
+
         describe('isProUser', () => {
             it('should return false for null user', () => {
                 expect(AppUserService.isProUser(null)).toBe(false);
@@ -301,6 +396,13 @@ describe('AppUserService', () => {
 
             it('should return true if user.isPro is true', () => {
                 const user = { ...mockUser, isPro: true };
+                expect(AppUserService.hasPaidAccessUser(user)).toBe(true);
+            });
+
+            it('should return true if user is in grace period', () => {
+                const futureDate = new Date();
+                futureDate.setDate(futureDate.getDate() + 1);
+                const user = { ...mockUser, stripeRole: 'free', gracePeriodUntil: futureDate };
                 expect(AppUserService.hasPaidAccessUser(user)).toBe(true);
             });
 

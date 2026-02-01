@@ -21,6 +21,7 @@ import { ServiceNames } from '@sports-alliance/sports-lib';
 import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE } from '../../../../functions/src/shared/history-import.constants';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import { AppAuthService } from '../../authentication/app.auth.service';
 
 dayjs.extend(relativeTime);
 
@@ -74,6 +75,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private logger = inject(LoggerService);
   private snackBar = inject(MatSnackBar);
   private changeDetectorRef = inject(ChangeDetectorRef);
+  private authService = inject(AppAuthService);
 
   async ngOnInit() {
     this.formGroup = new UntypedFormGroup({
@@ -90,7 +92,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
     this.formGroup.disable();
 
-    this.isPro = await this.userService.isPro();
+    const user = await this.authService.getUser();
+    this.isPro = AppUserService.hasProAccess(user);
 
     this.processChanges();
   }
