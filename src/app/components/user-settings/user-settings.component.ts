@@ -4,6 +4,7 @@ import { AppWindowService } from '../../services/app.window.service';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
+import { AppUserUtilities } from '../../utils/app.user.utilities';
 
 import { MatDialog } from '@angular/material/dialog';
 import { DeleteAccountDialogComponent } from '../delete-account-dialog/delete-account-dialog.component';
@@ -92,11 +93,11 @@ export class UserSettingsComponent implements OnChanges {
   public isAdminUser = false;
 
   get isProUser(): boolean {
-    return AppUserService.isProUser(this.user, this.isAdminUser);
+    return AppUserUtilities.isProUser(this.user, this.isAdminUser);
   }
 
   get isBasicUser(): boolean {
-    return AppUserService.isBasicUser(this.user);
+    return AppUserUtilities.isBasicUser(this.user);
   }
 
   get userAvatarUrl(): string {
@@ -286,9 +287,9 @@ export class UserSettingsComponent implements OnChanges {
           },
           unitSettings: <UserUnitSettingsInterface>{
             speedUnits: this.userSettingsFormGroup.get('speedUnitsToUse').value,
-            gradeAdjustedSpeedUnits: AppUserService.getGradeAdjustedSpeedUnitsFromSpeedUnits(this.userSettingsFormGroup.get('speedUnitsToUse').value),
+            gradeAdjustedSpeedUnits: AppUserUtilities.getGradeAdjustedSpeedUnitsFromSpeedUnits(this.userSettingsFormGroup.get('speedUnitsToUse').value),
             paceUnits: this.userSettingsFormGroup.get('paceUnitsToUse').value,
-            gradeAdjustedPaceUnits: AppUserService.getGradeAdjustedPaceUnitsFromPaceUnits(this.userSettingsFormGroup.get('paceUnitsToUse').value),
+            gradeAdjustedPaceUnits: AppUserUtilities.getGradeAdjustedPaceUnitsFromPaceUnits(this.userSettingsFormGroup.get('paceUnitsToUse').value),
             swimPaceUnits: this.userSettingsFormGroup.get('swimPaceUnitsToUse').value,
             verticalSpeedUnits: this.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value,
             startOfTheWeek: this.userSettingsFormGroup.get('startOfTheWeek').value,

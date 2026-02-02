@@ -12,6 +12,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { effect, Injector, runInInjectionContext, inject } from '@angular/core';
 import equal from 'fast-deep-equal';
 import { AppUserService } from '../../../services/app.user.service';
+import { AppUserUtilities } from '../../../utils/app.user.utilities';
 
 import { Subscription, Subject, asyncScheduler } from 'rxjs';
 import { AppEventService } from '../../../services/app.event.service';
@@ -129,24 +130,24 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   public get showGrid() { return this.userSettingsQuery.chartSettings()?.showGrid ?? true; }
   public get disableGrouping() { return this.userSettingsQuery.chartSettings()?.disableGrouping ?? false; }
   public get hideAllSeriesOnInit() { return this.userSettingsQuery.chartSettings()?.hideAllSeriesOnInit ?? false; }
-  public get lapTypes() { return this.userSettingsQuery.chartSettings()?.lapTypes ?? AppUserService.getDefaultChartLapTypes(); }
+  public get lapTypes() { return this.userSettingsQuery.chartSettings()?.lapTypes ?? AppUserUtilities.getDefaultChartLapTypes(); }
 
   public get xAxisType() { return this.userSettingsQuery.chartSettings()?.xAxisType ?? XAxisTypes.Duration; }
   public set xAxisType(value: XAxisTypes) { this.userSettingsQuery.updateChartSettings({ xAxisType: value }); }
 
-  public get downSamplingLevel() { return this.userSettingsQuery.chartSettings()?.downSamplingLevel ?? AppUserService.getDefaultDownSamplingLevel(); }
-  public get gainAndLossThreshold() { return this.userSettingsQuery.chartSettings()?.gainAndLossThreshold ?? AppUserService.getDefaultGainAndLossThreshold(); }
+  public get downSamplingLevel() { return this.userSettingsQuery.chartSettings()?.downSamplingLevel ?? AppUserUtilities.getDefaultDownSamplingLevel(); }
+  public get gainAndLossThreshold() { return this.userSettingsQuery.chartSettings()?.gainAndLossThreshold ?? AppUserUtilities.getDefaultGainAndLossThreshold(); }
   @Input() waterMark?: string;
-  public get chartCursorBehaviour() { return this.userSettingsQuery.chartSettings()?.chartCursorBehaviour ?? AppUserService.getDefaultChartCursorBehaviour(); }
+  public get chartCursorBehaviour() { return this.userSettingsQuery.chartSettings()?.chartCursorBehaviour ?? AppUserUtilities.getDefaultChartCursorBehaviour(); }
 
   public get stackYAxes() { return this.userSettingsQuery.chartSettings()?.stackYAxes ?? false; }
   public set stackYAxes(value: boolean) { this.userSettingsQuery.updateChartSettings({ stackYAxes: value }); }
 
-  public get strokeWidth() { return this.userSettingsQuery.chartSettings()?.strokeWidth ?? AppUserService.getDefaultChartStrokeWidth(); }
-  public get strokeOpacity() { return this.userSettingsQuery.chartSettings()?.strokeOpacity ?? AppUserService.getDefaultChartStrokeOpacity(); }
-  public get fillOpacity() { return this.userSettingsQuery.chartSettings()?.fillOpacity ?? AppUserService.getDefaultChartFillOpacity(); }
-  public get extraMaxForPower() { return this.userSettingsQuery.chartSettings()?.extraMaxForPower ?? AppUserService.getDefaultExtraMaxForPower(); }
-  public get extraMaxForPace() { return this.userSettingsQuery.chartSettings()?.extraMaxForPace ?? AppUserService.getDefaultExtraMaxForPace(); }
+  public get strokeWidth() { return this.userSettingsQuery.chartSettings()?.strokeWidth ?? AppUserUtilities.getDefaultChartStrokeWidth(); }
+  public get strokeOpacity() { return this.userSettingsQuery.chartSettings()?.strokeOpacity ?? AppUserUtilities.getDefaultChartStrokeOpacity(); }
+  public get fillOpacity() { return this.userSettingsQuery.chartSettings()?.fillOpacity ?? AppUserUtilities.getDefaultChartFillOpacity(); }
+  public get extraMaxForPower() { return this.userSettingsQuery.chartSettings()?.extraMaxForPower ?? AppUserUtilities.getDefaultExtraMaxForPower(); }
+  public get extraMaxForPace() { return this.userSettingsQuery.chartSettings()?.extraMaxForPace ?? AppUserUtilities.getDefaultExtraMaxForPace(); }
 
   public get userUnitSettings() { return this.userSettingsQuery.unitSettings(); }
   public chartTheme: ChartThemes = ChartThemes.Material;
@@ -1491,7 +1492,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     } else {
       // Else try to check what we should show by default
       const activityType = (ActivityTypes as any)[series.dummyData.activity.type] !== undefined ? (ActivityTypes as any)[series.dummyData.activity.type] : series.dummyData.activity.type;
-      const defaultTypes = [...AppUserService.getDefaultChartDataTypesToShowOnLoad(), ...ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(activityType)]
+      const defaultTypes = [...AppUserUtilities.getDefaultChartDataTypesToShowOnLoad(), ...ActivityTypesHelper.speedDerivedDataTypesToUseForActivityType(activityType)]
         .reduce((accu: string[], dataType) => {
           return [...accu, ...DynamicDataLoader.getUnitBasedDataTypesFromDataType(dataType, this.userUnitSettings)]
         }, []);

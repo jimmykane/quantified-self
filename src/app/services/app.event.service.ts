@@ -12,6 +12,7 @@ import { StreamInterface } from '@sports-alliance/sports-lib';
 import { EventExporterJSON } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { Privacy } from '@sports-alliance/sports-lib';
+import { AppUserUtilities } from '../utils/app.user.utilities';
 import { AppWindowService } from './app.window.service';
 import {
   EventMetaDataInterface,
@@ -346,7 +347,7 @@ export class AppEventService implements OnDestroy {
 
     // 1. Check Pro Status & Grace Period
     const userService = this.injector.get(AppUserService);
-    if (!AppUserService.hasProAccess(user)) {
+    if (!AppUserUtilities.hasProAccess(user)) {
       // 2. Check Limits
       const role = await userService.getSubscriptionRole() || 'free';
       const limit = USAGE_LIMITS[role] || USAGE_LIMITS['free'];

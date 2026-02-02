@@ -11,6 +11,7 @@ import {
     UserSummariesSettingsInterface,
     AppThemes
 } from '@sports-alliance/sports-lib';
+import { AppUserUtilities } from '../utils/app.user.utilities';
 import equal from 'fast-deep-equal';
 import { AppMyTracksSettings, AppUserInterface } from '../models/app-user.interface';
 
@@ -60,10 +61,9 @@ export class AppUserSettingsQueryService {
      */
     public readonly unitSettings = toSignal(
         this.user$.pipe(
-            map(user => user?.settings?.unitSettings ?? AppUserService.getDefaultUserUnitSettings()),
-            distinctUntilChanged((prev, curr) => equal(prev, curr))
+            map(user => user?.settings?.unitSettings ?? AppUserUtilities.getDefaultUserUnitSettings()),
         ),
-        { initialValue: AppUserService.getDefaultUserUnitSettings() }
+        { initialValue: AppUserUtilities.getDefaultUserUnitSettings() }
     );
 
     /**

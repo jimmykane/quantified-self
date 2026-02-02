@@ -22,7 +22,6 @@ import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataMovingTime } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { ActivityUtilities } from '@sports-alliance/sports-lib';
-import { AppUserService } from '../../../services/app.user.service';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { AppEventUtilities } from '../../../utils/app.event.utilities';
 

@@ -2,6 +2,7 @@ import { Injectable, OnDestroy, Signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppUserService } from './app.user.service';
+import { AppUserUtilities } from '../utils/app.user.utilities';
 import { User } from '@sports-alliance/sports-lib';
 import { ChartThemes } from '@sports-alliance/sports-lib';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
@@ -161,7 +162,7 @@ export class AppThemeService implements OnDestroy {
         return ChartThemes[key];
       }
     }
-    return AppUserService.getDefaultChartTheme();
+    return AppUserUtilities.getDefaultChartTheme();
   }
 
   private getEnumKeyByEnumValue<T extends Record<string, string>>(myEnum: T, enumValue: string): keyof T | null {

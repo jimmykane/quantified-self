@@ -32,6 +32,7 @@ import { rowsAnimation, expandCollapse } from '../../animations/animations';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
 import { AppUserService } from '../../services/app.user.service';
+import { AppUserUtilities } from '../../utils/app.user.utilities';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -70,7 +71,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   data: MatTableDataSource<any> = new MatTableDataSource<StatRowElement>();
   selection = new SelectionModel(true, []);
 
-  selectedColumns = AppUserService.getDefaultSelectedTableColumns();
+  selectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
 
   public show = true
 
@@ -110,7 +111,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.processChanges();
     }
     if (this.user && simpleChanges.user) {
-      this.selectedColumns = this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserService.getDefaultSelectedTableColumns();
+      this.selectedColumns = this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns();
       this.paginator?._changePageSize(this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 10);
     }
   }
@@ -472,7 +473,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       ...(this.selectedColumns || [])
         .filter(column => column !== 'Description')
         .sort(function (a, b) {
-          const defaultColumns = AppUserService.getDefaultSelectedTableColumns();
+          const defaultColumns = AppUserUtilities.getDefaultSelectedTableColumns();
           return defaultColumns.indexOf(a) - defaultColumns.indexOf(b);
         }),
       'Description',

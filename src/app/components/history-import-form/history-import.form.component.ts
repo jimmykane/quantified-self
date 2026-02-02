@@ -10,6 +10,7 @@ import {
 } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppEventService } from '../../services/app.event.service';
+import { AppUserUtilities } from '../../utils/app.user.utilities';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
@@ -93,7 +94,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
     this.formGroup.disable();
 
     const user = await this.authService.getUser();
-    this.isPro = AppUserService.hasProAccess(user);
+    this.isPro = AppUserUtilities.hasProAccess(user);
 
     this.processChanges();
   }
