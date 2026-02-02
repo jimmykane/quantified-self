@@ -128,6 +128,7 @@ export class AppUserService implements OnDestroy {
     const claims = tokenResult.claims;
     const stripeRole = (claims['stripeRole'] as StripeRole) || null;
     const gracePeriodUntil = (claims['gracePeriodUntil'] as number) || null;
+    const isAdmin = claims['admin'] === true;
 
     // Use current DB user or create a synthetic one for new accounts/loading states
     const identity: AppUserInterface = dbUser ? { ...dbUser } : {
@@ -147,10 +148,17 @@ export class AppUserService implements OnDestroy {
       lastSignInDate: new Date(firebaseUser.metadata.lastSignInTime!)
     } as any;
 
-    // Always prioritize Claims for role and grace period
+    // Prioritize Claims for role and grace period, but fallback to DB data if claims are missing
     identity.uid = firebaseUser.uid;
-    (identity as any).stripeRole = stripeRole;
-    (identity as any).gracePeriodUntil = identity.gracePeriodUntil || gracePeriodUntil;
+    if (stripeRole) {
+      (identity as any).stripeRole = stripeRole;
+    }
+    if (gracePeriodUntil) {
+      (identity as any).gracePeriodUntil = gracePeriodUntil;
+    }
+    if (isAdmin) {
+      (identity as any).admin = true;
+    }
 
     // Check for force-refresh (if DB was updated more recently than token issuance)
     const claimsUpdatedAt = (identity as any).claimsUpdatedAt;
@@ -162,8 +170,14 @@ export class AppUserService implements OnDestroy {
         try {
           await firebaseUser.getIdToken(true);
           const freshToken = await firebaseUser.getIdTokenResult();
-          (identity as any).stripeRole = (freshToken.claims['stripeRole'] as StripeRole) || null;
-          (identity as any).gracePeriodUntil = (freshToken.claims['gracePeriodUntil'] as number) || gracePeriodUntil;
+          const freshStripeRole = freshToken.claims['stripeRole'] as StripeRole;
+          const freshGracePeriodUntil = freshToken.claims['gracePeriodUntil'] as number;
+          if (freshStripeRole) {
+            (identity as any).stripeRole = freshStripeRole;
+          }
+          if (freshGracePeriodUntil) {
+            (identity as any).gracePeriodUntil = freshGracePeriodUntil;
+          }
         } catch (e) {
           this.logger.error('[AppUserService] Token refresh failed', e);
         }
@@ -202,6 +216,27 @@ export class AppUserService implements OnDestroy {
     // Handle Date or number
     return new Date(gracePeriodUntil);
   });
+
+  public async getSubscriptionRole(): Promise<StripeRole | null> {
+    const user = await firstValueFrom(this.user$.pipe(take(1)));
+    return (user as any)?.stripeRole as StripeRole || null;
+  }
+
+  public async isPro(): Promise<boolean> {
+    const user = await firstValueFrom(this.user$.pipe(take(1)));
+    const isAdmin = (user as any)?.admin === true;
+    return AppUserUtilities.hasProAccess(user, isAdmin);
+  }
+
+  public async hasProAccess(): Promise<boolean> {
+    return this.isPro();
+  }
+
+  public async hasPaidAccess(): Promise<boolean> {
+    const user = await firstValueFrom(this.user$.pipe(take(1)));
+    const isAdmin = (user as any)?.admin === true;
+    return AppUserUtilities.hasPaidAccessUser(user, isAdmin);
+  }
 
   public static readonly legalFields = [
     'acceptedPrivacyPolicy',
@@ -552,55 +587,9 @@ export class AppUserService implements OnDestroy {
 
   // ...
 
-  public async getSubscriptionRole(): Promise<StripeRole | null> {
-    const user = await runInInjectionContext(this.injector, () => firstValueFrom(authState(this.auth).pipe(take(1))));
-    if (!user) {
-      this.logger.warn('AppUserService: getSubscriptionRole - No current user');
-      return null;
-    }
-    try {
-      // Use cached token result unless explicitly told otherwise to avoid infinite loops
-      // by triggering auth state changes during an auth subscription.
-      const tokenResult = await user.getIdTokenResult();
-      this.logger.log('[AppUserService] DEBUG: Full Token Result:', tokenResult);
-      this.logger.log('[AppUserService] DEBUG: Custom Claims:', tokenResult.claims);
-      const role = (tokenResult.claims['stripeRole'] as StripeRole) || null;
-      this.logger.log(`AppUserService: getSubscriptionRole - User: ${user.uid}, Role: ${role}`);
-      return role;
-    } catch (e) {
-      this.logger.error('AppUserService: getSubscriptionRole - Error getting token result', e);
-      return null;
-    }
-  }
-
-  public async isBasic(): Promise<boolean> {
-    const role = await this.getSubscriptionRole();
-    return role === 'basic';
-  }
-
-  public async isPro(): Promise<boolean> {
-    const user = await firstValueFrom(this.user$.pipe(take(1)));
-    return AppUserUtilities.hasProAccess(user, await this.isAdmin());
-  }
-
   public async isAdmin(): Promise<boolean> {
-    const user = await runInInjectionContext(this.injector, () => firstValueFrom(authState(this.auth).pipe(take(1))));
-    if (!user) return false;
-    try {
-      const tokenResult = await user.getIdTokenResult();
-      return tokenResult.claims['admin'] === true;
-    } catch (e) {
-      this.logger.error('AppUserService: isAdmin - Error getting token result', e);
-      return false;
-    }
-  }
-
-  /**
-   * Returns true if the user has any level of paid access (basic or pro)
-   */
-  public async hasPaidAccess(): Promise<boolean> {
     const user = await firstValueFrom(this.user$.pipe(take(1)));
-    return AppUserUtilities.hasPaidAccessUser(user, await this.isAdmin());
+    return (user as any)?.admin === true;
   }
 
 
