@@ -403,6 +403,20 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             );
         });
 
+        it('should handle 410 Gone error by moving to DLQ', async () => {
+            mockRequestGet.mockRejectedValue({ statusCode: 410 });
+
+            const result = await processGarminAPIActivityQueueItem(queueItem);
+
+            expect(result).toBe('MOVED_TO_DLQ');
+            expect(mockMoveToDeadLetterQueue).toHaveBeenCalledWith(
+                queueItem,
+                expect.any(Object),
+                undefined,
+                'RESOURCE_GONE'
+            );
+        });
+
         it('should abort retries (move to DLQ) if UserNotFoundError is thrown by setEvent', async () => {
             const { UserNotFoundError } = await import('../utils');
             mockSetEvent.mockRejectedValue(new UserNotFoundError('User not found'));

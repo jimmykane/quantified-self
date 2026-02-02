@@ -142,6 +142,10 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
     } else if (e.statusCode === 500) {
       logger.error(new Error(`Could not get workout for ${queueItem.id} and token user ${(serviceToken as any).userID} due to 500 increasing retry by 20 URL: ${url}`));
       await increaseRetryCountForQueueItem(queueItem, e, 20, bulkWriter);
+    } else if (e.statusCode === 410) {
+      logger.error(new Error(`410 Gone for ${queueItem.id}. The resource is no longer available. Aborting retries.`));
+      await moveToDeadLetterQueue(queueItem, e, bulkWriter, 'RESOURCE_GONE');
+      return QueueResult.MovedToDLQ;
     } else if (e.statusCode === 401) {
       // Token might be bad, getTokenData usually handles refresh but if it fails here, maybe we need force refresh?
       // For now, treat as error
