@@ -48,7 +48,8 @@ describe('UploadActivitiesToServiceComponent', () => {
                 { provide: Auth, useValue: mockAuth },
                 { provide: AppFunctionsService, useValue: mockFunctionsService },
                 { provide: AppEventService, useValue: mockEventService },
-                { provide: AppUserService, useValue: mockUserService },
+                { provide: AppEventService, useValue: mockEventService },
+                { provide: AppUserService, useValue: { hasProAccessSignal: vi.fn().mockReturnValue(true), user: vi.fn().mockReturnValue({ stripeRole: 'pro' }) } },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();

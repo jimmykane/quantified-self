@@ -30,25 +30,7 @@ import { signInWithPopup, OAuthProvider, authState } from '@angular/fire/auth';
 describe('LoginComponent', () => {
     let component: LoginComponent;
 
-    const mockAuthService = {
-        user$: new BehaviorSubject(null) as any, // Use BehaviorSubject to control emission
-        authState$: of(null),
-        isSignInWithEmailLink: () => false,
-        googleLogin: vi.fn().mockResolvedValue({ user: { uid: '123' } }),
-        githubLogin: vi.fn().mockResolvedValue({ user: { uid: '123' } }),
-        fetchSignInMethods: vi.fn().mockResolvedValue([]),
-        getProviderForId: vi.fn().mockReturnValue({}),
-        linkCredential: vi.fn().mockResolvedValue({}),
-        sendEmailLink: vi.fn().mockResolvedValue(true),
-        linkWithPopup: vi.fn().mockResolvedValue({}),
-        signInWithPopup: vi.fn().mockResolvedValue({ user: { uid: '123' } }), // Add missing method
-        getRedirectResult: vi.fn().mockResolvedValue(null),
-        localStorageService: {
-            getItem: vi.fn().mockReturnValue(null),
-            setItem: vi.fn(),
-            removeItem: vi.fn()
-        }
-    };
+    let mockAuthService: any;
 
     const mockUserService = {
         getUserByID: vi.fn().mockReturnValue(of({ displayName: 'Test User' }))
@@ -70,6 +52,27 @@ describe('LoginComponent', () => {
 
     beforeEach(() => {
         vi.clearAllMocks(); // Clear spies to prevent accumulation
+
+        mockAuthService = {
+            user$: new BehaviorSubject(null),
+            authState$: of(null),
+            isSignInWithEmailLink: () => false,
+            googleLogin: vi.fn().mockResolvedValue({ user: { uid: '123' } }),
+            githubLogin: vi.fn().mockResolvedValue({ user: { uid: '123' } }),
+            fetchSignInMethods: vi.fn().mockResolvedValue([]),
+            getProviderForId: vi.fn().mockReturnValue({}),
+            linkCredential: vi.fn().mockResolvedValue({}),
+            sendEmailLink: vi.fn().mockResolvedValue(true),
+            linkWithPopup: vi.fn().mockResolvedValue({}),
+            signInWithPopup: vi.fn().mockResolvedValue({ user: { uid: '123' } }),
+            getRedirectResult: vi.fn().mockResolvedValue(null),
+            localStorageService: {
+                getItem: vi.fn().mockReturnValue(null),
+                setItem: vi.fn(),
+                removeItem: vi.fn()
+            }
+        };
+
         TestBed.configureTestingModule({
             providers: [
                 LoginComponent, // Provide the component itself
