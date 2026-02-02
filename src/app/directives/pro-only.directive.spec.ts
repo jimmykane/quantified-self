@@ -5,6 +5,10 @@ import { AppUserService } from '../services/app.user.service';
 import { By } from '@angular/platform-browser';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+import { signal } from '@angular/core';
+import { LoggerService } from '../services/logger.service';
+import { Firestore } from '@angular/fire/firestore';
+
 @Component({
     template: `<div *appProOnly>Pro Content</div>`,
     standalone: true,
@@ -14,17 +18,19 @@ class TestComponent { }
 
 describe('ProOnlyDirective', () => {
     let fixture: ComponentFixture<TestComponent>;
-    let mockUserService: any;
+    let mockUserService: { isProSignal: any };
 
     beforeEach(async () => {
         mockUserService = {
-            isPro: vi.fn()
+            isProSignal: signal(false)
         };
 
         await TestBed.configureTestingModule({
             imports: [TestComponent, ProOnlyDirective],
             providers: [
-                { provide: AppUserService, useValue: mockUserService }
+                { provide: AppUserService, useValue: mockUserService },
+                { provide: LoggerService, useValue: { error: vi.fn() } },
+                { provide: Firestore, useValue: {} }
             ]
         }).compileComponents();
 
@@ -32,10 +38,8 @@ describe('ProOnlyDirective', () => {
     });
 
     it('should show content if user is pro', async () => {
-        mockUserService.isPro.mockReturnValue(Promise.resolve(true));
-        fixture.detectChanges(); // Trigger ngOnInit
-        await fixture.whenStable(); // Wait for async ngOnInit
-        fixture.detectChanges(); // Update view with result
+        mockUserService.isProSignal.set(true);
+        fixture.detectChanges();
 
         const element = fixture.debugElement.query(By.css('div'));
         expect(element).toBeTruthy();
@@ -43,9 +47,7 @@ describe('ProOnlyDirective', () => {
     });
 
     it('should hide content if user is not pro', async () => {
-        mockUserService.isPro.mockReturnValue(Promise.resolve(false));
-        fixture.detectChanges();
-        await fixture.whenStable();
+        mockUserService.isProSignal.set(false);
         fixture.detectChanges();
 
         const element = fixture.debugElement.query(By.css('div'));

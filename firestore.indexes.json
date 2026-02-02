@@ -1,6 +1,25 @@
 {
   "indexes": [
     {
+      "collectionGroup": "changelogs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "published",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "date",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "COROSAPIWorkoutQueue",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1087,6 +1106,29 @@
       ]
     },
     {
+      "collectionGroup": "system",
+      "fieldPath": "gracePeriodUntil",
+      "ttl": false,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
       "collectionGroup": "tokens",
       "fieldPath": "dateRefreshed",
       "ttl": false,
@@ -1135,29 +1177,6 @@
     {
       "collectionGroup": "tokens",
       "fieldPath": "userName",
-      "ttl": false,
-      "indexes": [
-        {
-          "order": "ASCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "order": "DESCENDING",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "arrayConfig": "CONTAINS",
-          "queryScope": "COLLECTION"
-        },
-        {
-          "order": "ASCENDING",
-          "queryScope": "COLLECTION_GROUP"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "system",
-      "fieldPath": "gracePeriodUntil",
       "ttl": false,
       "indexes": [
         {

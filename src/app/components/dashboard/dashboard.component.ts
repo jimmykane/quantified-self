@@ -10,7 +10,7 @@ import { DateRanges } from '@sports-alliance/sports-lib';
 import { Search } from '../event-search/event-search.component';
 import { AppUserService } from '../../services/app.user.service';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
-import { map, switchMap, take, throttleTime } from 'rxjs/operators';
+import { distinctUntilChanged, map, switchMap, take, throttleTime } from 'rxjs/operators';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 
@@ -101,7 +101,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         return of({ user: null, events: null });
       }
 
-      // this.showUpload = this.authService.isGuest();
+
 
       if (this.user && (
         this.user.settings.dashboardSettings.dateRange !== user.settings.dashboardSettings.dateRange
@@ -154,22 +154,23 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         });
       }
 
-      // Get what is needed
-      const returnObservable = this.eventService
-        .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit);
-      return returnObservable
-        .pipe(map((eventsArray) => {
-          const t0 = performance.now();
-          if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
+      // Use the live listener but ensure we don't emit redundant data if it matches what we already have
+      return this.eventService
+        .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit)
+        .pipe(
+          distinctUntilChanged((p: EventInterface[], c: EventInterface[]) => JSON.stringify(p) === JSON.stringify(c)),
+          map((eventsArray: EventInterface[]) => {
+            const t0 = performance.now();
+            if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
 
-            return eventsArray;
-          }
-          const result = eventsArray.filter(event => {
-            return event.getActivityTypesAsArray().some(activityType => user.settings.dashboardSettings.activityTypes.indexOf(ActivityTypes[activityType]) >= 0)
-          });
+              return eventsArray;
+            }
+            const result = eventsArray.filter(event => {
+              return event.getActivityTypesAsArray().some(activityType => user.settings.dashboardSettings.activityTypes.indexOf(ActivityTypes[activityType]) >= 0)
+            });
 
-          return result;
-        }))
+            return result;
+          }))
         .pipe(map((events) => {
           return { events: events, user: user }
         }))

@@ -1,4 +1,5 @@
-import { inject, Injectable, OnDestroy, EnvironmentInjector, runInInjectionContext } from '@angular/core';
+import { inject, Injectable, OnDestroy, EnvironmentInjector, runInInjectionContext, computed } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 
 
 import { Observable, from, firstValueFrom, of, combineLatest, distinctUntilChanged } from 'rxjs';
@@ -6,7 +7,7 @@ import { StripeRole } from '../models/stripe-role.model';
 import { User } from '@sports-alliance/sports-lib';
 import { Privacy } from '@sports-alliance/sports-lib';
 import { AppEventService } from './app.event.service';
-import { catchError, map, take } from 'rxjs/operators';
+import { catchError, map, take, switchMap, shareReplay } from 'rxjs/operators';
 import {
   AppThemes,
   UserAppSettingsInterface
@@ -32,9 +33,8 @@ import {
   UserUnitSettingsInterface,
   VerticalSpeedUnits
 } from '@sports-alliance/sports-lib';
-import { Auth, authState } from '@angular/fire/auth';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { environment } from '../../environments/environment';
+import { Auth, authState, user } from '@angular/fire/auth';
+import { HttpClient } from '@angular/common/http';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import {
   DateRanges,
@@ -55,6 +55,7 @@ import {
 import { DataDuration } from '@sports-alliance/sports-lib';
 import { DataDistance } from '@sports-alliance/sports-lib';
 import { DataAscent } from '@sports-alliance/sports-lib';
+import { AppUserUtilities } from '../utils/app.user.utilities';
 import {
   MapThemes,
   MapTypes,
@@ -83,13 +84,15 @@ import { DataDeviceNames } from '@sports-alliance/sports-lib';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
-import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc, getDoc } from '@angular/fire/firestore';
+import { Firestore, doc, docData, collection, collectionData, setDoc, updateDoc } from '@angular/fire/firestore';
 import { AppFunctionsService } from './app.functions.service';
 import { FunctionName } from '../../shared/functions-manifest';
 
 
 /**
- * @todo  break up to partners (Services) and user
+ * Service for managing user data, subscription roles, and settings.
+ * Handles merging Firebase Authentication data with Firestore user profiles.
+ * Provides reactive signals for user state across the application.
  */
 @Injectable({
   providedIn: 'root',
@@ -100,240 +103,139 @@ export class AppUserService implements OnDestroy {
   private auth = inject(Auth);
   private functionsService = inject(AppFunctionsService);
   private injector = inject(EnvironmentInjector);
+  private logger = inject(LoggerService);
+  private eventService = inject(AppEventService);
+  private http = inject(HttpClient);
+  private windowService = inject(AppWindowService);
 
-  static getDefaultChartTheme(): ChartThemes {
-    return ChartThemes.Material;
-  }
+  public readonly user$ = runInInjectionContext(this.injector, () => user(this.auth).pipe(
+    switchMap(u => {
+      if (!u) return of(null);
+      return this.getUserByID(u.uid).pipe(
+        switchMap(dbUser => from(this.mergeClaims(u, dbUser)))
+      );
+    }),
+    distinctUntilChanged((p, c) => JSON.stringify(p) === JSON.stringify(c)),
+    shareReplay(1)
+  ));
 
-  static getDefaultAppTheme(): AppThemes {
-    return AppThemes.Normal;
-  }
+  /**
+   * Merges Firebase Auth User claims (stripeRole, gracePeriodUntil) with Firestore database data.
+   * Also handles force-refreshing the ID token if claims are outdated.
+   */
+  private async mergeClaims(firebaseUser: any, dbUser: AppUserInterface | null): Promise<AppUserInterface | null> {
+    const tokenResult = await firebaseUser.getIdTokenResult();
+    const claims = tokenResult.claims;
+    const stripeRole = (claims['stripeRole'] as StripeRole) || null;
+    const gracePeriodUntil = (claims['gracePeriodUntil'] as number) || null;
+    const isAdmin = claims['admin'] === true;
 
+    // Use current DB user or create a synthetic one for new accounts/loading states
+    const identity: AppUserInterface = dbUser ? { ...dbUser } : {
+      uid: firebaseUser.uid,
+      email: firebaseUser.email,
+      displayName: firebaseUser.displayName,
+      photoURL: firebaseUser.photoURL,
+      emailVerified: firebaseUser.emailVerified,
+      settings: AppUserUtilities.fillMissingAppSettings({} as any),
+      acceptedPrivacyPolicy: false,
+      acceptedDataPolicy: false,
+      acceptedTrackingPolicy: false,
+      acceptedDiagnosticsPolicy: true,
+      privacy: Privacy.Private,
+      isAnonymous: false,
+      creationDate: new Date(firebaseUser.metadata.creationTime!),
+      lastSignInDate: new Date(firebaseUser.metadata.lastSignInTime!)
+    } as any;
 
-  static getDefaultChartCursorBehaviour(): ChartCursorBehaviours {
-    return ChartCursorBehaviours.ZoomX;
-  }
-
-  static getDefaultMapStrokeWidth(): number {
-    return 4;
-  }
-
-  static getDefaultChartDataTypesToShowOnLoad(): string[] {
-    return [
-      DataAltitude.type,
-      DataHeartRate.type,
-    ]
-  }
-
-  static getDefaultUserChartSettingsDataTypeSettings(): DataTypeSettings {
-    return DynamicDataLoader.basicDataTypes.reduce((dataTypeSettings: DataTypeSettings, dataTypeToUse: string) => {
-      dataTypeSettings[dataTypeToUse] = { enabled: true };
-      return dataTypeSettings
-    }, {})
-  }
-
-  static getDefaultUserDashboardChartTile(): TileChartSettingsInterface {
-    return {
-      name: 'Distance',
-      order: 0,
-      type: TileTypes.Chart,
-      chartType: ChartTypes.ColumnsHorizontal,
-      dataType: DataDistance.type,
-      dataTimeInterval: TimeIntervals.Auto,
-      dataCategoryType: ChartDataCategoryTypes.ActivityType,
-      dataValueType: ChartDataValueTypes.Total,
-      size: { columns: 1, rows: 1 },
-    };
-  }
-
-  static getDefaultUserDashboardMapTile(): TileMapSettingsInterface {
-    return {
-      name: 'Clustered HeatMap',
-      order: 0,
-      type: TileTypes.Map,
-      mapType: MapTypes.Terrain,
-      mapTheme: MapThemes.Normal,
-      showHeatMap: true,
-      clusterMarkers: true,
-      size: { columns: 1, rows: 1 },
-    };
-  }
-
-  static getDefaultUserDashboardTiles(): TileSettingsInterface[] {
-    return [<TileMapSettingsInterface>{
-      name: 'Clustered HeatMap',
-      order: 0,
-      type: TileTypes.Map,
-      mapType: MapTypes.RoadMap,
-      mapTheme: MapThemes.Normal,
-      showHeatMap: true,
-      clusterMarkers: true,
-      size: { columns: 1, rows: 1 },
-    }, <TileChartSettingsInterface>{
-      name: 'Duration',
-      order: 1,
-      type: TileTypes.Chart,
-      chartType: ChartTypes.Pie,
-      dataCategoryType: ChartDataCategoryTypes.ActivityType,
-      dataType: DataDuration.type,
-      dataTimeInterval: TimeIntervals.Auto,
-      dataValueType: ChartDataValueTypes.Total,
-      size: { columns: 1, rows: 1 },
-    }, <TileChartSettingsInterface>{
-      name: 'Distance',
-      order: 2,
-      type: TileTypes.Chart,
-      chartType: ChartTypes.ColumnsHorizontal,
-      dataType: DataDistance.type,
-      dataTimeInterval: TimeIntervals.Auto,
-      dataCategoryType: ChartDataCategoryTypes.ActivityType,
-      dataValueType: ChartDataValueTypes.Total,
-      size: { columns: 1, rows: 1 },
-    }, <TileChartSettingsInterface>{
-      name: 'Ascent',
-      order: 3,
-      type: TileTypes.Chart,
-      chartType: ChartTypes.PyramidsVertical,
-      dataCategoryType: ChartDataCategoryTypes.DateType,
-      dataType: DataAscent.type,
-      dataTimeInterval: TimeIntervals.Auto,
-      dataValueType: ChartDataValueTypes.Total,
-      size: { columns: 1, rows: 1 },
-    }]
-  }
-
-  static getDefaultMapLapTypes(): LapTypes[] {
-    return [LapTypes.AutoLap, LapTypes.Distance, LapTypes.Manual];
-  }
-
-  static getDefaultChartLapTypes(): LapTypes[] {
-    return [LapTypes.AutoLap, LapTypes.Distance, LapTypes.Manual];
-  }
-
-  static getDefaultDownSamplingLevel(): number {
-    return 4;
-  }
-
-  static getDefaultGainAndLossThreshold(): number {
-    return 1;
-  }
-
-  static getDefaultExtraMaxForPower(): number {
-    return 0;
-  }
-
-  static getDefaultExtraMaxForPace(): number {
-    return -0.25;
-  }
-
-  static getDefaultMapType(): MapTypes {
-    return MapTypes.RoadMap;
-  }
-
-  static getDefaultDateRange(): DateRanges {
-    return DateRanges.all;
-  }
-
-  static getDefaultXAxisType(): XAxisTypes {
-    return XAxisTypes.Time;
-  }
-
-  static getDefaultSpeedUnits(): SpeedUnits[] {
-    return [SpeedUnits.KilometersPerHour];
-  }
-
-  static getDefaultGradeAdjustedSpeedUnits(): GradeAdjustedSpeedUnits[] {
-    return this.getGradeAdjustedSpeedUnitsFromSpeedUnits(this.getDefaultSpeedUnits());
-  }
-
-  static getGradeAdjustedSpeedUnitsFromSpeedUnits(speedUnits: SpeedUnits[]): GradeAdjustedSpeedUnits[] {
-    return speedUnits.map(speedUnit => GradeAdjustedSpeedUnits[SpeedUnitsToGradeAdjustedSpeedUnits[speedUnit]]);
-  }
-
-  static getDefaultPaceUnits(): PaceUnits[] {
-    return [PaceUnits.MinutesPerKilometer];
-  }
-
-  static getDefaultGradeAdjustedPaceUnits(): GradeAdjustedPaceUnits[] {
-    return this.getGradeAdjustedPaceUnitsFromPaceUnits(this.getDefaultPaceUnits());
-  }
-
-  static getGradeAdjustedPaceUnitsFromPaceUnits(paceUnits: PaceUnits[]): GradeAdjustedPaceUnits[] {
-    return paceUnits.map(paceUnit => GradeAdjustedPaceUnits[PaceUnitsToGradeAdjustedPaceUnits[paceUnit]]);
-  }
-
-  static getDefaultSwimPaceUnits(): SwimPaceUnits[] {
-    return [SwimPaceUnits.MinutesPer100Meter];
-  }
-
-  static getDefaultVerticalSpeedUnits(): VerticalSpeedUnits[] {
-    return [VerticalSpeedUnits.MetersPerSecond];
-  }
-
-  static getDefaultUserUnitSettings(): UserUnitSettingsInterface {
-    const unitSettings = <UserUnitSettingsInterface>{};
-    unitSettings.speedUnits = AppUserService.getDefaultSpeedUnits();
-    unitSettings.gradeAdjustedSpeedUnits = AppUserService.getDefaultGradeAdjustedSpeedUnits();
-    unitSettings.paceUnits = AppUserService.getDefaultPaceUnits();
-    unitSettings.gradeAdjustedPaceUnits = AppUserService.getDefaultGradeAdjustedPaceUnits();
-    unitSettings.swimPaceUnits = AppUserService.getDefaultSwimPaceUnits();
-    unitSettings.verticalSpeedUnits = AppUserService.getDefaultVerticalSpeedUnits();
-    unitSettings.startOfTheWeek = AppUserService.getDefaultStartOfTheWeek();
-    return unitSettings;
-  }
-
-  static getDefaultStartOfTheWeek(): DaysOfTheWeek {
-    return DaysOfTheWeek.Monday;
-  }
-
-  static getDefaultChartStrokeWidth(): number {
-    return 1.15;
-  }
-
-  static getDefaultChartStrokeOpacity(): number {
-    return 1;
-  }
-
-  static getDefaultChartFillOpacity(): number {
-    return 0.35;
-  }
-
-  static getDefaultTableSettings(): TableSettings {
-    return {
-      eventsPerPage: 10,
-      active: 'startDate',
-      direction: 'desc',
-      selectedColumns: this.getDefaultSelectedTableColumns()
+    // Prioritize Claims for role and grace period, but fallback to DB data if claims are missing
+    identity.uid = firebaseUser.uid;
+    if (stripeRole) {
+      (identity as any).stripeRole = stripeRole;
     }
+    if (gracePeriodUntil) {
+      (identity as any).gracePeriodUntil = gracePeriodUntil;
+    }
+    if (isAdmin) {
+      (identity as any).admin = true;
+    }
+
+    // Check for force-refresh (if DB was updated more recently than token issuance)
+    const claimsUpdatedAt = (identity as any).claimsUpdatedAt;
+    if (claimsUpdatedAt) {
+      const updatedAtDate = claimsUpdatedAt.toDate ? claimsUpdatedAt.toDate() : new Date(claimsUpdatedAt.seconds * 1000);
+      const iat = (claims['iat'] as number) * 1000;
+      if (updatedAtDate.getTime() > iat + 2000) {
+        this.logger.log(`[AppUserService] Refreshing token for ${firebaseUser.uid}...`);
+        try {
+          await firebaseUser.getIdToken(true);
+          const freshToken = await firebaseUser.getIdTokenResult();
+          const freshStripeRole = freshToken.claims['stripeRole'] as StripeRole;
+          const freshGracePeriodUntil = freshToken.claims['gracePeriodUntil'] as number;
+          if (freshStripeRole) {
+            (identity as any).stripeRole = freshStripeRole;
+          }
+          if (freshGracePeriodUntil) {
+            (identity as any).gracePeriodUntil = freshGracePeriodUntil;
+          }
+        } catch (e) {
+          this.logger.error('[AppUserService] Token refresh failed', e);
+        }
+      }
+    }
+
+    return identity;
   }
 
-  static getDefaultSelectedTableColumns(): string[] {
-    return [
-      DataDescription.type,
-      DataActivityTypes.type,
-      DataDuration.type,
-      DataDistance.type,
-      DataAscent.type,
-      DataDescent.type,
-      DataEnergy.type,
-      DataHeartRateAvg.type,
-      DataSpeedAvg.type,
-      DataPowerAvg.type,
-      // DataPowerMax.type,
-      DataVO2Max.type,
-      DataAerobicTrainingEffect.type,
-      DataRecoveryTime.type,
-      DataPeakEPOC.type,
-      DataDeviceNames.type,
-    ]
+  public readonly user = toSignal(this.user$,
+    { initialValue: null, injector: this.injector }
+  );
+
+  public readonly stripeRoleSignal = computed(() => (this.user() as any)?.stripeRole as StripeRole || null);
+  public readonly isAdminSignal = computed(() => (this.user() as any)?.admin === true);
+  public readonly isProSignal = computed(() => AppUserUtilities.hasProAccess(this.user(), this.isAdminSignal()));
+  public readonly isBasicSignal = computed(() => AppUserUtilities.isBasicUser(this.user()));
+
+  public readonly isGracePeriodActiveSignal = computed(() => AppUserUtilities.isGracePeriodActive(this.user()));
+  public readonly hasPaidAccessSignal = computed(() => AppUserUtilities.hasPaidAccessUser(this.user(), this.isAdminSignal()));
+  public readonly hasProAccessSignal = computed(() => AppUserUtilities.hasProAccess(this.user(), this.isAdminSignal()));
+
+  public readonly gracePeriodUntil = computed(() => {
+    const user = this.user();
+    if (!user) return null;
+    const gracePeriodUntil = (user as any).gracePeriodUntil;
+    if (!gracePeriodUntil) return null;
+    // Handle Firestore Timestamp
+    if (typeof gracePeriodUntil.toDate === 'function') {
+      return gracePeriodUntil.toDate();
+    }
+    // Handle seconds/nanoseconds object
+    if (typeof gracePeriodUntil === 'object' && gracePeriodUntil.seconds) {
+      return new Date(gracePeriodUntil.seconds * 1000);
+    }
+    // Handle Date or number
+    return new Date(gracePeriodUntil);
+  });
+
+  public async getSubscriptionRole(): Promise<StripeRole | null> {
+    const user = await firstValueFrom(this.user$.pipe(take(1)));
+    return (user as any)?.stripeRole as StripeRole || null;
   }
 
-  static getDefaultMyTracksDateRange(): DateRanges {
-    return DateRanges.lastThirtyDays
+  public async isPro(): Promise<boolean> {
+    const user = await firstValueFrom(this.user$.pipe(take(1)));
+    const isAdmin = (user as any)?.admin === true;
+    return AppUserUtilities.hasProAccess(user, isAdmin);
   }
 
-  static getDefaultActivityTypesToRemoveAscentFromSummaries(): ActivityTypes[] {
-    return [ActivityTypes.AlpineSki, ActivityTypes.Snowboard]
+  public async hasProAccess(): Promise<boolean> {
+    return this.isPro();
+  }
+
+  public async hasPaidAccess(): Promise<boolean> {
+    const user = await firstValueFrom(this.user$.pipe(take(1)));
+    const isAdmin = (user as any)?.admin === true;
+    return AppUserUtilities.hasPaidAccessUser(user, isAdmin);
   }
 
   public static readonly legalFields = [
@@ -345,29 +247,9 @@ export class AppUserService implements OnDestroy {
     'acceptedTos',
   ];
 
-  public static isProUser(user: User | null, isAdmin: boolean = false): boolean {
-    if (!user) return false;
-    const stripeRole = (user as any).stripeRole;
-    return stripeRole === 'pro' || isAdmin || (user as any).isPro === true;
-  }
 
-  public static isBasicUser(user: User | null): boolean {
-    if (!user) return false;
-    const stripeRole = (user as any).stripeRole;
-    return stripeRole === 'basic';
-  }
 
-  public static hasPaidAccessUser(user: User | null, isAdmin: boolean = false): boolean {
-    if (!user) return false;
-    return AppUserService.isProUser(user, isAdmin) || AppUserService.isBasicUser(user);
-  }
-
-  constructor(
-    private eventService: AppEventService,
-    private http: HttpClient,
-    private windowService: AppWindowService,
-    private logger: LoggerService
-  ) {
+  constructor() {
     authState(this.auth).subscribe((user) => {
       if (user) {
         this.logger.setUser({ id: user.uid, email: user.email || undefined });
@@ -386,16 +268,16 @@ export class AppUserService implements OnDestroy {
 
   public getUserByID(userID: string): Observable<AppUserInterface | null> {
     return runInInjectionContext(this.injector, () => {
-      const userDoc = doc(this.firestore, 'users', userID);
-      const legalDoc = doc(this.firestore, `users/${userID}/legal/agreements`);
-      const systemDoc = doc(this.firestore, `users/${userID}/system/status`);
-      const settingsDoc = doc(this.firestore, `users/${userID}/config/settings`);
+      const userDoc = doc(this.firestore, 'users', userID) as any;
+      const legalDoc = doc(this.firestore, `users/${userID}/legal/agreements`) as any;
+      const systemDoc = doc(this.firestore, `users/${userID}/system/status`) as any;
+      const settingsDoc = doc(this.firestore, `users/${userID}/config/settings`) as any;
 
       return combineLatest({
-        user: docData(userDoc),
-        legal: docData(legalDoc).pipe(catchError((err) => { this.logger.error('Error fetching legal:', err); return of({}); })),
-        system: docData(systemDoc).pipe(catchError((err) => { this.logger.error('Error fetching system:', err); return of({}); })),
-        settings: docData(settingsDoc).pipe(catchError((err) => { this.logger.error('Error fetching settings:', err); return of({}); }))
+        user: docData(userDoc) as Observable<AppUserInterface | null>,
+        legal: (docData(legalDoc) as Observable<any>).pipe(catchError((err) => { this.logger.error('Error fetching legal:', err); return of({}); })),
+        system: (docData(systemDoc) as Observable<any>).pipe(catchError((err) => { this.logger.error('Error fetching system:', err); return of({}); })),
+        settings: (docData(settingsDoc) as Observable<any>).pipe(catchError((err) => { this.logger.error('Error fetching settings:', err); return of({}); }))
       }).pipe(
         distinctUntilChanged((prev, curr) => JSON.stringify(prev) === JSON.stringify(curr)),
         map(({ user, legal, system, settings }) => {
@@ -412,7 +294,7 @@ export class AppUserService implements OnDestroy {
             u.settings = settings as any;
           }
 
-          u.settings = this.fillMissingAppSettings(u);
+          u.settings = AppUserUtilities.fillMissingAppSettings(u);
 
           return u;
         }));
@@ -678,13 +560,6 @@ export class AppUserService implements OnDestroy {
     // const hasPaidAccess = stripeRole === 'pro' || stripeRole === 'basic' || (user as any).isPro === true;
     // const onboardingCompleted = termsAccepted && (hasPaidAccess || hasSubscribedOnce);
 
-    // We need to enable a way for 'free' users to pass.
-    // We can set a property like 'onboardingCompleted' explicitly, but the guard calculates it dynamically 
-    // based on roles.
-
-    // Wait, the guard:
-    // return onboardingCompleted;
-
     // So if I just set 'onboardingCompleted' property on the user in Firestore, 
     // does the guard read it?
     // The guard code:
@@ -712,92 +587,13 @@ export class AppUserService implements OnDestroy {
 
   // ...
 
-  public async getSubscriptionRole(): Promise<StripeRole | null> {
-    const user = await runInInjectionContext(this.injector, () => firstValueFrom(authState(this.auth).pipe(take(1))));
-    if (!user) {
-      this.logger.warn('AppUserService: getSubscriptionRole - No current user');
-      return null;
-    }
-    try {
-      // Use cached token result unless explicitly told otherwise to avoid infinite loops
-      // by triggering auth state changes during an auth subscription.
-      const tokenResult = await user.getIdTokenResult();
-      this.logger.log('[AppUserService] DEBUG: Full Token Result:', tokenResult);
-      this.logger.log('[AppUserService] DEBUG: Custom Claims:', tokenResult.claims);
-      const role = (tokenResult.claims['stripeRole'] as StripeRole) || null;
-      this.logger.log(`AppUserService: getSubscriptionRole - User: ${user.uid}, Role: ${role}`);
-      return role;
-    } catch (e) {
-      this.logger.error('AppUserService: getSubscriptionRole - Error getting token result', e);
-      return null;
-    }
-  }
-
-  public async isBasic(): Promise<boolean> {
-    const role = await this.getSubscriptionRole();
-    return role === 'basic';
-  }
-
-  public async isPro(): Promise<boolean> {
-    const isAdmin = await this.isAdmin();
-    if (isAdmin) return true;
-    const role = await this.getSubscriptionRole();
-    return role === 'pro';
-  }
-
   public async isAdmin(): Promise<boolean> {
-    const user = await runInInjectionContext(this.injector, () => firstValueFrom(authState(this.auth).pipe(take(1))));
-    if (!user) {
-      return false;
-    }
-    try {
-      const tokenResult = await user.getIdTokenResult();
-      return tokenResult.claims['admin'] === true;
-    } catch (e) {
-      this.logger.error('AppUserService: isAdmin - Error getting token result', e);
-      return false;
-    }
+    const user = await firstValueFrom(this.user$.pipe(take(1)));
+    return (user as any)?.admin === true;
   }
 
-  /**
-   * Returns true if the user has any level of paid access (basic or pro)
-   */
-  public async hasPaidAccess(): Promise<boolean> {
-    const isAdmin = await this.isAdmin();
-    if (isAdmin) return true;
-    const role = await this.getSubscriptionRole();
-    return role === 'pro' || role === 'basic';
-  }
 
-  public getGracePeriodUntil(): Observable<Date | null> {
-    const user = this.auth.currentUser;
-    this.logger.log('[AppUserService] getGracePeriodUntil - Current auth user:', user?.uid || 'null');
-    if (!user) return from([null]);
-
-    return runInInjectionContext(this.injector, () => {
-      // Logic refactored: gracePeriodUntil is now in system/status and merged onto user
-      // so this can technically just call getUserByID, but that's heavy.
-      // Let's read directly from system/status for efficiency
-      const systemDoc = doc(this.firestore, `users/${user.uid}/system/status`);
-      return docData(systemDoc).pipe(
-        map((systemData: any) => {
-          if (systemData?.gracePeriodUntil) {
-            // Firebase Timestamp to Date
-            const date = (systemData.gracePeriodUntil as any).toDate();
-            // this.logger.log('[AppUserService] getGracePeriodUntil - Returning grace period date:', date);
-            return date;
-          }
-          return null;
-        }),
-        catchError((error) => {
-          this.logger.error('[AppUserService] getGracePeriodUntil - Error fetching system document:', error);
-          return from([null]);
-        })
-      );
-    });
-  }
-
-  public async deleteAllUserData(user: User) {
+  public async deleteAllUserData(_user: User) {
     try {
       await this.functionsService.call('deleteSelf');
       await this.auth.signOut();
@@ -819,6 +615,7 @@ export class AppUserService implements OnDestroy {
   }
 
   ngOnDestroy() {
+    // Required to satisfy OnDestroy interface
   }
 
   private getServiceTokens(user: User, serviceName: ServiceNames): Observable<any[]> {
@@ -851,95 +648,4 @@ export class AppUserService implements OnDestroy {
     });
   }
 
-  public fillMissingAppSettings(user: User): UserSettingsInterface {
-    const settings: UserSettingsInterface = user.settings || {};
-    // App
-    settings.appSettings = settings.appSettings || <UserAppSettingsInterface>{};
-    settings.appSettings.theme = settings.appSettings.theme || AppUserService.getDefaultAppTheme();
-    // Chart
-    settings.chartSettings = settings.chartSettings || <UserChartSettingsInterface>{};
-    settings.chartSettings.dataTypeSettings = settings.chartSettings.dataTypeSettings || AppUserService.getDefaultUserChartSettingsDataTypeSettings();
-    settings.chartSettings.theme = settings.chartSettings.theme || AppUserService.getDefaultChartTheme();
-    settings.chartSettings.useAnimations = settings.chartSettings.useAnimations === true;
-    settings.chartSettings.xAxisType = XAxisTypes[settings.chartSettings.xAxisType] || AppUserService.getDefaultXAxisType();
-    settings.chartSettings.showAllData = settings.chartSettings.showAllData === true;
-    settings.chartSettings.downSamplingLevel = settings.chartSettings.downSamplingLevel || AppUserService.getDefaultDownSamplingLevel();
-    settings.chartSettings.chartCursorBehaviour = settings.chartSettings.chartCursorBehaviour || AppUserService.getDefaultChartCursorBehaviour();
-    settings.chartSettings.strokeWidth = settings.chartSettings.strokeWidth || AppUserService.getDefaultChartStrokeWidth();
-    settings.chartSettings.strokeOpacity = isNumber(settings.chartSettings.strokeOpacity) ? settings.chartSettings.strokeOpacity : AppUserService.getDefaultChartStrokeOpacity();
-    settings.chartSettings.fillOpacity = isNumber(settings.chartSettings.fillOpacity) ? settings.chartSettings.fillOpacity : AppUserService.getDefaultChartFillOpacity();
-    settings.chartSettings.extraMaxForPower = isNumber(settings.chartSettings.extraMaxForPower) ? settings.chartSettings.extraMaxForPower : AppUserService.getDefaultExtraMaxForPower();
-    settings.chartSettings.extraMaxForPace = isNumber(settings.chartSettings.extraMaxForPace) ? settings.chartSettings.extraMaxForPace : AppUserService.getDefaultExtraMaxForPace();
-    settings.chartSettings.lapTypes = settings.chartSettings.lapTypes || AppUserService.getDefaultChartLapTypes();
-    settings.chartSettings.showLaps = settings.chartSettings.showLaps !== false;
-    settings.chartSettings.showGrid = settings.chartSettings.showGrid !== false;
-    settings.chartSettings.stackYAxes = settings.chartSettings.stackYAxes !== false;
-    settings.chartSettings.disableGrouping = settings.chartSettings.disableGrouping === true;
-    settings.chartSettings.hideAllSeriesOnInit = settings.chartSettings.hideAllSeriesOnInit === true;
-    settings.chartSettings.gainAndLossThreshold = settings.chartSettings.gainAndLossThreshold || AppUserService.getDefaultGainAndLossThreshold();
-    // Units
-    settings.unitSettings = settings.unitSettings || <UserUnitSettingsInterface>{};
-    settings.unitSettings.speedUnits = settings.unitSettings.speedUnits || AppUserService.getDefaultSpeedUnits();
-    settings.unitSettings.paceUnits = settings.unitSettings.paceUnits || AppUserService.getDefaultPaceUnits();
-    settings.unitSettings.gradeAdjustedSpeedUnits = settings.unitSettings.gradeAdjustedSpeedUnits || AppUserService.getGradeAdjustedSpeedUnitsFromSpeedUnits(settings.unitSettings.speedUnits);
-    settings.unitSettings.gradeAdjustedPaceUnits = settings.unitSettings.gradeAdjustedPaceUnits || AppUserService.getGradeAdjustedPaceUnitsFromPaceUnits(settings.unitSettings.paceUnits);
-    settings.unitSettings.swimPaceUnits = settings.unitSettings.swimPaceUnits || AppUserService.getDefaultSwimPaceUnits();
-    settings.unitSettings.verticalSpeedUnits = settings.unitSettings.verticalSpeedUnits || AppUserService.getDefaultVerticalSpeedUnits()
-    settings.unitSettings.startOfTheWeek = isNumber(settings.unitSettings.startOfTheWeek) ? settings.unitSettings.startOfTheWeek : AppUserService.getDefaultStartOfTheWeek();
-    // Dashboard
-    settings.dashboardSettings = settings.dashboardSettings || <UserDashboardSettingsInterface>{};
-    settings.dashboardSettings.dateRange = isNumber(settings.dashboardSettings.dateRange) ? settings.dashboardSettings.dateRange : AppUserService.getDefaultDateRange();
-    settings.dashboardSettings.startDate = settings.dashboardSettings.startDate || null;
-    settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
-    settings.dashboardSettings.activityTypes = settings.dashboardSettings.activityTypes || [];
-    settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserService.getDefaultUserDashboardTiles();
-    // Patch missing defaults
-    settings.dashboardSettings.tableSettings = settings.dashboardSettings.tableSettings || AppUserService.getDefaultTableSettings();
-    settings.dashboardSettings.tableSettings.selectedColumns = settings.dashboardSettings.tableSettings.selectedColumns || AppUserService.getDefaultSelectedTableColumns()
-
-    // Summaries
-    settings.summariesSettings = settings.summariesSettings || <UserSummariesSettingsInterface>{};
-    settings.summariesSettings.removeAscentForEventTypes = settings.summariesSettings.removeAscentForEventTypes || AppUserService.getDefaultActivityTypesToRemoveAscentFromSummaries();
-    // Map
-    settings.mapSettings = settings.mapSettings || <UserMapSettingsInterface>{};
-    settings.mapSettings.theme = settings.mapSettings.theme || MapThemes.Normal;
-    settings.mapSettings.showLaps = settings.mapSettings.showLaps !== false;
-    settings.mapSettings.showPoints = settings.mapSettings.showPoints === true;
-    settings.mapSettings.showArrows = settings.mapSettings.showArrows !== false;
-    settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || AppUserService.getDefaultMapLapTypes();
-    settings.mapSettings.mapType = settings.mapSettings.mapType || AppUserService.getDefaultMapType();
-    settings.mapSettings.strokeWidth = settings.mapSettings.strokeWidth || AppUserService.getDefaultMapStrokeWidth();
-    // MyTracks
-    settings.myTracksSettings = settings.myTracksSettings || <UserMyTracksSettingsInterface>{};
-    settings.myTracksSettings.dateRange = isNumber(settings.myTracksSettings.dateRange)
-      ? settings.myTracksSettings.dateRange
-      : AppUserService.getDefaultMyTracksDateRange();
-
-    // Export to CSV
-    settings.exportToCSVSettings = settings.exportToCSVSettings || <UserExportToCsvSettingsInterface>{};
-    settings.exportToCSVSettings.startDate = settings.exportToCSVSettings.startDate !== false;
-    settings.exportToCSVSettings.name = settings.exportToCSVSettings.name !== false;
-    settings.exportToCSVSettings.description = settings.exportToCSVSettings.description !== false;
-    settings.exportToCSVSettings.activityTypes = settings.exportToCSVSettings.activityTypes !== false;
-    settings.exportToCSVSettings.distance = settings.exportToCSVSettings.distance !== false;
-    settings.exportToCSVSettings.duration = settings.exportToCSVSettings.duration !== false;
-    settings.exportToCSVSettings.ascent = settings.exportToCSVSettings.ascent !== false;
-    settings.exportToCSVSettings.descent = settings.exportToCSVSettings.descent !== false;
-    settings.exportToCSVSettings.calories = settings.exportToCSVSettings.calories !== false;
-    settings.exportToCSVSettings.feeling = settings.exportToCSVSettings.feeling !== false;
-    settings.exportToCSVSettings.rpe = settings.exportToCSVSettings.rpe !== false;
-    settings.exportToCSVSettings.averageSpeed = settings.exportToCSVSettings.averageSpeed !== false;
-    settings.exportToCSVSettings.averagePace = settings.exportToCSVSettings.averagePace !== false;
-    settings.exportToCSVSettings.averageSwimPace = settings.exportToCSVSettings.averageSwimPace !== false;
-    settings.exportToCSVSettings.averageGradeAdjustedPace = settings.exportToCSVSettings.averageGradeAdjustedPace !== false;
-    settings.exportToCSVSettings.averageHeartRate = settings.exportToCSVSettings.averageHeartRate !== false;
-    settings.exportToCSVSettings.maximumHeartRate = settings.exportToCSVSettings.maximumHeartRate !== false;
-    settings.exportToCSVSettings.averagePower = settings.exportToCSVSettings.averagePower !== false;
-    settings.exportToCSVSettings.maximumPower = settings.exportToCSVSettings.maximumPower !== false;
-    settings.exportToCSVSettings.vO2Max = settings.exportToCSVSettings.vO2Max !== false;
-    settings.exportToCSVSettings.includeLink = settings.exportToCSVSettings.includeLink !== false;
-
-    // @warning !!!!!! Enums with 0 as start value default to the override
-    return settings;
-  }
 }

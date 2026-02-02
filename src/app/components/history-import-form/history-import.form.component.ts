@@ -10,6 +10,7 @@ import {
 } from '@angular/forms';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppEventService } from '../../services/app.event.service';
+import { AppUserUtilities } from '../../utils/app.user.utilities';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
@@ -18,8 +19,12 @@ import { User } from '@sports-alliance/sports-lib';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { Subscription } from 'rxjs';
 import { ServiceNames } from '@sports-alliance/sports-lib';
-import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT } from '../../../../functions/src/shared/history-import.constants';
+import { COROS_HISTORY_IMPORT_LIMIT_MONTHS, GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS, HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT, HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE } from '../../../../functions/src/shared/history-import.constants';
 import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import { AppAuthService } from '../../authentication/app.auth.service';
+
+dayjs.extend(relativeTime);
 
 /** Response from COROS/Suunto history import */
 export interface HistoryImportResult {
@@ -55,6 +60,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   public isPro = false;
   public corosHistoryLimitMonths = COROS_HISTORY_IMPORT_LIMIT_MONTHS;
   public activitiesPerDayLimit = HISTORY_IMPORT_ACTIVITIES_PER_DAY_LIMIT;
+  public processingCapacityPerDay = HISTORY_IMPORT_PROCESSING_CAPACITY_PER_DAY_PER_USER_ESTIMATE;
   public garminCooldownDays = GARMIN_HISTORY_IMPORT_COOLDOWN_DAYS;
   /** Optimistic UI flag - blocks re-submission immediately after success */
   public isHistoryImportPending = signal(false);
@@ -70,6 +76,7 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
   private logger = inject(LoggerService);
   private snackBar = inject(MatSnackBar);
   private changeDetectorRef = inject(ChangeDetectorRef);
+  private authService = inject(AppAuthService);
 
   async ngOnInit() {
     this.formGroup = new UntypedFormGroup({
@@ -86,7 +93,8 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
 
     this.formGroup.disable();
 
-    this.isPro = await this.userService.isPro();
+    const user = await this.authService.getUser();
+    this.isPro = AppUserUtilities.hasProAccess(user);
 
     this.processChanges();
   }
@@ -283,6 +291,37 @@ export class HistoryImportFormComponent implements OnInit, OnDestroy, OnChanges 
       return 0;
     }
     return Math.ceil(this.userMetaForService.processedActivitiesFromLastHistoryImportCount / this.activitiesPerDayLimit);
+  }
+
+  get userMeta(): any {
+    return this.userMetaForService;
+  }
+
+  get estimatedCompletionVerbal(): string {
+    const stats = this.pendingImportResult();
+    if (!stats || stats.successCount === 0) {
+      return '';
+    }
+
+    const count = stats.successCount;
+    // Calculate total days (decimals allowed)
+    // e.g. 500 / 24000 = 0.02 days
+    const totalDays = count / this.processingCapacityPerDay;
+    const totalHours = totalDays * 24;
+
+    if (totalHours < 1) {
+      return 'Should be done very soon! 🚀';
+    }
+
+    if (totalHours < 24) {
+      // "Estimated to finish by 4:00 PM today/tomorrow"
+      const completionDate = dayjs().add(totalHours, 'hour');
+      return `Estimated to finish by ${completionDate.format('h:mm A')} ${completionDate.fromNow()}.`;
+    }
+
+    // > 1 day
+    const completionDate = dayjs().add(totalDays, 'day');
+    return `Estimated to finish ${completionDate.fromNow()} (${completionDate.format('dddd')}).`;
   }
 }
 

@@ -1,5 +1,5 @@
 
-import { ActivityInterface, EventInterface, EventUtilities } from '@sports-alliance/sports-lib';
+import { ActivityInterface, ActivityTypes, ActivityTypesHelper, EventInterface, EventUtilities } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../services/logger.service';
 import { Injectable } from '@angular/core';
 
@@ -75,5 +75,23 @@ export class AppEventUtilities {
         } catch (e) {
             this.logger.error(`[AppEventUtilities] Error generating duration stream for activity ${activity.getID()}`, e);
         }
+    }
+
+    /**
+     * Determines if ascent should be excluded for a given activity type(s)
+     * @param activityTypes Array of activity types or a single activity type
+     */
+    static shouldExcludeAscent(activityTypes: ActivityTypes | ActivityTypes[]): boolean {
+        const types = Array.isArray(activityTypes) ? activityTypes : [activityTypes];
+        return types.every(type => ActivityTypesHelper.shouldExcludeAscent(type));
+    }
+
+    /**
+     * Determines if descent should be excluded for a given activity type(s)
+     * @param activityTypes Array of activity types or a single activity type
+     */
+    static shouldExcludeDescent(activityTypes: ActivityTypes | ActivityTypes[]): boolean {
+        const types = Array.isArray(activityTypes) ? activityTypes : [activityTypes];
+        return types.every(type => ActivityTypesHelper.shouldExcludeDescent(type));
     }
 }

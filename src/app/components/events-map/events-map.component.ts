@@ -21,7 +21,7 @@ import { MapAbstractDirective } from '../map/map-abstract.directive';
 import { LoggerService } from '../../services/logger.service';
 import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
-import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import { DatePipe } from '@angular/common';
 import { User } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
@@ -34,6 +34,8 @@ import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib';
 import { DataLongitudeDegrees } from '@sports-alliance/sports-lib';
 import { environment } from '../../../environments/environment';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
+import { inject } from '@angular/core';
 
 @Component({
   selector: 'app-events-map',
@@ -70,7 +72,8 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       mapTypeIds: ['roadmap', 'hybrid', 'terrain']
     },
     mapId: environment.googleMapsMapId,
-    colorScheme: this.mapColorScheme()
+    colorScheme: this.mapColorScheme(),
+    clickableIcons: false
   }));
 
   onZoomChanged() {
@@ -97,18 +100,20 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
 
   private nativeMap: google.maps.Map;
   private markerClusterer: MarkerClusterer;
+  private markerActivityTypes = new Map<google.maps.marker.AdvancedMarkerElement, ActivityTypes>();
 
   constructor(
     private zone: NgZone,
     private changeDetectorRef: ChangeDetectorRef,
     private eventColorService: AppEventColorService,
     private eventService: AppEventService,
-    private userService: AppUserService,
     private mapsLoader: GoogleMapsLoaderService,
     private markerFactory: MarkerFactoryService,
     protected logger: LoggerService) {
     super(changeDetectorRef, logger);
   }
+
+  private userSettingsQuery = inject(AppUserSettingsQueryService);
 
   // Class property to hold the loaded class
   // Class property to hold the loaded class
@@ -117,8 +122,9 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   async changeMapType(mapType: google.maps.MapTypeId) {
     if (!this.user) return;
     this.mapTypeId.set(mapType);
-    this.user.settings.mapSettings.mapType = mapType as any;
-    await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
+
+    // Safe persist via service
+    this.userSettingsQuery.updateMapSettings({ mapType: mapType as any });
   }
 
   async ngOnInit(): Promise<void> {
@@ -127,8 +133,11 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
 
     this.AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
 
-    if (this.user?.settings?.mapSettings?.mapType) {
-      this.mapTypeId.set(this.user.settings.mapSettings.mapType as any);
+    this.AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
+
+    const mapSettings = this.userSettingsQuery.mapSettings();
+    if (mapSettings?.mapType) {
+      this.mapTypeId.set(mapSettings.mapType as any);
     }
 
     this.apiLoaded.set(true);
@@ -169,15 +178,18 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   private initMapData() {
     if (!this.nativeMap) return;
 
+    // Clear existing markers unconditionally
+    if (this.markers) {
+      this.markers.forEach(m => m.map = null);
+    }
+    if (this.markerClusterer) {
+      this.markerClusterer.clearMarkers();
+    }
+    this.markerActivityTypes.clear();
+    this.markers = []; // Ensure markers array is reset
+
     // Create and add markers
     if (this.events?.length) {
-      // Clear existing markers
-      if (this.markers) {
-        this.markers.forEach(m => m.map = null);
-      }
-      if (this.markerClusterer) {
-        this.markerClusterer.clearMarkers();
-      }
 
       this.markers = this.getMarkersFromEvents(this.events);
       // for AdvancedMarkerElement, setting map via constructor is enough, or set properties.
@@ -193,12 +205,80 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
             map: this.nativeMap,
             markers: this.markers,
             renderer: {
-              render: ({ count, position }) => {
+              render: ({ count, position, markers }) => {
+                // Calculate prevailing activity type group
+                const groupCounts = new Map<string, number>();
+                let maxCount = 0;
+                let prevailingGroup: string | null = null;
+
+                if (markers) {
+                  for (const marker of markers) {
+                    if (marker instanceof google.maps.marker.AdvancedMarkerElement) {
+                      const activityType = this.markerActivityTypes.get(marker);
+                      if (activityType !== undefined) {
+                        const group = ActivityTypesHelper.getActivityGroupForActivityType(activityType);
+                        const currentCount = (groupCounts.get(group) || 0) + 1;
+                        groupCounts.set(group, currentCount);
+
+                        if (currentCount > maxCount) {
+                          maxCount = currentCount;
+                          prevailingGroup = group;
+                        }
+                      }
+                    }
+                  }
+                }
+
+                let clusterColor: string | undefined;
+                if (prevailingGroup) {
+                  // We can't easily get color by group name directly from service if it only takes ActivityType enum.
+                  // But we can find an ActivityType that belongs to this group.
+                  // Or better, we can modify/extend AppEventColorService or helper usage.
+                  // Actually, usage in marker loop was:
+                  // this.eventColorService.getColorForActivityTypeByActivityTypeGroup(type)
+                  // So we just need ONE type that maps to this group.
+                  // Let's find one.
+                  // Simpler appproach: Iterate types, count group. Store ONE representative type for the max group.
+
+                  // Re-doing simple loop for representative type
+                  const groupCountsMap = new Map<string, number>();
+                  const groupRepresentativeType = new Map<string, ActivityTypes>();
+
+                  let maxVal = 0;
+                  let maxGroup = '';
+
+                  for (const marker of markers) {
+                    if (marker instanceof google.maps.marker.AdvancedMarkerElement) {
+                      const activityType = this.markerActivityTypes.get(marker);
+                      if (activityType !== undefined) {
+                        const group = ActivityTypesHelper.getActivityGroupForActivityType(activityType);
+                        const val = (groupCountsMap.get(group) || 0) + 1;
+                        groupCountsMap.set(group, val);
+                        groupRepresentativeType.set(group, activityType); // Update representative (any is fine)
+
+                        if (val > maxVal) {
+                          maxVal = val;
+                          maxGroup = group;
+                        }
+                      }
+                    }
+                  }
+
+                  if (maxGroup && groupRepresentativeType.has(maxGroup)) {
+                    clusterColor = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(groupRepresentativeType.get(maxGroup)!);
+                  }
+                }
+
                 return new google.maps.marker.AdvancedMarkerElement({
                   position,
-                  content: this.markerFactory.createClusterMarker(count),
+                  content: this.markerFactory.createClusterMarker(count, clusterColor),
                   zIndex: Number(google.maps.Marker.MAX_ZINDEX) + count,
                 });
+              }
+            },
+            onClusterClick: (event, cluster, map) => {
+              if (cluster.bounds) {
+                map.fitBounds(cluster.bounds, 100);
               }
             }
           });
@@ -211,7 +291,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       // Fit bounds to show all events
       const startPositions = this.getStartPositionsFromEvents(this.events);
       if (startPositions.length > 0) {
-        this.nativeMap.fitBounds(this.getBounds(startPositions));
+        this.nativeMap.fitBounds(this.getBounds(startPositions), 100);
       }
     }
   }
@@ -247,19 +327,22 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       const eventStartPositionStat = <DataStartPosition>event.getStat(DataStartPosition.type);
       if (eventStartPositionStat) {
         const location = eventStartPositionStat.getValue();
+        const activityType = event.getActivityTypesAsArray().length > 1 ? ActivityTypes.Multisport : event.getActivityTypesAsArray()[0] as unknown as ActivityTypes;
 
-        const color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(
-          event.getActivityTypesAsArray().length > 1 ? ActivityTypes.Multisport : ActivityTypes[event.getActivityTypesAsArray()[0]]
-        );
+        const color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType);
 
         const marker = new this.AdvancedMarkerElement!({
           position: { lat: location.latitudeDegrees, lng: location.longitudeDegrees },
           title: `${event.getActivityTypesAsString()} for ${event.getDuration().getDisplayValue(false, false)} and ${event.getDistance().getDisplayValue()}`,
           content: this.markerFactory.createEventMarker(color)
         });
+
+        // Store activity type for this marker
+        this.markerActivityTypes.set(marker, activityType);
+
         markersArray.push(marker);
 
-        marker.addListener('click', async () => {
+        marker.addListener('gmp-click', async () => {
           this.loading();
           this.selectedEventPositionsByActivity = [];
 
@@ -298,7 +381,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
           }, []);
 
           if (allPositions.length > 0) {
-            this.nativeMap.fitBounds(this.getBounds(allPositions));
+            this.nativeMap.fitBounds(this.getBounds(allPositions), 100);
           }
 
           this.selectedEvent = populatedEvent;

@@ -1,4 +1,4 @@
-import { Directive, inject, Input, OnInit } from '@angular/core';
+import { Directive, inject, Input, OnInit, computed } from '@angular/core';
 import { Router } from '@angular/router';
 import { User } from '@sports-alliance/sports-lib';
 import { FileInterface } from './file.interface';
@@ -7,14 +7,23 @@ import { LoggerService } from '../../services/logger.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { AppProcessingService } from '../../services/app.processing.service';
+import { AppUserService } from '../../services/app.user.service';
 
 
 @Directive()
 export abstract class UploadAbstractDirective implements OnInit {
 
   @Input() user!: User;
-  @Input() hasProAccess: boolean = false;
+  @Input() set hasProAccess(value: boolean | null) {
+    this._hasProAccess = value;
+  }
+  get hasProAccess(): boolean {
+    return this._hasProAccess !== null ? this._hasProAccess : this.userService.hasProAccessSignal();
+  }
+  private _hasProAccess: boolean | null = null;
   @Input() requiresPro: boolean = false;
+
+  protected userService = inject(AppUserService);
   public isUploading = false;
 
   protected snackBar = inject(MatSnackBar);

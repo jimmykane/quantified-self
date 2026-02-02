@@ -1,4 +1,6 @@
 User-agent: *
+Allow: /
+Allow: /releases
 Disallow: /user
 Disallow: /user/
 Disallow: /settings

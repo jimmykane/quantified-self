@@ -4,7 +4,7 @@ import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
 import * as requestPromise from '../request-helper';
 import { executeWithTokenRetry } from './retry-helper';
-import { isProUser, PRO_REQUIRED_MESSAGE } from '../utils';
+import { hasProAccess, PRO_REQUIRED_MESSAGE } from '../utils';
 import * as zlib from 'zlib';
 import { SERVICE_NAME, SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from './constants';
 import { config } from '../config';
@@ -35,7 +35,7 @@ export const importRouteToSuuntoApp = onCall({
 
   const userID = request.auth.uid;
 
-  if (!(await isProUser(userID))) {
+  if (!(await hasProAccess(userID))) {
     logger.warn(`Blocking route upload for non-pro user ${userID}`);
     throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }

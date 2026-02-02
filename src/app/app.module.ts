@@ -9,12 +9,12 @@ import { environment } from '../environments/environment';
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
 import { provideAuth, getAuth, connectAuthEmulator } from '@angular/fire/auth';
-import { provideFirestore, initializeFirestore } from '@angular/fire/firestore';
+import { provideFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from '@angular/fire/firestore';
 import { getApp } from '@angular/fire/app';
 import { provideFunctions, getFunctions } from '@angular/fire/functions';
 import { provideAppCheck, initializeAppCheck, ReCaptchaV3Provider, AppCheck } from '@angular/fire/app-check';
 import { providePerformance, getPerformance } from '@angular/fire/performance';
-import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService, setAnalyticsCollectionEnabled } from '@angular/fire/analytics';
+import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService, setAnalyticsCollectionEnabled, initializeAnalytics } from '@angular/fire/analytics';
 import { provideRemoteConfig, getRemoteConfig } from '@angular/fire/remote-config';
 import { provideStorage, getStorage } from '@angular/fire/storage';
 import { MaterialModule } from './modules/material.module';
@@ -22,6 +22,7 @@ import { SharedModule } from './modules/shared.module';
 import { ClipboardModule } from '@angular/cdk/clipboard';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { MAT_DIALOG_DEFAULT_OPTIONS } from '@angular/material/dialog';
+import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { ServiceWorkerModule } from '@angular/service-worker';
 import { UploadActivitiesComponent } from './components/upload/upload-activities/upload-activities.component';
 import { GoogleMapsLoaderService } from './services/google-maps-loader.service';
@@ -91,7 +92,14 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
     // This is the official Firebase approach - undefined fields are silently skipped, not stored.
     provideFirestore(() => {
       return initializeFirestore(getApp(), {
-        ignoreUndefinedProperties: true
+        ignoreUndefinedProperties: true,
+        // @ts-ignore
+        useFetchStreams: true,
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+          cacheSizeBytes: 104857600 // 100 MB
+        }),
+
       });
     }),
     provideStorage(() => getStorage()),
@@ -103,9 +111,16 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
       return functions;
     }),
     providePerformance(() => getPerformance()),
-    provideAnalytics(() => getAnalytics()),
+    provideAnalytics(() => initializeAnalytics(getApp(), {
+      config: {
+        app_name: environment.firebase.projectId,
+        app_version: environment.appVersion,
+        debug_mode: environment.localhost
+      }
+    })),
     provideRemoteConfig(() => getRemoteConfig()),
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
+    { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
     { provide: MAT_DIALOG_DEFAULT_OPTIONS, useValue: { panelClass: 'qs-dialog-container', hasBackdrop: true } },
     MAT_DATE_LOCALE_PROVIDER,
     { provide: LOCALE_ID, useFactory: getBrowserLocale },

@@ -1,15 +1,15 @@
-import {ChangeDetectionStrategy, Component, Input} from '@angular/core';
-import {DataDistance} from '@sports-alliance/sports-lib';
+import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
+import { DataDistance } from '@sports-alliance/sports-lib';
 import { DataAscent } from '@sports-alliance/sports-lib';
 import { LapTypes } from '@sports-alliance/sports-lib';
 
 
 @Component({
-    selector: 'app-lap-type-icon',
-    templateUrl: './lap-type-icon.component.html',
-    styleUrls: ['./lap-type-icon.component.css'],
-    changeDetection: ChangeDetectionStrategy.OnPush,
-    standalone: false
+  selector: 'app-lap-type-icon',
+  templateUrl: './lap-type-icon.component.html',
+  styleUrls: ['./lap-type-icon.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: false
 })
 
 export class LapTypeIconComponent {
@@ -29,21 +29,18 @@ export class LapTypeIconComponent {
         return 'location_on'
       case LapTypes.Time:
         return 'timer'
+      case LapTypes.Manual:
+        return 'front_hand';
+      case LapTypes.Interval:
+      case LapTypes.FitnessEquipment:
+        return 'exercise';
       default:
         return null;
     }
   }
 
   getColumnHeaderSVGIcon(lapType): string {
-    switch (lapType) {
-      case LapTypes.Manual:
-        return 'lap-type-manual';
-      case LapTypes.Interval:
-      case LapTypes.FitnessEquipment: // Intentional, fitness equipement is selected for intervals on  fit files
-        return 'lap-type-interval';
-      default:
-        return null;
-    }
+    return null;
   }
 
   getColumnHeaderTextInitials(statName): string {

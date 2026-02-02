@@ -1,4 +1,4 @@
-import { Component, OnInit, Output, EventEmitter, ViewChild, ElementRef, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, Output, EventEmitter, ViewChild, ElementRef, AfterViewInit, OnDestroy, effect, inject } from '@angular/core';
 import { Observable, Subscription } from 'rxjs';
 import { AppUserService } from '../../services/app.user.service';
 import { LoggerService } from '../../services/logger.service';
@@ -29,27 +29,36 @@ export class GracePeriodBannerComponent implements OnInit, AfterViewInit, OnDest
         return this._bannerElement;
     }
 
-    gracePeriodUntil$!: Observable<Date | null>;
+    private userService = inject(AppUserService);
+    private logger = inject(LoggerService);
+
+    gracePeriodUntil = this.userService.gracePeriodUntil;
     isDismissed = false;
     private subscription: Subscription | null = null;
     private resizeObserver: ResizeObserver | null = null;
 
-    constructor(private userService: AppUserService, private logger: LoggerService) { }
-
-    ngOnInit(): void {
-        this.logger.info('[GracePeriodBanner] ngOnInit - Getting grace period observable');
-        this.gracePeriodUntil$ = this.userService.getGracePeriodUntil();
-    }
-
-    ngAfterViewInit(): void {
-        // Subscribe to grace period changes to update height when banner appears
-        this.subscription = this.gracePeriodUntil$.subscribe(() => {
+    constructor() {
+        effect(() => {
+            const date = this.gracePeriodUntil();
+            this.logger.info('[GracePeriodBanner] Effect triggered - gracePeriodUntil:', date);
             // Use setTimeout to ensure the DOM is updated before measuring
             setTimeout(() => {
                 this.updateHeight();
                 this.setupResizeObserver();
             }, 0);
         });
+    }
+
+    ngOnInit(): void {
+        this.logger.info('[GracePeriodBanner] ngOnInit - Signal already initialized in service');
+    }
+
+    ngAfterViewInit(): void {
+        // Use an effect or similar to update height when signal changes
+        // Since we are in EXECUTION and the component might be simple, 
+        // using effect() in constructor is cleaner for signals.
+        // But for this refactor, I'll just change the subscription to an effect-like behavior if needed.
+        // Actually, let's use effect in the constructor for the height update.
     }
 
     ngOnDestroy(): void {

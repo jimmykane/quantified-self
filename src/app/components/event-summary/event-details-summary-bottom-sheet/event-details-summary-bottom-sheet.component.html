@@ -8,7 +8,7 @@
     </button>
 </div>
 
-<div class="bottom-sheet-content">
+<div class="bottom-sheet-content qs-scrollbar">
     <mat-card-subtitle style="margin-top: 0.1em; margin-bottom: 0px; color: unset;">
         <mat-form-field appearance="outline">
             <mat-label>Name</mat-label>
@@ -21,7 +21,7 @@
         <mat-form-field appearance="outline">
             <mat-label>Description</mat-label>
             <textarea matInput rows="6" [placeholder]="'Add a description'" (change)="saveEventDescription()"
-                (keydown.enter)='$any($event.target).blur()' [(ngModel)]='event.description'>
+                class="qs-scrollbar" (keydown.enter)='$any($event.target).blur()' [(ngModel)]='event.description'>
         </textarea>
         </mat-form-field>
     </mat-card-subtitle>

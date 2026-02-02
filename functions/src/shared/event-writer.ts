@@ -79,6 +79,7 @@ export class EventWriter {
      * @param originalFiles - Optional original file(s) to upload to Storage
      */
     public async writeAllEventData(userID: string, event: AppEventInterface, originalFiles?: OriginalFile[] | OriginalFile): Promise<void> {
+        const startTotal = Date.now();
         this.logger.info('writeAllEventData called', { userID, eventID: event.getID(), adapterPresent: !!this.storageAdapter });
         const writePromises: Promise<void>[] = [];
 
@@ -88,7 +89,9 @@ export class EventWriter {
         }
 
         try {
-            for (const activity of event.getActivities()) {
+            const startActivities = Date.now();
+            const activities = event.getActivities();
+            for (const activity of activities) {
                 // Ensure Activity ID
                 if (!activity.getID()) {
                     activity.setID(this.adapter.generateID());
@@ -115,6 +118,7 @@ export class EventWriter {
                     )
                 );
             }
+            this.logger.info(`Prepared ${activities.length} activity writes in ${Date.now() - startActivities}ms`);
 
             // Write Event
             const eventJSON = event.toJSON() as unknown as FirestoreEventJSON;
@@ -131,6 +135,8 @@ export class EventWriter {
             }
 
             if (filesToUpload.length > 0 && this.storageAdapter) {
+                this.logger.info(`Starting upload of ${filesToUpload.length} files...`);
+                const startUpload = Date.now();
                 const uploadedFilesMetadata: { path: string, bucket?: string, startDate: Date, originalFilename?: string }[] = [];
 
                 for (let i = 0; i < filesToUpload.length; i++) {
@@ -149,8 +155,10 @@ export class EventWriter {
                         filePath = `users/${userID}/events/${event.getID()}/original_${i}.${file.extension}`;
                     }
 
+                    const subStart = Date.now();
                     this.logger.info(`Uploading file ${i + 1}/${filesToUpload.length} to`, filePath);
                     await this.storageAdapter.uploadFile(filePath, file.data);
+                    this.logger.info(`File ${i + 1} uploaded in ${Date.now() - subStart}ms`);
 
                     uploadedFilesMetadata.push({
                         path: filePath,
@@ -159,8 +167,7 @@ export class EventWriter {
                         originalFilename: file.originalFilename // Save if present
                     });
                 }
-
-                this.logger.info('Upload complete. Adding metadata to eventJSON');
+                this.logger.info(`All uploads complete in ${Date.now() - startUpload}ms. Adding metadata to eventJSON`);
 
                 // Dual-field strategy: Write both originalFiles (canonical) and originalFile (legacy)
                 // See method JSDoc for full explanation of this pattern
@@ -187,7 +194,11 @@ export class EventWriter {
                 this.adapter.setDoc(['users', userID, 'events', <string>event.getID()], eventJSON)
             );
 
+            this.logger.info(`Starting Promise.all for ${writePromises.length} writes...`);
+            const startWrites = Date.now();
             await Promise.all(writePromises);
+            this.logger.info(`Promise.all complete in ${Date.now() - startWrites}ms`);
+            this.logger.info(`Total writeAllEventData execution time: ${Date.now() - startTotal}ms`);
         } catch (e) {
             const error = e as Error;
             this.logger.error(error);

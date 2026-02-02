@@ -179,7 +179,11 @@ describe('AppThemeService', () => {
         });
 
         it('should remove dark-theme class from body for light theme', () => {
-            document.body.classList.add('dark-theme');
+            // First set to Dark to ensure state change
+            service.setAppTheme(AppThemes.Dark);
+            expect(document.body.classList.contains('dark-theme')).toBe(true);
+
+            // Now switch to Normal
             service.setAppTheme(AppThemes.Normal);
             expect(document.body.classList.contains('dark-theme')).toBe(false);
         });

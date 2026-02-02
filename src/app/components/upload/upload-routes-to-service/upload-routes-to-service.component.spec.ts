@@ -16,6 +16,7 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
 import { AppFunctionsService } from '../../../services/app.functions.service';
+import { AppUserService } from '../../../services/app.user.service';
 
 
 class MockCompressionStream {
@@ -118,6 +119,7 @@ describe('UploadRoutesToServiceComponent', () => {
                 { provide: Auth, useValue: mockAuth },
                 { provide: BrowserCompatibilityService, useValue: mockCompatibility },
                 { provide: AppFunctionsService, useValue: mockFunctionsService },
+                { provide: AppUserService, useValue: { hasProAccessSignal: vi.fn().mockReturnValue(true), user: vi.fn().mockReturnValue({ stripeRole: 'pro' }) } },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();

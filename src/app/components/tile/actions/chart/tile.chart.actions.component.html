@@ -3,13 +3,8 @@
   <mat-icon>more_vert</mat-icon>
 </button>
 <mat-menu #chartOptions="matMenu" class="qs-config-menu">
-  @if (user.settings.dashboardSettings.tiles.length <= 11) { <section class="first">
-    <button mat-flat-button color="primary" (click)="addNewTile($event)">
-      <mat-icon>add</mat-icon>
-      <span>Add new</span>
-      <mat-icon class="toolTip" matTooltip="This will copy the current tile and create a new one">info</mat-icon>
-    </button>
-    </section>
+  @if (user.settings.dashboardSettings.tiles.length <= 11) { <app-tile-actions-header (add)="addNewTile($event)">
+    </app-tile-actions-header>
     }
     <section mat-menu-item>
       <mat-form-field>
@@ -147,11 +142,6 @@
       </mat-form-field>
     </section>
     @if (user.settings.dashboardSettings.tiles.length > 1) {
-    <section class="delete-section">
-      <button mat-button color="warn" (click)="deleteTile($event)">
-        <mat-icon>delete_outline</mat-icon>
-        <span>Delete</span>
-      </button>
-    </section>
+    <app-tile-actions-footer (delete)="deleteTile($event)"></app-tile-actions-footer>
     }
 </mat-menu>

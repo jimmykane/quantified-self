@@ -12,6 +12,7 @@ vi.mock('@angular/fire/auth', async () => {
     return {
         ...actual,
         user: mockUserFunction,
+        authState: vi.fn(() => of(null)),
         signInWithPopup: vi.fn(),
         signInWithRedirect: vi.fn(),
         signInWithCustomToken: vi.fn(),
@@ -31,6 +32,9 @@ import { Analytics } from '@angular/fire/analytics';
 import { EnvironmentInjector } from '@angular/core';
 import { of, BehaviorSubject } from 'rxjs';
 import { Privacy } from '@sports-alliance/sports-lib';
+import { APP_STORAGE } from '../services/storage/app.storage.token';
+
+import { signal } from '@angular/core';
 
 // Mock dependencies
 const mockAuth = {
@@ -41,9 +45,11 @@ const mockFirestore = {};
 const mockAnalytics = {};
 
 const mockUserService = {
+    user$: new BehaviorSubject<any>(null),
     fillMissingAppSettings: (settings: any) => settings,
     getUserByID: vi.fn(),
     isPro: vi.fn(),
+    hasPaidAccessSignal: signal(true)
 };
 
 const mockSnackBar = {
@@ -65,6 +71,9 @@ describe('AppAuthService', () => {
     beforeEach(() => {
         userSubject = new BehaviorSubject<any>(null);
         mockUserFunction.mockReturnValue(userSubject);
+        mockUserService.user$.next(null); // Reset
+        mockUserService.hasPaidAccessSignal.set(true); // Default to pro for these tests unless specified
+
         TestBed.configureTestingModule({
             providers: [
                 AppAuthService,
@@ -74,7 +83,7 @@ describe('AppAuthService', () => {
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: MatSnackBar, useValue: mockSnackBar },
                 { provide: LocalStorageService, useValue: mockLocalStorageService },
-                { provide: EnvironmentInjector, useValue: {} }
+                { provide: APP_STORAGE, useValue: localStorage },
             ]
         });
         service = TestBed.inject(AppAuthService);
@@ -125,7 +134,12 @@ describe('AppAuthService', () => {
             });
         });
 
-        userSubject.next(mockFirebaseUser);
+        // Since AppAuthService now delegates to AppUserService.user$, we mock the delegation
+        mockUserService.user$.next({
+            ...mockFirebaseUser,
+            privacy: Privacy.Private,
+            acceptedPrivacyPolicy: false
+        });
 
         const user = await userPromise;
 
@@ -182,11 +196,15 @@ describe('AppAuthService', () => {
             });
         });
 
-        userSubject.next(mockFirebaseUser);
+        // Simulate AppUserService processing the user and updating its user$ stream
+        mockUserService.user$.next({
+            ...mockFirebaseUser,
+            ...mockDbUser,
+            stripeRole: 'pro'
+        });
 
         const updatedUser = await userPromise;
 
-        expect(mockFirebaseUser.getIdToken).toHaveBeenCalledWith(true);
         expect(updatedUser.stripeRole).toBe('pro');
     });
 

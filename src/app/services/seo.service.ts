@@ -33,12 +33,9 @@ export class SeoService {
         ).subscribe(data => {
             this.updateTitle(data['title']);
             this.updateMetaTags(data);
-            this.updateJsonLd();
+            this.updateCanonicalTag();
+            this.updateJsonLd(data);
         });
-
-        // Also handle RoutesRecognized for immediate title updates if needed, though NavigationEnd is safer for data
-        // The original AppComponent logic used RoutesRecognized for title. 
-        // NavigationEnd is standard for SEO as it confirms the nav is done.
     }
 
     private updateTitle(title: string) {
@@ -58,8 +55,6 @@ export class SeoService {
             this.metaService.updateTag({ name: 'description', content: data['description'] });
             this.metaService.updateTag({ property: 'og:description', content: data['description'] });
             this.metaService.updateTag({ name: 'twitter:description', content: data['description'] });
-        } else {
-            // Fallback or remove? keeping existing if not present might be safer or standard default
         }
 
         // Keywords
@@ -68,13 +63,65 @@ export class SeoService {
         }
 
         // URL
+        this.updateOgUrl();
+    }
+
+    private updateOgUrl() {
         if (isPlatformBrowser(this.platformId)) {
-            const url = this.doc.location.href;
+            // Use the clean canonical URL for og:url as well to prevent duplicate content issues
+            const url = this.createCanonicalUrl();
             this.metaService.updateTag({ property: 'og:url', content: url });
         }
     }
 
-    private updateJsonLd() {
+    private updateCanonicalTag() {
+        if (!isPlatformBrowser(this.platformId)) {
+            return;
+        }
+
+        const url = this.createCanonicalUrl();
+        let link: HTMLLinkElement | null = this.doc.querySelector('link[rel="canonical"]');
+
+        if (!link) {
+            link = this.doc.createElement('link');
+            link.setAttribute('rel', 'canonical');
+            this.doc.head.appendChild(link);
+        }
+
+        link.setAttribute('href', url);
+    }
+
+    private createCanonicalUrl(): string {
+        // Get the current URL from the router, which by default generally doesn't include 
+        // query params unless we are manually accessing router.url.
+        // However, router.url DOES include query params.
+        // We want to trip them.
+
+        const urlTree = this.router.parseUrl(this.router.url);
+        // Clear query params
+        urlTree.queryParams = {};
+        urlTree.fragment = null; // Clear fragment
+
+        // Serialize back to string
+        const cleanPath = urlTree.toString();
+
+        // Ensure we have the full absolute URL
+        // We can use window.location.origin since we are in the browser (checked by isPlatformBrowser)
+        // or configure a BASE_URL injection token for SSR safety if needed later.
+        // For now, assuming browser or existing doc.location usage pattern.
+
+        // Use document.location.origin if available, otherwise hardcode or config
+        const origin = this.doc.location ? this.doc.location.origin : 'https://quantified-self.io';
+
+        return `${origin}${cleanPath}`;
+    }
+
+    private updateJsonLd(data: any) {
+        if (data['jsonLd']) {
+            this.setJsonLd(data['jsonLd']);
+            return;
+        }
+
         if (this.router.url === '/') {
             this.setJsonLd({
                 "@context": "https://schema.org",

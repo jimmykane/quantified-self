@@ -2,6 +2,7 @@
   @if (user) {
   <app-event-search [startOfTheWeek]="user.settings.unitSettings.startOfTheWeek" [showDatePicker]="false"
     [showActivityTypePicker]="false" [dateRangesToShow]="dateRangesToShow"
+    [selectedActivityTypes]="user.settings.myTracksSettings?.activityTypes"
     [selectedDateRange]="user.settings.myTracksSettings?.dateRange" (searchChange)="search($event)">
   </app-event-search>
   }
@@ -16,4 +17,16 @@
   <!--    (searchChange)="search($event)">-->
   <!--  </app-event-search>-->
   <div #mapDiv id="map"></div>
+  <div class="map-style-controls">
+    <mat-button-toggle-group appearance="legacy" name="mapStyle" aria-label="Map Style" [disabled]="isLoading()"
+      [value]="user?.settings?.myTracksSettings?.mapStyle || 'default'"
+      (change)="setMapStyle($any($event).value)">
+      <mat-button-toggle value="default">Default</mat-button-toggle>
+      <mat-button-toggle value="satellite">Satellite</mat-button-toggle>
+      <mat-button-toggle value="outdoors">Outdoors</mat-button-toggle>
+    </mat-button-toggle-group>
+    @if (isLoading()) {
+    <mat-spinner diameter="24"></mat-spinner>
+    }
+  </div>
 </mat-card>

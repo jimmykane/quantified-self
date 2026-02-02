@@ -61,7 +61,7 @@ vi.mock('firebase-functions/v1', async () => {
 
 vi.mock('../utils', () => ({
     getUserIDFromFirebaseToken: vi.fn(),
-    isProUser: vi.fn(),
+    hasProAccess: vi.fn(),
     isCorsAllowed: vi.fn().mockReturnValue(true),
     setAccessControlHeadersOnResponse: vi.fn(),
     PRO_REQUIRED_MESSAGE: 'Service sync is a Pro feature.'
@@ -90,7 +90,7 @@ describe('Garmin Backfill', () => {
 
         // Default util mocks
         (utils.getUserIDFromFirebaseToken as any).mockResolvedValue('testUserID');
-        (utils.isProUser as any).mockResolvedValue(true);
+        (utils.hasProAccess as any).mockResolvedValue(true);
 
         // Mock getTokenData to return a valid token
         (tokens.getTokenData as any).mockResolvedValue({
@@ -156,7 +156,11 @@ describe('Garmin Backfill', () => {
         expect(requestHelper.get).toHaveBeenCalled();
         // onCall functions return data directly or void, status is handled by framework
         // We verify side effects (setMock for updating timestamp)
-        expect(setMock).toHaveBeenCalled();
+        expect(setMock).toHaveBeenCalledWith(expect.objectContaining({
+            didLastHistoryImport: expect.any(Number),
+            lastHistoryImportStartDate: expect.any(Number),
+            lastHistoryImportEndDate: expect.any(Number),
+        }));
     });
 
     it('should throw failed-precondition if app is undefined', async () => {

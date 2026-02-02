@@ -19,7 +19,8 @@ const TEMPLATE_SUBJECTS: { [key: string]: string } = {
     'subscription_cancellation': "Subscription Cancellation Confirmed",
     'subscription_expiring_soon': "Action Required: Your subscription is ending soon",
     'welcome_email': "Welcome to Quantified Self Pro!",
-    'grace_period_ending': "⚠️ FINAL WARNING: Your data will be deleted in 5 days"
+    'grace_period_ending': "⚠️ FINAL WARNING: Your data will be deleted in 5 days",
+    'development_update': "Quantified Self is back! Important updates inside."
 };
 
 async function seedTemplates() {

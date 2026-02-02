@@ -11,6 +11,8 @@ import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
+import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
+import { MarkerFactoryService } from '../../../services/map/marker-factory.service';
 import { signal } from '@angular/core';
 
 describe('EventCardMapComponent', () => {
@@ -60,6 +62,22 @@ describe('EventCardMapComponent', () => {
                 { provide: AppUserService, useValue: mockUserSvc },
                 { provide: AppActivityCursorService, useValue: mockCursor },
                 { provide: AppThemeService, useValue: mockTheme },
+                {
+                    provide: AppUserSettingsQueryService,
+                    useValue: {
+                        mapSettings: signal({ mapType: 'roadmap' }),
+                        chartSettings: signal({}),
+                        unitSettings: signal({}),
+                        updateMapSettings: vi.fn()
+                    }
+                },
+                {
+                    provide: MarkerFactoryService,
+                    useValue: {
+                        createPinMarker: vi.fn(),
+                        // Add other methods if needed, mostly createPinMarker/EventMarker/ClusterMarker
+                    }
+                },
                 { provide: NgZone, useValue: new NgZone({ enableLongStackTrace: false }) },
                 ChangeDetectorRef
             ],

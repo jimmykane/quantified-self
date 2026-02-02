@@ -2,6 +2,7 @@ import { Injectable, OnDestroy, Signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppUserService } from './app.user.service';
+import { AppUserUtilities } from '../utils/app.user.utilities';
 import { User } from '@sports-alliance/sports-lib';
 import { ChartThemes } from '@sports-alliance/sports-lib';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
@@ -88,6 +89,9 @@ export class AppThemeService implements OnDestroy {
   }
 
   public setAppTheme(appTheme: AppThemes, saveToStorage: boolean = true) {
+    if (this.appThemeSubject.getValue() === appTheme) {
+      return;
+    }
     if (appTheme === AppThemes.Normal) {
       document.body.classList.remove('dark-theme');
     } else {
@@ -100,6 +104,9 @@ export class AppThemeService implements OnDestroy {
   }
 
   public setChartTheme(chartTheme: ChartThemes) {
+    if (this.chartTheme.getValue() === chartTheme) {
+      return;
+    }
     localStorage.setItem('chartTheme', chartTheme);
     this.chartTheme.next(chartTheme);
   }
@@ -155,7 +162,7 @@ export class AppThemeService implements OnDestroy {
         return ChartThemes[key];
       }
     }
-    return AppUserService.getDefaultChartTheme();
+    return AppUserUtilities.getDefaultChartTheme();
   }
 
   private getEnumKeyByEnumValue<T extends Record<string, string>>(myEnum: T, enumValue: string): keyof T | null {

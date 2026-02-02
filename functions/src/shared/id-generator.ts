@@ -12,13 +12,20 @@ export const EVENT_DUPLICATE_THRESHOLD_MS = 100;
 
 /**
  * Generates a deterministic ID for an event based on the user ID and start date.
+ * 
+ * @param userID - The user's Firebase UID
+ * @param startDate - The event's start date
+ * @param thresholdMs - Bucketing threshold in milliseconds. Default: 100ms for deduplication.
+ *                      Set to 0 for exact timestamp (no bucketing) - used for frontend uploads.
  */
-export async function generateEventID(userID: string, startDate: Date): Promise<string> {
-    // Bucket the timestamp to allow for slight differences in start time (e.g. from different devices)
+export async function generateEventID(userID: string, startDate: Date, thresholdMs: number = EVENT_DUPLICATE_THRESHOLD_MS): Promise<string> {
     const time = startDate.getTime();
-    const bucketedTime = Math.floor(time / EVENT_DUPLICATE_THRESHOLD_MS) * EVENT_DUPLICATE_THRESHOLD_MS;
+    // When thresholdMs is 0, use exact timestamp (no bucketing)
+    // Otherwise, bucket to allow for slight differences in start time (e.g. from different devices)
+    const bucketedTime = thresholdMs > 0
+        ? Math.floor(time / thresholdMs) * thresholdMs
+        : time;
 
-    // Note: bucketedTime is used for duplicate detection
     const parts = [userID, bucketedTime.toString()];
     return generateIDFromParts(parts);
 }

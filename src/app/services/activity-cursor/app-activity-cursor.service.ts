@@ -1,11 +1,11 @@
-import {Injectable} from '@angular/core';
-import {BehaviorSubject} from 'rxjs';
+import { Injectable } from '@angular/core';
+import { BehaviorSubject } from 'rxjs';
 
 @Injectable({
   providedIn: 'root',
 })
 export class AppActivityCursorService {
-  public cursors: BehaviorSubject<ActivityCursorInterface[]> = new BehaviorSubject([]);
+  public cursors: BehaviorSubject<ActivityCursorInterface[]> = new BehaviorSubject<ActivityCursorInterface[]>([]);
 
 
 
@@ -13,7 +13,7 @@ export class AppActivityCursorService {
   }
 
   public setCursor(cursor: ActivityCursorInterface) {
-    // debugger
+    // console.log('AppActivityCursorService: setCursor', cursor);
     const activityCursor = this.cursors.getValue().find(c => c.activityID === cursor.activityID);
     // If there is no current cursor then justs add it and return
     if (!activityCursor) {

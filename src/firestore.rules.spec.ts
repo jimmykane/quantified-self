@@ -329,4 +329,67 @@ describe('Firestore Security Rules', () => {
             }));
         });
     });
+
+    describe('Changelogs Collection', () => {
+        const userId = 'user_123';
+        const adminId = 'admin_456';
+
+        beforeEach(async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection('changelogs').doc('published_post').set({
+                    title: 'Published Post',
+                    published: true
+                });
+                await context.firestore().collection('changelogs').doc('unpublished_post').set({
+                    title: 'Draft Post',
+                    published: false
+                });
+            });
+        });
+
+        it('should allow anyone to read published changelogs', async () => {
+            const db = testEnv.unauthenticatedContext().firestore();
+            await assertSucceeds(db.collection('changelogs').doc('published_post').get());
+        });
+
+        it('should DENY non-admins from reading unpublished changelogs', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+            await assertFails(db.collection('changelogs').doc('unpublished_post').get());
+        });
+
+        it('should allow admins to read unpublished changelogs', async () => {
+            const db = testEnv.authenticatedContext(adminId, { admin: true }).firestore();
+            await assertSucceeds(db.collection('changelogs').doc('unpublished_post').get());
+        });
+
+        it('should DENY non-admins from creating changelogs', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+            await assertFails(db.collection('changelogs').add({ title: 'New Post', published: true }));
+        });
+
+        it('should allow admins to create changelogs', async () => {
+            const db = testEnv.authenticatedContext(adminId, { admin: true }).firestore();
+            await assertSucceeds(db.collection('changelogs').doc('new_post').set({ title: 'Admin Post', published: true }));
+        });
+
+        it('should DENY non-admins from updating changelogs', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+            await assertFails(db.collection('changelogs').doc('published_post').update({ title: 'Hacked' }));
+        });
+
+        it('should allow admins to update changelogs', async () => {
+            const db = testEnv.authenticatedContext(adminId, { admin: true }).firestore();
+            await assertSucceeds(db.collection('changelogs').doc('published_post').update({ title: 'Updated Title' }));
+        });
+
+        it('should DENY non-admins from deleting changelogs', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+            await assertFails(db.collection('changelogs').doc('published_post').delete());
+        });
+
+        it('should allow admins to delete changelogs', async () => {
+            const db = testEnv.authenticatedContext(adminId, { admin: true }).firestore();
+            await assertSucceeds(db.collection('changelogs').doc('published_post').delete());
+        });
+    });
 });

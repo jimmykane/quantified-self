@@ -109,7 +109,7 @@ vi.mock('./utils', () => ({
     isCorsAllowed: vi.fn().mockReturnValue(true),
     setAccessControlHeadersOnResponse: vi.fn(),
     getUserIDFromFirebaseToken: vi.fn().mockResolvedValue('testUserID'),
-    isProUser: vi.fn().mockResolvedValue(true),
+    hasProAccess: vi.fn().mockResolvedValue(true),
     PRO_REQUIRED_MESSAGE: 'Service sync is a Pro feature.'
 }));
 

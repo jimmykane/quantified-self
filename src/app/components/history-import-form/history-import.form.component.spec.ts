@@ -1,3 +1,4 @@
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HistoryImportFormComponent } from './history-import.form.component';
 import { MatDatepickerModule } from '@angular/material/datepicker';
@@ -15,6 +16,10 @@ import { AppEventService } from '../../services/app.event.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { LoggerService } from '../../services/logger.service';
+import { AppAuthService } from '../../authentication/app.auth.service';
+import { APP_STORAGE } from '../../services/storage/app.storage.token';
+import { Firestore } from '@angular/fire/firestore';
+import { of } from 'rxjs';
 import { ServiceNames, UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { Component, Input, NO_ERRORS_SCHEMA } from '@angular/core';
@@ -41,19 +46,26 @@ describe('HistoryImportFormComponent', () => {
     let mockUserService: any;
     let mockAnalyticsService: any;
     let mockLoggerService: any;
+    let mockAuthService: any;
     let snackBar: MatSnackBar;
 
     beforeEach(async () => {
         mockEventService = {};
         mockUserService = {
             isPro: vi.fn().mockResolvedValue(true),
-            importServiceHistoryForCurrentUser: vi.fn().mockResolvedValue(true)
+            importServiceHistoryForCurrentUser: vi.fn().mockResolvedValue(true),
+            user$: of({ uid: '123' }),
+            hasPaidAccessSignal: vi.fn(() => true)
         };
         mockAnalyticsService = {
             logEvent: vi.fn()
         };
         mockLoggerService = {
             error: vi.fn()
+        };
+        mockAuthService = {
+            getUser: vi.fn().mockResolvedValue({ stripeRole: 'pro' }),
+            user$: of({ uid: '123' })
         };
 
         await TestBed.configureTestingModule({
@@ -78,7 +90,10 @@ describe('HistoryImportFormComponent', () => {
                 { provide: AppEventService, useValue: mockEventService },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppAnalyticsService, useValue: mockAnalyticsService },
-                { provide: LoggerService, useValue: mockLoggerService }
+                { provide: LoggerService, useValue: mockLoggerService },
+                { provide: AppAuthService, useValue: mockAuthService },
+                { provide: Firestore, useValue: {} },
+                { provide: APP_STORAGE, useValue: localStorage },
             ]
         }).compileComponents();
 
@@ -95,6 +110,10 @@ describe('HistoryImportFormComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should have correct processing capacity constant', () => {
+        expect(component.processingCapacityPerDay).toBe(5000);
     });
 
     it('should calculate cooldownDays correctly', () => {
@@ -207,11 +226,13 @@ describe('HistoryImportFormComponent', () => {
             await component.onSubmit(mockEvent);
 
             expect(component.pendingImportResult()).toEqual(mockStats);
-            expect(snackBar.open).toHaveBeenCalledWith(
-                `History import queued: ${mockStats.successCount} activities found.`,
-                undefined,
-                { duration: 3000 }
-            );
+            // We now check for the verbal estimation
+            // 150 / 24000 = very small fraction of a day -> very soon
+            expect(component.estimatedCompletionVerbal).toContain('Should be done very soon! 🚀');
+
+            // Should also display the capacity
+            const compiled = fixture.nativeElement;
+            expect(compiled.textContent).toContain('5,000 / day capacity');
         });
 
         it('should show "No new activities" snackbar when successCount is 0', async () => {

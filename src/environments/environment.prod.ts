@@ -20,4 +20,5 @@ export const environment = {
     recaptchaSiteKey: '6Lfi_EwsAAAAACWwUUff0cd4E-92EJnXEwFuOSzz'
   },
   googleMapsMapId: '1192252b0032f7559388bd8a',
+  mapboxAccessToken: 'pk.eyJ1IjoiamltbXlrYW5lIiwiYSI6ImNta3Y2bXZrdjAyZWozZHBja2hsd3kxbmYifQ.LMMjdYEmiiKr7CtIQT66uQ',
 };

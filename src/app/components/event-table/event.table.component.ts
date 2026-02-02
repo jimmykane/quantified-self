@@ -32,6 +32,7 @@ import { rowsAnimation, expandCollapse } from '../../animations/animations';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
 import { AppUserService } from '../../services/app.user.service';
+import { AppUserUtilities } from '../../utils/app.user.utilities';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
@@ -70,7 +71,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   data: MatTableDataSource<any> = new MatTableDataSource<StatRowElement>();
   selection = new SelectionModel(true, []);
 
-  selectedColumns = AppUserService.getDefaultSelectedTableColumns();
+  selectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
 
   public show = true
 
@@ -110,7 +111,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.processChanges();
     }
     if (this.user && simpleChanges.user) {
-      this.selectedColumns = this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserService.getDefaultSelectedTableColumns();
+      this.selectedColumns = this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns();
       this.paginator?._changePageSize(this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 10);
     }
   }
@@ -472,7 +473,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       ...(this.selectedColumns || [])
         .filter(column => column !== 'Description')
         .sort(function (a, b) {
-          const defaultColumns = AppUserService.getDefaultSelectedTableColumns();
+          const defaultColumns = AppUserUtilities.getDefaultSelectedTableColumns();
           return defaultColumns.indexOf(a) - defaultColumns.indexOf(b);
         }),
       'Description',
@@ -583,6 +584,18 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         event.getActivityTypesAsArray().length > 1 ? ActivityTypes.Multisport : ActivityTypes[event.getActivityTypesAsArray()[0] as keyof typeof ActivityTypes]
       );
       statRowElement['Event'] = event;
+
+      const activityTypes = event.getActivityTypesAsArray();
+
+      statRowElement.isAscentExcluded = activityTypes.some(type =>
+        AppEventUtilities.shouldExcludeAscent(type as ActivityTypes) ||
+        (this.user.settings.summariesSettings?.removeAscentForEventTypes || []).includes(type as any)
+      );
+
+      statRowElement.isDescentExcluded = activityTypes.some(type =>
+        AppEventUtilities.shouldExcludeDescent(type as ActivityTypes) ||
+        ((this.user.settings.summariesSettings as any)?.removeDescentForEventTypes || []).includes(type as any)
+      );
 
       // Add the sorts
       statRowElement['sort.Start Date'] = event.startDate.getTime();

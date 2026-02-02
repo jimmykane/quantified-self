@@ -152,6 +152,8 @@ export interface StatRowElement {
   'Merged Event': boolean,
   'Actions': boolean,
   Description?: string,
+  isAscentExcluded?: boolean,
+  isDescentExcluded?: boolean,
   RPE?: RPEBorgCR10SCale,
   Feeling?: Feelings,
   // And their sortable data

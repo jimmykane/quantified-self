@@ -1,0 +1,49 @@
+<!-- Shared Templates -->
+<ng-template #statusDot>
+    <span *ngIf="isUnread()" class="unread-dot" matTooltip="Unread"></span>
+</ng-template>
+
+<ng-template #metadata let-includeDate="includeDate">
+    <span *ngIf="includeDate" class="header-date">{{ post().date.toDate() | date:'mediumDate' }}</span>
+    <span *ngIf="post().version" class="version-tag">{{ post().version }}</span>
+    <span class="unpublished-tag" *ngIf="!post().published">Draft</span>
+</ng-template>
+
+<!-- COMPACT MODE: Cards (Dialog) -->
+<mat-card *ngIf="displayMode() === 'compact'" class="changelog-card" (click)="onCardClick()">
+    <mat-card-header>
+        <div class="header-line">
+            <div class="header-left">
+                <ng-container *ngTemplateOutlet="statusDot"></ng-container>
+                <span class="post-title">{{ post().title }}</span>
+                <span class="header-separator">-</span>
+                <span class="header-date">{{ post().date.toDate() | date:'mediumDate' }}</span>
+            </div>
+            <div class="header-right">
+                <ng-container *ngTemplateOutlet="metadata; context: { includeDate: false }"></ng-container>
+            </div>
+        </div>
+    </mat-card-header>
+</mat-card>
+
+<!-- FULL MODE: Expansion Panels (Releases Page) -->
+<mat-expansion-panel *ngIf="displayMode() === 'full'" [expanded]="expanded()" class="changelog-panel">
+    <mat-expansion-panel-header>
+        <mat-panel-title>
+            <div class="header-left">
+                <ng-container *ngTemplateOutlet="statusDot"></ng-container>
+                <span class="post-title">{{ post().title }}</span>
+            </div>
+        </mat-panel-title>
+        <mat-panel-description>
+            <div class="header-right">
+                <ng-container *ngTemplateOutlet="metadata; context: { includeDate: true }"></ng-container>
+            </div>
+        </mat-panel-description>
+    </mat-expansion-panel-header>
+
+    <div class="panel-content">
+        <img *ngIf="post().image" [src]="post().image" alt="Update image" class="expandable-image">
+        <div class="description" [innerHTML]="post().description | markdown | async"></div>
+    </div>
+</mat-expansion-panel>

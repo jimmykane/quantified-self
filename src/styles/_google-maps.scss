@@ -1,0 +1,53 @@
+/* ==========================================================================
+   Google Maps Global Overrides
+   "Nuclear" Option to strip default Google styling and allow custom 
+   glassmorphism cards to control the presentation.
+   ========================================================================== */
+
+/* Hide default Google Maps InfoWindow container */
+.gm-style-iw-c {
+    background-color: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+
+/* Hide the little triangle pointer */
+.gm-style-iw-tc::after {
+    display: none !important;
+}
+
+/* Hide the scroll container background */
+.gm-style-iw-d {
+    overflow: hidden !important;
+    background-color: transparent !important;
+}
+
+/* Hide the default Google Maps close button (we implement our own) */
+.gm-ui-hover-effect {
+    display: none !important;
+}
+
+/* Global Glassmorphism Card Style */
+.glass-card {
+    background: var(--mat-sys-surface) !important;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--mat-app-outline-variant);
+    border-radius: 20px !important;
+    /* Force border radius */
+    box-shadow:
+        0 4px 6px -1px rgba(0, 0, 0, 0.05),
+        0 2px 4px -1px rgba(0, 0, 0, 0.03),
+        0 10px 15px -3px rgba(0, 0, 0, 0.05) !important;
+    /* Override material elevation */
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Dark Theme Overrides for Glass Card */
+.dark-theme {
+    .glass-card {
+        /* Background handled by variable */
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2) !important;
+    }
+}

@@ -25,6 +25,7 @@ import { config } from './config';
 import { getTokenData } from './tokens';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { COROSAPIEventMetaData, SuuntoAppEventMetaData, ActivityParsingOptions } from '@sports-alliance/sports-lib';
+import { uploadDebugFile } from './debug-utils';
 
 
 
@@ -256,8 +257,16 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName);
     } catch (e: any) {
-      logger.error(e);
-      logger.error(new Error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`));
+      const statusCode = e.statusCode || (e.output && e.output.statusCode);
+      const errorDescription = e.message || (e.error && (e.error.error_description || e.error.error));
+      const isTransientError = statusCode === 500 || statusCode === 502 || (statusCode === 406 && String(errorDescription).toLowerCase().includes('json compatible'));
+
+      if (isTransientError) {
+        logger.warn(`Refreshing token failed with transient error (${statusCode}), skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
+      } else {
+        logger.error(e);
+        logger.error(new Error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`));
+      }
       continue;
     }
 
@@ -357,6 +366,11 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
         logger.error(new Error(`FIT file for ${queueItem.id} contains no activities. Aborting retries.`));
         await moveToDeadLetterQueue(queueItem, e, bulkWriter, 'EVENT_EMPTY_ERROR');
         return QueueResult.MovedToDLQ;
+      }
+
+      // Attempt to upload debug file
+      if (result) {
+        await uploadDebugFile(result, 'fit', queueItem.id, serviceName, parentID);
       }
 
       logger.error(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${serviceToken.openId || serviceToken.userName} to ${queueItem.retryCount + 1} due to ${e.message}`));

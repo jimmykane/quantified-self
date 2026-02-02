@@ -1,15 +1,10 @@
-<button [ngStyle]="{'color': iconColor}" mat-icon-button [matMenuTriggerFor]="menu"
+<button mat-icon-button [matMenuTriggerFor]="menu"
   (click)="$event.preventDefault(); $event.stopPropagation(); fixDisappearIOSBug();">
   <mat-icon>more_vert</mat-icon>
 </button>
-<mat-menu #menu="matMenu">
-  @if (user.settings.dashboardSettings.tiles.length <= 11) { <section class="first">
-    <button mat-menu-item class="big" (click)="addNewTile($event)">
-      <mat-icon>add</mat-icon>
-      <span>Add new</span>
-      <mat-icon class="toolTip" matTooltip="This will copy the current tile and create a new one">info</mat-icon>
-    </button>
-    </section>
+<mat-menu #menu="matMenu" class="qs-config-menu">
+  @if (user.settings.dashboardSettings.tiles.length <= 11) { <app-tile-actions-header (add)="addNewTile($event)">
+    </app-tile-actions-header>
     }
     <section mat-menu-item>
       <mat-form-field>
@@ -109,10 +104,6 @@
 
 
     @if (user.settings.dashboardSettings.tiles.length > 1) {
-    <section>
-      <button class="big" mat-menu-item (click)="deleteTile($event)">
-        <mat-icon>delete_outline</mat-icon>
-      </button>
-    </section>
+    <app-tile-actions-footer (delete)="deleteTile($event)"></app-tile-actions-footer>
     }
 </mat-menu>

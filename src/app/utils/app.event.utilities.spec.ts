@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AppEventUtilities } from './app.event.utilities';
 import { LoggerService } from '../services/logger.service';
 import { TestBed } from '@angular/core/testing';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 
 describe('AppEventUtilities', () => {
     let mockActivity: any;
@@ -105,6 +106,58 @@ describe('AppEventUtilities', () => {
                 // Should not throw
                 expect(() => service.enrich(mockActivity, ['Duration'])).not.toThrow();
                 expect(loggerMock.error).toHaveBeenCalled();
+            });
+        });
+    });
+
+    describe('Exclusion Logic', () => {
+        describe('shouldExcludeAscent', () => {
+            it('should return true for AlpineSki', () => {
+                expect(AppEventUtilities.shouldExcludeAscent(ActivityTypes.AlpineSki)).toBe(true);
+            });
+
+            it('should return true for Snowboard', () => {
+                expect(AppEventUtilities.shouldExcludeAscent(ActivityTypes.Snowboard)).toBe(true);
+            });
+
+            it('should return false for Running', () => {
+                expect(AppEventUtilities.shouldExcludeAscent(ActivityTypes.Running)).toBe(false);
+            });
+
+            it('should return true for Swimming', () => {
+                expect(AppEventUtilities.shouldExcludeAscent(ActivityTypes.Swimming)).toBe(true);
+            });
+
+            it('should return true for an array containing only excluded types', () => {
+                expect(AppEventUtilities.shouldExcludeAscent([ActivityTypes.AlpineSki, ActivityTypes.Snowboard])).toBe(true);
+            });
+
+            it('should return false for an array containing a mix of types (bailout if ANY should NOT be excluded)', () => {
+                // The utility uses .every(), so if one is false, the whole thing is false.
+                // This is correct because if a merged event has Running and AlpineSki, we probably want to see the total ascent.
+                expect(AppEventUtilities.shouldExcludeAscent([ActivityTypes.Running, ActivityTypes.AlpineSki])).toBe(false);
+            });
+        });
+
+        describe('shouldExcludeDescent', () => {
+            it('should return false for AlpineSki (descent is usually the objective)', () => {
+                expect(AppEventUtilities.shouldExcludeDescent(ActivityTypes.AlpineSki)).toBe(false);
+            });
+
+            it('should return false for Running', () => {
+                expect(AppEventUtilities.shouldExcludeDescent(ActivityTypes.Running)).toBe(false);
+            });
+
+            it('should return true for Swimming', () => {
+                expect(AppEventUtilities.shouldExcludeDescent(ActivityTypes.Swimming)).toBe(true);
+            });
+
+            it('should return true for swimming_lap_swimming', () => {
+                expect(AppEventUtilities.shouldExcludeDescent(ActivityTypes['swimming_lap_swimming'])).toBe(true);
+            });
+
+            it('should return true for an array containing only swimming types', () => {
+                expect(AppEventUtilities.shouldExcludeDescent([ActivityTypes.Swimming, ActivityTypes['swimming_lap_swimming']])).toBe(true);
             });
         });
     });

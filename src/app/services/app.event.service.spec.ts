@@ -11,6 +11,19 @@ import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
 import { of } from 'rxjs';
+import { AppCacheService } from './app.cache.service';
+import { getMetadata } from '@angular/fire/storage';
+import { webcrypto } from 'node:crypto';
+
+// Polyfill crypto for JSDOM environment
+if (!globalThis.crypto || !globalThis.crypto.subtle) {
+    Object.defineProperty(globalThis, 'crypto', {
+        value: webcrypto,
+        configurable: true,
+        enumerable: true,
+        writable: true
+    });
+}
 
 // Hoist mocks
 const mocks = vi.hoisted(() => {
@@ -20,6 +33,7 @@ const mocks = vi.hoisted(() => {
         getActivityFromJSON: vi.fn(),
         sanitize: vi.fn(),
         getCountFromServer: vi.fn(),
+        getBytes: vi.fn(),
     };
 });
 
@@ -37,6 +51,19 @@ vi.mock('@angular/fire/firestore', async (importOriginal) => {
         deleteDoc: vi.fn(),
         setDoc: vi.fn(),
         getCountFromServer: mocks.getCountFromServer,
+        runInInjectionContext: vi.fn((injector, fn) => fn()),
+    };
+});
+
+// Mock @angular/fire/storage
+vi.mock('@angular/fire/storage', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@angular/fire/storage')>();
+    return {
+        ...actual,
+        ref: vi.fn(),
+        getBytes: mocks.getBytes,
+        uploadBytes: vi.fn(),
+        getMetadata: vi.fn(),
         runInInjectionContext: vi.fn((injector, fn) => fn()),
     };
 });
@@ -90,6 +117,11 @@ describe('AppEventService', () => {
     const originalCompressionStream = globalThis.CompressionStream;
     const originalResponse = globalThis.Response;
 
+    const mockCacheService = {
+        getFile: vi.fn(),
+        setFile: vi.fn()
+    };
+
     beforeEach(() => {
         TestBed.configureTestingModule({
             providers: [
@@ -102,7 +134,10 @@ describe('AppEventService', () => {
                 { provide: LoggerService, useValue: mockLogger },
                 { provide: AppFileService, useValue: mockFileService },
                 { provide: BrowserCompatibilityService, useValue: mockCompatibility },
-                { provide: AppEventUtilities, useValue: { enrich: vi.fn() } }
+                { provide: AppFileService, useValue: mockFileService },
+                { provide: BrowserCompatibilityService, useValue: mockCompatibility },
+                { provide: AppEventUtilities, useValue: { enrich: vi.fn() } },
+                { provide: AppCacheService, useValue: mockCacheService }
             ]
         });
         service = TestBed.inject(AppEventService);
@@ -223,6 +258,106 @@ describe('AppEventService', () => {
         expect(mocks.writeAllEventData).toHaveBeenCalled();
     });
 
+    describe('ID generation with zero bucketing', () => {
+        it('should call generateEventID with thresholdMs=0 for frontend uploads', async () => {
+            // Mock generateEventID to track calls
+            const { generateEventID } = await import('../../../functions/src/shared/id-generator');
+            const generateEventIDSpy = vi.spyOn(await import('../../../functions/src/shared/id-generator'), 'generateEventID');
+            generateEventIDSpy.mockResolvedValue('mock-event-id');
+
+            const mockEvent = {
+                getID: () => null, // No ID yet - should trigger generation
+                startDate: new Date('2025-12-28T12:00:00.000Z'),
+                getActivities: () => [],
+                setID: vi.fn()
+            } as any;
+            const user = { uid: 'user1' } as any;
+
+            await service.writeAllEventData(user, mockEvent);
+
+            expect(generateEventIDSpy).toHaveBeenCalledWith('user1', mockEvent.startDate, 0);
+            expect(mockEvent.setID).toHaveBeenCalledWith('mock-event-id');
+
+            generateEventIDSpy.mockRestore();
+        });
+
+        it('should generate unique IDs for events with same startDate (no bucketing)', async () => {
+            const { generateEventID } = await import('../../../functions/src/shared/id-generator');
+
+            // Same timestamp, different milliseconds shouldn't matter with threshold=0
+            const date1 = new Date('2025-12-28T12:00:00.000Z');
+            const date2 = new Date('2025-12-28T12:00:00.001Z'); // 1ms later
+
+            const id1 = await generateEventID('user1', date1, 0);
+            const id2 = await generateEventID('user1', date2, 0);
+
+            expect(id1).not.toBe(id2);
+        });
+
+        it('should skip ID generation if event already has ID', async () => {
+            const generateEventIDSpy = vi.spyOn(await import('../../../functions/src/shared/id-generator'), 'generateEventID');
+            const mockEvent = {
+                getID: () => 'existing-id', // Already has ID
+                startDate: new Date(),
+                getActivities: () => [],
+                setID: vi.fn()
+            } as any;
+            const user = { uid: 'user1' } as any;
+
+            await service.writeAllEventData(user, mockEvent);
+
+            expect(generateEventIDSpy).not.toHaveBeenCalled();
+            expect(mockEvent.setID).not.toHaveBeenCalled();
+
+            generateEventIDSpy.mockRestore();
+        });
+    });
+
+    describe('Upload Limit Enforcement', () => {
+        it('should bypass limit check if grace period is active', async () => {
+            const mockEvent = {
+                getID: () => '1',
+                startDate: new Date(),
+                getActivities: () => [],
+                setID: vi.fn(),
+                toJSON: () => ({})
+            } as any;
+            const user = { uid: 'user1', gracePeriodUntil: Date.now() + 100000 } as any;
+
+            // Mock userService to return non-pro
+            mockUser.isPro.mockResolvedValue(false);
+            mockUser.getSubscriptionRole.mockResolvedValue('free');
+
+            // Mock count to be over limit
+            mocks.getCountFromServer.mockResolvedValue({ data: () => ({ count: 15 }) });
+
+            await service.writeAllEventData(user, mockEvent);
+
+            expect(mocks.writeAllEventData).toHaveBeenCalled();
+            // Should NOT have thrown an error
+        });
+
+        it('should throw error if NOT pro, NOT in grace period, and OVER limit', async () => {
+            const mockEvent = {
+                getID: () => '1',
+                startDate: new Date(),
+                getActivities: () => [],
+                setID: vi.fn(),
+                toJSON: () => ({})
+            } as any;
+            const user = { uid: 'user1' } as any;
+
+            // Mock userService to return non-pro
+            mockUser.isPro.mockResolvedValue(false);
+            mockUser.getSubscriptionRole.mockResolvedValue('free');
+
+            // Mock count to be over limit
+            mocks.getCountFromServer.mockResolvedValue({ data: () => ({ count: 15 }) });
+
+            await expect(service.writeAllEventData(user, mockEvent)).rejects.toThrow(/Upload limit reached/);
+        });
+    });
+
     // Note: Testing compressed file size rejection would require complex mocking
     // of the Response/CompressionStream chain. The size check is verified to work
     // by the implementation in app.event.service.ts lines 347-350.
@@ -265,8 +400,221 @@ describe('AppEventService', () => {
         await expect(service.writeAllEventData({ uid: 'user1' } as any, mockEvent, originalFiles))
             .resolves.not.toThrow();
     });
-    // Note: SML is added to textExtensions in the service code.
-    // This is verified by the existing "should skip compression if browser not supported" test
-    // which uses a GPX file - the same code path applies to SML since they're in the same
-    // textExtensions array.
+    // ... existing tests ...
+
+    describe('downloadFile', () => {
+        const testPath = 'test/path/file.json';
+        const testBuffer = new ArrayBuffer(8);
+        const testGeneration = '12345';
+
+        beforeEach(() => {
+            // Default mocks
+            vi.mocked(getMetadata).mockResolvedValue({ generation: testGeneration } as any);
+            vi.mocked(mocks.getBytes).mockResolvedValue(testBuffer);
+            // @ts-ignore
+            service.fileService.decompressIfNeeded = vi.fn().mockResolvedValue(testBuffer);
+        });
+
+        it('should return cached file if generation matches (Cache Hit)', async () => {
+            mockCacheService.getFile.mockResolvedValue({ buffer: testBuffer, generation: testGeneration });
+
+            const result = await service.downloadFile(testPath);
+
+            expect(getMetadata).toHaveBeenCalled();
+            expect(mockCacheService.getFile).toHaveBeenCalledWith(testPath);
+            expect(mocks.getBytes).not.toHaveBeenCalled(); // Should NOT download
+            expect(result).toBe(testBuffer);
+        });
+
+        it('should download and cache file if cache is empty (Cache Miss)', async () => {
+            mockCacheService.getFile.mockResolvedValue(undefined);
+
+            const result = await service.downloadFile(testPath);
+
+            expect(getMetadata).toHaveBeenCalled();
+            expect(mockCacheService.getFile).toHaveBeenCalledWith(testPath);
+            expect(mocks.getBytes).toHaveBeenCalled(); // Should download
+            expect(mockCacheService.setFile).toHaveBeenCalledWith(testPath, { buffer: testBuffer, generation: testGeneration });
+            expect(result).toBe(testBuffer);
+        });
+
+        it('should download and cache file if generation does not match (Cache Stale)', async () => {
+            const staleGeneration = '00000';
+            mockCacheService.getFile.mockResolvedValue({ buffer: testBuffer, generation: staleGeneration });
+
+            const result = await service.downloadFile(testPath);
+
+            expect(getMetadata).toHaveBeenCalled();
+            expect(mockCacheService.getFile).toHaveBeenCalledWith(testPath);
+            expect(mocks.getBytes).toHaveBeenCalled(); // Should download
+            expect(mockCacheService.setFile).toHaveBeenCalledWith(testPath, { buffer: testBuffer, generation: testGeneration });
+            expect(result).toBe(testBuffer);
+        });
+
+        it('should fallback to download if metadata fetch fails', async () => {
+            vi.mocked(getMetadata).mockRejectedValue(new Error('Metadata Error'));
+
+            const result = await service.downloadFile(testPath);
+
+            expect(getMetadata).toHaveBeenCalled();
+            expect(mocks.getBytes).toHaveBeenCalled(); // Fallback download
+            expect(mockCacheService.setFile).not.toHaveBeenCalled(); // Should skip caching on error
+            expect(result).toBe(testBuffer);
+        });
+
+        it('should fallback to download if cache get fails', async () => {
+            vi.mocked(getMetadata).mockResolvedValue({ generation: testGeneration } as any);
+            mockCacheService.getFile.mockRejectedValue(new Error('Cache Error'));
+
+            const result = await service.downloadFile(testPath);
+
+            expect(mocks.getBytes).toHaveBeenCalled();
+            expect(result).toBe(testBuffer);
+        });
+    });
+
+    describe('activity ID transfer', () => {
+        it('should transfer activity IDs from existing activities during client-side parsing (Single File)', async () => {
+            const activityId = 'act1';
+
+            // Mock activities from Firestore
+            const mockActivity = {
+                getID: vi.fn().mockReturnValue(activityId),
+                setID: vi.fn().mockReturnThis(),
+            } as any;
+
+            const mockEvent = {
+                getActivities: vi.fn().mockReturnValue([mockActivity]),
+                originalFile: { path: 'path/to/file.fit' },
+                getID: vi.fn().mockReturnValue('event1')
+            } as any;
+
+            // Mock re-parsed activity (without ID)
+            const parsedActivity = {
+                getID: vi.fn().mockReturnValue(null),
+                setID: vi.fn().mockReturnThis(),
+            } as any;
+            const parsedEvent = {
+                getActivities: vi.fn().mockReturnValue([parsedActivity]),
+            } as any;
+
+            // Mock fetchAndParseOneFile helper
+            vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue(parsedEvent);
+
+            // Call calculateStreamsFromWithOrchestration
+            const result = await (service as any).calculateStreamsFromWithOrchestration(mockEvent);
+
+            expect(result).toBe(parsedEvent);
+            expect(parsedActivity.setID).toHaveBeenCalledWith(activityId);
+        });
+
+        it('should transfer activity IDs in merged events scenario (Multiple Files)', async () => {
+            // Firestore activities
+            const mockActivity1 = { getID: () => 'act1' } as any;
+            const mockActivity2 = { getID: () => 'act2' } as any;
+
+            const mockEvent = {
+                getID: () => 'event1',
+                getActivities: () => [mockActivity1, mockActivity2],
+                originalFiles: [{ path: 'f1.fit' }, { path: 'f2.fit' }]
+            } as any;
+
+            // Mock re-parsed activities (without IDs)
+            const parsedActivity1 = {
+                getID: vi.fn().mockReturnValue(null),
+                setID: vi.fn().mockReturnThis(),
+            } as any;
+            const parsedActivity2 = {
+                getID: vi.fn().mockReturnValue(null),
+                setID: vi.fn().mockReturnThis(),
+            } as any;
+
+            const parsedEvent1 = { getActivities: () => [parsedActivity1] } as any;
+            const parsedEvent2 = { getActivities: () => [parsedActivity2] } as any;
+
+            vi.spyOn(service as any, 'fetchAndParseOneFile')
+                .mockResolvedValueOnce(parsedEvent1)
+                .mockResolvedValueOnce(parsedEvent2);
+
+            // Mock EventUtilities.mergeEvents
+            const mergedEvent = {
+                getActivities: () => [parsedActivity1, parsedActivity2]
+            } as any;
+
+            const { EventUtilities } = await import('@sports-alliance/sports-lib');
+            vi.spyOn(EventUtilities, 'mergeEvents').mockReturnValue(mergedEvent);
+
+            // Call calculateStreamsFromWithOrchestration
+            const result = await (service as any).calculateStreamsFromWithOrchestration(mockEvent);
+
+            expect(result).toBe(mergedEvent);
+            expect(parsedActivity1.setID).toHaveBeenCalledWith('act1');
+            expect(parsedActivity2.setID).toHaveBeenCalledWith('act2');
+        });
+
+        it('should handle mismatched activity counts gracefully (More parsed than Firestore)', async () => {
+            const mockActivity1 = { getID: () => 'act1' } as any;
+            const mockEvent = {
+                getActivities: () => [mockActivity1],
+                originalFile: { path: 'path/to/file.fit' },
+                getID: () => 'event1'
+            } as any;
+
+            const parsedActivity1 = { getID: () => null, setID: vi.fn().mockReturnThis() } as any;
+            const parsedActivity2 = { getID: () => null, setID: vi.fn().mockReturnThis() } as any;
+            const parsedEvent = {
+                getActivities: () => [parsedActivity1, parsedActivity2],
+            } as any;
+
+            vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue(parsedEvent);
+
+            const result = await (service as any).calculateStreamsFromWithOrchestration(mockEvent);
+
+            expect(result).toBe(parsedEvent);
+            expect(parsedActivity1.setID).toHaveBeenCalledWith('act1');
+            expect(parsedActivity2.setID).not.toHaveBeenCalled(); // No corresponding Firestore activity
+        });
+
+        it('should handle mismatched activity counts gracefully (Fewer parsed than Firestore)', async () => {
+            const mockActivity1 = { getID: () => 'act1' } as any;
+            const mockActivity2 = { getID: () => 'act2' } as any;
+            const mockEvent = {
+                getActivities: () => [mockActivity1, mockActivity2],
+                originalFile: { path: 'path/to/file.fit' },
+                getID: () => 'event1'
+            } as any;
+
+            const parsedActivity1 = { getID: () => null, setID: vi.fn().mockReturnThis() } as any;
+            const parsedEvent = {
+                getActivities: () => [parsedActivity1],
+            } as any;
+
+            vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue(parsedEvent);
+
+            const result = await (service as any).calculateStreamsFromWithOrchestration(mockEvent);
+
+            expect(result).toBe(parsedEvent);
+            expect(parsedActivity1.setID).toHaveBeenCalledWith('act1');
+        });
+
+        it('should not crash if Firestore has no activities', async () => {
+            const mockEvent = {
+                getActivities: () => [],
+                originalFile: { path: 'path/to/file.fit' },
+                getID: () => 'event1'
+            } as any;
+
+            const parsedActivity1 = { getID: () => null, setID: vi.fn().mockReturnThis() } as any;
+            const parsedEvent = {
+                getActivities: () => [parsedActivity1],
+            } as any;
+
+            vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue(parsedEvent);
+
+            const result = await (service as any).calculateStreamsFromWithOrchestration(mockEvent);
+
+            expect(result).toBe(parsedEvent);
+            expect(parsedActivity1.setID).not.toHaveBeenCalled();
+        });
+    });
 });

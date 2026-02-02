@@ -20,14 +20,14 @@ vi.mock('../request-helper', () => ({
 }));
 
 const utilsMocks = {
-    isProUser: vi.fn(),
+    hasProAccess: vi.fn(),
 };
 
 vi.mock('../utils', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../utils')>();
     return {
         ...actual,
-        isProUser: (...args: any[]) => utilsMocks.isProUser(...args),
+        hasProAccess: (...args: any[]) => utilsMocks.hasProAccess(...args),
     };
 });
 
@@ -114,7 +114,7 @@ describe('importRouteToSuuntoApp', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         // Happy path defaults
-        utilsMocks.isProUser.mockResolvedValue(true);
+        utilsMocks.hasProAccess.mockResolvedValue(true);
         tokensMocks.getTokenData.mockResolvedValue({ accessToken: 'fake-access-token' });
     });
 
@@ -133,7 +133,7 @@ describe('importRouteToSuuntoApp', () => {
 
         const result = await importRouteToSuuntoApp(request as any);
 
-        expect(utilsMocks.isProUser).toHaveBeenCalledWith('test-user-id');
+        expect(utilsMocks.hasProAccess).toHaveBeenCalledWith('test-user-id');
         expect(requestMocks.post).toHaveBeenCalled();
 
         // Check args for post
@@ -180,7 +180,7 @@ describe('importRouteToSuuntoApp', () => {
     });
 
     it('should block non-pro user', async () => {
-        utilsMocks.isProUser.mockResolvedValue(false);
+        utilsMocks.hasProAccess.mockResolvedValue(false);
 
         const request = createMockRequest({
             data: { file: 'base64data' }
