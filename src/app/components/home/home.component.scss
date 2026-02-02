@@ -185,9 +185,9 @@
         border-radius: 999px;
         background-color: var(--mat-sys-surface-container-highest);
         color: var(--mat-sys-on-surface-variant);
-        font-size: 1.25rem;
+        font-size: 1.5rem;
         font-weight: 500;
-        margin-bottom: 2rem;
+        margin-bottom: 0rem;
         transition: transform 0.3s ease;
 
         &:hover {
@@ -195,8 +195,8 @@
         }
 
         .brand-logo {
-            width: 32px;
-            height: 32px;
+            width: 64px;
+            height: 64px;
         }
     }
 
@@ -695,7 +695,6 @@
         font-size: 56px;
         width: 56px;
         height: 56px;
-        color: var(--mat-sys-tertiary);
         margin-bottom: 1.5rem;
     }
 
