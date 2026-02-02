@@ -268,6 +268,7 @@ export async function getUserRoleAndGracePeriod(userID: string): Promise<{ role:
     const userRecord = await admin.auth().getUser(userID);
     const role = (userRecord.customClaims?.['stripeRole'] as string) || 'free';
     const gracePeriodUntil = userRecord.customClaims?.['gracePeriodUntil'] as number;
+    logger.info(`[getUserRoleAndGracePeriod] User: ${userID}, Role: ${role}, GracePeriodUntil: ${gracePeriodUntil}, Now: ${Date.now()}, Active: ${isGracePeriodActive(gracePeriodUntil)}`);
     return { role, gracePeriodUntil };
   } catch (e: any) {
     if (e.code === 'auth/user-not-found') {
@@ -365,7 +366,11 @@ export const PRO_REQUIRED_MESSAGE = 'Service sync is a Pro feature. Please upgra
  */
 export async function hasProAccess(userID: string): Promise<boolean> {
   const { role, gracePeriodUntil } = await getUserRoleAndGracePeriod(userID);
-  return role === 'pro' || isGracePeriodActive(gracePeriodUntil);
+  const hasAccess = role === 'pro' || isGracePeriodActive(gracePeriodUntil);
+  if (!hasAccess) {
+    logger.warn(`[hasProAccess] Access Denied. User: ${userID}, Role: ${role}, GracePeriodUntil: ${gracePeriodUntil}, Active: ${isGracePeriodActive(gracePeriodUntil)}`);
+  }
+  return hasAccess;
 }
 
 // Re-export Cloud Tasks utilities from shared module for backward compatibility
