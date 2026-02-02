@@ -424,6 +424,255 @@
     }
 }
 
+// 3.1 Hardware Analysis Section
+.analysis-section {
+    padding: 6rem 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+
+    .analysis-header {
+        text-align: center;
+        margin-bottom: 4rem;
+
+        .section-title {
+            margin-bottom: 1rem;
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+
+        .section-subtitle {
+            font-size: 1.25rem;
+            color: var(--mat-sys-on-surface-variant);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+    }
+
+    .analysis-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+        gap: 2.5rem;
+
+        @include bp.xsmall {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .analysis-card {
+        @include glass-interactive-card;
+        padding: 0; // Reset for internal structure
+        overflow: hidden;
+
+        mat-card-header {
+            padding: 24px 24px 16px;
+        }
+
+        mat-card-content {
+            padding: 0 24px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .analysis-icon-container {
+            @include icon-container-base;
+            background-color: var(--mat-sys-secondary-container);
+            color: var(--mat-sys-on-secondary-container);
+        }
+
+        .visual-box {
+            height: 320px;
+            background: var(--mat-sys-surface-container-highest);
+            border-radius: 16px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--mat-sys-outline-variant);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            &.map-preview {
+                padding: 0;
+            }
+        }
+
+        // Chart Visuals
+        .chart-svg {
+            width: 100%;
+            height: 100%;
+            color: var(--mat-sys-outline-variant);
+
+            .active-path {
+                fill: none;
+                stroke: var(--mat-sys-primary);
+                stroke-width: 4;
+                stroke-linecap: round;
+                filter: drop-shadow(0 0 8px rgba(255, 152, 0, 0.4)); // Fallback to primary orange glow
+            }
+
+            .ghost-path {
+                fill: none;
+                stroke: var(--mat-sys-secondary);
+                stroke-width: 3;
+                stroke-dasharray: 8, 4;
+                opacity: 0.3;
+            }
+
+            .hardware-label {
+                rect {
+                    fill: var(--mat-sys-surface-container-high);
+                    stroke: var(--mat-sys-outline-variant);
+                    stroke-width: 1;
+                }
+
+                text {
+                    fill: var(--mat-sys-on-surface);
+                    font-size: 10px;
+                    font-weight: 700;
+                    font-family: 'JetBrains Mono', monospace;
+                }
+
+                &.primary rect {
+                    fill: var(--mat-sys-primary);
+                    stroke: none;
+                }
+
+                &.primary text {
+                    fill: var(--mat-sys-on-primary);
+                }
+            }
+        }
+
+        // Map Visuals
+        .map-tile-bg {
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(var(--mat-sys-outline-variant) 1px, transparent 1px),
+                linear-gradient(90deg, var(--mat-sys-outline-variant) 1px, transparent 1px);
+            background-size: 30px 30px;
+            opacity: 0.1;
+        }
+
+        .map-svg {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            z-index: 2;
+            overflow: visible; // Allow glow to bleed out slightly
+
+            .track-active {
+                fill: none;
+                stroke: var(--mat-sys-primary);
+                stroke-width: 5;
+                stroke-linecap: round;
+                filter: drop-shadow(0 0 10px rgba(255, 152, 0, 0.5));
+            }
+
+            .track-ghost {
+                fill: none;
+                stroke: var(--mat-sys-secondary);
+                stroke-width: 4;
+                stroke-linecap: round;
+                opacity: 0.3;
+                stroke-dasharray: 6, 2;
+            }
+
+            .marker.start {
+                fill: #4CAF50;
+                filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.3));
+            }
+
+            .accuracy-callout {
+                rect {
+                    fill: var(--mat-sys-surface-container-highest);
+                    stroke: var(--mat-sys-secondary);
+                    stroke-width: 1;
+                }
+
+                text {
+                    fill: var(--mat-sys-secondary);
+                    font-size: 11px;
+                    font-weight: 800;
+                    font-family: 'JetBrains Mono', monospace;
+                }
+            }
+        }
+
+        .scale-bar {
+            position: absolute;
+            bottom: 16px;
+            right: 16px;
+            width: 60px;
+            height: 2px;
+            background: var(--mat-sys-on-surface);
+            opacity: 0.2;
+            z-index: 3;
+
+            &::before,
+            &::after {
+                content: '';
+                position: absolute;
+                height: 4px;
+                width: 2px;
+                background: currentColor;
+                top: -1px;
+            }
+
+            &::after {
+                right: 0;
+            }
+        }
+
+        .scale-label {
+            position: absolute;
+            bottom: 22px;
+            right: 16px;
+            font-size: 8px;
+            opacity: 0.4;
+            letter-spacing: 1px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .stat-preview {
+            display: flex;
+            gap: 1.5rem;
+            padding: 1rem;
+            background: var(--mat-sys-surface-container-low);
+            border-radius: 12px;
+            border: 1px solid var(--mat-sys-outline-variant);
+
+            .stat-item {
+                display: flex;
+                flex-direction: column;
+                gap: 0.25rem;
+            }
+
+            .stat-label {
+                font-size: 10px;
+                color: var(--mat-sys-on-surface-variant);
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                font-weight: 600;
+            }
+
+            .stat-value {
+                font-size: 1.1rem;
+                font-weight: 700;
+                font-family: 'JetBrains Mono', monospace;
+
+                &.success {
+                    color: #4CAF50;
+                }
+
+                &.warning {
+                    color: var(--mat-sys-primary);
+                }
+            }
+        }
+    }
+}
+
 // 3.5 Footprint Section
 .footprint-section {
     padding: 5rem 2rem;
