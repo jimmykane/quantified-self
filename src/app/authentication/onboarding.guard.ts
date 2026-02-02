@@ -13,6 +13,7 @@ import { LoggerService } from '../services/logger.service';
  */
 export const onboardingGuard: CanMatchFn = (route, segments) => {
     const authService = inject(AppAuthService);
+    const userService = inject(AppUserService);
     const router = inject(Router);
     const logger = inject(LoggerService);
 
@@ -38,7 +39,7 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
 
             const hasSubscribedOnce = (user as any).hasSubscribedOnce === true;
             const stripeRole = (user as any).stripeRole;
-            const hasPaidAccess = AppUserService.hasPaidAccessUser(user);
+            const hasPaidAccess = userService.hasPaidAccessSignal();
             const explicitlyCompleted = (user as any).onboardingCompleted === true;
 
             // User must have accepted terms AND (be pro OR have subscribed once OR explicitly completed free onboarding)

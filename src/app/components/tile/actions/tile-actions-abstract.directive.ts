@@ -3,6 +3,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { TileAbstractDirective } from '../tile-abstract.directive';
 import { AppUserService } from '../../../services/app.user.service';
+import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { Input, Directive, inject } from '@angular/core';
 import { User } from '@sports-alliance/sports-lib';
@@ -18,7 +19,7 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
   async changeTileType(event) {
     this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeTileType' });
     const tileIndex = this.user.settings.dashboardSettings.tiles.findIndex(tile => tile.order === this.order);
-    this.user.settings.dashboardSettings.tiles[tileIndex] = this.type === TileTypes.Map ? AppUserService.getDefaultUserDashboardChartTile() : AppUserService.getDefaultUserDashboardMapTile();
+    this.user.settings.dashboardSettings.tiles[tileIndex] = this.type === TileTypes.Map ? AppUserUtilities.getDefaultUserDashboardChartTile() : AppUserUtilities.getDefaultUserDashboardMapTile();
     this.user.settings.dashboardSettings.tiles[tileIndex].order = this.order;
     return this.userService.updateUserProperties(this.user, { settings: this.user.settings })
   }

@@ -47,7 +47,7 @@ export class AppWhatsNewService {
     });
 
     // Re-create observable stream based on the computed query
-    private changelogs$ = toObservable(this.changelogsQuery, { injector: this.injector }).pipe(
+    public changelogs$ = toObservable(this.changelogsQuery, { injector: this.injector }).pipe(
         switchMap(q => runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' }))),
         map(changelogs => changelogs as ChangelogPost[]),
         shareReplay(1)

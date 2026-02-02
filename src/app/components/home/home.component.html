@@ -9,8 +9,9 @@
       </div>
 
       <h1 class="hero-title">
-        Quantify. Analyze. Improve.<br>
-        <span class="highlight-text">Fitness Analytics Platform</span>
+        <p>Quantify. Analyze. Improve.</p>
+        <mat-divider></mat-divider>
+        <p class="highlight-text">Performance Analytics Platform</p>
       </h1>
 
       <p class="hero-subtitle">
@@ -42,12 +43,12 @@
     </div>
   </section>
 
-  <!-- 1.5 Fast Track Section -->
-  <section class="fast-track-section container animate-on-scroll">
-    <div class="fast-track-grid">
-      <mat-card class="fast-track-card glass-panel" appearance="outlined">
+  <!-- 1.5 Fast Track Section (Using Features Styling) -->
+  <section class="features-section container" style="padding-bottom: 0;">
+    <div class="features-grid">
+      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
         <mat-card-header>
-          <div mat-card-avatar class="fast-track-icon-container import">
+          <div mat-card-avatar class="feature-icon-container import">
             <mat-icon>history</mat-icon>
           </div>
           <mat-card-title>Import History</mat-card-title>
@@ -58,9 +59,9 @@
         </mat-card-content>
       </mat-card>
 
-      <mat-card class="fast-track-card glass-panel" appearance="outlined">
+      <mat-card class="feature-card glass-panel animate-on-scroll" appearance="outlined">
         <mat-card-header>
-          <div mat-card-avatar class="fast-track-icon-container sync">
+          <div mat-card-avatar class="feature-icon-container sync">
             <mat-icon>sync</mat-icon>
           </div>
           <mat-card-title>Seamless Sync</mat-card-title>
@@ -146,6 +147,99 @@
         <mat-card-content>
           <p>The ultimate Suunto companion. Sync routes and activities directly to your watch. Perform full history
             imports from major platforms with ease.</p>
+        </mat-card-content>
+      </mat-card>
+    </div>
+  </section>
+
+  <!-- 3.1 Hardware Benchmark Section (Precise Analysis) -->
+  <section class="analysis-section container">
+    <div class="analysis-header animate-on-scroll">
+      <h2 class="section-title">Hardware-Grade Precision</h2>
+      <p class="section-subtitle">Benchmark your devices with high-fidelity trace comparison.</p>
+    </div>
+
+    <div class="analysis-grid">
+      <!-- Effort Comparison -->
+      <mat-card class="analysis-card glass-panel animate-on-scroll" appearance="outlined">
+        <mat-card-header>
+          <div mat-card-avatar class="analysis-icon-container">
+            <mat-icon>analytics</mat-icon>
+          </div>
+          <mat-card-title>Sensor Data Alignment</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="visual-box chart-preview">
+            <svg class="chart-svg" viewBox="0 -80 1000 560" preserveAspectRatio="xMidYMid meet">
+              <defs>
+                <linearGradient id="activeGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="var(--mat-sys-primary)" stop-opacity="0.2" />
+                  <stop offset="100%" stop-color="var(--mat-sys-primary)" stop-opacity="0" />
+                </linearGradient>
+              </defs>
+              <g opacity="0.1">
+                <line x1="0" y1="80" x2="1000" y2="80" stroke="currentColor" stroke-width="1" />
+                <line x1="0" y1="240" x2="1000" y2="240" stroke="currentColor" stroke-width="1" />
+                <line x1="0" y1="400" x2="1000" y2="400" stroke="currentColor" stroke-width="1" />
+              </g>
+              <path d="M0,350 Q200,50 400,200 T800,100 T1000,250" class="ghost-path" />
+              <path d="M0,360 Q210,60 410,210 T810,110 T1000,240" class="active-path" />
+              <g transform="translate(450, 220)" class="hardware-label primary">
+                <rect x="-60" y="-35" width="120" height="24" rx="6" />
+                <text x="0" y="-19" text-anchor="middle">FENIX 8 (1S)</text>
+              </g>
+              <g transform="translate(450, 160)" class="hardware-label secondary">
+                <rect x="-60" y="-35" width="120" height="24" rx="6" />
+                <text x="0" y="-19" text-anchor="middle">WATCH ULTRA 2</text>
+              </g>
+            </svg>
+          </div>
+          <div class="stat-preview">
+            <div class="stat-item">
+              <span class="stat-label">Sync Quality</span>
+              <span class="stat-value success">99.2%</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Sampling</span>
+              <span class="stat-value">1Hz / 1Hz</span>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- GNSS Trace Comparison -->
+      <mat-card class="analysis-card glass-panel animate-on-scroll" appearance="outlined">
+        <mat-card-header>
+          <div mat-card-avatar class="analysis-icon-container">
+            <mat-icon>route</mat-icon>
+          </div>
+          <mat-card-title>GNSS Trace Comparison</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="visual-box map-preview">
+            <div class="map-tile-bg"></div>
+            <svg class="map-svg" viewBox="-100 -50 1000 700" preserveAspectRatio="xMidYMid meet">
+              <path d="M100,600 L120,400 L130,200 C140,0 400,0 600,10 L780,20" class="track-ghost" />
+              <path d="M100,600 L110,400 L115,200 C120,0 400,0 600,0 L800,0" class="track-active" />
+              <circle cx="100" cy="600" r="10" class="marker start" />
+              <g transform="translate(130, 100)" class="accuracy-callout">
+                <rect x="10" y="-35" width="140" height="28" rx="6" />
+                <text x="80" y="-17" text-anchor="middle">&#916; OFFSET: 1.2M</text>
+              </g>
+            </svg>
+            <div class="scale-bar"></div>
+            <span class="scale-label">500M</span>
+          </div>
+          <div class="stat-preview">
+            <div class="stat-item">
+              <span class="stat-label">CEP (50%)</span>
+              <span class="stat-value">0.8m</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Stability</span>
+              <span class="stat-value warning">ULTRA</span>
+            </div>
+          </div>
         </mat-card-content>
       </mat-card>
     </div>

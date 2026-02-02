@@ -295,9 +295,7 @@ describe('AppEventService', () => {
         });
 
         it('should skip ID generation if event already has ID', async () => {
-            const { generateEventID } = await import('../../../functions/src/shared/id-generator');
             const generateEventIDSpy = vi.spyOn(await import('../../../functions/src/shared/id-generator'), 'generateEventID');
-
             const mockEvent = {
                 getID: () => 'existing-id', // Already has ID
                 startDate: new Date(),
@@ -312,6 +310,51 @@ describe('AppEventService', () => {
             expect(mockEvent.setID).not.toHaveBeenCalled();
 
             generateEventIDSpy.mockRestore();
+        });
+    });
+
+    describe('Upload Limit Enforcement', () => {
+        it('should bypass limit check if grace period is active', async () => {
+            const mockEvent = {
+                getID: () => '1',
+                startDate: new Date(),
+                getActivities: () => [],
+                setID: vi.fn(),
+                toJSON: () => ({})
+            } as any;
+            const user = { uid: 'user1', gracePeriodUntil: Date.now() + 100000 } as any;
+
+            // Mock userService to return non-pro
+            mockUser.isPro.mockResolvedValue(false);
+            mockUser.getSubscriptionRole.mockResolvedValue('free');
+
+            // Mock count to be over limit
+            mocks.getCountFromServer.mockResolvedValue({ data: () => ({ count: 15 }) });
+
+            await service.writeAllEventData(user, mockEvent);
+
+            expect(mocks.writeAllEventData).toHaveBeenCalled();
+            // Should NOT have thrown an error
+        });
+
+        it('should throw error if NOT pro, NOT in grace period, and OVER limit', async () => {
+            const mockEvent = {
+                getID: () => '1',
+                startDate: new Date(),
+                getActivities: () => [],
+                setID: vi.fn(),
+                toJSON: () => ({})
+            } as any;
+            const user = { uid: 'user1' } as any;
+
+            // Mock userService to return non-pro
+            mockUser.isPro.mockResolvedValue(false);
+            mockUser.getSubscriptionRole.mockResolvedValue('free');
+
+            // Mock count to be over limit
+            mocks.getCountFromServer.mockResolvedValue({ data: () => ({ count: 15 }) });
+
+            await expect(service.writeAllEventData(user, mockEvent)).rejects.toThrow(/Upload limit reached/);
         });
     });
 

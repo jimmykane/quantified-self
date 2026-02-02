@@ -1,20 +1,22 @@
 import { TestBed } from '@angular/core/testing';
 import { AppUserService } from './app.user.service';
-import { Auth, authState } from '@angular/fire/auth';
+import { Auth, authState, user } from '@angular/fire/auth';
 import { Firestore, docData, setDoc, updateDoc } from '@angular/fire/firestore';
 
 import { HttpClient } from '@angular/common/http';
 import { AppEventService } from './app.event.service';
 import { AppWindowService } from './app.window.service';
 import { AppUserInterface } from '../models/app-user.interface';
-import { of, firstValueFrom } from 'rxjs';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { AppUserUtilities } from '../utils/app.user.utilities';
+import { of, firstValueFrom, take, from, filter } from 'rxjs';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 vi.mock('@angular/fire/auth', async (importOriginal) => {
     const actual: any = await importOriginal();
     return {
         ...actual,
         authState: vi.fn(),
+        user: vi.fn(),
     };
 });
 
@@ -38,20 +40,33 @@ describe('AppUserService', () => {
     let mockFunctionsService: any;
 
     beforeEach(() => {
+        vi.clearAllMocks();
+        (authState as any).mockImplementation((auth: any) => of(auth?.currentUser || null));
+        (user as any).mockImplementation((auth: any) => of(auth?.currentUser || null));
+
         mockAuth = {
             currentUser: {
                 getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} }),
                 getIdToken: vi.fn().mockResolvedValue('test-token'),
-                uid: 'u1'
+                uid: 'u1',
+                email: 'test@example.com',
+                displayName: 'Test User',
+                photoURL: 'https://example.com/photo.jpg',
+                emailVerified: true,
+                metadata: {
+                    creationTime: new Date().toISOString(),
+                    lastSignInTime: new Date().toISOString()
+                }
             },
-            signOut: vi.fn().mockResolvedValue(undefined)
+            signOut: vi.fn().mockResolvedValue(undefined),
+            onIdTokenChanged: vi.fn().mockReturnValue(() => { }),
         };
 
         mockFunctionsService = {
             call: vi.fn().mockResolvedValue({ success: true })
         };
 
-        (authState as any).mockReturnValue(of(mockAuth.currentUser));
+        (docData as any).mockReturnValue(of({}));
 
         TestBed.configureTestingModule({
             providers: [
@@ -60,10 +75,14 @@ describe('AppUserService', () => {
                 { provide: Firestore, useValue: {} },
                 { provide: AppFunctionsService, useValue: mockFunctionsService },
                 { provide: HttpClient, useValue: {} },
-                { provide: AppEventService, useValue: {} },
-                { provide: AppWindowService, useValue: {} }
+                { provide: AppEventService, useValue: { getUserEvents: vi.fn().mockReturnValue(of([])) } },
+                { provide: AppWindowService, useValue: { currentDomain: 'http://localhost' } }
             ]
         });
+    });
+
+    afterEach(() => {
+        TestBed.resetTestingModule();
     });
 
     it('should be created', () => {
@@ -72,59 +91,151 @@ describe('AppUserService', () => {
     });
 
     describe('role checks', () => {
-        beforeEach(() => {
-            // Default mock for getIdTokenResult
-            mockAuth.currentUser.getIdTokenResult.mockReturnValue(Promise.resolve({
-                claims: { stripeRole: 'basic' }
-            }));
 
-            // Note: because authState is mocked to return the user, we need to ensure firstValueFrom works
-            // But AppUserService.getSubscriptionRole uses authState(this.auth)
-            service = TestBed.inject(AppUserService);
-        });
+
 
         it('should return basic role', async () => {
+            mockAuth.currentUser.getIdTokenResult.mockResolvedValue({
+                claims: { stripeRole: 'basic' }
+            });
+            service = TestBed.inject(AppUserService);
+            await firstValueFrom(service.user$.pipe(filter(u => !!u), take(1)));
             const role = await service.getSubscriptionRole();
             expect(role).toBe('basic');
         });
 
         it('hasPaidAccess should return true for basic', async () => {
+            (docData as any).mockReturnValue(of({ stripeRole: 'basic' }));
+            service = TestBed.inject(AppUserService);
+            await firstValueFrom(service.user$.pipe(filter(u => !!u), take(1)));
             const hasAccess = await service.hasPaidAccess();
             expect(hasAccess).toBe(true);
         });
 
         it('isPro should return false for basic', async () => {
+            mockAuth.currentUser.getIdTokenResult.mockResolvedValue({
+                claims: { stripeRole: 'basic' }
+            });
+            (docData as any).mockReturnValue(of({ stripeRole: 'basic' }));
+            service = TestBed.inject(AppUserService);
+            await firstValueFrom(service.user$.pipe(filter(u => !!u), take(1)));
             const isPro = await service.isPro();
             expect(isPro).toBe(false);
         });
 
-        it('should return pro role', async () => {
-            mockAuth.currentUser.getIdTokenResult.mockReturnValue(Promise.resolve({
-                claims: { stripeRole: 'pro' }
+        it('isPro should return true for free user in active grace period', async () => {
+            // Mock docData to have active grace period
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + 1);
+            mockAuth.currentUser.getIdTokenResult.mockResolvedValue({
+                claims: { stripeRole: 'free' }
+            });
+            (docData as any).mockReturnValue(of({
+                stripeRole: 'free',
+                gracePeriodUntil: { toMillis: () => futureDate.getTime() }
             }));
+            service = TestBed.inject(AppUserService);
+            await firstValueFrom(service.user$.pipe(filter(u => !!u), take(1)));
+            const isPro = await service.isPro();
+            expect(isPro).toBe(true);
+        });
+
+        it('should return pro role', async () => {
+            (docData as any).mockReturnValue(of({ stripeRole: 'pro' }));
+            mockAuth.currentUser.getIdTokenResult.mockResolvedValue({
+                claims: { stripeRole: 'pro' }
+            });
+            service = TestBed.inject(AppUserService);
+            await firstValueFrom(service.user$.pipe(filter(u => !!u), take(1)));
             const role = await service.getSubscriptionRole();
             expect(role).toBe('pro');
         });
 
         it('hasPaidAccess should return true for pro', async () => {
-            mockAuth.currentUser.getIdTokenResult.mockReturnValue(Promise.resolve({
+            (docData as any).mockReturnValue(of({ stripeRole: 'pro' }));
+            mockAuth.currentUser.getIdTokenResult.mockResolvedValue({
                 claims: { stripeRole: 'pro' }
-            }));
+            });
             service = TestBed.inject(AppUserService);
+            await firstValueFrom(service.user$.pipe(filter(u => !!u), take(1)));
             const hasAccess = await service.hasPaidAccess();
             expect(hasAccess).toBe(true);
+        });
+
+        it('should return true for admin', async () => {
+            mockAuth.currentUser.getIdTokenResult.mockResolvedValue({
+                claims: { admin: true }
+            });
+            (docData as any).mockReturnValue(of({}));
+            service = TestBed.inject(AppUserService);
+            await firstValueFrom(service.user$.pipe(filter(u => !!u), take(1)));
+            const isAdmin = await service.isAdmin();
+            expect(isAdmin).toBe(true);
+        });
+
+        it('signals should reflect basic role', async () => {
+            mockAuth.currentUser.getIdTokenResult.mockResolvedValue({
+                claims: { stripeRole: 'basic' }
+            });
+            (docData as any).mockReturnValue(of({ stripeRole: 'basic' }));
+            service = TestBed.inject(AppUserService);
+            await firstValueFrom(service.user$.pipe(filter(u => !!u), take(1)));
+            expect(await service.getSubscriptionRole()).toBe('basic');
+            expect(service.isBasicSignal()).toBe(true);
+            expect(service.isProSignal()).toBe(false);
+            expect(service.hasPaidAccessSignal()).toBe(true);
+        });
+
+        it('signals should reflect pro role', async () => {
+            mockAuth.currentUser.getIdTokenResult.mockResolvedValue({
+                claims: { stripeRole: 'pro' }
+            });
+            (docData as any).mockReturnValue(of({ stripeRole: 'pro' }));
+            service = TestBed.inject(AppUserService);
+            // Wait for signal to update since mergeClaims is async
+            await firstValueFrom(service.user$.pipe(filter(u => !!u), take(1)));
+            const u = service.user();
+            expect(u).not.toBeNull();
+            expect(service.isProSignal()).toBe(true);
+            expect(service.isBasicSignal()).toBe(false);
+            expect(service.hasPaidAccessSignal()).toBe(true);
+        });
+
+        it('signals should reflect grace period as pro access', async () => {
+            const futureDate = new Date();
+            futureDate.setDate(futureDate.getDate() + 1);
+            mockAuth.currentUser.getIdTokenResult.mockResolvedValue({
+                claims: { stripeRole: 'free', gracePeriodUntil: futureDate.getTime() }
+            });
+            (docData as any).mockReturnValue(of({
+                stripeRole: 'free',
+                gracePeriodUntil: { toMillis: () => futureDate.getTime() }
+            }));
+            service = TestBed.inject(AppUserService);
+            // Wait for signal to update
+            await firstValueFrom(service.user$.pipe(filter(u => !!u), take(1)));
+            const u = service.user();
+            expect(u).not.toBeNull();
+            expect((u as any).gracePeriodUntil).toBeDefined();
+            expect(service.isProSignal()).toBe(true);
+            expect(service.hasPaidAccessSignal()).toBe(true);
         });
     });
 
     describe('gracePeriodUntil signal', () => {
         it('should return null if user is not logged in', async () => {
             (authState as any).mockReturnValue(of(null));
+            (user as any).mockReturnValue(of(null));
             service = TestBed.inject(AppUserService);
             expect(service.gracePeriodUntil()).toBeNull();
         });
 
         it('should return null if no grace period is set', async () => {
             (authState as any).mockReturnValue(of({
+                uid: 'u1',
+                getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} })
+            }));
+            (user as any).mockReturnValue(of({
                 uid: 'u1',
                 getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} })
             }));
@@ -139,12 +250,20 @@ describe('AppUserService', () => {
                 uid: 'u1',
                 getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} })
             }));
+            (user as any).mockReturnValue(of({
+                uid: 'u1',
+                getIdTokenResult: vi.fn().mockResolvedValue({ claims: {} })
+            }));
             (docData as any).mockReturnValue(of({
-                gracePeriodUntil: { toDate: () => mockDate }
+                gracePeriodUntil: { toDate: () => mockDate, toMillis: () => mockDate.getTime() }
             }));
 
             service = TestBed.inject(AppUserService);
-            expect(service.gracePeriodUntil()).toEqual(mockDate);
+            await firstValueFrom(service.user$.pipe(filter(u => !!u), take(1)));
+            const u = service.user();
+            expect(u).not.toBeNull();
+            expect((u as any).gracePeriodUntil).toBeDefined();
+            expect(service.gracePeriodUntil()?.getTime()).toEqual(mockDate.getTime());
         });
     });
     describe('updateUserProperties', () => {
@@ -221,95 +340,6 @@ describe('AppUserService', () => {
         });
     });
 
-    describe('static user role checks', () => {
-        beforeEach(() => {
-            service = TestBed.inject(AppUserService);
-        });
-        const mockUser = { uid: 'u1' } as any;
-
-        describe('isProUser', () => {
-            it('should return false for null user', () => {
-                expect(AppUserService.isProUser(null)).toBe(false);
-            });
-
-            it('should return true if stripeRole is pro', () => {
-                const user = { ...mockUser, stripeRole: 'pro' };
-                expect(AppUserService.isProUser(user)).toBe(true);
-            });
-
-            it('should return true if isAdmin is true', () => {
-                const user = { ...mockUser, stripeRole: 'basic' };
-                expect(AppUserService.isProUser(user, true)).toBe(true);
-            });
-
-            it('should return true if user.isPro is true', () => {
-                const user = { ...mockUser, isPro: true };
-                expect(AppUserService.isProUser(user)).toBe(true);
-            });
-
-            it('should return false for basic user without admin/isPro', () => {
-                const user = { ...mockUser, stripeRole: 'basic' };
-                expect(AppUserService.isProUser(user)).toBe(false);
-            });
-
-            it('should return false for free user', () => {
-                const user = { ...mockUser, stripeRole: 'free' };
-                expect(AppUserService.isProUser(user)).toBe(false);
-            });
-        });
-
-        describe('isBasicUser', () => {
-            it('should return false for null user', () => {
-                expect(AppUserService.isBasicUser(null)).toBe(false);
-            });
-
-            it('should return true if stripeRole is basic', () => {
-                const user = { ...mockUser, stripeRole: 'basic' };
-                expect(AppUserService.isBasicUser(user)).toBe(true);
-            });
-
-            it('should return false if stripeRole is pro', () => {
-                const user = { ...mockUser, stripeRole: 'pro' };
-                expect(AppUserService.isBasicUser(user)).toBe(false);
-            });
-
-            it('should return false if stripeRole is free', () => {
-                const user = { ...mockUser, stripeRole: 'free' };
-                expect(AppUserService.isBasicUser(user)).toBe(false);
-            });
-        });
-
-        describe('hasPaidAccessUser', () => {
-            it('should return false for null user', () => {
-                expect(AppUserService.hasPaidAccessUser(null)).toBe(false);
-            });
-
-            it('should return true for basic user', () => {
-                const user = { ...mockUser, stripeRole: 'basic' };
-                expect(AppUserService.hasPaidAccessUser(user)).toBe(true);
-            });
-
-            it('should return true for pro user', () => {
-                const user = { ...mockUser, stripeRole: 'pro' };
-                expect(AppUserService.hasPaidAccessUser(user)).toBe(true);
-            });
-
-            it('should return true if isAdmin is true', () => {
-                const user = { ...mockUser, stripeRole: 'free' };
-                expect(AppUserService.hasPaidAccessUser(user, true)).toBe(true);
-            });
-
-            it('should return true if user.isPro is true', () => {
-                const user = { ...mockUser, isPro: true };
-                expect(AppUserService.hasPaidAccessUser(user)).toBe(true);
-            });
-
-            it('should return false for free user', () => {
-                const user = { ...mockUser, stripeRole: 'free' };
-                expect(AppUserService.hasPaidAccessUser(user)).toBe(false);
-            });
-        });
-    });
     describe('deleteAllUserData', () => {
         beforeEach(() => {
             service = TestBed.inject(AppUserService);

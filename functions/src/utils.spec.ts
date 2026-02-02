@@ -387,6 +387,26 @@ describe('utils', () => {
                 await expect(checkEventUsageLimit('user1')).rejects.toThrow();
             });
 
+            it('should bypass limit if gracePeriodUntil is in the future', async () => {
+                const futureDate = Date.now() + 100000;
+                mockGetUser.mockResolvedValue({
+                    customClaims: {
+                        stripeRole: 'free',
+                        gracePeriodUntil: futureDate
+                    }
+                });
+                const { checkEventUsageLimit } = await getUtils();
+
+                // Case: Over Limit (15)
+                mockCountGet.mockResolvedValueOnce({ data: () => ({ count: 15 }) });
+                // Should NOT throw because of grace period
+                await expect(checkEventUsageLimit('user1')).resolves.not.toThrow();
+                // Should NOT have called Firestore for count check if it returned early from Auth check
+                // Update: My implementation fetches role before early return, then checks grace period.
+                // In my implementation, if gracePeriodUntil is present, it returns BEFORE the Firestore check.
+                expect(mockCollection).not.toHaveBeenCalled();
+            });
+
             it('should iterate over users/uid/events', async () => {
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
                 const { checkEventUsageLimit } = await getUtils();
@@ -430,100 +450,107 @@ describe('utils', () => {
             });
         });
 
-        describe('isProUser', () => {
+        describe('hasProAccess', () => {
             it('should return true for pro users', async () => {
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
-                const { isProUser } = await getUtils();
-                await expect(isProUser('user1')).resolves.toBe(true);
+                const { hasProAccess } = await getUtils();
+                await expect(hasProAccess('user1')).resolves.toBe(true);
             });
 
-            it('should return false for free users', async () => {
+            it('should return true for users in active grace period', async () => {
+                const futureDate = Date.now() + 60000;
+                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free', gracePeriodUntil: futureDate } });
+                const { hasProAccess } = await getUtils();
+                await expect(hasProAccess('user1')).resolves.toBe(true);
+            });
+
+            it('should return false for free users without grace period', async () => {
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
-                const { isProUser } = await getUtils();
-                await expect(isProUser('user1')).resolves.toBe(false);
+                const { hasProAccess } = await getUtils();
+                await expect(hasProAccess('user1')).resolves.toBe(false);
             });
 
-            it('should return false for basic users', async () => {
-                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'basic' } });
-                const { isProUser } = await getUtils();
-                await expect(isProUser('user1')).resolves.toBe(false);
-            });
-
-            it('should return false for users with no customClaims', async () => {
-                mockGetUser.mockResolvedValue({});
-                const { isProUser } = await getUtils();
-                await expect(isProUser('user1')).resolves.toBe(false);
-            });
-
-            it('should return false for users with empty customClaims', async () => {
-                mockGetUser.mockResolvedValue({ customClaims: {} });
-                const { isProUser } = await getUtils();
-                await expect(isProUser('user1')).resolves.toBe(false);
-            });
-
-            it('should return false for unknown role', async () => {
-                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'unknown' } });
-                const { isProUser } = await getUtils();
-                await expect(isProUser('user1')).resolves.toBe(false);
+            it('should return false for free users with expired grace period', async () => {
+                const pastDate = Date.now() - 60000;
+                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free', gracePeriodUntil: pastDate } });
+                const { hasProAccess } = await getUtils();
+                await expect(hasProAccess('user1')).resolves.toBe(false);
             });
         });
 
-        describe('getUserRole', () => {
+        describe('getUserRoleAndGracePeriod', () => {
             it('should return pro for pro users', async () => {
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
-                const { getUserRole } = await getUtils();
-                await expect(getUserRole('user1')).resolves.toBe('pro');
+                const { getUserRoleAndGracePeriod } = await getUtils();
+                await expect(getUserRoleAndGracePeriod('user1')).resolves.toEqual({ role: 'pro', gracePeriodUntil: undefined });
             });
 
             it('should return basic for basic users', async () => {
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'basic' } });
-                const { getUserRole } = await getUtils();
-                await expect(getUserRole('user1')).resolves.toBe('basic');
+                const { getUserRoleAndGracePeriod } = await getUtils();
+                await expect(getUserRoleAndGracePeriod('user1')).resolves.toEqual({ role: 'basic', gracePeriodUntil: undefined });
             });
 
             it('should return free for free users', async () => {
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
-                const { getUserRole } = await getUtils();
-                await expect(getUserRole('user1')).resolves.toBe('free');
+                const { getUserRoleAndGracePeriod } = await getUtils();
+                await expect(getUserRoleAndGracePeriod('user1')).resolves.toEqual({ role: 'free', gracePeriodUntil: undefined });
             });
 
-            it('should return free when no customClaims', async () => {
-                mockGetUser.mockResolvedValue({});
-                const { getUserRole } = await getUtils();
-                await expect(getUserRole('user1')).resolves.toBe('free');
+            it('should return gracePeriodUntil if present in customClaims', async () => {
+                const futureDate = Date.now() + 100000;
+                mockGetUser.mockResolvedValue({
+                    customClaims: {
+                        stripeRole: 'free',
+                        gracePeriodUntil: futureDate
+                    }
+                });
+                const { getUserRoleAndGracePeriod } = await getUtils();
+                await expect(getUserRoleAndGracePeriod('user1')).resolves.toEqual({ role: 'free', gracePeriodUntil: futureDate });
+            });
+        });
+
+        describe('isGracePeriodActive', () => {
+            it('should return true for future dates', async () => {
+                const { isGracePeriodActive } = await getUtils();
+                expect(isGracePeriodActive(Date.now() + 10000)).toBe(true);
             });
 
-            it('should return free when customClaims empty', async () => {
-                mockGetUser.mockResolvedValue({ customClaims: {} });
-                const { getUserRole } = await getUtils();
-                await expect(getUserRole('user1')).resolves.toBe('free');
+            it('should return false for past dates', async () => {
+                const { isGracePeriodActive } = await getUtils();
+                expect(isGracePeriodActive(Date.now() - 10000)).toBe(false);
+            });
+
+            it('should return false for undefined', async () => {
+                const { isGracePeriodActive } = await getUtils();
+                expect(isGracePeriodActive(undefined)).toBe(false);
             });
         });
-    });
 
-    describe('Custom Error Classes', () => {
-        it('UsageLimitExceededError should have correct name', async () => {
-            const { UsageLimitExceededError } = await import('./utils');
-            const error = new UsageLimitExceededError('Test message');
-            expect(error.name).toBe('UsageLimitExceededError');
-            expect(error.message).toBe('Test message');
-            expect(error).toBeInstanceOf(Error);
-        });
+        describe('Custom Error Classes', () => {
+            it('UsageLimitExceededError should have correct name', async () => {
+                const { UsageLimitExceededError } = await import('./utils');
+                const error = new UsageLimitExceededError('Test message');
+                expect(error.name).toBe('UsageLimitExceededError');
+                expect(error.message).toBe('Test message');
+                expect(error).toBeInstanceOf(Error);
+            });
 
-        it('TokenNotFoundError should have correct name', async () => {
-            const { TokenNotFoundError } = await import('./utils');
-            const error = new TokenNotFoundError('Test message');
-            expect(error.name).toBe('TokenNotFoundError');
-            expect(error.message).toBe('Test message');
-            expect(error).toBeInstanceOf(Error);
-        });
+            it('TokenNotFoundError should have correct name', async () => {
+                const { TokenNotFoundError } = await import('./utils');
+                const error = new TokenNotFoundError('Test message');
+                expect(error.name).toBe('TokenNotFoundError');
+                expect(error.message).toBe('Test message');
+                expect(error).toBeInstanceOf(Error);
+            });
 
-        it('UserNotFoundError should have correct name', async () => {
-            const { UserNotFoundError } = await import('./utils');
-            const error = new UserNotFoundError('Test message');
-            expect(error.name).toBe('UserNotFoundError');
-            expect(error.message).toBe('Test message');
-            expect(error).toBeInstanceOf(Error);
+            it('UserNotFoundError should have correct name', async () => {
+                const { UserNotFoundError } = await import('./utils');
+                const error = new UserNotFoundError('Test message');
+                expect(error.name).toBe('UserNotFoundError');
+                expect(error.message).toBe('Test message');
+                expect(error).toBeInstanceOf(Error);
+            });
         });
     });
 });

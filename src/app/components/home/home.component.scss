@@ -12,9 +12,6 @@
     overflow-x: hidden;
 }
 
-
-
-
 // Animations & Transitions
 @keyframes fadeInUp {
     from {
@@ -56,10 +53,73 @@
 }
 
 // Common Utils
+@mixin icon-container-base {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 16px;
+    width: 48px;
+    height: 48px;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+    mat-icon {
+        font-size: 24px;
+        width: 24px;
+        height: 24px;
+    }
+}
+
+@mixin glass-interactive-card {
+    border-radius: 24px;
+    background: var(--mat-sys-surface-container-low);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+    border: 1px solid transparent;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+
+    mat-card-header {
+        display: flex; // Force flex logic
+        align-items: center;
+        padding-top: 16px;
+        margin-bottom: 8px;
+
+        // Fix: Strip default margins from internal wrapper to guarantee centering
+        ::ng-deep .mat-mdc-card-header-text {
+            margin: 0;
+        }
+    }
+
+    mat-card-content {
+        flex-grow: 1;
+
+        p {
+            font-size: 1rem;
+            color: var(--mat-sys-on-surface-variant);
+            line-height: 1.6;
+            margin-bottom: 0; // reset
+        }
+    }
+
+    mat-card-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin: 0; // Remove all margins
+        margin-left: 16px; // Add spacing between avatar and title
+    }
+
+    &:hover {
+        transform: translateY(-8px) scale(1);
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+        border-color: var(--mat-sys-outline-variant);
+        background: var(--mat-sys-surface-container);
+    }
+}
+
 .highlight-text {
     background: linear-gradient(135deg,
             var(--mat-sys-primary) 0%,
-            var(--mat-sys-tertiary) 50%,
+            #FF9800 50%, // FIXED: Hardcoded Vivid Orange
             var(--mat-sys-primary) 100%);
     background-size: 200% auto;
     -webkit-background-clip: text;
@@ -77,6 +137,7 @@
     align-items: center;
     text-align: center;
     padding: 8rem 2rem 5rem;
+    padding-bottom: 1em;
     background: radial-gradient(circle at 50% 0%,
             var(--mat-sys-surface-container-high) 0%,
             var(--mat-sys-surface) 70%);
@@ -119,14 +180,14 @@
     .brand-badge {
         display: inline-flex;
         align-items: center;
-        gap: 0.75rem; // Increased gap
-        padding: 0.75rem 1.5rem; // Larger padding
+        gap: 0.75rem;
+        padding: 0.75rem 1.5rem;
         border-radius: 999px;
         background-color: var(--mat-sys-surface-container-highest);
         color: var(--mat-sys-on-surface-variant);
-        font-size: 1.25rem; // Increased from 1rem
+        font-size: 1.5rem;
         font-weight: 500;
-        margin-bottom: 2rem; // More breathing room
+        margin-bottom: 0rem;
         transition: transform 0.3s ease;
 
         &:hover {
@@ -134,15 +195,14 @@
         }
 
         .brand-logo {
-            width: 32px; // Increased from 24px
-            height: 32px;
+            width: 64px;
+            height: 64px;
         }
     }
 
     .hero-title {
         font-family: var(--mat-sys-display-large-font-family-name);
-        // Use clamp for responsive font sizing
-        font-size: clamp(3.5rem, 6vw, 5.5rem);
+        font-size: clamp(2.5rem, 5vw, 4rem);
         line-height: 1.1;
         font-weight: 800;
         letter-spacing: -0.02em;
@@ -165,7 +225,7 @@
         justify-content: center;
 
         .cta-button {
-            padding: 1.5rem 2rem; // Slightly taller buttons
+            padding: 1.5rem 2rem;
             font-size: 1.1rem;
             border-radius: 999px;
             transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -176,8 +236,7 @@
 
             &.primary {
                 &:hover {
-                    box-shadow: 0 4px 12px rgba(var(--mat-sys-primary-rgb), 0.3); // Assuming RGB var might exist, else just shadow
-                    // If RGB var doesn't exist, we fall back to standard shadow or elevation
+                    box-shadow: 0 4px 12px rgba(var(--mat-sys-primary-rgb), 0.3);
                 }
             }
         }
@@ -213,66 +272,6 @@
     }
 }
 
-// 1.5 Fast Track Section
-.fast-track-section {
-    padding: 2rem 2rem 4rem;
-    max-width: 1000px;
-    margin: 0 auto;
-
-    .fast-track-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 2rem;
-    }
-
-    .fast-track-card {
-        border-radius: 20px;
-        background: var(--mat-sys-surface-container-low);
-        transition: transform 0.3s ease, background-color 0.3s ease;
-
-        &:hover {
-            transform: translateY(-4px);
-            background: var(--mat-sys-surface-container);
-        }
-
-        .fast-track-icon-container {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 12px;
-            width: 40px;
-            height: 40px;
-
-            &.import {
-                background-color: var(--mat-sys-secondary-container);
-                color: var(--mat-sys-on-secondary-container);
-            }
-
-            &.sync {
-                background-color: var(--mat-sys-tertiary-container);
-                color: var(--mat-sys-on-tertiary-container);
-            }
-
-            mat-icon {
-                font-size: 20px;
-                width: 20px;
-                height: 20px;
-            }
-        }
-
-        mat-card-title {
-            font-size: 1.1rem;
-            font-weight: 600;
-        }
-
-        mat-card-content p {
-            font-size: 0.95rem;
-            color: var(--mat-sys-on-surface-variant);
-            line-height: 1.5;
-        }
-    }
-}
-
 // 2. Integrations Ticker
 .integrations-section {
     display: flex;
@@ -288,12 +287,12 @@
     transition-delay: 0.2s; // Delay relative to appearance
 
     .section-label {
-        font-size: 2.5rem; // Much bigger as requested
+        font-size: 2.5rem;
         font-weight: 700;
         letter-spacing: -0.02em;
         color: var(--mat-sys-on-surface);
         margin-bottom: 3rem;
-        opacity: 1; // Remove opacity for prominence
+        opacity: 1;
         text-align: center;
     }
 
@@ -313,20 +312,9 @@
         .partner-logo {
             width: 90px;
             height: 90px;
-            cursor: pointer;
-            transition: transform 0.2s ease, filter 0.2s ease;
-            // filter: grayscale(100%); // Start grayscale for "pro" look, color on hover if wanted?
-            // Actually, removing grayscale might be better if they are SVG icons that follow text color.
-            // Let's assume they take color from 'color' property or are original SVGs.
-            // filter: grayscale(0%); // Reset
 
             &.wide {
-                width: 90px; // align width with square icons, height will be much smaller = "smaller" overall
-            }
-
-            &:hover {
-                transform: translateY(-2px) scale(1.1);
-                color: var(--mat-sys-primary);
+                width: 90px;
             }
         }
 
@@ -335,7 +323,7 @@
             height: 24px;
             background-color: var(--mat-sys-outline-variant);
             margin: 0 1rem;
-            display: none; // Hide on mobile primarily
+            display: none;
 
             @include bp.small {
                 display: block;
@@ -366,11 +354,14 @@
 
 // 3. Features Grid
 .features-section {
-    padding: 6rem 2rem;
+    padding: 1rem 2rem;
+    padding-bottom: 2rem;
     max-width: 1200px;
     width: 100%;
     margin: 0 auto;
     box-sizing: border-box;
+
+
 
     .section-title {
         text-align: center;
@@ -390,7 +381,6 @@
             @extend .animate-on-scroll;
         }
 
-        // Stagger delays (transition-delay)
         &>*:nth-child(1) {
             transition-delay: 0.1s;
         }
@@ -409,57 +399,281 @@
     }
 
     .feature-card {
-        height: 100%;
-        border-radius: 24px;
-        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease; // Bouncy transition
-        background: var(--mat-sys-surface-container-low);
-        // Ensure border doesn't conflict with elevation if any, but adding a transparent border helps with high contrast modes or just structure
-        border: 1px solid transparent;
+        @include glass-interactive-card;
 
         &:hover {
-            transform: translateY(-8px); // More dramatic lift
-            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08); // Custom soft shadow or var(--mat-sys-elevation-level2)
-            border-color: var(--mat-sys-outline-variant); // Slight border highlight
-            background: var(--mat-sys-surface-container); // Slightly lighter background
-
-            .feature-icon-container {
-                transform: scale(1.1) rotate(5deg); // Playful interaction
-            }
+            // No rotation here
         }
 
         .feature-icon-container {
+            @include icon-container-base;
             background-color: var(--mat-sys-primary-container);
             color: var(--mat-sys-on-primary-container);
-            width: 48px;
-            height: 48px;
-            border-radius: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); // Bouncy
+            margin-bottom: 0;
 
-            mat-icon {
-                width: 24px;
-                height: 24px;
+            &.import {
+                background-color: var(--mat-sys-secondary-container);
+                color: var(--mat-sys-on-secondary-container);
             }
-        }
 
-        mat-card-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            margin-top: 1rem;
-            margin-bottom: 0.5rem;
-        }
-
-        mat-card-content p {
-            color: var(--mat-sys-on-surface-variant);
-            line-height: 1.6;
-            font-size: 1rem;
+            &.sync {
+                background-color: var(--mat-sys-tertiary-container);
+                color: var(--mat-sys-on-tertiary-container);
+            }
         }
     }
 }
 
-// 3.5 Footprint Section (MyTracks Highlight)
+// 3.1 Hardware Analysis Section
+.analysis-section {
+    padding: 6rem 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+
+    .analysis-header {
+        text-align: center;
+        margin-bottom: 4rem;
+
+        .section-title {
+            margin-bottom: 1rem;
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+
+        .section-subtitle {
+            font-size: 1.25rem;
+            color: var(--mat-sys-on-surface-variant);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+    }
+
+    .analysis-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+        gap: 2.5rem;
+
+        @include bp.xsmall {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .analysis-card {
+        @include glass-interactive-card;
+        padding: 0; // Reset for internal structure
+        overflow: hidden;
+
+        mat-card-header {
+            padding: 24px 24px 16px;
+        }
+
+        mat-card-content {
+            padding: 0 24px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .analysis-icon-container {
+            @include icon-container-base;
+            background-color: var(--mat-sys-secondary-container);
+            color: var(--mat-sys-on-secondary-container);
+        }
+
+        .visual-box {
+            height: 320px;
+            background: var(--mat-sys-surface-container-highest);
+            border-radius: 16px;
+            position: relative;
+            overflow: hidden;
+            border: 1px solid var(--mat-sys-outline-variant);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            &.map-preview {
+                padding: 0;
+            }
+        }
+
+        // Chart Visuals
+        .chart-svg {
+            width: 100%;
+            height: 100%;
+            color: var(--mat-sys-outline-variant);
+
+            .active-path {
+                fill: none;
+                stroke: var(--mat-sys-primary);
+                stroke-width: 4;
+                stroke-linecap: round;
+                filter: drop-shadow(0 0 8px rgba(255, 152, 0, 0.4)); // Fallback to primary orange glow
+            }
+
+            .ghost-path {
+                fill: none;
+                stroke: var(--mat-sys-secondary);
+                stroke-width: 3;
+                stroke-dasharray: 8, 4;
+                opacity: 0.3;
+            }
+
+            .hardware-label {
+                rect {
+                    fill: var(--mat-sys-surface-container-high);
+                    stroke: var(--mat-sys-outline-variant);
+                    stroke-width: 1;
+                }
+
+                text {
+                    fill: var(--mat-sys-on-surface);
+                    font-size: 10px;
+                    font-weight: 700;
+                    font-family: 'JetBrains Mono', monospace;
+                }
+
+                &.primary rect {
+                    fill: var(--mat-sys-primary);
+                    stroke: none;
+                }
+
+                &.primary text {
+                    fill: var(--mat-sys-on-primary);
+                }
+            }
+        }
+
+        // Map Visuals
+        .map-tile-bg {
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(var(--mat-sys-outline-variant) 1px, transparent 1px),
+                linear-gradient(90deg, var(--mat-sys-outline-variant) 1px, transparent 1px);
+            background-size: 30px 30px;
+            opacity: 0.1;
+        }
+
+        .map-svg {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            z-index: 2;
+            overflow: visible; // Allow glow to bleed out slightly
+
+            .track-active {
+                fill: none;
+                stroke: var(--mat-sys-primary);
+                stroke-width: 5;
+                stroke-linecap: round;
+                filter: drop-shadow(0 0 10px rgba(255, 152, 0, 0.5));
+            }
+
+            .track-ghost {
+                fill: none;
+                stroke: var(--mat-sys-secondary);
+                stroke-width: 4;
+                stroke-linecap: round;
+                opacity: 0.3;
+                stroke-dasharray: 6, 2;
+            }
+
+            .marker.start {
+                fill: #4CAF50;
+                filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.3));
+            }
+
+            .accuracy-callout {
+                rect {
+                    fill: var(--mat-sys-surface-container-highest);
+                    stroke: var(--mat-sys-secondary);
+                    stroke-width: 1;
+                }
+
+                text {
+                    fill: var(--mat-sys-secondary);
+                    font-size: 11px;
+                    font-weight: 800;
+                    font-family: 'JetBrains Mono', monospace;
+                }
+            }
+        }
+
+        .scale-bar {
+            position: absolute;
+            bottom: 16px;
+            right: 16px;
+            width: 60px;
+            height: 2px;
+            background: var(--mat-sys-on-surface);
+            opacity: 0.2;
+            z-index: 3;
+
+            &::before,
+            &::after {
+                content: '';
+                position: absolute;
+                height: 4px;
+                width: 2px;
+                background: currentColor;
+                top: -1px;
+            }
+
+            &::after {
+                right: 0;
+            }
+        }
+
+        .scale-label {
+            position: absolute;
+            bottom: 22px;
+            right: 16px;
+            font-size: 8px;
+            opacity: 0.4;
+            letter-spacing: 1px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .stat-preview {
+            display: flex;
+            gap: 1.5rem;
+            padding: 1rem;
+            background: var(--mat-sys-surface-container-low);
+            border-radius: 12px;
+            border: 1px solid var(--mat-sys-outline-variant);
+
+            .stat-item {
+                display: flex;
+                flex-direction: column;
+                gap: 0.25rem;
+            }
+
+            .stat-label {
+                font-size: 10px;
+                color: var(--mat-sys-on-surface-variant);
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                font-weight: 600;
+            }
+
+            .stat-value {
+                font-size: 1.1rem;
+                font-weight: 700;
+                font-family: 'JetBrains Mono', monospace;
+
+                &.success {
+                    color: #4CAF50;
+                }
+
+                &.warning {
+                    color: var(--mat-sys-primary);
+                }
+            }
+        }
+    }
+}
+
+// 3.5 Footprint Section
 .footprint-section {
     padding: 5rem 2rem;
     text-align: center;
@@ -481,7 +695,6 @@
         font-size: 56px;
         width: 56px;
         height: 56px;
-        color: var(--mat-sys-tertiary);
         margin-bottom: 1.5rem;
     }
 
@@ -614,6 +827,7 @@
 @include bp.xsmall {
     .hero-section {
         padding: 4rem 1.5rem 2rem;
+        padding-bottom: 1em;
 
         .hero-title {
             font-size: 2.5rem;

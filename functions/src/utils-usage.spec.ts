@@ -1,0 +1,205 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { UsageLimitExceededError, checkEventUsageLimit, hasProAccess, getUserRoleAndGracePeriod, setEvent, determineRedirectURI, setAccessControlHeadersOnResponse } from './utils';
+import { HttpsError } from 'firebase-functions/v2/https';
+
+// Hoisted shared/id-generator mock
+vi.mock('./shared/id-generator', () => ({
+    generateIDFromParts: vi.fn(async () => 'gen-part-id'),
+    generateEventID: vi.fn(async () => 'event-id'),
+}));
+
+// Mock firebase-functions/logger to no-op
+vi.mock('firebase-functions/logger', () => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+}));
+
+// Mock EventWriter to avoid heavy behavior
+const writeAllEventDataMock = vi.fn().mockResolvedValue(undefined);
+vi.mock('./shared/event-writer', () => ({
+    EventWriter: vi.fn().mockImplementation(() => ({
+        writeAllEventData: writeAllEventDataMock,
+    })),
+    FirestoreAdapter: class { },
+    StorageAdapter: class { },
+    LogAdapter: class { },
+}));
+
+// firebase-functions/v2/https mock (provide HttpsError already imported)
+vi.mock('firebase-functions/v2/https', () => ({
+    HttpsError: class extends Error {
+        code: string;
+        constructor(code: string, message: string) {
+            super(message);
+            this.code = code;
+        }
+    }
+}));
+
+// Hoisted firebase-admin mock
+const hoisted = vi.hoisted(() => {
+    let countValue = 0;
+    const setCount = (v: number) => { countValue = v; };
+
+    const makeCollection = (name: string) => ({
+        _name: name,
+        doc: (id: string) => makeDoc(`${name}/${id}`),
+        count: () => ({
+            get: async () => ({ data: () => ({ count: countValue }) })
+        }),
+    });
+
+    const makeDoc = (path: string) => ({
+        _path: path,
+        collection: (name: string) => makeCollection(`${path}/${name}`),
+        set: vi.fn(),
+        update: vi.fn(),
+    });
+
+    const firestore = () => ({
+        collection: (name: string) => makeCollection(name),
+        doc: (id: string) => makeDoc(id),
+        batch: vi.fn(),
+    });
+
+    const bucketSave = vi.fn();
+    const storage = () => ({
+        bucket: () => ({
+            name: 'mock-bucket',
+            file: (path: string) => ({
+                path,
+                save: bucketSave,
+            }),
+        }),
+    });
+
+    const getUser = vi.fn();
+    const createCustomToken = vi.fn(async () => 'custom-token');
+    const auth = () => ({
+        getUser,
+        updateUser: vi.fn(),
+        createUser: vi.fn(),
+        createCustomToken,
+    });
+
+    return { firestore, storage, auth, getUser, setCount, bucketSave };
+});
+
+vi.mock('firebase-admin', () => ({
+    default: {
+        firestore: hoisted.firestore,
+        storage: hoisted.storage,
+        auth: hoisted.auth,
+    },
+    firestore: hoisted.firestore,
+    storage: hoisted.storage,
+    auth: hoisted.auth,
+}));
+
+describe('utils higher-level helpers', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        hoisted.setCount(0);
+    });
+
+    describe('checkEventUsageLimit', () => {
+        it('bypasses limit for pro users', async () => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
+            await expect(checkEventUsageLimit('u1')).resolves.toBeUndefined();
+            expect(hoisted.getUser).toHaveBeenCalled();
+        });
+
+        it('bypasses limit during grace period', async () => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'free', gracePeriodUntil: Date.now() + 10000 } });
+            await expect(checkEventUsageLimit('u1')).resolves.toBeUndefined();
+        });
+
+        it('throws UsageLimitExceededError when over limit including pending writes', async () => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
+            hoisted.setCount(9);
+            const pending = new Map<string, number>([['u1', 2]]); // total 11 > limit 10
+
+            await expect(checkEventUsageLimit('u1', undefined, pending)).rejects.toBeInstanceOf(UsageLimitExceededError);
+        });
+
+        it('uses cache to avoid duplicate Firestore count calls', async () => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
+            hoisted.setCount(1);
+            const cache = new Map();
+
+            await checkEventUsageLimit('u1', cache);
+            await checkEventUsageLimit('u1', cache); // should use cached promise
+
+            // count() should have been invoked once (via first call)
+            expect(cache.size).toBe(1);
+        });
+    });
+
+    describe('hasProAccess', () => {
+        it('returns true for pro role', async () => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
+            await expect(hasProAccess('u1')).resolves.toBe(true);
+        });
+
+        it('returns true for active grace period', async () => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'free', gracePeriodUntil: Date.now() + 5000 } });
+            await expect(hasProAccess('u1')).resolves.toBe(true);
+        });
+    });
+
+    describe('getUserRoleAndGracePeriod', () => {
+        it('throws UserNotFoundError for missing user', async () => {
+            const err: any = new Error('not found');
+            err.code = 'auth/user-not-found';
+            hoisted.getUser.mockRejectedValue(err);
+
+            await expect(getUserRoleAndGracePeriod('missing')).rejects.toThrow('User missing not found in Auth');
+        });
+    });
+
+    describe('setEvent', () => {
+        it('writes activities, meta data, and uses bulkWriter when provided', async () => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
+            const bulkWriter = { set: vi.fn() };
+            const event = {
+                getID: () => null,
+                setID: vi.fn(),
+                getActivities: () => [{
+                    getID: () => null,
+                    setID: vi.fn(),
+                    toJSON: () => ({ id: 'act' }),
+                    getAllExportableStreams: () => [],
+                }],
+            };
+            const metaData = {
+                serviceName: 'GARMINAPI',
+                toJSON: () => ({ meta: true }),
+            } as any;
+            const originalFile = {
+                data: Buffer.from('file'),
+                extension: 'fit',
+                startDate: new Date(),
+            };
+
+            await setEvent('user-1', 'event-1', event as any, metaData, originalFile as any, bulkWriter as any);
+
+            expect(writeAllEventDataMock).toHaveBeenCalled();
+            expect(bulkWriter.set).toHaveBeenCalled(); // called at least for metaData
+        });
+    });
+
+    describe('determineRedirectURI and headers', () => {
+        it('returns empty string for disallowed redirect', () => {
+            const req = { body: { redirectUri: 'https://evil.com' } } as any;
+            expect(determineRedirectURI(req)).toBe('');
+        });
+
+        it('sets access control headers from origin', () => {
+            const res = { set: vi.fn(), get: vi.fn() } as any;
+            const req = { get: vi.fn().mockReturnValue('http://localhost:4200') } as any;
+            setAccessControlHeadersOnResponse(req, res);
+            expect(res.set).toHaveBeenCalledWith('Access-Control-Allow-Origin', 'http://localhost:4200');
+        });
+    });
+});

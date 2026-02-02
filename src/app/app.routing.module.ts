@@ -6,6 +6,7 @@ import { proGuard } from './authentication/pro.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { adminGuard } from './authentication/admin.guard';
 import { loggedInGuard } from './authentication/logged-in.guard';
+import { releasesResolver } from './resolvers/releases.resolver';
 
 const routes: Routes = [
   {
@@ -49,8 +50,10 @@ const routes: Routes = [
   {
     path: 'releases',
     loadComponent: () => import('./components/whats-new/whats-new-page.component').then(m => m.WhatsNewPageComponent),
+    resolve: { releases: releasesResolver },
     data: {
       title: 'Release Notes',
+      animation: 'Releases',
       description: 'Stay up to date with the latest features, improvements, and bug fixes in Quantified Self.',
       keywords: 'release notes, changelog, updates, new features, quantified self updates',
       jsonLd: {

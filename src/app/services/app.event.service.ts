@@ -12,6 +12,7 @@ import { StreamInterface } from '@sports-alliance/sports-lib';
 import { EventExporterJSON } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { Privacy } from '@sports-alliance/sports-lib';
+import { AppUserUtilities } from '../utils/app.user.utilities';
 import { AppWindowService } from './app.window.service';
 import {
   EventMetaDataInterface,
@@ -344,10 +345,9 @@ export class AppEventService implements OnDestroy {
       }
     }
 
-    // 1. Check Pro Status
+    // 1. Check Pro Status & Grace Period
     const userService = this.injector.get(AppUserService);
-    const isPro = await userService.isPro();
-    if (!isPro) {
+    if (!AppUserUtilities.hasProAccess(user)) {
       // 2. Check Limits
       const role = await userService.getSubscriptionRole() || 'free';
       const limit = USAGE_LIMITS[role] || USAGE_LIMITS['free'];
@@ -819,6 +819,7 @@ export class AppEventService implements OnDestroy {
     const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount, startAfterDoc, endBeforeDoc);
 
     return runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })).pipe(
+      distinctUntilChanged((p, c) => JSON.stringify(p) === JSON.stringify(c)),
       map((eventSnapshots: any[]) => {
         this.logger.log(`[AppEventService] _getEvents emitted ${eventSnapshots?.length || 0} event snapshots for user: ${user.uid}`);
         return eventSnapshots.map((eventSnapshot) => {
@@ -850,42 +851,45 @@ export class AppEventService implements OnDestroy {
   private _getEventsAndActivities(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any): Observable<EventInterface[]> {
     const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount, startAfterDoc, endBeforeDoc);
 
-    return runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })).pipe(map((eventSnapshots: any[]) => {
-      return eventSnapshots.reduce((events: EventInterface[], eventSnapshot) => {
-        const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
-        if (unknownTypes.length > 0) {
-          const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
-          if (newUnknownTypes.length > 0) {
-            newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
-            this.logger.captureMessage('Unknown Data Types in _getEventsAndActivities', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
+    return runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })).pipe(
+      distinctUntilChanged((p, c) => JSON.stringify(p) === JSON.stringify(c)),
+      map((eventSnapshots: any[]) => {
+        this.logger.log(`[AppEventService] _getEventsAndActivities emitted ${eventSnapshots?.length || 0} event snapshots for user: ${user.uid}`);
+        return eventSnapshots.reduce((events: EventInterface[], eventSnapshot) => {
+          const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
+          if (unknownTypes.length > 0) {
+            const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
+            if (newUnknownTypes.length > 0) {
+              newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
+              this.logger.captureMessage('Unknown Data Types in _getEventsAndActivities', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
+            }
           }
-        }
-        const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id) as AppEventInterface;
+          const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventSnapshot.id) as AppEventInterface;
 
-        // Hydrate with original file(s) info if present
-        const rawData = eventSnapshot as any;
+          // Hydrate with original file(s) info if present
+          const rawData = eventSnapshot as any;
 
-        if (rawData.originalFiles) {
-          event.originalFiles = rawData.originalFiles;
-        }
-        if (rawData.originalFile) {
-          event.originalFile = rawData.originalFile;
-        }
+          if (rawData.originalFiles) {
+            event.originalFiles = rawData.originalFiles;
+          }
+          if (rawData.originalFile) {
+            event.originalFile = rawData.originalFile;
+          }
 
-        events.push(event);
-        return events;
-      }, []);
-    })).pipe(switchMap((events: EventInterface[]) => {
-      if (events.length === 0) {
-        return of([]);
-      }
-      return combineLatest(events.map((event) => {
-        return this.getActivities(user, event.getID()).pipe(map((activities) => {
-          event.addActivities(activities)
-          return event;
-        }));
-      }))
-    }));
+          events.push(event);
+          return events;
+        }, []);
+      })).pipe(switchMap((events: EventInterface[]) => {
+        if (events.length === 0) {
+          return of([]);
+        }
+        return combineLatest(events.map((event) => {
+          return this.getActivities(user, event.getID()).pipe(map((activities) => {
+            event.addActivities(activities)
+            return event;
+          }));
+        }))
+      }));
   }
 
   private getEventQueryForUser(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any) {

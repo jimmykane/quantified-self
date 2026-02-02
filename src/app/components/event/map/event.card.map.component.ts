@@ -23,6 +23,7 @@ import { EventInterface, ActivityInterface, LapInterface, User, LapTypes, GeoLib
 import { AppEventService } from '../../../services/app.event.service';
 import { Subject, Subscription, asyncScheduler } from 'rxjs';
 import { AppUserService } from '../../../services/app.user.service';
+import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import { MapAbstractDirective } from '../../map/map-abstract.directive';
@@ -56,7 +57,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   public get lapTypes(): LapTypes[] {
     const types = (this._lapTypes && this._lapTypes.length > 0)
       ? this._lapTypes
-      : (this.userSettingsQuery.chartSettings()?.lapTypes ?? AppUserService.getDefaultChartLapTypes());
+      : (this.userSettingsQuery.chartSettings()?.lapTypes ?? AppUserUtilities.getDefaultChartLapTypes());
     return types;
   }
   @Input() set lapTypes(value: LapTypes[]) {

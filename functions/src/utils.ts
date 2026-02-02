@@ -263,18 +263,26 @@ export async function createFirebaseAccount(serviceUserID: string) {
   return token;
 }
 
-export async function getUserRole(userID: string): Promise<string> {
+export async function getUserRoleAndGracePeriod(userID: string): Promise<{ role: string, gracePeriodUntil?: number }> {
   try {
     const userRecord = await admin.auth().getUser(userID);
-    const role = userRecord.customClaims?.['stripeRole'] as string;
-    return role || 'free';
+    const role = (userRecord.customClaims?.['stripeRole'] as string) || 'free';
+    const gracePeriodUntil = userRecord.customClaims?.['gracePeriodUntil'] as number;
+    return { role, gracePeriodUntil };
   } catch (e: any) {
     if (e.code === 'auth/user-not-found') {
       throw new UserNotFoundError(`User ${userID} not found in Auth`);
     }
     logger.error(`Error fetching user role for ${userID}:`, e);
-    return 'free'; // Safe default for other errors
+    return { role: 'free' }; // Safe default for other errors
   }
+}
+
+/**
+ * Checks if the grace period is still active.
+ */
+export function isGracePeriodActive(gracePeriodUntil?: number): boolean {
+  return !!gracePeriodUntil && gracePeriodUntil > Date.now();
 }
 
 
@@ -301,11 +309,17 @@ export class UserNotFoundError extends Error {
 
 import { USAGE_LIMITS } from './shared/limits';
 
-export async function checkEventUsageLimit(userID: string, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number }>>, pendingWrites?: Map<string, number>): Promise<void> {
-  const role = await getUserRole(userID);
+export async function checkEventUsageLimit(userID: string, usageCache?: Map<string, Promise<{ role: string, limit: number, currentCount: number, gracePeriodUntil?: number }>>, pendingWrites?: Map<string, number>): Promise<void> {
+  const { role, gracePeriodUntil } = await getUserRoleAndGracePeriod(userID);
   if (role === 'pro') return;
 
-  let roleData: { role: string, limit: number, currentCount: number };
+  // Bypass limit if in active grace period
+  if (isGracePeriodActive(gracePeriodUntil)) {
+    logger.info(`[UsageCheck] User: ${userID}, Role: ${role}, In Active Grace Period until ${new Date(gracePeriodUntil!).toISOString()}. Bypassing limit.`);
+    return;
+  }
+
+  let roleData: { role: string, limit: number, currentCount: number, gracePeriodUntil?: number };
 
   if (usageCache) {
     let usagePromise = usageCache.get(userID);
@@ -314,7 +328,7 @@ export async function checkEventUsageLimit(userID: string, usageCache?: Map<stri
         const limit = USAGE_LIMITS[role] || 10;
         const eventsCollection = admin.firestore().collection('users').doc(userID).collection('events');
         const snapshot = await eventsCollection.count().get();
-        return { role, limit, currentCount: snapshot.data().count };
+        return { role, limit, currentCount: snapshot.data().count, gracePeriodUntil };
       })();
       usageCache.set(userID, usagePromise);
     }
@@ -323,13 +337,10 @@ export async function checkEventUsageLimit(userID: string, usageCache?: Map<stri
     const limit = USAGE_LIMITS[role] || 10;
     const eventsCollection = admin.firestore().collection('users').doc(userID).collection('events');
     const snapshot = await eventsCollection.count().get();
-    roleData = { role, limit, currentCount: snapshot.data().count };
+    roleData = { role, limit, currentCount: snapshot.data().count, gracePeriodUntil };
   }
 
   const { limit, currentCount } = roleData;
-
-  // Pro: Unlimited
-  if (role === 'pro') return;
 
   const currentPending = (pendingWrites?.get(userID) || 0);
   const totalCount = currentCount + currentPending;
@@ -350,11 +361,11 @@ export async function checkEventUsageLimit(userID: string, usageCache?: Map<stri
 export const PRO_REQUIRED_MESSAGE = 'Service sync is a Pro feature. Please upgrade to Pro.';
 
 /**
- * Checks if the user has Pro access.
+ * Checks if the user has Pro access (either 'pro' role or active grace period).
  */
-export async function isProUser(userID: string): Promise<boolean> {
-  const role = await getUserRole(userID);
-  return role === 'pro';
+export async function hasProAccess(userID: string): Promise<boolean> {
+  const { role, gracePeriodUntil } = await getUserRoleAndGracePeriod(userID);
+  return role === 'pro' || isGracePeriodActive(gracePeriodUntil);
 }
 
 // Re-export Cloud Tasks utilities from shared module for backward compatibility

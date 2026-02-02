@@ -25,12 +25,10 @@ export class SideNavComponent implements OnInit, OnDestroy {
   public events: EventInterface[] = [];
   public appVersion = environment.appVersion;
 
-  public user: User | null = null;
 
   public appTheme!: AppThemes
   public appThemes = AppThemes;
 
-  private userSubscription!: Subscription
   private themeSubscription!: Subscription
   private analyticsService = inject(AppAnalyticsService);
 
@@ -45,33 +43,27 @@ export class SideNavComponent implements OnInit, OnDestroy {
     private router: Router) {
   }
 
-  public isAdminUser = false;
 
   ngOnInit() {
     this.themeSubscription = this.themeService.getAppTheme().subscribe(theme => {
       this.appTheme = theme
     })
-    this.userSubscription = this.authService.user$.subscribe(async (user) => {
-      this.user = user;
-      this.user = user;
-      if (user) {
-        this.isAdminUser = await this.userService.isAdmin();
-      } else {
-        this.isAdminUser = false;
-      }
-    });
   }
 
   get isProUser(): boolean {
-    return AppUserService.isProUser(this.user, this.isAdminUser);
+    return this.userService.isProSignal();
   }
 
   get isBasicUser(): boolean {
-    return AppUserService.isBasicUser(this.user);
+    return this.userService.isBasicSignal();
   }
 
   get hasPaidAccess(): boolean {
-    return AppUserService.hasPaidAccessUser(this.user, this.isAdminUser);
+    return this.userService.hasPaidAccessSignal();
+  }
+
+  get user(): User | null {
+    return this.userService.user();
   }
 
   async donate() {
@@ -103,9 +95,6 @@ export class SideNavComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     if (this.themeSubscription) {
       this.themeSubscription.unsubscribe();
-    }
-    if (this.userSubscription) {
-      this.userSubscription.unsubscribe();
     }
   }
 

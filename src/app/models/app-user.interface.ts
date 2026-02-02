@@ -19,4 +19,5 @@ export interface AppUserInterface extends User {
     acceptedMarketingPolicy?: boolean;
     claimsUpdatedAt?: { seconds: number, nanoseconds: number } | Date;
     settings?: AppUserSettingsInterface;
+    gracePeriodUntil?: { seconds: number, nanoseconds: number } | Date | number;
 }

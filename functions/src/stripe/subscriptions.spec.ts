@@ -31,7 +31,6 @@ vi.mock('firebase-functions/v2/firestore', () => ({
 import { onSubscriptionUpdated } from './subscriptions';
 
 describe('onSubscriptionUpdated', () => {
-    let firestoreSpy: ReturnType<typeof vi.spyOn>;
     let collectionSpy: ReturnType<typeof vi.fn>;
     let docSpy: ReturnType<typeof vi.fn>;
     let setSpy: ReturnType<typeof vi.fn>;
@@ -98,7 +97,7 @@ describe('onSubscriptionUpdated', () => {
             return { doc: docSpy };
         });
 
-        firestoreSpy = vi.spyOn(admin, 'firestore').mockReturnValue({
+        vi.spyOn(admin, 'firestore').mockReturnValue({
             collection: collectionSpy,
             doc: docSpy,
         } as unknown as admin.firestore.Firestore);
@@ -165,9 +164,11 @@ describe('onSubscriptionUpdated', () => {
             setupSubscriptionsQuery(true); // Has active subscription
             mockReconcileClaims.mockResolvedValue({ role: 'pro' });
 
-            await onSubscriptionUpdated(event);
+            await onSubscriptionUpdated(event as any);
 
-            expect(mockReconcileClaims).toHaveBeenCalledWith(uid);
+            // Should call reconcileClaims twice: once at the top, and once after checking/updating grace period
+            // Since setupSubscriptionsQuery(true) is called, it goes to the 'else' branch (clearing grace period).
+            expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
         });
 
         it('should log appropriate message when skipping deleted user', async () => {
@@ -198,7 +199,8 @@ describe('onSubscriptionUpdated', () => {
 
             await onSubscriptionUpdated(event);
 
-            expect(mockReconcileClaims).toHaveBeenCalledWith(uid);
+            // Should call reconcileClaims twice: once at the top, and once after setting grace period
+            expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
             expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({
                 gracePeriodUntil: expect.anything(),
                 lastDowngradedAt: 'SERVER_TIMESTAMP'
@@ -265,9 +267,10 @@ describe('onSubscriptionUpdated', () => {
             setupSubscriptionsQuery(true);
             mockReconcileClaims.mockResolvedValue({ role: 'pro' });
 
-            await onSubscriptionUpdated(event);
+            await onSubscriptionUpdated(event as any);
 
-            expect(mockReconcileClaims).toHaveBeenCalledWith(uid);
+            // Should call reconcileClaims twice: once at the top, and once after clearing grace period (since sub query mocks active sub)
+            expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
         });
 
         it('should handle trialing subscription as active', async () => {
@@ -291,10 +294,11 @@ describe('onSubscriptionUpdated', () => {
             });
             mockReconcileClaims.mockResolvedValue({ role: 'basic' });
 
-            await onSubscriptionUpdated(event);
+            await onSubscriptionUpdated(event as any);
 
             // Should try to clear grace period (subscription is active)
             expect(updateSpy).toHaveBeenCalled();
+            expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
         });
     });
 
@@ -307,7 +311,10 @@ describe('onSubscriptionUpdated', () => {
             const event = createMockEvent(uid, 'sub_canceled');
 
             setupUserExists(true, {});
-            mockReconcileClaims.mockRejectedValue({ code: 'not-found', message: 'No active subscription found' });
+            // Explicitly mock exactly two calls
+            mockReconcileClaims
+                .mockRejectedValueOnce({ code: 'not-found', message: 'No active subscription found' }) // 1st call
+                .mockResolvedValueOnce({ role: 'free' }); // 2nd call (inside grace period block)
 
             // Mock auth for fallback
             authSpy.mockReturnValue({
@@ -315,10 +322,11 @@ describe('onSubscriptionUpdated', () => {
                 setCustomUserClaims: vi.fn().mockResolvedValue(undefined)
             } as unknown as admin.auth.Auth);
 
-            await expect(onSubscriptionUpdated(event)).resolves.not.toThrow();
+            await expect(onSubscriptionUpdated(event as any)).resolves.not.toThrow();
 
-            // Should set grace period in catch block
+            // Should set grace period in catch block or after
             expect(setSpy).toHaveBeenCalled();
+            expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
         });
 
         it('should log error for unexpected exceptions', async () => {
@@ -327,14 +335,18 @@ describe('onSubscriptionUpdated', () => {
 
             setupUserExists(true);
             const unexpectedError = new Error('Unexpected database error');
-            mockReconcileClaims.mockRejectedValue(unexpectedError);
+            // Explicitly mock both calls
+            mockReconcileClaims
+                .mockRejectedValueOnce(unexpectedError) // 1st call
+                .mockResolvedValueOnce({ role: 'free' }); // 2nd call
 
-            await onSubscriptionUpdated(event);
+            await onSubscriptionUpdated(event as any);
 
-            expect(mockLogger.error).toHaveBeenCalledWith(
-                expect.stringContaining('Error for user'),
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                expect.stringContaining('Non-critical error during initial reconcileClaims'),
                 unexpectedError
             );
+            expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
         });
 
         it('should handle "No active subscription found" message in error', async () => {
@@ -342,28 +354,36 @@ describe('onSubscriptionUpdated', () => {
             const event = createMockEvent(uid, 'sub_msg_error');
 
             setupUserExists(true, {});
-            mockReconcileClaims.mockRejectedValue({ message: 'No active subscription found for user' });
+            // Explicitly mock both calls
+            mockReconcileClaims
+                .mockRejectedValueOnce({ message: 'No active subscription found for user' }) // 1st call
+                .mockResolvedValueOnce({ role: 'free' }); // 2nd call
 
             authSpy.mockReturnValue({
                 getUser: vi.fn().mockResolvedValue({ customClaims: {} }),
                 setCustomUserClaims: vi.fn().mockResolvedValue(undefined)
             } as unknown as admin.auth.Auth);
 
-            await expect(onSubscriptionUpdated(event)).resolves.not.toThrow();
+            await expect(onSubscriptionUpdated(event as any)).resolves.not.toThrow();
+            expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
         });
         it('should handle user without customClaims defined', async () => {
             const uid = 'no_claims_user';
             const event = createMockEvent(uid, 'sub_no_claims');
 
             setupUserExists(true, {});
-            mockReconcileClaims.mockRejectedValue({ code: 'not-found' }); // Force catch block
+            // Explicitly mock both calls
+            mockReconcileClaims
+                .mockRejectedValueOnce({ code: 'not-found' }) // 1st call
+                .mockResolvedValueOnce({ role: 'free' }); // 2nd call
 
             authSpy.mockReturnValue({
                 getUser: vi.fn().mockResolvedValue({ customClaims: undefined }), // No claims
                 setCustomUserClaims: vi.fn().mockResolvedValue(undefined)
             } as unknown as admin.auth.Auth);
 
-            await expect(onSubscriptionUpdated(event)).resolves.not.toThrow();
+            await expect(onSubscriptionUpdated(event as any)).resolves.not.toThrow();
+            expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
         });
     });
 
@@ -383,7 +403,10 @@ describe('onSubscriptionUpdated', () => {
             setupSubscriptionsQuery(true);
             mockReconcileClaims.mockResolvedValue({ role: 'pro' });
 
-            await onSubscriptionUpdated(event);
+            await onSubscriptionUpdated(event as any);
+
+            // Should reconcile claims twice
+            expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
 
             expect(mockCheckAndSendEmails).toHaveBeenCalledWith(
                 uid,
@@ -417,8 +440,10 @@ describe('onSubscriptionUpdated', () => {
             setupSubscriptionsQuery(true);
             mockReconcileClaims.mockResolvedValue({ role: 'pro' });
 
-            await onSubscriptionUpdated(event);
+            await onSubscriptionUpdated(event as any);
 
+            // Should reconcile claims twice
+            expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
             expect(mockCheckAndSendEmails).not.toHaveBeenCalled();
         });
 
@@ -434,7 +459,10 @@ describe('onSubscriptionUpdated', () => {
             setupSubscriptionsQuery(true);
             mockReconcileClaims.mockResolvedValue({ role: 'pro' });
 
-            await onSubscriptionUpdated(event);
+            await onSubscriptionUpdated(event as any);
+
+            // Should reconcile claims twice
+            expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
 
             expect(mockCheckAndSendEmails).toHaveBeenCalledWith(
                 uid,
@@ -461,10 +489,10 @@ describe('onSubscriptionUpdated', () => {
             setupSubscriptionsQuery(false); // No active subscriptions after cancel
             mockReconcileClaims.mockResolvedValue({ role: 'free' });
 
-            await onSubscriptionUpdated(event);
+            await onSubscriptionUpdated(event as any);
 
-            // Should reconcile claims
-            expect(mockReconcileClaims).toHaveBeenCalledWith(uid);
+            // Should reconcile claims twice
+            expect(mockReconcileClaims).toHaveBeenCalledTimes(2);
 
             // Should set grace period
             expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({

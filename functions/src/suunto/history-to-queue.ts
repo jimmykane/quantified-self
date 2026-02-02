@@ -2,7 +2,7 @@
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
-import { isProUser, PRO_REQUIRED_MESSAGE, enforceAppCheck } from '../utils';
+import { hasProAccess, PRO_REQUIRED_MESSAGE, enforceAppCheck } from '../utils';
 import { SERVICE_NAME } from './constants';
 import { HistoryImportResult, addHistoryToQueue, getNextAllowedHistoryImportDate } from '../history';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
@@ -38,7 +38,7 @@ export const addSuuntoAppHistoryToQueue = onCall({
   const userID = request.auth.uid;
 
   // Enforce Pro Access
-  if (!(await isProUser(userID))) {
+  if (!(await hasProAccess(userID))) {
     logger.warn(`Blocking history import for non-pro user ${userID}`);
     throw new HttpsError('permission-denied', PRO_REQUIRED_MESSAGE);
   }

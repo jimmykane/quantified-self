@@ -17,36 +17,38 @@ import { BehaviorSubject } from 'rxjs';
 import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
 
 // Mock canvas for charts
+// Mock canvas for charts
 Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
-    value: () => ({
-        fillRect: () => { },
-        clearRect: () => { },
-        getImageData: () => ({ data: [] }),
-        putImageData: () => { },
-        createImageData: () => [],
-        setTransform: () => { },
-        save: () => { },
-        restore: () => { },
-        beginPath: () => { },
-        moveTo: () => { },
-        lineTo: () => { },
-        clip: () => { },
-        fill: () => { },
-        stroke: () => { },
-        rect: () => { },
-        arc: () => { },
-        quadraticCurveTo: () => { },
-        closePath: () => { },
-        translate: () => { },
-        rotate: () => { },
-        scale: () => { },
-        fillText: () => { },
-        strokeText: () => { },
-        measureText: () => ({ width: 0 }),
-        drawImage: () => { },
+    value: vi.fn().mockImplementation(() => ({
+        fillRect: vi.fn(),
+        clearRect: vi.fn(),
+        getImageData: vi.fn().mockReturnValue({ data: [] }),
+        putImageData: vi.fn(),
+        createImageData: vi.fn().mockReturnValue([]),
+        setTransform: vi.fn(),
+        save: vi.fn(),
+        restore: vi.fn(),
+        beginPath: vi.fn(),
+        moveTo: vi.fn(),
+        lineTo: vi.fn(),
+        clip: vi.fn(),
+        fill: vi.fn(),
+        stroke: vi.fn(),
+        rect: vi.fn(),
+        arc: vi.fn(),
+        quadraticCurveTo: vi.fn(),
+        closePath: vi.fn(),
+        translate: vi.fn(),
+        rotate: vi.fn(),
+        scale: vi.fn(),
+        fillText: vi.fn(),
+        strokeText: vi.fn(),
+        measureText: vi.fn().mockReturnValue({ width: 0 }),
+        drawImage: vi.fn(),
         canvas: { width: 0, height: 0, style: {} }
-    }),
-    configurable: true
+    })),
+    configurable: true,
+    writable: true
 });
 
 // Mock ResizeObserver

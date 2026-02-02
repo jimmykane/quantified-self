@@ -1,8 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { EventCardStatsGridComponent } from './event.card.stats-grid.component';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
-import { signal } from '@angular/core';
-import { ActivityInterface, ActivityTypes, EventInterface, UserSummariesSettingsInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { signal, NO_ERRORS_SCHEMA } from '@angular/core';
+import { ActivityTypes, UserSummariesSettingsInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { SimpleChange } from '@angular/core';
 import { DataAscent, DataDescent, DataDuration } from '@sports-alliance/sports-lib';
 
@@ -35,6 +35,7 @@ describe('EventCardStatsGridComponent', () => {
             providers: [
                 { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQueryService },
             ],
+            schemas: [NO_ERRORS_SCHEMA],
         }).compileComponents();
 
         fixture = TestBed.createComponent(EventCardStatsGridComponent);

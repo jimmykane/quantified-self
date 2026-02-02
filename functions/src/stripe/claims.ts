@@ -270,6 +270,8 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
     const db = admin.firestore();
     const subscriptionsRef = db.collection(`customers/${uid}/subscriptions`);
 
+    let role = 'free';
+
     // Check for any active or trialing subscription
     const snapshot = await subscriptionsRef
         .where('status', 'in', ['active', 'trialing'])
@@ -277,7 +279,11 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
         .limit(1)
         .get();
 
-    if (snapshot.empty) {
+    if (!snapshot.empty) {
+        const subData = snapshot.docs[0].data();
+        role = subData.role || 'free';
+        logger.info(`[reconcileClaims] Local subscription found for ${uid}. Role: ${role}`);
+    } else {
         // Fallback: Check if the user exists in Stripe by email
         logger.info(`[reconcileClaims] No local subscription found for ${uid}. Checking Stripe by email...`);
 
@@ -285,31 +291,33 @@ export async function reconcileClaims(uid: string): Promise<{ role: string }> {
         if (user.email) {
             const result = await findAndLinkStripeCustomerByEmail(uid, user.email, user);
             if (result.found && result.role) {
-                return { role: result.role };
+                role = result.role;
             }
         }
-
-        throw new HttpsError('not-found', 'No active subscription found.');
-    }
-
-    const subData = snapshot.docs[0].data();
-    const role = subData.role;
-
-    logger.info(`[reconcileClaims] Metadata check - role: ${subData.role}`);
-
-    if (!role) {
-        throw new HttpsError('failed-precondition', 'Subscription found but no role defined in document.');
     }
 
     // Set custom user claims
-    logger.info(`[reconcileClaims] Setting claims for user ${uid} to role: ${role}`);
+    logger.info(`[reconcileClaims] Updating claims for user ${uid}. Final role: ${role}`);
     const user = await admin.auth().getUser(uid);
     const existingClaims = user.customClaims || {};
 
-    await admin.auth().setCustomUserClaims(uid, {
+    // Check for grace period in system status
+    const systemDoc = await db.doc(`users/${uid}/system/status`).get();
+    const systemData = systemDoc.data();
+    const gracePeriodUntil = systemData?.gracePeriodUntil ? Math.floor(systemData.gracePeriodUntil.toMillis()) : undefined;
+
+    const newClaims = {
         ...existingClaims,
-        stripeRole: role
-    });
+        stripeRole: role,
+    };
+
+    if (gracePeriodUntil) {
+        (newClaims as any).gracePeriodUntil = gracePeriodUntil;
+    } else {
+        delete (newClaims as any).gracePeriodUntil;
+    }
+
+    await admin.auth().setCustomUserClaims(uid, newClaims);
 
     // Semantic update: Signal that claims have been updated so the client can refresh
     await db.doc(`users/${uid}/system/status`).set({

@@ -28,14 +28,14 @@ vi.mock('../request-helper', () => ({
 }));
 
 const utilsMocks = {
-    isProUser: vi.fn(),
+    hasProAccess: vi.fn(),
 };
 
 vi.mock('../utils', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../utils')>();
     return {
         ...actual,
-        isProUser: (...args: any[]) => utilsMocks.isProUser(...args),
+        hasProAccess: (...args: any[]) => utilsMocks.hasProAccess(...args),
     };
 });
 
@@ -120,7 +120,7 @@ describe('importActivityToSuuntoApp', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         // Default happy path
-        utilsMocks.isProUser.mockResolvedValue(true);
+        utilsMocks.hasProAccess.mockResolvedValue(true);
     });
 
     it('should successfully upload an activity', async () => {
@@ -154,7 +154,7 @@ describe('importActivityToSuuntoApp', () => {
         const result = await importActivityToSuuntoApp(request as any);
 
         // Assertions
-        expect(utilsMocks.isProUser).toHaveBeenCalledWith('test-user-id');
+        expect(utilsMocks.hasProAccess).toHaveBeenCalledWith('test-user-id');
         expect(tokensMocks.getTokenData).toHaveBeenCalled();
 
         // 1. Check Init Upload
@@ -321,7 +321,7 @@ describe('importActivityToSuuntoApp', () => {
     });
 
     it('should block non-pro users', async () => {
-        utilsMocks.isProUser.mockResolvedValue(false);
+        utilsMocks.hasProAccess.mockResolvedValue(false);
 
         const request = createMockRequest({
             data: { file: 'base64data' }
