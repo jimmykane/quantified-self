@@ -360,14 +360,14 @@ describe('tokens', () => {
             expect(mockDoc.ref.delete).not.toHaveBeenCalled();
         });
 
-        it('should NOT delete token on 502 error', async () => {
+        it('should NOT delete token on 406 error with JSON compatible message', async () => {
             mockToken.expired.mockReturnValue(true);
-            const error: any = new Error('Bad Gateway');
-            error.statusCode = 502;
+            const error: any = new Error('The content-type is not JSON compatible');
+            error.statusCode = 406;
             mockToken.refresh.mockRejectedValue(error);
 
             await expect(getTokenData(mockDoc, ServiceNames.SuuntoApp, false))
-                .rejects.toThrow('Bad Gateway');
+                .rejects.toThrow('The content-type is not JSON compatible');
 
             expect(mockDoc.ref.delete).not.toHaveBeenCalled();
             expect(deleteLocalServiceToken).not.toHaveBeenCalled();

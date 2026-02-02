@@ -257,8 +257,16 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     try {
       serviceToken = await getTokenData(tokenQueryDocumentSnapshot, serviceName);
     } catch (e: any) {
-      logger.error(e);
-      logger.error(new Error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`));
+      const statusCode = e.statusCode || (e.output && e.output.statusCode);
+      const errorDescription = e.message || (e.error && (e.error.error_description || e.error.error));
+      const isTransientError = statusCode === 500 || statusCode === 502 || (statusCode === 406 && String(errorDescription).toLowerCase().includes('json compatible'));
+
+      if (isTransientError) {
+        logger.warn(`Refreshing token failed with transient error (${statusCode}), skipping this token with id ${tokenQueryDocumentSnapshot.id}`);
+      } else {
+        logger.error(e);
+        logger.error(new Error(`Refreshing token failed skipping this token with id ${tokenQueryDocumentSnapshot.id}`));
+      }
       continue;
     }
 
