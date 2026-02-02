@@ -1,11 +1,14 @@
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
-import { of } from 'rxjs';
+import { of, Observable } from 'rxjs';
 import { onboardingGuard } from './onboarding.guard';
 import { AppAuthService } from './app.auth.service';
 import { LoggerService } from '../services/logger.service';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { User } from '@sports-alliance/sports-lib';
+import { AppUserService } from '../services/app.user.service';
+import { Firestore } from '@angular/fire/firestore';
+import { signal } from '@angular/core';
 
 describe('onboardingGuard', () => {
     let router: Router;
@@ -22,22 +25,29 @@ describe('onboardingGuard', () => {
         error: vi.fn()
     };
 
-    const mockAuthService = {
+    const mockAuthService: { user$: Observable<any> } = {
         user$: of(null)
+    };
+
+    const mockUserService = {
+        hasPaidAccessSignal: signal(false)
     };
 
     beforeEach(() => {
         TestBed.configureTestingModule({
             providers: [
                 { provide: AppAuthService, useValue: mockAuthService },
+                { provide: AppUserService, useValue: mockUserService },
                 { provide: Router, useValue: mockRouter },
-                { provide: LoggerService, useValue: mockLogger }
+                { provide: LoggerService, useValue: mockLogger },
+                { provide: Firestore, useValue: {} }
             ]
         });
 
         router = TestBed.inject(Router);
         authService = TestBed.inject(AppAuthService);
         logger = TestBed.inject(LoggerService);
+        mockUserService.hasPaidAccessSignal.set(false); // Reset state
         vi.clearAllMocks();
     });
 
@@ -54,6 +64,8 @@ describe('onboardingGuard', () => {
             acceptedDataPolicy: true,
             acceptedTos: true
         };
+
+        mockUserService.hasPaidAccessSignal.set(true);
 
         const result = await (runGuard(user) as any).toPromise();
         expect(result).toBe(true);
@@ -99,6 +111,8 @@ describe('onboardingGuard', () => {
             acceptedTos: true,
             hasSubscribedOnce: true
         };
+
+        mockUserService.hasPaidAccessSignal.set(true);
 
         const result = await (runGuard(user) as any).toPromise();
         expect(result).toBe(true);

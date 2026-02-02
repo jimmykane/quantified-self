@@ -5,6 +5,9 @@ import { AppUserService } from '../services/app.user.service';
 import { AppAuthService } from './app.auth.service';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { of } from 'rxjs';
+import { LoggerService } from '../services/logger.service';
+import { Firestore } from '@angular/fire/firestore';
+import { signal } from '@angular/core';
 
 describe('proGuard', () => {
     let router: Router;
@@ -15,8 +18,9 @@ describe('proGuard', () => {
         authServiceStub = {
             user$: of(null)
         };
-        userServiceStub = {}; // No methods needed for seemingly, as guard checks authService user directly now? 
-        // Actually guard uses authService.user$ to get user claims.
+        userServiceStub = {
+            hasPaidAccessSignal: signal(false)
+        } as any;
 
         const routerSpy = {
             navigate: vi.fn()
@@ -26,7 +30,9 @@ describe('proGuard', () => {
             providers: [
                 { provide: AppAuthService, useValue: authServiceStub },
                 { provide: AppUserService, useValue: userServiceStub },
-                { provide: Router, useValue: routerSpy }
+                { provide: Router, useValue: routerSpy },
+                { provide: LoggerService, useValue: { log: vi.fn(), error: vi.fn() } },
+                { provide: Firestore, useValue: {} }
             ]
         });
 
@@ -43,6 +49,8 @@ describe('proGuard', () => {
             acceptedDiagnosticsPolicy: true
         } as any);
 
+        userServiceStub.hasPaidAccessSignal.set(true);
+
         const result = await TestBed.runInInjectionContext(() => proGuard({} as any, {} as any));
         expect(result).toBe(true);
     });
@@ -56,6 +64,8 @@ describe('proGuard', () => {
             acceptedTrackingPolicy: true,
             acceptedDiagnosticsPolicy: true
         } as any);
+
+        userServiceStub.hasPaidAccessSignal.set(true);
 
         const result = await TestBed.runInInjectionContext(() => proGuard({} as any, {} as any));
         expect(result).toBe(true);

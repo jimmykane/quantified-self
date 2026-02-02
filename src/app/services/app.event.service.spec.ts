@@ -328,19 +328,13 @@ describe('AppEventService', () => {
             mockUser.isPro.mockResolvedValue(false);
             mockUser.getSubscriptionRole.mockResolvedValue('free');
 
-            // Spy on static method
-            const isGracePeriodActiveSpy = vi.spyOn(AppUserService, 'isGracePeriodActive');
-
             // Mock count to be over limit
             mocks.getCountFromServer.mockResolvedValue({ data: () => ({ count: 15 }) });
 
             await service.writeAllEventData(user, mockEvent);
 
-            expect(isGracePeriodActiveSpy).toHaveBeenCalled();
             expect(mocks.writeAllEventData).toHaveBeenCalled();
             // Should NOT have thrown an error
-
-            isGracePeriodActiveSpy.mockRestore();
         });
 
         it('should throw error if NOT pro, NOT in grace period, and OVER limit', async () => {

@@ -3,7 +3,11 @@ import { ComponentFixture, TestBed, waitForAsync } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { HasRoleDirective } from './has-role.directive';
 import { AppUserService } from '../services/app.user.service';
-import { vi, describe, it, expect } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
+
+import { signal } from '@angular/core';
+import { LoggerService } from '../services/logger.service';
+import { Firestore } from '@angular/fire/firestore';
 
 @Component({
     standalone: true,
@@ -17,17 +21,21 @@ class HasRoleTestComponent { }
 
 describe('HasRoleDirective', () => {
     let fixture: ComponentFixture<HasRoleTestComponent>;
-    let userServiceStub: { hasPaidAccess: ReturnType<typeof vi.fn>, isPremium: ReturnType<typeof vi.fn> };
+    let userServiceStub: { hasPaidAccessSignal: any, isProSignal: any };
 
     beforeEach(async () => {
         userServiceStub = {
-            hasPaidAccess: vi.fn(),
-            isPro: vi.fn()
+            hasPaidAccessSignal: signal(false),
+            isProSignal: signal(false)
         };
 
         await TestBed.configureTestingModule({
             imports: [HasRoleTestComponent, HasRoleDirective],
-            providers: [{ provide: AppUserService, useValue: userServiceStub }]
+            providers: [
+                { provide: AppUserService, useValue: userServiceStub },
+                { provide: LoggerService, useValue: { error: vi.fn() } },
+                { provide: Firestore, useValue: {} }
+            ]
         }).compileComponents();
     });
 
@@ -36,11 +44,9 @@ describe('HasRoleDirective', () => {
     });
 
     it('should display basic content for Basic user', async () => {
-        userServiceStub.hasPaidAccess.mockResolvedValue(true); // Basic satisfies hasPaidAccess
-        userServiceStub.isPro.mockResolvedValue(false);
+        userServiceStub.hasPaidAccessSignal.set(true);
+        userServiceStub.isProSignal.set(false);
 
-        fixture.detectChanges();
-        await fixture.whenStable();
         fixture.detectChanges();
 
         const basicEl = fixture.debugElement.query(By.css('.basic-content'));
@@ -51,11 +57,9 @@ describe('HasRoleDirective', () => {
     });
 
     it('should display all content for Pro user', async () => {
-        userServiceStub.hasPaidAccess.mockResolvedValue(true);
-        userServiceStub.isPro.mockResolvedValue(true);
+        userServiceStub.hasPaidAccessSignal.set(true);
+        userServiceStub.isProSignal.set(true);
 
-        fixture.detectChanges();
-        await fixture.whenStable(); // Wait for async ngOnInit
         fixture.detectChanges();
 
         const basicEl = fixture.debugElement.query(By.css('.basic-content'));
@@ -66,11 +70,9 @@ describe('HasRoleDirective', () => {
     });
 
     it('should hide all content for Free user', async () => {
-        userServiceStub.hasPaidAccess.mockResolvedValue(false);
-        userServiceStub.isPro.mockResolvedValue(false);
+        userServiceStub.hasPaidAccessSignal.set(false);
+        userServiceStub.isProSignal.set(false);
 
-        fixture.detectChanges();
-        await fixture.whenStable();
         fixture.detectChanges();
 
         const basicEl = fixture.debugElement.query(By.css('.basic-content'));
