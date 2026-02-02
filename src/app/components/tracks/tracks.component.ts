@@ -144,7 +144,7 @@ export class TracksComponent implements OnInit, OnDestroy {
         lastLoadedDataSettings = currentSnapshot;
         this.isLoading.set(true);
         this.loadTracksMapForUserByDateRange(this.user, map, settings.dateRange, settings.activityTypes)
-          .catch(err => console.error('Error loading tracks', err))
+          .catch(err => this.logger.error('Error loading tracks', err))
           .finally(() => this.isLoading.set(false));
       }
     });
@@ -229,7 +229,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       });
 
     } catch (error) {
-      console.error('Failed to initialize Mapbox:', error);
+      this.logger.error('Failed to initialize Mapbox:', error);
     }
   }
 
@@ -418,7 +418,7 @@ export class TracksComponent implements OnInit, OnDestroy {
             this.tracksMapManager.clearAllTracks();
           }
         } catch (e) {
-          console.error('Error loading tracks', e);
+          this.logger.error('Error loading tracks', e);
         } finally {
           if (this.promiseTime === promiseTime) {
             this.clearProgressAndCloseBottomSheet();

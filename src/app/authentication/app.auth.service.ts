@@ -48,8 +48,8 @@ export class AppAuthService {
     // Use modular user observable to react to token refreshes too
     this.user$ = this.userService.user$;
     this.user$.subscribe({
-      error: err => console.error('[AppAuthService] user$ stream ERROR:', err),
-      complete: () => console.warn('[AppAuthService] user$ stream COMPLETED')
+      error: err => this.logger.error('[AppAuthService] user$ stream ERROR:', err),
+      complete: () => this.logger.warn('[AppAuthService] user$ stream COMPLETED')
     });
   }
 

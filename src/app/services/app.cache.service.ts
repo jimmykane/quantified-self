@@ -1,5 +1,6 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { get, set, del, clear } from 'idb-keyval';
+import { LoggerService } from './logger.service';
 
 export interface CachedFile {
     buffer: ArrayBuffer;
@@ -11,13 +12,15 @@ export interface CachedFile {
 })
 export class AppCacheService {
 
+    private logger = inject(LoggerService);
+
     constructor() { }
 
     public async getFile(key: string): Promise<CachedFile | undefined> {
         try {
             return await get<CachedFile>(key);
         } catch (e) {
-            console.warn('[AppCacheService] Failed to get file from cache', e);
+            this.logger.warn('[AppCacheService] Failed to get file from cache', e);
             return undefined;
         }
     }
@@ -26,7 +29,7 @@ export class AppCacheService {
         try {
             await set(key, value);
         } catch (e) {
-            console.warn('[AppCacheService] Failed to set file in cache', e);
+            this.logger.warn('[AppCacheService] Failed to set file in cache', e);
         }
     }
 
@@ -34,7 +37,7 @@ export class AppCacheService {
         try {
             await del(key);
         } catch (e) {
-            console.warn('[AppCacheService] Failed to remove file from cache', e);
+            this.logger.warn('[AppCacheService] Failed to remove file from cache', e);
         }
     }
 
@@ -42,7 +45,7 @@ export class AppCacheService {
         try {
             await clear();
         } catch (e) {
-            console.warn('[AppCacheService] Failed to clear cache', e);
+            this.logger.warn('[AppCacheService] Failed to clear cache', e);
         }
     }
 }

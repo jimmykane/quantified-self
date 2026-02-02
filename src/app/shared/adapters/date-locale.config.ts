@@ -66,8 +66,6 @@ export function getBrowserLocale(logger?: LoggerService): string {
 
         if (logger) {
             logger.warn(`[Locale] Unsupported locale detected: ${detected}. Falling back to en-US.`);
-        } else {
-            console.warn(`[Locale] Unsupported locale detected: ${detected}. Falling back to en-US.`);
         }
         return 'en-US';
 
