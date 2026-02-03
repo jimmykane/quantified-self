@@ -158,7 +158,16 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       return this.eventService
         .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit)
         .pipe(
-          distinctUntilChanged((p: EventInterface[], c: EventInterface[]) => JSON.stringify(p) === JSON.stringify(c)),
+          distinctUntilChanged((p: EventInterface[], c: EventInterface[]) => {
+            if (p?.length !== c?.length) return false;
+            return p.every((event, index) => {
+              const prev = p[index];
+              const curr = c[index];
+              return prev.getID() === curr.getID() &&
+                prev.name === curr.name &&
+                prev.startDate?.getTime() === curr.startDate?.getTime();
+            });
+          }),
           map((eventsArray: EventInterface[]) => {
             const t0 = performance.now();
             if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
