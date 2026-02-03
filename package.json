@@ -56,7 +56,6 @@
     "jszip": "^3.10.1",
     "mapbox-gl": "^3.10.0",
     "marked": "^15.0.12",
-    "material-symbols": "^0.40.2",
     "ng2-charts": "^8.0.0",
     "rxjs": "^7.8.2",
     "weeknumber": "^1.2.1",
