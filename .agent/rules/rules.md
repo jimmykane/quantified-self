@@ -38,3 +38,8 @@ trigger: always_on
   - `src/app/modules`: Feature modules.
   - `src/app/services`: Singleton services.
   - `src/app/components`: Shared components.
+
+### Code Quality & safety
+- **NO `any` Casting**:
+  - **STRICT RULE**: Do **NOT** cast objects to `any` (e.g., `const data: any = { ... }`), especially when interacting with **Firestore** or external APIs.
+  - **Reason**: Use strictly typed interfaces (e.g., `EventJSONInterface`) to ensure data integrity and catch type mismatches (like `Date` vs `number` timestamps) at compile time.
