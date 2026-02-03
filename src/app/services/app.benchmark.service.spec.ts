@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppBenchmarkService } from './app.benchmark.service';
-import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface, DataGradeAdjustedSpeed } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { webcrypto } from 'node:crypto';
 
@@ -226,7 +226,8 @@ describe('AppBenchmarkService', () => {
         it('getPositionAtTime should return null if no stream data', () => {
             const act = {
                 getDateIndex: () => 0,
-                getStreamData: () => null
+                getStreamData: () => null,
+                getAllStreams: () => [{ type: 'Latitude' }, { type: 'Longitude' }]
             } as any;
             expect((service as any).getPositionAtTime(act, new Date())).toBeNull();
         });
@@ -234,7 +235,8 @@ describe('AppBenchmarkService', () => {
         it('getPositionAtTime should return null if index out of bounds', () => {
             const act = {
                 getDateIndex: () => 10,
-                getStreamData: () => [0, 1, 2]
+                getStreamData: () => [0, 1, 2],
+                getAllStreams: () => [{ type: 'Latitude' }, { type: 'Longitude' }]
             } as any;
             expect((service as any).getPositionAtTime(act, new Date())).toBeNull();
         });
@@ -242,7 +244,8 @@ describe('AppBenchmarkService', () => {
         it('getPositionAtTime should return null if lat/lng is null', () => {
             const act = {
                 getDateIndex: () => 0,
-                getStreamData: (type: string) => type === 'Latitude' ? [null] : [0]
+                getStreamData: (type: string) => type === 'Latitude' ? [null] : [0],
+                getAllStreams: () => [{ type: 'Latitude' }, { type: 'Longitude' }]
             } as any;
             expect((service as any).getPositionAtTime(act, new Date())).toBeNull();
         });
@@ -329,7 +332,7 @@ describe('AppBenchmarkService', () => {
                     { type: 'Speed' },
                     { type: 'Pace' },           // Should be excluded
                     { type: 'Grade' },          // Should be excluded
-                    { type: 'GradeAdjustedSpeed' }, // Should be excluded
+                    { type: DataGradeAdjustedSpeed.type }, // Should be excluded
                     { type: 'Latitude' },       // Excluded (handled by GNSS)
                     { type: 'Longitude' },      // Excluded (handled by GNSS)
                 ],
@@ -338,7 +341,7 @@ describe('AppBenchmarkService', () => {
                     if (type === 'Speed') return [3.5, 3.6, 3.7];
                     if (type === 'Pace') return [4.0, 4.1, 4.2];
                     if (type === 'Grade') return [1, 2, 3];
-                    if (type === 'GradeAdjustedSpeed') return [3.8, 3.9, 4.0];
+                    if (type === DataGradeAdjustedSpeed.type) return [3.8, 3.9, 4.0];
                     if (type === 'Latitude') return [40, 40.001, 40.002];
                     if (type === 'Longitude') return [-74, -74.001, -74.002];
                     return [];
@@ -355,7 +358,7 @@ describe('AppBenchmarkService', () => {
             // Excluded types should NOT be in streamMetrics
             expect(result.metrics.streamMetrics['Pace']).toBeUndefined();
             expect(result.metrics.streamMetrics['Grade']).toBeUndefined();
-            expect(result.metrics.streamMetrics['GradeAdjustedSpeed']).toBeUndefined();
+            expect(result.metrics.streamMetrics[DataGradeAdjustedSpeed.type]).toBeUndefined();
             expect(result.metrics.streamMetrics['Latitude']).toBeUndefined();
             expect(result.metrics.streamMetrics['Longitude']).toBeUndefined();
         });
@@ -566,6 +569,169 @@ describe('AppBenchmarkService', () => {
             const result = await service.generateBenchmark(actA, actB);
 
             expect(Object.keys(result.metrics.streamMetrics).length).toBe(0);
+        });
+    });
+
+    describe('Auto Alignment', () => {
+        it('should detect and apply time offset when autoAlignTime is true', async () => {
+            const startDate = new Date('2023-01-01T10:00:00Z');
+            const endDate = new Date('2023-01-01T10:05:00Z'); // 5 mins
+
+            // Create reference speed data
+            const refSpeed = Array.from({ length: 300 }, (_, i) => Math.sin(i / 10) + 5);
+
+            // Create test speed data shifted by +5 seconds (Test is late)
+            // If Test is late, it means Test[t] matches Ref[t-5].
+            // Or Ref[t] matches Test[t+5].
+            // The algorithm searches offset. If offset=5, it means Test[t-5] matches Ref[t].
+            // So if Test is late (shifted right), Test[t] is Ref[t-5].
+            // So Test[5] matches Ref[0].
+            const testSpeed = new Array(300).fill(0);
+            for (let i = 0; i < 300; i++) {
+                if (i >= 5) testSpeed[i] = refSpeed[i - 5];
+            }
+
+            const actA = {
+                getID: () => 'actA',
+                startDate,
+                endDate,
+                getAllStreams: () => [{ type: 'Speed' }],
+                getStreamData: (type: string) => type === 'Speed' ? refSpeed : [],
+                getDateIndex: (date: Date) => Math.floor((date.getTime() - startDate.getTime()) / 1000),
+            } as unknown as ActivityInterface;
+
+            const actB = {
+                getID: () => 'actB',
+                startDate,
+                endDate,
+                getAllStreams: () => [{ type: 'Speed' }],
+                getStreamData: (type: string) => type === 'Speed' ? testSpeed : [],
+                getDateIndex: (date: Date) => Math.floor((date.getTime() - startDate.getTime()) / 1000),
+            } as unknown as ActivityInterface;
+
+            const result = await service.generateBenchmark(actA, actB, { autoAlignTime: true });
+
+            expect(result.alignmentApplied).toBe(true);
+            // We expect offset to be around -5.
+            expect(result.timeOffsetSeconds).toBe(-5);
+        });
+
+        it('should NOT apply offset if autoAlignTime is false', async () => {
+            const startDate = new Date('2023-01-01T10:00:00Z');
+            const endDate = new Date('2023-01-01T10:05:00Z');
+            const refSpeed = Array.from({ length: 300 }, (_, i) => Math.sin(i / 10) + 5);
+            const testSpeed = new Array(300).fill(0);
+            for (let i = 0; i < 300; i++) {
+                if (i >= 5) testSpeed[i] = refSpeed[i - 5];
+            }
+
+            const actA = {
+                getID: () => 'actA',
+                startDate,
+                endDate,
+                getAllStreams: () => [{ type: 'Speed' }],
+                getStreamData: (type: string) => type === 'Speed' ? refSpeed : [],
+                getDateIndex: (date: Date) => Math.floor((date.getTime() - startDate.getTime()) / 1000),
+            } as unknown as ActivityInterface;
+
+            const actB = {
+                getID: () => 'actB',
+                startDate,
+                endDate,
+                getAllStreams: () => [{ type: 'Speed' }],
+                getStreamData: (type: string) => type === 'Speed' ? testSpeed : [],
+                getDateIndex: (date: Date) => Math.floor((date.getTime() - startDate.getTime()) / 1000),
+            } as unknown as ActivityInterface;
+
+            const result = await service.generateBenchmark(actA, actB, { autoAlignTime: false });
+
+            expect(result.alignmentApplied).toBe(false);
+            expect(result.timeOffsetSeconds).toBe(0);
+        });
+    });
+
+    describe('Quality Issue Detection', () => {
+        it('should detect signal dropouts', async () => {
+            const startDate = new Date('2023-01-01T10:00:00Z');
+            const endDate = new Date('2023-01-01T10:01:00Z'); // 1 min
+
+            // 60 seconds of data. 0-10 OK, 11-20 Dropout (0), 21-60 OK
+            const hrData = Array.from({ length: 60 }, (_, i) => (i > 10 && i <= 20) ? 0 : 140);
+
+            const act = {
+                getID: () => 'act',
+                startDate,
+                endDate,
+                getAllStreams: () => [{ type: 'HeartRate' }],
+                getStreamData: (type: string) => type === 'HeartRate' ? hrData : [],
+                getDateIndex: (date: Date) => Math.floor((date.getTime() - startDate.getTime()) / 1000),
+            } as unknown as ActivityInterface;
+
+            // We can test this via private method access or full benchmark
+            // Let's use full benchmark against itself (comparison irrelevant, looking for issues)
+            const result = await service.generateBenchmark(act, act);
+
+            expect(result.qualityIssues).toBeDefined();
+            const dropout = result.qualityIssues!.find(i => i.type === 'dropout');
+            expect(dropout).toBeDefined();
+            expect(dropout!.streamType).toBe('HeartRate');
+            expect(dropout!.duration).toBe(10);
+        });
+
+        it('should detect stuck values', async () => {
+            const startDate = new Date('2023-01-01T10:00:00Z');
+            const endDate = new Date('2023-01-01T10:02:00Z');
+
+            // 120 seconds. 0-19 OK, 20-84 Stuck at 150, 85-119 OK
+            // 65 seconds of stuck values (threshold is 60)
+            const hrData = Array.from({ length: 120 }, (_, i) => {
+                if (i >= 20 && i < 85) return 150; // 65 seconds stuck
+                return 140 + (i % 5);
+            });
+
+            const act = {
+                getID: () => 'act',
+                startDate,
+                endDate,
+                getAllStreams: () => [{ type: 'HeartRate' }],
+                getStreamData: (type: string) => type === 'HeartRate' ? hrData : [],
+                getDateIndex: (date: Date) => Math.floor((date.getTime() - startDate.getTime()) / 1000),
+            } as unknown as ActivityInterface;
+
+            const result = await service.generateBenchmark(act, act);
+
+            const stuck = result.qualityIssues!.find(i => i.type === 'stuck');
+            expect(stuck).toBeDefined();
+            expect(stuck!.streamType).toBe('HeartRate');
+            expect(stuck!.duration).toBe(64);
+        });
+
+        it('should detect cadence lock', async () => {
+            const startDate = new Date('2023-01-01T10:00:00Z');
+            const endDate = new Date('2023-01-01T10:02:00Z'); // 2 mins
+
+            // 120 seconds. Highly correlated HR and Cadence
+            const hrData = Array.from({ length: 120 }, (_, i) => 160 + (i % 5));
+            const cadData = Array.from({ length: 120 }, (_, i) => 160 + (i % 5)); // Identical pattern
+
+            const act = {
+                getID: () => 'act',
+                startDate,
+                endDate,
+                getAllStreams: () => [{ type: 'HeartRate' }, { type: 'Cadence' }],
+                getStreamData: (type: string) => {
+                    if (type === 'HeartRate') return hrData;
+                    if (type === 'Cadence') return cadData;
+                    return [];
+                },
+                getDateIndex: (date: Date) => Math.floor((date.getTime() - startDate.getTime()) / 1000),
+            } as unknown as ActivityInterface;
+
+            const result = await service.generateBenchmark(act, act);
+
+            const lock = result.qualityIssues!.find(i => i.type === 'cadence_lock');
+            expect(lock).toBeDefined();
+            expect(lock!.streamType).toBe('HeartRate');
         });
     });
 });

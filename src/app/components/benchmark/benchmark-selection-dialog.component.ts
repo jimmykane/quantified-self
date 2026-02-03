@@ -31,6 +31,12 @@ export interface BenchmarkSelectionData {
            <mat-icon>compare_arrows</mat-icon>
            <span>{{ selection.selected[1].creator?.name || 'Device B' }}</span>
         </div>
+        
+        <div class="options-container">
+            <mat-checkbox [(ngModel)]="autoAlignTime">
+                Auto-align Time (Use Correlation)
+            </mat-checkbox>
+        </div>
       </div>
 
     </mat-dialog-content>
@@ -74,6 +80,11 @@ export interface BenchmarkSelectionData {
         justify-content: center;
         margin-top: 1rem;
     }
+    .options-container {
+        margin-top: 1rem;
+        display: flex;
+        justify-content: center;
+    }
     .fade-in {
         animation: fadeIn 0.3s ease-in;
     }
@@ -87,6 +98,7 @@ export interface BenchmarkSelectionData {
 export class BenchmarkSelectionDialogComponent {
 
   selection = new SelectionModel<ActivityInterface>(true, []);
+  autoAlignTime = true;
 
   constructor(
     public dialogRef: MatDialogRef<BenchmarkSelectionDialogComponent>,
@@ -112,7 +124,10 @@ export class BenchmarkSelectionDialogComponent {
 
   confirm(): void {
     if (this.selection.selected.length === 2) {
-      this.dialogRef.close(this.selection.selected);
+      this.dialogRef.close({
+        activities: this.selection.selected,
+        options: { autoAlignTime: this.autoAlignTime }
+      });
     }
   }
 }

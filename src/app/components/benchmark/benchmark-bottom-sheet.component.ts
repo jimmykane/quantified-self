@@ -5,17 +5,19 @@ import { BenchmarkResult } from '../../../../functions/src/shared/app-event.inte
 @Component({
   selector: 'app-benchmark-bottom-sheet',
   template: `
-    <div class="bottom-sheet-header">
-      <div class="title-row">
-        <mat-icon color="primary">analytics</mat-icon>
-        <h2 mat-dialog-title>Hardware Benchmark Analysis</h2>
-      </div>
-      <button mat-icon-button (click)="close()">
-        <mat-icon>close</mat-icon>
-      </button>
-    </div>
-    <div class="bottom-sheet-content qs-scrollbar">
-      <app-benchmark-report [result]="data.result"></app-benchmark-report>
+    <div class="bottom-sheet-container">
+        <div class="bottom-sheet-header">
+            <div class="title-row">
+                <mat-icon color="primary">analytics</mat-icon>
+                <h2 mat-dialog-title>Hardware Benchmark Analysis</h2>
+            </div>
+            <button mat-icon-button (click)="close()">
+                <mat-icon>close</mat-icon>
+            </button>
+        </div>
+        <div class="bottom-sheet-content qs-scrollbar">
+            <app-benchmark-report [result]="data.result"></app-benchmark-report>
+        </div>
     </div>
   `,
   styleUrls: ['./benchmark-bottom-sheet.component.css'],

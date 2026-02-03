@@ -62,7 +62,7 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
         <mat-card-content class="stats-grid">
             <div class="stat-item">
                 <span class="label">CEP 50%</span>
-                <span class="value" [ngClass]="getGnssGrade()">{{ result.metrics.gnss.cep50 | number:'1.2-2' }}m</span>
+                <span class="value">{{ result.metrics.gnss.cep50 | number:'1.2-2' }}m</span>
             </div>
             <div class="stat-item">
                 <span class="label">CEP 95%</span>
@@ -75,6 +75,31 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
              <div class="stat-item">
                 <span class="label">Max Dev</span>
                 <span class="value highlight">{{ result.metrics.gnss.maxDeviation | number:'1.1-1' }}m</span>
+            </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card class="metric-card info-card" *ngIf="result && (result.alignmentApplied || (result.qualityIssues && result.qualityIssues.length > 0))">
+        <mat-card-header>
+            <mat-icon mat-card-avatar>tune</mat-icon>
+            <mat-card-title>Data Quality</mat-card-title>
+            <mat-card-subtitle>Preprocessing & Artifacts</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+            <div class="quality-item" *ngIf="result.alignmentApplied">
+                <mat-icon class="info-icon">schedule</mat-icon>
+                <span>Auto-aligned by <strong>{{ result.timeOffsetSeconds }}s</strong> to maximize correlation.</span>
+            </div>
+            
+            <div class="quality-issues-list" *ngIf="result.qualityIssues && result.qualityIssues.length > 0">
+                <p class="issues-title">Detected Issues:</p>
+                <div class="quality-issue" *ngFor="let issue of result.qualityIssues" [ngClass]="issue.severity">
+                    <mat-icon>{{ getIssueIcon(issue.type) }}</mat-icon>
+                    <div class="issue-details">
+                        <span class="issue-desc">{{ issue.description }}</span>
+                        <span class="issue-meta">{{ issue.streamType }} • {{ issue.timestamp | date:'mediumTime' }}</span>
+                    </div>
+                </div>
             </div>
         </mat-card-content>
       </mat-card>
@@ -97,7 +122,7 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
                              [ngClass]="getCorrelationGrade(result.metrics.streamMetrics[stream].pearsonCorrelation)">
                         </div>
                     </div>
-                    <span class="corr-value" [ngClass]="getCorrelationGrade(result.metrics.streamMetrics[stream].pearsonCorrelation)">
+                    <span class="corr-value">
                         {{ result.metrics.streamMetrics[stream].pearsonCorrelation | number:'1.3-3' }} Correlation
                     </span>
                 </div>
@@ -123,23 +148,24 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
     .verdict-card {
         margin-bottom: 1.5rem;
         border-radius: 12px;
-        border: 2px solid transparent;
+        border: 2px solid transparent; /* Border will represent status */
         
-        &.excellent { 
-            border-color: #4caf50;
-            mat-card-avatar { background: #4caf50; color: white; }
-        }
-        &.good { 
-            border-color: #8bc34a;
-            mat-card-avatar { background: #8bc34a; color: white; }
-        }
-        &.fair { 
-            border-color: #ff9800;
-            mat-card-avatar { background: #ff9800; color: white; }
-        }
-        &.poor { 
-            border-color: #f44336;
-            mat-card-avatar { background: #f44336; color: white; }
+        /* Card BORDERS only */
+        &.excellent { border-color: #11DD55; }
+        &.good { border-color: #4CAF50; }
+        &.fair { border-color: #FFAA00; }
+        &.poor { border-color: #FF3333; }
+
+        /* Avatar styles - Backgrounds and Icons inside avatars */
+        mat-card-avatar { 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            
+            &.excellent { background: #11DD55; color: white; }
+            &.good { background: #4CAF50; color: white; }
+            &.fair { background: #FFAA00; color: white; }
+            &.poor { background: #FF3333; color: white; }
         }
     }
 
@@ -163,11 +189,20 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
         }
     }
 
-    /* Grade colors */
-    .excellent { color: #4caf50 !important; }
-    .good { color: #8bc34a !important; }
-    .fair { color: #ff9800 !important; }
-    .poor { color: #f44336 !important; }
+    /* Standalone Icons (Verdict List etc) - Color ONLY */
+    mat-icon.excellent { color: #11DD55; }
+    mat-icon.good { color: #4CAF50; }
+    mat-icon.fair { color: #FFAA00; }
+    mat-icon.poor { color: #FF3333; }
+
+    /* Bar fills */
+    .bar-fill.excellent { background: #11DD55; }
+    .bar-fill.good { background: #4CAF50; }
+    .bar-fill.fair { background: #FFAA00; }
+    .bar-fill.poor { background: #FF3333; }
+    
+    /* Ensure text remains standard */
+    span, li { color: var(--mat-sys-on-surface); }
 
     .report-header {
         display: flex;
@@ -258,10 +293,7 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
             transition: width 0.8s ease-out;
             border-radius: 4px;
             
-            &.excellent { background: #4caf50; }
-            &.good { background: #8bc34a; }
-            &.fair { background: #ff9800; }
-            &.poor { background: #f44336; }
+
         }
 
         .corr-value {
@@ -286,6 +318,52 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
             gap: 0.5rem;
         }
     }
+
+    .quality-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        background: var(--mat-sys-secondary-container);
+        color: var(--mat-sys-on-secondary-container);
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }
+    .info-icon { font-size: 20px; width: 20px; height: 20px; }
+    
+    .issues-title {
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+    }
+    .quality-issues-list {
+        margin-top: 1rem;
+        max-height: 250px;
+        overflow-y: auto;
+        /* Using standard scrollbar styling via global css or just native for now */
+    }
+
+    .quality-issue {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        border-radius: 8px;
+        background: var(--mat-sys-surface-variant);
+        margin-bottom: 0.5rem;
+        margin-right: 4px; /* Space for scrollbar */
+        
+        &.high { border-left: 4px solid var(--mat-sys-error); }
+        &.medium { border-left: 4px solid var(--mat-sys-tertiary); }
+        &.low { border-left: 4px solid var(--mat-sys-outline); }
+    }
+    .issue-details {
+        display: flex;
+        flex-direction: column;
+        gap: 0.1rem;
+    }
+    .issue-desc { font-size: 0.875rem; font-weight: 500; }
+    .issue-meta { font-size: 0.75rem; opacity: 0.7; }
   `],
     standalone: false
 })
@@ -310,15 +388,25 @@ export class BenchmarkReportComponent {
     }
 
     getOverallGrade(): Grade {
-        const gnssGrade = this.getGnssGrade();
         const streamGrades = this.getStreamGrades();
+        const gnssGrade = this.getGnssGrade();
         const allGrades = [gnssGrade, ...streamGrades];
 
-        // Overall is the worst individual grade
-        if (allGrades.includes('poor')) return 'poor';
-        if (allGrades.includes('fair')) return 'fair';
-        if (allGrades.includes('good')) return 'good';
-        return 'excellent';
+        if (allGrades.length === 0) return 'fair';
+
+        // Weighted scoring: Excellent=3, Good=2, Fair=1, Poor=0
+        const scoreMap: Record<Grade, number> = { excellent: 3, good: 2, fair: 1, poor: 0 };
+        const totalScore = allGrades.reduce((acc, g) => acc + scoreMap[g], 0);
+        const average = totalScore / allGrades.length;
+
+        // >= 2.5 (mostly excellent) -> Excellent
+        // >= 1.5 (mostly good) -> Good
+        // >= 0.5 (mostly fair) -> Fair
+        // < 0.5 (mostly poor) -> Poor
+        if (average >= 2.5) return 'excellent';
+        if (average >= 1.5) return 'good';
+        if (average >= 0.5) return 'fair';
+        return 'poor';
     }
 
     getStreamGrades(): Grade[] {
@@ -380,5 +468,14 @@ export class BenchmarkReportComponent {
         }
 
         return insights;
+    }
+
+    getIssueIcon(type: string): string {
+        switch (type) {
+            case 'dropout': return 'signal_disconnected';
+            case 'stuck': return 'horizontal_rule';
+            case 'cadence_lock': return 'lock';
+            default: return 'warning';
+        }
     }
 }

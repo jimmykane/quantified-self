@@ -1,7 +1,18 @@
 import { Injectable } from '@angular/core';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { DataPositionInterface } from '@sports-alliance/sports-lib';
-import { BenchmarkResult } from '../../../functions/src/shared/app-event.interface';
+import { BenchmarkResult, BenchmarkOptions, BenchmarkQualityIssue } from '../../../functions/src/shared/app-event.interface';
+import {
+    DataLatitudeDegrees,
+    DataLongitudeDegrees,
+    DataDistance,
+    DataGradeAdjustedSpeed,
+    DataVerticalSpeed,
+    DataPace,
+    DataAscent,
+    DataDescent,
+    DataGradeAdjustedPace,
+} from '@sports-alliance/sports-lib';
 
 @Injectable({
     providedIn: 'root'
@@ -16,27 +27,27 @@ export class AppBenchmarkService {
      * - Cumulative totals (not suitable for per-point comparison)
      */
     private static readonly EXCLUDED_STREAM_TYPES = new Set([
-        'Latitude',           // Handled by GNSS comparison
-        'Longitude',          // Handled by GNSS comparison
-        'Distance',           // Compared as totalDistanceDifference in GNSS metrics
-        'Grade',              // Derived from altitude + distance
-        'GradeAdjustedSpeed', // Calculated from speed + grade
-        'VerticalSpeed',      // Derived from altitude changes
-        'Pace',               // Inverse of speed (redundant)
-        'SWOLF',              // Calculated (strokes + time)
-        'FormPower',          // Algorithm-based (Stryd-specific)
-        'RunningEconomy',     // Calculated metric
-        'ElevationGain',      // Cumulative total
-        'ElevationLoss',      // Cumulative total
+        DataLatitudeDegrees.type,           // Handled by GNSS comparison
+        DataLongitudeDegrees.type,          // Handled by GNSS comparison
+        DataDistance.type,           // Compared as totalDistanceDifference in GNSS metrics
+        'Grade',                     // Derived from altitude + distance
+        DataGradeAdjustedSpeed.type, // Calculated from speed + grade
+        DataVerticalSpeed.type,      // Derived from altitude changes
+        DataPace.type,               // Inverse of speed (redundant)
+        'SWOLF',                     // Calculated (strokes + time)
+        'FormPower',                 // Algorithm-based (Stryd-specific)
+        'RunningEconomy',            // Calculated metric
+        DataAscent.type,             // Cumulative total
+        DataDescent.type,            // Cumulative total
+        DataGradeAdjustedPace.type,  // Calculated metric
     ]);
 
     constructor() { }
 
     /**
-     * Generates a comprehensive benchmark report comparing two activities.
-     * Assumes activities are from the same event (overlapping time).
+     * Generates a benchmark report comparing a Reference activity against a Test activity.
      */
-    public async generateBenchmark(reference: ActivityInterface, test: ActivityInterface): Promise<BenchmarkResult> {
+    async generateBenchmark(reference: ActivityInterface, test: ActivityInterface, options: BenchmarkOptions = { autoAlignTime: true }): Promise<BenchmarkResult> {
         console.log('AppBenchmarkService: generateBenchmark started', { referenceId: reference.getID(), testId: test.getID() });
         // 1. alignment
         const startA = reference.startDate.getTime();
@@ -47,12 +58,25 @@ export class AppBenchmarkService {
         const sharedStart = Math.max(startA, startB);
         const sharedEnd = Math.min(endA, endB);
 
-        console.log('AppBenchmarkService: overlaps', { sharedStart, sharedEnd, diff: sharedEnd - sharedStart });
-
         if (sharedEnd <= sharedStart) {
             console.error('AppBenchmarkService: No overlap found');
             throw new Error('Activities do not overlap in time.');
         }
+
+        // Auto-Alignment
+        let testActivityToUse = test;
+        let timeOffset = 0;
+        let alignmentApplied = false;
+
+        if (options.autoAlignTime) {
+            timeOffset = this.findBestTimeOffset(reference, test, sharedStart, sharedEnd);
+            if (timeOffset !== 0) {
+                testActivityToUse = createOffsetActivity(test, timeOffset);
+                alignmentApplied = true;
+            }
+        }
+
+        console.log('AppBenchmarkService: overlaps', { sharedStart, sharedEnd, diff: sharedEnd - sharedStart, offset: timeOffset });
 
         // 2. Setup Result Skeleton
         const result: BenchmarkResult = {
@@ -73,7 +97,7 @@ export class AppBenchmarkService {
 
         // 3. Identify Common Streams (excluding derived/calculated types)
         const streamsA = reference.getAllStreams().map(s => s.type);
-        const streamsB = test.getAllStreams().map(s => s.type);
+        const streamsB = testActivityToUse.getAllStreams().map(s => s.type);
         const commonTypes = streamsA.filter(type =>
             streamsB.includes(type) &&
             !AppBenchmarkService.EXCLUDED_STREAM_TYPES.has(type)
@@ -98,7 +122,7 @@ export class AppBenchmarkService {
 
             // GNSS Comparison
             const posA = this.getPositionAtTime(reference, date);
-            const posB = this.getPositionAtTime(test, date);
+            const posB = this.getPositionAtTime(testActivityToUse, date);
 
             if (posA && posB) {
                 const deviation = this.haversineDistance(posA.latitudeDegrees, posA.longitudeDegrees, posB.latitudeDegrees, posB.longitudeDegrees);
@@ -110,7 +134,7 @@ export class AppBenchmarkService {
             // Stream Comparisons
             commonTypes.forEach(type => {
                 const valA = this.getValueAtTime(reference, type, date);
-                const valB = this.getValueAtTime(test, type, date);
+                const valB = this.getValueAtTime(testActivityToUse, type, date);
 
                 if (valA !== null && valB !== null) {
                     const diff = valA - valB;
@@ -131,10 +155,22 @@ export class AppBenchmarkService {
             result.metrics.gnss.rmse = Math.sqrt(gnssDeviations.reduce((acc, val) => acc + (val * val), 0) / gnssDeviations.length);
 
             // Total Distance
-            const distAStream = reference.getStreamData('Distance');
-            const distBStream = test.getStreamData('Distance');
-            const distA = (distAStream && distAStream.length > 0) ? (distAStream.filter(v => v !== null).pop() || 0) : 0;
-            const distB = (distBStream && distBStream.length > 0) ? (distBStream.filter(v => v !== null).pop() || 0) : 0;
+            // Total Distance
+            let distA = 0;
+            let distB = 0;
+            try {
+                const distAStream = reference.getStreamData('Distance');
+                if (distAStream && distAStream.length > 0) {
+                    distA = (distAStream.filter(v => v !== null).pop() || 0);
+                }
+            } catch { /* ignore */ }
+
+            try {
+                const distBStream = test.getStreamData('Distance');
+                if (distBStream && distBStream.length > 0) {
+                    distB = (distBStream.filter(v => v !== null).pop() || 0);
+                }
+            } catch { /* ignore */ }
 
             result.metrics.gnss.totalDistanceDifference = Math.abs(distA - distB);
         }
@@ -153,6 +189,14 @@ export class AppBenchmarkService {
             }
         });
 
+        // 7. Quality Issues & Metadata
+        const issuesRef = this.detectQualityIssues(reference);
+        const issuesTest = this.detectQualityIssues(test); // Use original test activity for artifact detection
+
+        result.timeOffsetSeconds = timeOffset;
+        result.alignmentApplied = alignmentApplied;
+        result.qualityIssues = [...issuesRef, ...issuesTest];
+
         return result;
     }
 
@@ -161,6 +205,9 @@ export class AppBenchmarkService {
     private getPositionAtTime(activity: ActivityInterface, date: Date): DataPositionInterface | null {
         const index = activity.getDateIndex(date);
         if (index === -1) return null;
+
+        const streams = activity.getAllStreams().map(s => s.type);
+        if (!streams.includes('Latitude') || !streams.includes('Longitude')) return null;
 
         const latStream = activity.getStreamData('Latitude');
         const longStream = activity.getStreamData('Longitude');
@@ -233,4 +280,220 @@ export class AppBenchmarkService {
 
         return R * c;
     }
+
+    private findBestTimeOffset(reference: ActivityInterface, test: ActivityInterface, sharedStart: number, sharedEnd: number, maxShiftSeconds: number = 15): number {
+        // Prefer Speed, fallback to Altitude
+        const refStreams = reference.getAllStreams().map(s => s.type);
+        const testStreams = test.getAllStreams().map(s => s.type);
+
+        const hasSpeed = refStreams.includes('Speed') && testStreams.includes('Speed');
+        const hasAltitude = refStreams.includes('Altitude') && testStreams.includes('Altitude');
+
+        const type = hasSpeed ? 'Speed' : (hasAltitude ? 'Altitude' : null);
+        if (!type) return 0;
+
+        // Take a representative sample (middle 5 mins or full duration if shorter)
+        const duration = sharedEnd - sharedStart;
+        const sampleDur = Math.min(300 * 1000, duration); // 5 mins
+        const sampleStart = sharedStart + (duration - sampleDur) / 2;
+        const sampleEnd = sampleStart + sampleDur;
+
+        // Sample data at 1Hz
+        const refData: number[] = [];
+
+        // Get Reference data
+        for (let t = sampleStart; t <= sampleEnd; t += 1000) {
+            const v = this.getValueAtTime(reference, type, new Date(t));
+            refData.push(typeof v === 'number' ? v : 0);
+        }
+
+        // Search window
+        let bestCorrelation = -2; // Pearson is between -1 and 1
+        let bestOffset = 0;
+
+        for (let offset = -maxShiftSeconds; offset <= maxShiftSeconds; offset++) {
+            const currentTestData: number[] = [];
+            for (let t = sampleStart; t <= sampleEnd; t += 1000) {
+                // Apply offset to test time lookup
+                const v = this.getValueAtTime(test, type, new Date(t - (offset * 1000)));
+                currentTestData.push(typeof v === 'number' ? v : 0);
+            }
+
+            const corr = this.pearsonCorrelation(refData, currentTestData);
+            if (corr > bestCorrelation) {
+                bestCorrelation = corr;
+                bestOffset = offset;
+            }
+        }
+
+        console.log(`Time Alignment (${type}): Found best offset ${bestOffset}s with correlation ${bestCorrelation}`);
+        return bestOffset;
+    }
+
+    private detectQualityIssues(activity: ActivityInterface): BenchmarkQualityIssue[] {
+        const issues: BenchmarkQualityIssue[] = [];
+        const streams = activity.getAllStreams();
+
+        for (const s of streams) {
+            const data = activity.getStreamData(s.type);
+            if (!data || data.length === 0) continue;
+
+            // 1. Dropouts (Zeros/Nulls)
+            // Context aware: Speed/Power can be 0. HeartRate/Cadence usually shouldn't be 0 while moving.
+            if (['HeartRate', 'Cadence'].includes(s.type)) {
+                this.detectStreamDropouts(s.type, data, activity, issues);
+            }
+
+            // 2. Stuck Values
+            this.detectStuckValues(s.type, data, activity, issues);
+        }
+
+        // 3. Cadence Lock (HR vs Cadence)
+        // 3. Cadence Lock (HR vs Cadence)
+        const hasHR = streams.some(s => s.type === 'HeartRate');
+        const hasCadence = streams.some(s => s.type === 'Cadence');
+
+        if (hasHR && hasCadence) {
+            try {
+                const hr = activity.getStreamData('HeartRate');
+                const cad = activity.getStreamData('Cadence');
+                if (hr && cad && hr.length > 0 && cad.length > 0) {
+                    this.detectCadenceLock(hr, cad, activity, issues);
+                }
+            } catch (e) {
+                console.warn('AppBenchmarkService: Failed to retrieve HR/Cadence for lock check', e);
+            }
+        }
+
+        return issues;
+    }
+
+    private detectStreamDropouts(type: string, data: (number | null)[], activity: ActivityInterface, issues: BenchmarkQualityIssue[]) {
+        let zeroRun = 0;
+        // 5 seconds threshold
+        const threshold = 5;
+
+        for (let i = 0; i < data.length; i++) {
+            const val = data[i];
+            if (val === 0 || val === null || val === undefined) {
+                zeroRun++;
+            } else {
+                if (zeroRun > threshold) {
+                    issues.push({
+                        type: 'dropout',
+                        streamType: type,
+                        description: `Signal dropout for ${zeroRun} seconds`,
+                        severity: 'warning',
+                        duration: zeroRun,
+                        timestamp: new Date(activity.startDate.getTime() + (i - zeroRun) * 1000)
+                    });
+                }
+                zeroRun = 0;
+            }
+        }
+    }
+
+    private detectStuckValues(type: string, data: (number | null)[], activity: ActivityInterface, issues: BenchmarkQualityIssue[]) {
+        // Exclude Temperature as it naturally changes very slowly
+        if (type === 'Temperature') return;
+
+        if (data.length < 60) return;
+        let stuckRun = 0;
+        const threshold = 60; // 60 seconds (1 minute) static to avoid false positives
+
+        for (let i = 1; i < data.length; i++) {
+            // Check exact equality. 
+            const val = data[i];
+            const prev = data[i - 1];
+
+            if (val !== null && prev !== null && val === prev && val !== 0) {
+                stuckRun++;
+            } else {
+                if (stuckRun > threshold) {
+                    issues.push({
+                        type: 'stuck',
+                        streamType: type,
+                        description: `Sensor stuck at ${data[i - 1]} for ${stuckRun} seconds`,
+                        severity: 'warning',
+                        duration: stuckRun,
+                        timestamp: new Date(activity.startDate.getTime() + (i - stuckRun) * 1000)
+                    });
+                }
+                stuckRun = 0;
+            }
+        }
+    }
+
+    private detectCadenceLock(hr: (number | null)[], cad: (number | null)[], activity: ActivityInterface, issues: BenchmarkQualityIssue[]) {
+        // Simple windowed correlation check
+        // Check 1-minute windows
+        const windowSize = 60;
+        const step = 30;
+        const limit = Math.min(hr.length, cad.length);
+
+        for (let i = 0; i < limit - windowSize; i += step) {
+            const hrWindow: number[] = [];
+            const cadWindow: number[] = [];
+
+            // Build non-null windows
+            for (let j = 0; j < windowSize; j++) {
+                const h = hr[i + j];
+                const c = cad[i + j];
+                if (typeof h === 'number' && typeof c === 'number' && h > 0 && c > 0) {
+                    hrWindow.push(h);
+                    cadWindow.push(c);
+                }
+            }
+
+            if (hrWindow.length < windowSize * 0.5) continue; // Need 50% data
+
+            const corr = this.pearsonCorrelation(hrWindow, cadWindow);
+
+            if (corr > 0.95) {
+                const avgDiff = this.mean(hrWindow.map((h, idx) => Math.abs(h - cadWindow[idx])));
+
+                if (avgDiff < 10) {
+                    issues.push({
+                        type: 'cadence_lock',
+                        streamType: 'HeartRate',
+                        description: `Possible cadence lock detected (Correlation ${corr.toFixed(2)})`,
+                        severity: 'warning',
+                        duration: windowSize,
+                        timestamp: new Date(activity.startDate.getTime() + i * 1000)
+                    });
+                    // Skip ahead a bit to avoid flooding
+                    i += 60;
+                }
+            }
+        }
+    }
 }
+
+/**
+ * Wraps an activity to apply a time offset to all data requests.
+ * We rely on intercepting getDateIndex, because AppBenchmarkService uses it to query data/position.
+ */
+export function createOffsetActivity(activity: ActivityInterface, offsetSeconds: number): ActivityInterface {
+    if (offsetSeconds === 0) return activity;
+
+    // Use a proxy to intercept getDateIndex
+    return new Proxy(activity, {
+        get(target, prop, receiver) {
+            if (prop === 'getDateIndex') {
+                return (date: Date) => {
+                    // Usage: service calls getDateIndex(queryTime)
+                    // We want to return data from (queryTime - offset)
+                    // So we delegate to target.getDateIndex(queryTime - offset)
+                    const shiftedDate = new Date(date.getTime() - (offsetSeconds * 1000));
+                    return target.getDateIndex(shiftedDate);
+                };
+            }
+            return Reflect.get(target, prop, receiver);
+        }
+    });
+}
+
+/**
+ * Wraps an activity to apply a time offset to all data requests.
+ * We rely on intercepting getDateIndex, because AppBenchmarkService uses it to query data/position.
+ */

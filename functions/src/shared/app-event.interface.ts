@@ -63,11 +63,32 @@ export interface BenchmarkResult {
             [streamType: string]: BenchmarkStreamMetrics;
         };
     };
+    /** Detected time lag applied to the Test activity (in seconds) */
+    timeOffsetSeconds?: number;
+    /** Whether auto-alignment was enabled/used */
+    alignmentApplied?: boolean;
+    /** Detected data quality issues */
+    qualityIssues?: BenchmarkQualityIssue[];
     diffStreams?: {
         time: number[];
         gnssDeviation: number[];
         [streamType: string]: number[];
     };
+}
+
+export interface BenchmarkQualityIssue {
+    type: 'dropout' | 'stuck' | 'cadence_lock';
+    streamType: string;
+    description: string;
+    severity: 'warning' | 'severe';
+    timestamp?: Date;
+    /** Duration of the issue in seconds */
+    duration?: number;
+}
+
+export interface BenchmarkOptions {
+    autoAlignTime: boolean;
+    // Future options can go here (e.g. maxOffset)
 }
 
 /**

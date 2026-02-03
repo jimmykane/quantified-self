@@ -86,13 +86,30 @@ describe('BenchmarkReportComponent', () => {
     });
 
     describe('Overall Grade', () => {
-        it('should return excellent when all metrics are excellent', () => {
-            component.result = createMockResult(1.5, 0.99);
+        it('should return excellent grade (>= 2.5) when all metrics are excellent (3)', () => {
+            component.result = createMockResult(1.5, 0.99); // Excellent GNSS & Stream
+            // 3 + 3 = 6 / 2 = 3.0 -> Excellent
             expect(component.getOverallGrade()).toBe('excellent');
         });
 
-        it('should return the worst grade among all metrics', () => {
-            component.result = createMockResult(1.5, 0.85); // excellent GNSS, poor correlation
+        it('should return good grade (>= 1.5) even with one poor metric if average is high enough', () => {
+            // Setup: GNSS=Excellent (3), Stream=Poor (0). Avg = 1.5 -> Good
+            // Current mock only has 1 stream. 
+            // 3 (GNSS) + 0 (Correlation < 0.90) = 3 / 2 = 1.5 -> Good
+            component.result = createMockResult(1.5, 0.85);
+            expect(component.getOverallGrade()).toBe('good');
+        });
+
+        it('should return fair grade (>= 0.5) if metrics are mixed low', () => {
+            // Setup: GNSS=Fair (1), Stream=Poor (0). Avg = 0.5 -> Fair
+            // GNSS 7.5m -> Fair(1). Correlation 0.85 -> Poor(0).
+            component.result = createMockResult(7.5, 0.85);
+            expect(component.getOverallGrade()).toBe('fair');
+        });
+
+        it('should return poor grade (< 0.5) if all metrics are poor', () => {
+            // Setup: GNSS=Poor (0), Stream=Poor (0). Avg=0 -> Poor
+            component.result = createMockResult(15, 0.85);
             expect(component.getOverallGrade()).toBe('poor');
         });
     });

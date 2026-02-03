@@ -226,8 +226,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       const theme = this.themeSignal();
       const units = this.userSettingsQuery.unitSettings();
 
-      this.logger.info('[EventCardChart] Trigger: Effect (signals changed)', { theme, unitsSet: !!units, settingsSet: !!settings });
-
       this.chartTheme = theme ?? ChartThemes.Material;
       this.checkForUpdates('Effect');
     }, { injector: this.injector });
@@ -269,15 +267,20 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   async ngOnChanges(simpleChanges: SimpleChanges) {
-    const keys = Object.keys(simpleChanges);
-    this.logger.info('[EventCardChart] Trigger: ngOnChanges', keys);
-
     // Only handle Event/Activity/User changes here. Settings are handled by effect.
     if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.targetUserID || simpleChanges.user) {
       this.checkForUpdates('ngOnChanges');
     }
   }
 
+  /**
+   * CENTRAL UPDATE ORCHESTRATOR
+   * 
+   * This method prevents "Double Reloads" caused by:
+   * 1. Initial Load: `previousState` is initialized in `ngAfterViewInit` to prevent the first check from seeing "everything changed".
+   * 2. Object Reference Changes: `fast-deep-equal` is used instead of `JSON.stringify` to ignore key order changes (e.g. `dataTypesToUse`).
+   * 3. Concurrent Triggers: `ngOnChanges` and `Effect` can theoretically overlap; this serialized check ensures one source of truth.
+   */
   private async checkForUpdates(source: string) {
     if (!this.chart) return;
 
@@ -297,11 +300,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       });
 
       if (Object.keys(changes).length > 0) {
-        this.logger.info(`[EventCardChart] checkForUpdates detected changes via [${source}]:`, Object.keys(changes));
+        // this.logger.info(`[EventCardChart] checkForUpdates detected changes via [${source}]:`, Object.keys(changes));
         this.previousState = { ...this.previousState, ...currentState };
         await this.handleUpdates(changes);
-      } else {
-        this.logger.info(`[EventCardChart] checkForUpdates: No content changes via [${source}]`);
       }
     } catch (err) {
       this.logger.error('[EventCardChart] Error in checkForUpdates', err);
@@ -372,7 +373,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
       // #2: Full Rebuild
       if (requiresFullRebuild) {
-        this.logger.info('[EventCardChart] Full rebuild triggered by:', Object.keys(simpleChanges).filter(k => simpleChanges[k]));
+        // this.logger.info('[EventCardChart] Full rebuild triggered by:', Object.keys(simpleChanges).filter(k => simpleChanges[k]));
         this.loading();
         this.changeDetector.detectChanges();
 

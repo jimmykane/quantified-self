@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges, ChangeDetectorRef, computed } from '@angular/core';
-import { AppEventInterface } from '../../../../functions/src/shared/app-event.interface';
+import { AppEventInterface, BenchmarkOptions } from '../../../../functions/src/shared/app-event.interface';
 import {
   EventInterface,
   User,
@@ -118,13 +118,13 @@ export class EventSummaryComponent implements OnChanges {
       }
     });
 
-    dialogRef.afterClosed().subscribe(async (selectedActivities: ActivityInterface[]) => {
-      if (selectedActivities && selectedActivities.length === 2) {
+    dialogRef.afterClosed().subscribe(async (result: { activities: ActivityInterface[], options: BenchmarkOptions } | undefined) => {
+      if (result && result.activities && result.activities.length === 2) {
         try {
           this.snackBar.open('Generating Benchmark...', undefined, { duration: 2000 });
 
           // Generate benchmark on-the-fly (not persisted)
-          this.benchmarkResult = await this.benchmarkService.generateBenchmark(selectedActivities[0], selectedActivities[1]);
+          this.benchmarkResult = await this.benchmarkService.generateBenchmark(result.activities[0], result.activities[1], result.options);
           this.cd.detectChanges();
 
           this.snackBar.open('Benchmark Generated!', undefined, { duration: 2000 });
