@@ -185,6 +185,7 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
                 font-size: 18px;
                 width: 18px;
                 height: 18px;
+                flex-shrink: 0;
             }
         }
     }
@@ -309,13 +310,20 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
         opacity: 0.7;
     }
     
-    @media (max-width: 600px) {
+    @media (max-width: 599px) {
+        .benchmark-container {
+            padding: 1rem;
+        }
         .stats-grid {
             grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
         }
         .report-header {
             flex-direction: column;
             gap: 0.5rem;
+        }
+        .stat-item .value {
+            font-size: 1.1rem;
         }
     }
 
