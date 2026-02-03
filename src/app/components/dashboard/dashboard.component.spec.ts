@@ -139,4 +139,71 @@ describe('DashboardComponent', () => {
         expect(component.events).toBeDefined();
         expect(component.events.length).toBeGreaterThan(0);
     });
+
+    it('should handle circular references in events safely during comparison', async () => {
+        const event1: any = {
+            getID: () => 'event1',
+            name: 'Event 1',
+            startDate: new Date(1000),
+            toJSON: () => ({ id: 'event1' })
+        };
+        // Create a circular reference
+        event1.self = event1;
+
+        const eventsSubject = new BehaviorSubject([event1]);
+        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.events.length).toBe(1);
+
+        // This should not throw 'Converting circular structure to JSON'
+        expect(() => {
+            eventsSubject.next([event1]);
+            fixture.detectChanges();
+        }).not.toThrow();
+    });
+
+    it('should update when an event is renamed or its date changes', async () => {
+        class MockEvent {
+            constructor(public id: string, public name: string, public startDate: Date) { }
+            getID() { return this.id; }
+            getActivityTypesAsArray() { return []; }
+            toJSON() { return {}; }
+        }
+
+        const date1 = new Date(2024, 1, 1);
+        const event1 = new MockEvent('e1', 'Original Name', date1) as any;
+
+        const eventsSubject = new BehaviorSubject([event1]);
+        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.events[0].name).toBe('Original Name');
+
+        // 1. Update with same data (should not trigger change if we were strictly checking, 
+        // but here we check if it updates the property if we were to just re-assign)
+        const event1Same = new MockEvent('e1', 'Original Name', date1) as any;
+        eventsSubject.next([event1Same]);
+        fixture.detectChanges();
+        // Since they are "equal" by our logic, component.events shouldn't change reference 
+        // if we were being super strict, but actually distinctUntilChanged prevents the 
+        // subscribe block from running.
+
+        // 2. Update name
+        const event1Renamed = new MockEvent('e1', 'New Name', date1) as any;
+        eventsSubject.next([event1Renamed]);
+        fixture.detectChanges();
+        expect(component.events[0].name).toBe('New Name');
+
+        // 3. Update date
+        const date2 = new Date(2024, 1, 2);
+        const event1NewDate = new MockEvent('e1', 'New Name', date2) as any;
+        eventsSubject.next([event1NewDate]);
+        fixture.detectChanges();
+        expect(component.events[0].startDate.getTime()).toBe(date2.getTime());
+    });
 });

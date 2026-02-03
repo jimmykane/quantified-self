@@ -51,13 +51,20 @@ const mockMapStyleService = {
     adjustColorForTheme: vi.fn().mockReturnValue('#adjustedColor')
 } as unknown as MapStyleService;
 
+const mockLoggerService = {
+    log: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    captureMessage: vi.fn()
+};
+
 describe('TracksMapManager', () => {
     let manager: TracksMapManager;
     let zone: NgZone;
 
     beforeEach(() => {
         zone = new MockNgZone();
-        manager = new TracksMapManager(zone, mockEventColorService, mockMapStyleService);
+        manager = new TracksMapManager(zone, mockEventColorService, mockMapStyleService, mockLoggerService as any);
         manager.setMap(mockMap, mockMapboxGL);
 
         // Reset mocks

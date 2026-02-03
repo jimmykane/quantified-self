@@ -28,7 +28,6 @@
               "src/sitemap.xml"
             ],
             "styles": [
-              "./node_modules/material-symbols/rounded.css",
               "./node_modules/mapbox-gl/dist/mapbox-gl.css",
               "./src/styles.scss"
             ],

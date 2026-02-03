@@ -114,7 +114,7 @@ export class TracksMapManager {
                     // console.log('Style loading in progress, retrying track...');
                     this.map.once('style.load', () => this.addTrackFromActivity(activity, coordinates));
                 } else {
-                    console.warn('Failed to add track layer:', error);
+                    this.logger.warn('Failed to add track layer:', error);
                 }
             }
         });
@@ -187,23 +187,23 @@ export class TracksMapManager {
 
     public toggleTerrain(enable: boolean, animate: boolean = true) {
         if (!this.map) {
-            console.warn('[TracksMapManager] toggleTerrain called but map is not set.');
+            this.logger.warn('[TracksMapManager] toggleTerrain called but map is not set.');
             return;
         }
 
-        console.log(`[TracksMapManager] toggleTerrain called. Enable: ${enable}, Animate: ${animate}`);
+        this.logger.log(`[TracksMapManager] toggleTerrain called. Enable: ${enable}, Animate: ${animate}`);
 
         this.zone.runOutsideAngular(() => {
             try {
                 if (!this.isStyleReady()) {
-                    console.log('[TracksMapManager] Style not loaded yet. Deferring terrain toggle.');
+                    this.logger.log('[TracksMapManager] Style not loaded yet. Deferring terrain toggle.');
                     this.deferTerrainToggle(enable, animate);
                     return;
                 }
 
                 if (enable) {
                     if (!this.map.getSource('mapbox-dem')) {
-                        console.log('[TracksMapManager] Adding mapbox-dem source.');
+                        this.logger.log('[TracksMapManager] Adding mapbox-dem source.');
                         this.map.addSource('mapbox-dem', {
                             'type': 'raster-dem',
                             'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
@@ -211,17 +211,17 @@ export class TracksMapManager {
                             'maxzoom': 14
                         });
                     } else {
-                        console.log('[TracksMapManager] mapbox-dem source already exists.');
+                        this.logger.log('[TracksMapManager] mapbox-dem source already exists.');
                     }
                 }
 
                 if (enable) {
-                    console.log('[TracksMapManager] Setting terrain to mapbox-dem and pitching to 60.');
+                    this.logger.log('[TracksMapManager] Setting terrain to mapbox-dem and pitching to 60.');
                     this.map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
                     if (animate) this.map.easeTo({ pitch: 60 });
                     else this.map.setPitch(60);
                 } else {
-                    console.log('[TracksMapManager] Removing terrain and pitching to 0.');
+                    this.logger.log('[TracksMapManager] Removing terrain and pitching to 0.');
                     this.map.setTerrain(null);
                     if (animate) this.map.easeTo({ pitch: 0 });
                     else this.map.setPitch(0);
@@ -234,7 +234,7 @@ export class TracksMapManager {
             } catch (error: any) {
                 this.logger.error('[TracksMapManager] Error toggling terrain:', error);
                 if (error?.message?.includes('Style is not done loading') || !this.isStyleReady()) {
-                    console.log('[TracksMapManager] Style/Map state not ready, deferring terrain toggle.');
+                    this.logger.log('[TracksMapManager] Style/Map state not ready, deferring terrain toggle.');
                     this.deferTerrainToggle(enable, animate);
                 }
             }
