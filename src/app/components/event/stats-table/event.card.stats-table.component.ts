@@ -111,19 +111,30 @@ export class EventCardStatsTableComponent implements OnChanges {
 
     // Create the data as rows
     const data = Array.from(stats.values()).reduce((array, stat) => {
-      array.push(
-        this.selectedActivities.reduce((rowObj: any, activity, index) => {
-          const activityStat = activity.getStat(stat.getType());
-          if (!activityStat) {
-            return rowObj;
-          }
-          rowObj[`${activity.creator.name} ${this.eventColorService.getActivityColor(this.selectedActivities, activity)}`] =
-            (activityStat ? activityStat.getDisplayValue() : '') +
-            ' ' +
-            (activityStat ? activityStat.getDisplayUnit() : '');
+      let isComplexObject = false;
+      const row = this.selectedActivities.reduce((rowObj: any, activity, index) => {
+        const activityStat = activity.getStat(stat.getType());
+        if (!activityStat) {
           return rowObj;
-        }, { Name: `${stat.getDisplayType()}` } as any),
-      );
+        }
+        const displayValue = activityStat.getDisplayValue();
+        const displayUnit = activityStat.getDisplayUnit();
+
+        // Check if any activity has a value that renders as [object Object]
+        if (String(displayValue).includes('[object Object]')) {
+          isComplexObject = true;
+        }
+
+        rowObj[`${activity.creator.name} ${this.eventColorService.getActivityColor(this.selectedActivities, activity)}`] =
+          (displayValue || '') +
+          ' ' +
+          (displayUnit || '');
+        return rowObj;
+      }, { Name: `${stat.getDisplayType()}` } as any);
+
+      if (!isComplexObject) {
+        array.push(row);
+      }
       return array;
     }, [] as any[]);
 
@@ -131,7 +142,11 @@ export class EventCardStatsTableComponent implements OnChanges {
     // @todo support more than 2 activities for diff
     if (this.selectedActivities.length === 2) {
       this.columns = this.columns.concat(['Difference']);
-      Array.from(stats.values()).forEach((stat: DataInterface, index) => {
+      Array.from(stats.values()).forEach((stat: DataInterface) => {
+        const row = data.find(r => r.Name === stat.getDisplayType());
+        if (!row) {
+          return;
+        }
         const firstActivityStat = this.selectedActivities[0].getStat(stat.getType());
         const secondActivityStat = this.selectedActivities[1].getStat(stat.getType());
         if (!firstActivityStat || !secondActivityStat) {
@@ -143,12 +158,12 @@ export class EventCardStatsTableComponent implements OnChanges {
           return;
         }
         // Create an obj
-        data[index]['Difference'] = {} as any;
-        data[index]['Difference']['display'] = (DynamicDataLoader.getDataInstanceFromDataType(stat.getType(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayValue() + ' ' + (DynamicDataLoader.getDataInstanceFromDataType(stat.getType(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayUnit();
-        data[index]['Difference']['percent'] = 100 * Math.abs((firstActivityStatValue - secondActivityStatValue) / ((firstActivityStatValue + secondActivityStatValue) / 2));
+        row['Difference'] = {} as any;
+        row['Difference']['display'] = (DynamicDataLoader.getDataInstanceFromDataType(stat.getType(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayValue() + ' ' + (DynamicDataLoader.getDataInstanceFromDataType(stat.getType(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayUnit();
+        row['Difference']['percent'] = 100 * Math.abs((firstActivityStatValue - secondActivityStatValue) / ((firstActivityStatValue + secondActivityStatValue) / 2));
         // Correct the NaN with both 0's
         if (firstActivityStatValue === 0 && secondActivityStatValue === 0) {
-          data[index]['Difference']['percent'] = 0
+          row['Difference']['percent'] = 0
         }
       })
     }

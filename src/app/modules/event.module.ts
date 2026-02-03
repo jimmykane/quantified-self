@@ -6,7 +6,6 @@ import { EventRoutingModule } from '../event.routing.module';
 import { EventCardComponent } from '../components/event/event.card.component';
 import { EventCardMapComponent } from '../components/event/map/event.card.map.component';
 import { EventCardLapsComponent } from '../components/event/laps/event.card.laps.component';
-import { EventCardToolsComponent } from '../components/event/tools/event.card.tools.component';
 import { ActivityActionsComponent } from '../components/activity-actions/activity.actions.component';
 import { MapActionsComponent } from '../components/event/map/map-actions/map.actions.component';
 import { EventCardChartActionsComponent } from '../components/event/chart/actions/event.card.chart.actions.component';
@@ -26,6 +25,9 @@ import { EventStatsBottomSheetComponent } from '../components/event/stats-table/
 import { EventDevicesBottomSheetComponent } from '../components/event/devices/event-devices-bottom-sheet/event-devices-bottom-sheet.component';
 
 import { JumpMarkerPopupComponent } from '../components/event/map/popups/jump-marker-popup/jump-marker-popup.component';
+import { BenchmarkSelectionDialogComponent } from '../components/benchmark/benchmark-selection-dialog.component';
+import { BenchmarkReportComponent } from '../components/benchmark/benchmark-report.component';
+import { BenchmarkBottomSheetComponent } from '../components/benchmark/benchmark-bottom-sheet.component';
 
 @NgModule({
     imports: [
@@ -44,7 +46,6 @@ import { JumpMarkerPopupComponent } from '../components/event/map/popups/jump-ma
         EventCardStatsTableComponent,
         EventCardStatsGridComponent,
         EventCardLapsComponent,
-        EventCardToolsComponent,
         EventCardChartComponent,
         EventCardChartActionsComponent,
         EventCardDevicesComponent,
@@ -59,7 +60,10 @@ import { JumpMarkerPopupComponent } from '../components/event/map/popups/jump-ma
         MapActionsComponent,
         EventIntensityZonesComponent,
         LapTypeIconComponent,
-        JumpMarkerPopupComponent
+        JumpMarkerPopupComponent,
+        BenchmarkSelectionDialogComponent,
+        BenchmarkReportComponent,
+        BenchmarkBottomSheetComponent
     ]
 })
 

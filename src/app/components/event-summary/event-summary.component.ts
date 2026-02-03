@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges, ChangeDetectorRef, computed } from '@angular/core';
+import { AppEventInterface } from '../../../../functions/src/shared/app-event.interface';
 import {
   EventInterface,
   User,
@@ -19,11 +20,15 @@ import {
   ServiceNames,
 } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
+import { AppBenchmarkService } from '../../services/app.benchmark.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { MatDialog } from '@angular/material/dialog';
 import { EventDetailsSummaryBottomSheetComponent } from './event-details-summary-bottom-sheet/event-details-summary-bottom-sheet.component';
 import { EventStatsBottomSheetComponent } from '../event/stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
 import { EventDevicesBottomSheetComponent } from '../event/devices/event-devices-bottom-sheet/event-devices-bottom-sheet.component';
+import { BenchmarkBottomSheetComponent } from '../benchmark/benchmark-bottom-sheet.component';
+import { BenchmarkSelectionDialogComponent } from '../benchmark/benchmark-selection-dialog.component';
 
 @Component({
   selector: 'app-event-summary',
@@ -34,7 +39,7 @@ import { EventDevicesBottomSheetComponent } from '../event/devices/event-devices
 })
 
 export class EventSummaryComponent implements OnChanges {
-  @Input() event!: EventInterface;
+  @Input() event!: AppEventInterface;
   @Input() user!: User;
   @Input() showType = true;
   @Input() showIcon = false;
@@ -43,11 +48,16 @@ export class EventSummaryComponent implements OnChanges {
   @Input() unitSettings!: UserUnitSettingsInterface;
   @Input() statsToShow: string[] = [];
 
+  // Local state for on-demand generated benchmark
+  benchmarkResult: import('../../../../functions/src/shared/app-event.interface').BenchmarkResult | null = null;
+
   constructor(
     private eventService: AppEventService,
+    private benchmarkService: AppBenchmarkService,
     private snackBar: MatSnackBar,
     private cd: ChangeDetectorRef,
-    private bottomSheet: MatBottomSheet
+    private bottomSheet: MatBottomSheet,
+    private dialog: MatDialog
   ) {
   }
 
@@ -94,6 +104,45 @@ export class EventSummaryComponent implements OnChanges {
       data: {
         event: this.event,
         selectedActivities: this.selectedActivities,
+      },
+      panelClass: 'qs-full-width-bottom-sheet'
+    });
+  }
+
+  openBenchmarkDialog(): void {
+    const dialogRef = this.dialog.open(BenchmarkSelectionDialogComponent, {
+      width: '600px',
+      data: {
+        activities: this.event?.getActivities() || [],
+        initialSelection: this.selectedActivities
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(async (selectedActivities: ActivityInterface[]) => {
+      if (selectedActivities && selectedActivities.length === 2) {
+        try {
+          this.snackBar.open('Generating Benchmark...', undefined, { duration: 2000 });
+
+          // Generate benchmark on-the-fly (not persisted)
+          this.benchmarkResult = await this.benchmarkService.generateBenchmark(selectedActivities[0], selectedActivities[1]);
+          this.cd.detectChanges();
+
+          this.snackBar.open('Benchmark Generated!', undefined, { duration: 2000 });
+          this.openBenchmarkReport();
+        } catch (error) {
+          console.error(error);
+          this.snackBar.open('Benchmark failed: ' + error, 'Close');
+        }
+      }
+    });
+  }
+
+  openBenchmarkReport() {
+    if (!this.benchmarkResult) return;
+
+    this.bottomSheet.open(BenchmarkBottomSheetComponent, {
+      data: {
+        result: this.benchmarkResult,
       },
       panelClass: 'qs-full-width-bottom-sheet'
     });

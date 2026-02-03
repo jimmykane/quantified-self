@@ -28,6 +28,46 @@ export interface AppEventInterface extends EventInterface {
     originalFile?: OriginalFileMetaData;
     /** Canonical source for original file metadata. Always an array. */
     originalFiles?: OriginalFileMetaData[];
+    /** Result data for hardware comparison benchmarks */
+    benchmarkResult?: BenchmarkResult;
+    /** Flag to identify benchmark events */
+    isBenchmark?: boolean;
+}
+
+export interface BenchmarkStreamMetrics {
+    sourceA_mean: number;
+    sourceB_mean: number;
+    pearsonCorrelation: number;
+    meanAbsoluteError: number;
+    rootMeanSquareError: number;
+}
+
+export interface BenchmarkResult {
+    referenceId: string;
+    testId: string;
+    /** Device/watch name for the reference activity */
+    referenceName?: string;
+    /** Device/watch name for the test activity */
+    testName?: string;
+    sourceEventId?: string; // ID of the event containing the source activities
+    timestamp: Date;
+    metrics: {
+        gnss: {
+            cep50: number; // Circular Error Probable 50%
+            cep95: number; // Circular Error Probable 95%
+            maxDeviation: number;
+            rmse: number;
+            totalDistanceDifference: number;
+        };
+        streamMetrics: {
+            [streamType: string]: BenchmarkStreamMetrics;
+        };
+    };
+    diffStreams?: {
+        time: number[];
+        gnssDeviation: number[];
+        [streamType: string]: number[];
+    };
 }
 
 /**

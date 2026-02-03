@@ -171,11 +171,11 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
           map((eventsArray: EventInterface[]) => {
             const t0 = performance.now();
             if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
-
               return eventsArray;
             }
             const result = eventsArray.filter(event => {
-              return event.getActivityTypesAsArray().some(activityType => user.settings.dashboardSettings.activityTypes.indexOf(ActivityTypes[activityType]) >= 0)
+              const hasType = event.getActivityTypesAsArray().some(activityType => user.settings.dashboardSettings.activityTypes.indexOf(ActivityTypes[activityType]) >= 0);
+              return hasType;
             });
 
             return result;
