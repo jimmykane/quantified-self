@@ -14,6 +14,7 @@ const {
     mockMoveToDeadLetterQueue,
     mockUpdateToProcessed,
     mockGetTokenData,
+    mockUploadDebugFile,
 } = vi.hoisted(() => {
     return {
         mockSetEvent: vi.fn(),
@@ -26,6 +27,7 @@ const {
         mockMoveToDeadLetterQueue: vi.fn(),
         mockUpdateToProcessed: vi.fn(),
         mockGetTokenData: vi.fn(),
+        mockUploadDebugFile: vi.fn(),
     };
 });
 
@@ -76,6 +78,10 @@ vi.mock('./auth/auth', () => ({
         authorize: vi.fn(),
         toHeader: vi.fn().mockReturnValue({}),
     })
+}));
+
+vi.mock('../debug-utils', () => ({
+    uploadDebugFile: mockUploadDebugFile,
 }));
 
 // Mock queue utilities
@@ -535,6 +541,22 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             const result = await processGarminAPIActivityQueueItem(queueItem);
 
             expect(result).toBe('RETRY_INCREMENTED');
+            expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
+                queueItem,
+                expect.any(Error),
+                1,
+                undefined
+            );
+        });
+
+        it('should handle uploadDebugFile failure gracefully and still increment retry count', async () => {
+            mockSetEvent.mockRejectedValue(new Error('Parsing error'));
+            mockUploadDebugFile.mockRejectedValue(new Error('Upload failed'));
+
+            const result = await processGarminAPIActivityQueueItem(queueItem);
+
+            expect(result).toBe('RETRY_INCREMENTED');
+            expect(mockUploadDebugFile).toHaveBeenCalled();
             expect(mockIncreaseRetryCountForQueueItem).toHaveBeenCalledWith(
                 queueItem,
                 expect.any(Error),
