@@ -2,6 +2,7 @@ import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ShadeComponent } from '../components/loading/shade.component';
 import { AppSkeletonComponent } from '../components/loading/skeleton/app.skeleton.component';
+import { AppLoadingOverlayComponent } from '../components/loading/loading-overlay/loading-overlay.component';
 import { MaterialModule } from './material.module';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { PrivacyIconComponent } from '../components/privacy-icon/privacy-icon.component';
@@ -41,6 +42,7 @@ import { StatusInfoComponent } from '../components/shared/status-info/status-inf
         ActivityTypesMultiSelectComponent,
         ActivityTypeIconComponent,
         AppSkeletonComponent,
+        AppLoadingOverlayComponent,
         ServiceSyncingStateComponent,
         ServiceSourceIconComponent,
         StatusInfoComponent,
@@ -52,6 +54,7 @@ import { StatusInfoComponent } from '../components/shared/status-info/status-inf
         RouterModule,
         ShadeComponent,
         AppSkeletonComponent,
+        AppLoadingOverlayComponent,
         PrivacyIconComponent,
         EventActionsComponent,
         EventFormComponent,

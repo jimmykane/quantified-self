@@ -1,0 +1,33 @@
+.loading-overlay-container {
+    position: relative;
+    display: block;
+}
+
+.loading-indicators {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    /* Ensure it covers content */
+    pointer-events: none;
+    /* Let clicks pass through if somehow blocking when fading out? Usually handled by ngIf */
+}
+
+.overlay-progress-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    /* On top of everything */
+}
+
+.overlay-skeleton {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
