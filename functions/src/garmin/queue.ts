@@ -223,7 +223,11 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
 
     // Attempt to upload the debug file if we have the result (file data)
     if (result) {
-      await uploadDebugFile(result, queueItem.activityFileType.toLowerCase(), queueItem.id, 'garmin', firebaseUserID);
+      try {
+        await uploadDebugFile(result, queueItem.activityFileType.toLowerCase(), queueItem.id, 'garmin', firebaseUserID);
+      } catch (uploadError) {
+        logger.error(`Failed to upload debug file for ${queueItem.id}:`, uploadError);
+      }
     }
 
     logger.info(new Error(`Could not save event for ${queueItem.id} trying to update retry count from ${queueItem.retryCount} and token user ${(serviceToken as any).userID} to ${queueItem.retryCount + 1} due to ${err.message}`));
