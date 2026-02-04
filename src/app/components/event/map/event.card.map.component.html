@@ -10,6 +10,12 @@
     </div>
   </div>
   <section class="container">
+    @if (isLoading) {
+    <mat-progress-bar mode="indeterminate" class="map-progress-bar"></mat-progress-bar>
+    }
+
+    <app-skeleton *ngIf="isLoading" width="100%" height="60vh" borderRadius="4px"
+      style="position: absolute; top:0; left:0; z-index: 20;"></app-skeleton>
     @if (googleMap && event.getActivities().length > 1) {
     <mat-card class="map-legend mat-elevation-z0">
       @for (activity of event.getActivities(); track activity.getID()) {
@@ -86,9 +92,10 @@
     </google-map>
     }
     } @placeholder {
-    <div
-      style="height: 100%; width: 100%; display: flex; align-items: center; justify-content: center; background-color: rgba(0,0,0,0.05);">
-      <p>Loading map...</p>
+    <div style="position: relative; width: 100%; height: 60vh;">
+      <mat-progress-bar mode="indeterminate" class="map-progress-bar"></mat-progress-bar>
+      <app-skeleton width="100%" height="100%" borderRadius="4px"
+        style="position: absolute; top:0; left:0; z-index: 20;"></app-skeleton>
     </div>
     }
   </section>

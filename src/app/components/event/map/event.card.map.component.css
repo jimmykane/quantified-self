@@ -22,6 +22,14 @@
   flex: 1;
 }
 
+.map-progress-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+}
+
 google-map {
   width: 100%;
   min-height: 60vh;
