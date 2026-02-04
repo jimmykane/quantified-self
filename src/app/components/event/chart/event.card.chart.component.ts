@@ -449,6 +449,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
 
 
+    chart.fontFamily = 'Barlow Condensed';
     chart.fontSize = '1em';
     chart.paddingTop = 0;
     chart.paddingRight = 10;
@@ -2258,6 +2259,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     return this.zone.runOutsideAngular(() => {
       // Create a Legend
       chart.legend = new this.charts.Legend();
+      chart.legend.fontFamily = 'Barlow Condensed';
       // legend.fontSize = '1em';
 
       chart.legend.parent = this.core.create(this.legendDiv.nativeElement, this.core.Container);
