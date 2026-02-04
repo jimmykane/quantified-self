@@ -26,7 +26,7 @@ When reviewing code, you will:
    - Evaluate interaction patterns for intuitiveness
    - Assess error handling and user feedback mechanisms
    - Review form validation and helper text clarity
-   - Check loading states and progress indicators
+   - Check loading states and pass/fail criteria (use `<app-loading-overlay>` for content blocks)
    - Verify touch target sizes (minimum 44x44px)
    - Analyze information hierarchy and visual flow
 
