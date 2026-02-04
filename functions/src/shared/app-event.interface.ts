@@ -69,11 +69,8 @@ export interface BenchmarkResult {
     alignmentApplied?: boolean;
     /** Detected data quality issues */
     qualityIssues?: BenchmarkQualityIssue[];
-    diffStreams?: {
-        time: number[];
-        gnssDeviation: number[];
-        [streamType: string]: number[];
-    };
+    // diffStreams removed for Firestore optimization.
+    // Charts will rely on on-the-fly calculation if needed, or simply summary stats.
 }
 
 export interface BenchmarkQualityIssue {

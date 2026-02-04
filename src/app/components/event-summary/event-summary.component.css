@@ -189,6 +189,11 @@
   box-sizing: border-box;
 }
 
+
+.benchmark-btn mat-icon.has-result {
+  color: var(--mat-sys-primary);
+}
+
 .summary-activities-toggles {
   width: 100%;
   padding: 16px 40px;

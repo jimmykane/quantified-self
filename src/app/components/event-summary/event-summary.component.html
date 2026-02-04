@@ -45,14 +45,11 @@
       <button mat-icon-button (click)="openEditDetails()" matTooltip="Edit details">
         <mat-icon>edit</mat-icon>
       </button>
-      @if (benchmarkResult) {
-      <button mat-icon-button (click)="openBenchmarkReport()" matTooltip="View Benchmark" class="benchmark-btn">
-        <mat-icon>analytics</mat-icon>
-      </button>
-      }
       @if (event.getActivities().length >= 2) {
-      <button mat-icon-button (click)="openBenchmarkDialog()" matTooltip="Run Hardware Benchmark">
-        <mat-icon>compare_arrows</mat-icon>
+      <button mat-icon-button (click)="openBenchmark()" matTooltip="Benchmark Analysis" class="benchmark-btn">
+        <mat-icon [class.has-result]="!!event.benchmarkResult">
+          {{ event.benchmarkResult ? 'analytics' : 'compare_arrows' }}
+        </mat-icon>
       </button>
       }
       <app-event-actions [user]="user" [event]="event" [showDownloadOriginal]="true" align="end"></app-event-actions>

@@ -109,42 +109,98 @@ export class EventSummaryComponent implements OnChanges {
     });
   }
 
+  async openBenchmark() {
+    // 1. If we already have a result (persisted or local), open it.
+    if (this.event.benchmarkResult) {
+      this.benchmarkResult = this.event.benchmarkResult;
+      this.openBenchmarkReport();
+      return;
+    }
+
+    // 2. If we have exactly 2 activities, auto-run.
+    const activities = this.event.getActivities();
+    if (activities.length === 2) {
+      await this.runBenchmark(activities[0], activities[1], { autoAlignTime: true });
+      return;
+    }
+
+    // 3. Otherwise (or if force-triggered), open dialog.
+    this.openBenchmarkDialog();
+  }
+
   openBenchmarkDialog(): void {
+    console.log('openBenchmarkDialog called');
+    const activities = this.event?.getActivities() || [];
+    console.log('Activities available:', activities.length, activities.map(a => a.creator?.name));
+
     const dialogRef = this.dialog.open(BenchmarkSelectionDialogComponent, {
       width: '600px',
       data: {
-        activities: this.event?.getActivities() || [],
+        activities: activities,
         initialSelection: this.selectedActivities
       }
     });
 
     dialogRef.afterClosed().subscribe(async (result: { activities: ActivityInterface[], options: BenchmarkOptions } | undefined) => {
+      console.log('Dialog closed with result:', result);
       if (result && result.activities && result.activities.length === 2) {
-        try {
-          this.snackBar.open('Generating Benchmark...', undefined, { duration: 2000 });
-
-          // Generate benchmark on-the-fly (not persisted)
-          this.benchmarkResult = await this.benchmarkService.generateBenchmark(result.activities[0], result.activities[1], result.options);
-          this.cd.detectChanges();
-
-          this.snackBar.open('Benchmark Generated!', undefined, { duration: 2000 });
-          this.openBenchmarkReport();
-        } catch (error) {
-          console.error(error);
-          this.snackBar.open('Benchmark failed: ' + error, 'Close');
-        }
+        await this.runBenchmark(result.activities[0], result.activities[1], result.options);
       }
     });
+  }
+
+  private async runBenchmark(ref: ActivityInterface, test: ActivityInterface, options: BenchmarkOptions) {
+    try {
+      this.snackBar.open('Generating Benchmark...', undefined, { duration: 2000 });
+
+      // Generate
+      const result = await this.benchmarkService.generateBenchmark(ref, test, options);
+
+      this.benchmarkResult = result;
+      // Optimistically update local event
+      this.event.benchmarkResult = result;
+      this.cd.detectChanges();
+
+      // Open Report immediately
+      this.openBenchmarkReport();
+      this.snackBar.open('Benchmark Generated & Saved!', undefined, { duration: 2000 });
+
+      // Persist to Event
+      // We perform this in background.
+      if (this.user && this.event.getID()) {
+        try {
+          await this.eventService.updateEventProperties(this.user, this.event.getID()!, {
+            benchmarkResult: result
+          });
+          console.log('Benchmark result persisted to event.');
+        } catch (e) {
+          console.error('Failed to persist benchmark result', e);
+          // Non-blocking error, user still sees report
+        }
+      }
+
+    } catch (error) {
+      console.error(error);
+      this.snackBar.open('Benchmark failed: ' + error, 'Close');
+    }
   }
 
   openBenchmarkReport() {
     if (!this.benchmarkResult) return;
 
-    this.bottomSheet.open(BenchmarkBottomSheetComponent, {
+    const sheetRef = this.bottomSheet.open(BenchmarkBottomSheetComponent, {
       data: {
         result: this.benchmarkResult,
       },
       panelClass: 'qs-full-width-bottom-sheet'
+    });
+
+    sheetRef.afterDismissed().subscribe((result: { rerun?: boolean } | undefined) => {
+      console.log('Bottom sheet dismissed with result:', result);
+      if (result?.rerun) {
+        console.log('Re-run triggered, opening dialog...');
+        this.openBenchmarkDialog();
+      }
     });
   }
 

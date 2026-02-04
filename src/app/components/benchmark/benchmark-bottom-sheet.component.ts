@@ -11,9 +11,14 @@ import { BenchmarkResult } from '../../../../functions/src/shared/app-event.inte
                 <mat-icon color="primary">analytics</mat-icon>
                 <h2 mat-dialog-title>Hardware Benchmark Analysis</h2>
             </div>
-            <button mat-icon-button (click)="close()">
-                <mat-icon>close</mat-icon>
-            </button>
+            <div class="header-actions">
+                <button mat-icon-button matTooltip="Re-run with different activities" (click)="rerun()">
+                    <mat-icon>refresh</mat-icon>
+                </button>
+                <button mat-icon-button (click)="close()">
+                    <mat-icon>close</mat-icon>
+                </button>
+            </div>
         </div>
         <div class="bottom-sheet-content qs-scrollbar">
             <app-benchmark-report [result]="data.result"></app-benchmark-report>
@@ -31,5 +36,9 @@ export class BenchmarkBottomSheetComponent {
 
   close() {
     this.bottomSheetRef.dismiss();
+  }
+
+  rerun() {
+    this.bottomSheetRef.dismiss({ rerun: true });
   }
 }

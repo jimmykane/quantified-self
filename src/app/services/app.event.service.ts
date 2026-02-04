@@ -103,6 +103,22 @@ export class AppEventService implements OnDestroy {
             event.originalFile = rawData.originalFile;
           }
 
+          // Hydrate persistent benchmark result
+          if (rawData.benchmarkResult) {
+            event.benchmarkResult = rawData.benchmarkResult;
+            // Convert timestamp string/firestore-timestamp to Date
+            if (event.benchmarkResult.timestamp) {
+              const ts = event.benchmarkResult.timestamp as any;
+              if (ts.toDate && typeof ts.toDate === 'function') {
+                event.benchmarkResult.timestamp = ts.toDate();
+              } else if (ts.seconds !== undefined) {
+                event.benchmarkResult.timestamp = new Date(ts.seconds * 1000);
+              } else {
+                event.benchmarkResult.timestamp = new Date(ts);
+              }
+            }
+          }
+
           return event;
         })),
       this.getActivities(user, eventID),
@@ -187,6 +203,36 @@ export class AppEventService implements OnDestroy {
         }
         if (rawData.originalFile) {
           event.originalFile = rawData.originalFile;
+        }
+
+        if (rawData.benchmarkResult) {
+          event.benchmarkResult = rawData.benchmarkResult;
+          // Convert main timestamp
+          if (event.benchmarkResult.timestamp) {
+            const ts = event.benchmarkResult.timestamp as any;
+            if (ts.toDate && typeof ts.toDate === 'function') {
+              event.benchmarkResult.timestamp = ts.toDate();
+            } else if (ts.seconds !== undefined) {
+              event.benchmarkResult.timestamp = new Date(ts.seconds * 1000);
+            } else {
+              event.benchmarkResult.timestamp = new Date(ts);
+            }
+          }
+          // Convert qualityIssues timestamps
+          if (event.benchmarkResult.qualityIssues && Array.isArray(event.benchmarkResult.qualityIssues)) {
+            event.benchmarkResult.qualityIssues.forEach((issue: any) => {
+              if (issue.timestamp) {
+                const ts = issue.timestamp;
+                if (ts.toDate && typeof ts.toDate === 'function') {
+                  issue.timestamp = ts.toDate();
+                } else if (ts.seconds !== undefined) {
+                  issue.timestamp = new Date(ts.seconds * 1000);
+                } else {
+                  issue.timestamp = new Date(ts);
+                }
+              }
+            });
+          }
         }
 
         return event;

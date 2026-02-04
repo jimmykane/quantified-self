@@ -103,7 +103,7 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
                     <mat-icon>{{ getIssueIcon(issue.type) }}</mat-icon>
                     <div class="issue-details">
                         <span class="issue-desc">{{ issue.description }}</span>
-                        <span class="issue-meta">{{ issue.streamType }} • {{ issue.timestamp | date:'mediumTime' }}</span>
+                        <span class="issue-meta">{{ issue.streamType }} • {{ toSafeDate(issue.timestamp) | date:'mediumTime' }}</span>
                     </div>
                 </div>
             </div>
@@ -519,5 +519,14 @@ export class BenchmarkReportComponent {
             case 'cadence_lock': return 'lock';
             default: return 'warning';
         }
+    }
+
+    /** Safely convert Firestore Timestamp or any date-like value to Date */
+    toSafeDate(val: any): Date | null {
+        if (!val) return null;
+        if (val instanceof Date) return val;
+        if (typeof val.toDate === 'function') return val.toDate();
+        if (val.seconds !== undefined) return new Date(val.seconds * 1000);
+        return new Date(val);
     }
 }

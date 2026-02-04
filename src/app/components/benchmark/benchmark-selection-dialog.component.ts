@@ -25,11 +25,22 @@ export interface BenchmarkSelectionData {
       </mat-selection-list>
 
       <div *ngIf="selection.selected.length === 2" class="preview-info fade-in">
-        <p><strong>Ready to Compare:</strong></p>
-        <div class="comparison-pill">
-           <span>{{ selection.selected[0].creator?.name || 'Device A' }}</span>
-           <mat-icon>compare_arrows</mat-icon>
-           <span>{{ selection.selected[1].creator?.name || 'Device B' }}</span>
+        <p class="preview-title">Ready to Compare:</p>
+        
+        <div class="role-assignment">
+          <div class="role-card reference">
+            <span class="role-label">Reference (Ground Truth)</span>
+            <span class="device-name">{{ selection.selected[0].creator?.name || 'Device A' }}</span>
+          </div>
+          
+          <button mat-icon-button class="swap-btn" (click)="swapActivities()" matTooltip="Swap Reference and Test">
+            <mat-icon>swap_horiz</mat-icon>
+          </button>
+          
+          <div class="role-card test">
+            <span class="role-label">Test Device</span>
+            <span class="device-name">{{ selection.selected[1].creator?.name || 'Device B' }}</span>
+          </div>
         </div>
         
         <div class="options-container">
@@ -67,18 +78,49 @@ export interface BenchmarkSelectionData {
         font-size: 0.85em;
         color: var(--mat-sys-on-surface-variant);
     }
-    .comparison-pill {
+    .preview-title {
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+        text-align: center;
+    }
+    .role-assignment {
         display: flex;
         align-items: center;
-        gap: 1rem;
-        background: var(--mat-sys-secondary-container);
-        color: var(--mat-sys-on-secondary-container);
-        padding: 0.5rem 1rem;
-        border-radius: 999px;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    .role-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        min-width: 140px;
+        text-align: center;
+    }
+    .role-card.reference {
+        background: var(--mat-sys-primary-container);
+        color: var(--mat-sys-on-primary-container);
+    }
+    .role-card.test {
+        background: var(--mat-sys-tertiary-container);
+        color: var(--mat-sys-on-tertiary-container);
+    }
+    .role-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        opacity: 0.8;
+        margin-bottom: 0.25rem;
+    }
+    .device-name {
+        font-weight: 600;
         font-family: 'JetBrains Mono', monospace;
         font-size: 0.9rem;
-        justify-content: center;
-        margin-top: 1rem;
+    }
+    .swap-btn {
+        color: var(--mat-sys-primary);
     }
     .options-container {
         margin-top: 1rem;
@@ -110,15 +152,14 @@ export class BenchmarkSelectionDialogComponent {
   }
 
   onSelectionChange(event: any): void {
-    // Enforce max 2
-    if (this.selection.selected.length > 2) {
-      // Deselect the oldest one/first one effectively? Or just prevent?
-      // Let's just deselect the previous one if we adding a 3rd
-      const toDeselect = this.selection.selected.find(x => x !== event.option.value); // Naive
-      // simpler: if 3 selected, splice?
-      // SelectionModel doesn't strictly enforce limit.
-      // Let's manually manage if needed, or just let users toggle.
-      // The button is disabled if !== 2. That's enough for MVP.
+    // Enforce max 2 - the button is disabled if !== 2, that's enough for MVP.
+  }
+
+  swapActivities(): void {
+    if (this.selection.selected.length === 2) {
+      const [first, second] = this.selection.selected;
+      this.selection.clear();
+      this.selection.select(second, first);
     }
   }
 

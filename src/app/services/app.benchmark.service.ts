@@ -88,10 +88,6 @@ export class AppBenchmarkService {
             metrics: {
                 gnss: { cep50: 0, cep95: 0, maxDeviation: 0, rmse: 0, totalDistanceDifference: 0 },
                 streamMetrics: {}
-            },
-            diffStreams: {
-                time: [],
-                gnssDeviation: []
             }
         };
 
@@ -104,7 +100,7 @@ export class AppBenchmarkService {
         );
 
         // Initialize diff streams for common types
-        commonTypes.forEach(type => result.diffStreams![type] = []);
+        // Initialize diff streams for common types (removed for optimization)
 
         const gnssDeviations: number[] = [];
         const streamValues: { [type: string]: { a: number[], b: number[] } } = {};
@@ -127,8 +123,6 @@ export class AppBenchmarkService {
             if (posA && posB) {
                 const deviation = this.haversineDistance(posA.latitudeDegrees, posA.longitudeDegrees, posB.latitudeDegrees, posB.longitudeDegrees);
                 gnssDeviations.push(deviation);
-                result.diffStreams!.gnssDeviation.push(deviation);
-                result.diffStreams!.time.push(t);
             }
 
             // Stream Comparisons
@@ -137,9 +131,6 @@ export class AppBenchmarkService {
                 const valB = this.getValueAtTime(testActivityToUse, type, date);
 
                 if (valA !== null && valB !== null) {
-                    const diff = valA - valB;
-                    result.diffStreams![type].push(diff);
-
                     streamValues[type].a.push(valA);
                     streamValues[type].b.push(valB);
                 }
