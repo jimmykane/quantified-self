@@ -81,7 +81,13 @@
           }
           @if (column === 'Activity Types') {
           <span class="activity-type-cell">
-            @if (row['Merged Event']) {
+            @if (row['Merged Event'] && row['Has Benchmark']) {
+            <span class="clickable-icon" (click)="openBenchmarkReport($event, row.Event)">
+              <mat-icon matTooltip="View Benchmark Analysis"
+                [style.color]="getBenchmarkColor(row.Event)">analytics</mat-icon>
+            </span>
+            }
+            @if (row['Merged Event'] && !row['Has Benchmark']) {
             <span><mat-icon>compare_arrows</mat-icon></span>
             }
             <app-activity-type-icon [activityType]="row[column]" size="18px" vAlign="middle"></app-activity-type-icon>

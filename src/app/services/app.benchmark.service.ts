@@ -280,7 +280,7 @@ export class AppBenchmarkService {
         const hasSpeed = refStreams.includes('Speed') && testStreams.includes('Speed');
         const hasAltitude = refStreams.includes('Altitude') && testStreams.includes('Altitude');
 
-        const type = hasSpeed ? 'Speed' : (hasAltitude ? 'Altitude' : null);
+        const type = hasAltitude ? 'Altitude' : (hasSpeed ? 'Speed' : null);
         if (!type) return 0;
 
         // Take a representative sample (middle 5 mins or full duration if shorter)

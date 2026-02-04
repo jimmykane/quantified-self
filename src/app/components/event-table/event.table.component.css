@@ -205,3 +205,11 @@ mat-paginator {
   align-items: center;
   gap: 8px;
 }
+
+.clickable-icon {
+  cursor: pointer;
+}
+
+.clickable-icon:hover mat-icon {
+  color: var(--mat-sys-primary);
+}

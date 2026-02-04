@@ -14,11 +14,13 @@ import {
 } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { AppBreakpoints } from '../../constants/breakpoints';
+import { AppColors } from '../../services/color/app.colors';
 import { AppEventService } from '../../services/app.event.service';
 import { Router } from '@angular/router';
 import { MatCard } from '@angular/material/card';
 import { MatPaginator, MatPaginatorIntl, PageEvent } from '@angular/material/paginator';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatSort } from '@angular/material/sort';
 import { AppEventInterface } from '../../../../functions/src/shared/app-event.interface';
 import { MatTableDataSource } from '@angular/material/table';
@@ -45,6 +47,7 @@ import { LoggerService } from '../../services/logger.service';
 import { AppProcessingService } from '../../services/app.processing.service';
 import { AppEventUtilities } from '../../utils/app.event.utilities';
 import { Firestore, doc, collection } from '@angular/fire/firestore';
+import { BenchmarkBottomSheetComponent } from '../benchmark/benchmark-bottom-sheet.component';
 
 @Component({
   selector: 'app-event-table',
@@ -96,7 +99,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     private logger: LoggerService,
     private processingService: AppProcessingService,
     private appEventUtilities: AppEventUtilities,
-    private breakpointObserver: BreakpointObserver) {
+    private breakpointObserver: BreakpointObserver,
+    private bottomSheet: MatBottomSheet) {
     super(changeDetector);
   }
 
@@ -157,6 +161,69 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   checkBoxClick(row) {
     this.selection.toggle(row);
+  }
+
+  /**
+   * Opens the benchmark report for a merged event directly from the table.
+   * Stops propagation to prevent row navigation.
+   */
+  openBenchmarkReport(event: Event, appEvent: AppEventInterface): void {
+    event.stopPropagation();
+    event.preventDefault();
+
+    if (!appEvent.benchmarkResults) return;
+
+    // Get the first benchmark result from the map
+    const keys = Object.keys(appEvent.benchmarkResults);
+    if (keys.length === 0) return;
+
+    const result = appEvent.benchmarkResults[keys[0]];
+
+    this.bottomSheet.open(BenchmarkBottomSheetComponent, {
+      data: {
+        result: result,
+        event: appEvent
+      },
+      panelClass: 'qs-full-width-bottom-sheet',
+      autoFocus: 'dialog'
+    });
+  }
+
+  getBenchmarkColor(appEvent: AppEventInterface): string {
+    if (!appEvent.benchmarkResults) return '';
+    const keys = Object.keys(appEvent.benchmarkResults);
+    if (keys.length === 0) return '';
+    const result = appEvent.benchmarkResults[keys[0]];
+
+    // Replicating grading logic from BenchmarkReportComponent
+
+    // 1. GNSS Grade
+    let gnssScore = 0; // poor
+    const cep50 = result.metrics.gnss.cep50;
+    if (cep50 <= 2) gnssScore = 3; // excellent
+    else if (cep50 <= 5) gnssScore = 2; // good
+    else if (cep50 <= 10) gnssScore = 1; // fair
+
+    // 2. Stream Grades
+    const streamScores: number[] = [];
+    Object.values(result.metrics.streamMetrics).forEach(m => {
+      const corr = m.pearsonCorrelation;
+      if (corr >= 0.98) streamScores.push(3);
+      else if (corr >= 0.95) streamScores.push(2);
+      else if (corr >= 0.90) streamScores.push(1);
+      else streamScores.push(0);
+    });
+
+    const allScores = [gnssScore, ...streamScores];
+    if (allScores.length === 0) return AppColors.Orange; // Fair default
+
+    const total = allScores.reduce((a, b) => a + b, 0);
+    const avg = total / allScores.length;
+
+    if (avg >= 2.5) return AppColors.Green; // Excellent
+    if (avg >= 1.5) return AppColors.Green; // Good (using same green for simplicity or could use a lighter one)
+    if (avg >= 0.5) return AppColors.Orange; // Fair
+    return AppColors.Red; // Poor
   }
 
   /** Whether the number of selected elements matches the total number of rows. */
@@ -606,6 +673,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         AppEventUtilities.shouldExcludeDescent(type as ActivityTypes) ||
         ((this.user.settings.summariesSettings as any)?.removeDescentForEventTypes || []).includes(type as any)
       );
+
+      statRowElement['Has Benchmark'] = (event as any).benchmarkResult || ((event as any).benchmarkResults && Object.keys((event as any).benchmarkResults).length > 0);
 
       // Add the sorts
       statRowElement['sort.Start Date'] = event.startDate.getTime();

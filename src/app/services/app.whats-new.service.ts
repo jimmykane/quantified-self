@@ -36,7 +36,8 @@ export class AppWhatsNewService {
     private _isAdminMode = signal(false);
 
     // Derived query that changes based on admin mode
-    private changelogsQuery = computed(() => {
+    // Must run Firebase API calls in injection context to avoid zone issues
+    private changelogsQuery = computed(() => runInInjectionContext(this.injector, () => {
         if (this._isAdminMode()) {
             // Admin mode: Show all, ordered by date
             return query(this.changelogsCollection, orderBy('date', 'desc'));
@@ -44,7 +45,7 @@ export class AppWhatsNewService {
             // User mode: Show only published
             return query(this.changelogsCollection, where('published', '==', true), orderBy('date', 'desc'));
         }
-    });
+    }));
 
     // Re-create observable stream based on the computed query
     public changelogs$ = toObservable(this.changelogsQuery, { injector: this.injector }).pipe(

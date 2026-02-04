@@ -851,6 +851,10 @@ export class AppEventService implements OnDestroy {
             event.originalFile = rawData.originalFile;
           }
 
+          // Hydrate benchmark results (map) with timestamp conversion
+          // Also migrate legacy single benchmarkResult to new map structure
+          this.hydrateBenchmarkResults(event, rawData);
+
           return event;
         })
       }));
@@ -883,6 +887,10 @@ export class AppEventService implements OnDestroy {
           if (rawData.originalFile) {
             event.originalFile = rawData.originalFile;
           }
+
+          // Hydrate benchmark results (map) with timestamp conversion
+          // Also migrate legacy single benchmarkResult to new map structure
+          this.hydrateBenchmarkResults(event, rawData);
 
           events.push(event);
           return events;

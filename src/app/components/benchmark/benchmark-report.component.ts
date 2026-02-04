@@ -47,10 +47,18 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
            <mat-icon>star</mat-icon>
            <span>{{ result.referenceName || 'Device A' }}</span>
         </div>
+        
         <div class="vs-badge">VS</div>
+        
         <div class="device-pill" [style.--pill-color]="testColor || 'var(--mat-sys-tertiary)'">
            <mat-icon>watch</mat-icon>
            <span>{{ result.testName || 'Device B' }}</span>
+        </div>
+
+        <!-- Auto Align Status Chip -->
+        <div class="align-chip" *ngIf="result.timeOffsetSeconds !== undefined" [matTooltip]="'Time alignment offset: ' + result.timeOffsetSeconds + 's'">
+            <mat-icon>history</mat-icon>
+            <span>Offset {{ result.timeOffsetSeconds }}s</span>
         </div>
       </div>
 
@@ -248,6 +256,20 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
             width: 18px; 
             height: 18px; 
         }
+    }
+
+    .align-chip {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border-radius: 8px;
+        font-weight: 500;
+        font-size: 0.875rem;
+        background: var(--mat-sys-secondary-container);
+        color: var(--mat-sys-on-secondary-container);
+        
+        mat-icon { font-size: 18px; width: 18px; height: 18px; }
     }
 
     .vs-badge {

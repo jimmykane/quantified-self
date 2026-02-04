@@ -52,6 +52,17 @@ export interface BenchmarkSelectionData {
             <mat-checkbox [(ngModel)]="autoAlignTime">
                 Auto-align Time (Use Correlation)
             </mat-checkbox>
+            
+            <app-status-info type="info" title="How Auto-align Works">
+                <ul>
+                    <li><strong>Streams:</strong> Uses <strong>Altitude</strong> (priority) or <strong>Speed</strong>.</li>
+                    <li><strong>Method:</strong> Cross-correlation (Pearson) on a 5-minute sample at 1Hz.</li>
+                    <li><strong>Window:</strong> Tests shifts of ±15 seconds to find best match.</li>
+                </ul>
+                <div style="margin-top: 4px; font-size: 0.85em; opacity: 0.8;">
+                    <em>Note: For indoor activities (no GPS altitude), alignment requires a Speed source. Without valid data, no alignment is applied.</em>
+                </div>
+            </app-status-info>
         </div>
       </div>
 
