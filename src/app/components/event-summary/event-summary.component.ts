@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges, ChangeDetectorRef, computed } from '@angular/core';
-import { AppEventInterface, BenchmarkOptions } from '../../../../functions/src/shared/app-event.interface';
+import { AppEventInterface, BenchmarkOptions, getBenchmarkPairKey } from '../../../../functions/src/shared/app-event.interface';
 import {
   EventInterface,
   User,
@@ -110,21 +110,23 @@ export class EventSummaryComponent implements OnChanges {
   }
 
   async openBenchmark() {
-    // 1. If we already have a result (persisted or local), open it.
-    if (this.event.benchmarkResult) {
-      this.benchmarkResult = this.event.benchmarkResult;
-      this.openBenchmarkReport();
-      return;
-    }
-
-    // 2. If we have exactly 2 activities, auto-run.
     const activities = this.event.getActivities();
+
+    // For 2 activities, check if we have a saved result for this pair
     if (activities.length === 2) {
+      const key = getBenchmarkPairKey(activities[0].getID()!, activities[1].getID()!);
+      const savedResult = this.event.benchmarkResults?.[key];
+      if (savedResult) {
+        this.benchmarkResult = savedResult;
+        this.openBenchmarkReport();
+        return;
+      }
+      // No saved result, auto-run
       await this.runBenchmark(activities[0], activities[1], { autoAlignTime: true });
       return;
     }
 
-    // 3. Otherwise (or if force-triggered), open dialog.
+    // For 3+ activities or to select different pair, open dialog
     this.openBenchmarkDialog();
   }
 
@@ -132,6 +134,9 @@ export class EventSummaryComponent implements OnChanges {
     console.log('openBenchmarkDialog called');
     const activities = this.event?.getActivities() || [];
     console.log('Activities available:', activities.length, activities.map(a => a.creator?.name));
+
+    // Blur active element to prevent aria-hidden warning
+    (document.activeElement as HTMLElement)?.blur();
 
     const dialogRef = this.dialog.open(BenchmarkSelectionDialogComponent, {
       width: '600px',
@@ -157,25 +162,25 @@ export class EventSummaryComponent implements OnChanges {
       const result = await this.benchmarkService.generateBenchmark(ref, test, options);
 
       this.benchmarkResult = result;
-      // Optimistically update local event
-      this.event.benchmarkResult = result;
+      // Optimistically update local event with map structure
+      const key = getBenchmarkPairKey(ref.getID()!, test.getID()!);
+      if (!this.event.benchmarkResults) this.event.benchmarkResults = {};
+      this.event.benchmarkResults[key] = result;
       this.cd.detectChanges();
 
       // Open Report immediately
       this.openBenchmarkReport();
       this.snackBar.open('Benchmark Generated & Saved!', undefined, { duration: 2000 });
 
-      // Persist to Event
-      // We perform this in background.
+      // Persist to Event (save entire map)
       if (this.user && this.event.getID()) {
         try {
           await this.eventService.updateEventProperties(this.user, this.event.getID()!, {
-            benchmarkResult: result
+            benchmarkResults: this.event.benchmarkResults
           });
-          console.log('Benchmark result persisted to event.');
+          console.log('Benchmark results persisted to event.');
         } catch (e) {
-          console.error('Failed to persist benchmark result', e);
-          // Non-blocking error, user still sees report
+          console.error('Failed to persist benchmark results', e);
         }
       }
 
@@ -191,8 +196,10 @@ export class EventSummaryComponent implements OnChanges {
     const sheetRef = this.bottomSheet.open(BenchmarkBottomSheetComponent, {
       data: {
         result: this.benchmarkResult,
+        event: this.event
       },
-      panelClass: 'qs-full-width-bottom-sheet'
+      panelClass: 'qs-full-width-bottom-sheet',
+      autoFocus: 'dialog'
     });
 
     sheetRef.afterDismissed().subscribe((result: { rerun?: boolean } | undefined) => {

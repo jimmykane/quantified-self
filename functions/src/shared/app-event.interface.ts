@@ -28,10 +28,20 @@ export interface AppEventInterface extends EventInterface {
     originalFile?: OriginalFileMetaData;
     /** Canonical source for original file metadata. Always an array. */
     originalFiles?: OriginalFileMetaData[];
-    /** Result data for hardware comparison benchmarks */
+    /** @deprecated Use benchmarkResults instead. Kept for migration. */
     benchmarkResult?: BenchmarkResult;
+    /** Map of benchmark results keyed by "referenceId_testId" */
+    benchmarkResults?: { [pairKey: string]: BenchmarkResult };
     /** Flag to identify benchmark events */
     isBenchmark?: boolean;
+}
+
+/**
+ * Generate a benchmark pair key from reference and test activity IDs.
+ * Order matters: Garmin(ref) vs Suunto(test) ≠ Suunto(ref) vs Garmin(test)
+ */
+export function getBenchmarkPairKey(referenceId: string, testId: string): string {
+    return `${referenceId}_${testId}`;
 }
 
 export interface BenchmarkStreamMetrics {

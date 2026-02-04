@@ -21,7 +21,7 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
     selector: 'app-benchmark-report',
     template: `
     <div class="benchmark-container" *ngIf="result">
-      
+    
       <!-- Verdict Summary -->
       <mat-card class="verdict-card" [ngClass]="getOverallGrade()">
         <mat-card-header>
@@ -43,12 +43,12 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
 
       <!-- Header -->
       <div class="report-header">
-        <div class="device-pill reference">
+        <div class="device-pill" [style.--pill-color]="referenceColor || 'var(--mat-sys-primary)'">
            <mat-icon>star</mat-icon>
            <span>{{ result.referenceName || 'Device A' }}</span>
         </div>
         <div class="vs-badge">VS</div>
-        <div class="device-pill test">
+        <div class="device-pill" [style.--pill-color]="testColor || 'var(--mat-sys-tertiary)'">
            <mat-icon>watch</mat-icon>
            <span>{{ result.testName || 'Device B' }}</span>
         </div>
@@ -97,7 +97,7 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
                 <span>Auto-aligned by <strong>{{ result.timeOffsetSeconds }}s</strong> to maximize correlation.</span>
             </div>
             
-            <div class="quality-issues-list" *ngIf="result.qualityIssues && result.qualityIssues.length > 0">
+            <div class="quality-issues-list qs-scrollbar" *ngIf="result.qualityIssues && result.qualityIssues.length > 0">
                 <p class="issues-title">Detected Issues:</p>
                 <div class="quality-issue" *ngFor="let issue of result.qualityIssues" [ngClass]="issue.severity">
                     <mat-icon>{{ getIssueIcon(issue.type) }}</mat-icon>
@@ -117,7 +117,7 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
                     <mat-icon>{{ getGradeIcon(getCorrelationGrade(result.metrics.streamMetrics[stream].pearsonCorrelation)) }}</mat-icon>
                 </div>
                 <mat-card-title>{{ stream }}</mat-card-title>
-                <mat-card-subtitle>Sensor Correlation</mat-card-subtitle>
+                <mat-card-subtitle>{{ getCorrelationLabel(result.metrics.streamMetrics[stream].pearsonCorrelation) }}</mat-card-subtitle>
             </mat-card-header>
             <mat-card-content>
                 <div class="correlation-meter">
@@ -132,8 +132,8 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
                     </span>
                 </div>
                 <div class="mini-stats">
-                    <span>RMSE: {{ result.metrics.streamMetrics[stream].rootMeanSquareError | number:'1.1-1' }}</span>
-                    <span>MAE: {{ result.metrics.streamMetrics[stream].meanAbsoluteError | number:'1.1-1' }}</span>
+                    <span>RMSE: <span class="stat-val">{{ result.metrics.streamMetrics[stream].rootMeanSquareError | number:'1.1-1' }}</span></span>
+                    <span>MAE: <span class="stat-val">{{ result.metrics.streamMetrics[stream].meanAbsoluteError | number:'1.1-1' }}</span></span>
                 </div>
             </mat-card-content>
         </mat-card>
@@ -238,16 +238,16 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
         font-weight: 500;
         font-size: 0.875rem;
         
-        &.reference {
-            background: var(--mat-sys-primary);
-            color: var(--mat-sys-on-primary);
-        }
-        &.test {
-            background: var(--mat-sys-tertiary);
-            color: var(--mat-sys-on-tertiary);
-        }
+        background: var(--pill-color);
+        border: 2px solid var(--pill-color);
+        color: #ffffff;
         
-        mat-icon { font-size: 18px; width: 18px; height: 18px; }
+        mat-icon { 
+            color: #ffffff;
+            font-size: 18px; 
+            width: 18px; 
+            height: 18px; 
+        }
     }
 
     .vs-badge {
@@ -256,7 +256,7 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
     }
 
     .metric-card {
-        background: var(--mat-sys-surface);
+        background: var(--mat-app-surface-container-high);
         margin-bottom: 1rem;
         box-shadow: none;
         border: 1px solid var(--mat-sys-outline-variant);
@@ -301,7 +301,11 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
         flex-direction: column;
         
         .label { font-size: 0.75rem; opacity: 0.7; }
-        .value { font-size: 1.25rem; font-weight: 700; }
+        .value { 
+            font-size: 1.25rem; 
+            font-weight: 700;
+            font-family: 'Barlow Condensed', sans-serif;
+        }
         .value.highlight { color: var(--mat-sys-error); }
     }
 
@@ -334,6 +338,7 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
         .corr-value {
             font-size: 0.875rem;
             font-weight: 600;
+            font-family: 'Barlow Condensed', sans-serif;
         }
     }
     
@@ -342,6 +347,12 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
         justify-content: space-between;
         font-size: 0.75rem;
         opacity: 0.7;
+        
+        .stat-val {
+            font-family: 'Barlow Condensed', sans-serif;
+            font-size: 1.1em;
+            font-weight: 600;
+        }
     }
     
     @media (max-width: 599px) {
@@ -410,7 +421,9 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
     standalone: false
 })
 export class BenchmarkReportComponent {
-    @Input() result?: BenchmarkResult;
+    @Input() result: BenchmarkResult | null = null;
+    @Input() referenceColor: string = '';
+    @Input() testColor: string = '';
     objectKeys = Object.keys;
 
     getGnssGrade(): Grade {
@@ -528,5 +541,13 @@ export class BenchmarkReportComponent {
         if (typeof val.toDate === 'function') return val.toDate();
         if (val.seconds !== undefined) return new Date(val.seconds * 1000);
         return new Date(val);
+    }
+
+    getCorrelationLabel(score: number): string {
+        const absScore = Math.abs(score);
+        if (absScore >= CORRELATION_THRESHOLDS.excellent) return 'Excellent Match';
+        if (absScore >= CORRELATION_THRESHOLDS.good) return 'Strong Correlation';
+        if (absScore >= CORRELATION_THRESHOLDS.fair) return 'Moderate Correlation';
+        return 'Weak Correlation';
     }
 }
