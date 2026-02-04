@@ -46,6 +46,7 @@ mat-icon {
 }
 
 mat-card.map-legend {
+  border: 0;
   padding-top: 0.4em;
   padding-bottom: 0.4em;
   padding-left: 0;
@@ -54,6 +55,8 @@ mat-card.map-legend {
   bottom: 21px;
   right: 48px;
   z-index: 1;
+  background: inherit;
+  box-shadow: none;
 }
 
 mat-slide-toggle {
