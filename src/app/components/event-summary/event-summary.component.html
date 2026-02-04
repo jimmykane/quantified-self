@@ -46,8 +46,9 @@
         <mat-icon>edit</mat-icon>
       </button>
       @if (event.getActivities().length >= 2) {
-      <button mat-icon-button (click)="openBenchmark()" matTooltip="Benchmark Analysis" class="benchmark-btn">
-        <mat-icon [class.has-result]="!!event.benchmarkResult">
+      <button mat-icon-button (click)="openBenchmark()" matTooltip="Benchmark Analysis" class="benchmark-btn"
+        [matBadge]="benchmarkCount > 1 ? benchmarkCount : null" matBadgeColor="accent" matBadgeSize="small">
+        <mat-icon [class.has-result]="benchmarkCount > 0">
           analytics
         </mat-icon>
       </button>

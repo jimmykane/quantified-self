@@ -215,6 +215,11 @@ export class EventSummaryComponent implements OnChanges {
     return this.event?.getActivities()[0]?.type || 'Other';
   }
 
+  get benchmarkCount(): number {
+    if (!this.event?.benchmarkResults) return 0;
+    return Object.keys(this.event.benchmarkResults).length;
+  }
+
   getHeroStats(): string[] {
     const type = this.mainActivityType;
     if (type === 'Virtual Cycling' || type === 'VirtualRide') {
