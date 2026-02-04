@@ -25,7 +25,9 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
       <!-- Verdict Summary -->
       <mat-card class="verdict-card" [ngClass]="getOverallGrade()">
         <mat-card-header>
-          <mat-icon mat-card-avatar [ngClass]="getOverallGrade()">{{ getGradeIcon(getOverallGrade()) }}</mat-icon>
+          <div mat-card-avatar class="grade-avatar" [ngClass]="getOverallGrade()">
+            <mat-icon>{{ getGradeIcon(getOverallGrade()) }}</mat-icon>
+          </div>
           <mat-card-title>{{ getVerdictTitle() }}</mat-card-title>
           <mat-card-subtitle>Hardware Benchmark Analysis</mat-card-subtitle>
         </mat-card-header>
@@ -55,7 +57,9 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
       <!-- GNSS Section -->
       <mat-card class="metric-card gnss-card">
         <mat-card-header>
-            <mat-icon mat-card-avatar [ngClass]="getGnssGrade()">{{ getGradeIcon(getGnssGrade()) }}</mat-icon>
+            <div mat-card-avatar class="grade-avatar" [ngClass]="getGnssGrade()">
+                <mat-icon>{{ getGradeIcon(getGnssGrade()) }}</mat-icon>
+            </div>
             <mat-card-title>GNSS Accuracy</mat-card-title>
             <mat-card-subtitle>Positional Deviation</mat-card-subtitle>
         </mat-card-header>
@@ -81,7 +85,9 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
 
       <mat-card class="metric-card info-card" *ngIf="result && (result.alignmentApplied || (result.qualityIssues && result.qualityIssues.length > 0))">
         <mat-card-header>
-            <mat-icon mat-card-avatar>tune</mat-icon>
+            <div mat-card-avatar class="grade-avatar">
+                <mat-icon>tune</mat-icon>
+            </div>
             <mat-card-title>Data Quality</mat-card-title>
             <mat-card-subtitle>Preprocessing & Artifacts</mat-card-subtitle>
         </mat-card-header>
@@ -104,13 +110,12 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
         </mat-card-content>
       </mat-card>
 
-      <!-- Sensor Streams -->
       <div class="streams-container">
         <mat-card class="metric-card stream-card" *ngFor="let stream of objectKeys(result.metrics.streamMetrics)">
             <mat-card-header>
-                <mat-icon mat-card-avatar [ngClass]="getCorrelationGrade(result.metrics.streamMetrics[stream].pearsonCorrelation)">
-                    {{ getGradeIcon(getCorrelationGrade(result.metrics.streamMetrics[stream].pearsonCorrelation)) }}
-                </mat-icon>
+                <div mat-card-avatar class="grade-avatar" [ngClass]="getCorrelationGrade(result.metrics.streamMetrics[stream].pearsonCorrelation)">
+                    <mat-icon>{{ getGradeIcon(getCorrelationGrade(result.metrics.streamMetrics[stream].pearsonCorrelation)) }}</mat-icon>
+                </div>
                 <mat-card-title>{{ stream }}</mat-card-title>
                 <mat-card-subtitle>Sensor Correlation</mat-card-subtitle>
             </mat-card-header>
@@ -156,16 +161,27 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
         &.fair { border-color: #FFAA00; }
         &.poor { border-color: #FF3333; }
 
-        /* Avatar styles - Backgrounds and Icons inside avatars */
-        mat-card-avatar { 
+        /* Custom Avatar styles - Replaces mat-card-avatar to avoid cropping */
+        .grade-avatar { 
             display: flex;
             align-items: center;
             justify-content: center;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            margin-right: 16px; /* Mimic mat-card-avatar spacing */
             
             &.excellent { background: #11DD55; color: white; }
             &.good { background: #4CAF50; color: white; }
             &.fair { background: #FFAA00; color: white; }
             &.poor { background: #FF3333; color: white; }
+            
+            mat-icon {
+                font-size: 24px;
+                width: 24px;
+                height: 24px;
+            }
         }
     }
 
@@ -246,11 +262,29 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
         border: 1px solid var(--mat-sys-outline-variant);
         border-radius: 12px;
         
-        mat-card-avatar {
-            border-radius: 50%;
+        /* Consistent avatar style for sub-cards */
+        .grade-avatar {
             display: flex;
             align-items: center;
             justify-content: center;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            background: var(--mat-sys-secondary-container);
+            color: var(--mat-sys-on-secondary-container);
+            margin-right: 16px;
+            
+            &.excellent { background: #11DD55; color: white; }
+            &.good { background: #4CAF50; color: white; }
+            &.fair { background: #FFAA00; color: white; }
+            &.poor { background: #FF3333; color: white; }
+            
+             mat-icon {
+                font-size: 24px;
+                width: 24px;
+                height: 24px;
+            }
         }
     }
 
