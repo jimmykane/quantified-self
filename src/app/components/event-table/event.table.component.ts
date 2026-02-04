@@ -336,6 +336,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   public downloadAsCSV(event) {
+    if (this.selection.selected.length > 20) {
+      this.snackBar.open('Cannot download more than 20 events at once', 'Close', { duration: 3000 });
+      return;
+    }
     this.dialog.open(EventsExportFormComponent, {
       // width: '100vw',
       disableClose: false,
@@ -347,6 +351,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   public async downloadOriginals() {
+
+    if (this.selection.selected.length > 20) {
+      this.snackBar.open('Cannot download more than 20 events at once', 'Close', { duration: 3000 });
+      return;
+    }
+
     // Start background job instead of blocking UI
     const jobId = this.processingService.addJob('download', 'Preparing download...');
 
