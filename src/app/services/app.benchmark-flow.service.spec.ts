@@ -150,9 +150,14 @@ describe('AppBenchmarkFlowService', () => {
     const key = getBenchmarkPairKey(activityA.getID(), activityB.getID());
     expect(benchmarkService.generateBenchmark).toHaveBeenCalledWith(activityA, activityB, options);
     expect(event.benchmarkResults?.[key]).toBe(result);
-    expect(eventService.updateEventProperties).toHaveBeenCalledWith(user, event.getID(), {
-      benchmarkResults: event.benchmarkResults
-    });
+    expect(eventService.updateEventProperties).toHaveBeenCalledWith(
+      user,
+      event.getID(),
+      expect.objectContaining({
+        benchmarkResults: event.benchmarkResults,
+        hasBenchmark: true,
+      })
+    );
     expect(onResult).toHaveBeenCalledWith(result);
     expect(bottomSheet.open).toHaveBeenCalled();
   });

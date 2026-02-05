@@ -43,6 +43,7 @@ import { AppFileService } from './app.file.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { getMetadata } from '@angular/fire/storage';
 import { AppCacheService } from './app.cache.service';
+import { BenchmarkEventAdapter } from './benchmark-event.adapter';
 
 
 @Injectable({
@@ -56,6 +57,7 @@ export class AppEventService implements OnDestroy {
   private fileService = inject(AppFileService);
   private logger = inject(LoggerService);
   private appEventUtilities = inject(AppEventUtilities);
+  private benchmarkAdapter = inject(BenchmarkEventAdapter);
   private static reportedUnknownTypes = new Set<string>();
 
   /**
@@ -103,9 +105,7 @@ export class AppEventService implements OnDestroy {
             event.originalFile = rawData.originalFile;
           }
 
-          // Hydrate benchmark results (map) with timestamp conversion
-          // Also migrate legacy single benchmarkResult to new map structure
-          this.hydrateBenchmarkResults(event, rawData);
+          this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(event, rawData);
 
           return event;
         })),
@@ -193,9 +193,7 @@ export class AppEventService implements OnDestroy {
           event.originalFile = rawData.originalFile;
         }
 
-        // Hydrate benchmark results (map) with timestamp conversion
-        // Also migrate legacy single benchmarkResult to new map structure
-        this.hydrateBenchmarkResults(event, rawData);
+        this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(event, rawData);
 
         return event;
       });
@@ -851,9 +849,7 @@ export class AppEventService implements OnDestroy {
             event.originalFile = rawData.originalFile;
           }
 
-          // Hydrate benchmark results (map) with timestamp conversion
-          // Also migrate legacy single benchmarkResult to new map structure
-          this.hydrateBenchmarkResults(event, rawData);
+          this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(event, rawData);
 
           return event;
         })
@@ -888,9 +884,7 @@ export class AppEventService implements OnDestroy {
             event.originalFile = rawData.originalFile;
           }
 
-          // Hydrate benchmark results (map) with timestamp conversion
-          // Also migrate legacy single benchmarkResult to new map structure
-          this.hydrateBenchmarkResults(event, rawData);
+          this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(event, rawData);
 
           events.push(event);
           return events;
@@ -979,53 +973,6 @@ export class AppEventService implements OnDestroy {
       }
     }
     return totalDeleteCount;
-  }
-
-  /**
-   * Hydrate benchmark results from Firestore.
-   * Handles both new `benchmarkResults` map and migrates legacy `benchmarkResult`.
-   */
-  private hydrateBenchmarkResults(event: AppEventInterface, rawData: any): void {
-    // Helper to convert Firestore Timestamp to Date
-    const toDate = (val: any): Date => {
-      if (!val) return new Date();
-      if (val instanceof Date) return val;
-      if (typeof val.toDate === 'function') return val.toDate();
-      if (val.seconds !== undefined) return new Date(val.seconds * 1000);
-      return new Date(val);
-    };
-
-    // Helper to hydrate a single BenchmarkResult
-    const hydrateResult = (result: any): void => {
-      if (result.timestamp) {
-        result.timestamp = toDate(result.timestamp);
-      }
-      if (result.qualityIssues && Array.isArray(result.qualityIssues)) {
-        result.qualityIssues.forEach((issue: any) => {
-          if (issue.timestamp) {
-            issue.timestamp = toDate(issue.timestamp);
-          }
-        });
-      }
-    };
-
-    // 1. Hydrate new benchmarkResults map
-    if (rawData.benchmarkResults) {
-      event.benchmarkResults = {};
-      for (const key of Object.keys(rawData.benchmarkResults)) {
-        event.benchmarkResults[key] = rawData.benchmarkResults[key];
-        hydrateResult(event.benchmarkResults[key]);
-      }
-    }
-
-    // 2. Migrate legacy benchmarkResult to benchmarkResults
-    if (rawData.benchmarkResult && !rawData.benchmarkResults) {
-      const legacy = rawData.benchmarkResult;
-      hydrateResult(legacy);
-      const key = `${legacy.referenceId}_${legacy.testId}`;
-      event.benchmarkResults = { [key]: legacy };
-      // Don't set event.benchmarkResult to avoid confusion
-    }
   }
 
   private chunkArray(myArray, chunk_size) {

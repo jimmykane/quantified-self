@@ -34,6 +34,12 @@ export interface AppEventInterface extends EventInterface {
     benchmarkResults?: { [pairKey: string]: BenchmarkResult };
     /** Flag to identify benchmark events */
     isBenchmark?: boolean;
+    /** Denormalized benchmark flag for querying */
+    hasBenchmark?: boolean;
+    /** Denormalized benchmark device names (normalized) for querying */
+    benchmarkDevices?: string[];
+    /** Latest benchmark timestamp for querying/sorting */
+    benchmarkLatestAt?: Date;
 }
 
 /**
@@ -124,5 +130,10 @@ export interface FirestoreEventJSON {
     originalFile?: OriginalFileMetaData;
     /** Canonical source for original file metadata */
     originalFiles?: OriginalFileMetaData[];
+    /** Denormalized benchmark flag for querying */
+    hasBenchmark?: boolean;
+    /** Denormalized benchmark device names (normalized) for querying */
+    benchmarkDevices?: string[];
+    /** Latest benchmark timestamp for querying/sorting */
+    benchmarkLatestAt?: Date;
 }
-

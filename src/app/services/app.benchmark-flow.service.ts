@@ -121,9 +121,23 @@ export class AppBenchmarkFlowService {
         config.event.benchmarkResults[key] = benchmarkResult;
       }
 
+      const benchmarkDevices = this.buildBenchmarkDevices(persistEvent);
+      const benchmarkLatestAt = benchmarkResult.timestamp;
+      persistEvent.hasBenchmark = true;
+      persistEvent.benchmarkDevices = benchmarkDevices;
+      persistEvent.benchmarkLatestAt = benchmarkLatestAt;
+      if (persistEvent !== config.event) {
+        config.event.hasBenchmark = true;
+        config.event.benchmarkDevices = benchmarkDevices;
+        config.event.benchmarkLatestAt = benchmarkLatestAt;
+      }
+
       if (config.user && persistEvent.getID()) {
         await this.eventService.updateEventProperties(config.user, persistEvent.getID()!, {
-          benchmarkResults: persistEvent.benchmarkResults
+          benchmarkResults: persistEvent.benchmarkResults,
+          hasBenchmark: true,
+          benchmarkDevices,
+          benchmarkLatestAt
         });
       }
 
@@ -153,5 +167,24 @@ export class AppBenchmarkFlowService {
       this.logger.error('Failed to load activities for benchmark selection', error);
       return config.event;
     }
+  }
+
+  private buildBenchmarkDevices(event: AppEventInterface): string[] {
+    const devices = new Set<string>();
+    if (event.benchmarkResults) {
+      Object.values(event.benchmarkResults).forEach(result => {
+        const names = [result.referenceName, result.testName];
+        names.forEach(name => {
+          const normalized = this.normalizeBenchmarkDevice(name);
+          if (normalized) devices.add(normalized);
+        });
+      });
+    }
+    return Array.from(devices);
+  }
+
+  private normalizeBenchmarkDevice(name?: string): string | null {
+    if (!name) return null;
+    return name.trim().replace(/\s+/g, ' ').toLowerCase();
   }
 }
