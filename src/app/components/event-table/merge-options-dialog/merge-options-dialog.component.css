@@ -13,6 +13,11 @@
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
+.option-card.disabled {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
 .option-card.selected {
   border-color: var(--mat-sys-primary);
   box-shadow: 0 8px 20px rgba(var(--mat-sys-primary-rgb), 0.2);
@@ -27,6 +32,17 @@
 .option-summary {
   font-size: 0.875rem;
   opacity: 0.8;
+}
+
+.merge-button-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.merge-spinner {
+  width: 18px;
+  height: 18px;
 }
 
 @media (max-width: 599.98px) {

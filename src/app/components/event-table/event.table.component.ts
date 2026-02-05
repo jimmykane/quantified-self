@@ -28,7 +28,7 @@ import { DatePipe } from '@angular/common';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { debounceTime, take, map } from 'rxjs/operators';
-import { firstValueFrom, Subject, Subscription } from 'rxjs';
+import { firstValueFrom, race, Subject, Subscription } from 'rxjs';
 import { rowsAnimation, expandCollapse } from '../../animations/animations';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
@@ -272,11 +272,18 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return;
     }
     const dialogRef = this.dialog.open(MergeOptionsDialogComponent);
-    const mergeSelection = await firstValueFrom(dialogRef.afterClosed().pipe(take(1)));
+    const mergeSelection = await firstValueFrom(
+      race(
+        dialogRef.componentInstance.mergeRequested.pipe(map((option) => option)),
+        dialogRef.afterClosed().pipe(map(() => null))
+      )
+    ).catch(() => null);
     if (!mergeSelection) {
       return;
     }
-    const mergeAsBenchmark = mergeSelection.mergeAsBenchmark === true;
+    dialogRef.disableClose = true;
+    dialogRef.componentInstance.isMerging = true;
+    const mergeAsBenchmark = mergeSelection === 'benchmark';
 
     // Show loading
     this.loading();
@@ -386,6 +393,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
       this.analyticsService.logEvent('merge_events');
       await this.router.navigate(['/user', this.user.uid, 'event', mergedEvent.getID()], {});
+      dialogRef.close(true);
       this.snackBar.open('Events merged', undefined, {
         duration: 2000,
       });
@@ -400,6 +408,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.snackBar.open('Could not merge events', undefined, {
         duration: 5000,
       });
+      dialogRef.disableClose = false;
+      dialogRef.componentInstance.isMerging = false;
     }
   }
 

@@ -1,5 +1,6 @@
 import { Component } from '@angular/core';
 import { MatDialogRef } from '@angular/material/dialog';
+import { EventEmitter } from '@angular/core';
 
 export type MergeOption = 'benchmark' | 'multi';
 
@@ -11,6 +12,8 @@ export type MergeOption = 'benchmark' | 'multi';
 })
 export class MergeOptionsDialogComponent {
   public selectedOption: MergeOption = 'benchmark';
+  public isMerging = false;
+  public mergeRequested = new EventEmitter<MergeOption>();
 
   constructor(private dialogRef: MatDialogRef<MergeOptionsDialogComponent>) { }
 
@@ -19,10 +22,17 @@ export class MergeOptionsDialogComponent {
   }
 
   confirm() {
-    this.dialogRef.close({ mergeAsBenchmark: this.selectedOption === 'benchmark' });
+    if (this.isMerging) {
+      return;
+    }
+    this.isMerging = true;
+    this.mergeRequested.emit(this.selectedOption);
   }
 
   cancel() {
+    if (this.isMerging) {
+      return;
+    }
     this.dialogRef.close(null);
   }
 }

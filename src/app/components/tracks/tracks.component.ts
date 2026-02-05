@@ -73,7 +73,6 @@ export class TracksComponent implements OnInit, OnDestroy {
   private logger = inject(LoggerService);
 
   public isLoading: WritableSignal<boolean> = signal(false);
-  public hasMergedEvents = false;
   // Removed legacy state tracking
 
   constructor(
@@ -335,7 +334,6 @@ export class TracksComponent implements OnInit, OnDestroy {
       .subscribe(async (events) => {
         this.logger.log(`[TracksComponent] eventService.getEventsBy emitted ${events?.length || 0} events for promiseTime: ${promiseTime}`);
         try {
-          this.hasMergedEvents = !!events?.some((event) => event.isMerge);
           events = (events || []).filter((event) => !event.isMerge).filter((event) => event.getStat(DataStartPosition.type));
           if (!events || !events.length) {
             if (this.promiseTime !== promiseTime) {
