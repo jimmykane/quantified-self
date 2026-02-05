@@ -1,7 +1,8 @@
 @if (searchFormGroup) {
 <form [formGroup]="searchFormGroup" autocomplete="off">
   <app-shade [isActive]="isLoading"></app-shade>
-  <section class="filters-row" [ngStyle]="{display: showDatePicker || showActivityTypePicker ? 'flex' : 'none' }">
+  <section class="filters-row"
+    [ngStyle]="{display: showDatePicker || showActivityTypePicker || showMergedEventsToggle ? 'flex' : 'none' }">
     @if (searchFormGroup) {
     <mat-form-field [style.display]="showDatePicker ? null : 'none'" class="big qs-subscript-hidden">
       <mat-label>Select date range</mat-label>
@@ -99,6 +100,19 @@
       </mat-button-toggle>
       }
     </mat-button-toggle-group>
+    }
+    @if (showMergedEventsToggle) {
+    <div class="merge-toggle-group">
+      <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator
+        [value]="includeMergedEvents" [disabled]="mergedEventsToggleDisabled"
+        (change)="onMergedEventsToggleChange($event)">
+        <mat-button-toggle [value]="true" aria-label="Include merged">Include</mat-button-toggle>
+        <mat-button-toggle [value]="false" aria-label="Exclude merged">Exclude</mat-button-toggle>
+      </mat-button-toggle-group>
+      @if (mergedEventsToggleDisabled && !includeMergedEvents) {
+      <span class="merge-toggle-hint">{{ mergedEventsToggleHint }}</span>
+      }
+    </div>
     }
   </section>
 </form>

@@ -27,7 +27,8 @@ import {
   UserUnitSettingsInterface,
   VerticalSpeedUnits
 } from '@sports-alliance/sports-lib';
-import { UserDashboardSettingsInterface, ACTIVITIES_EXCLUDED_FROM_ASCENT, ACTIVITIES_EXCLUDED_FROM_DESCENT } from '@sports-alliance/sports-lib';
+import { ACTIVITIES_EXCLUDED_FROM_ASCENT, ACTIVITIES_EXCLUDED_FROM_DESCENT } from '@sports-alliance/sports-lib';
+import { AppDashboardSettingsInterface } from '../../models/app-user.interface';
 import { LapTypesHelper } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { ActivityTypesHelper } from '@sports-alliance/sports-lib';
@@ -294,11 +295,12 @@ export class UserSettingsComponent implements OnChanges {
             verticalSpeedUnits: this.userSettingsFormGroup.get('verticalSpeedUnitsToUse').value,
             startOfTheWeek: this.userSettingsFormGroup.get('startOfTheWeek').value,
           },
-          dashboardSettings: <UserDashboardSettingsInterface>{
+          dashboardSettings: <AppDashboardSettingsInterface>{
             tiles: this.user.settings.dashboardSettings.tiles,
             startDate: this.user.settings.dashboardSettings.startDate,
             endDate: this.user.settings.dashboardSettings.endDate,
             dateRange: this.user.settings.dashboardSettings.dateRange,
+            includeMergedEvents: this.user.settings.dashboardSettings.includeMergedEvents,
             tableSettings: {
               active: this.user.settings.dashboardSettings.tableSettings.active,
               direction: this.user.settings.dashboardSettings.tableSettings.direction,

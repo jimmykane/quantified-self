@@ -38,8 +38,7 @@ import { HttpClient } from '@angular/common/http';
 import { UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import {
   DateRanges,
-  TableSettings,
-  UserDashboardSettingsInterface
+  TableSettings
 } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../models/app-user.interface';
 import {

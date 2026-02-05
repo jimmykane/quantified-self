@@ -7,7 +7,10 @@
     @if (user) {
     <app-event-search [isLoading]="isLoading" [selectedDateRange]="user.settings.dashboardSettings.dateRange"
       [selectedStartDate]="searchStartDate" [selectedEndDate]="searchEndDate" [startOfTheWeek]="startOfTheWeek"
-      [selectedActivityTypes]="user.settings.dashboardSettings.activityTypes" (searchChange)="search($event)">
+      [selectedActivityTypes]="user.settings.dashboardSettings.activityTypes"
+      [showMergedEventsToggle]="true"
+      [includeMergedEvents]="user.settings.dashboardSettings.includeMergedEvents !== false"
+      (searchChange)="search($event)">
     </app-event-search>
     }
 

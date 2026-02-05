@@ -155,6 +155,7 @@ describe('AppUserUtilities', () => {
             expect(settings.appSettings?.theme).toBe(AppThemes.Normal);
             expect(settings.chartSettings?.theme).toBe(ChartThemes.Material);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
+            expect(settings.dashboardSettings?.includeMergedEvents).toBe(true);
             expect(settings.unitSettings?.startOfTheWeek).toBe(1); // Monday
         });
 
@@ -162,12 +163,13 @@ describe('AppUserUtilities', () => {
             const user = {
                 settings: {
                     appSettings: { theme: AppThemes.Dark },
-                    dashboardSettings: { dateRange: DateRanges.lastYear }
+                    dashboardSettings: { dateRange: DateRanges.lastYear, includeMergedEvents: false }
                 }
             } as User;
             const settings = AppUserUtilities.fillMissingAppSettings(user);
             expect(settings.appSettings?.theme).toBe(AppThemes.Dark);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.lastYear);
+            expect(settings.dashboardSettings?.includeMergedEvents).toBe(false);
         });
     });
 });

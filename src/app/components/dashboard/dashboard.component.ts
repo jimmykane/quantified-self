@@ -5,7 +5,7 @@ import { EventInterface } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../../authentication/app.auth.service';
-import { User } from '@sports-alliance/sports-lib';
+import { AppUserInterface } from '../../models/app-user.interface';
 import { DateRanges } from '@sports-alliance/sports-lib';
 import { Search } from '../event-search/event-search.component';
 import { AppUserService } from '../../services/app.user.service';
@@ -26,8 +26,8 @@ import { WhereFilterOp } from 'firebase/firestore';
 })
 
 export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
-  public user: User;
-  public targetUser: User;
+  public user: AppUserInterface;
+  public targetUser: AppUserInterface;
   public events: EventInterface[];
   public dataSubscription: Subscription;
   public searchTerm: string;
@@ -87,7 +87,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         });
       }
     }
-    this.dataSubscription = this.authService.user$.pipe(switchMap((user: User | null) => {
+    this.dataSubscription = this.authService.user$.pipe(switchMap((user: AppUserInterface | null) => {
 
       if (this.shouldSearch || !this.isInitialized) {
         this.isLoading = true;
@@ -107,6 +107,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         this.user.settings.dashboardSettings.dateRange !== user.settings.dashboardSettings.dateRange
         || this.user.settings.dashboardSettings.startDate !== user.settings.dashboardSettings.startDate
         || this.user.settings.dashboardSettings.endDate !== user.settings.dashboardSettings.endDate
+        || (this.user.settings.dashboardSettings.includeMergedEvents !== false) !== (user.settings.dashboardSettings.includeMergedEvents !== false)
         || this.user.settings.unitSettings.startOfTheWeek !== user.settings.unitSettings.startOfTheWeek
       )) {
         this.shouldSearch = true;
@@ -125,6 +126,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
 
       const limit = 0; // @todo double check this how it relates
       const where = [];
+      const includeMergedEvents = user.settings.dashboardSettings.includeMergedEvents !== false;
       if (this.searchTerm) {
         where.push({
           fieldPath: 'name',
@@ -170,10 +172,14 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
           }),
           map((eventsArray: EventInterface[]) => {
             const t0 = performance.now();
-            if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
-              return eventsArray;
+            let filteredEvents = eventsArray;
+            if (!includeMergedEvents) {
+              filteredEvents = filteredEvents.filter(event => !event.isMerge);
             }
-            const result = eventsArray.filter(event => {
+            if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
+              return filteredEvents;
+            }
+            const result = filteredEvents.filter(event => {
               const hasType = event.getActivityTypesAsArray().some(activityType => user.settings.dashboardSettings.activityTypes.indexOf(ActivityTypes[activityType]) >= 0);
               return hasType;
             });
@@ -200,6 +206,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     this.searchTerm = search.searchTerm;
     this.searchStartDate = search.startDate;
     this.searchEndDate = search.endDate;
+    this.user.settings.dashboardSettings.includeMergedEvents = search.includeMergedEvents !== false;
     this.user.settings.dashboardSettings.dateRange = search.dateRange;
     this.user.settings.dashboardSettings.startDate = search.startDate && search.startDate.getTime();
     this.user.settings.dashboardSettings.endDate = search.endDate && search.endDate.getTime();

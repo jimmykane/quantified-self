@@ -26,7 +26,6 @@ import {
     TimeIntervals,
     UserAppSettingsInterface,
     UserChartSettingsInterface,
-    UserDashboardSettingsInterface,
     UserMapSettingsInterface,
     UserMyTracksSettingsInterface,
     UserUnitSettingsInterface,
@@ -54,10 +53,9 @@ import {
     DataAltitude,
     DataHeartRate,
     User,
-    UserSettingsInterface,
 } from '@sports-alliance/sports-lib';
 import { isNumber } from 'lodash-es';
-import { AppUserInterface, AppUserSettingsInterface } from '../models/app-user.interface';
+import { AppDashboardSettingsInterface, AppUserInterface, AppUserSettingsInterface } from '../models/app-user.interface';
 import { StripeRole } from '../models/stripe-role.model';
 
 /**
@@ -307,8 +305,8 @@ export class AppUserUtilities {
         return [ActivityTypes.AlpineSki, ActivityTypes.Snowboard]
     }
 
-    public static fillMissingAppSettings(user: User): UserSettingsInterface {
-        const settings: UserSettingsInterface = user.settings || {};
+    public static fillMissingAppSettings(user: User): AppUserSettingsInterface {
+        const settings: AppUserSettingsInterface = user.settings || {};
         // App
         settings.appSettings = settings.appSettings || <UserAppSettingsInterface>{};
         settings.appSettings.theme = settings.appSettings.theme || AppUserUtilities.getDefaultAppTheme();
@@ -343,11 +341,12 @@ export class AppUserUtilities {
         settings.unitSettings.verticalSpeedUnits = settings.unitSettings.verticalSpeedUnits || AppUserUtilities.getDefaultVerticalSpeedUnits()
         settings.unitSettings.startOfTheWeek = isNumber(settings.unitSettings.startOfTheWeek) ? settings.unitSettings.startOfTheWeek : AppUserUtilities.getDefaultStartOfTheWeek();
         // Dashboard
-        settings.dashboardSettings = settings.dashboardSettings || <UserDashboardSettingsInterface>{};
+        settings.dashboardSettings = settings.dashboardSettings || <AppDashboardSettingsInterface>{};
         settings.dashboardSettings.dateRange = isNumber(settings.dashboardSettings.dateRange) ? settings.dashboardSettings.dateRange : AppUserUtilities.getDefaultDateRange();
         settings.dashboardSettings.startDate = settings.dashboardSettings.startDate || null;
         settings.dashboardSettings.endDate = settings.dashboardSettings.endDate || null;
         settings.dashboardSettings.activityTypes = settings.dashboardSettings.activityTypes || [];
+        settings.dashboardSettings.includeMergedEvents = settings.dashboardSettings.includeMergedEvents !== false;
         settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserUtilities.getDefaultUserDashboardTiles();
         // Patch missing defaults
         settings.dashboardSettings.tableSettings = settings.dashboardSettings.tableSettings || AppUserUtilities.getDefaultTableSettings();

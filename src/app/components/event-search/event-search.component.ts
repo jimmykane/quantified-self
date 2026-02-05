@@ -35,6 +35,11 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   @Input() selectedActivityTypes!: ActivityTypes[];
   @Input() showDatePicker = true;
   @Input() showActivityTypePicker = true;
+  @Input() showMergedEventsToggle = false;
+  @Input() includeMergedEvents = true;
+  @Input() mergedEventsToggleDisabled = false;
+  @Input() mergedEventsToggleLabel = 'Merged events';
+  @Input() mergedEventsToggleHint = 'Merged events are excluded';
   @Input() dateRangesToShow: DateRanges[] = [
     DateRanges.thisWeek,
     DateRanges.lastWeek,
@@ -126,7 +131,8 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
       startDate: this.selectedStartDate,
       endDate: this.selectedEndDate,
       activityTypes: this.selectedActivityTypes,
-      dateRange: this.selectedDateRange
+      dateRange: this.selectedDateRange,
+      includeMergedEvents: this.includeMergedEvents
     });
   }
 
@@ -166,6 +172,14 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     return this.search();
   }
 
+  async onMergedEventsToggleChange(event: MatButtonToggleChange) {
+    if (this.mergedEventsToggleDisabled) {
+      return;
+    }
+    this.includeMergedEvents = event.value !== false;
+    return this.search();
+  }
+
   validateAllFormFields(formGroup: UntypedFormGroup) {
     Object.keys(formGroup.controls).forEach(field => {
       const control = formGroup.get(field);
@@ -201,5 +215,6 @@ export interface Search {
   startDate?: Date,
   endDate?: Date,
   dateRange: DateRanges,
-  activityTypes?: ActivityTypes[]
+  activityTypes?: ActivityTypes[],
+  includeMergedEvents?: boolean
 }

@@ -3,7 +3,12 @@
   <app-event-search [startOfTheWeek]="user.settings.unitSettings.startOfTheWeek" [showDatePicker]="false"
     [showActivityTypePicker]="false" [dateRangesToShow]="dateRangesToShow"
     [selectedActivityTypes]="user.settings.myTracksSettings?.activityTypes"
-    [selectedDateRange]="user.settings.myTracksSettings?.dateRange" (searchChange)="search($event)">
+    [selectedDateRange]="user.settings.myTracksSettings?.dateRange"
+    [showMergedEventsToggle]="true"
+    [includeMergedEvents]="false"
+    [mergedEventsToggleDisabled]="true"
+    [mergedEventsToggleHint]="'Merged events are excluded here'"
+    (searchChange)="search($event)">
   </app-event-search>
   }
 

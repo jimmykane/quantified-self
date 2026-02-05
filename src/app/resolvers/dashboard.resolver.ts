@@ -2,7 +2,8 @@ import { inject, Injector, runInInjectionContext } from '@angular/core';
 import { ActivatedRouteSnapshot, ResolveFn, Router, RouterStateSnapshot } from '@angular/router';
 import { AppEventService } from '../services/app.event.service';
 import { AppUserService } from '../services/app.user.service';
-import { EventInterface, User, ActivityTypes, DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
+import { EventInterface, ActivityTypes, DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
+import { AppUserInterface } from '../models/app-user.interface';
 import { map, switchMap, take } from 'rxjs/operators';
 import { of, EMPTY, Observable, firstValueFrom } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -12,8 +13,8 @@ import { getDatesForDateRange } from '../helpers/date-range-helper';
 
 export interface DashboardResolverData {
     events: EventInterface[];
-    user: User | null;
-    targetUser?: User | null;
+    user: AppUserInterface | null;
+    targetUser?: AppUserInterface | null;
 }
 
 export const dashboardResolver: ResolveFn<DashboardResolverData> = (
@@ -32,14 +33,14 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
 
     return authService.user$.pipe(
         take(1),
-        switchMap((user: User | null) => runInInjectionContext(injector, async () => {
+        switchMap((user: AppUserInterface | null) => runInInjectionContext(injector, async () => {
             if (!user) {
                 // If user is not authenticated, redirect to login and return empty data
                 router.navigate(['login']);
                 return { events: [], user: null, targetUser: null };
             }
 
-            let targetUser: User | undefined = undefined;
+            let targetUser: AppUserInterface | undefined = undefined;
             if (targetUserID) {
                 try {
                     // We need to convert the Observable to a Promise or handle it in RxJS chain
@@ -76,6 +77,7 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
             }
 
             const where: any[] = [];
+            const includeMergedEvents = user.settings.dashboardSettings.includeMergedEvents !== false;
 
             if ((!searchStartDate || !searchEndDate) && user.settings.dashboardSettings.dateRange === DateRanges.custom) {
                 return { events: [], user: user, targetUser };
@@ -100,13 +102,14 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
             const limit = 0;
 
             const events = await firstValueFrom(eventService.getEventsOnceBy(userContext, where, 'startDate', false, limit));
+            const filteredByMerge = includeMergedEvents ? (events || []) : (events || []).filter(event => !event.isMerge);
 
             // Filter by Activity Types
             if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
-                return { events: events || [], user: user, targetUser };
+                return { events: filteredByMerge || [], user: user, targetUser };
             }
 
-            const filteredEvents = (events || []).filter(event => {
+            const filteredEvents = (filteredByMerge || []).filter(event => {
                 return event.getActivityTypesAsArray().some(activityType => user.settings!.dashboardSettings!.activityTypes!.indexOf(ActivityTypes[activityType as unknown as keyof typeof ActivityTypes]) >= 0)
             });
 
