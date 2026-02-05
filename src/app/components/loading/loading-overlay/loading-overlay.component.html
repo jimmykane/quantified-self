@@ -1,0 +1,15 @@
+<div class="loading-overlay-container" [style.height]="height" [style.minHeight]="minHeight" [style.width]="width">
+    <!-- Overlay Content (Spinner/Skeleton) -->
+    <div class="loading-indicators" *ngIf="isLoading">
+        <div class="overlay-surface" [style.--overlay-radius]="borderRadius">
+            <mat-progress-bar mode="indeterminate" class="overlay-progress-bar"></mat-progress-bar>
+            <app-skeleton width="100%" height="100%" [borderRadius]="borderRadius" class="overlay-skeleton"></app-skeleton>
+        </div>
+    </div>
+
+    <!-- Optional Shade -->
+    <app-shade *ngIf="showShade" [isActive]="isLoading"></app-shade>
+
+    <!-- Transcluded Content -->
+    <ng-content></ng-content>
+</div>

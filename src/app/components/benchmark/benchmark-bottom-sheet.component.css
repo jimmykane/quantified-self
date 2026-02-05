@@ -1,0 +1,23 @@
+:host {
+    display: block;
+    height: 100%;
+}
+
+.bottom-sheet-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.bottom-sheet-content {
+    /* Flex content to fill space */
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 1rem 1.5rem 1rem;
+}
+
+@media (max-width: 600px) {
+    .bottom-sheet-content {
+        padding: 0 0.75rem 1rem 0.75rem;
+    }
+}

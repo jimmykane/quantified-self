@@ -162,6 +162,10 @@
   line-height: 1.1;
 }
 
+.hero-metrics .metric-item .value {
+  font-family: 'Barlow Condensed', sans-serif;
+}
+
 .metric-item .unit {
   font-size: 0.75rem;
   text-transform: uppercase;
@@ -187,6 +191,11 @@
   border-top: 1px solid var(--mat-app-outline-variant);
   width: 100%;
   box-sizing: border-box;
+}
+
+
+.benchmark-btn mat-icon.has-result {
+  color: var(--mat-sys-primary);
 }
 
 .summary-activities-toggles {
@@ -330,7 +339,8 @@
 .show-more-item .stat-value-grid {
   color: var(--mat-app-primary);
   font-weight: 500;
-  font-size: 0.9rem;
+  font-size: 1.1rem;
+  font-family: 'Barlow Condensed', sans-serif;
 }
 
 .devices-item .stat-avatar mat-icon,
@@ -381,9 +391,10 @@
 
 .devices-item .stat-value-grid,
 .show-more-item .stat-value-grid {
-  font-size: 0.95rem;
+  font-size: 1.1rem;
   font-weight: 400;
   color: var(--mat-app-on-surface);
   line-height: 1.2;
   white-space: nowrap;
+  font-family: 'Barlow Condensed', sans-serif;
 }

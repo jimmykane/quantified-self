@@ -206,6 +206,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   private rangeLabelsContainer: am4core.Container | undefined;
   private clearSelectionButton: am4core.Button | undefined;
   private zoomOrSelectButton: am4core.Button | undefined;
+  private customZoomOutButton: am4core.Button | undefined;
 
   constructor(changeDetector: ChangeDetectorRef,
     protected zone: NgZone,
@@ -225,8 +226,6 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       const settings = this.userSettingsQuery.chartSettings();
       const theme = this.themeSignal();
       const units = this.userSettingsQuery.unitSettings();
-
-      this.logger.info('[EventCardChart] Trigger: Effect (signals changed)', { theme, unitsSet: !!units, settingsSet: !!settings });
 
       this.chartTheme = theme ?? ChartThemes.Material;
       this.checkForUpdates('Effect');
@@ -269,15 +268,20 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   async ngOnChanges(simpleChanges: SimpleChanges) {
-    const keys = Object.keys(simpleChanges);
-    this.logger.info('[EventCardChart] Trigger: ngOnChanges', keys);
-
     // Only handle Event/Activity/User changes here. Settings are handled by effect.
     if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.targetUserID || simpleChanges.user) {
       this.checkForUpdates('ngOnChanges');
     }
   }
 
+  /**
+   * CENTRAL UPDATE ORCHESTRATOR
+   * 
+   * This method prevents "Double Reloads" caused by:
+   * 1. Initial Load: `previousState` is initialized in `ngAfterViewInit` to prevent the first check from seeing "everything changed".
+   * 2. Object Reference Changes: `fast-deep-equal` is used instead of `JSON.stringify` to ignore key order changes (e.g. `dataTypesToUse`).
+   * 3. Concurrent Triggers: `ngOnChanges` and `Effect` can theoretically overlap; this serialized check ensures one source of truth.
+   */
   private async checkForUpdates(source: string) {
     if (!this.chart) return;
 
@@ -297,11 +301,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       });
 
       if (Object.keys(changes).length > 0) {
-        this.logger.info(`[EventCardChart] checkForUpdates detected changes via [${source}]:`, Object.keys(changes));
+        // this.logger.info(`[EventCardChart] checkForUpdates detected changes via [${source}]:`, Object.keys(changes));
         this.previousState = { ...this.previousState, ...currentState };
         await this.handleUpdates(changes);
-      } else {
-        this.logger.info(`[EventCardChart] checkForUpdates: No content changes via [${source}]`);
       }
     } catch (err) {
       this.logger.error('[EventCardChart] Error in checkForUpdates', err);
@@ -372,7 +374,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
       // #2: Full Rebuild
       if (requiresFullRebuild) {
-        this.logger.info('[EventCardChart] Full rebuild triggered by:', Object.keys(simpleChanges).filter(k => simpleChanges[k]));
+        // this.logger.info('[EventCardChart] Full rebuild triggered by:', Object.keys(simpleChanges).filter(k => simpleChanges[k]));
         this.loading();
         this.changeDetector.detectChanges();
 
@@ -445,9 +447,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       chart.dateFormatter.utc = true;
     }
 
-    // Enable native "Click to Interact" behavior
-    chart.tapToActivate = true;
 
+
+    chart.fontFamily = 'Barlow Condensed';
     chart.fontSize = '1em';
     chart.paddingTop = 0;
     chart.paddingRight = 10;
@@ -457,13 +459,19 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     chart.durationFormatter.durationFormat = 'mm:ss';
 
-    // Add scrollbar
+    // Add scrollbar - visible and interactive
     chart.scrollbarX = new this.core.Scrollbar();
+    // chart.scrollbarX.hide(0); // Restore visibility
 
+    // Enable grips for zooming? User requested "light version" which usually means no grips (pan only)
+    // Original code had grips disabled.
     chart.scrollbarX.startGrip.disabled = true;
     chart.scrollbarX.endGrip.disabled = true;
+
     chart.scrollbarX.marginTop = 0;
     chart.scrollbarX.marginBottom = 10;
+
+    // Previously removed: Visibility toggle logic is removed to keep it always visible
 
     if (this.stackYAxes) {
       ChartHelper.setYAxesToStack(chart);
@@ -480,31 +488,17 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
 
     chart.cursor.interactions.hitOptions.hitTolerance = 20;
-    chart.cursor.interactions.hitOptions.noFocus = true;
+
 
     chart.cursor.behavior = 'none'; // Disable initially to prevent auto-zooms
     chart.cursor.zIndex = 10;
     chart.cursor.hideSeriesTooltipsOnSelection = true;
 
-    chart.zoomOutButton.icon.path = 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zM7 9h5v1H7z'
-    const tempButton = new this.core.Button();
+    // Disable default amCharts zoom button - we use our custom one
+    chart.zoomOutButton.disabled = true;
 
-
-    chart.zoomOutButton.background.fill = tempButton.background.fill;
-    if (tempButton.label) {
-      chart.zoomOutButton.icon.stroke = tempButton.label.stroke;
-      chart.zoomOutButton.strokeWidth = tempButton.label.strokeWidth;
-    }
-
-    chart.zoomOutButton.icon.padding(0, 0, 0, 0);
-    chart.zoomOutButton.padding(13, 12, 13, 12);
-    chart.zoomOutButton.fontSize = '1.2em';
-    chart.zoomOutButton.dx = -88;
-    chart.zoomOutButton.dy = 4;
-
-
-    // chart.zoomOutButton.padding(0,0,0,0)
-    chart.zoomOutButton.background.cornerRadius(5, 5, 5, 5);
+    // Add custom Material-styled zoom out button
+    this.addCustomZoomOutButton(chart);
 
 
     chart.cursor.events.on('cursorpositionchanged', (event) => {
@@ -706,6 +700,23 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     chart.events.on('inited', (ev) => {
 
     });
+
+
+
+    // Disable all chart interactions initially (cursor, tooltips, hover)
+    // Re-enable on first click - use native DOM event since amCharts events are blocked
+    chart.interactionsEnabled = false;
+    const svgContainer = chart.svgContainer?.SVGContainer;
+    if (svgContainer) {
+      const enableInteractions = () => {
+        chart.interactionsEnabled = true;
+        // Enable zoom behavior - was 'none' to prevent auto-zooms before activation
+        chart.cursor.behavior = ChartCursorBehaviours.ZoomX;
+        this.updateZoomOrSelectButtonLabel(); // Update button to reflect new state
+        svgContainer.removeEventListener('click', enableInteractions);
+      };
+      svgContainer.addEventListener('click', enableInteractions);
+    }
 
     return chart;
   }
@@ -1573,6 +1584,13 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     }
     this.chart.cursor.behavior = behavior;
     this.updateZoomOrSelectButtonLabel();
+
+    // Trigger visibility update for custom zoom out button (Always show/enable)
+    if (this.customZoomOutButton && !this.customZoomOutButton.isDisposed()) {
+      this.customZoomOutButton.show(0);
+      this.customZoomOutButton.interactionsEnabled = true;
+      this.customZoomOutButton.opacity = 1;
+    }
   }
 
   /**
@@ -1704,6 +1722,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // Add icon
     button.icon = new this.core.Sprite();
     button.icon.marginRight = 8;
+    button.icon.width = 24;
+    button.icon.height = 24;
     button.icon.path = chart.cursor.behavior === ChartCursorBehaviours.SelectX
       ? 'M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 10H3V8h2v4h2V8h2v4h2V8h2v4h2V8h2v8z' // Ruler/Range icon (straighten)
       : 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z'; // Zoom icon
@@ -1734,6 +1754,65 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     // Store reference so we can update the label when cursor behavior changes
     this.zoomOrSelectButton = button;
+    return button;
+  }
+
+  private addCustomZoomOutButton(chart: am4charts.XYChart): am4core.Button {
+    const button = chart.plotContainer.createChild(this.core.Button);
+
+    button.id = 'customZoomOutButton';
+    button.align = 'right';
+    button.zIndex = 20;
+    button.marginRight = 8;
+    // Position at top (above zoomOrSelectButton which is at y=40)
+    button.y = 0;
+
+    // Zoom out icon (minus magnifier)
+    button.icon = new this.core.Sprite();
+    button.icon.marginRight = 8;
+    button.icon.width = 24;
+    button.icon.height = 24;
+    button.icon.path = 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zM7 9h5v1H7z';
+
+    // Set label
+    if (button.label) {
+      button.label.text = 'Zoom Out';
+    }
+
+    // Apply Material styling
+    this.applyMaterialButtonStyle(button, {
+      fontSize: '0.85em',
+      paddingV: 4,
+      paddingH: 14,
+      cornerRadius: 20
+    });
+
+    // Click handler - zoom out to full range
+    button.events.on('hit', () => {
+      chart.xAxes.each(axis => {
+        axis.start = 0;
+        axis.end = 1;
+      });
+    });
+
+    // Initial state: Show always
+    // Visibility Logic: ALWAYS SHOW AND ENABLED (User request)
+
+    button.show(0);
+    button.opacity = 1;
+    button.interactionsEnabled = true;
+
+    // We keep the listener just in case other logic needs it later, but for now we enforce visibility
+    const updateVisibility = () => {
+      button.show(0);
+      button.opacity = 1;
+      button.interactionsEnabled = true;
+    };
+
+    chart.events.on('datarangechanged', updateVisibility);
+    chart.events.on('ready', updateVisibility);
+
+    this.customZoomOutButton = button;
     return button;
   }
 
@@ -2180,6 +2259,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     return this.zone.runOutsideAngular(() => {
       // Create a Legend
       chart.legend = new this.charts.Legend();
+      chart.legend.fontFamily = 'Barlow Condensed';
       // legend.fontSize = '1em';
 
       chart.legend.parent = this.core.create(this.legendDiv.nativeElement, this.core.Container);

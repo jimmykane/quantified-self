@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { ResolveFn, Router, ActivatedRouteSnapshot, RouterStateSnapshot } from '@angular/router';
 import { EventInterface, User, DateRanges, DaysOfTheWeek, ActivityTypes } from '@sports-alliance/sports-lib';
+import { AppUserInterface } from '../models/app-user.interface';
 import { of, throwError } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppEventService } from '../services/app.event.service';
@@ -19,11 +20,12 @@ describe('dashboardResolver', () => {
     let routerSpy: any;
     let snackBarSpy: any;
 
-    const mockUser = new User('testUser');
+    const mockUser = new User('testUser') as AppUserInterface;
     mockUser.settings = {
         dashboardSettings: {
             dateRange: DateRanges.all,
-            activityTypes: ['Run']
+            activityTypes: ['Run'],
+            includeMergedEvents: true
         },
         unitSettings: {
             startOfTheWeek: DaysOfTheWeek.Monday
@@ -86,6 +88,24 @@ describe('dashboardResolver', () => {
             expect(result.user).toEqual(mockUser);
             expect(result.targetUser).toEqual(mockTargetUser);
             expect(userServiceSpy.getUserByID).toHaveBeenCalledWith('targetUser');
+            done();
+        });
+    }));
+
+    it('should filter out merged events when includeMergedEvents is false', () => new Promise<void>(done => {
+        mockUser.settings.dashboardSettings.includeMergedEvents = false;
+        mockUser.settings.dashboardSettings.activityTypes = [];
+        const mergedEvent = { isMerge: true, getActivityTypesAsArray: () => [] } as any;
+        const normalEvent = { isMerge: false, getActivityTypesAsArray: () => [] } as any;
+        eventServiceSpy.getEventsOnceBy.mockReturnValue(of([mergedEvent, normalEvent]));
+
+        const route = new ActivatedRouteSnapshot();
+        vi.spyOn(route.paramMap, 'get').mockReturnValue(null);
+
+        const state = {} as RouterStateSnapshot;
+
+        (executeResolver(route, state) as any).subscribe((result: DashboardResolverData) => {
+            expect(result.events).toEqual([normalEvent]);
             done();
         });
     }));

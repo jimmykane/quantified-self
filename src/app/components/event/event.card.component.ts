@@ -12,6 +12,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { debounceTime } from 'rxjs/operators';
 
 import { ActivityInterface } from '@sports-alliance/sports-lib';
+import { AppEventInterface } from '../../../../functions/src/shared/app-event.interface';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../../authentication/app.auth.service';
@@ -53,7 +54,7 @@ export class EventCardComponent implements OnInit {
   private logger = inject(LoggerService);
 
   // Signal-based state
-  public event = signal<EventInterface | null>(null);
+  public event = signal<AppEventInterface | null>(null);
   public currentUser = signal<User | null>(null);
   public selectedActivitiesInstant = signal<ActivityInterface[]>([]);
   public selectedActivitiesDebounced = signal<ActivityInterface[]>([]);

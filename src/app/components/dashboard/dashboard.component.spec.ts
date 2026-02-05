@@ -9,6 +9,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib';
+import { AppUserInterface } from '../../models/app-user.interface';
 import { Analytics } from '@angular/fire/analytics';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { BehaviorSubject } from 'rxjs';
@@ -26,7 +27,7 @@ describe('DashboardComponent', () => {
     let mockDialog: any;
     let mockSnackBar: any;
 
-    const mockUser = new User('testUser');
+    const mockUser = new User('testUser') as AppUserInterface;
     mockUser.settings = {
         dashboardSettings: {
             dateRange: 0,

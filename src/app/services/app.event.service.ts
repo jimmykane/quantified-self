@@ -43,6 +43,7 @@ import { AppFileService } from './app.file.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { getMetadata } from '@angular/fire/storage';
 import { AppCacheService } from './app.cache.service';
+import { BenchmarkEventAdapter } from './benchmark-event.adapter';
 
 
 @Injectable({
@@ -56,6 +57,7 @@ export class AppEventService implements OnDestroy {
   private fileService = inject(AppFileService);
   private logger = inject(LoggerService);
   private appEventUtilities = inject(AppEventUtilities);
+  private benchmarkAdapter = inject(BenchmarkEventAdapter);
   private static reportedUnknownTypes = new Set<string>();
 
   /**
@@ -102,6 +104,8 @@ export class AppEventService implements OnDestroy {
           if (rawData.originalFile) {
             event.originalFile = rawData.originalFile;
           }
+
+          this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(event, rawData);
 
           return event;
         })),
@@ -188,6 +192,8 @@ export class AppEventService implements OnDestroy {
         if (rawData.originalFile) {
           event.originalFile = rawData.originalFile;
         }
+
+        this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(event, rawData);
 
         return event;
       });
@@ -843,6 +849,8 @@ export class AppEventService implements OnDestroy {
             event.originalFile = rawData.originalFile;
           }
 
+          this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(event, rawData);
+
           return event;
         })
       }));
@@ -875,6 +883,8 @@ export class AppEventService implements OnDestroy {
           if (rawData.originalFile) {
             event.originalFile = rawData.originalFile;
           }
+
+          this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(event, rawData);
 
           events.push(event);
           return events;

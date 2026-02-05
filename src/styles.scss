@@ -6,6 +6,7 @@
 @use 'styles/search';
 @use 'styles/segmented-buttons';
 @use 'styles/google-maps';
+@use 'styles/glass';
 
 // Include the common styles for Angular Material. We include this here so that you only
 // have to load a single css file for Angular Material in your app.
@@ -657,30 +658,23 @@ mat-table {
   }
 }
 
-/* Bottom Sheet Overrides */
-/* Bottom Sheet Overrides */
-.qs-full-width-bottom-sheet {
-  padding: 0 !important;
-  overflow: hidden !important;
-  max-width: none !important;
-  max-height: 80vh !important;
-  height: 80vh !important;
-
-  display: flex !important;
-  flex-direction: column !important;
+/* Bottom Sheet Overrides
+   Style the sheet once via the Material host class to avoid double-stacking when a panelClass is also present.
+*/
+.mat-bottom-sheet-container {
+  @extend .glass-card;
+  @extend .qs-scrollbar;
+  --mat-bottom-sheet-container-background-color: transparent;
+  --mat-bottom-sheet-container-shape: 20px;
+  background: var(--mat-sys-surface) !important;
+  /* Keep only the top corners rounded; bottom edge stays flush with viewport */
+  border-radius: 20px 20px 0 0 !important;
+  padding: 16px !important;
 }
 
-/* Specific Material targets */
-.mat-mdc-bottom-sheet-container.qs-full-width-bottom-sheet,
-.mat-bottom-sheet-container.qs-full-width-bottom-sheet {
-  padding: 0 !important;
-  overflow: hidden !important;
-  max-width: none !important;
-  max-height: 80vh !important;
-  height: 80vh !important;
-
-  display: flex !important;
-  flex-direction: column !important;
+/* Ensure bottom sheet scroll areas inherit the QS scrollbar styling */
+.mat-bottom-sheet-container .bottom-sheet-content {
+  @extend .qs-scrollbar;
 }
 
 /* Ensure Overlays (Bottom Sheets, Dialogs) are always on top of App Bars and Banners */
@@ -717,6 +711,7 @@ mat-table {
   .mat-mdc-dialog-content {
     color: var(--mat-sys-on-surface) !important;
     padding: 8px 24px !important;
+    @extend .qs-scrollbar;
   }
 
   .mat-mdc-dialog-actions {

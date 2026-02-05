@@ -19,9 +19,17 @@
 }
 
 .activity-chip.mat-mdc-chip-selected {
-  --mdc-chip-elevated-container-color: color-mix(in srgb, var(--chip-accent-color, var(--mat-app-primary)) 15%, var(--mat-app-surface-container));
-  --mdc-chip-label-text-color: var(--mat-app-on-surface);
+  --mdc-chip-elevated-container-color: var(--chip-accent-color, var(--mat-app-primary));
+  --mdc-chip-label-text-color: #ffffff;
   border: 2px solid var(--chip-accent-color, var(--mat-app-primary)) !important;
+}
+
+.activity-chip.mat-mdc-chip-selected .chip-stats,
+.activity-chip.mat-mdc-chip-selected .chip-device,
+.activity-chip.mat-mdc-chip-selected .chip-type {
+  color: #ffffff !important;
+  opacity: 1;
+  /* Ensure full visibility on colored background */
 }
 
 /* Remove checkmark graphic completely */
@@ -76,9 +84,14 @@
   margin-top: 2px;
 }
 
-/* Responsive: stack on very small screens */
-@media (max-width: 360px) {
+/* Responsive: on handheld widths, let each chip stretch across the row */
+@media (max-width: 600px) {
+  .activity-chips {
+    gap: 10px;
+  }
   .activity-chip {
     flex: 1 1 100%;
+    min-width: auto;
+    width: 100%;
   }
 }

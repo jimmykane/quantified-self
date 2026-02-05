@@ -30,6 +30,7 @@ import { LoggerService } from '../../services/logger.service';
 import { TracksMapManager } from './tracks-map.manager'; // Imported Manager
 import { MapStyleService } from '../../services/map-style.service';
 import { MapboxStyleSynchronizer } from '../../services/map/mapbox-style-synchronizer';
+import { Search } from '../event-search/event-search.component';
 
 @Component({
   selector: 'app-tracks',
@@ -239,7 +240,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.logger.info('[TracksComponent] User selected map style', { styleType });
   }
 
-  public async search(event: { dateRange: DateRanges, activityTypes?: ActivityTypes[] }) {
+  public async search(event: Search) {
     if (!isPlatformBrowser(this.platformId)) return;
 
     // Update user settings - this will trigger signal -> effect
@@ -333,7 +334,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       .subscribe(async (events) => {
         this.logger.log(`[TracksComponent] eventService.getEventsBy emitted ${events?.length || 0} events for promiseTime: ${promiseTime}`);
         try {
-          events = events.filter((event) => event.getStat(DataStartPosition.type));
+          events = (events || []).filter((event) => !event.isMerge).filter((event) => event.getStat(DataStartPosition.type));
           if (!events || !events.length) {
             if (this.promiseTime !== promiseTime) {
               return;

@@ -108,6 +108,17 @@ mat-button-toggle:active {
   gap: 16px;
 }
 
+.merge-toggle-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.merge-toggle-hint {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
 /* Tablet: Reduce gap and padding to prevent overflow */
 @media (max-width: 959px) {
   .button-groups {
@@ -145,5 +156,9 @@ mat-button-toggle:active {
     width: 100%;
     min-width: 100%;
     flex: 1 1 100%;
+  }
+
+  .merge-toggle-group {
+    width: 100%;
   }
 }

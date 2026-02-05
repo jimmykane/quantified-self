@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { deauthorizeServiceForUser } from '../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { reconcileClaims } from '../stripe/claims';
 
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
@@ -93,6 +94,9 @@ async function processUser(uid: string) {
                 gracePeriodUntil: newGracePeriodUntil,
                 lastDowngradedAt: admin.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
+
+            // Ensure claims are synced so backend checks recognize the grace period
+            await reconcileClaims(uid);
 
             return; // Skip cleanup for this run, let them have their 30 days
         }
