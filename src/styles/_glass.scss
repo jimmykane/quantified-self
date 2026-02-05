@@ -16,11 +16,6 @@
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
-/* Optional underscore alias for legacy callers */
-.glass_card {
-  @extend .glass-card;
-}
-
 /* Dark Theme Overrides for Glass Card */
 .dark-theme {
   .glass-card {

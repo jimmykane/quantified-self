@@ -666,7 +666,8 @@ mat-table {
   --mat-bottom-sheet-container-background-color: transparent;
   --mat-bottom-sheet-container-shape: 20px;
   background: var(--mat-sys-surface) !important;
-  border-radius: 20px !important;
+  /* Keep only the top corners rounded; bottom edge stays flush with viewport */
+  border-radius: 20px 20px 0 0 !important;
   padding: 16px !important;
 }
 
