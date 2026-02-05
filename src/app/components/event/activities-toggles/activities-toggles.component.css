@@ -84,9 +84,14 @@
   margin-top: 2px;
 }
 
-/* Responsive: stack on very small screens */
-@media (max-width: 360px) {
+/* Responsive: on handheld widths, let each chip stretch across the row */
+@media (max-width: 600px) {
+  .activity-chips {
+    gap: 10px;
+  }
   .activity-chip {
     flex: 1 1 100%;
+    min-width: auto;
+    width: 100%;
   }
 }
