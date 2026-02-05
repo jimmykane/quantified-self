@@ -116,7 +116,7 @@ describe('AppBenchmarkService', () => {
             expect(result.metrics.gnss.cep50).toBeDefined();
             expect(result.metrics.gnss.cep95).toBeDefined();
             expect(result.metrics.gnss.rmse).toBeGreaterThan(0);
-            expect(result.diffStreams!.gnssDeviation.length).toBeGreaterThan(0);
+            expect(result.metrics.gnss.maxDeviation).toBeGreaterThan(0);
         });
 
         it('should calculate correct Haversine distance', async () => {
@@ -541,7 +541,7 @@ describe('AppBenchmarkService', () => {
 
             const result = await service.generateBenchmark(actA, actB);
             expect(result).toBeDefined();
-            expect(result.diffStreams!.time.length).toBeLessThanOrEqual(2);
+            expect(result.metrics.streamMetrics['HeartRate']).toBeDefined();
         });
 
         it('should handle activities with no common streams', async () => {
@@ -735,4 +735,3 @@ describe('AppBenchmarkService', () => {
         });
     });
 });
-

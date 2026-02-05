@@ -60,8 +60,7 @@ describe('BenchmarkSelectionDialogComponent', () => {
     });
 
     it('should not allow confirmation with fewer than 2 selections', () => {
-        component.selection.clear();
-        component.selection.select(mockData.activities[0]);
+        component.selectedActivities = [mockData.activities[0]];
 
         component.confirm();
 
@@ -69,15 +68,14 @@ describe('BenchmarkSelectionDialogComponent', () => {
     });
 
     it('should close dialog with selected activities when confirmed', () => {
-        component.selection.clear();
-        component.selection.select(mockData.activities[0], mockData.activities[1]);
+        component.selectedActivities = [mockData.activities[0], mockData.activities[1]];
 
         component.confirm();
 
-        expect(mockDialogRef.close).toHaveBeenCalledWith([
-            mockData.activities[0],
-            mockData.activities[1]
-        ]);
+        expect(mockDialogRef.close).toHaveBeenCalledWith({
+            activities: [mockData.activities[0], mockData.activities[1]],
+            options: { autoAlignTime: true }
+        });
     });
 
     it('should initialize with initial selection if provided', async () => {
@@ -106,7 +104,7 @@ describe('BenchmarkSelectionDialogComponent', () => {
         const newFixture = TestBed.createComponent(BenchmarkSelectionDialogComponent);
         const newComponent = newFixture.componentInstance;
 
-        expect(newComponent.selection.selected.length).toBe(2);
+        expect(newComponent.selectedActivities.length).toBe(2);
     });
 
     it('should have correct number of activities from data', () => {
