@@ -1,10 +1,9 @@
 <div class="bottom-sheet-container">
-    <div class="bottom-sheet-header">
-        <h2 mat-dialog-title>Devices</h2>
+    <app-bottom-sheet-header title="Devices" icon="devices">
         <button mat-icon-button (click)="close()">
             <mat-icon>close</mat-icon>
         </button>
-    </div>
+    </app-bottom-sheet-header>
     <div class="bottom-sheet-content qs-scrollbar">
         <app-event-card-devices [event]="data.event" [selectedActivities]="data.selectedActivities">
         </app-event-card-devices>

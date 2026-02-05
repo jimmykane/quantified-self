@@ -21,6 +21,7 @@ import { ActivityTypeIconComponent } from '../components/activity-type-icon/acti
 import { ServiceSyncingStateComponent } from '../components/shared/service-syncing-state/service-syncing-state.component';
 import { ServiceSourceIconComponent } from '../components/event-summary/service-source-icon/service-source-icon.component';
 import { StatusInfoComponent } from '../components/shared/status-info/status-info.component';
+import { BottomSheetHeaderComponent } from '../components/shared/bottom-sheet-header/bottom-sheet-header.component';
 
 @NgModule({
     imports: [
@@ -46,6 +47,7 @@ import { StatusInfoComponent } from '../components/shared/status-info/status-inf
         ServiceSyncingStateComponent,
         ServiceSourceIconComponent,
         StatusInfoComponent,
+        BottomSheetHeaderComponent,
     ],
     providers: [],
     exports: [
@@ -69,6 +71,7 @@ import { StatusInfoComponent } from '../components/shared/status-info/status-inf
         ServiceSyncingStateComponent,
         ServiceSourceIconComponent,
         StatusInfoComponent,
+        BottomSheetHeaderComponent,
     ]
 })
 

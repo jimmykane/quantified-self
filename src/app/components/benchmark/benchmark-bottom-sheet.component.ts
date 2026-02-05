@@ -9,20 +9,14 @@ import { EventInterface } from '@sports-alliance/sports-lib';
   selector: 'app-benchmark-bottom-sheet',
   template: `
     <div class="bottom-sheet-container">
-        <div class="bottom-sheet-header">
-            <div class="title-row">
-                <mat-icon color="primary">analytics</mat-icon>
-                <h2 mat-dialog-title>Hardware Benchmark Analysis</h2>
-            </div>
-            <div class="header-actions">
-                <button mat-icon-button matTooltip="Re-run with different activities" (click)="rerun()">
-                    <mat-icon>refresh</mat-icon>
-                </button>
-                <button mat-icon-button (click)="close()">
-                    <mat-icon>close</mat-icon>
-                </button>
-            </div>
-        </div>
+        <app-bottom-sheet-header title="Hardware Benchmark Analysis" icon="analytics">
+            <button mat-icon-button matTooltip="Re-run with different activities" (click)="rerun()">
+                <mat-icon>refresh</mat-icon>
+            </button>
+            <button mat-icon-button (click)="close()">
+                <mat-icon>close</mat-icon>
+            </button>
+        </app-bottom-sheet-header>
         <div class="bottom-sheet-content qs-scrollbar">
             <app-benchmark-report 
                 [result]="data.result"
