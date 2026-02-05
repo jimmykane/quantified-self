@@ -52,27 +52,34 @@ export class AppBenchmarkFlowService {
   }
 
   async openBenchmarkSelectionDialog(config: BenchmarkFlowConfig): Promise<void> {
-    const activeEvent = await this.resolveEventWithActivities(config);
-    const activities = activeEvent.getActivities() || [];
+    const seededActivities = config.event.getActivities?.() || [];
     const initialSelection = (config.initialSelection && config.initialSelection.length)
       ? config.initialSelection
-      : activities.slice(0, 2);
+      : seededActivities.slice(0, 2);
 
     (document.activeElement as HTMLElement)?.blur();
 
     const dialogRef = this.dialog.open(BenchmarkSelectionDialogComponent, {
       width: '600px',
       data: {
-        activities,
-        initialSelection
+        activities: seededActivities,
+        initialSelection,
+        isLoading: seededActivities.length === 0
       }
+    });
+
+    let resolvedEvent: AppEventInterface = config.event;
+    let closed = false;
+
+    dialogRef.afterClosed().subscribe(() => {
+      closed = true;
     });
 
     dialogRef.afterClosed().subscribe(async (result: { activities: ActivityInterface[]; options: BenchmarkOptions } | undefined) => {
       if (result && result.activities?.length === 2) {
         await this.generateAndOpenReport({
           ...config,
-          event: activeEvent,
+          event: resolvedEvent,
           persistEvent: config.persistEvent ?? config.event,
           ref: result.activities[0],
           test: result.activities[1],
@@ -80,6 +87,18 @@ export class AppBenchmarkFlowService {
         });
       }
     });
+
+    if (seededActivities.length === 0) {
+      void this.resolveEventWithActivities(config).then((activeEvent) => {
+        resolvedEvent = activeEvent;
+        if (closed) return;
+        const activities = activeEvent.getActivities?.() || [];
+        const nextSelection = (config.initialSelection && config.initialSelection.length)
+          ? config.initialSelection
+          : activities.slice(0, 2);
+        dialogRef.componentInstance?.setActivities(activities, nextSelection);
+      });
+    }
   }
 
   async generateAndOpenReport(config: BenchmarkFlowConfig & {

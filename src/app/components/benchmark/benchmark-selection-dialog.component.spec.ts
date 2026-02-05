@@ -7,6 +7,7 @@ import { MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { CommonModule } from '@angular/common';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 
@@ -48,6 +49,7 @@ describe('BenchmarkSelectionDialogComponent', () => {
                 { provide: MatDialogRef, useValue: mockDialogRef },
                 { provide: MAT_DIALOG_DATA, useValue: mockData },
             ],
+            schemas: [NO_ERRORS_SCHEMA],
         }).compileComponents();
 
         fixture = TestBed.createComponent(BenchmarkSelectionDialogComponent);
@@ -99,6 +101,7 @@ describe('BenchmarkSelectionDialogComponent', () => {
                 { provide: MatDialogRef, useValue: mockDialogRef },
                 { provide: MAT_DIALOG_DATA, useValue: dataWithInitial },
             ],
+            schemas: [NO_ERRORS_SCHEMA],
         }).compileComponents();
 
         const newFixture = TestBed.createComponent(BenchmarkSelectionDialogComponent);

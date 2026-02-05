@@ -15,6 +15,14 @@
     /* Let clicks pass through if somehow blocking when fading out? Usually handled by ngIf */
 }
 
+.overlay-surface {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    overflow: hidden;
+    border-radius: var(--overlay-radius, 4px) var(--overlay-radius, 4px) 0 0;
+}
+
 .overlay-progress-bar {
     position: absolute;
     top: 0;
@@ -30,4 +38,5 @@
     left: 0;
     width: 100%;
     height: 100%;
+    z-index: 10;
 }

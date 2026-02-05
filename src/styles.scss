@@ -711,6 +711,7 @@ mat-table {
   .mat-mdc-dialog-content {
     color: var(--mat-sys-on-surface) !important;
     padding: 8px 24px !important;
+    @extend .qs-scrollbar;
   }
 
   .mat-mdc-dialog-actions {

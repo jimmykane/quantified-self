@@ -46,7 +46,7 @@ describe('AppBenchmarkFlowService', () => {
 
   beforeEach(() => {
     bottomSheet = { open: vi.fn().mockReturnValue({ afterDismissed: () => of(undefined) }) };
-    dialog = { open: vi.fn().mockReturnValue({ afterClosed: () => of(undefined) }) };
+    dialog = { open: vi.fn().mockReturnValue({ afterClosed: () => of(undefined), componentInstance: { setActivities: vi.fn() } }) };
     snackBar = { open: vi.fn() };
     benchmarkService = { generateBenchmark: vi.fn() };
     eventService = {
@@ -80,7 +80,7 @@ describe('AppBenchmarkFlowService', () => {
     const result = createResult();
 
     bottomSheet.open.mockReturnValueOnce({ afterDismissed: () => of({ rerun: true }) });
-    dialog.open.mockReturnValueOnce({ afterClosed: () => of(undefined) });
+    dialog.open.mockReturnValueOnce({ afterClosed: () => of(undefined), componentInstance: { setActivities: vi.fn() } });
 
     service.openBenchmarkReport({ event, result });
 
@@ -96,7 +96,7 @@ describe('AppBenchmarkFlowService', () => {
     const options: BenchmarkOptions = { autoAlignTime: true };
 
     const generateSpy = vi.spyOn(service, 'generateAndOpenReport').mockResolvedValue();
-    dialog.open.mockReturnValueOnce({ afterClosed: () => of({ activities: [activityA, activityB], options }) });
+    dialog.open.mockReturnValueOnce({ afterClosed: () => of({ activities: [activityA, activityB], options }), componentInstance: { setActivities: vi.fn() } });
 
     await service.openBenchmarkSelectionDialog({ event });
 
@@ -119,9 +119,11 @@ describe('AppBenchmarkFlowService', () => {
     const fullEvent = createEvent();
 
     eventService.getEventActivitiesAndAllStreams.mockReturnValueOnce(of(fullEvent));
-    dialog.open.mockReturnValueOnce({ afterClosed: () => of(undefined) });
+    const setActivities = vi.fn();
+    dialog.open.mockReturnValueOnce({ afterClosed: () => of(undefined), componentInstance: { setActivities } });
 
     await service.openBenchmarkSelectionDialog({ event: emptyEvent, user, persistEvent: emptyEvent });
+    await Promise.resolve();
 
     expect(eventService.getEventActivitiesAndAllStreams).toHaveBeenCalledWith(user, emptyEvent.getID());
     expect(dialog.open).toHaveBeenCalledTimes(1);

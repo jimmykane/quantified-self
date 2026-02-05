@@ -6,6 +6,7 @@ import { MatSelectionListChange } from '@angular/material/list';
 export interface BenchmarkSelectionData {
   activities: ActivityInterface[];
   initialSelection?: ActivityInterface[];
+  isLoading?: boolean;
 }
 
 @Component({
@@ -13,23 +14,30 @@ export interface BenchmarkSelectionData {
   template: `
     <h2 mat-dialog-title>Select Activities to Compare</h2>
     <mat-dialog-content>
-      <p class="dialog-subtitle">Choose exactly two activities to generate a hardware benchmark.</p>
-      
-      <mat-selection-list #list (selectionChange)="onSelectionChange($event)">
-        <mat-list-option *ngFor="let activity of data.activities" [value]="activity" [selected]="isSelected(activity)">
-          <div class="activity-line">
-            <span class="activity-name">{{ activity.name || activity.creator?.name || 'Unknown Activity' }}</span>
-            <span class="activity-meta">{{ activity.startDate | date:'shortTime' }} • {{ activity.creator?.name || 'Unknown Device' }}</span>
-          </div>
-        </mat-list-option>
-      </mat-selection-list>
+      <p class="dialog-subtitle">Choose two activities to generate a hardware benchmark.</p>
 
-      <div *ngIf="selectedActivities.length !== 2" class="selection-hint">
+      <app-loading-overlay [isLoading]="isLoading" height="auto" minHeight="128px" borderRadius="12px" [showShade]="false">
+        @if (activities.length > 0) {
+        <mat-selection-list #list class="selection-list" (selectionChange)="onSelectionChange($event)">
+          <mat-list-option *ngFor="let activity of activities" [value]="activity" [selected]="isSelected(activity)">
+            <div class="activity-line">
+              <span class="activity-name">{{ activity.name || activity.creator?.name || 'Unknown Activity' }}</span>
+              <span class="activity-meta">{{ activity.startDate | date:'shortTime' }} • {{ activity.creator?.name || 'Unknown Device' }}</span>
+            </div>
+          </mat-list-option>
+        </mat-selection-list>
+        }
+        @if (!isLoading && activities.length === 0) {
+        <div class="empty-state">No activities available.</div>
+        }
+      </app-loading-overlay>
+
+      <div *ngIf="!isLoading && selectedActivities.length !== 2" class="selection-hint">
         <mat-icon color="warn">info</mat-icon>
         <span>{{ selectedActivities.length === 0 ? 'Select two activities' : 'Select one more activity' }}</span>
       </div>
 
-      <div *ngIf="selectedActivities.length === 2" class="preview-info fade-in">
+      <div *ngIf="!isLoading && selectedActivities.length === 2" class="preview-info fade-in">
         <p class="preview-title">Ready to Compare:</p>
         
         <div class="role-assignment">
@@ -61,6 +69,8 @@ export interface BenchmarkSelectionData {
                 </ul>
                 <div style="margin-top: 4px; font-size: 0.85em; opacity: 0.8;">
                     <em>Note: For indoor activities (no GPS altitude), alignment requires a Speed source. Without valid data, no alignment is applied.</em>
+                    <br/>
+                    <em>Contact us for a feature request or ideas on this or changes.</em>
                 </div>
             </app-status-info>
         </div>
@@ -80,6 +90,19 @@ export interface BenchmarkSelectionData {
     .dialog-subtitle { 
         color: var(--mat-sys-on-surface-variant); 
         margin-bottom: 1rem;
+    }
+    .loading-hint {
+        font-size: 0.9rem;
+        color: var(--mat-sys-on-surface-variant);
+        margin-bottom: 0.75rem;
+    }
+    .selection-list {
+        margin-bottom: 0.5rem;
+    }
+    .empty-state {
+        padding: 1rem;
+        text-align: center;
+        color: var(--mat-sys-on-surface-variant);
     }
     .activity-line {
         display: flex;
@@ -201,16 +224,28 @@ export interface BenchmarkSelectionData {
 })
 export class BenchmarkSelectionDialogComponent {
 
+  activities: ActivityInterface[] = [];
   selectedActivities: ActivityInterface[] = [];
   autoAlignTime = true;
+  isLoading = false;
 
   constructor(
     public dialogRef: MatDialogRef<BenchmarkSelectionDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: BenchmarkSelectionData
   ) {
+    this.activities = data.activities ?? [];
+    this.isLoading = !!data.isLoading;
     // Pre-select activities if provided (for rerun scenarios)
     if (this.data.initialSelection && this.data.initialSelection.length > 0) {
       this.selectedActivities = [...this.data.initialSelection];
+    }
+  }
+
+  setActivities(activities: ActivityInterface[], initialSelection?: ActivityInterface[]): void {
+    this.activities = activities;
+    this.isLoading = false;
+    if (this.selectedActivities.length === 0 && initialSelection?.length) {
+      this.selectedActivities = [...initialSelection];
     }
   }
 
