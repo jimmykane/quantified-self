@@ -49,11 +49,11 @@ export interface BenchmarkSelectionData {
         </div>
         
         <div class="options-container">
-            <mat-checkbox [(ngModel)]="autoAlignTime">
+            <mat-checkbox [(ngModel)]="autoAlignTime" class="auto-align-checkbox">
                 Auto-align Time (Use Correlation)
             </mat-checkbox>
             
-            <app-status-info type="info" title="How Auto-align Works">
+            <app-status-info type="info" title="How Auto-align Works" class="auto-align-info">
                 <ul>
                     <li><strong>Streams:</strong> Uses <strong>Altitude</strong> (priority) or <strong>Speed</strong>.</li>
                     <li><strong>Method:</strong> Cross-correlation (Pearson) on a 5-minute sample at 1Hz.</li>
@@ -119,6 +119,7 @@ export interface BenchmarkSelectionData {
         justify-content: center;
         gap: 0.5rem;
         margin-top: 0.5rem;
+        flex-wrap: wrap;
     }
     .role-card {
         display: flex;
@@ -154,7 +155,39 @@ export interface BenchmarkSelectionData {
     .options-container {
         margin-top: 1rem;
         display: flex;
-        justify-content: center;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+    }
+    .auto-align-checkbox {
+        align-self: flex-start;
+    }
+    .auto-align-info {
+        width: 100%;
+    }
+    ::ng-deep .auto-align-checkbox .mdc-label {
+        white-space: normal;
+        line-height: 1.2;
+    }
+    @media (max-width: 600px) {
+        .role-assignment {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        .swap-btn {
+            align-self: center;
+            transform: rotate(90deg);
+        }
+        .role-card {
+            width: 100%;
+            min-width: 0;
+        }
+        .auto-align-info ul {
+            padding-left: 1.25rem;
+        }
+        .auto-align-info li {
+            margin-bottom: 0.4rem;
+        }
     }
     .fade-in {
         animation: fadeIn 0.3s ease-in;

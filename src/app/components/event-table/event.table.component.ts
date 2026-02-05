@@ -20,7 +20,6 @@ import { Router } from '@angular/router';
 import { MatCard } from '@angular/material/card';
 import { MatPaginator, MatPaginatorIntl, PageEvent } from '@angular/material/paginator';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatSort } from '@angular/material/sort';
 import { AppEventInterface } from '../../../../functions/src/shared/app-event.interface';
 import { MatTableDataSource } from '@angular/material/table';
@@ -47,7 +46,7 @@ import { LoggerService } from '../../services/logger.service';
 import { AppProcessingService } from '../../services/app.processing.service';
 import { AppEventUtilities } from '../../utils/app.event.utilities';
 import { Firestore, doc, collection } from '@angular/fire/firestore';
-import { BenchmarkBottomSheetComponent } from '../benchmark/benchmark-bottom-sheet.component';
+import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 
 @Component({
   selector: 'app-event-table',
@@ -100,7 +99,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     private processingService: AppProcessingService,
     private appEventUtilities: AppEventUtilities,
     private breakpointObserver: BreakpointObserver,
-    private bottomSheet: MatBottomSheet) {
+    private benchmarkFlow: AppBenchmarkFlowService) {
     super(changeDetector);
   }
 
@@ -179,12 +178,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
     const result = appEvent.benchmarkResults[keys[0]];
 
-    this.bottomSheet.open(BenchmarkBottomSheetComponent, {
-      data: {
-        result: result,
-        event: appEvent
-      },
-      autoFocus: 'dialog'
+    this.benchmarkFlow.openBenchmarkReport({
+      event: appEvent,
+      persistEvent: appEvent,
+      user: this.user,
+      result,
+      initialSelection: appEvent.getActivities().slice(0, 2)
     });
   }
 

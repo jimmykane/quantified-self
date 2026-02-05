@@ -20,15 +20,11 @@ import {
   ServiceNames,
 } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
-import { AppBenchmarkService } from '../../services/app.benchmark.service';
-import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { MatDialog } from '@angular/material/dialog';
 import { EventDetailsSummaryBottomSheetComponent } from './event-details-summary-bottom-sheet/event-details-summary-bottom-sheet.component';
 import { EventStatsBottomSheetComponent } from '../event/stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
 import { EventDevicesBottomSheetComponent } from '../event/devices/event-devices-bottom-sheet/event-devices-bottom-sheet.component';
-import { BenchmarkBottomSheetComponent } from '../benchmark/benchmark-bottom-sheet.component';
-import { BenchmarkSelectionDialogComponent } from '../benchmark/benchmark-selection-dialog.component';
+import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 
 @Component({
   selector: 'app-event-summary',
@@ -53,11 +49,9 @@ export class EventSummaryComponent implements OnChanges {
 
   constructor(
     private eventService: AppEventService,
-    private benchmarkService: AppBenchmarkService,
-    private snackBar: MatSnackBar,
     private cd: ChangeDetectorRef,
     private bottomSheet: MatBottomSheet,
-    private dialog: MatDialog
+    private benchmarkFlow: AppBenchmarkFlowService
   ) {
   }
 
@@ -129,81 +123,42 @@ export class EventSummaryComponent implements OnChanges {
   }
 
   openBenchmarkDialog(): void {
-    console.log('openBenchmarkDialog called');
-    const activities = this.event?.getActivities() || [];
-    console.log('Activities available:', activities.length, activities.map(a => a.creator?.name));
-
-    // Blur active element to prevent aria-hidden warning
-    (document.activeElement as HTMLElement)?.blur();
-
-    const dialogRef = this.dialog.open(BenchmarkSelectionDialogComponent, {
-      width: '600px',
-      data: {
-        activities: activities,
-        initialSelection: this.selectedActivities
-      }
-    });
-
-    dialogRef.afterClosed().subscribe(async (result: { activities: ActivityInterface[], options: BenchmarkOptions } | undefined) => {
-      console.log('Dialog closed with result:', result);
-      if (result && result.activities && result.activities.length === 2) {
-        await this.runBenchmark(result.activities[0], result.activities[1], result.options);
+    this.benchmarkFlow.openBenchmarkSelectionDialog({
+      event: this.event,
+      user: this.user,
+      initialSelection: this.selectedActivities,
+      onResult: (result) => {
+        this.benchmarkResult = result;
+        this.cd.detectChanges();
       }
     });
   }
 
   private async runBenchmark(ref: ActivityInterface, test: ActivityInterface, options: BenchmarkOptions) {
-    try {
-      this.snackBar.open('Generating Benchmark...', undefined, { duration: 2000 });
-
-      // Generate
-      const result = await this.benchmarkService.generateBenchmark(ref, test, options);
-
-      this.benchmarkResult = result;
-      // Optimistically update local event with map structure
-      const key = getBenchmarkPairKey(ref.getID()!, test.getID()!);
-      if (!this.event.benchmarkResults) this.event.benchmarkResults = {};
-      this.event.benchmarkResults[key] = result;
-      this.cd.detectChanges();
-
-      // Open Report immediately
-      this.openBenchmarkReport();
-      this.snackBar.open('Benchmark Generated & Saved!', undefined, { duration: 2000 });
-
-      // Persist to Event (save entire map)
-      if (this.user && this.event.getID()) {
-        try {
-          await this.eventService.updateEventProperties(this.user, this.event.getID()!, {
-            benchmarkResults: this.event.benchmarkResults
-          });
-          console.log('Benchmark results persisted to event.');
-        } catch (e) {
-          console.error('Failed to persist benchmark results', e);
-        }
+    await this.benchmarkFlow.generateAndOpenReport({
+      event: this.event,
+      user: this.user,
+      ref,
+      test,
+      options,
+      initialSelection: this.selectedActivities,
+      onResult: (result) => {
+        this.benchmarkResult = result;
+        this.cd.detectChanges();
       }
-
-    } catch (error) {
-      console.error(error);
-      this.snackBar.open('Benchmark failed: ' + error, 'Close');
-    }
+    });
   }
 
   openBenchmarkReport() {
     if (!this.benchmarkResult) return;
-
-    const sheetRef = this.bottomSheet.open(BenchmarkBottomSheetComponent, {
-      data: {
-        result: this.benchmarkResult,
-        event: this.event
-      },
-      autoFocus: 'dialog'
-    });
-
-    sheetRef.afterDismissed().subscribe((result: { rerun?: boolean } | undefined) => {
-      console.log('Bottom sheet dismissed with result:', result);
-      if (result?.rerun) {
-        console.log('Re-run triggered, opening dialog...');
-        this.openBenchmarkDialog();
+    this.benchmarkFlow.openBenchmarkReport({
+      event: this.event,
+      user: this.user,
+      result: this.benchmarkResult,
+      initialSelection: this.selectedActivities,
+      onResult: (result) => {
+        this.benchmarkResult = result;
+        this.cd.detectChanges();
       }
     });
   }
