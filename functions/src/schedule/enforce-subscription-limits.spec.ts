@@ -59,6 +59,7 @@ vi.mock('firebase-functions/v2/scheduler', () => ({
 // Import AFTER mocks
 import { enforceSubscriptionLimits } from './enforce-subscription-limits';
 import * as OAuth2 from '../OAuth2';
+import * as Claims from '../stripe/claims';
 
 import { ServiceNames } from '@sports-alliance/sports-lib';
 import { GARMIN_API_TOKENS_COLLECTION_NAME } from '../garmin/constants';
@@ -70,6 +71,7 @@ describe('enforceSubscriptionLimits', () => {
         vi.clearAllMocks();
 
         deauthorizeServiceSpy = vi.spyOn(OAuth2, 'deauthorizeServiceForUser').mockResolvedValue(undefined);
+        vi.spyOn(Claims, 'reconcileClaims').mockResolvedValue({ role: 'free' });
     });
 
     afterEach(() => {
@@ -160,6 +162,9 @@ describe('enforceSubscriptionLimits', () => {
             gracePeriodUntil: expect.anything(),
             lastDowngradedAt: 'SERVER_TIMESTAMP'
         }), { merge: true });
+
+        // Verify reconcileClaims is called
+        expect(Claims.reconcileClaims).toHaveBeenCalledWith('user1');
     });
 
     it('should disconnect and prune (Free user, limits exceeded)', async () => {
