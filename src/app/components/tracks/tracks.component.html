@@ -4,7 +4,7 @@
     [showActivityTypePicker]="false" [dateRangesToShow]="dateRangesToShow"
     [selectedActivityTypes]="user.settings.myTracksSettings?.activityTypes"
     [selectedDateRange]="user.settings.myTracksSettings?.dateRange"
-    [showMergedEventsToggle]="true"
+    [showMergedEventsToggle]="hasMergedEvents"
     [includeMergedEvents]="false"
     [mergedEventsToggleDisabled]="true"
     [mergedEventsToggleHint]="'Merged events are excluded here'"

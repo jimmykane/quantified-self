@@ -8,7 +8,7 @@
     <app-event-search [isLoading]="isLoading" [selectedDateRange]="user.settings.dashboardSettings.dateRange"
       [selectedStartDate]="searchStartDate" [selectedEndDate]="searchEndDate" [startOfTheWeek]="startOfTheWeek"
       [selectedActivityTypes]="user.settings.dashboardSettings.activityTypes"
-      [showMergedEventsToggle]="true"
+      [showMergedEventsToggle]="hasMergedEvents"
       [includeMergedEvents]="user.settings.dashboardSettings.includeMergedEvents !== false"
       (searchChange)="search($event)">
     </app-event-search>

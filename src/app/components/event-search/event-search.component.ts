@@ -176,7 +176,8 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     if (this.mergedEventsToggleDisabled) {
       return;
     }
-    this.includeMergedEvents = event.value !== false;
+    const selected = Array.isArray(event.value) ? event.value : [];
+    this.includeMergedEvents = selected.includes('merged');
     return this.search();
   }
 

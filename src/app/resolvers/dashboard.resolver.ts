@@ -15,6 +15,7 @@ export interface DashboardResolverData {
     events: EventInterface[];
     user: AppUserInterface | null;
     targetUser?: AppUserInterface | null;
+    hasMergedEvents?: boolean;
 }
 
 export const dashboardResolver: ResolveFn<DashboardResolverData> = (
@@ -37,7 +38,7 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
             if (!user) {
                 // If user is not authenticated, redirect to login and return empty data
                 router.navigate(['login']);
-                return { events: [], user: null, targetUser: null };
+                return { events: [], user: null, targetUser: null, hasMergedEvents: false };
             }
 
             let targetUser: AppUserInterface | undefined = undefined;
@@ -50,7 +51,7 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
                 } catch (e) {
                     snackBar.open('Page not found');
                     router.navigate(['dashboard']);
-                    return { events: [], user: user, targetUser: null };
+                    return { events: [], user: user, targetUser: null, hasMergedEvents: false };
                 }
             }
 
@@ -61,7 +62,7 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
             // So we use `user.settings`.
 
             if (!user.settings?.dashboardSettings) {
-                return { events: [], user: user, targetUser };
+                return { events: [], user: user, targetUser, hasMergedEvents: false };
             }
 
             let searchStartDate: Date | null = null;
@@ -80,7 +81,7 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
             const includeMergedEvents = user.settings.dashboardSettings.includeMergedEvents !== false;
 
             if ((!searchStartDate || !searchEndDate) && user.settings.dashboardSettings.dateRange === DateRanges.custom) {
-                return { events: [], user: user, targetUser };
+                return { events: [], user: user, targetUser, hasMergedEvents: false };
             }
 
             if (user.settings.dashboardSettings.dateRange !== DateRanges.all && searchStartDate && searchEndDate) {
@@ -102,18 +103,20 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
             const limit = 0;
 
             const events = await firstValueFrom(eventService.getEventsOnceBy(userContext, where, 'startDate', false, limit));
-            const filteredByMerge = includeMergedEvents ? (events || []) : (events || []).filter(event => !event.isMerge);
+            const rawEvents = events || [];
+            const hasMergedEvents = rawEvents.some(event => event.isMerge);
+            const filteredByMerge = includeMergedEvents ? rawEvents : rawEvents.filter(event => !event.isMerge);
 
             // Filter by Activity Types
             if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
-                return { events: filteredByMerge || [], user: user, targetUser };
+                return { events: filteredByMerge || [], user: user, targetUser, hasMergedEvents };
             }
 
             const filteredEvents = (filteredByMerge || []).filter(event => {
                 return event.getActivityTypesAsArray().some(activityType => user.settings!.dashboardSettings!.activityTypes!.indexOf(ActivityTypes[activityType as unknown as keyof typeof ActivityTypes]) >= 0)
             });
 
-            return { events: filteredEvents, user: user, targetUser };
+            return { events: filteredEvents, user: user, targetUser, hasMergedEvents };
         })),
         map((result) => {
             return result as DashboardResolverData;

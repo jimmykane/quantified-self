@@ -103,11 +103,10 @@
     }
     @if (showMergedEventsToggle) {
     <div class="merge-toggle-group">
-      <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator
-        [value]="includeMergedEvents" [disabled]="mergedEventsToggleDisabled"
+      <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator multiple
+        [value]="includeMergedEvents ? ['merged'] : []" [disabled]="mergedEventsToggleDisabled"
         (change)="onMergedEventsToggleChange($event)">
-        <mat-button-toggle [value]="true" aria-label="Include merged">Include</mat-button-toggle>
-        <mat-button-toggle [value]="false" aria-label="Exclude merged">Exclude</mat-button-toggle>
+        <mat-button-toggle value="merged" aria-label="Merged">Merged</mat-button-toggle>
       </mat-button-toggle-group>
       @if (mergedEventsToggleDisabled && !includeMergedEvents) {
       <span class="merge-toggle-hint">{{ mergedEventsToggleHint }}</span>

@@ -10,7 +10,7 @@ import { DateRanges } from '@sports-alliance/sports-lib';
 import { Search } from '../event-search/event-search.component';
 import { AppUserService } from '../../services/app.user.service';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
-import { distinctUntilChanged, map, switchMap, take, throttleTime } from 'rxjs/operators';
+import { distinctUntilChanged, map, switchMap, take, tap, throttleTime } from 'rxjs/operators';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 
@@ -37,6 +37,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public isLoading: boolean;
   public showUpload = false;
   public isInitialized = false;
+  public hasMergedEvents = false;
 
   private shouldSearch: boolean;
   private analyticsService = inject(AppAnalyticsService);
@@ -57,6 +58,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       this.events = resolvedData.events || [];
       this.user = resolvedData.user;
       this.targetUser = resolvedData.targetUser;
+      this.hasMergedEvents = resolvedData.hasMergedEvents ?? this.events?.some(event => event.isMerge) ?? false;
       this.isLoading = false;
       this.isInitialized = true;
 
@@ -169,6 +171,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
                 prev.name === curr.name &&
                 prev.startDate?.getTime() === curr.startDate?.getTime();
             });
+          }),
+          tap((eventsArray: EventInterface[]) => {
+            this.hasMergedEvents = eventsArray.some(event => event.isMerge);
           }),
           map((eventsArray: EventInterface[]) => {
             const t0 = performance.now();
