@@ -21,7 +21,7 @@ import { MatCard } from '@angular/material/card';
 import { MatPaginator, MatPaginatorIntl, PageEvent } from '@angular/material/paginator';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatSort } from '@angular/material/sort';
-import { AppEventInterface } from '../../../../functions/src/shared/app-event.interface';
+import { AppEventInterface, BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
 import { MatTableDataSource } from '@angular/material/table';
 import { SelectionModel } from '@angular/cdk/collections';
 import { DatePipe } from '@angular/common';
@@ -163,35 +163,37 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   /**
-   * Opens the benchmark report for a merged event directly from the table.
+   * Opens the benchmark report or selection dialog for a merged event directly from the table.
    * Stops propagation to prevent row navigation.
    */
-  openBenchmarkReport(event: Event, appEvent: AppEventInterface): void {
+  openBenchmarkFlow(event: Event, appEvent: AppEventInterface): void {
     event.stopPropagation();
     event.preventDefault();
 
-    if (!appEvent.benchmarkResults) return;
+    const initialSelection = appEvent.getActivities().slice(0, 2);
+    const result = this.getFirstBenchmarkResult(appEvent);
 
-    // Get the first benchmark result from the map
-    const keys = Object.keys(appEvent.benchmarkResults);
-    if (keys.length === 0) return;
-
-    const result = appEvent.benchmarkResults[keys[0]];
-
-    this.benchmarkFlow.openBenchmarkReport({
-      event: appEvent,
-      persistEvent: appEvent,
-      user: this.user,
-      result,
-      initialSelection: appEvent.getActivities().slice(0, 2)
-    });
+    if (result) {
+      this.benchmarkFlow.openBenchmarkReport({
+        event: appEvent,
+        persistEvent: appEvent,
+        user: this.user,
+        result,
+        initialSelection
+      });
+    } else {
+      this.benchmarkFlow.openBenchmarkSelectionDialog({
+        event: appEvent,
+        persistEvent: appEvent,
+        user: this.user,
+        initialSelection
+      });
+    }
   }
 
   getBenchmarkColor(appEvent: AppEventInterface): string {
-    if (!appEvent.benchmarkResults) return '';
-    const keys = Object.keys(appEvent.benchmarkResults);
-    if (keys.length === 0) return '';
-    const result = appEvent.benchmarkResults[keys[0]];
+    const result = this.getFirstBenchmarkResult(appEvent);
+    if (!result) return '';
 
     // Replicating grading logic from BenchmarkReportComponent
 
@@ -222,6 +224,19 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (avg >= 1.5) return AppColors.Green; // Good (using same green for simplicity or could use a lighter one)
     if (avg >= 0.5) return AppColors.Orange; // Fair
     return AppColors.Red; // Poor
+  }
+
+  private getFirstBenchmarkResult(appEvent: AppEventInterface): BenchmarkResult | null {
+    const results = appEvent.benchmarkResults;
+    if (results) {
+      const keys = Object.keys(results);
+      if (keys.length > 0) {
+        return results[keys[0]];
+      }
+    }
+
+    const legacy = (appEvent as { benchmarkResult?: BenchmarkResult }).benchmarkResult;
+    return legacy ?? null;
   }
 
   /** Whether the number of selected elements matches the total number of rows. */

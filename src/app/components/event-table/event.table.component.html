@@ -81,16 +81,16 @@
           }
           @if (column === 'Activity Types') {
           <span class="activity-type-cell">
-            @if (row['Merged Event'] && row['Has Benchmark']) {
-            <span class="clickable-icon" (click)="openBenchmarkReport($event, row.Event)">
-              <mat-icon matTooltip="View Benchmark Analysis"
-                [style.color]="getBenchmarkColor(row.Event)">analytics</mat-icon>
-            </span>
+            @if (row['Merged Event']) {
+              <span class="benchmark-icon" [class.is-muted]="!row['Has Benchmark']"
+                (click)="openBenchmarkFlow($event, row.Event)">
+                <mat-icon [matTooltip]="row['Has Benchmark'] ? 'View Benchmark Analysis' : 'Generate Benchmark Analysis'"
+                  [style.color]="row['Has Benchmark'] ? getBenchmarkColor(row.Event) : ''">analytics</mat-icon>
+              </span>
             }
-            @if (row['Merged Event'] && !row['Has Benchmark']) {
-            <span><mat-icon>compare_arrows</mat-icon></span>
-            }
+            @if (!row['Merged Event'] && row[column]) {
             <app-activity-type-icon [activityType]="row[column]" size="18px" vAlign="middle"></app-activity-type-icon>
+            }
             {{ row[column] }}
           </span>
           }

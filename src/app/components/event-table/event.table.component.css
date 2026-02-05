@@ -206,10 +206,17 @@ mat-paginator {
   gap: 8px;
 }
 
-.clickable-icon {
+.benchmark-icon {
+  display: inline-flex;
+  align-items: center;
   cursor: pointer;
 }
 
-.clickable-icon:hover mat-icon {
-  color: var(--mat-sys-primary);
+.benchmark-icon.is-muted mat-icon {
+  color: var(--mat-sys-on-surface-variant);
+  opacity: 0.4;
+}
+
+.benchmark-icon:hover mat-icon {
+  opacity: 0.85;
 }
