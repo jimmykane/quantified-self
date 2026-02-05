@@ -663,12 +663,18 @@ mat-table {
 */
 .mat-bottom-sheet-container {
   @extend .glass-card;
+  @extend .qs-scrollbar;
   --mat-bottom-sheet-container-background-color: transparent;
   --mat-bottom-sheet-container-shape: 20px;
   background: var(--mat-sys-surface) !important;
   /* Keep only the top corners rounded; bottom edge stays flush with viewport */
   border-radius: 20px 20px 0 0 !important;
   padding: 16px !important;
+}
+
+/* Ensure bottom sheet scroll areas inherit the QS scrollbar styling */
+.mat-bottom-sheet-container .bottom-sheet-content {
+  @extend .qs-scrollbar;
 }
 
 /* Ensure Overlays (Bottom Sheets, Dialogs) are always on top of App Bars and Banners */
