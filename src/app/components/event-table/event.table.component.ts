@@ -184,7 +184,6 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         result: result,
         event: appEvent
       },
-      panelClass: 'qs-full-width-bottom-sheet',
       autoFocus: 'dialog'
     });
   }

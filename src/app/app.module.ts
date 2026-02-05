@@ -123,7 +123,7 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
     { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
     { provide: MAT_DIALOG_DEFAULT_OPTIONS, useValue: { panelClass: 'qs-dialog-container', hasBackdrop: true } },
-    { provide: MAT_BOTTOM_SHEET_DEFAULT_OPTIONS, useValue: { autoFocus: 'dialog' } },
+    { provide: MAT_BOTTOM_SHEET_DEFAULT_OPTIONS, useValue: { autoFocus: 'dialog', panelClass: 'qs-bottom-sheet-container' } },
     MAT_DATE_LOCALE_PROVIDER,
     { provide: LOCALE_ID, useFactory: getBrowserLocale },
     {

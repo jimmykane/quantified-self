@@ -89,7 +89,6 @@ export class EventSummaryComponent implements OnChanges {
         selectedActivities: this.selectedActivities,
         userUnitSettings: this.unitSettings
       },
-      panelClass: 'qs-full-width-bottom-sheet'
     });
   }
 
@@ -105,7 +104,6 @@ export class EventSummaryComponent implements OnChanges {
         event: this.event,
         selectedActivities: this.selectedActivities,
       },
-      panelClass: 'qs-full-width-bottom-sheet'
     });
   }
 
@@ -198,7 +196,6 @@ export class EventSummaryComponent implements OnChanges {
         result: this.benchmarkResult,
         event: this.event
       },
-      panelClass: 'qs-full-width-bottom-sheet',
       autoFocus: 'dialog'
     });
 
