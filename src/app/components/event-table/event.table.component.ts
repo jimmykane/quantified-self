@@ -47,6 +47,7 @@ import { AppProcessingService } from '../../services/app.processing.service';
 import { AppEventUtilities } from '../../utils/app.event.utilities';
 import { Firestore, doc, collection } from '@angular/fire/firestore';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
+import { MergeOptionsDialogComponent } from './merge-options-dialog/merge-options-dialog.component';
 
 @Component({
   selector: 'app-event-table',
@@ -266,6 +267,17 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   async mergeSelection(event) {
+    if (this.selection.selected.length < 2) {
+      this.snackBar.open('Select at least two events to merge', undefined, { duration: 2000 });
+      return;
+    }
+    const dialogRef = this.dialog.open(MergeOptionsDialogComponent);
+    const mergeSelection = await firstValueFrom(dialogRef.afterClosed().pipe(take(1)));
+    if (!mergeSelection) {
+      return;
+    }
+    const mergeAsBenchmark = mergeSelection.mergeAsBenchmark === true;
+
     // Show loading
     this.loading();
     // Remove all subscriptions
@@ -292,11 +304,16 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     // 1. Fetch Events
     let events: any[];
     try {
-      events = await Promise.all(promises);
+      events = (await Promise.all(promises)).filter(Boolean);
     } catch (e: any) {
       this.logger.error('Merge failed during event fetch', e);
       this.loaded();
       this.snackBar.open(e.message || 'Error loading events for merge', 'Close', { duration: 5000, panelClass: ['error-snackbar'] });
+      return;
+    }
+    if (events.length < 2) {
+      this.loaded();
+      this.snackBar.open('Not enough events to merge', undefined, { duration: 3000 });
       return;
     }
 
@@ -358,6 +375,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       events,
       () => doc(collection(this.firestore, 'users')).id
     ) as AppEventInterface;
+    mergedEvent.isMerge = mergeAsBenchmark;
 
     try {
       // Pass the collected files to the writer

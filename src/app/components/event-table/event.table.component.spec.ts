@@ -115,7 +115,7 @@ describe('EventTableComponent', () => {
         };
 
         mockRouter = { navigate: vi.fn() };
-        mockDialog = { open: vi.fn() };
+        mockDialog = { open: vi.fn().mockReturnValue({ afterClosed: () => of({ mergeAsBenchmark: true }) }) };
         mockSnackBar = { open: vi.fn() };
 
         mockBottomSheet = {
@@ -670,4 +670,3 @@ describe('EventTableComponent', () => {
         });
     });
 });
-
