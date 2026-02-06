@@ -16,6 +16,7 @@ import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib';
 import { SelectionModel } from '@angular/cdk/collections';
 import { DataExportService } from '../../../services/data-export.service';
 import { expandCollapse } from '../../../animations/animations';
+import { computeStatDiff } from '../../../helpers/stats-diff.helper';
 
 @Component({
   selector: 'app-event-stats-table',
@@ -149,24 +150,20 @@ export class EventCardStatsTableComponent implements OnChanges {
         if (!row) {
           return;
         }
-        const firstActivityStat = this.selectedActivities[0].getStat(stat.getType());
-        const secondActivityStat = this.selectedActivities[1].getStat(stat.getType());
-        if (!firstActivityStat || !secondActivityStat) {
+        const diff = computeStatDiff(
+          this.selectedActivities[0],
+          this.selectedActivities[1],
+          stat.getType(),
+          stat.getType(),
+          this.userUnitSettings
+        );
+        if (!diff) {
           return;
         }
-        const firstActivityStatValue = firstActivityStat.getValue();
-        const secondActivityStatValue = secondActivityStat.getValue();
-        if (typeof firstActivityStatValue !== 'number' || typeof secondActivityStatValue !== 'number') {
-          return;
-        }
-        // Create an obj
-        row['Difference'] = {} as any;
-        row['Difference']['display'] = (DynamicDataLoader.getDataInstanceFromDataType(stat.getType(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayValue() + ' ' + (DynamicDataLoader.getDataInstanceFromDataType(stat.getType(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayUnit();
-        row['Difference']['percent'] = 100 * Math.abs((firstActivityStatValue - secondActivityStatValue) / ((firstActivityStatValue + secondActivityStatValue) / 2));
-        // Correct the NaN with both 0's
-        if (firstActivityStatValue === 0 && secondActivityStatValue === 0) {
-          row['Difference']['percent'] = 0
-        }
+        row['Difference'] = {
+          display: diff.display,
+          percent: diff.percent,
+        };
       })
     }
 

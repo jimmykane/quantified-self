@@ -90,6 +90,24 @@ section.grid {
   font-family: 'Barlow Condensed', sans-serif;
 }
 
+.stat-diff {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  line-height: 1.1;
+  margin-top: 2px;
+  opacity: 0.8;
+}
+
+.stat-diff-value {
+  color: var(--mat-app-on-surface-variant);
+}
+
+.stat-diff-percent {
+  font-weight: 600;
+}
+
 /* Condensed (Chips) Container */
 section.condensed {
   display: flex;

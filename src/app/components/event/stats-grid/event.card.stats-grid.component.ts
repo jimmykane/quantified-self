@@ -22,8 +22,11 @@ import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataMovingTime } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { ActivityUtilities } from '@sports-alliance/sports-lib';
+import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { AppEventUtilities } from '../../../utils/app.event.utilities';
+import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { computeStatDiff } from '../../../helpers/stats-diff.helper';
 
 @Component({
   selector: 'app-event-card-stats-grid',
@@ -43,8 +46,11 @@ export class EventCardStatsGridComponent implements OnChanges {
 
   public displayedStatsToShow: string[] = [];
   public stats: DataInterface[] = [];
+  public showDiff = false;
+  public diffByType = new Map<string, { display: string; percent: number; color: string }>();
 
   private userSettingsQuery = inject(AppUserSettingsQueryService);
+  private eventColorService = inject(AppEventColorService);
 
   public get unitSettings() {
     return this.userSettingsQuery.unitSettings();
@@ -57,6 +63,8 @@ export class EventCardStatsGridComponent implements OnChanges {
   ngOnChanges(simpleChanges: SimpleChanges) {
     if (!this.selectedActivities.length) {
       this.stats = [];
+      this.showDiff = false;
+      this.diffByType = new Map();
       return;
     }
 
@@ -72,6 +80,7 @@ export class EventCardStatsGridComponent implements OnChanges {
 
     if (this.statsToShow) {
       this.displayedStatsToShow = this.statsToShow;
+      this.updateDiffMap();
       return;
     }
 
@@ -116,5 +125,47 @@ export class EventCardStatsGridComponent implements OnChanges {
       }
       return [...statsAccu, statType];
     }, [] as string[])
+
+    this.updateDiffMap();
+  }
+
+  private updateDiffMap() {
+    this.showDiff = !!this.event?.isMerge && this.selectedActivities.length === 2;
+    if (!this.showDiff || !this.unitSettings) {
+      this.diffByType = new Map();
+      return;
+    }
+    this.diffByType = this.buildDiffMap();
+  }
+
+  private buildDiffMap(): Map<string, { display: string; percent: number; color: string }> {
+    const diffMap = new Map<string, { display: string; percent: number; color: string }>();
+    const activityA = this.selectedActivities[0];
+    const activityB = this.selectedActivities[1];
+
+    const statsMap = new Map<string, DataInterface>();
+    this.stats.forEach(stat => statsMap.set(stat.getType(), stat));
+
+    this.displayedStatsToShow.forEach((statType) => {
+      const stat = statsMap.get(statType);
+      if (!stat) {
+        return;
+      }
+      const unitStats = DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, this.unitSettings);
+      unitStats.forEach((unitStat) => {
+        const displayType = unitStat.getType();
+        const diff = computeStatDiff(activityA, activityB, stat.getType(), displayType, this.unitSettings);
+        if (!diff) {
+          return;
+        }
+        diffMap.set(displayType, {
+          display: diff.display,
+          percent: diff.percent,
+          color: this.eventColorService.getDifferenceColor(diff.percent)
+        });
+      });
+    });
+
+    return diffMap;
   }
 }

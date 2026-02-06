@@ -1,4 +1,5 @@
-<app-header-stats [statsToShow]="displayedStatsToShow" [layout]="layout" [stats]="stats" [unitSettings]="unitSettings">
+<app-header-stats [statsToShow]="displayedStatsToShow" [layout]="layout" [stats]="stats" [unitSettings]="unitSettings"
+    [showDiff]="showDiff" [diffByType]="diffByType">
     <div grid-suffix>
         <ng-content select="[stats-suffix]"></ng-content>
     </div>
