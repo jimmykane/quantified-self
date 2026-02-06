@@ -138,8 +138,8 @@ describe('BenchmarkReportComponent', () => {
             const insights = component.getInsights();
 
             expect(insights.length).toBe(2); // GNSS + HeartRate
-            expect(insights[0].text).toContain('GNSS');
-            expect(insights[1].text).toContain('HeartRate');
+            expect(insights[0].label).toContain('GNSS');
+            expect(insights[1].label).toContain('HeartRate');
         });
     });
 });
