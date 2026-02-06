@@ -7,7 +7,15 @@
 }
 
 .activity-chip {
-  --mdc-chip-elevated-container-color: var(--mat-app-surface-container);
+  --mdc-chip-elevated-container-color: transparent;
+  --mdc-chip-elevated-selected-container-color: transparent;
+  --mdc-chip-container-color: transparent;
+  --mdc-chip-selected-container-color: transparent;
+  --mat-mdc-chip-state-layer-color: transparent;
+  --mat-mdc-chip-selected-state-layer-color: transparent;
+  --mat-mdc-chip-disabled-state-layer-color: transparent;
+  --mat-mdc-chip-state-layer-opacity: 0;
+  --mat-mdc-chip-selected-state-layer-opacity: 0;
   --mdc-chip-label-text-color: var(--mat-app-on-surface);
   --mdc-chip-with-icon-icon-size: 0;
   --mdc-chip-graphic-selected-width: 0;
@@ -19,17 +27,9 @@
 }
 
 .activity-chip.mat-mdc-chip-selected {
-  --mdc-chip-elevated-container-color: var(--chip-accent-color, var(--mat-app-primary));
-  --mdc-chip-label-text-color: #ffffff;
+  --mdc-chip-elevated-container-color: transparent;
+  --mdc-chip-label-text-color: var(--mat-app-on-surface);
   border: 2px solid var(--chip-accent-color, var(--mat-app-primary)) !important;
-}
-
-.activity-chip.mat-mdc-chip-selected .chip-stats,
-.activity-chip.mat-mdc-chip-selected .chip-device,
-.activity-chip.mat-mdc-chip-selected .chip-type {
-  color: #ffffff !important;
-  opacity: 1;
-  /* Ensure full visibility on colored background */
 }
 
 /* Remove checkmark graphic completely */
@@ -49,6 +49,24 @@
 
 ::ng-deep .activity-chip .mat-mdc-chip-action-label {
   padding-left: 0 !important;
+}
+
+/* Force transparent chip background across MDC internal elements */
+::ng-deep .activity-chip,
+::ng-deep .activity-chip .mdc-evolution-chip__action,
+::ng-deep .activity-chip .mdc-evolution-chip__action--primary,
+::ng-deep .activity-chip .mdc-evolution-chip__cell {
+  background-color: transparent !important;
+}
+
+/* Remove pressed/hover/selected state layer visuals */
+::ng-deep .activity-chip .mdc-evolution-chip__action::before,
+::ng-deep .activity-chip .mdc-evolution-chip__action::after,
+::ng-deep .activity-chip .mdc-evolution-chip__ripple::before,
+::ng-deep .activity-chip .mdc-evolution-chip__ripple::after,
+::ng-deep .activity-chip .mat-mdc-chip-focus-overlay {
+  background-color: transparent !important;
+  opacity: 0 !important;
 }
 
 .activity-chip:not(.mat-mdc-chip-selected) {
