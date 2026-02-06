@@ -2,9 +2,11 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { EventCardStatsGridComponent } from './event.card.stats-grid.component';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { signal, NO_ERRORS_SCHEMA } from '@angular/core';
-import { ActivityTypes, UserSummariesSettingsInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { ActivityTypes, UserSummariesSettingsInterface, UserUnitSettingsInterface, ActivityUtilities, DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { SimpleChange } from '@angular/core';
 import { DataAscent, DataDescent, DataDuration } from '@sports-alliance/sports-lib';
+import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { vi } from 'vitest';
 
 describe('EventCardStatsGridComponent', () => {
     let component: EventCardStatsGridComponent;
@@ -34,6 +36,7 @@ describe('EventCardStatsGridComponent', () => {
             declarations: [EventCardStatsGridComponent],
             providers: [
                 { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQueryService },
+                { provide: AppEventColorService, useValue: { getDifferenceColor: vi.fn(() => '#00ff00') } },
             ],
             schemas: [NO_ERRORS_SCHEMA],
         }).compileComponents();
@@ -163,5 +166,81 @@ describe('EventCardStatsGridComponent', () => {
         expect(component.displayedStatsToShow).not.toContain(DataAscent.type);
         expect(component.displayedStatsToShow).toContain(DataDescent.type); // Descent should still be there for alpine skiing
     });
-});
 
+    it('should compute diff map when event is a merge and two activities are selected', () => {
+        const durationStatA = {
+            getType: () => DataDuration.type,
+            getDisplayType: () => 'Duration',
+            getDisplayValue: () => '1000',
+            getDisplayUnit: () => 's',
+            getValue: () => 1000
+        };
+        const durationStatB = {
+            getType: () => DataDuration.type,
+            getDisplayType: () => 'Duration',
+            getDisplayValue: () => '1500',
+            getDisplayUnit: () => 's',
+            getValue: () => 1500
+        };
+
+        const activity1 = {
+            type: ActivityTypes.Cycling,
+            getStat: (type: string) => (type === DataDuration.type ? durationStatA : null),
+            getStatsAsArray: () => [durationStatA],
+        } as any;
+        const activity2 = {
+            type: ActivityTypes.Cycling,
+            getStat: (type: string) => (type === DataDuration.type ? durationStatB : null),
+            getStatsAsArray: () => [durationStatB],
+        } as any;
+
+        const mockEvent = {
+            isMerge: true,
+            getActivities: () => [activity1, activity2],
+            getActivityTypesAsArray: () => [ActivityTypes.Cycling],
+            getStats: () => [],
+        } as any;
+
+        vi.spyOn(ActivityUtilities, 'getSummaryStatsForActivities').mockReturnValue([durationStatA] as any);
+        vi.spyOn(DynamicDataLoader, 'getUnitBasedDataFromDataInstance').mockReturnValue([durationStatA] as any);
+        vi.spyOn(DynamicDataLoader, 'getDataInstanceFromDataType').mockReturnValue({
+            getDisplayValue: () => '500',
+            getDisplayUnit: () => 's'
+        } as any);
+
+        component.event = mockEvent;
+        component.selectedActivities = [activity1, activity2];
+
+        component.ngOnChanges({
+            event: new SimpleChange(null, mockEvent, true),
+            selectedActivities: new SimpleChange(null, component.selectedActivities, true),
+        });
+
+        expect(component.showDiff).toBe(true);
+    });
+
+    it('should not compute diff map when event is not a merge', () => {
+        const activity = {
+            type: ActivityTypes.Cycling,
+            getStat: () => null,
+            getStatsAsArray: () => [],
+        } as any;
+        const mockEvent = {
+            isMerge: false,
+            getActivities: () => [activity],
+            getActivityTypesAsArray: () => [ActivityTypes.Cycling],
+            getStats: () => [],
+        } as any;
+
+        component.event = mockEvent;
+        component.selectedActivities = [activity, activity];
+
+        component.ngOnChanges({
+            event: new SimpleChange(null, mockEvent, true),
+            selectedActivities: new SimpleChange(null, component.selectedActivities, true),
+        });
+
+        expect(component.showDiff).toBe(false);
+        expect(component.diffByType.size).toBe(0);
+    });
+});

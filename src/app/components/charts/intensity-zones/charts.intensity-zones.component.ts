@@ -41,6 +41,7 @@ export class ChartsIntensityZonesComponent extends DashboardChartAbstractDirecti
     const legend = new this.charts.Legend();
 
     chart.legend = legend;
+    legend.fontFamily = 'Barlow Condensed';
     legend.parent = chart.plotContainer;
     legend.background.fill = this.core.color('#000');
     legend.background.fillOpacity = 0.00;

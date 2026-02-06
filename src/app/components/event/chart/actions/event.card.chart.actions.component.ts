@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, EventEmitter, Input, OnChanges, Output, inject } from '@angular/core';
 import { XAxisTypes } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
-import { AppUserSettingsQueryService } from '../../../../services/app.user-settings-query.service';
 import { AppAnalyticsService } from '../../../../services/app.analytics.service';
 import { EventInterface } from '@sports-alliance/sports-lib';
 
@@ -29,25 +28,27 @@ export class EventCardChartActionsComponent implements OnChanges {
   public xAxisTypes = XAxisTypes;
   private analyticsService = inject(AppAnalyticsService);
 
-  private userSettingsQuery = inject(AppUserSettingsQueryService);
-
   constructor() {
   }
 
-  async somethingChanged(event) {
-    this.xAxisTypeChange.emit(this.xAxisType);
-    this.showAllDataChange.emit(this.showAllData);
-    this.showLapsChange.emit(this.showLaps);
-    this.stackYAxesChange.emit(this.stackYAxes);
-    if (this.user) {
-      this.userSettingsQuery.updateChartSettings({
-        xAxisType: this.xAxisType,
-        showAllData: this.showAllData,
-        showLaps: this.showLaps,
-        stackYAxes: this.stackYAxes
-      });
+  async somethingChanged(prop?: string) {
+    if (prop === 'xAxisType') {
+      this.xAxisTypeChange.emit(this.xAxisType);
+    } else if (prop === 'showAllData') {
+      this.showAllDataChange.emit(this.showAllData);
+    } else if (prop === 'showLaps') {
+      this.showLapsChange.emit(this.showLaps);
+    } else if (prop === 'stackYAxes') {
+      this.stackYAxesChange.emit(this.stackYAxes);
+    } else {
+      // Fallback for safety if called without prop
+      this.xAxisTypeChange.emit(this.xAxisType);
+      this.showAllDataChange.emit(this.showAllData);
+      this.showLapsChange.emit(this.showLaps);
+      this.stackYAxesChange.emit(this.stackYAxes);
     }
-    this.analyticsService.logEvent('event_chart_settings_change');
+
+    this.analyticsService.logEvent('event_chart_settings_change', { property: prop });
   }
 
   formatLabel(value: number | null) {

@@ -304,6 +304,28 @@ describe('Firestore Security Rules', () => {
             await assertFails(db.collection(`users/${userId}/activities`).doc(activityId).get());
         });
 
+        it('should ALLOW unauthenticated users to read PUBLIC activities', async () => {
+            const db = testEnv.unauthenticatedContext().firestore();
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/activities`).doc('public_activity').set({
+                    type: 'Swimming',
+                    privacy: 'public'
+                });
+            });
+            await assertSucceeds(db.collection(`users/${userId}/activities`).doc('public_activity').get());
+        });
+
+        it('should ALLOW other authenticated users to read PUBLIC activities', async () => {
+            const db = testEnv.authenticatedContext(otherId).firestore();
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/activities`).doc('public_activity_2').set({
+                    type: 'Cycling',
+                    privacy: 'public'
+                });
+            });
+            await assertSucceeds(db.collection(`users/${userId}/activities`).doc('public_activity_2').get());
+        });
+
     });
 
     // End of main describe block removed here to include appended tests

@@ -123,17 +123,29 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   // ...
 
   public get showAllData() { return this.userSettingsQuery.chartSettings()?.showAllData ?? false; }
-  public set showAllData(value: boolean) { this.userSettingsQuery.updateChartSettings({ showAllData: value }); }
+  public set showAllData(value: boolean) {
+    if (value !== this.showAllData) {
+      this.userSettingsQuery.updateChartSettings({ showAllData: value });
+    }
+  }
 
   public get showLaps() { return this.userSettingsQuery.chartSettings()?.showLaps ?? true; }
-  public set showLaps(value: boolean) { this.userSettingsQuery.updateChartSettings({ showLaps: value }); }
+  public set showLaps(value: boolean) {
+    if (value !== this.showLaps) {
+      this.userSettingsQuery.updateChartSettings({ showLaps: value });
+    }
+  }
   public get showGrid() { return this.userSettingsQuery.chartSettings()?.showGrid ?? true; }
   public get disableGrouping() { return this.userSettingsQuery.chartSettings()?.disableGrouping ?? false; }
   public get hideAllSeriesOnInit() { return this.userSettingsQuery.chartSettings()?.hideAllSeriesOnInit ?? false; }
   public get lapTypes() { return this.userSettingsQuery.chartSettings()?.lapTypes ?? AppUserUtilities.getDefaultChartLapTypes(); }
 
   public get xAxisType() { return this.userSettingsQuery.chartSettings()?.xAxisType ?? XAxisTypes.Duration; }
-  public set xAxisType(value: XAxisTypes) { this.userSettingsQuery.updateChartSettings({ xAxisType: value }); }
+  public set xAxisType(value: XAxisTypes) {
+    if (value !== this.xAxisType) {
+      this.userSettingsQuery.updateChartSettings({ xAxisType: value });
+    }
+  }
 
   public get downSamplingLevel() { return this.userSettingsQuery.chartSettings()?.downSamplingLevel ?? AppUserUtilities.getDefaultDownSamplingLevel(); }
   public get gainAndLossThreshold() { return this.userSettingsQuery.chartSettings()?.gainAndLossThreshold ?? AppUserUtilities.getDefaultGainAndLossThreshold(); }
@@ -141,7 +153,11 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   public get chartCursorBehaviour() { return this.userSettingsQuery.chartSettings()?.chartCursorBehaviour ?? AppUserUtilities.getDefaultChartCursorBehaviour(); }
 
   public get stackYAxes() { return this.userSettingsQuery.chartSettings()?.stackYAxes ?? false; }
-  public set stackYAxes(value: boolean) { this.userSettingsQuery.updateChartSettings({ stackYAxes: value }); }
+  public set stackYAxes(value: boolean) {
+    if (value !== this.stackYAxes) {
+      this.userSettingsQuery.updateChartSettings({ stackYAxes: value });
+    }
+  }
 
   public get strokeWidth() { return this.userSettingsQuery.chartSettings()?.strokeWidth ?? AppUserUtilities.getDefaultChartStrokeWidth(); }
   public get strokeOpacity() { return this.userSettingsQuery.chartSettings()?.strokeOpacity ?? AppUserUtilities.getDefaultChartStrokeOpacity(); }
@@ -167,7 +183,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   private themeSignal = toSignal(this.themeService.getChartTheme());
 
   // Track previous state for change detection
-  private previousSettingsState: any = {};
+  private previousState: any = {};
 
 
   public distanceAxesForActivitiesMap = new Map<string, StreamInterface>();
@@ -190,6 +206,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   private rangeLabelsContainer: am4core.Container | undefined;
   private clearSelectionButton: am4core.Button | undefined;
   private zoomOrSelectButton: am4core.Button | undefined;
+  private customZoomOutButton: am4core.Button | undefined;
 
   constructor(changeDetector: ChangeDetectorRef,
     protected zone: NgZone,
@@ -210,11 +227,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       const theme = this.themeSignal();
       const units = this.userSettingsQuery.unitSettings();
 
-      // Defer logic to avoid ExpressionChangedAfterItHasChecked if strictly synchronous
-      // But effect is async nature usually.
-      // Call update checking logic
-      this.chartTheme = theme ?? ChartThemes.Material; // Update property immediately
-      this.checkForSettingsUpdates(settings, theme, units);
+      this.chartTheme = theme ?? ChartThemes.Material;
+      this.checkForUpdates('Effect');
     }, { injector: this.injector });
   }
 
@@ -232,6 +246,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   async ngAfterViewInit() {
 
     this.chart = await this.createChart();
+
+    // Initialize previous state to avoid immediate re-trigger on first check
+    this.previousState = this.getCurrentState();
 
     await this.processChanges(++this.processSequence);
   }
@@ -251,81 +268,65 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   async ngOnChanges(simpleChanges: SimpleChanges) {
-    if (!this.chart) {
-      return; // Chart not yet initialized
-    }
-
     // Only handle Event/Activity/User changes here. Settings are handled by effect.
-    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.targetUserID) {
-      // Create a synthetic change object for the full rebuild check
-      this.handleUpdates({
-        event: simpleChanges.event,
-        selectedActivities: simpleChanges.selectedActivities
-      });
+    if (simpleChanges.event || simpleChanges.selectedActivities || simpleChanges.targetUserID || simpleChanges.user) {
+      this.checkForUpdates('ngOnChanges');
     }
   }
 
-  private async checkForSettingsUpdates(settings: any, theme: any, units: any) {
-    // Update local property - ALWAYS do this even if chart is not ready
-    this.chartTheme = theme ?? ChartThemes.Material;
-
+  /**
+   * CENTRAL UPDATE ORCHESTRATOR
+   * 
+   * This method prevents "Double Reloads" caused by:
+   * 1. Initial Load: `previousState` is initialized in `ngAfterViewInit` to prevent the first check from seeing "everything changed".
+   * 2. Object Reference Changes: `fast-deep-equal` is used instead of `JSON.stringify` to ignore key order changes (e.g. `dataTypesToUse`).
+   * 3. Concurrent Triggers: `ngOnChanges` and `Effect` can theoretically overlap; this serialized check ensures one source of truth.
+   */
+  private async checkForUpdates(source: string) {
     if (!this.chart) return;
 
-    const currentState = {
+    try {
+      const currentState = this.getCurrentState();
+
+      const changes: any = {};
+      const keysToCheck = Object.keys(currentState);
+
+      keysToCheck.forEach(key => {
+        const currentVal = currentState[key];
+        const prevVal = this.previousState[key];
+        // Use fast-deep-equal for robust comparison (ignoring key order)
+        if (!equal(currentVal, prevVal)) {
+          changes[key] = { currentValue: currentVal, previousValue: prevVal };
+        }
+      });
+
+      if (Object.keys(changes).length > 0) {
+        // this.logger.info(`[EventCardChart] checkForUpdates detected changes via [${source}]:`, Object.keys(changes));
+        this.previousState = { ...this.previousState, ...currentState };
+        await this.handleUpdates(changes);
+      }
+    } catch (err) {
+      this.logger.error('[EventCardChart] Error in checkForUpdates', err);
+    }
+  }
+
+  private getCurrentState(): any {
+    const settings = this.userSettingsQuery.chartSettings();
+    const theme = this.themeSignal();
+    const units = this.userSettingsQuery.unitSettings();
+
+    const currentSelectedActivitiesIDs = (this.selectedActivities || []).map(a => a.getID()).sort().join(',');
+    const currentEventID = this.event?.getID();
+
+    return {
       ...settings,
       chartTheme: theme,
       unitSettings: units,
-      // Helper Props
-      dataTypesToUse: this.dataTypesToUse
+      dataTypesToUse: (this.dataTypesToUse || []).sort(),
+      eventID: currentEventID,
+      selectedActivitiesIDs: currentSelectedActivitiesIDs,
+      targetUserID: this.targetUserID
     };
-
-    const changes: any = {};
-
-    // Compare with previous state
-    if (!this.previousSettingsState) this.previousSettingsState = {};
-
-    const keysToCheck = [
-      'chartTheme', 'xAxisType', 'stackYAxes', 'chartCursorBehaviour', 'disableGrouping',
-      'showAllData', 'lapTypes', 'extraMaxForPower', 'extraMaxForPace',
-      'hideAllSeriesOnInit', 'strokeWidth', 'fillOpacity', 'dataTypesToUse',
-      'downSamplingLevel', 'gainAndLossThreshold', 'showLaps', 'showGrid'
-    ];
-
-    /* 
-       We need to detect changes. 
-       Since 'settings' object is new reference from service only if changed,
-       we can compare properties.
-    */
-
-    keysToCheck.forEach(key => {
-      // Use strict equality or deep equal?
-      // Signals from service are checking equality, so if reference changed, it likely changed.
-      // But here we are comparing against *our* last applied state.
-
-      const validKey = key === 'chartTheme' ? 'chartTheme' :
-        key === 'dataTypesToUse' ? 'dataTypesToUse' :
-          key as keyof UserChartSettingsInterface;
-
-      const currentVal = key === 'chartTheme' ? theme :
-        key === 'dataTypesToUse' ? this.dataTypesToUse : // Computed
-          settings[key as keyof UserChartSettingsInterface];
-
-      const prevVal = this.previousSettingsState[key];
-
-      // Using JSON stringify for simple deep check on arrays if needed, or equal?
-      // fast-deep-equal is imported as equal ?? checking imports.. I imported 'equal' from 'fast-deep-equal' in previous step? 
-      // Wait, I imported { equal } which might be wrong, it's default export usually.
-      // Let's assume strict eq for primitives and JSON/equal for arrays
-
-      if (JSON.stringify(currentVal) !== JSON.stringify(prevVal)) {
-        changes[key] = { currentValue: currentVal, previousValue: prevVal, firstChange: false, isFirstChange: () => false };
-      }
-    });
-
-    if (Object.keys(changes).length > 0) {
-      this.previousSettingsState = { ...this.previousSettingsState, ...currentState }; // Update state
-      await this.handleUpdates(changes);
-    }
   }
 
   private async handleUpdates(simpleChanges: any) {
@@ -336,8 +337,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       || simpleChanges.stackYAxes
       || simpleChanges.chartCursorBehaviour
       || simpleChanges.disableGrouping
-      || simpleChanges.event
-      || simpleChanges.selectedActivities
+      || simpleChanges.eventID // Content changed
+      || simpleChanges.selectedActivitiesIDs // Content changed
+      || simpleChanges.targetUserID
       || simpleChanges.showAllData
       || simpleChanges.lapTypes
       || simpleChanges.extraMaxForPower
@@ -349,43 +351,37 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       || simpleChanges.downSamplingLevel
       || simpleChanges.gainAndLossThreshold;
 
-    // Changes that can be handled with partial updates
-    const canPartialUpdate =
-      (simpleChanges.showLaps || simpleChanges.showGrid)
-      && !requiresFullRebuild;
+    // Serialized update handling
+    this.chartActionPromise = this.chartActionPromise.then(async () => {
+      // #1: Partial Updates
+      const canPartialUpdate = (simpleChanges.showLaps || simpleChanges.showGrid) && !requiresFullRebuild;
+      if (canPartialUpdate) {
+        if (!this.chart || this.chart.isDisposed()) return;
 
-    if (canPartialUpdate) {
-      // #1: Handle showLaps toggle without rebuild
-      if (simpleChanges.showLaps && this.chart) {
-        this.removeLapGuides(this.chart);
-        if (this.showLaps) {
-          this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
+        if (simpleChanges.showLaps) {
+          this.removeLapGuides(this.chart);
+          if (this.showLaps) {
+            this.addLapGuides(this.chart, this.selectedActivities, this.xAxisType, this.lapTypes);
+          }
         }
-      }
 
-      // #1: Handle showGrid toggle without rebuild
-      if (simpleChanges.showGrid) {
-        if (this.showGrid) {
-          this.addGrid();
-        } else {
-          this.removeGrid();
+        if (simpleChanges.showGrid) {
+          if (this.showGrid) this.addGrid();
+          else this.removeGrid();
         }
-      }
-      return; // Exit early - no full rebuild needed
-    }
-
-    if (requiresFullRebuild || simpleChanges.showLaps || simpleChanges.showGrid) {
-      // Show loading immediately so the user sees feedback
-      this.loading();
-      this.changeDetector.detectChanges();
-
-      // #8: Only clear distance cache when activities actually change
-      if (simpleChanges.event || simpleChanges.selectedActivities) {
-        this.distanceAxesForActivitiesMap.clear();
+        return;
       }
 
-      this.chartActionPromise = this.chartActionPromise.then(async () => {
-        // #2: Temporarily disable animations during rebuild for better performance
+      // #2: Full Rebuild
+      if (requiresFullRebuild) {
+        // this.logger.info('[EventCardChart] Full rebuild triggered by:', Object.keys(simpleChanges).filter(k => simpleChanges[k]));
+        this.loading();
+        this.changeDetector.detectChanges();
+
+        if (simpleChanges.eventID || simpleChanges.selectedActivitiesIDs) {
+          this.distanceAxesForActivitiesMap.clear();
+        }
+
         const originalAnimationSetting = this.useAnimations;
         this.useAnimations = false;
 
@@ -393,24 +389,20 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         this.activityCursorService.clear();
         this.eventColorService.clearCache();
 
-        // Re-create the empty chart shell
         this.chart = await this.createChart();
-
-        // Restore animation setting after chart is created
         this.useAnimations = originalAnimationSetting;
 
-        // Proceed to populate data
         const seq = ++this.processSequence;
         if (!this.event || !this.selectedActivities?.length) {
           this.loaded();
           return;
         }
         await this.processChanges(seq);
-      }).catch(err => {
-        this.logger.error('Error during chart rebuild sequence', err);
-        this.loaded(); // Ensure loading spinner is hidden on error
-      });
-    }
+      }
+    }).catch(err => {
+      this.logger.error('Error during chart update sequence', err);
+      this.loaded();
+    });
   }
 
 
@@ -455,9 +447,9 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       chart.dateFormatter.utc = true;
     }
 
-    // Enable native "Click to Interact" behavior
-    chart.tapToActivate = true;
 
+
+    chart.fontFamily = 'Barlow Condensed';
     chart.fontSize = '1em';
     chart.paddingTop = 0;
     chart.paddingRight = 10;
@@ -467,13 +459,19 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     chart.durationFormatter.durationFormat = 'mm:ss';
 
-    // Add scrollbar
+    // Add scrollbar - visible and interactive
     chart.scrollbarX = new this.core.Scrollbar();
+    // chart.scrollbarX.hide(0); // Restore visibility
 
+    // Enable grips for zooming? User requested "light version" which usually means no grips (pan only)
+    // Original code had grips disabled.
     chart.scrollbarX.startGrip.disabled = true;
     chart.scrollbarX.endGrip.disabled = true;
+
     chart.scrollbarX.marginTop = 0;
     chart.scrollbarX.marginBottom = 10;
+
+    // Previously removed: Visibility toggle logic is removed to keep it always visible
 
     if (this.stackYAxes) {
       ChartHelper.setYAxesToStack(chart);
@@ -490,31 +488,17 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
 
     chart.cursor.interactions.hitOptions.hitTolerance = 20;
-    chart.cursor.interactions.hitOptions.noFocus = true;
+
 
     chart.cursor.behavior = 'none'; // Disable initially to prevent auto-zooms
     chart.cursor.zIndex = 10;
     chart.cursor.hideSeriesTooltipsOnSelection = true;
 
-    chart.zoomOutButton.icon.path = 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zM7 9h5v1H7z'
-    const tempButton = new this.core.Button();
+    // Disable default amCharts zoom button - we use our custom one
+    chart.zoomOutButton.disabled = true;
 
-
-    chart.zoomOutButton.background.fill = tempButton.background.fill;
-    if (tempButton.label) {
-      chart.zoomOutButton.icon.stroke = tempButton.label.stroke;
-      chart.zoomOutButton.strokeWidth = tempButton.label.strokeWidth;
-    }
-
-    chart.zoomOutButton.icon.padding(0, 0, 0, 0);
-    chart.zoomOutButton.padding(13, 12, 13, 12);
-    chart.zoomOutButton.fontSize = '1.2em';
-    chart.zoomOutButton.dx = -88;
-    chart.zoomOutButton.dy = 4;
-
-
-    // chart.zoomOutButton.padding(0,0,0,0)
-    chart.zoomOutButton.background.cornerRadius(5, 5, 5, 5);
+    // Add custom Material-styled zoom out button
+    this.addCustomZoomOutButton(chart);
 
 
     chart.cursor.events.on('cursorpositionchanged', (event) => {
@@ -716,6 +700,23 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     chart.events.on('inited', (ev) => {
 
     });
+
+
+
+    // Disable all chart interactions initially (cursor, tooltips, hover)
+    // Re-enable on first click - use native DOM event since amCharts events are blocked
+    chart.interactionsEnabled = false;
+    const svgContainer = chart.svgContainer?.SVGContainer;
+    if (svgContainer) {
+      const enableInteractions = () => {
+        chart.interactionsEnabled = true;
+        // Enable zoom behavior - was 'none' to prevent auto-zooms before activation
+        chart.cursor.behavior = ChartCursorBehaviours.ZoomX;
+        this.updateZoomOrSelectButtonLabel(); // Update button to reflect new state
+        svgContainer.removeEventListener('click', enableInteractions);
+      };
+      svgContainer.addEventListener('click', enableInteractions);
+    }
 
     return chart;
   }
@@ -972,7 +973,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     this.logger.info(`EventCardChartComponent: Mapping ${this.selectedActivities.length} activities. showLaps: ${this.showLaps}, lapTypes count: ${this.lapTypes?.length}`);
 
     this.selectedActivities.forEach((activity) => {
-      this.logger.info(`EventCardChartComponent: Mapping activity ID: "${activity.getID()}"`);
+      // Mapping activity...
       // The original code had a check for hasPositionData, which is not directly relevant for chart streams.
       // Assuming the intent is to check if the activity has any streams at all.
       // If the original intent was to check for position data for a map, this block might need adjustment.
@@ -994,14 +995,14 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
         }
       }
 
-      // Determine which data types to show based on showAllData toggle
+      // Determine which data types to show based on showAllData toggle and user-selected metrics
       const allowedDataTypes = this.showAllData
         ? null // null means show all
         : DynamicDataLoader.getUnitBasedDataTypesFromDataTypes(
-          [...DynamicDataLoader.basicDataTypes, ...this.dataTypesToUse],
+          this.dataTypesToUse,
           this.userUnitSettings,
           { includeDerivedTypes: true }
-        ).concat([...DynamicDataLoader.basicDataTypes, ...this.dataTypesToUse]);
+        ).concat(this.dataTypesToUse);
 
       // These need to be unit based and activity based?
       const shouldRemoveSpeed = DynamicDataLoader.getUnitBasedDataTypesFromDataType(DataSpeed.type, this.userUnitSettings).indexOf(DataSpeed.type) === -1
@@ -1583,6 +1584,13 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     }
     this.chart.cursor.behavior = behavior;
     this.updateZoomOrSelectButtonLabel();
+
+    // Trigger visibility update for custom zoom out button (Always show/enable)
+    if (this.customZoomOutButton && !this.customZoomOutButton.isDisposed()) {
+      this.customZoomOutButton.show(0);
+      this.customZoomOutButton.interactionsEnabled = true;
+      this.customZoomOutButton.opacity = 1;
+    }
   }
 
   /**
@@ -1714,6 +1722,8 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // Add icon
     button.icon = new this.core.Sprite();
     button.icon.marginRight = 8;
+    button.icon.width = 24;
+    button.icon.height = 24;
     button.icon.path = chart.cursor.behavior === ChartCursorBehaviours.SelectX
       ? 'M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 10H3V8h2v4h2V8h2v4h2V8h2v4h2V8h2v8z' // Ruler/Range icon (straighten)
       : 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z'; // Zoom icon
@@ -1744,6 +1754,65 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     // Store reference so we can update the label when cursor behavior changes
     this.zoomOrSelectButton = button;
+    return button;
+  }
+
+  private addCustomZoomOutButton(chart: am4charts.XYChart): am4core.Button {
+    const button = chart.plotContainer.createChild(this.core.Button);
+
+    button.id = 'customZoomOutButton';
+    button.align = 'right';
+    button.zIndex = 20;
+    button.marginRight = 8;
+    // Position at top (above zoomOrSelectButton which is at y=40)
+    button.y = 0;
+
+    // Zoom out icon (minus magnifier)
+    button.icon = new this.core.Sprite();
+    button.icon.marginRight = 8;
+    button.icon.width = 24;
+    button.icon.height = 24;
+    button.icon.path = 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14zM7 9h5v1H7z';
+
+    // Set label
+    if (button.label) {
+      button.label.text = 'Zoom Out';
+    }
+
+    // Apply Material styling
+    this.applyMaterialButtonStyle(button, {
+      fontSize: '0.85em',
+      paddingV: 4,
+      paddingH: 14,
+      cornerRadius: 20
+    });
+
+    // Click handler - zoom out to full range
+    button.events.on('hit', () => {
+      chart.xAxes.each(axis => {
+        axis.start = 0;
+        axis.end = 1;
+      });
+    });
+
+    // Initial state: Show always
+    // Visibility Logic: ALWAYS SHOW AND ENABLED (User request)
+
+    button.show(0);
+    button.opacity = 1;
+    button.interactionsEnabled = true;
+
+    // We keep the listener just in case other logic needs it later, but for now we enforce visibility
+    const updateVisibility = () => {
+      button.show(0);
+      button.opacity = 1;
+      button.interactionsEnabled = true;
+    };
+
+    chart.events.on('datarangechanged', updateVisibility);
+    chart.events.on('ready', updateVisibility);
+
+    this.customZoomOutButton = button;
     return button;
   }
 
@@ -2190,6 +2259,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     return this.zone.runOutsideAngular(() => {
       // Create a Legend
       chart.legend = new this.charts.Legend();
+      chart.legend.fontFamily = 'Barlow Condensed';
       // legend.fontSize = '1em';
 
       chart.legend.parent = this.core.create(this.legendDiv.nativeElement, this.core.Container);
@@ -2217,10 +2287,13 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   }
 
   private handleCursorPositionChange(event: any) {
-    if (!event || !event.target || !event.target.chart) {
+    if (!event || !event.target || event.target.isDisposed()) {
       return;
     }
-    this.logger.info(`EventCardChartComponent: handleCursorPositionChange Type: ${this.xAxisType}`);
+    const chart = event.target.chart;
+    if (!chart || chart.isDisposed()) {
+      return;
+    }
 
     // Avoid rewriting cursor change if it's triggered from this component
     if (event.target['_stick'] === 'hard') {

@@ -12,19 +12,6 @@
     /* Remove max-height: 80vh; as it's now handled by the parent container */
 }
 
-.bottom-sheet-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1rem;
-    flex-shrink: 0;
-}
-
-.bottom-sheet-header h2 {
-    margin: 0;
-    font-weight: 400;
-}
-
 .bottom-sheet-content {
     padding: 16px;
     overflow-y: auto;

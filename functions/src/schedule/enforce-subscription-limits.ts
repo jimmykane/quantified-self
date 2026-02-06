@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import { deauthorizeServiceForUser } from '../OAuth2';
 import { ServiceNames } from '@sports-alliance/sports-lib';
+import { reconcileClaims } from '../stripe/claims';
 
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME } from '../coros/constants';
@@ -77,10 +78,9 @@ async function processUser(uid: string) {
             const now = admin.firestore.Timestamp.now();
             if (gracePeriodUntil.toMillis() > now.toMillis()) {
                 logger.info(`User ${uid} in grace period until ${gracePeriodUntil.toDate().toISOString()}. Skipping cleanup.`);
-                // If in grace period, we SKIP cleanup.
-                // Wait, logic says: "Skipping cleanup." then "continue".
-                // In my refactor, I used "return" inside processUser.
-                // If "continue" was used in loop, here "return" exits processUser.
+                // Ensure claims are synced so backend checks recognize the grace period
+                // This prevents "soft-lock" where a user has a grace period doc but missing Auth claims
+                await reconcileClaims(uid);
                 return;
             }
         } else {
@@ -93,6 +93,9 @@ async function processUser(uid: string) {
                 gracePeriodUntil: newGracePeriodUntil,
                 lastDowngradedAt: admin.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
+
+            // Ensure claims are synced so backend checks recognize the grace period
+            await reconcileClaims(uid);
 
             return; // Skip cleanup for this run, let them have their 30 days
         }

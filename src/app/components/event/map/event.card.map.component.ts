@@ -112,6 +112,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
   public apiLoaded = signal(false);
   private processSequence = 0;
+  private previousState: any = {};
   private pendingFitBoundsTimeout: ReturnType<typeof setTimeout> | null = null;
 
   public mapInstance = signal<google.maps.Map | undefined>(undefined);
@@ -205,17 +206,37 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   ngOnChanges(simpleChanges: SimpleChanges) {
-    if (
-      (simpleChanges.selectedActivities && !simpleChanges.selectedActivities.firstChange) ||
-      (simpleChanges.showLaps && !simpleChanges.showLaps.firstChange) ||
-      (simpleChanges.lapTypes && !simpleChanges.lapTypes.firstChange) ||
-      (simpleChanges.showArrows && !simpleChanges.showArrows.firstChange) ||
-      (simpleChanges.strokeWidth && !simpleChanges.strokeWidth.firstChange) ||
-      (simpleChanges.strokeWidth && !simpleChanges.strokeWidth.firstChange)
-    ) {
-      // Only re-fit bounds if the selected activities changed
-      const shouldFitBounds = !!simpleChanges.selectedActivities;
-      this.mapActivities(++this.processSequence, shouldFitBounds);
+    if (!this.event) return;
+
+    const currentSelectedActivitiesIDs = (this.selectedActivities || []).map(a => a.getID()).sort().join(',');
+    const currentEventID = this.event?.getID();
+    const mapSettings = this.userSettingsQuery.mapSettings();
+
+    const currentState: any = {
+      eventID: currentEventID,
+      selectedActivitiesIDs: currentSelectedActivitiesIDs,
+      showLaps: mapSettings?.showLaps,
+      showArrows: mapSettings?.showArrows,
+      strokeWidth: mapSettings?.strokeWidth,
+      lapTypes: JSON.stringify(this.lapTypes)
+    };
+
+    const changes: any = {};
+    const keysToCheck = Object.keys(currentState);
+
+    keysToCheck.forEach(key => {
+      if (currentState[key] !== this.previousState[key]) {
+        changes[key] = { currentValue: currentState[key], previousValue: this.previousState[key] };
+      }
+    });
+
+    if (Object.keys(changes).length > 0) {
+      const shouldFitBounds = !!changes.selectedActivitiesIDs;
+      this.previousState = { ...this.previousState, ...currentState };
+
+      if (this.nativeMap || !this.googleMap) { // If map is ready or not yet using google-map
+        this.mapActivities(++this.processSequence, shouldFitBounds);
+      }
     }
   }
 
@@ -242,20 +263,11 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   onShowLapsChange(value: boolean) {
-    this.showLaps = value; // Triggers setter -> updates service
-    if (this.nativeMap) {
-      this.mapActivities(++this.processSequence, false);
-      this.changeDetectorRef.markForCheck();
-    }
+    this.showLaps = value; // Triggers setter -> updates service -> triggers ngOnChanges
   }
 
   onShowArrowsChange(value: boolean) {
-    this.logger.info('onShowArrowsChange', value);
-    this.showArrows = value; // Triggers setter -> updates service
-    if (this.nativeMap) {
-      this.mapActivities(++this.processSequence, false);
-      this.changeDetectorRef.markForCheck();
-    }
+    this.showArrows = value; // Triggers setter -> updates service -> triggers ngOnChanges
   }
 
   async onMapReady(map: google.maps.Map) {
@@ -384,10 +396,6 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         repeat: '100px'
       }] : []
     };
-
-    if (this.showArrows) {
-      this.logger.info('Adding arrows to polyline options');
-    }
 
     return options;
   }

@@ -15,6 +15,8 @@ export class HeaderStatsComponent implements OnChanges {
   @Input() stats: DataInterface[] = [];
   @Input() unitSettings?: UserUnitSettingsInterface;
   @Input() layout: 'grid' | 'condensed' = 'grid';
+  @Input() showDiff = false;
+  @Input() diffByType?: Map<string, { display: string; percent: number; color: string }>;
   public displayedStats: DataInterface[] = [];
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -38,6 +40,13 @@ export class HeaderStatsComponent implements OnChanges {
     });
 
     this.displayedStats = enrichedStats;
+  }
+
+  getDiffForStat(stat: DataInterface) {
+    if (!this.showDiff || !this.diffByType) {
+      return null;
+    }
+    return this.diffByType.get(stat.getType()) || null;
   }
 
 

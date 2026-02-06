@@ -14,20 +14,21 @@ import {
 } from '@angular/core';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import { AppBreakpoints } from '../../constants/breakpoints';
+import { AppColors } from '../../services/color/app.colors';
 import { AppEventService } from '../../services/app.event.service';
 import { Router } from '@angular/router';
 import { MatCard } from '@angular/material/card';
 import { MatPaginator, MatPaginatorIntl, PageEvent } from '@angular/material/paginator';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatSort } from '@angular/material/sort';
-import { AppEventInterface } from '../../../../functions/src/shared/app-event.interface';
+import { AppEventInterface, BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
 import { MatTableDataSource } from '@angular/material/table';
 import { SelectionModel } from '@angular/cdk/collections';
 import { DatePipe } from '@angular/common';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { debounceTime, take, map } from 'rxjs/operators';
-import { firstValueFrom, Subject, Subscription } from 'rxjs';
+import { firstValueFrom, race, Subject, Subscription } from 'rxjs';
 import { rowsAnimation, expandCollapse } from '../../animations/animations';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
@@ -45,6 +46,8 @@ import { LoggerService } from '../../services/logger.service';
 import { AppProcessingService } from '../../services/app.processing.service';
 import { AppEventUtilities } from '../../utils/app.event.utilities';
 import { Firestore, doc, collection } from '@angular/fire/firestore';
+import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
+import { MergeOptionsDialogComponent } from './merge-options-dialog/merge-options-dialog.component';
 
 @Component({
   selector: 'app-event-table',
@@ -96,7 +99,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     private logger: LoggerService,
     private processingService: AppProcessingService,
     private appEventUtilities: AppEventUtilities,
-    private breakpointObserver: BreakpointObserver) {
+    private breakpointObserver: BreakpointObserver,
+    private benchmarkFlow: AppBenchmarkFlowService) {
     super(changeDetector);
   }
 
@@ -159,6 +163,83 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.selection.toggle(row);
   }
 
+  /**
+   * Opens the benchmark report or selection dialog for a merged event directly from the table.
+   * Stops propagation to prevent row navigation.
+   */
+  openBenchmarkFlow(event: Event, appEvent: AppEventInterface): void {
+    event.stopPropagation();
+    event.preventDefault();
+
+    const initialSelection = appEvent.getActivities().slice(0, 2);
+    const result = this.getFirstBenchmarkResult(appEvent);
+
+    if (result) {
+      this.benchmarkFlow.openBenchmarkReport({
+        event: appEvent,
+        persistEvent: appEvent,
+        user: this.user,
+        result,
+        initialSelection
+      });
+    } else {
+      this.benchmarkFlow.openBenchmarkSelectionDialog({
+        event: appEvent,
+        persistEvent: appEvent,
+        user: this.user,
+        initialSelection
+      });
+    }
+  }
+
+  getBenchmarkColor(appEvent: AppEventInterface): string {
+    const result = this.getFirstBenchmarkResult(appEvent);
+    if (!result) return '';
+
+    // Replicating grading logic from BenchmarkReportComponent
+
+    // 1. GNSS Grade
+    let gnssScore = 0; // poor
+    const cep50 = result.metrics.gnss.cep50;
+    if (cep50 <= 2) gnssScore = 3; // excellent
+    else if (cep50 <= 5) gnssScore = 2; // good
+    else if (cep50 <= 10) gnssScore = 1; // fair
+
+    // 2. Stream Grades
+    const streamScores: number[] = [];
+    Object.values(result.metrics.streamMetrics).forEach(m => {
+      const corr = m.pearsonCorrelation;
+      if (corr >= 0.98) streamScores.push(3);
+      else if (corr >= 0.95) streamScores.push(2);
+      else if (corr >= 0.90) streamScores.push(1);
+      else streamScores.push(0);
+    });
+
+    const allScores = [gnssScore, ...streamScores];
+    if (allScores.length === 0) return AppColors.Orange; // Fair default
+
+    const total = allScores.reduce((a, b) => a + b, 0);
+    const avg = total / allScores.length;
+
+    if (avg >= 2.5) return AppColors.Green; // Excellent
+    if (avg >= 1.5) return AppColors.Green; // Good (using same green for simplicity or could use a lighter one)
+    if (avg >= 0.5) return AppColors.Orange; // Fair
+    return AppColors.Red; // Poor
+  }
+
+  private getFirstBenchmarkResult(appEvent: AppEventInterface): BenchmarkResult | null {
+    const results = appEvent.benchmarkResults;
+    if (results) {
+      const keys = Object.keys(results);
+      if (keys.length > 0) {
+        return results[keys[0]];
+      }
+    }
+
+    const legacy = (appEvent as { benchmarkResult?: BenchmarkResult }).benchmarkResult;
+    return legacy ?? null;
+  }
+
   /** Whether the number of selected elements matches the total number of rows. */
   /**
    * Helper to handle cell clicks safely for strict templates
@@ -186,6 +267,24 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   async mergeSelection(event) {
+    if (this.selection.selected.length < 2) {
+      this.snackBar.open('Select at least two events to merge', undefined, { duration: 2000 });
+      return;
+    }
+    const dialogRef = this.dialog.open(MergeOptionsDialogComponent);
+    const mergeSelection = await firstValueFrom(
+      race(
+        dialogRef.componentInstance.mergeRequested.pipe(map((option) => option)),
+        dialogRef.afterClosed().pipe(map(() => null))
+      )
+    ).catch(() => null);
+    if (!mergeSelection) {
+      return;
+    }
+    dialogRef.disableClose = true;
+    dialogRef.componentInstance.isMerging = true;
+    const mergeAsBenchmark = mergeSelection === 'benchmark';
+
     // Show loading
     this.loading();
     // Remove all subscriptions
@@ -212,11 +311,16 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     // 1. Fetch Events
     let events: any[];
     try {
-      events = await Promise.all(promises);
+      events = (await Promise.all(promises)).filter(Boolean);
     } catch (e: any) {
       this.logger.error('Merge failed during event fetch', e);
       this.loaded();
       this.snackBar.open(e.message || 'Error loading events for merge', 'Close', { duration: 5000, panelClass: ['error-snackbar'] });
+      return;
+    }
+    if (events.length < 2) {
+      this.loaded();
+      this.snackBar.open('Not enough events to merge', undefined, { duration: 3000 });
       return;
     }
 
@@ -278,6 +382,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       events,
       () => doc(collection(this.firestore, 'users')).id
     ) as AppEventInterface;
+    mergedEvent.isMerge = mergeAsBenchmark;
 
     try {
       // Pass the collected files to the writer
@@ -288,6 +393,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
       this.analyticsService.logEvent('merge_events');
       await this.router.navigate(['/user', this.user.uid, 'event', mergedEvent.getID()], {});
+      dialogRef.close(true);
       this.snackBar.open('Events merged', undefined, {
         duration: 2000,
       });
@@ -302,6 +408,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       this.snackBar.open('Could not merge events', undefined, {
         duration: 5000,
       });
+      dialogRef.disableClose = false;
+      dialogRef.componentInstance.isMerging = false;
     }
   }
 
@@ -336,6 +444,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   public downloadAsCSV(event) {
+    if (this.selection.selected.length > 20) {
+      this.snackBar.open('Cannot download more than 20 events at once', 'Close', { duration: 3000 });
+      return;
+    }
     this.dialog.open(EventsExportFormComponent, {
       // width: '100vw',
       disableClose: false,
@@ -347,6 +459,12 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   public async downloadOriginals() {
+
+    if (this.selection.selected.length > 20) {
+      this.snackBar.open('Cannot download more than 20 events at once', 'Close', { duration: 3000 });
+      return;
+    }
+
     // Start background job instead of blocking UI
     const jobId = this.processingService.addJob('download', 'Preparing download...');
 
@@ -596,6 +714,8 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
         AppEventUtilities.shouldExcludeDescent(type as ActivityTypes) ||
         ((this.user.settings.summariesSettings as any)?.removeDescentForEventTypes || []).includes(type as any)
       );
+
+      statRowElement['Has Benchmark'] = (event as any).benchmarkResult || ((event as any).benchmarkResults && Object.keys((event as any).benchmarkResults).length > 0);
 
       // Add the sorts
       statRowElement['sort.Start Date'] = event.startDate.getTime();

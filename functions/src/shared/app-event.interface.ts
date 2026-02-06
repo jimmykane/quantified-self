@@ -28,6 +28,84 @@ export interface AppEventInterface extends EventInterface {
     originalFile?: OriginalFileMetaData;
     /** Canonical source for original file metadata. Always an array. */
     originalFiles?: OriginalFileMetaData[];
+    /** @deprecated Use benchmarkResults instead. Kept for migration. */
+    benchmarkResult?: BenchmarkResult;
+    /** Map of benchmark results keyed by "referenceId_testId" */
+    benchmarkResults?: { [pairKey: string]: BenchmarkResult };
+    /** Flag to identify benchmark events */
+    isBenchmark?: boolean;
+    /** Denormalized benchmark flag for querying */
+    hasBenchmark?: boolean;
+    /** Denormalized benchmark device names (normalized) for querying */
+    benchmarkDevices?: string[];
+    /** Latest benchmark timestamp for querying/sorting */
+    benchmarkLatestAt?: Date;
+}
+
+/**
+ * Generate a benchmark pair key from reference and test activity IDs.
+ * Order matters: Garmin(ref) vs Suunto(test) ≠ Suunto(ref) vs Garmin(test)
+ */
+export function getBenchmarkPairKey(referenceId: string, testId: string): string {
+    return `${referenceId}_${testId}`;
+}
+
+export interface BenchmarkStreamMetrics {
+    sourceA_mean: number;
+    sourceB_mean: number;
+    pearsonCorrelation: number;
+    meanAbsoluteError: number;
+    rootMeanSquareError: number;
+}
+
+export interface BenchmarkResult {
+    referenceId: string;
+    testId: string;
+    /** Device/watch name for the reference activity */
+    referenceName?: string;
+    /** Device/watch name for the test activity */
+    testName?: string;
+    sourceEventId?: string; // ID of the event containing the source activities
+    timestamp: Date;
+    metrics: {
+        gnss: {
+            cep50: number; // Circular Error Probable 50%
+            cep95: number; // Circular Error Probable 95%
+            maxDeviation: number;
+            rmse: number;
+            totalDistanceDifference: number;
+        };
+        streamMetrics: {
+            [streamType: string]: BenchmarkStreamMetrics;
+        };
+    };
+    /** Detected time lag applied to the Test activity (in seconds) */
+    timeOffsetSeconds?: number;
+    /** Whether auto-alignment was enabled/used */
+    alignmentApplied?: boolean;
+    /** Detected data quality issues */
+    qualityIssues?: BenchmarkQualityIssue[];
+    // diffStreams removed for Firestore optimization.
+    // Charts will rely on on-the-fly calculation if needed, or simply summary stats.
+}
+
+export interface BenchmarkQualityIssue {
+    type: 'dropout' | 'stuck' | 'cadence_lock';
+    streamType: string;
+    description: string;
+    severity: 'warning' | 'severe';
+    timestamp?: Date;
+    /** Duration of the issue in seconds */
+    duration?: number;
+    /** Which activity/device produced the issue */
+    source?: 'reference' | 'test';
+    /** Device/watch name for this issue */
+    deviceName?: string;
+}
+
+export interface BenchmarkOptions {
+    autoAlignTime: boolean;
+    // Future options can go here (e.g. maxOffset)
 }
 
 /**
@@ -56,5 +134,10 @@ export interface FirestoreEventJSON {
     originalFile?: OriginalFileMetaData;
     /** Canonical source for original file metadata */
     originalFiles?: OriginalFileMetaData[];
+    /** Denormalized benchmark flag for querying */
+    hasBenchmark?: boolean;
+    /** Denormalized benchmark device names (normalized) for querying */
+    benchmarkDevices?: string[];
+    /** Latest benchmark timestamp for querying/sorting */
+    benchmarkLatestAt?: Date;
 }
-

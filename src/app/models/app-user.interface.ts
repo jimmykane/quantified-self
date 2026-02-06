@@ -1,9 +1,13 @@
-import { User, UserMyTracksSettingsInterface, UserSettingsInterface, ActivityTypes, UserAppSettingsInterface } from '@sports-alliance/sports-lib';
+import { User, UserMyTracksSettingsInterface, UserSettingsInterface, ActivityTypes, UserAppSettingsInterface, UserDashboardSettingsInterface } from '@sports-alliance/sports-lib';
 
 export interface AppMyTracksSettings extends UserMyTracksSettingsInterface {
     is3D?: boolean;
     activityTypes?: ActivityTypes[];
     mapStyle?: 'default' | 'satellite' | 'outdoors';
+}
+
+export interface AppDashboardSettingsInterface extends UserDashboardSettingsInterface {
+    includeMergedEvents?: boolean;
 }
 
 export interface AppAppSettingsInterface extends UserAppSettingsInterface {
@@ -12,6 +16,7 @@ export interface AppAppSettingsInterface extends UserAppSettingsInterface {
 
 export interface AppUserSettingsInterface extends UserSettingsInterface {
     myTracksSettings?: AppMyTracksSettings;
+    dashboardSettings?: AppDashboardSettingsInterface;
     appSettings?: AppAppSettingsInterface;
 }
 
