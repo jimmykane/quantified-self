@@ -13,6 +13,8 @@ import { GarminAPIEventMetaData } from '@sports-alliance/sports-lib';
 import * as base58 from 'bs58';
 import { EventWriter, FirestoreAdapter, StorageAdapter, LogAdapter, OriginalFile } from './shared/event-writer';
 import { generateIDFromParts as sharedGenerateIDFromParts, generateEventID as sharedGenerateEventID } from './shared/id-generator';
+import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
+import { ProcessingMetaData } from './shared/processing-metadata.interface';
 
 
 export function generateIDFromPartsOld(parts: string[]): string {
@@ -214,6 +216,25 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
   const writer = new EventWriter(adapter, storageAdapter, undefined, logAdapter);
   await writer.writeAllEventData(userID, event, originalFile);
 
+  const processingMetaData: ProcessingMetaData = {
+    sportsLibVersion: SPORTS_LIB_VERSION,
+    processedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+
+  const processingMetaRef = admin.firestore()
+    .collection('users')
+    .doc(userID)
+    .collection('events')
+    .doc(<string>event.getID())
+    .collection('metaData')
+    .doc('processing');
+
+  if (bulkWriter) {
+    void bulkWriter.set(processingMetaRef, processingMetaData);
+  } else {
+    await processingMetaRef.set(processingMetaData);
+  }
+
   // Write Metadata (not handled by EventWriter)
   const metaRef = admin.firestore()
     .collection('users')
@@ -379,4 +400,3 @@ export {
   enqueueWorkoutTask,
   resetCloudTaskQueueDepthCache,
 } from './shared/cloud-tasks';
-

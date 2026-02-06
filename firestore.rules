@@ -76,6 +76,10 @@ service cloud.firestore {
             // Restoring metaData inside events
             match /metaData/{document=**} {
               allow read: if request.auth.uid == userID;
+              allow write: if request.auth.uid == userID
+                && document == 'processing'
+                && request.resource.data.keys().hasOnly(['sportsLibVersion', 'processedAt', 'functionsVersion'])
+                && request.resource.data.sportsLibVersion is string;
             }
 
           }
