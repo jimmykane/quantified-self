@@ -16,8 +16,63 @@
     padding: 0 1rem 1.5rem 1rem;
 }
 
+.benchmark-share-frame {
+    position: relative;
+}
+
+.benchmark-share-export {
+    background: var(--mat-sys-surface);
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.benchmark-watermark {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 3px;
+    font-size: 0.65rem;
+    color: var(--mat-sys-on-surface-variant);
+    opacity: 0.8;
+    pointer-events: none;
+}
+
+.benchmark-watermark .watermark-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.benchmark-watermark .watermark-logo {
+    width: 16px;
+    height: 16px;
+}
+
+.benchmark-watermark .watermark-brand {
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.benchmark-watermark .watermark-url {
+    font-size: 0.6rem;
+    letter-spacing: 0.04em;
+}
+
 @media (max-width: 600px) {
     .bottom-sheet-content {
         padding: 0 0.75rem 1rem 0.75rem;
+    }
+
+    .benchmark-share-export {
+        padding: 12px;
+    }
+
+    .benchmark-watermark {
+        right: 12px;
+        bottom: 12px;
     }
 }

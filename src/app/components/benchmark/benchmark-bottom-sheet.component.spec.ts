@@ -4,6 +4,7 @@ import { BenchmarkBottomSheetComponent } from './benchmark-bottom-sheet.componen
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
 import { Component, Input } from '@angular/core';
@@ -58,6 +59,7 @@ describe('BenchmarkBottomSheetComponent', () => {
             imports: [
                 MatIconModule,
                 MatButtonModule,
+                MatProgressSpinnerModule,
                 NoopAnimationsModule,
             ],
             providers: [

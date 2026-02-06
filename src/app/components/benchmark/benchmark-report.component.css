@@ -376,6 +376,24 @@ li {
   }
 }
 
+.benchmark-container.benchmark-export {
+  padding: 1.5rem;
+}
+
+.benchmark-container.benchmark-export .stats-grid {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+.benchmark-container.benchmark-export .report-header {
+  flex-direction: row;
+  gap: 1rem;
+}
+
+.benchmark-container.benchmark-export .stat-item .value {
+  font-size: 1.25rem;
+}
+
 .quality-item {
   display: flex;
   align-items: center;
