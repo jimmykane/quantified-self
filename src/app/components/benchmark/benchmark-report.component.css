@@ -134,6 +134,66 @@ li {
   margin-bottom: 1.5rem;
 }
 
+.diff-chips-section {
+  margin-bottom: 1.25rem;
+}
+
+.diff-chips-title {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mat-sys-on-surface-variant);
+  opacity: 0.8;
+  margin-bottom: 0.5rem;
+}
+
+.diff-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.diff-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  background: var(--mat-sys-surface-variant);
+  border: 1px solid var(--mat-sys-outline-variant);
+  font-size: 0.75rem;
+  line-height: 1.1;
+  color: var(--mat-sys-on-surface);
+  white-space: nowrap;
+}
+
+.diff-chip .chip-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mat-sys-on-surface-variant);
+  opacity: 0.8;
+}
+
+.diff-chip .chip-value,
+.diff-chip .chip-percent {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+}
+
+.diff-chip .chip-nodiff {
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mat-sys-tertiary);
+}
+
+.diff-chip.no-diff {
+  border-style: dashed;
+  border-color: var(--mat-sys-tertiary);
+  background: var(--mat-sys-tertiary-container);
+}
+
 .device-pill {
   display: flex;
   align-items: center;
@@ -380,6 +440,31 @@ li {
 }
 
 .issue-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
   font-size: 0.75rem;
   opacity: 0.7;
+}
+
+.issue-device-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  line-height: 1;
+  background: transparent;
+  border: 1px solid var(--pill-color, var(--mat-sys-primary));
+  color: var(--pill-color, var(--mat-sys-primary));
+  opacity: 1;
+}
+
+.issue-device-pill mat-icon {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
 }

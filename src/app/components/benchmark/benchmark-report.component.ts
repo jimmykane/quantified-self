@@ -1,5 +1,9 @@
-import { Component, Input } from '@angular/core';
-import { BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
+import { Component, Input, OnChanges, SimpleChanges, inject } from '@angular/core';
+import { ActivityInterface, ActivityTypes, ActivityUtilities, EventInterface, UserSummariesSettingsInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { AppEventColorService } from '../../services/color/app.event.color.service';
+import { buildDiffMapForStats, buildStatDisplayList } from '../../helpers/stats-diff.helper';
+import { getDefaultSummaryStatTypes } from '../../helpers/summary-stats.helper';
+import { BenchmarkQualityIssue, BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
 
 // Grade thresholds for GNSS accuracy (CEP50 in meters)
 const GNSS_THRESHOLDS = {
@@ -16,6 +20,14 @@ const CORRELATION_THRESHOLDS = {
 };
 
 type Grade = 'excellent' | 'good' | 'fair' | 'poor';
+
+interface BenchmarkDiffChip {
+    label: string;
+    hasDiff: boolean;
+    display?: string;
+    percent?: number;
+    color?: string;
+}
 
 @Component({
     selector: 'app-benchmark-report',
@@ -59,6 +71,23 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
         <div class="align-chip" *ngIf="result.timeOffsetSeconds !== undefined" [matTooltip]="'Time alignment offset: ' + result.timeOffsetSeconds + 's'">
             <mat-icon>history</mat-icon>
             <span>Offset {{ result.timeOffsetSeconds }}s</span>
+        </div>
+      </div>
+
+      <!-- Diff Chips -->
+      <div class="diff-chips-section" *ngIf="diffChips.length > 0">
+        <div class="diff-chips-title">Stat Differences</div>
+        <div class="diff-chips">
+          <div class="diff-chip" *ngFor="let chip of diffChips" [class.no-diff]="!chip.hasDiff">
+            <span class="chip-label">{{ chip.label }}</span>
+            <ng-container *ngIf="chip.hasDiff; else noDiff">
+              <span class="chip-value">Δ {{ chip.display }}</span>
+              <span class="chip-percent" [style.color]="chip.color">{{ chip.percent | number:'1.1-1' }}%</span>
+            </ng-container>
+            <ng-template #noDiff>
+              <span class="chip-nodiff">No diff</span>
+            </ng-template>
+          </div>
         </div>
       </div>
 
@@ -110,8 +139,18 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
                 <div class="quality-issue" *ngFor="let issue of result.qualityIssues" [ngClass]="issue.severity">
                     <mat-icon>{{ getIssueIcon(issue.type) }}</mat-icon>
                     <div class="issue-details">
-                        <span class="issue-desc">{{ issue.description }}</span>
-                        <span class="issue-meta">{{ issue.streamType }} • {{ toSafeDate(issue.timestamp) | date:'mediumTime' }}</span>
+                        <span class="issue-desc">{{ formatIssueDescription(issue) }}</span>
+                        <div class="issue-meta">
+                          <span class="issue-device-pill"
+                            *ngIf="(issue.type === 'stuck' && getIssueDeviceLabel(issue)) as deviceLabel"
+                            [style.--pill-color]="getIssueDeviceColor(issue)">
+                            <mat-icon>watch</mat-icon>
+                            {{ deviceLabel }}
+                          </span>
+                          <span *ngIf="issue.type !== 'stuck'">{{ issue.streamType }}</span>
+                          <span>•</span>
+                          <span>{{ toSafeDate(issue.timestamp) | date:'mediumTime' }}</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -152,11 +191,23 @@ type Grade = 'excellent' | 'good' | 'fair' | 'poor';
     styleUrls: ['./benchmark-report.component.css'],
     standalone: false
 })
-export class BenchmarkReportComponent {
+export class BenchmarkReportComponent implements OnChanges {
     @Input() result: BenchmarkResult | null = null;
     @Input() referenceColor: string = '';
     @Input() testColor: string = '';
+    @Input() event?: EventInterface;
+    @Input() unitSettings?: UserUnitSettingsInterface;
+    @Input() summariesSettings?: UserSummariesSettingsInterface;
     objectKeys = Object.keys;
+    diffChips: BenchmarkDiffChip[] = [];
+
+    private eventColorService = inject(AppEventColorService);
+
+    ngOnChanges(changes: SimpleChanges) {
+        if (changes['result'] || changes['event'] || changes['unitSettings'] || changes['summariesSettings']) {
+            this.updateDiffChips();
+        }
+    }
 
     getGnssGrade(): Grade {
         if (!this.result) return 'poor';
@@ -266,6 +317,42 @@ export class BenchmarkReportComponent {
         }
     }
 
+    getIssueDeviceLabel(issue: BenchmarkQualityIssue): string | null {
+        if (!issue) return null;
+        if (issue.deviceName) return issue.deviceName;
+        if (issue.source === 'reference') return this.result?.referenceName || null;
+        if (issue.source === 'test') return this.result?.testName || null;
+        return null;
+    }
+
+    getIssueDeviceColor(issue: BenchmarkQualityIssue): string {
+        if (issue?.source === 'reference') {
+            return this.referenceColor || 'var(--mat-sys-primary)';
+        }
+        if (issue?.source === 'test') {
+            return this.testColor || 'var(--mat-sys-tertiary)';
+        }
+        if (issue?.deviceName && this.result) {
+            if (issue.deviceName === this.result.referenceName) {
+                return this.referenceColor || 'var(--mat-sys-primary)';
+            }
+            if (issue.deviceName === this.result.testName) {
+                return this.testColor || 'var(--mat-sys-tertiary)';
+            }
+        }
+        return 'var(--mat-sys-primary)';
+    }
+
+    formatIssueDescription(issue: BenchmarkQualityIssue): string {
+        if (!issue) return '';
+        const streamLabel = issue.streamType ? `${issue.streamType} ` : '';
+        if (issue.type === 'stuck') {
+            const description = issue.description ? issue.description.replace(/^Sensor\s+/i, '') : '';
+            return `${streamLabel}sensor ${description}`.replace(/\s+/g, ' ').trim();
+        }
+        return issue.description || '';
+    }
+
     /** Safely convert Firestore Timestamp or any date-like value to Date */
     toSafeDate(val: any): Date | null {
         if (!val) return null;
@@ -281,5 +368,49 @@ export class BenchmarkReportComponent {
         if (absScore >= CORRELATION_THRESHOLDS.good) return 'Strong Correlation';
         if (absScore >= CORRELATION_THRESHOLDS.fair) return 'Moderate Correlation';
         return 'Weak Correlation';
+    }
+
+    private updateDiffChips() {
+        if (!this.result || !this.event) {
+            this.diffChips = [];
+            return;
+        }
+        const unitSettings = this.unitSettings;
+        if (!unitSettings) {
+            this.diffChips = [];
+            return;
+        }
+
+        const activities = this.event.getActivities?.() || [];
+        const reference = activities.find(activity => activity.getID?.() === this.result?.referenceId);
+        const test = activities.find(activity => activity.getID?.() === this.result?.testId);
+        if (!reference || !test) {
+            this.diffChips = [];
+            return;
+        }
+
+        const compareActivities: ActivityInterface[] = [reference, test];
+        const stats = ActivityUtilities.getSummaryStatsForActivities(compareActivities);
+        const activityTypes = compareActivities.map(activity => activity.type).filter(type => !!type) as ActivityTypes[];
+        const displayedStatsToShow = getDefaultSummaryStatTypes(activityTypes, this.summariesSettings);
+        const displayList = buildStatDisplayList(stats, displayedStatsToShow, unitSettings);
+        const diffMap = buildDiffMapForStats(stats, displayedStatsToShow, compareActivities, unitSettings);
+
+        this.diffChips = displayList.map((stat) => {
+            const diff = diffMap.get(stat.type);
+            if (!diff) {
+                return {
+                    label: stat.label,
+                    hasDiff: false
+                };
+            }
+            return {
+                label: stat.label,
+                hasDiff: true,
+                display: diff.display,
+                percent: diff.percent,
+                color: this.eventColorService.getDifferenceColor(diff.percent)
+            };
+        });
     }
 }

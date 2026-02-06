@@ -1,0 +1,217 @@
+- chore: add typography
+- chore: improvements
+- chore: styles for non merged
+- chore: reconcile claims as well
+- chore: improve details
+- chore: UI
+- feature: intermediate for merge
+- chore: improvements on filtering
+- chore: new toggle
+- chore: bump sl
+- chore: improve benchmarks
+- chore: bump version
+- chore: reconcile also
+- chore: improvements
+- chore: refactor
+- chore: improve ui for table
+- fix: tests
+- chore: refactor bottom sheets
+- chore: improve benchmark
+- chore: extract styles
+- chore: let em grow
+- chore: styles
+- chore: ui for bottom sheets
+- chore: add agents
+- chore: change font
+- chore: fixes
+- chore: ui
+- chore: chart improvements
+- chore: map styles
+- chore: rules
+- styles: switch to barlow a little
+- chore: bump sl
+- chore: overlay
+- chore: rule
+- chore: benchmark refinements
+- fix: toggles fonts
+- chore: add loading state
+- fix: for autofocus
+- chore: more benchmark improvements
+- chore: queue tests
+- fix: add try catch for uploads of debug
+- chore: bump sl
+- chore: disable downloads for more than 20 files
+- chore: ui fixes
+- style: mobile
+- chore: more of benchmark + plan
+- chore: bump sl
+- feature: benchmark
+- chore: fix charts double loading
+- chore: fix tests
+- chore: test
+- chore: fix upload now showing up instantly
+- chore: update rules
+- chore: improve font loading
+- chore: improved font loading and fixes
+- fix: url
+- chore: use google
+- chore: export to constant and dec frequency
+- chore: logs for future usage
+- chore: fix for garmin gone
+- chore: use logger service
+- chore: styles
+- chore: tests
+- feature: home ui
+- chore: add resolve for whats new
+- fix: tests
+- chore: improve token handling
+- chore: styles
+- chore: tests fixes
+- chore: fixes
+- chore: tests
+- refactor: extract to utils
+- fix: for instant roles
+- chore: prevent double fetch
+- chore: add lock icon
+- chore: renames
+- refactor: backend
+- refactor: frontend
+- fix: grace period not updated
+- fix: exclude ascent and descent from grid
+- chore: add tests
+- chore: remove time bucketing for frontend
+- chore: grid now shows ascent and descent conditionally
+- chore: history estimates
+- chore: devices bottom sheet
+- chore: decrease
+- fix: test
+- fix: area hidden
+- chore: exclude descent
+- chore: exclude ascent
+- chore: bump sl
+- chore: improve history form estimates
+- fix: label
+- style: admin changelog ui
+- chore: bump sl
+- chore: disable clicks for google maps
+- chore: reattach ids
+- chore: improve intesity zones and hide z6 z7 if no data etc
+- refactor: whats new
+- chore: rules test
+- fix: tests
+- chore: improvements on UI and services
+- chore: updates
+- feature: add whats new
+- chore: update update
+- chore: email templts
+- chore: bump sl
+- chore: logs
+- chore: change icon
+- chore: fix tests and use signals for tracks
+- chore: icon improvements
+- chore: mapbox and tracks
+- fix: syles for dark
+- chore: use the new icons
+- fix: polylines
+- fix: seo
+- chore: bump sl
+- chore: do no force night on sat
+- refactor: mapbox stuff and my tracks stuff
+- chore: better lazy loading
+- chore: angular shit
+- chore: deprecation fix
+- refactor: my tracks
+- chore: track improvements
+- chore: use track-manager
+- chore: more zones preperation
+- chore: improve activity refresh
+- fix: tests
+- chore: add timing
+- chore: better debug
+- chore: more throttle
+- fix: map pointer
+- chore: fixes
+- chore: fixes
+- fix: more chart stuff
+- chore: fixes
+- chore: restore marker
+- chore: remove anotation
+- chore: remove export menu
+- chore: disable interactions
+- refactor: improve tile actions
+- chore: increase padding
+- fix: 3d initi
+- chore: remove snacky
+- fix: my tracks double loads
+- chore: hide button from admin
+- chore: home
+- fix: home title
+- chore: add all option
+- chore: reduce glow
+- feature: glow for my tracks
+- chore: remove jetbrains
+- chore: home component fixes
+- chore: lints and tests fixes
+- refactor: user token ensureFreshToken to new method
+- chore: rules
+- chore: bump version
+- chore: fix for map component
+- chore: bump sl
+- chore: improve my tracks
+- feature: get files that cannot be uploaded
+- chore: user settings fixes
+- fix: import activities
+- chore: styles
+- fix: activity upload ?
+- fix: label style
+- refactor: use app user setting service for seperation of settings
+- fix: for arrows
+- chore: have no clue for intensity zones
+- chore: do not aggressively apply the theme
+- fix: tests
+- chore: no need for timeout
+- chore: fix for intensity zones
+- chore: timeout 0
+- chore: improve map theme change
+- chore: remove dead zones
+- chore: fix not disposed charts
+- feature: cache fit files
+- refactor: use devices service
+- chore: styles
+- chore: map styles
+- chore: styles for google maps
+- chore: styles
+- chore: add test
+- refactor: rename to logged in guard
+- chore: remove guest
+- feature: implement mapbox for 3d
+- chore: improve devices
+- chore: use fetch streams
+- chore: better storage
+- chore: enable persistance
+- chore: remove show points
+- chore: remove anonymous
+- chore: styles
+- chore: remove debug
+- chore: sidenav improvements
+- chore: remove debugs
+- chore: fix item highlight
+- chore: bump sl
+- chore: disable services if not logged in
+- chore: more home page info
+- chore: improve home
+- feature: jumps
+- chore: improve home
+- chore: improve devices
+- fix: issue with xAxis
+- chore: fix logo
+- feature: clusters based on prevailing activity colors
+- chore: bump sl
+- chore: add last import ranges for history imports
+- chore: lower firebase
+- fix: race condition
+- chore: analytics settings
+- chore: auth service fixes
+- chore: app component fixes
+- chore: fix injection context
+- chore: bump sl

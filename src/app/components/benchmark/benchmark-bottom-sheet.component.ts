@@ -2,8 +2,7 @@ import { Component, Inject } from '@angular/core';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
-import { AppEventService } from '../../services/app.event.service';
-import { EventInterface } from '@sports-alliance/sports-lib';
+import { EventInterface, UserSummariesSettingsInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 
 @Component({
   selector: 'app-benchmark-bottom-sheet',
@@ -20,6 +19,9 @@ import { EventInterface } from '@sports-alliance/sports-lib';
         <div class="bottom-sheet-content qs-scrollbar">
             <app-benchmark-report 
                 [result]="data.result"
+                [event]="data.event"
+                [unitSettings]="data.unitSettings"
+                [summariesSettings]="data.summariesSettings"
                 [referenceColor]="referenceColor"
                 [testColor]="testColor">
             </app-benchmark-report>
@@ -34,7 +36,12 @@ export class BenchmarkBottomSheetComponent {
   testColor = '';
 
   constructor(
-    @Inject(MAT_BOTTOM_SHEET_DATA) public data: { result: BenchmarkResult, event: EventInterface },
+    @Inject(MAT_BOTTOM_SHEET_DATA) public data: {
+      result: BenchmarkResult;
+      event?: EventInterface;
+      unitSettings?: UserUnitSettingsInterface;
+      summariesSettings?: UserSummariesSettingsInterface;
+    },
     private bottomSheetRef: MatBottomSheetRef<BenchmarkBottomSheetComponent>,
     private eventColorService: AppEventColorService
   ) {

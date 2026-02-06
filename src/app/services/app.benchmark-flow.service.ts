@@ -10,6 +10,7 @@ import { LoggerService } from './logger.service';
 import { BenchmarkBottomSheetComponent } from '../components/benchmark/benchmark-bottom-sheet.component';
 import { BenchmarkSelectionDialogComponent } from '../components/benchmark/benchmark-selection-dialog.component';
 import { firstValueFrom } from 'rxjs';
+import { AppUserUtilities } from '../utils/app.user.utilities';
 
 interface BenchmarkFlowConfig {
   event: AppEventInterface;
@@ -39,7 +40,9 @@ export class AppBenchmarkFlowService {
     const sheetRef = this.bottomSheet.open(BenchmarkBottomSheetComponent, {
       data: {
         result: config.result,
-        event: config.event
+        event: config.event,
+        unitSettings: config.user?.settings?.unitSettings ?? AppUserUtilities.getDefaultUserUnitSettings(),
+        summariesSettings: config.user?.settings?.summariesSettings
       },
       autoFocus: 'dialog'
     });

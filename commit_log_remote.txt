@@ -1,0 +1,49 @@
+- chore: add typography
+- chore: improvements
+- chore: styles for non merged
+- chore: reconcile claims as well
+- chore: improve details
+- chore: UI
+- feature: intermediate for merge
+- chore: improvements on filtering
+- chore: new toggle
+- chore: bump sl
+- chore: improve benchmarks
+- chore: bump version
+- chore: reconcile also
+- chore: improvements
+- chore: refactor
+- chore: improve ui for table
+- fix: tests
+- chore: refactor bottom sheets
+- chore: improve benchmark
+- chore: extract styles
+- chore: let em grow
+- chore: styles
+- chore: ui for bottom sheets
+- chore: add agents
+- chore: change font
+- chore: fixes
+- chore: ui
+- chore: chart improvements
+- chore: map styles
+- chore: rules
+- styles: switch to barlow a little
+- chore: bump sl
+- chore: overlay
+- chore: rule
+- chore: benchmark refinements
+- fix: toggles fonts
+- chore: add loading state
+- fix: for autofocus
+- chore: more benchmark improvements
+- chore: queue tests
+- fix: add try catch for uploads of debug
+- chore: bump sl
+- chore: disable downloads for more than 20 files
+- chore: ui fixes
+- style: mobile
+- chore: more of benchmark + plan
+- chore: bump sl
+- feature: benchmark
+- chore: fix charts double loading

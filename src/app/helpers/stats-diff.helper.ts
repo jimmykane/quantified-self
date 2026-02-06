@@ -1,8 +1,13 @@
-import { ActivityInterface, DynamicDataLoader, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { ActivityInterface, DataInterface, DynamicDataLoader, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 
 export interface StatDiffResult {
   display: string;
   percent: number;
+}
+
+export interface StatDisplayDescriptor {
+  type: string;
+  label: string;
 }
 
 const getStatValueForDisplayType = (
@@ -59,4 +64,74 @@ export const computeStatDiff = (
   const display = `${diffStat.getDisplayValue()} ${diffStat.getDisplayUnit()}`.trim();
 
   return { display, percent };
+};
+
+export const buildStatDisplayList = (
+  stats: DataInterface[],
+  displayedStatsToShow: string[],
+  unitSettings: UserUnitSettingsInterface
+): StatDisplayDescriptor[] => {
+  if (!stats?.length || !unitSettings) {
+    return [];
+  }
+
+  const statsMap = new Map<string, DataInterface>();
+  stats.forEach(stat => statsMap.set(stat.getType(), stat));
+
+  const seen = new Set<string>();
+  const displayList: StatDisplayDescriptor[] = [];
+
+  displayedStatsToShow.forEach((statType) => {
+    const stat = statsMap.get(statType);
+    if (!stat) {
+      return;
+    }
+    const unitStats = DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, unitSettings);
+    unitStats.forEach((unitStat) => {
+      const displayType = unitStat.getType();
+      if (seen.has(displayType)) {
+        return;
+      }
+      seen.add(displayType);
+      displayList.push({ type: displayType, label: unitStat.getDisplayType() });
+    });
+  });
+
+  return displayList;
+};
+
+export const buildDiffMapForStats = (
+  stats: DataInterface[],
+  displayedStatsToShow: string[],
+  activities: ActivityInterface[],
+  unitSettings: UserUnitSettingsInterface
+): Map<string, StatDiffResult> => {
+  if (!stats?.length || !unitSettings || !activities?.length || activities.length < 2) {
+    return new Map();
+  }
+
+  const activityA = activities[0];
+  const activityB = activities[1];
+  const diffMap = new Map<string, StatDiffResult>();
+
+  const statsMap = new Map<string, DataInterface>();
+  stats.forEach(stat => statsMap.set(stat.getType(), stat));
+
+  displayedStatsToShow.forEach((statType) => {
+    const stat = statsMap.get(statType);
+    if (!stat) {
+      return;
+    }
+    const unitStats = DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, unitSettings);
+    unitStats.forEach((unitStat) => {
+      const displayType = unitStat.getType();
+      const diff = computeStatDiff(activityA, activityB, stat.getType(), displayType, unitSettings);
+      if (!diff) {
+        return;
+      }
+      diffMap.set(displayType, diff);
+    });
+  });
+
+  return diffMap;
 };

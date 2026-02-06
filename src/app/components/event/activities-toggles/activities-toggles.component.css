@@ -16,9 +16,10 @@
   --mat-mdc-chip-disabled-state-layer-color: transparent;
   --mat-mdc-chip-state-layer-opacity: 0;
   --mat-mdc-chip-selected-state-layer-opacity: 0;
-  --mdc-chip-label-text-color: var(--mat-app-on-surface);
+  --mdc-chip-label-text-color: currentColor;
   --mdc-chip-with-icon-icon-size: 0;
   --mdc-chip-graphic-selected-width: 0;
+  color: var(--mat-app-on-surface);
   border-radius: 10px !important;
   height: auto !important;
   padding: 4px 12px !important;
@@ -28,7 +29,6 @@
 
 .activity-chip.mat-mdc-chip-selected {
   --mdc-chip-elevated-container-color: transparent;
-  --mdc-chip-label-text-color: var(--mat-app-on-surface);
   border: 2px solid var(--chip-accent-color, var(--mat-app-primary)) !important;
 }
 
@@ -86,6 +86,7 @@
   font-weight: 400;
   font-size: 0.95rem;
   line-height: 1.2;
+  color: var(--mat-app-on-surface);
 }
 
 .chip-stats {

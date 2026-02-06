@@ -97,6 +97,10 @@ export interface BenchmarkQualityIssue {
     timestamp?: Date;
     /** Duration of the issue in seconds */
     duration?: number;
+    /** Which activity/device produced the issue */
+    source?: 'reference' | 'test';
+    /** Device/watch name for this issue */
+    deviceName?: string;
 }
 
 export interface BenchmarkOptions {

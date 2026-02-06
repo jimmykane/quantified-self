@@ -720,6 +720,22 @@ mat-table {
   }
 }
 
+@media (max-width: 600px) {
+  .qs-dialog-container {
+    .mat-mdc-dialog-title {
+      padding: 20px 16px 6px !important;
+    }
+
+    .mat-mdc-dialog-content {
+      padding: 8px 16px !important;
+    }
+
+    .mat-mdc-dialog-actions {
+      padding: 12px 16px 16px !important;
+    }
+  }
+}
+
 /* Dark Theme Dialog Overrides */
 .dark-theme .qs-dialog-container {
 

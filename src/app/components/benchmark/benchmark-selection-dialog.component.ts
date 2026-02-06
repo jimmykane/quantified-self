@@ -2,6 +2,7 @@ import { Component, Inject } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { MatSelectionListChange } from '@angular/material/list';
+import { AppEventColorService } from '../../services/color/app.event.color.service';
 
 export interface BenchmarkSelectionData {
   activities: ActivityInterface[];
@@ -16,13 +17,20 @@ export interface BenchmarkSelectionData {
     <mat-dialog-content>
       <p class="dialog-subtitle">Choose two activities to generate a hardware benchmark.</p>
 
-      <app-loading-overlay [isLoading]="isLoading" height="auto" minHeight="128px" borderRadius="12px" [showShade]="false">
+      <app-loading-overlay class="benchmark-selection-overlay" [isLoading]="isLoading" height="auto"
+        minHeight="var(--benchmark-overlay-min-height)" borderRadius="12px" [showShade]="false">
         @if (activities.length > 0) {
         <mat-selection-list #list class="selection-list" (selectionChange)="onSelectionChange($event)">
           <mat-list-option *ngFor="let activity of activities" [value]="activity" [selected]="isSelected(activity)">
             <div class="activity-line">
-              <span class="activity-name">{{ activity.name || activity.creator?.name || 'Unknown Activity' }}</span>
-              <span class="activity-meta">{{ activity.startDate | date:'shortTime' }} • {{ activity.creator?.name || 'Unknown Device' }}</span>
+              <div class="activity-main">
+                <span class="activity-name">{{ activity.name || activity.type || 'Unknown Activity' }}</span>
+                <span class="activity-meta">{{ activity.startDate | date:'shortTime' }}</span>
+              </div>
+              <span class="device-pill" [style.--pill-color]="getActivityColor(activity)">
+                <mat-icon>watch</mat-icon>
+                <span class="device-pill-text">{{ activity.creator?.name || 'Unknown Device' }}</span>
+              </span>
             </div>
           </mat-list-option>
         </mat-selection-list>
@@ -41,18 +49,24 @@ export interface BenchmarkSelectionData {
         <p class="preview-title">Ready to Compare:</p>
         
         <div class="role-assignment">
-          <div class="role-card reference">
+          <div class="role-card reference" [style.--role-color]="getSelectedActivityColor(0)">
             <span class="role-label">Reference (Ground Truth)</span>
-            <span class="device-name">{{ selectedActivities[0].creator?.name || 'Device A' }}</span>
+            <span class="device-pill" [style.--pill-color]="getSelectedActivityColor(0)">
+              <mat-icon>watch</mat-icon>
+              <span class="device-pill-text">{{ selectedActivities[0].creator?.name || 'Device A' }}</span>
+            </span>
           </div>
           
           <button mat-icon-button class="swap-btn" (click)="swapActivities()" matTooltip="Swap Reference and Test">
             <mat-icon>swap_horiz</mat-icon>
           </button>
           
-          <div class="role-card test">
+          <div class="role-card test" [style.--role-color]="getSelectedActivityColor(1)">
             <span class="role-label">Test Device</span>
-            <span class="device-name">{{ selectedActivities[1].creator?.name || 'Device B' }}</span>
+            <span class="device-pill" [style.--pill-color]="getSelectedActivityColor(1)">
+              <mat-icon>watch</mat-icon>
+              <span class="device-pill-text">{{ selectedActivities[1].creator?.name || 'Device B' }}</span>
+            </span>
           </div>
         </div>
         
@@ -96,8 +110,28 @@ export interface BenchmarkSelectionData {
         color: var(--mat-sys-on-surface-variant);
         margin-bottom: 0.75rem;
     }
+    .benchmark-selection-overlay {
+        --benchmark-overlay-min-height: 160px;
+    }
+    ::ng-deep .benchmark-selection-overlay .loading-overlay-container {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
     .selection-list {
         margin-bottom: 0.5rem;
+        width: 100%;
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+    ::ng-deep .selection-list .mat-mdc-list-item,
+    ::ng-deep .selection-list .mdc-list-item {
+        height: auto !important;
+        min-height: 56px;
+    }
+    ::ng-deep .selection-list .mdc-list-item__content {
+        align-items: stretch;
+        white-space: normal;
     }
     .empty-state {
         padding: 1rem;
@@ -106,15 +140,55 @@ export interface BenchmarkSelectionData {
     }
     .activity-line {
         display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .activity-main {
+        display: flex;
         flex-direction: column;
         gap: 0.25rem;
+        min-width: 0;
     }
     .activity-name {
         font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .activity-meta {
         font-size: 0.85em;
         color: var(--mat-sys-on-surface-variant);
+    }
+    .device-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        line-height: 1;
+        background: transparent;
+        border: 1px solid var(--pill-color, var(--mat-sys-primary));
+        color: var(--pill-color, var(--mat-sys-primary));
+        white-space: nowrap;
+        flex-shrink: 1;
+        max-width: 100%;
+        min-width: 0;
+        overflow: hidden;
+    }
+    .device-pill-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .device-pill mat-icon {
+        font-size: 14px;
+        width: 14px;
+        height: 14px;
     }
     mat-list-option {
         margin-bottom: 0.5rem;
@@ -152,14 +226,15 @@ export interface BenchmarkSelectionData {
         border-radius: 8px;
         min-width: 140px;
         text-align: center;
+        background: var(--mat-sys-surface-variant);
+        border: 1px solid var(--role-color, var(--mat-sys-outline-variant));
+        box-sizing: border-box;
     }
     .role-card.reference {
-        background: var(--mat-sys-primary-container);
-        color: var(--mat-sys-on-primary-container);
+        color: var(--mat-sys-on-surface);
     }
     .role-card.test {
-        background: var(--mat-sys-tertiary-container);
-        color: var(--mat-sys-on-tertiary-container);
+        color: var(--mat-sys-on-surface);
     }
     .role-label {
         font-size: 0.7rem;
@@ -193,6 +268,23 @@ export interface BenchmarkSelectionData {
         line-height: 1.2;
     }
     @media (max-width: 600px) {
+        .benchmark-selection-overlay {
+            --benchmark-overlay-min-height: 240px;
+        }
+        .activity-line {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.35rem;
+        }
+        .activity-line .device-pill {
+            align-self: flex-start;
+            font-size: 0.6rem;
+            padding: 0.1rem 0.4rem;
+            max-width: 100%;
+        }
+        .role-card .device-pill {
+            align-self: center;
+        }
         .role-assignment {
             flex-direction: column;
             align-items: stretch;
@@ -204,6 +296,10 @@ export interface BenchmarkSelectionData {
         .role-card {
             width: 100%;
             min-width: 0;
+            padding: 0.6rem 0.75rem;
+        }
+        .role-label {
+            font-size: 0.6rem;
         }
         .auto-align-info ul {
             padding-left: 1.25rem;
@@ -231,7 +327,8 @@ export class BenchmarkSelectionDialogComponent {
 
   constructor(
     public dialogRef: MatDialogRef<BenchmarkSelectionDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: BenchmarkSelectionData
+    @Inject(MAT_DIALOG_DATA) public data: BenchmarkSelectionData,
+    private eventColorService: AppEventColorService
   ) {
     this.activities = data.activities ?? [];
     this.isLoading = !!data.isLoading;
@@ -271,5 +368,15 @@ export class BenchmarkSelectionDialogComponent {
         options: { autoAlignTime: this.autoAlignTime }
       });
     }
+  }
+
+  getActivityColor(activity: ActivityInterface): string {
+    return this.eventColorService.getActivityColor(this.activities, activity);
+  }
+
+  getSelectedActivityColor(index: number): string {
+    const activity = this.selectedActivities[index];
+    if (!activity) return '';
+    return this.getActivityColor(activity);
   }
 }

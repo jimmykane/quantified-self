@@ -7,6 +7,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
 import { Component, Input } from '@angular/core';
+import { EventInterface, UserSummariesSettingsInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { BottomSheetHeaderComponent } from '../shared/bottom-sheet-header/bottom-sheet-header.component';
 
 // Mock the BenchmarkReportComponent since we're testing the sheet, not the report
@@ -17,6 +18,9 @@ import { BottomSheetHeaderComponent } from '../shared/bottom-sheet-header/bottom
 })
 class MockBenchmarkReportComponent {
     @Input() result!: BenchmarkResult;
+    @Input() event?: EventInterface;
+    @Input() unitSettings?: UserUnitSettingsInterface;
+    @Input() summariesSettings?: UserSummariesSettingsInterface;
 }
 
 describe('BenchmarkBottomSheetComponent', () => {
@@ -58,7 +62,7 @@ describe('BenchmarkBottomSheetComponent', () => {
             ],
             providers: [
                 { provide: MatBottomSheetRef, useValue: mockBottomSheetRef },
-                { provide: MAT_BOTTOM_SHEET_DATA, useValue: { result: mockResult } },
+                { provide: MAT_BOTTOM_SHEET_DATA, useValue: { result: mockResult, event: { getActivities: () => [] } } },
             ],
         }).compileComponents();
 

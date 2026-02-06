@@ -181,8 +181,14 @@ export class AppBenchmarkService {
         });
 
         // 7. Quality Issues & Metadata
-        const issuesRef = this.detectQualityIssues(reference);
-        const issuesTest = this.detectQualityIssues(test); // Use original test activity for artifact detection
+        const issuesRef = this.detectQualityIssues(reference, {
+            source: 'reference',
+            deviceName: result.referenceName
+        });
+        const issuesTest = this.detectQualityIssues(test, {
+            source: 'test',
+            deviceName: result.testName
+        }); // Use original test activity for artifact detection
 
         result.timeOffsetSeconds = timeOffset;
         result.alignmentApplied = alignmentApplied;
@@ -321,7 +327,10 @@ export class AppBenchmarkService {
         return bestOffset;
     }
 
-    private detectQualityIssues(activity: ActivityInterface): BenchmarkQualityIssue[] {
+    private detectQualityIssues(
+        activity: ActivityInterface,
+        context?: Pick<BenchmarkQualityIssue, 'source' | 'deviceName'>
+    ): BenchmarkQualityIssue[] {
         const issues: BenchmarkQualityIssue[] = [];
         const streams = activity.getAllStreams();
 
@@ -332,11 +341,11 @@ export class AppBenchmarkService {
             // 1. Dropouts (Zeros/Nulls)
             // Context aware: Speed/Power can be 0. HeartRate/Cadence usually shouldn't be 0 while moving.
             if (['HeartRate', 'Cadence'].includes(s.type)) {
-                this.detectStreamDropouts(s.type, data, activity, issues);
+                this.detectStreamDropouts(s.type, data, activity, issues, context);
             }
 
             // 2. Stuck Values
-            this.detectStuckValues(s.type, data, activity, issues);
+            this.detectStuckValues(s.type, data, activity, issues, context);
         }
 
         // 3. Cadence Lock (HR vs Cadence)
@@ -349,7 +358,7 @@ export class AppBenchmarkService {
                 const hr = activity.getStreamData('HeartRate');
                 const cad = activity.getStreamData('Cadence');
                 if (hr && cad && hr.length > 0 && cad.length > 0) {
-                    this.detectCadenceLock(hr, cad, activity, issues);
+                    this.detectCadenceLock(hr, cad, activity, issues, context);
                 }
             } catch (e) {
                 console.warn('AppBenchmarkService: Failed to retrieve HR/Cadence for lock check', e);
@@ -359,7 +368,13 @@ export class AppBenchmarkService {
         return issues;
     }
 
-    private detectStreamDropouts(type: string, data: (number | null)[], activity: ActivityInterface, issues: BenchmarkQualityIssue[]) {
+    private detectStreamDropouts(
+        type: string,
+        data: (number | null)[],
+        activity: ActivityInterface,
+        issues: BenchmarkQualityIssue[],
+        context?: Pick<BenchmarkQualityIssue, 'source' | 'deviceName'>
+    ) {
         let zeroRun = 0;
         // 5 seconds threshold
         const threshold = 5;
@@ -376,7 +391,8 @@ export class AppBenchmarkService {
                         description: `Signal dropout for ${zeroRun} seconds`,
                         severity: 'warning',
                         duration: zeroRun,
-                        timestamp: new Date(activity.startDate.getTime() + (i - zeroRun) * 1000)
+                        timestamp: new Date(activity.startDate.getTime() + (i - zeroRun) * 1000),
+                        ...context
                     });
                 }
                 zeroRun = 0;
@@ -384,7 +400,13 @@ export class AppBenchmarkService {
         }
     }
 
-    private detectStuckValues(type: string, data: (number | null)[], activity: ActivityInterface, issues: BenchmarkQualityIssue[]) {
+    private detectStuckValues(
+        type: string,
+        data: (number | null)[],
+        activity: ActivityInterface,
+        issues: BenchmarkQualityIssue[],
+        context?: Pick<BenchmarkQualityIssue, 'source' | 'deviceName'>
+    ) {
         // Exclude Temperature as it naturally changes very slowly
         if (type === 'Temperature') return;
 
@@ -407,7 +429,8 @@ export class AppBenchmarkService {
                         description: `Sensor stuck at ${data[i - 1]} for ${stuckRun} seconds`,
                         severity: 'warning',
                         duration: stuckRun,
-                        timestamp: new Date(activity.startDate.getTime() + (i - stuckRun) * 1000)
+                        timestamp: new Date(activity.startDate.getTime() + (i - stuckRun) * 1000),
+                        ...context
                     });
                 }
                 stuckRun = 0;
@@ -415,7 +438,13 @@ export class AppBenchmarkService {
         }
     }
 
-    private detectCadenceLock(hr: (number | null)[], cad: (number | null)[], activity: ActivityInterface, issues: BenchmarkQualityIssue[]) {
+    private detectCadenceLock(
+        hr: (number | null)[],
+        cad: (number | null)[],
+        activity: ActivityInterface,
+        issues: BenchmarkQualityIssue[],
+        context?: Pick<BenchmarkQualityIssue, 'source' | 'deviceName'>
+    ) {
         // Simple windowed correlation check
         // Check 1-minute windows
         const windowSize = 60;
@@ -450,7 +479,8 @@ export class AppBenchmarkService {
                         description: `Possible cadence lock detected (Correlation ${corr.toFixed(2)})`,
                         severity: 'warning',
                         duration: windowSize,
-                        timestamp: new Date(activity.startDate.getTime() + i * 1000)
+                        timestamp: new Date(activity.startDate.getTime() + i * 1000),
+                        ...context
                     });
                     // Skip ahead a bit to avoid flooding
                     i += 60;

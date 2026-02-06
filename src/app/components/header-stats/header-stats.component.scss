@@ -93,19 +93,26 @@ section.grid {
 .stat-diff {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.7rem;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.65rem;
   line-height: 1.1;
   margin-top: 2px;
   opacity: 0.8;
+  width: 100%;
+  font-family: 'Barlow Condensed', sans-serif;
 }
 
 .stat-diff-value {
   color: var(--mat-app-on-surface-variant);
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .stat-diff-percent {
   font-weight: 600;
+  flex: 0 0 auto;
+  text-align: right;
 }
 
 /* Condensed (Chips) Container */
