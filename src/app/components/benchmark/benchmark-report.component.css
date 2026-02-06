@@ -86,6 +86,15 @@
   flex-shrink: 0;
 }
 
+.insight-label {
+  font-family: var(--mat-sys-body-font, inherit);
+}
+
+.insight-value {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+}
+
 /* Standalone Icons (Verdict List etc) - Color ONLY */
 mat-icon.excellent {
   color: #11dd55;

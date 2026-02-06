@@ -36,6 +36,7 @@ interface BenchmarkDiffChip {
     display?: string;
     percent?: number;
     color?: string;
+    absPercent?: number;
 }
 
 interface BenchmarkIssueGroup {
@@ -49,6 +50,12 @@ interface BenchmarkIssueGroup {
     firstTimestamp: Date | null;
     lastTimestamp: Date | null;
     hasRange: boolean;
+}
+
+interface InsightItem {
+    label: string;
+    value?: string;
+    grade: Grade;
 }
 
 @Component({
@@ -90,7 +97,8 @@ interface BenchmarkIssueGroup {
           <ul class="verdict-list">
             <li *ngFor="let insight of getInsights()">
               <mat-icon [ngClass]="insight.grade">{{ getGradeIcon(insight.grade) }}</mat-icon>
-              <span>{{ insight.text }}</span>
+              <span class="insight-label">{{ insight.label }}</span>
+              <span *ngIf="insight.value" class="insight-value">{{ insight.value }}</span>
             </li>
           </ul>
         </mat-card-content>
@@ -262,6 +270,15 @@ export class BenchmarkReportComponent implements OnChanges {
         return 'poor';
     }
 
+    getStatGapGrade(): Grade | null {
+        if (!this.diffChips.length) return null;
+        const maxAbs = Math.max(...this.diffChips.map(c => c.absPercent ?? Math.abs(c.percent ?? 0)));
+        if (maxAbs <= 5) return 'excellent';
+        if (maxAbs <= 10) return 'good';
+        if (maxAbs <= 20) return 'fair';
+        return 'poor';
+    }
+
     getCorrelationGrade(correlation: number): Grade {
         if (correlation >= CORRELATION_THRESHOLDS.excellent) return 'excellent';
         if (correlation >= CORRELATION_THRESHOLDS.good) return 'good';
@@ -272,7 +289,8 @@ export class BenchmarkReportComponent implements OnChanges {
     getOverallGrade(): Grade {
         const streamGrades = this.getStreamGrades();
         const gnssGrade = this.getGnssGrade();
-        const allGrades = [gnssGrade, ...streamGrades];
+        const statGrade = this.getStatGapGrade();
+        const allGrades = statGrade ? [gnssGrade, ...streamGrades, statGrade] : [gnssGrade, ...streamGrades];
 
         if (allGrades.length === 0) return 'fair';
 
@@ -315,22 +333,22 @@ export class BenchmarkReportComponent implements OnChanges {
         }
     }
 
-    getInsights(): { text: string; grade: Grade }[] {
+    getInsights(): InsightItem[] {
         if (!this.result) return [];
 
-        const insights: { text: string; grade: Grade }[] = [];
+        const insights: InsightItem[] = [];
         const gnssGrade = this.getGnssGrade();
         const cep50 = this.result.metrics.gnss.cep50;
 
         // GNSS insights
         if (gnssGrade === 'excellent') {
-            insights.push({ text: `GNSS accuracy is excellent (${cep50.toFixed(1)}m CEP50)`, grade: 'excellent' });
+            insights.push({ label: 'GNSS accuracy is excellent', value: `${cep50.toFixed(1)}m CEP50`, grade: 'excellent' });
         } else if (gnssGrade === 'good') {
-            insights.push({ text: `GNSS accuracy is good (${cep50.toFixed(1)}m CEP50)`, grade: 'good' });
+            insights.push({ label: 'GNSS accuracy is good', value: `${cep50.toFixed(1)}m CEP50`, grade: 'good' });
         } else if (gnssGrade === 'fair') {
-            insights.push({ text: `GNSS shows moderate deviation (${cep50.toFixed(1)}m CEP50)`, grade: 'fair' });
+            insights.push({ label: 'GNSS shows moderate deviation', value: `${cep50.toFixed(1)}m CEP50`, grade: 'fair' });
         } else {
-            insights.push({ text: `GNSS has significant deviation (${cep50.toFixed(1)}m CEP50)`, grade: 'poor' });
+            insights.push({ label: 'GNSS has significant deviation', value: `${cep50.toFixed(1)}m CEP50`, grade: 'poor' });
         }
 
         // Stream insights
@@ -339,17 +357,39 @@ export class BenchmarkReportComponent implements OnChanges {
             const streamGrade = this.getCorrelationGrade(correlation);
 
             if (streamGrade === 'excellent') {
-                insights.push({ text: `${name} correlation is excellent (${(correlation * 100).toFixed(1)}%)`, grade: 'excellent' });
+                insights.push({ label: `${name} correlation is excellent`, value: `${(correlation * 100).toFixed(1)}%`, grade: 'excellent' });
             } else if (streamGrade === 'good') {
-                insights.push({ text: `${name} correlation is good (${(correlation * 100).toFixed(1)}%)`, grade: 'good' });
+                insights.push({ label: `${name} correlation is good`, value: `${(correlation * 100).toFixed(1)}%`, grade: 'good' });
             } else if (streamGrade === 'fair') {
-                insights.push({ text: `${name} shows moderate correlation (${(correlation * 100).toFixed(1)}%)`, grade: 'fair' });
+                insights.push({ label: `${name} shows moderate correlation`, value: `${(correlation * 100).toFixed(1)}%`, grade: 'fair' });
             } else {
-                insights.push({ text: `${name} has weak correlation (${(correlation * 100).toFixed(1)}%)`, grade: 'poor' });
+                insights.push({ label: `${name} has weak correlation`, value: `${(correlation * 100).toFixed(1)}%`, grade: 'poor' });
             }
         }
 
+        const statInsight = this.getStatDiffInsight();
+        if (statInsight) {
+            insights.unshift(statInsight);
+        }
+
         return insights;
+    }
+
+    private getStatDiffInsight(): InsightItem | null {
+        if (!this.diffChips.length) return null;
+        const statGrade = this.getStatGapGrade() || 'poor';
+        const sorted = [...this.diffChips].sort((a, b) => (b.absPercent ?? 0) - (a.absPercent ?? 0));
+        const top = sorted.slice(0, 2);
+        const parts = top.map(c => `${c.label} ${c.display || ''}`.trim());
+        const joined = parts.join(' • ');
+        let qualifier = '';
+        switch (statGrade) {
+            case 'excellent': qualifier = 'Stat differences are negligible'; break;
+            case 'good': qualifier = 'Stat differences are small'; break;
+            case 'fair': qualifier = 'Stat differences are noticeable'; break;
+            case 'poor': qualifier = 'Stat differences are large'; break;
+        }
+        return { label: qualifier, value: joined || undefined, grade: statGrade };
     }
 
     getIssueIcon(type: string): string {
@@ -500,7 +540,8 @@ export class BenchmarkReportComponent implements OnChanges {
                     hasDiff: true,
                     display: diff.display,
                     percent: diff.percent,
-                    color: this.eventColorService.getDifferenceColor(diff.percent)
+                    color: this.eventColorService.getDifferenceColor(diff.percent),
+                    absPercent: Math.abs(diff.percent ?? 0),
                 };
             })
             .sort((left, right) => {
