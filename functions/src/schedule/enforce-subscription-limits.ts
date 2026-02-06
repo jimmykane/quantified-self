@@ -78,10 +78,9 @@ async function processUser(uid: string) {
             const now = admin.firestore.Timestamp.now();
             if (gracePeriodUntil.toMillis() > now.toMillis()) {
                 logger.info(`User ${uid} in grace period until ${gracePeriodUntil.toDate().toISOString()}. Skipping cleanup.`);
-                // If in grace period, we SKIP cleanup.
-                // Wait, logic says: "Skipping cleanup." then "continue".
-                // In my refactor, I used "return" inside processUser.
-                // If "continue" was used in loop, here "return" exits processUser.
+                // Ensure claims are synced so backend checks recognize the grace period
+                // This prevents "soft-lock" where a user has a grace period doc but missing Auth claims
+                await reconcileClaims(uid);
                 return;
             }
         } else {

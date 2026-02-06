@@ -132,6 +132,39 @@ describe('enforceSubscriptionLimits', () => {
         await wrapped({});
 
         expect(mockSetCustomUserClaims).not.toHaveBeenCalled();
+
+        // VERIFY: We now expect reconcileClaims to be called even if doc exists
+        expect(Claims.reconcileClaims).toHaveBeenCalledWith('user1');
+    });
+
+    it('should handle reconcileClaims failures gracefully', async () => {
+        const futureDate = new Date(Date.now() + 100000);
+
+        mockFirestoreInstance.collection.mockImplementation((path: string) => {
+            if (path === GARMIN_API_TOKENS_COLLECTION_NAME) return mockQuery([{ id: 'user1' }, { id: 'user2' }]);
+            return mockQuery([]);
+        });
+
+        // Mock system docs
+        mockFirestoreInstance.doc.mockImplementation((path: string) => {
+            if (path.includes('system/status')) return mockDoc({ gracePeriodUntil: admin.firestore.Timestamp.fromDate(futureDate) });
+            return mockDoc({});
+        });
+
+        // Make reconcileClaims fail for user1
+        vi.spyOn(Claims, 'reconcileClaims')
+            .mockRejectedValueOnce(new Error('Sync Error')) // user1 fail
+            .mockResolvedValue({ role: 'free' });           // user2 pass
+
+        const wrapped = enforceSubscriptionLimits as any;
+        await wrapped({});
+
+        // Expect user2 to still be processed (Claims.reconcileClaims called twice)
+        expect(Claims.reconcileClaims).toHaveBeenCalledTimes(2);
+        expect(Claims.reconcileClaims).toHaveBeenCalledWith('user1');
+        expect(Claims.reconcileClaims).toHaveBeenCalledWith('user2');
+
+        // Verify logs contain error for user1 (implicitly handled by the catch block in the function)
     });
 
     it('should initialize grace period if missing (Fail-safe)', async () => {
