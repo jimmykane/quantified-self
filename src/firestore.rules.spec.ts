@@ -127,6 +127,7 @@ describe('Firestore Security Rules', () => {
     describe('User Split Model', () => {
         const userId = 'split_user';
         const otherId = 'other_user';
+        const eventId = 'event_123';
 
         describe('Legal Agreements (users/{uid}/legal/agreements)', () => {
             it('should allow user to read their own agreements', async () => {
@@ -213,6 +214,40 @@ describe('Firestore Security Rules', () => {
                     acceptedPrivacyPolicy: true,
                     acceptedDiagnosticsPolicy: true,
                     someRandomField: true
+                }));
+            });
+        });
+
+        describe('Event MetaData (users/{uid}/events/{eventId}/metaData)', () => {
+            it('should allow owner to write processing metadata', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertSucceeds(db.collection(`users/${userId}/events/${eventId}/metaData`).doc('processing').set({
+                    sportsLibVersion: '8.0.9',
+                    processedAt: new Date(),
+                }));
+            });
+
+            it('should deny owner writing non-processing metadata documents', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection(`users/${userId}/events/${eventId}/metaData`).doc('GarminAPI').set({
+                    serviceName: 'GarminAPI',
+                }));
+            });
+
+            it('should deny other users writing processing metadata', async () => {
+                const db = testEnv.authenticatedContext(otherId).firestore();
+                await assertFails(db.collection(`users/${userId}/events/${eventId}/metaData`).doc('processing').set({
+                    sportsLibVersion: '8.0.9',
+                    processedAt: new Date(),
+                }));
+            });
+
+            it('should deny extra fields in processing metadata', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection(`users/${userId}/events/${eventId}/metaData`).doc('processing').set({
+                    sportsLibVersion: '8.0.9',
+                    processedAt: new Date(),
+                    extraField: true,
                 }));
             });
         });
