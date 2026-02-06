@@ -1,8 +1,17 @@
 import { Component, Input, OnChanges, SimpleChanges, inject } from '@angular/core';
-import { ActivityInterface, ActivityTypes, ActivityUtilities, EventInterface, UserSummariesSettingsInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import {
+    ActivityInterface,
+    ActivityUtilities,
+    DataAltitudeMax,
+    DataCadenceMax,
+    DataHeartRateMax,
+    DataPowerMax,
+    EventInterface,
+    UserSummariesSettingsInterface,
+    UserUnitSettingsInterface
+} from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { buildDiffMapForStats, buildStatDisplayList } from '../../helpers/stats-diff.helper';
-import { getDefaultSummaryStatTypes } from '../../helpers/summary-stats.helper';
 import { BenchmarkQualityIssue, BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
 
 // Grade thresholds for GNSS accuracy (CEP50 in meters)
@@ -391,26 +400,43 @@ export class BenchmarkReportComponent implements OnChanges {
 
         const compareActivities: ActivityInterface[] = [reference, test];
         const stats = ActivityUtilities.getSummaryStatsForActivities(compareActivities);
-        const activityTypes = compareActivities.map(activity => activity.type).filter(type => !!type) as ActivityTypes[];
-        const displayedStatsToShow = getDefaultSummaryStatTypes(activityTypes, this.summariesSettings);
-        const displayList = buildStatDisplayList(stats, displayedStatsToShow, unitSettings);
-        const diffMap = buildDiffMapForStats(stats, displayedStatsToShow, compareActivities, unitSettings);
+        const statsByType = new Map(stats.map(stat => [stat.getType(), stat]));
+        const extraStatTypes = [
+            DataAltitudeMax.type,
+            DataCadenceMax.type,
+            DataHeartRateMax.type,
+            DataPowerMax.type,
+        ];
 
-        this.diffChips = displayList.map((stat) => {
-            const diff = diffMap.get(stat.type);
-            if (!diff) {
+        extraStatTypes.forEach((statType) => {
+            const statA = reference.getStat(statType as any);
+            const statB = test.getStat(statType as any);
+            if (statA && statB && !statsByType.has(statType)) {
+                statsByType.set(statType, statA);
+            }
+        });
+
+        const statsList = Array.from(statsByType.values());
+        const displayedStatsToShow = statsList.map(stat => stat.getType());
+        const displayList = buildStatDisplayList(statsList, displayedStatsToShow, unitSettings);
+        const diffMap = buildDiffMapForStats(statsList, displayedStatsToShow, compareActivities, unitSettings);
+
+        this.diffChips = displayList
+            .filter(stat => diffMap.has(stat.type))
+            .map((stat) => {
+                const diff = diffMap.get(stat.type)!;
                 return {
                     label: stat.label,
-                    hasDiff: false
+                    hasDiff: true,
+                    display: diff.display,
+                    percent: diff.percent,
+                    color: this.eventColorService.getDifferenceColor(diff.percent)
                 };
-            }
-            return {
-                label: stat.label,
-                hasDiff: true,
-                display: diff.display,
-                percent: diff.percent,
-                color: this.eventColorService.getDifferenceColor(diff.percent)
-            };
-        });
+            })
+            .sort((left, right) => {
+                const leftValue = Number.isFinite(left.percent) ? left.percent : 0;
+                const rightValue = Number.isFinite(right.percent) ? right.percent : 0;
+                return rightValue - leftValue;
+            });
     }
 }
