@@ -43,6 +43,7 @@ export class EventSummaryComponent implements OnChanges {
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() unitSettings!: UserUnitSettingsInterface;
   @Input() statsToShow: string[] = [];
+  @Input() targetUserID!: string;
 
   // Local state for on-demand generated benchmark
   benchmarkResult: import('../../../../functions/src/shared/app-event.interface').BenchmarkResult | null = null;

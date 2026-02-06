@@ -42,6 +42,7 @@ import { LoggerService } from '../../services/logger.service';
 export class EventActionsComponent implements OnInit, OnDestroy {
   @Input() event!: EventInterface;
   @Input() user!: User;
+  @Input() isOwner = false;
   @Input() showDownloadOriginal = false;
 
 
@@ -68,17 +69,13 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   async ngOnInit() {
-    if (!this.user) {
-      throw new Error('User is required')
-    }
-
+    // User is no longer strictly required for all actions (e.g., downloads of public events)
   }
 
   async menuOpen(event) {
-    if (!this.showDownloadOriginal) {
+    if (!this.showDownloadOriginal || !this.user) {
       return;
     }
-
 
     this.garminAPIServiceMetaData = <GarminAPIEventMetaData>(await this.eventService.getEventMetaData(this.user, this.event.getID(), ServiceNames.GarminAPI)
       .pipe(take(1)).toPromise());
@@ -86,13 +83,14 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   async share() {
-    if (this.event.privacy !== Privacy.Public) {
+    if (this.user && this.event.privacy !== Privacy.Public) {
       await this.eventService.setEventPrivacy(this.user, this.event.getID(), Privacy.Public);
     }
-    this.clipboardService.copy(this.sharingService.getShareURLForEvent(this.user.uid, this.event.getID()));
+    const userID = this.user?.uid || (this.event as any).userID || (this.event as any).creatorID; // Fallback to userID/creatorID if available
+    this.clipboardService.copy(this.sharingService.getShareURLForEvent(userID, this.event.getID()));
     this.analyticsService.logEvent('share', { method: 'event_actions', content_type: 'event', item_id: this.event.getID() });
-    this.snackBar.open('Privacy is changed to public and link copied to your clipboard', undefined, {
-      duration: 20000,
+    this.snackBar.open('Link copied to your clipboard', undefined, {
+      duration: 2000,
     })
   }
 
@@ -249,6 +247,9 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
 
   async delete() {
+    if (!this.user) {
+      return;
+    }
     const dialogRef = this.dialog.open(DeleteConfirmationComponent);
     this.deleteConfirmationSubscription = dialogRef.afterClosed().subscribe(async (result) => {
       if (!result) {

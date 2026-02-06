@@ -41,7 +41,7 @@ import { AppEventUtilities } from '../utils/app.event.utilities';
 import { LoggerService } from './logger.service';
 import { AppFileService } from './app.file.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
-import { getMetadata } from '@angular/fire/storage';
+import { getMetadata, updateMetadata } from '@angular/fire/storage';
 import { AppCacheService } from './app.cache.service';
 import { BenchmarkEventAdapter } from './benchmark-event.adapter';
 
@@ -281,8 +281,9 @@ export class AppEventService implements OnDestroy {
     )
   }
 
-  public getEventMetaDataKeys(user: User, eventID: string): Observable<string[]> {
-    const metaDataCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'events', eventID, 'metaData'));
+  public getEventMetaDataKeys(userOrUserID: User | string, eventID: string): Observable<string[]> {
+    const userID = typeof userOrUserID === 'string' ? userOrUserID : userOrUserID.uid;
+    const metaDataCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', userID, 'events', eventID, 'metaData'));
     return from(runInInjectionContext(this.injector, () => getDocs(metaDataCollection))).pipe(
       map((querySnapshot) => querySnapshot.docs.map(doc => doc.id))
     );
@@ -427,14 +428,14 @@ export class AppEventService implements OnDestroy {
     };
 
     const storageAdapter: StorageAdapter = {
-      uploadFile: async (path: string, data: any) => {
+      uploadFile: async (path: string, data: any, metadata?: any) => {
         const fileRef = runInInjectionContext(this.injector, () => ref(this.storage, path));
         // data can be Blob, Uint8Array or ArrayBuffer. If string, convert to Blob.
         let payload = data;
         if (typeof data === 'string') {
           payload = new Blob([data], { type: 'text/plain' });
         }
-        await runInInjectionContext(this.injector, () => uploadBytes(fileRef, payload));
+        await runInInjectionContext(this.injector, () => uploadBytes(fileRef, payload, metadata));
       },
       getBucketName: () => {
         // Return the Firebase Storage bucket name from config
@@ -457,12 +458,48 @@ export class AppEventService implements OnDestroy {
     if (event.startDate) {
       data.eventStartDate = event.startDate;
     }
+    // Sync privacy metadata from event if available
+    const eventJSON = (event as any).toJSON ? (event as any).toJSON() : {};
+    if (eventJSON.privacy) {
+      data.privacy = eventJSON.privacy;
+    }
     return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, 'users', user.uid, 'activities', activity.getID()), data));
   }
 
   public async updateEventProperties(user: User, eventID: string, propertiesToUpdate: any) {
     // @todo check if properties are allowed on object via it's JSON export interface keys
-    return runInInjectionContext(this.injector, () => updateDoc(doc(this.firestore, 'users', user.uid, 'events', eventID), propertiesToUpdate));
+    const updatePromise = runInInjectionContext(this.injector, () => updateDoc(doc(this.firestore, 'users', user.uid, 'events', eventID), propertiesToUpdate));
+
+    // If privacy is being updated, sync it to storage metadata for all original files
+    // and to all activity documents in Firestore
+    if (propertiesToUpdate.privacy) {
+      try {
+        const eventDocRef = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID));
+        const eventData = await runInInjectionContext(this.injector, () => getDoc(eventDocRef));
+        const originalFiles = eventData.data()?.originalFiles || (eventData.data()?.originalFile ? [eventData.data()?.originalFile] : []);
+        const metadataUpdate = {
+          customMetadata: {
+            privacy: propertiesToUpdate.privacy
+          }
+        };
+        const storagePromises = originalFiles.map((file: any) => {
+          const fileRef = runInInjectionContext(this.injector, () => ref(this.storage, file.path));
+          return runInInjectionContext(this.injector, () => updateMetadata(fileRef, metadataUpdate));
+        });
+
+        // Sync to activities
+        const activitiesCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'activities'));
+        const q = runInInjectionContext(this.injector, () => query(activitiesCollection, where('eventID', '==', eventID)));
+        const activitiesSnapshot = await runInInjectionContext(this.injector, () => getDocs(q));
+        const activityUpdates = activitiesSnapshot.docs.map(docSnapshot => runInInjectionContext(this.injector, () => updateDoc(docSnapshot.ref, { privacy: propertiesToUpdate.privacy })));
+
+        await Promise.all([...storagePromises, ...activityUpdates]);
+      } catch (e) {
+        this.logger.error('[AppEventService] Failed to sync privacy to storage or activities', e);
+      }
+    }
+
+    return updatePromise;
   }
 
   /**

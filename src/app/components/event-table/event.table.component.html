@@ -73,8 +73,8 @@
           }
           @if (column === 'Actions') {
           <span>
-            @if (user) {
-            <app-event-actions [user]="user" [event]="$any(row.Event)"
+            @if (user || row.Event.privacy === 'public') {
+            <app-event-actions [user]="user" [event]="$any(row.Event)" [isOwner]="user?.uid === row.Event.getUserID()"
               [showDownloadOriginal]="true"></app-event-actions>
             }
           </span>
@@ -82,11 +82,11 @@
           @if (column === 'Activity Types') {
           <span class="activity-type-cell">
             @if (row['Merged Event']) {
-              <span class="benchmark-icon" [class.is-muted]="!row['Has Benchmark']"
-                (click)="openBenchmarkFlow($event, row.Event)">
-                <mat-icon [matTooltip]="row['Has Benchmark'] ? 'View Benchmark Analysis' : 'Generate Benchmark Analysis'"
-                  [style.color]="row['Has Benchmark'] ? getBenchmarkColor(row.Event) : ''">analytics</mat-icon>
-              </span>
+            <span class="benchmark-icon" [class.is-muted]="!row['Has Benchmark']"
+              (click)="openBenchmarkFlow($event, row.Event)">
+              <mat-icon [matTooltip]="row['Has Benchmark'] ? 'View Benchmark Analysis' : 'Generate Benchmark Analysis'"
+                [style.color]="row['Has Benchmark'] ? getBenchmarkColor(row.Event) : ''">analytics</mat-icon>
+            </span>
             }
             @if (!row['Merged Event'] && row[column]) {
             <app-activity-type-icon [activityType]="row[column]" size="18px" vAlign="middle"></app-activity-type-icon>

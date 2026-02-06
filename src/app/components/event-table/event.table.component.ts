@@ -121,9 +121,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   }
 
   ngOnInit(): void {
-    if (!this.user) {
-      throw new Error(`Component needs user`)
-    }
+    // User is no longer strictly required
     this.searchSubject.pipe(
       debounceTime(250)
     ).subscribe(searchTextValue => {

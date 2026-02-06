@@ -194,10 +194,12 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
   };
 
   const storageAdapter: StorageAdapter = {
-    uploadFile: async (path: string, data: any) => {
+    uploadFile: async (path: string, data: any, metadata?: any) => {
       const bucket = admin.storage().bucket();
       const file = bucket.file(path);
-      await file.save(data);
+      await file.save(data, {
+        metadata: metadata
+      });
     },
     getBucketName: () => {
       return admin.storage().bucket().name;

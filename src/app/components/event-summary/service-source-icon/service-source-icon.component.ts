@@ -11,7 +11,8 @@ import { AppEventService } from '../../../services/app.event.service';
 })
 export class ServiceSourceIconComponent implements OnChanges {
     @Input() event!: EventInterface;
-    @Input() user!: User;
+    @Input() user!: User | null;
+    @Input() targetUserID?: string;
 
     serviceName: ServiceNames | null = null;
     serviceLogo: string | null = null;
@@ -25,13 +26,17 @@ export class ServiceSourceIconComponent implements OnChanges {
     }
 
     private checkServiceSource() {
-        if (!this.user || !this.event || !this.event.getID()) {
+        if (!this.event || !this.event.getID()) {
             this.serviceName = null;
             this.serviceLogo = null;
             this.cd.markForCheck();
             return;
         }
-        this.eventService.getEventMetaDataKeys(this.user, this.event.getID()!).subscribe(keys => {
+        const userID = this.user?.uid || this.targetUserID;
+        if (!userID) {
+            return;
+        }
+        this.eventService.getEventMetaDataKeys(userID, this.event.getID()!).subscribe(keys => {
             if (keys && keys.length > 0) {
                 if (keys.includes(ServiceNames.COROSAPI)) {
                     this.serviceName = ServiceNames.COROSAPI;

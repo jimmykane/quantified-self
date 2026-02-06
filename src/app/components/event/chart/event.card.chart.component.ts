@@ -113,7 +113,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   @Input() event!: EventInterface;
   @Input() targetUserID!: string;
-  @Input() user!: User;
+  @Input() user!: User | null;
   @Input() selectedActivities: ActivityInterface[] = [];
   @Input() isVisible!: boolean;
 
@@ -170,7 +170,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   // Computed property for dataTypesToUse
   public get dataTypesToUse(): string[] {
-    return this.user ? this.userService.getUserChartDataTypesToUse(this.user) : [];
+    return this.user ? this.userService.getUserChartDataTypesToUse(this.user) : AppUserUtilities.getDefaultChartDataTypesToShowOnLoad();
   }
 
   @Output() loadingStatus = new EventEmitter<boolean>();

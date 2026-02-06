@@ -99,7 +99,6 @@ const routes: Routes = [
     path: 'user/:userID/event/:eventID',
     loadChildren: () => import('./modules/event.module').then(module => module.EventModule),
     data: { title: 'Event Details', animation: 'Event' },
-    canMatch: [authGuard, onboardingGuard]
   },
   {
     path: 'policies',

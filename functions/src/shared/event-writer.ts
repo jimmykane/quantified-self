@@ -89,6 +89,8 @@ export class EventWriter {
         }
 
         try {
+            // Write Event
+            const eventJSON = event.toJSON() as unknown as FirestoreEventJSON;
             const startActivities = Date.now();
             const activities = event.getActivities();
             for (const activity of activities) {
@@ -109,6 +111,9 @@ export class EventWriter {
                     activityJSON.eventStartDate = event.startDate;
                 }
 
+                // Sync privacy metadata to activity for optimized querying
+                activityJSON.privacy = eventJSON.privacy || 'private';
+
 
                 writePromises.push(
                     this.adapter.setDoc(
@@ -120,8 +125,6 @@ export class EventWriter {
             }
             this.logger.info(`Prepared ${activities.length} activity writes in ${Date.now() - startActivities}ms`);
 
-            // Write Event
-            const eventJSON = event.toJSON() as unknown as FirestoreEventJSON;
             delete (eventJSON as Record<string, unknown>).activities;
 
             // Normalize input to array or single
@@ -157,7 +160,7 @@ export class EventWriter {
 
                     const subStart = Date.now();
                     this.logger.info(`Uploading file ${i + 1}/${filesToUpload.length} to`, filePath);
-                    await this.storageAdapter.uploadFile(filePath, file.data);
+                    await this.storageAdapter.uploadFile(filePath, file.data, { customMetadata: { privacy: eventJSON.privacy || 'private' } });
                     this.logger.info(`File ${i + 1} uploaded in ${Date.now() - subStart}ms`);
 
                     uploadedFilesMetadata.push({

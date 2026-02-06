@@ -328,6 +328,97 @@ describe('Firestore Security Rules', () => {
 
     });
 
+    describe('Events Collection', () => {
+        const userId = 'user_events_1';
+        const otherId = 'user_events_2';
+        const eventId = 'event_1';
+
+        it('should allow user to read their own event', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+            await assertSucceeds(db.collection(`users/${userId}/events`).doc(eventId).get());
+        });
+
+        it('should allow anyone to read a public event', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/events`).doc('public_event').set({
+                    privacy: 'public'
+                });
+            });
+
+            const unauthDb = testEnv.unauthenticatedContext().firestore();
+            await assertSucceeds(unauthDb.collection(`users/${userId}/events`).doc('public_event').get());
+
+            const otherAuthDb = testEnv.authenticatedContext(otherId).firestore();
+            await assertSucceeds(otherAuthDb.collection(`users/${userId}/events`).doc('public_event').get());
+        });
+
+        it('should deny anyone (except owner) to read metadata of a public event', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/events`).doc('public_event_metadata').set({
+                    privacy: 'public'
+                });
+                await context.firestore().collection(`users/${userId}/events/public_event_metadata/metaData`).doc('meta_1').set({
+                    key: 'value'
+                });
+            });
+
+            const unauthDb = testEnv.unauthenticatedContext().firestore();
+            await assertFails(unauthDb.collection(`users/${userId}/events/public_event_metadata/metaData`).doc('meta_1').get());
+
+            const otherAuthDb = testEnv.authenticatedContext(otherId).firestore();
+            await assertFails(otherAuthDb.collection(`users/${userId}/events/public_event_metadata/metaData`).doc('meta_1').get());
+        });
+
+        it('should deny unauthenticated users from reading a private event', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/events`).doc('private_event').set({
+                    privacy: 'private'
+                });
+            });
+
+            const unauthDb = testEnv.unauthenticatedContext().firestore();
+            await assertFails(unauthDb.collection(`users/${userId}/events`).doc('private_event').get());
+        });
+
+        it('should allow anyone to read a public activity', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/activities`).doc('public_activity').set({
+                    privacy: 'public',
+                    eventID: 'event_123'
+                });
+            });
+
+            const unauthDb = testEnv.unauthenticatedContext().firestore();
+            await assertSucceeds(unauthDb.collection(`users/${userId}/activities`).doc('public_activity').get());
+        });
+
+        it('should deny unauthenticated users from reading a private activity', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/activities`).doc('private_activity').set({
+                    privacy: 'private',
+                    eventID: 'event_123'
+                });
+            });
+
+            const unauthDb = testEnv.unauthenticatedContext().firestore();
+            await assertFails(unauthDb.collection(`users/${userId}/activities`).doc('private_activity').get());
+        });
+
+        it('should deny unauthenticated users from reading metadata of a private event', async () => {
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/events`).doc('private_event_metadata').set({
+                    privacy: 'private'
+                });
+                await context.firestore().collection(`users/${userId}/events/private_event_metadata/metaData`).doc('meta_1').set({
+                    key: 'value'
+                });
+            });
+
+            const unauthDb = testEnv.unauthenticatedContext().firestore();
+            await assertFails(unauthDb.collection(`users/${userId}/events/private_event_metadata/metaData`).doc('meta_1').get());
+        });
+    });
+
     // End of main describe block removed here to include appended tests
 
     describe('Legacy Activities Collection (Nested)', () => {

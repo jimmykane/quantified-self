@@ -43,7 +43,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   @ViewChild(GoogleMap) googleMap!: GoogleMap;
   @Input() event!: EventInterface;
   @Input() targetUserID!: string;
-  @Input() user!: User;
+  @Input() user!: User | null;
   @Input() selectedActivities!: ActivityInterface[];
   public get showLaps() { return this.userSettingsQuery.mapSettings()?.showLaps ?? true; }
   public set showLaps(value: boolean) { this.userSettingsQuery.updateMapSettings({ showLaps: value }); }

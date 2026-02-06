@@ -12,9 +12,9 @@ export default defineConfig({
             }
         },
         globals: true,
-        environment: 'jsdom',
-        setupFiles: ['src/test-setup.ts'],
-        include: ['src/firestore.rules.spec.ts'],
+        environment: 'node',
+        // setupFiles: ['src/test-setup.ts'],
+        include: ['src/**/*.rules.spec.ts'],
         exclude: ['functions/**', 'node_modules/**'],
         reporters: ['default'],
     }

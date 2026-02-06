@@ -6,6 +6,7 @@
     <mat-icon>share</mat-icon>
     <span>Share</span>
   </button>
+  @if (isOwner) {
   <button mat-menu-item (click)="editEvent()">
     <mat-icon>drive_file_rename_outline</mat-icon>
     <span>Edit settings</span>
@@ -31,6 +32,7 @@
         matTooltip="This will re-calculate statistics like distance, ascent, descent etc...">info</mat-icon>
     </span>
   </button>
+  }
   <button mat-menu-item (click)="downloadJSON()">
     <mat-icon>file_download</mat-icon>
     <span>Download as JSON</span>
@@ -54,8 +56,10 @@
   </button>
   }
 
+  @if (isOwner) {
   <button mat-menu-item (click)="delete()">
     <mat-icon>delete</mat-icon>
     <span>Delete</span>
   </button>
+  }
 </mat-menu>

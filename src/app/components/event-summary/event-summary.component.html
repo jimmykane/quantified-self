@@ -15,7 +15,8 @@
           <span class="date"><b>{{ event.startDate | date:"d MMM yyyy" }}</b></span>
           <span class="time-separator">at</span>
           <span class="time">{{ event.startDate | date:"shortTime" }}</span>
-          <app-service-source-icon [event]="event" [user]="user"></app-service-source-icon>
+          <app-service-source-icon [event]="event" [user]="user"
+            [targetUserID]="targetUserID"></app-service-source-icon>
         </div>
         <div class="chips-row">
           <span class="chip activity-chip">{{ mainActivityType }}</span>
@@ -53,7 +54,10 @@
         </mat-icon>
       </button>
       }
-      <app-event-actions [user]="user" [event]="event" [showDownloadOriginal]="true" align="end"></app-event-actions>
+      }
+      @if (isOwner || event.privacy === 'public') {
+      <app-event-actions [user]="user" [event]="event" [isOwner]="isOwner" [showDownloadOriginal]="true"
+        align="end"></app-event-actions>
       }
     </div>
   </div>

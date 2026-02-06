@@ -39,12 +39,10 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  "storage": [
-    {
-      "bucket": "quantified-self-io",
-      "rules": "storage.quantified-self-io.rules"
-    }
-  ],
+  "storage": {
+    "bucket": "quantified-self-io",
+    "rules": "storage.quantified-self-io.rules"
+  },
   "emulators": {
     "auth": {
       "port": 9099
@@ -54,6 +52,9 @@
     },
     "firestore": {
       "port": 8081
+    },
+    "storage": {
+      "port": 9199
     },
     "ui": {
       "enabled": true,

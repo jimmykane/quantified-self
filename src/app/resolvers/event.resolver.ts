@@ -60,6 +60,10 @@ export const eventResolver: ResolveFn<EventResolverData> = (
                         dataTypes.push(t);
                     }
                 })
+            } else {
+                // If no user is logged in, use standard data types
+                // We could also get defaults from AppUserUtilities or similar if needed
+                logger.log('No user found in eventResolver, using standard data types');
             }
 
             return eventService.getEventActivitiesAndSomeStreams(

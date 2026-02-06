@@ -38,7 +38,7 @@ jobs:
       - name: Run lint
         run: npm run lint
 
-      - name: Run firestore rules tests
+      - name: Run security rules tests
         run: npm run test:rules
 
       - name: Run app tests

@@ -6,7 +6,7 @@
   <!-- Standard Event Dashboard -->
   <app-event-summary [event]="event()!" [user]='currentUser()' [isOwner]="isOwner()"
     [selectedActivities]="selectedActivitiesInstant()" [unitSettings]="userUnitSettings()"
-    [statsToShow]="basicStatsTypes">
+    [statsToShow]="basicStatsTypes" [targetUserID]="targetUserID()!">
 
     <!-- Projecting Intensity Zones after Stats Grid -->
     @if (hasIntensityZonesFlag()) {
@@ -26,7 +26,7 @@
         @if (event() && targetUserID() && hasPositionsFlag()) {
         @if (selectedActivitiesDebounced().length > 0) {
         <app-event-card-map [selectedActivities]="selectedActivitiesDebounced()" [targetUserID]="targetUserID()"
-          [user]="currentUser()!" [event]="event()!">
+          [user]="currentUser()" [event]="event()!">
         </app-event-card-map>
         } @else {
         <div class="empty-selection-message">
@@ -37,10 +37,10 @@
         }
 
         <!-- Chart Section -->
-        @if (event() && targetUserID() && currentUser()) {
+        @if (event() && targetUserID()) {
         @if (selectedActivitiesDebounced().length > 0) {
         <app-event-card-chart [selectedActivities]="selectedActivitiesDebounced()" [targetUserID]="targetUserID()"
-          [user]="currentUser()!" [waterMark]="currentUser() ? currentUser()!.brandText : null" [event]="event()!">
+          [user]="currentUser()" [waterMark]="currentUser() ? currentUser()!.brandText : null" [event]="event()!">
         </app-event-card-chart>
         } @else {
         <div class="empty-selection-message">
