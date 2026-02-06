@@ -1,44 +1,77 @@
-<button mat-icon-button [matMenuTriggerFor]="jobsMenu" *ngIf="hasActiveJobs$ | async" class="indicator-button">
-    <mat-spinner diameter="24"></mat-spinner>
+<button
+    mat-icon-button
+    [matMenuTriggerFor]="jobsMenu"
+    class="indicator-button"
+    [attr.aria-label]="statusSummary()">
+    <span class="indicator-content">
+        @if (hasActiveJobs()) {
+        <mat-progress-spinner [diameter]="24" [strokeWidth]="3" [mode]="progressMode()" [value]="overallProgress()">
+        </mat-progress-spinner>
+        } @else {
+        <mat-icon>hourglass_empty</mat-icon>
+        }
+    </span>
 </button>
 
 <mat-menu #jobsMenu="matMenu" class="jobs-menu">
     <div class="jobs-header" (click)="$event.stopPropagation()">
-        Processing Tasks
+        <div class="jobs-title">Processing Tasks</div>
+        <div class="jobs-summary">{{statusSummary()}}</div>
+        @if (totalJobsCount() > 0) {
+        <mat-progress-bar mode="determinate" [value]="overallProgress()"></mat-progress-bar>
+        }
     </div>
 
     <mat-divider></mat-divider>
 
     <div class="jobs-list" (click)="$event.stopPropagation()">
-        @for (job of jobs$ | async; track job.id) {
+        @for (job of jobs(); track job.id) {
         <div class="job-item">
             <div class="job-icon">
-                @if (job.status === 'processing') {
-                <mat-spinner diameter="20"></mat-spinner>
-                } @else if (job.status === 'completed') {
-                <mat-icon class="success">check_circle</mat-icon>
-                } @else if (job.status === 'duplicate') {
-                <mat-icon class="warning">info</mat-icon>
-                } @else if (job.status === 'failed') {
-                <mat-icon class="error">error</mat-icon>
-                } @else {
+                @switch (job.status) {
+                @case ('processing') {
+                <mat-progress-spinner diameter="20" [strokeWidth]="3" mode="indeterminate"></mat-progress-spinner>
+                }
+                @case ('completed') {
+                <mat-icon color="primary">check_circle</mat-icon>
+                }
+                @case ('duplicate') {
+                <mat-icon color="accent">info</mat-icon>
+                }
+                @case ('failed') {
+                <mat-icon color="warn">error</mat-icon>
+                }
+                @default {
                 <mat-icon>hourglass_empty</mat-icon>
+                }
                 }
             </div>
 
             <div class="job-info">
                 <div class="job-title">{{job.title}}</div>
-                <div class="job-details" *ngIf="job.details">{{job.details}}</div>
-                <mat-progress-bar *ngIf="job.status === 'processing'" mode="determinate" [value]="job.progress || 0">
+                @if (job.details) {
+                <div class="job-details">{{job.details}}</div>
+                }
+                <div class="job-meta">
+                    <mat-chip-set role="list" class="job-status">
+                        <mat-chip role="listitem" [color]="statusColorMap[job.status]" [highlighted]="true"
+                            [disableRipple]="true">
+                            {{statusLabelMap[job.status]}}
+                        </mat-chip>
+                    </mat-chip-set>
+                </div>
+                @if (job.status === 'processing') {
+                <mat-progress-bar mode="determinate" [value]="job.progress ?? 0">
                 </mat-progress-bar>
+                }
             </div>
 
-            <button mat-icon-button (click)="removeJob(job.id)">
+            <button mat-icon-button (click)="removeJob(job.id)" aria-label="Remove job">
                 <mat-icon>close</mat-icon>
             </button>
         </div>
         }
-        @if ((jobs$ | async)?.length === 0) {
+        @if (totalJobsCount() === 0) {
         <div class="empty-state">No active tasks</div>
         }
     </div>

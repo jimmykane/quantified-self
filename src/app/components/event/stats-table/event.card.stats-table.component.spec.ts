@@ -155,7 +155,7 @@ describe('EventCardStatsTableComponent', () => {
         expect(swRow).toBeUndefined();
     });
 
-    it('should use activity type headers when event is not a merge', () => {
+    it('should use value header when event is not a merge and there is one activity', () => {
         component.event = { ...mockEvent, isMerge: false } as EventInterface;
         const activity = {
             ...mockActivity,
@@ -166,7 +166,35 @@ describe('EventCardStatsTableComponent', () => {
         component.selectedActivities = [activity];
         component.ngOnChanges({});
 
-        expect(component.columns).toContain('Ride #ff0000');
+        expect(component.columns).toContain('Value #ff0000');
+    });
+
+    it('should hide activity header label when event is not a merge and there is one activity', () => {
+        component.event = { ...mockEvent, isMerge: false } as EventInterface;
+        component.selectedActivities = [mockActivity];
+        component.ngOnChanges({});
+
+        expect(component.shouldShowActivityHeaderLabel('Value #ff0000')).toBe(false);
+        expect(component.shouldShowActivityHeaderLabel('Name')).toBe(false);
+    });
+
+    it('should hide header row when there is only one activity', () => {
+        component.selectedActivities = [mockActivity];
+        component.ngOnChanges({});
+
+        expect(component.shouldShowHeaderRow()).toBe(false);
+    });
+
+    it('should show header row when there are multiple activities', () => {
+        const activity2 = {
+            ...mockActivity,
+            creator: { name: 'Player 2' },
+            getID: () => 'act2'
+        } as unknown as ActivityInterface;
+        component.selectedActivities = [mockActivity, activity2];
+        component.ngOnChanges({});
+
+        expect(component.shouldShowHeaderRow()).toBe(true);
     });
 
     it('should NOT add difference column when event is not a merge', () => {

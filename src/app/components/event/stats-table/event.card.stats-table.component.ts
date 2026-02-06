@@ -228,8 +228,25 @@ export class EventCardStatsTableComponent implements OnChanges {
     return columnHeader.slice(-7);
   }
 
+  shouldShowActivityHeaderLabel(columnHeader: string): boolean {
+    if (columnHeader === 'Name') {
+      return false;
+    }
+    if (columnHeader === 'Difference') {
+      return true;
+    }
+    if (!this.event?.isMerge && (this.selectedActivities?.length ?? 0) === 1) {
+      return false;
+    }
+    return true;
+  }
+
   getDifferenceColor(percent: number): string {
     return this.eventColorService.getDifferenceColor(percent);
+  }
+
+  shouldShowHeaderRow(): boolean {
+    return (this.selectedActivities?.length ?? 0) > 1;
   }
 
   toggleRow(row: any) {
@@ -257,6 +274,9 @@ export class EventCardStatsTableComponent implements OnChanges {
   }
 
   private getActivityHeaderLabel(activity: ActivityInterface): string {
+    if (!this.event?.isMerge && this.selectedActivities?.length === 1) {
+      return 'Value';
+    }
     if (this.event?.isMerge) {
       return activity.creator?.name || 'Device';
     }

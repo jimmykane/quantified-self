@@ -43,10 +43,13 @@
     <mat-table [dataSource]="data">
       @for (column of columns; track column) {
       <ng-container [matColumnDef]="column">
-        <mat-header-cell *matHeaderCellDef [ngStyle]="{'color': getColumnHeaderColor(column)}">
+        <mat-header-cell *matHeaderCellDef [ngStyle]="{'color': getColumnHeaderColor(column)}"
+          [attr.aria-label]="getColumnHeaderName(column)">
           @if (column !== 'Difference') {
           <span>
+            @if (shouldShowActivityHeaderLabel(column)) {
             {{getColumnHeaderName(column)}}
+            }
           </span>
           }
           @if (column === 'Difference') {
@@ -72,7 +75,9 @@
         </mat-cell>
       </ng-container>
       }
+      @if (shouldShowHeaderRow()) {
       <mat-header-row *matHeaderRowDef="columns; sticky: true;"></mat-header-row>
+      }
       <mat-row *matRowDef="let row; columns: columns;" (click)="toggleRow(row)"
         [class.selected-row]="selection.isSelected(row)">
       </mat-row>
