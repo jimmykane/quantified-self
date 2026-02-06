@@ -51,10 +51,12 @@ export class EventCardStatsTableComponent implements OnChanges {
     }
 
     // Create the columns
-    this.columns = ['Name'].concat(this.selectedActivities
-      .map((activity, index) => {
-        return `${activity.creator.name} ${this.eventColorService.getActivityColor(this.selectedActivities, activity)}`
-      }));
+    const activityColumnKeys = this.selectedActivities.map((activity) => {
+      const label = this.getActivityHeaderLabel(activity);
+      const color = this.eventColorService.getActivityColor(this.selectedActivities, activity);
+      return `${label} ${color}`;
+    });
+    this.columns = ['Name'].concat(activityColumnKeys);
 
     // Collect all the stat types from all the activities
     const stats = this.selectedActivities.reduce((statsMap: Map<string, DataInterface>, activity) => {
@@ -125,7 +127,7 @@ export class EventCardStatsTableComponent implements OnChanges {
           isComplexObject = true;
         }
 
-        rowObj[`${activity.creator.name} ${this.eventColorService.getActivityColor(this.selectedActivities, activity)}`] =
+        rowObj[activityColumnKeys[index]] =
           (displayValue || '') +
           ' ' +
           (displayUnit || '');
@@ -140,7 +142,7 @@ export class EventCardStatsTableComponent implements OnChanges {
 
     // If we are comparing only 2 activities then add a diff column.
     // @todo support more than 2 activities for diff
-    if (this.selectedActivities.length === 2) {
+    if (this.event?.isMerge && this.selectedActivities.length === 2) {
       this.columns = this.columns.concat(['Difference']);
       Array.from(stats.values()).forEach((stat: DataInterface) => {
         const row = data.find(r => r.Name === stat.getDisplayType());
@@ -182,16 +184,16 @@ export class EventCardStatsTableComponent implements OnChanges {
     const swVersionRow = { Name: 'Software Version' } as any;
     let hasSwVersion = false;
 
-    this.selectedActivities.forEach(activity => {
+    this.selectedActivities.forEach((activity, index) => {
       const creator = activity.creator as any;
       // Check commonly used fields for SW version
       const version = creator.swInfo || creator.swVersion || creator.version;
 
       if (version !== undefined && version !== null && version !== '') {
         hasSwVersion = true;
-        swVersionRow[`${activity.creator.name} ${this.eventColorService.getActivityColor(this.selectedActivities, activity)}`] = version;
+        swVersionRow[activityColumnKeys[index]] = version;
       } else {
-        swVersionRow[`${activity.creator.name} ${this.eventColorService.getActivityColor(this.selectedActivities, activity)}`] = '';
+        swVersionRow[activityColumnKeys[index]] = '';
       }
     });
 
@@ -255,5 +257,19 @@ export class EventCardStatsTableComponent implements OnChanges {
     const selectedRows = this.selection.selected;
     if (selectedRows.length === 0) return;
     this.dataExportService.copyToSheets(selectedRows, this.columns);
+  }
+
+  private getActivityHeaderLabel(activity: ActivityInterface): string {
+    if (this.event?.isMerge) {
+      return activity.creator?.name || 'Device';
+    }
+    const activityType = (activity as any)?.type;
+    if (activityType === null || activityType === undefined) {
+      return 'Activity';
+    }
+    if (typeof activityType === 'number') {
+      return ActivityTypes[activityType] || String(activityType);
+    }
+    return String(activityType);
   }
 }
