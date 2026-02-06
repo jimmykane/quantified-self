@@ -16,6 +16,25 @@
     padding: 0 1rem 1.5rem 1rem;
 }
 
+.share-progress {
+    height: 3px;
+    border-radius: 999px;
+}
+
+.icon-button-square {
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon-button-square .mat-mdc-progress-spinner {
+    width: 18px !important;
+    height: 18px !important;
+    margin: 0;
+}
+
 .benchmark-share-frame {
     position: relative;
 }

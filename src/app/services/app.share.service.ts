@@ -1,5 +1,5 @@
 import { Injectable, NgZone } from '@angular/core';
-import html2canvas from 'html2canvas';
+import { snapdom } from '@zumer/snapdom';
 
 export interface ShareBenchmarkOptions {
   watermark?: { brand: string; timestamp: string; url?: string; logoUrl?: string };
@@ -57,16 +57,23 @@ export class AppShareService {
       wrapper.appendChild(clone);
       document.body.appendChild(wrapper);
 
-      await this.waitForIdle();
+      try {
+        await this.waitForIdle();
 
-      const canvas = await html2canvas(clone, {
-        scale,
-        backgroundColor: null,
-        useCORS: true,
-      });
+        const image = await snapdom.toPng(clone, {
+          scale,
+          width: options.width,
+          backgroundColor: 'transparent',
+          embedFonts: true,
+          fast: false,
+        });
 
-      document.body.removeChild(wrapper);
-      return canvas.toDataURL('image/png');
+        return image.src;
+      } finally {
+        if (wrapper.parentNode) {
+          wrapper.parentNode.removeChild(wrapper);
+        }
+      }
     });
   }
 

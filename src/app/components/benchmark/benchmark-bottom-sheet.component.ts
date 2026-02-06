@@ -11,12 +11,8 @@ import { environment } from '../../../environments/environment';
   template: `
     <div class="bottom-sheet-container">
         <app-bottom-sheet-header title="Hardware Benchmark Analysis" icon="analytics">
-            <button mat-icon-button matTooltip="Share as image" (click)="shareBenchmark()" [disabled]="isSharing">
-                @if (isSharing) {
-                  <mat-spinner diameter="18"></mat-spinner>
-                } @else {
-                  <mat-icon>share</mat-icon>
-                }
+            <button mat-icon-button class="icon-button-square" matTooltip="Share as image" (click)="shareBenchmark()" [disabled]="isSharing" aria-busy="{{isSharing}}">
+                <mat-icon>share</mat-icon>
             </button>
             <button mat-icon-button matTooltip="Re-run with different activities" (click)="rerun()">
                 <mat-icon>refresh</mat-icon>
@@ -25,6 +21,7 @@ import { environment } from '../../../environments/environment';
                 <mat-icon>close</mat-icon>
             </button>
         </app-bottom-sheet-header>
+        <mat-progress-bar *ngIf="isSharing" class="share-progress" mode="indeterminate" color="accent"></mat-progress-bar>
         <div class="bottom-sheet-content qs-scrollbar">
             <div #shareFrame class="benchmark-share-frame">
               <app-benchmark-report 

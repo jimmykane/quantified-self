@@ -38,29 +38,23 @@ interface BenchmarkDiffChip {
     color?: string;
 }
 
+interface BenchmarkIssueGroup {
+    key: string;
+    title: string;
+    icon: string;
+    deviceLabel: string | null;
+    deviceColor: string;
+    issues: BenchmarkQualityIssue[];
+    count: number;
+    firstTimestamp: Date | null;
+    lastTimestamp: Date | null;
+    hasRange: boolean;
+}
+
 @Component({
     selector: 'app-benchmark-report',
     template: `
     <div class="benchmark-container" *ngIf="result">
-    
-      <!-- Verdict Summary -->
-      <mat-card class="verdict-card" [ngClass]="getOverallGrade()">
-        <mat-card-header>
-          <div mat-card-avatar class="grade-avatar" [ngClass]="getOverallGrade()">
-            <mat-icon>{{ getGradeIcon(getOverallGrade()) }}</mat-icon>
-          </div>
-          <mat-card-title>{{ getVerdictTitle() }}</mat-card-title>
-          <mat-card-subtitle>Hardware Benchmark Analysis</mat-card-subtitle>
-        </mat-card-header>
-        <mat-card-content>
-          <ul class="verdict-list">
-            <li *ngFor="let insight of getInsights()">
-              <mat-icon [ngClass]="insight.grade">{{ getGradeIcon(insight.grade) }}</mat-icon>
-              <span>{{ insight.text }}</span>
-            </li>
-          </ul>
-        </mat-card-content>
-      </mat-card>
 
       <!-- Header -->
       <div class="report-header">
@@ -82,6 +76,25 @@ interface BenchmarkDiffChip {
             <span>Offset {{ result.timeOffsetSeconds }}s</span>
         </div>
       </div>
+
+      <!-- Verdict Summary -->
+      <mat-card class="verdict-card" [ngClass]="getOverallGrade()">
+        <mat-card-header>
+          <div mat-card-avatar class="grade-avatar" [ngClass]="getOverallGrade()">
+            <mat-icon>{{ getGradeIcon(getOverallGrade()) }}</mat-icon>
+          </div>
+          <mat-card-title>{{ getVerdictTitle() }}</mat-card-title>
+          <mat-card-subtitle>Hardware Benchmark Analysis</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+          <ul class="verdict-list">
+            <li *ngFor="let insight of getInsights()">
+              <mat-icon [ngClass]="insight.grade">{{ getGradeIcon(insight.grade) }}</mat-icon>
+              <span>{{ insight.text }}</span>
+            </li>
+          </ul>
+        </mat-card-content>
+      </mat-card>
 
       <!-- Diff Chips -->
       <div class="diff-chips-section" *ngIf="diffChips.length > 0">
@@ -143,22 +156,41 @@ interface BenchmarkDiffChip {
                 <span>Auto-aligned by <strong>{{ result.timeOffsetSeconds }}s</strong> to maximize correlation.</span>
             </div>
             
-            <div class="quality-issues-list qs-scrollbar" *ngIf="result.qualityIssues && result.qualityIssues.length > 0">
+            <div class="quality-issues-list" *ngIf="qualityIssueGroups.length > 0">
                 <p class="issues-title">Detected Issues:</p>
-                <div class="quality-issue" *ngFor="let issue of result.qualityIssues" [ngClass]="issue.severity">
-                    <mat-icon>{{ getIssueIcon(issue.type) }}</mat-icon>
-                    <div class="issue-details">
-                        <span class="issue-desc">{{ formatIssueDescription(issue) }}</span>
-                        <div class="issue-meta">
-                          <span class="issue-device-pill"
-                            *ngIf="(issue.type === 'stuck' && getIssueDeviceLabel(issue)) as deviceLabel"
-                            [style.--pill-color]="getIssueDeviceColor(issue)">
+                <div class="quality-issue-group" *ngFor="let group of qualityIssueGroups">
+                    <button class="issue-group-header" type="button"
+                        (click)="toggleIssueGroup(group.key)"
+                        [attr.aria-expanded]="isIssueGroupExpanded(group.key)">
+                        <span class="issue-group-title">
+                          <mat-icon>{{ group.icon }}</mat-icon>
+                          <span>{{ group.title }}</span>
+                          <span class="issue-device-pill issue-group-device" *ngIf="group.deviceLabel"
+                            [style.--pill-color]="group.deviceColor">
                             <mat-icon>watch</mat-icon>
-                            {{ deviceLabel }}
+                            {{ group.deviceLabel }}
                           </span>
-                          <span *ngIf="issue.type !== 'stuck'">{{ issue.streamType }}</span>
-                          <span>•</span>
-                          <span>{{ toSafeDate(issue.timestamp) | date:'mediumTime' }}</span>
+                        </span>
+                        <span class="issue-group-meta">
+                          <span class="issue-group-count">{{ group.count }}×</span>
+                          <span class="issue-group-time" *ngIf="group.firstTimestamp">
+                            {{ group.firstTimestamp | date:'shortTime' }}
+                            <ng-container *ngIf="group.hasRange">–{{ group.lastTimestamp | date:'shortTime' }}</ng-container>
+                          </span>
+                          <mat-icon class="issue-group-chevron">
+                            {{ isIssueGroupExpanded(group.key) ? 'expand_less' : 'expand_more' }}
+                          </mat-icon>
+                        </span>
+                    </button>
+                    <div class="issue-group-details" *ngIf="isIssueGroupExpanded(group.key)">
+                        <div class="quality-issue" *ngFor="let issue of group.issues" [ngClass]="issue.severity">
+                            <mat-icon>{{ getIssueIcon(issue.type) }}</mat-icon>
+                            <div class="issue-details">
+                                <span class="issue-desc">{{ formatIssueDetail(issue) }}</span>
+                                <div class="issue-meta">
+                                  <span>{{ toSafeDate(issue.timestamp) | date:'mediumTime' }}</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -209,12 +241,15 @@ export class BenchmarkReportComponent implements OnChanges {
     @Input() summariesSettings?: UserSummariesSettingsInterface;
     objectKeys = Object.keys;
     diffChips: BenchmarkDiffChip[] = [];
+    qualityIssueGroups: BenchmarkIssueGroup[] = [];
+    expandedIssueGroups = new Set<string>();
 
     private eventColorService = inject(AppEventColorService);
 
     ngOnChanges(changes: SimpleChanges) {
         if (changes['result'] || changes['event'] || changes['unitSettings'] || changes['summariesSettings']) {
             this.updateDiffChips();
+            this.updateQualityIssueGroups();
         }
     }
 
@@ -352,14 +387,37 @@ export class BenchmarkReportComponent implements OnChanges {
         return 'var(--mat-sys-primary)';
     }
 
-    formatIssueDescription(issue: BenchmarkQualityIssue): string {
+    formatIssueDetail(issue: BenchmarkQualityIssue): string {
         if (!issue) return '';
-        const streamLabel = issue.streamType ? `${issue.streamType} ` : '';
         if (issue.type === 'stuck') {
             const description = issue.description ? issue.description.replace(/^Sensor\s+/i, '') : '';
-            return `${streamLabel}sensor ${description}`.replace(/\s+/g, ' ').trim();
+            const trimmed = description.replace(/^sensor\s+/i, '').trim();
+            return trimmed.length > 0 ? `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}` : '';
         }
         return issue.description || '';
+    }
+
+    getIssueGroupTitle(issue: BenchmarkQualityIssue): string {
+        if (!issue) return '';
+        const streamLabel = issue.streamType ? `${issue.streamType} ` : '';
+        let title = '';
+
+        switch (issue.type) {
+            case 'stuck':
+                title = `${streamLabel}sensor stuck`;
+                break;
+            case 'dropout':
+                title = `${streamLabel}signal dropout`;
+                break;
+            case 'cadence_lock':
+                title = `${streamLabel}cadence lock`;
+                break;
+            default:
+                title = issue.description || issue.type;
+                break;
+        }
+
+        return title.charAt(0).toUpperCase() + title.slice(1);
     }
 
     /** Safely convert Firestore Timestamp or any date-like value to Date */
@@ -377,6 +435,18 @@ export class BenchmarkReportComponent implements OnChanges {
         if (absScore >= CORRELATION_THRESHOLDS.good) return 'Strong Correlation';
         if (absScore >= CORRELATION_THRESHOLDS.fair) return 'Moderate Correlation';
         return 'Weak Correlation';
+    }
+
+    toggleIssueGroup(key: string) {
+        if (this.expandedIssueGroups.has(key)) {
+            this.expandedIssueGroups.delete(key);
+        } else {
+            this.expandedIssueGroups.add(key);
+        }
+    }
+
+    isIssueGroupExpanded(key: string): boolean {
+        return this.expandedIssueGroups.has(key);
     }
 
     private updateDiffChips() {
@@ -438,5 +508,78 @@ export class BenchmarkReportComponent implements OnChanges {
                 const rightValue = Number.isFinite(right.percent) ? right.percent : 0;
                 return rightValue - leftValue;
             });
+    }
+
+    private updateQualityIssueGroups() {
+        const issues = this.result?.qualityIssues ?? [];
+        if (!issues.length) {
+            this.qualityIssueGroups = [];
+            this.expandedIssueGroups.clear();
+            return;
+        }
+
+        const groups = new Map<string, BenchmarkIssueGroup>();
+        for (const issue of issues) {
+            const deviceLabel = this.getIssueDeviceLabel(issue);
+            const key = [issue.type, issue.streamType || '', deviceLabel || ''].join('|');
+            let group = groups.get(key);
+
+            if (!group) {
+                group = {
+                    key,
+                    title: this.getIssueGroupTitle(issue),
+                    icon: this.getIssueIcon(issue.type),
+                    deviceLabel,
+                    deviceColor: this.getIssueDeviceColor(issue),
+                    issues: [],
+                    count: 0,
+                    firstTimestamp: null,
+                    lastTimestamp: null,
+                    hasRange: false,
+                };
+                groups.set(key, group);
+            }
+
+            group.issues.push(issue);
+        }
+
+        const grouped = Array.from(groups.values()).map(group => {
+            group.issues.sort((a, b) => this.getIssueTime(a) - this.getIssueTime(b));
+            group.count = group.issues.length;
+            group.firstTimestamp = this.toSafeDate(group.issues[0]?.timestamp);
+            group.lastTimestamp = this.toSafeDate(group.issues[group.issues.length - 1]?.timestamp);
+            group.hasRange = group.count > 1 &&
+                !!group.firstTimestamp &&
+                !!group.lastTimestamp &&
+                group.firstTimestamp.getTime() !== group.lastTimestamp.getTime();
+            return group;
+        });
+
+        grouped.sort((left, right) => {
+            if (left.count !== right.count) {
+                return right.count - left.count;
+            }
+            return this.getIssueGroupTime(right) - this.getIssueGroupTime(left);
+        });
+
+        this.qualityIssueGroups = grouped;
+
+        const validKeys = new Set(grouped.map(group => group.key));
+        for (const key of Array.from(this.expandedIssueGroups)) {
+            if (!validKeys.has(key)) {
+                this.expandedIssueGroups.delete(key);
+            }
+        }
+    }
+
+    private getIssueTime(issue: BenchmarkQualityIssue): number {
+        const date = this.toSafeDate(issue?.timestamp);
+        return date ? date.getTime() : 0;
+    }
+
+    private getIssueGroupTime(group: BenchmarkIssueGroup): number {
+        if (group.lastTimestamp) return group.lastTimestamp.getTime();
+        if (group.firstTimestamp) return group.firstTimestamp.getTime();
+        return 0;
     }
 }
