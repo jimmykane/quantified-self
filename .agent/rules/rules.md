@@ -29,6 +29,7 @@ trigger: always_on
 - Follow **Angular Material** theming conventions.
 - Use `app-service-source-icon` for displaying service logos (Garmin, Suunto, COROS) to ensure they are theme-aware (using `mat-icon` and `svgIcon`).
 - interactive maps use **Leaflet**.
+- **Typography**: Use **Barlow Condensed** for numeric/stat displays (values, diffs, percentages) unless a specific component style dictates otherwise.
 
 ### General
 - **Browser Compatibility**: Use `BrowserCompatibilityService` to check for modern API support (e.g., `CompressionStream`, `DecompressionStream`) before using them. If unsupported, the service handles showing an upgrade dialog.
