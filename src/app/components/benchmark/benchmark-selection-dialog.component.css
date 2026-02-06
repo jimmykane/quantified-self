@@ -1,0 +1,266 @@
+.dialog-subtitle {
+  color: var(--mat-sys-on-surface-variant);
+  margin-bottom: 1rem;
+}
+
+.loading-hint {
+  font-size: 0.9rem;
+  color: var(--mat-sys-on-surface-variant);
+  margin-bottom: 0.75rem;
+}
+
+.benchmark-selection-overlay {
+  --benchmark-overlay-min-height: 160px;
+}
+
+::ng-deep .benchmark-selection-overlay .loading-overlay-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.selection-list {
+  margin-bottom: 0.5rem;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+::ng-deep .selection-list .mat-mdc-list-item,
+::ng-deep .selection-list .mdc-list-item {
+  height: auto !important;
+  min-height: 56px;
+}
+
+::ng-deep .selection-list .mdc-list-item__content {
+  align-items: stretch;
+  white-space: normal;
+}
+
+.empty-state {
+  padding: 1rem;
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.activity-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.activity-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.activity-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.activity-meta {
+  font-size: 0.85em;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.device-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  background: transparent;
+  border: 1px solid var(--pill-color, var(--mat-sys-primary));
+  color: var(--pill-color, var(--mat-sys-primary));
+  white-space: nowrap;
+  flex-shrink: 1;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.device-pill-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-pill mat-icon {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+}
+
+mat-list-option {
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0;
+  border-radius: 8px;
+}
+
+.selection-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin-top: 1rem;
+  background: var(--mat-sys-surface-variant);
+  border-radius: 8px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.preview-title {
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.role-assignment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.role-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  min-width: 140px;
+  text-align: center;
+  background: var(--mat-sys-surface-variant);
+  border: 1px solid var(--role-color, var(--mat-sys-outline-variant));
+  box-sizing: border-box;
+}
+
+.role-card.reference {
+  color: var(--mat-sys-on-surface);
+}
+
+.role-card.test {
+  color: var(--mat-sys-on-surface);
+}
+
+.role-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+  margin-bottom: 0.25rem;
+}
+
+.device-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.swap-btn {
+  color: var(--mat-sys-primary);
+}
+
+.options-container {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+}
+
+.auto-align-checkbox {
+  align-self: flex-start;
+}
+
+.auto-align-info {
+  width: 100%;
+}
+
+.auto-align-note {
+  margin-top: 4px;
+  font-size: 0.85em;
+  opacity: 0.8;
+}
+
+::ng-deep .auto-align-checkbox .mdc-label {
+  white-space: normal;
+  line-height: 1.2;
+}
+
+@media (max-width: 600px) {
+  .benchmark-selection-overlay {
+    --benchmark-overlay-min-height: 240px;
+  }
+
+  .activity-line {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+
+  .activity-line .device-pill {
+    align-self: flex-start;
+    font-size: 0.6rem;
+    padding: 0.1rem 0.4rem;
+    max-width: 100%;
+  }
+
+  .role-card .device-pill {
+    align-self: center;
+  }
+
+  .role-assignment {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .swap-btn {
+    align-self: center;
+    transform: rotate(90deg);
+  }
+
+  .role-card {
+    width: 100%;
+    min-width: 0;
+    padding: 0.6rem 0.75rem;
+  }
+
+  .role-label {
+    font-size: 0.6rem;
+  }
+
+  .auto-align-info ul {
+    padding-left: 1.25rem;
+  }
+
+  .auto-align-info li {
+    margin-bottom: 0.4rem;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

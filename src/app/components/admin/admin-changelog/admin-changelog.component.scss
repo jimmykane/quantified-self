@@ -92,6 +92,7 @@
     display: flex;
     gap: 16px;
     flex-wrap: wrap;
+    align-items: flex-start;
 
     mat-form-field {
         flex: 1;
@@ -101,6 +102,9 @@
     mat-checkbox {
         display: flex;
         align-items: center;
+        // Match the height of mat-form-field to center the checkbox vertically
+        min-height: 56px;
+        padding-top: 8px; // Offset for form field label space
     }
 }
 

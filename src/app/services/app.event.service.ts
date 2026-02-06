@@ -22,7 +22,7 @@ import { EventExporterGPX } from '@sports-alliance/sports-lib';
 
 import { EventWriter, FirestoreAdapter, StorageAdapter, OriginalFile } from '../../../functions/src/shared/event-writer';
 import { generateActivityID, generateEventID } from '../../../functions/src/shared/id-generator';
-import { Bytes } from 'firebase/firestore';
+import { Bytes, serverTimestamp } from 'firebase/firestore';
 import { Storage, ref, uploadBytes, getBytes } from '@angular/fire/storage';
 import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
@@ -43,6 +43,8 @@ import { AppFileService } from './app.file.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { getMetadata } from '@angular/fire/storage';
 import { AppCacheService } from './app.cache.service';
+import { BenchmarkEventAdapter } from './benchmark-event.adapter';
+import { SPORTS_LIB_VERSION } from '../constants/sports-lib-version.browser';
 
 
 @Injectable({
@@ -56,6 +58,7 @@ export class AppEventService implements OnDestroy {
   private fileService = inject(AppFileService);
   private logger = inject(LoggerService);
   private appEventUtilities = inject(AppEventUtilities);
+  private benchmarkAdapter = inject(BenchmarkEventAdapter);
   private static reportedUnknownTypes = new Set<string>();
 
   /**
@@ -102,6 +105,8 @@ export class AppEventService implements OnDestroy {
           if (rawData.originalFile) {
             event.originalFile = rawData.originalFile;
           }
+
+          this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(event, rawData);
 
           return event;
         })),
@@ -188,6 +193,8 @@ export class AppEventService implements OnDestroy {
         if (rawData.originalFile) {
           event.originalFile = rawData.originalFile;
         }
+
+        this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(event, rawData);
 
         return event;
       });
@@ -438,6 +445,13 @@ export class AppEventService implements OnDestroy {
 
     const writer = new EventWriter(adapter, storageAdapter);
     await writer.writeAllEventData(user.uid, event, originalFiles);
+
+    const processingDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID as string, 'metaData', 'processing'));
+    const processingPayload = {
+      sportsLibVersion: SPORTS_LIB_VERSION,
+      processedAt: serverTimestamp(),
+    };
+    await runInInjectionContext(this.injector, () => setDoc(processingDoc, processingPayload));
   }
 
   public async setEvent(user: User, event: EventInterface) {
@@ -513,6 +527,7 @@ export class AppEventService implements OnDestroy {
   }
 
   public ngOnDestroy() {
+    return;
   }
 
   /**
@@ -554,7 +569,6 @@ export class AppEventService implements OnDestroy {
             return fullEvent;
           }
 
-          const existingID = event.getID();
           event.clearActivities();
           event.addActivities(fullEvent.getActivities());
           return event;
@@ -580,7 +594,6 @@ export class AppEventService implements OnDestroy {
 
           // Merge logic: Copy activities/streams from fullEvent to event
           // We assume the file is the source of truth.
-          const existingID = event.getID();
           // Keep the ID and other metadata from Firestore, but replace activities
           event.clearActivities();
           event.addActivities(fullEvent.getActivities());
@@ -843,6 +856,8 @@ export class AppEventService implements OnDestroy {
             event.originalFile = rawData.originalFile;
           }
 
+          this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(event, rawData);
+
           return event;
         })
       }));
@@ -875,6 +890,8 @@ export class AppEventService implements OnDestroy {
           if (rawData.originalFile) {
             event.originalFile = rawData.originalFile;
           }
+
+          this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(event, rawData);
 
           events.push(event);
           return events;

@@ -16,6 +16,7 @@ import { DataGradeAdjustedPace } from '@sports-alliance/sports-lib';
 import { SelectionModel } from '@angular/cdk/collections';
 import { DataExportService } from '../../../services/data-export.service';
 import { expandCollapse } from '../../../animations/animations';
+import { computeStatDiff } from '../../../helpers/stats-diff.helper';
 
 @Component({
   selector: 'app-event-stats-table',
@@ -51,10 +52,12 @@ export class EventCardStatsTableComponent implements OnChanges {
     }
 
     // Create the columns
-    this.columns = ['Name'].concat(this.selectedActivities
-      .map((activity, index) => {
-        return `${activity.creator.name} ${this.eventColorService.getActivityColor(this.selectedActivities, activity)}`
-      }));
+    const activityColumnKeys = this.selectedActivities.map((activity) => {
+      const label = this.getActivityHeaderLabel(activity);
+      const color = this.eventColorService.getActivityColor(this.selectedActivities, activity);
+      return `${label} ${color}`;
+    });
+    this.columns = ['Name'].concat(activityColumnKeys);
 
     // Collect all the stat types from all the activities
     const stats = this.selectedActivities.reduce((statsMap: Map<string, DataInterface>, activity) => {
@@ -111,45 +114,56 @@ export class EventCardStatsTableComponent implements OnChanges {
 
     // Create the data as rows
     const data = Array.from(stats.values()).reduce((array, stat) => {
-      array.push(
-        this.selectedActivities.reduce((rowObj: any, activity, index) => {
-          const activityStat = activity.getStat(stat.getType());
-          if (!activityStat) {
-            return rowObj;
-          }
-          rowObj[`${activity.creator.name} ${this.eventColorService.getActivityColor(this.selectedActivities, activity)}`] =
-            (activityStat ? activityStat.getDisplayValue() : '') +
-            ' ' +
-            (activityStat ? activityStat.getDisplayUnit() : '');
+      let isComplexObject = false;
+      const row = this.selectedActivities.reduce((rowObj: any, activity, index) => {
+        const activityStat = activity.getStat(stat.getType());
+        if (!activityStat) {
           return rowObj;
-        }, { Name: `${stat.getDisplayType()}` } as any),
-      );
+        }
+        const displayValue = activityStat.getDisplayValue();
+        const displayUnit = activityStat.getDisplayUnit();
+
+        // Check if any activity has a value that renders as [object Object]
+        if (String(displayValue).includes('[object Object]')) {
+          isComplexObject = true;
+        }
+
+        rowObj[activityColumnKeys[index]] =
+          (displayValue || '') +
+          ' ' +
+          (displayUnit || '');
+        return rowObj;
+      }, { Name: `${stat.getDisplayType()}` } as any);
+
+      if (!isComplexObject) {
+        array.push(row);
+      }
       return array;
     }, [] as any[]);
 
     // If we are comparing only 2 activities then add a diff column.
     // @todo support more than 2 activities for diff
-    if (this.selectedActivities.length === 2) {
+    if (this.event?.isMerge && this.selectedActivities.length === 2) {
       this.columns = this.columns.concat(['Difference']);
-      Array.from(stats.values()).forEach((stat: DataInterface, index) => {
-        const firstActivityStat = this.selectedActivities[0].getStat(stat.getType());
-        const secondActivityStat = this.selectedActivities[1].getStat(stat.getType());
-        if (!firstActivityStat || !secondActivityStat) {
+      Array.from(stats.values()).forEach((stat: DataInterface) => {
+        const row = data.find(r => r.Name === stat.getDisplayType());
+        if (!row) {
           return;
         }
-        const firstActivityStatValue = firstActivityStat.getValue();
-        const secondActivityStatValue = secondActivityStat.getValue();
-        if (typeof firstActivityStatValue !== 'number' || typeof secondActivityStatValue !== 'number') {
+        const diff = computeStatDiff(
+          this.selectedActivities[0],
+          this.selectedActivities[1],
+          stat.getType(),
+          stat.getType(),
+          this.userUnitSettings
+        );
+        if (!diff) {
           return;
         }
-        // Create an obj
-        data[index]['Difference'] = {} as any;
-        data[index]['Difference']['display'] = (DynamicDataLoader.getDataInstanceFromDataType(stat.getType(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayValue() + ' ' + (DynamicDataLoader.getDataInstanceFromDataType(stat.getType(), Math.abs(firstActivityStatValue - secondActivityStatValue))).getDisplayUnit();
-        data[index]['Difference']['percent'] = 100 * Math.abs((firstActivityStatValue - secondActivityStatValue) / ((firstActivityStatValue + secondActivityStatValue) / 2));
-        // Correct the NaN with both 0's
-        if (firstActivityStatValue === 0 && secondActivityStatValue === 0) {
-          data[index]['Difference']['percent'] = 0
-        }
+        row['Difference'] = {
+          display: diff.display,
+          percent: diff.percent,
+        };
       })
     }
 
@@ -167,16 +181,16 @@ export class EventCardStatsTableComponent implements OnChanges {
     const swVersionRow = { Name: 'Software Version' } as any;
     let hasSwVersion = false;
 
-    this.selectedActivities.forEach(activity => {
+    this.selectedActivities.forEach((activity, index) => {
       const creator = activity.creator as any;
       // Check commonly used fields for SW version
       const version = creator.swInfo || creator.swVersion || creator.version;
 
       if (version !== undefined && version !== null && version !== '') {
         hasSwVersion = true;
-        swVersionRow[`${activity.creator.name} ${this.eventColorService.getActivityColor(this.selectedActivities, activity)}`] = version;
+        swVersionRow[activityColumnKeys[index]] = version;
       } else {
-        swVersionRow[`${activity.creator.name} ${this.eventColorService.getActivityColor(this.selectedActivities, activity)}`] = '';
+        swVersionRow[activityColumnKeys[index]] = '';
       }
     });
 
@@ -240,5 +254,19 @@ export class EventCardStatsTableComponent implements OnChanges {
     const selectedRows = this.selection.selected;
     if (selectedRows.length === 0) return;
     this.dataExportService.copyToSheets(selectedRows, this.columns);
+  }
+
+  private getActivityHeaderLabel(activity: ActivityInterface): string {
+    if (this.event?.isMerge) {
+      return activity.creator?.name || 'Device';
+    }
+    const activityType = (activity as any)?.type;
+    if (activityType === null || activityType === undefined) {
+      return 'Activity';
+    }
+    if (typeof activityType === 'number') {
+      return ActivityTypes[activityType] || String(activityType);
+    }
+    return String(activityType);
   }
 }

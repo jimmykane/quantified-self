@@ -7,6 +7,7 @@ import { DashboardComponent } from '../components/dashboard/dashboard.component'
 import { SummariesComponent } from '../components/summaries/summaries.component';
 import { EventsExportFormComponent } from '../components/events-export-form/events-export.form.component';
 import { EventTableComponent, MatPaginatorIntlFireStore } from '../components/event-table/event.table.component';
+import { MergeOptionsDialogComponent } from '../components/event-table/merge-options-dialog/merge-options-dialog.component';
 import { MatPaginatorIntl } from '@angular/material/paginator';
 import { EventsMapComponent } from '../components/events-map/events-map.component';
 import { TileChartComponent } from '../components/tile/chart/tile.chart.component';
@@ -42,6 +43,7 @@ import { GoogleMapsModule } from '@angular/google-maps';
         TileActionsFooterComponent,
         EventsExportFormComponent,
         EventTableComponent,
+        MergeOptionsDialogComponent,
         EventTableActionsComponent,
         EventsMapComponent,
         TileChartComponent,

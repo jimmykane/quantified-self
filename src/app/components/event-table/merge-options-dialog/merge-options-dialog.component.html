@@ -1,0 +1,43 @@
+<h2 mat-dialog-title>Merge events</h2>
+<mat-dialog-content>
+  <div class="merge-options">
+    <div class="glass-card option-card" role="button" tabindex="0"
+      [class.selected]="selectedOption === 'benchmark'"
+      [class.disabled]="isMerging" [attr.aria-disabled]="isMerging"
+      (click)="selectOption('benchmark')" (keydown.enter)="selectOption('benchmark')"
+      [attr.tabindex]="isMerging ? -1 : 0">
+      <div class="option-title">Create a benchmark merge</div>
+      <div class="option-summary">
+        Creates a merged event flagged as a benchmark merge.
+      </div>
+      <app-status-info type="info" title="What this does">
+        This merged event is excluded from stats and enables benchmark comparison tools and reports.
+      </app-status-info>
+    </div>
+
+    <div class="glass-card option-card" role="button" tabindex="0"
+      [class.selected]="selectedOption === 'multi'"
+      [class.disabled]="isMerging" [attr.aria-disabled]="isMerging"
+      (click)="selectOption('multi')" (keydown.enter)="selectOption('multi')"
+      [attr.tabindex]="isMerging ? -1 : 0">
+      <div class="option-title">Create a new multi activity event</div>
+      <div class="option-summary">
+        Creates a standard multi-activity event.
+      </div>
+      <app-status-info type="info" title="What this does">
+        This event is treated like any other multi-activity event and remains included in stats.
+      </app-status-info>
+    </div>
+  </div>
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()" [disabled]="isMerging">Cancel</button>
+  <button mat-flat-button color="primary" (click)="confirm()" [disabled]="isMerging">
+    <span class="merge-button-content">
+      @if (isMerging) {
+      <mat-progress-spinner class="merge-spinner" diameter="18" mode="indeterminate"></mat-progress-spinner>
+      }
+      <span>{{ isMerging ? 'Merging…' : 'Merge' }}</span>
+    </span>
+  </button>
+</mat-dialog-actions>

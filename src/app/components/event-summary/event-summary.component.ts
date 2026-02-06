@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges, ChangeDetectorRef, computed } from '@angular/core';
+import { AppEventInterface, BenchmarkOptions, getBenchmarkPairKey } from '../../../../functions/src/shared/app-event.interface';
 import {
   EventInterface,
   User,
@@ -19,11 +20,11 @@ import {
   ServiceNames,
 } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
-import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { EventDetailsSummaryBottomSheetComponent } from './event-details-summary-bottom-sheet/event-details-summary-bottom-sheet.component';
 import { EventStatsBottomSheetComponent } from '../event/stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
 import { EventDevicesBottomSheetComponent } from '../event/devices/event-devices-bottom-sheet/event-devices-bottom-sheet.component';
+import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 
 @Component({
   selector: 'app-event-summary',
@@ -34,7 +35,7 @@ import { EventDevicesBottomSheetComponent } from '../event/devices/event-devices
 })
 
 export class EventSummaryComponent implements OnChanges {
-  @Input() event!: EventInterface;
+  @Input() event!: AppEventInterface;
   @Input() user!: User;
   @Input() showType = true;
   @Input() showIcon = false;
@@ -43,11 +44,14 @@ export class EventSummaryComponent implements OnChanges {
   @Input() unitSettings!: UserUnitSettingsInterface;
   @Input() statsToShow: string[] = [];
 
+  // Local state for on-demand generated benchmark
+  benchmarkResult: import('../../../../functions/src/shared/app-event.interface').BenchmarkResult | null = null;
+
   constructor(
     private eventService: AppEventService,
-    private snackBar: MatSnackBar,
     private cd: ChangeDetectorRef,
-    private bottomSheet: MatBottomSheet
+    private bottomSheet: MatBottomSheet,
+    private benchmarkFlow: AppBenchmarkFlowService
   ) {
   }
 
@@ -79,7 +83,6 @@ export class EventSummaryComponent implements OnChanges {
         selectedActivities: this.selectedActivities,
         userUnitSettings: this.unitSettings
       },
-      panelClass: 'qs-full-width-bottom-sheet'
     });
   }
 
@@ -95,12 +98,78 @@ export class EventSummaryComponent implements OnChanges {
         event: this.event,
         selectedActivities: this.selectedActivities,
       },
-      panelClass: 'qs-full-width-bottom-sheet'
+    });
+  }
+
+  async openBenchmark() {
+    const activities = this.event.getActivities();
+
+    // For 2 activities, check if we have a saved result for this pair
+    if (activities.length === 2) {
+      const key = getBenchmarkPairKey(activities[0].getID()!, activities[1].getID()!);
+      const savedResult = this.event.benchmarkResults?.[key];
+      if (savedResult) {
+        this.benchmarkResult = savedResult;
+        this.openBenchmarkReport();
+        return;
+      }
+      // No saved result, auto-run
+      await this.runBenchmark(activities[0], activities[1], { autoAlignTime: true });
+      return;
+    }
+
+    // For 3+ activities or to select different pair, open dialog
+    this.openBenchmarkDialog();
+  }
+
+  openBenchmarkDialog(): void {
+    this.benchmarkFlow.openBenchmarkSelectionDialog({
+      event: this.event,
+      user: this.user,
+      initialSelection: this.selectedActivities,
+      onResult: (result) => {
+        this.benchmarkResult = result;
+        this.cd.detectChanges();
+      }
+    });
+  }
+
+  private async runBenchmark(ref: ActivityInterface, test: ActivityInterface, options: BenchmarkOptions) {
+    await this.benchmarkFlow.generateAndOpenReport({
+      event: this.event,
+      user: this.user,
+      ref,
+      test,
+      options,
+      initialSelection: this.selectedActivities,
+      onResult: (result) => {
+        this.benchmarkResult = result;
+        this.cd.detectChanges();
+      }
+    });
+  }
+
+  openBenchmarkReport() {
+    if (!this.benchmarkResult) return;
+    this.benchmarkFlow.openBenchmarkReport({
+      event: this.event,
+      user: this.user,
+      result: this.benchmarkResult,
+      initialSelection: this.selectedActivities,
+      onResult: (result) => {
+        this.benchmarkResult = result;
+        this.cd.detectChanges();
+      }
     });
   }
 
   get mainActivityType(): string {
     return this.event?.getActivities()[0]?.type || 'Other';
+  }
+
+  get benchmarkCount(): number {
+    if (!this.event?.benchmarkResults) return 0;
+    return Object.keys(this.event.benchmarkResults).length;
   }
 
   getHeroStats(): string[] {

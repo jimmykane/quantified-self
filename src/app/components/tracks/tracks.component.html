@@ -3,24 +3,15 @@
   <app-event-search [startOfTheWeek]="user.settings.unitSettings.startOfTheWeek" [showDatePicker]="false"
     [showActivityTypePicker]="false" [dateRangesToShow]="dateRangesToShow"
     [selectedActivityTypes]="user.settings.myTracksSettings?.activityTypes"
-    [selectedDateRange]="user.settings.myTracksSettings?.dateRange" (searchChange)="search($event)">
+    [selectedDateRange]="user.settings.myTracksSettings?.dateRange" [includeMergedEvents]="false"
+    (searchChange)="search($event)">
   </app-event-search>
   }
 
-  <!--  <app-event-search-->
-  <!--    [isLoading]="totalProgress !== 100"-->
-  <!--    [selectedDateRange]="user.settings.dashboardSettings.dateRange"-->
-  <!--    [selectedStartDate]="searchStartDate"-->
-  <!--    [selectedEndDate]="searchEndDate"-->
-  <!--    [startOfTheWeek]="startOfTheWeek"-->
-  <!--    [selectedActivityTypes]="user.settings.dashboardSettings.activityTypes"-->
-  <!--    (searchChange)="search($event)">-->
-  <!--  </app-event-search>-->
   <div #mapDiv id="map"></div>
   <div class="map-style-controls">
     <mat-button-toggle-group appearance="legacy" name="mapStyle" aria-label="Map Style" [disabled]="isLoading()"
-      [value]="user?.settings?.myTracksSettings?.mapStyle || 'default'"
-      (change)="setMapStyle($any($event).value)">
+      [value]="user?.settings?.myTracksSettings?.mapStyle || 'default'" (change)="setMapStyle($any($event).value)">
       <mat-button-toggle value="default">Default</mat-button-toggle>
       <mat-button-toggle value="satellite">Satellite</mat-button-toggle>
       <mat-button-toggle value="outdoors">Outdoors</mat-button-toggle>

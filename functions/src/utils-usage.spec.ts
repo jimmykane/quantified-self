@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UsageLimitExceededError, checkEventUsageLimit, hasProAccess, getUserRoleAndGracePeriod, setEvent, determineRedirectURI, setAccessControlHeadersOnResponse } from './utils';
 import { HttpsError } from 'firebase-functions/v2/https';
+import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 
 // Hoisted shared/id-generator mock
 vi.mock('./shared/id-generator', () => ({
@@ -41,6 +42,7 @@ vi.mock('firebase-functions/v2/https', () => ({
 const hoisted = vi.hoisted(() => {
     let countValue = 0;
     const setCount = (v: number) => { countValue = v; };
+    const serverTimestamp = vi.fn().mockReturnValue('SERVER_TIMESTAMP');
 
     const makeCollection = (name: string) => ({
         _name: name,
@@ -62,6 +64,7 @@ const hoisted = vi.hoisted(() => {
         doc: (id: string) => makeDoc(id),
         batch: vi.fn(),
     });
+    (firestore as any).FieldValue = { serverTimestamp };
 
     const bucketSave = vi.fn();
     const storage = () => ({
@@ -83,7 +86,7 @@ const hoisted = vi.hoisted(() => {
         createCustomToken,
     });
 
-    return { firestore, storage, auth, getUser, setCount, bucketSave };
+    return { firestore, storage, auth, getUser, setCount, bucketSave, serverTimestamp };
 });
 
 vi.mock('firebase-admin', () => ({
@@ -185,7 +188,14 @@ describe('utils higher-level helpers', () => {
             await setEvent('user-1', 'event-1', event as any, metaData, originalFile as any, bulkWriter as any);
 
             expect(writeAllEventDataMock).toHaveBeenCalled();
-            expect(bulkWriter.set).toHaveBeenCalled(); // called at least for metaData
+            expect(bulkWriter.set).toHaveBeenCalled(); // called at least for metaData/processing
+
+            const processingCall = (bulkWriter.set as any).mock.calls.find((call: any[]) => call[1]?.sportsLibVersion);
+            expect(processingCall).toBeTruthy();
+            expect(processingCall[1]).toEqual(expect.objectContaining({
+                sportsLibVersion: SPORTS_LIB_VERSION,
+                processedAt: 'SERVER_TIMESTAMP',
+            }));
         });
     });
 

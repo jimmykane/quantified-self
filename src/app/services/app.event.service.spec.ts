@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { Firestore, doc, docData, collection, collectionData, deleteDoc } from '@angular/fire/firestore';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc, setDoc } from '@angular/fire/firestore';
 import { Storage } from '@angular/fire/storage';
 import { Auth } from '@angular/fire/auth';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -162,12 +162,12 @@ describe('AppEventService', () => {
         mocks.writeAllEventData.mockResolvedValue(true);
 
         // Polyfills
-        // @ts-ignore
+        // @ts-expect-error - JSDOM does not provide CompressionStream
         globalThis.CompressionStream = vi.fn().mockImplementation(() => ({
             writable: {}, readable: {}
         }));
-        // @ts-ignore
-        globalThis.Response = vi.fn().mockImplementation((data) => ({
+        // @ts-expect-error - JSDOM does not provide Response in this shape
+        globalThis.Response = vi.fn().mockImplementation((_data) => ({
             body: {
                 pipeThrough: vi.fn().mockReturnValue({}),
             },
@@ -176,9 +176,9 @@ describe('AppEventService', () => {
     });
 
     afterEach(() => {
-        // @ts-ignore
+        // @ts-expect-error - JSDOM does not provide CompressionStream
         globalThis.CompressionStream = originalCompressionStream;
-        // @ts-ignore
+        // @ts-expect-error - JSDOM does not provide Response in this shape
         globalThis.Response = originalResponse;
         vi.restoreAllMocks();
     });
@@ -252,16 +252,21 @@ describe('AppEventService', () => {
             setID: vi.fn()
         } as any;
         const user = { uid: 'user1' } as any;
+        (doc as Mock).mockReturnValue({});
 
         await service.writeAllEventData(user, mockEvent);
 
         expect(mocks.writeAllEventData).toHaveBeenCalled();
+        expect(doc).toHaveBeenCalledWith(expect.anything(), 'users', 'user1', 'events', '1', 'metaData', 'processing');
+        expect(setDoc).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            sportsLibVersion: expect.any(String),
+            processedAt: expect.anything(),
+        }));
     });
 
     describe('ID generation with zero bucketing', () => {
         it('should call generateEventID with thresholdMs=0 for frontend uploads', async () => {
             // Mock generateEventID to track calls
-            const { generateEventID } = await import('../../../functions/src/shared/id-generator');
             const generateEventIDSpy = vi.spyOn(await import('../../../functions/src/shared/id-generator'), 'generateEventID');
             generateEventIDSpy.mockResolvedValue('mock-event-id');
 
@@ -381,7 +386,7 @@ describe('AppEventService', () => {
     it('should allow compressed files under 10MB', async () => {
         // Mock Response to return a small compressed buffer (5MB)
         const smallBuffer = new ArrayBuffer(5 * 1024 * 1024);
-        // @ts-ignore
+        // @ts-expect-error - JSDOM Response mocked for compression test
         globalThis.Response = vi.fn().mockImplementation(() => ({
             body: {
                 pipeThrough: vi.fn().mockReturnValue({}),
@@ -411,7 +416,7 @@ describe('AppEventService', () => {
             // Default mocks
             vi.mocked(getMetadata).mockResolvedValue({ generation: testGeneration } as any);
             vi.mocked(mocks.getBytes).mockResolvedValue(testBuffer);
-            // @ts-ignore
+            // @ts-expect-error - mock private service method for test
             service.fileService.decompressIfNeeded = vi.fn().mockResolvedValue(testBuffer);
         });
 

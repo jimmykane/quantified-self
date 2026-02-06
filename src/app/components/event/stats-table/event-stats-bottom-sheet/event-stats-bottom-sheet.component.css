@@ -9,20 +9,6 @@
     height: 100%;
 }
 
-.bottom-sheet-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1rem;
-    flex-shrink: 0;
-    /* Consistent padding with other sheets */
-}
-
-.bottom-sheet-header h2 {
-    margin: 0;
-    font-weight: 400;
-}
-
 .bottom-sheet-content {
     /* Removed max-height here, let flex container handle it */
     overflow-y: auto;

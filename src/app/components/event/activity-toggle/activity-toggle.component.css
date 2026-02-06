@@ -1,43 +1,51 @@
-mat-card-subtitle{
-  margin: 1em 0;
+/* Glass Card Effect */
+:host {
+  display: block;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--mat-app-outline-variant);
+  border-radius: 12px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  padding: 8px 12px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  margin-bottom: 0.5em;
+}
+
+/* Compact Subtitle */
+mat-card-subtitle {
+  margin: 0.25em 0;
   line-height: 0.9em;
   text-align: left;
-  font-size: 0.90em;
-  margin-left: 0.8em;
+  font-size: 0.8em;
+  margin-left: 0.5em;
 }
 
-mat-card-header{
-  /*min-width: 240px;*/
+/* Compact Header */
+mat-card-header {
+  padding: 0;
 }
 
-
-mat-icon{
+mat-icon {
   vertical-align: middle;
 }
 
-.mat-card-avatar{
+.mat-card-avatar {
   height: auto;
   width: auto;
   text-align: left;
-  padding-top: 12px;
-  /*margin-left: -16px;*/
+  padding-top: 8px;
 }
 
-/*::ng-deep .mat-card-header-text {*/
-/*  !*margin-left: 0;*!*/
-/*}*/
-
-mat-card-header mat-card-title{
-  font-size: 1.1em;
+/* Compact Title */
+mat-card-header mat-card-title {
+  font-size: 1em;
   text-align: left;
   margin: 0;
-  line-height: 2.5em;
-  margin-left: 0.5em;
-  /*margin-top: -0.6em;*/
+  line-height: 1.5em;
+  margin-left: 0.25em;
 }
 
-mat-slide-toggle{
-  margin-top: 0.6em;
+/* Compact Toggle */
+mat-slide-toggle {
+  margin-top: 0.25em;
 }
-
-

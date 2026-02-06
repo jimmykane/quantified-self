@@ -127,6 +127,7 @@ describe('Firestore Security Rules', () => {
     describe('User Split Model', () => {
         const userId = 'split_user';
         const otherId = 'other_user';
+        const eventId = 'event_123';
 
         describe('Legal Agreements (users/{uid}/legal/agreements)', () => {
             it('should allow user to read their own agreements', async () => {
@@ -217,6 +218,40 @@ describe('Firestore Security Rules', () => {
             });
         });
 
+        describe('Event MetaData (users/{uid}/events/{eventId}/metaData)', () => {
+            it('should allow owner to write processing metadata', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertSucceeds(db.collection(`users/${userId}/events/${eventId}/metaData`).doc('processing').set({
+                    sportsLibVersion: '8.0.9',
+                    processedAt: new Date(),
+                }));
+            });
+
+            it('should deny owner writing non-processing metadata documents', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection(`users/${userId}/events/${eventId}/metaData`).doc('GarminAPI').set({
+                    serviceName: 'GarminAPI',
+                }));
+            });
+
+            it('should deny other users writing processing metadata', async () => {
+                const db = testEnv.authenticatedContext(otherId).firestore();
+                await assertFails(db.collection(`users/${userId}/events/${eventId}/metaData`).doc('processing').set({
+                    sportsLibVersion: '8.0.9',
+                    processedAt: new Date(),
+                }));
+            });
+
+            it('should deny extra fields in processing metadata', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection(`users/${userId}/events/${eventId}/metaData`).doc('processing').set({
+                    sportsLibVersion: '8.0.9',
+                    processedAt: new Date(),
+                    extraField: true,
+                }));
+            });
+        });
+
         describe('System Status (users/{uid}/system/status)', () => {
             it('should allow user to read their own status', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
@@ -302,6 +337,28 @@ describe('Firestore Security Rules', () => {
         it('should DENY unauthenticated users from reading activities', async () => {
             const db = testEnv.unauthenticatedContext().firestore();
             await assertFails(db.collection(`users/${userId}/activities`).doc(activityId).get());
+        });
+
+        it('should ALLOW unauthenticated users to read PUBLIC activities', async () => {
+            const db = testEnv.unauthenticatedContext().firestore();
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/activities`).doc('public_activity').set({
+                    type: 'Swimming',
+                    privacy: 'public'
+                });
+            });
+            await assertSucceeds(db.collection(`users/${userId}/activities`).doc('public_activity').get());
+        });
+
+        it('should ALLOW other authenticated users to read PUBLIC activities', async () => {
+            const db = testEnv.authenticatedContext(otherId).firestore();
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/activities`).doc('public_activity_2').set({
+                    type: 'Cycling',
+                    privacy: 'public'
+                });
+            });
+            await assertSucceeds(db.collection(`users/${userId}/activities`).doc('public_activity_2').get());
         });
 
     });

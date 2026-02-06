@@ -18,10 +18,13 @@ describe('EventCardStatsTableComponent', () => {
         creator: { name: 'Player 1' },
         getStatsAsArray: () => [],
         getStat: () => null,
+        type: 'Run',
+        getID: () => 'act1',
     } as unknown as ActivityInterface;
 
     const mockEvent = {
         getID: () => 'event1',
+        isMerge: true,
     } as unknown as EventInterface;
 
     const mockUserUnitSettings = {
@@ -150,5 +153,90 @@ describe('EventCardStatsTableComponent', () => {
 
         const swRow = component.data.data.find(row => row.Name === 'Software Version');
         expect(swRow).toBeUndefined();
+    });
+
+    it('should use activity type headers when event is not a merge', () => {
+        component.event = { ...mockEvent, isMerge: false } as EventInterface;
+        const activity = {
+            ...mockActivity,
+            type: 'Ride',
+            creator: { name: 'Garmin' },
+            getID: () => 'act1'
+        } as unknown as ActivityInterface;
+        component.selectedActivities = [activity];
+        component.ngOnChanges({});
+
+        expect(component.columns).toContain('Ride #ff0000');
+    });
+
+    it('should NOT add difference column when event is not a merge', () => {
+        component.event = { ...mockEvent, isMerge: false } as EventInterface;
+        const stat = {
+            getType: () => 'Power',
+            getDisplayType: () => 'Power',
+            getDisplayValue: () => 100,
+            getDisplayUnit: () => 'W',
+            getValue: () => 100
+        };
+        const activity1 = {
+            ...mockActivity,
+            type: 'Ride',
+            creator: { name: 'Device A' },
+            getStatsAsArray: () => [stat],
+            getStat: () => stat,
+            getID: () => 'act1'
+        } as unknown as ActivityInterface;
+        const activity2 = {
+            ...mockActivity,
+            type: 'Ride',
+            creator: { name: 'Device B' },
+            getStatsAsArray: () => [stat],
+            getStat: () => stat,
+            getID: () => 'act2'
+        } as unknown as ActivityInterface;
+        component.selectedActivities = [activity1, activity2];
+        component.ngOnChanges({});
+
+        expect(component.columns).not.toContain('Difference');
+    });
+
+    it('should exclude stats that display as [object Object] for ANY activity', () => {
+        const powerCurveStatGood = {
+            getType: () => 'PowerCurve',
+            getDisplayType: () => 'Power Curve',
+            getDisplayValue: () => '100W',
+            getDisplayUnit: () => '',
+            getValue: () => 100
+        };
+
+        const powerCurveStatBad = {
+            getType: () => 'PowerCurve',
+            getDisplayType: () => 'Power Curve',
+            getDisplayValue: () => ({} as any), // Simulating an object return
+            getDisplayUnit: () => '',
+            getValue: () => 0
+        };
+
+        const activity1 = {
+            ...mockActivity,
+            creator: { name: 'Player 1' },
+            getStatsAsArray: () => [powerCurveStatGood],
+            getStat: (type: string) => type === 'PowerCurve' ? powerCurveStatGood : null,
+            getID: () => 'act1'
+        } as unknown as ActivityInterface;
+
+        const activity2 = {
+            ...mockActivity,
+            creator: { name: 'Player 2' },
+            getStatsAsArray: () => [powerCurveStatBad],
+            getStat: (type: string) => type === 'PowerCurve' ? powerCurveStatBad : null,
+            getID: () => 'act2'
+        } as unknown as ActivityInterface;
+
+        component.selectedActivities = [activity1, activity2];
+        component.ngOnChanges({});
+
+        const powerCurveRow = component.data.data.find(row => row.Name === 'Power Curve');
+        expect(powerCurveRow).toBeUndefined();
     });
 });

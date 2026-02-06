@@ -205,3 +205,18 @@ mat-paginator {
   align-items: center;
   gap: 8px;
 }
+
+.benchmark-icon {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.benchmark-icon.is-muted mat-icon {
+  color: var(--mat-sys-on-surface-variant);
+  opacity: 0.4;
+}
+
+.benchmark-icon:hover mat-icon {
+  opacity: 0.85;
+}

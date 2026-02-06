@@ -47,6 +47,7 @@ export class ActivitiesTogglesComponent implements OnInit {
 
   // Computed: check if device names should show
   shouldShowDeviceNames = computed(() => {
+    if (!this.event()?.isMerge) return false;
     const acts = this.activities();
     if (acts.length <= 1) return false;
     const ids = acts.map(a => `${a.creator?.name || ''}-${a.creator?.serialNumber || ''}`);

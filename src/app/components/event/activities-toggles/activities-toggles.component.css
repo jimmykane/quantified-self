@@ -7,10 +7,19 @@
 }
 
 .activity-chip {
-  --mdc-chip-elevated-container-color: var(--mat-app-surface-container);
-  --mdc-chip-label-text-color: var(--mat-app-on-surface);
+  --mdc-chip-elevated-container-color: transparent;
+  --mdc-chip-elevated-selected-container-color: transparent;
+  --mdc-chip-container-color: transparent;
+  --mdc-chip-selected-container-color: transparent;
+  --mat-mdc-chip-state-layer-color: transparent;
+  --mat-mdc-chip-selected-state-layer-color: transparent;
+  --mat-mdc-chip-disabled-state-layer-color: transparent;
+  --mat-mdc-chip-state-layer-opacity: 0;
+  --mat-mdc-chip-selected-state-layer-opacity: 0;
+  --mdc-chip-label-text-color: currentColor;
   --mdc-chip-with-icon-icon-size: 0;
   --mdc-chip-graphic-selected-width: 0;
+  color: var(--mat-app-on-surface);
   border-radius: 10px !important;
   height: auto !important;
   padding: 4px 12px !important;
@@ -19,8 +28,7 @@
 }
 
 .activity-chip.mat-mdc-chip-selected {
-  --mdc-chip-elevated-container-color: color-mix(in srgb, var(--chip-accent-color, var(--mat-app-primary)) 15%, var(--mat-app-surface-container));
-  --mdc-chip-label-text-color: var(--mat-app-on-surface);
+  --mdc-chip-elevated-container-color: transparent;
   border: 2px solid var(--chip-accent-color, var(--mat-app-primary)) !important;
 }
 
@@ -43,6 +51,24 @@
   padding-left: 0 !important;
 }
 
+/* Force transparent chip background across MDC internal elements */
+::ng-deep .activity-chip,
+::ng-deep .activity-chip .mdc-evolution-chip__action,
+::ng-deep .activity-chip .mdc-evolution-chip__action--primary,
+::ng-deep .activity-chip .mdc-evolution-chip__cell {
+  background-color: transparent !important;
+}
+
+/* Remove pressed/hover/selected state layer visuals */
+::ng-deep .activity-chip .mdc-evolution-chip__action::before,
+::ng-deep .activity-chip .mdc-evolution-chip__action::after,
+::ng-deep .activity-chip .mdc-evolution-chip__ripple::before,
+::ng-deep .activity-chip .mdc-evolution-chip__ripple::after,
+::ng-deep .activity-chip .mat-mdc-chip-focus-overlay {
+  background-color: transparent !important;
+  opacity: 0 !important;
+}
+
 .activity-chip:not(.mat-mdc-chip-selected) {
   border: 1px solid var(--mat-app-outline-variant) !important;
   opacity: 0.7;
@@ -60,6 +86,7 @@
   font-weight: 400;
   font-size: 0.95rem;
   line-height: 1.2;
+  color: var(--mat-app-on-surface);
 }
 
 .chip-stats {
@@ -76,9 +103,14 @@
   margin-top: 2px;
 }
 
-/* Responsive: stack on very small screens */
-@media (max-width: 360px) {
+/* Responsive: on handheld widths, let each chip stretch across the row */
+@media (max-width: 600px) {
+  .activity-chips {
+    gap: 10px;
+  }
   .activity-chip {
     flex: 1 1 100%;
+    min-width: auto;
+    width: 100%;
   }
 }

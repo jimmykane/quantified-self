@@ -117,6 +117,12 @@ export class AppUserSettingsQueryService {
      * Handles missing 'settings' or 'myTracksSettings' on the user object internally.
      */
     public async updateMyTracksSettings(settings: Partial<AppMyTracksSettings>): Promise<void> {
+        const currentSettings = this.myTracksSettings();
+        const hasChanges = Object.keys(settings).some(key => !equal(settings[key as keyof AppMyTracksSettings], currentSettings[key as keyof AppMyTracksSettings]));
+        if (!hasChanges) {
+            return;
+        }
+
         this.logger.info(`[AppUserSettingsQueryService] Updating My Tracks Settings:`, settings);
         const user = await this.getCurrentUser();
         if (!user) {
@@ -137,6 +143,12 @@ export class AppUserSettingsQueryService {
      * Updates Map settings by merging the provided partial settings.
      */
     public async updateMapSettings(settings: Partial<UserMapSettingsInterface>): Promise<void> {
+        const currentSettings = this.mapSettings();
+        const hasChanges = Object.keys(settings).some(key => !equal(settings[key as keyof UserMapSettingsInterface], currentSettings[key as keyof UserMapSettingsInterface]));
+        if (!hasChanges) {
+            return;
+        }
+
         this.logger.info(`[AppUserSettingsQueryService] Updating Map Settings:`, settings);
         const user = await this.getCurrentUser();
         if (!user) {
@@ -157,6 +169,12 @@ export class AppUserSettingsQueryService {
      * Updates Chart settings by merging the provided partial settings.
      */
     public async updateChartSettings(settings: Partial<UserChartSettingsInterface>): Promise<void> {
+        const currentSettings = this.chartSettings();
+        const hasChanges = Object.keys(settings).some(key => !equal(settings[key as keyof UserChartSettingsInterface], currentSettings[key as keyof UserChartSettingsInterface]));
+        if (!hasChanges) {
+            return;
+        }
+
         this.logger.info(`[AppUserSettingsQueryService] Updating Chart Settings:`, settings);
         const user = await this.getCurrentUser();
         if (!user) {
@@ -177,6 +195,12 @@ export class AppUserSettingsQueryService {
      * Updates Summaries settings by merging the provided partial settings.
      */
     public async updateSummariesSettings(settings: Partial<UserSummariesSettingsInterface>): Promise<void> {
+        const currentSettings = this.summariesSettings();
+        const hasChanges = Object.keys(settings).some(key => !equal(settings[key as keyof UserSummariesSettingsInterface], currentSettings[key as keyof UserSummariesSettingsInterface]));
+        if (!hasChanges) {
+            return;
+        }
+
         this.logger.info(`[AppUserSettingsQueryService] Updating Summaries Settings:`, settings);
         const user = await this.getCurrentUser();
         if (!user) {

@@ -79,3 +79,33 @@ Object.defineProperty(globalThis, 'matchMedia', {
         dispatchEvent: vi.fn(),
     })),
 });
+
+if (!('IntersectionObserver' in globalThis)) {
+    class MockIntersectionObserver implements IntersectionObserver {
+        readonly root: Element | null;
+        readonly rootMargin: string;
+        readonly thresholds: ReadonlyArray<number>;
+        constructor(
+            public callback: IntersectionObserverCallback,
+            public options: IntersectionObserverInit = {},
+        ) {
+            this.root = options.root ?? null;
+            this.rootMargin = options.rootMargin ?? '';
+            this.thresholds = Array.isArray(options.threshold)
+                ? options.threshold
+                : options.threshold !== undefined
+                    ? [options.threshold]
+                    : [];
+        }
+        observe = vi.fn();
+        unobserve = vi.fn();
+        disconnect = vi.fn();
+        takeRecords = vi.fn(() => []);
+    }
+
+    Object.defineProperty(globalThis, 'IntersectionObserver', {
+        writable: true,
+        configurable: true,
+        value: MockIntersectionObserver,
+    });
+}
