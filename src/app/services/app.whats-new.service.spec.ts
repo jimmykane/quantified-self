@@ -1,8 +1,8 @@
 import { TestBed } from '@angular/core/testing';
-import { AppWhatsNewService } from './app.whats-new.service';
+import { AppWhatsNewService, ChangelogPost } from './app.whats-new.service';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { AppUserService } from './app.user.service';
-import { Firestore } from '@angular/fire/firestore';
+import { Firestore, collectionData, Timestamp } from '@angular/fire/firestore';
 import { LoggerService } from './logger.service';
 import { of, BehaviorSubject } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
@@ -37,8 +37,10 @@ describe('AppWhatsNewService', () => {
     let localStorageMock: any;
 
     const userSubject = new BehaviorSubject<any>(null);
+    const collectionDataMock = vi.mocked(collectionData);
 
     beforeEach(() => {
+        collectionDataMock.mockReturnValue(of([]));
         authServiceMock = {
             user$: userSubject.asObservable(),
             user: () => userSubject.getValue()
@@ -69,23 +71,41 @@ describe('AppWhatsNewService', () => {
                 { provide: AppWhatsNewLocalStorageService, useValue: localStorageMock }
             ]
         });
-        service = TestBed.inject(AppWhatsNewService);
     });
 
     it('should be created', () => {
+        service = TestBed.inject(AppWhatsNewService);
         expect(service).toBeTruthy();
     });
 
     it('markAsRead should call updateUserProperties for authenticated user', async () => {
+        service = TestBed.inject(AppWhatsNewService);
         userSubject.next({ uid: '123' });
         await service.markAsRead();
         expect(userServiceMock.updateUserProperties).toHaveBeenCalled();
     });
 
     it('markAsRead should call localStorage for guest user', async () => {
+        service = TestBed.inject(AppWhatsNewService);
         userSubject.next(null);
         await service.markAsRead();
         expect(userServiceMock.updateUserProperties).not.toHaveBeenCalled();
         expect(localStorageMock.setItem).toHaveBeenCalledWith('whats_new_last_seen', expect.any(String));
+    });
+
+    it('unreadCount should be 0 for guest users even with changelogs', () => {
+        const mockPost: ChangelogPost = {
+            id: '1',
+            title: 'Release 1.0',
+            description: 'First release',
+            date: new Timestamp(0, 0),
+            published: true,
+            type: 'minor'
+        };
+
+        collectionDataMock.mockReturnValue(of([mockPost]));
+        service = TestBed.inject(AppWhatsNewService);
+
+        expect(service.unreadCount()).toBe(0);
     });
 });
