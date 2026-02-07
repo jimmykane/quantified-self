@@ -8,9 +8,14 @@ import { switchMap } from 'rxjs/operators';
 })
 export class NetworkAwarePreloadingStrategy implements PreloadingStrategy {
     preload(route: Route, load: () => Observable<any>): Observable<any> {
-        return this.hasGoodConnection()
-            ? timer(5000).pipe(switchMap(() => load()))
-            : of(null);
+        const shouldPreload = route.data?.['preload'] === true;
+        if (!shouldPreload) {
+            return of(null);
+        }
+        if (!this.hasGoodConnection()) {
+            return of(null);
+        }
+        return timer(5000).pipe(switchMap(() => load()));
     }
 
     private hasGoodConnection(): boolean {

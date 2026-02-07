@@ -1,10 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CommonModule } from '@angular/common';
-import { firstValueFrom } from 'rxjs';
 import { ProcessingIndicatorComponent } from './processing-indicator.component';
 import { AppProcessingService, BackgroundJob } from '../../../services/app.processing.service';
 import { BehaviorSubject } from 'rxjs';
-import { map } from 'rxjs/operators';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatIconModule } from '@angular/material/icon';
 import { MatBadgeModule } from '@angular/material/badge';
@@ -12,24 +10,21 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatChipsModule } from '@angular/material/chips';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 
 describe('ProcessingIndicatorComponent', () => {
     let component: ProcessingIndicatorComponent;
     let fixture: ComponentFixture<ProcessingIndicatorComponent>;
     let mockProcessingService: Partial<AppProcessingService>;
-    let activeJobsSubject: BehaviorSubject<BackgroundJob[]>;
     let allJobsSubject: BehaviorSubject<BackgroundJob[]>;
 
     beforeEach(async () => {
-        activeJobsSubject = new BehaviorSubject<BackgroundJob[]>([]);
         allJobsSubject = new BehaviorSubject<BackgroundJob[]>([]);
 
         mockProcessingService = {
-            activeJobs$: activeJobsSubject.asObservable(),
             jobs$: allJobsSubject.asObservable(),
-            removeJob: (() => { }) as any,
-            hasActiveJobs$: activeJobsSubject.pipe(map(jobs => jobs.length > 0))
+            removeJob: (() => { }) as any
         };
 
         await TestBed.configureTestingModule({
@@ -41,6 +36,7 @@ describe('ProcessingIndicatorComponent', () => {
                 MatBadgeModule,
                 MatProgressSpinnerModule,
                 MatDividerModule,
+                MatChipsModule,
                 MatButtonModule,
                 MatProgressBarModule,
                 NoopAnimationsModule
@@ -61,44 +57,55 @@ describe('ProcessingIndicatorComponent', () => {
     });
 
     it('should display active job count', () => {
-        activeJobsSubject.next([
+        allJobsSubject.next([
             { id: '1', title: 'Job 1', status: 'processing', type: 'upload', createdAt: Date.now() },
-            { id: '2', title: 'Job 2', status: 'processing', type: 'download', createdAt: Date.now() }
+            { id: '2', title: 'Job 2', status: 'pending', type: 'download', createdAt: Date.now() },
+            { id: '3', title: 'Job 3', status: 'completed', type: 'download', createdAt: Date.now() }
         ]);
         fixture.detectChanges();
 
-        component.activeJobs$.subscribe(jobs => {
-            expect(jobs.length).toBe(2);
-        });
+        expect(component.activeJobs().length).toBe(2);
     });
 
-    it('should identify if processing is active', async () => {
+    it('should identify if processing is active', () => {
         // No jobs initially
-        const hasActive1 = await firstValueFrom(component.hasActiveJobs$);
-        expect(hasActive1).toBe(false);
+        expect(component.hasActiveJobs()).toBe(false);
 
         // Add active job
-        activeJobsSubject.next([
+        allJobsSubject.next([
             { id: '1', title: 'Job 1', status: 'processing', type: 'upload', createdAt: Date.now() }
         ]);
+        fixture.detectChanges();
 
-        const hasActive2 = await firstValueFrom(component.hasActiveJobs$);
-        expect(hasActive2).toBe(true);
+        expect(component.hasActiveJobs()).toBe(true);
     });
 
-    it('should calculate active jobs progress correctly', async () => {
-        activeJobsSubject.next([
-            { id: '1', title: 'Job 1', status: 'processing', type: 'upload', progress: 50, createdAt: Date.now() },
-            { id: '2', title: 'Job 2', status: 'processing', type: 'upload', progress: 100, createdAt: Date.now() }
+    it('should calculate overall progress based on completed jobs', () => {
+        allJobsSubject.next([
+            { id: '1', title: 'Job 1', status: 'completed', type: 'upload', createdAt: Date.now() },
+            { id: '2', title: 'Job 2', status: 'processing', type: 'upload', createdAt: Date.now() }
         ]);
+        fixture.detectChanges();
 
-        const progress = await firstValueFrom(component.activeJobsProgress$);
-        expect(progress).toBe(75); // (50 + 100) / 2 = 75
+        const progress = component.overallProgress();
+        expect(progress).toBe(50); // 1 of 2 jobs finished
     });
 
-    it('should return 0 progress if no active jobs', async () => {
-        activeJobsSubject.next([]);
-        const progress = await firstValueFrom(component.activeJobsProgress$);
+    it('should return 0 progress if no jobs', () => {
+        allJobsSubject.next([]);
+        fixture.detectChanges();
+        const progress = component.overallProgress();
         expect(progress).toBe(0);
+    });
+
+    it('should treat finished jobs as complete when progress is missing', () => {
+        allJobsSubject.next([
+            { id: '1', title: 'Job 1', status: 'completed', type: 'upload', createdAt: Date.now() },
+            { id: '2', title: 'Job 2', status: 'failed', type: 'upload', createdAt: Date.now() },
+            { id: '3', title: 'Job 3', status: 'pending', type: 'upload', createdAt: Date.now() }
+        ]);
+        fixture.detectChanges();
+
+        expect(component.overallProgress()).toBe(67);
     });
 });

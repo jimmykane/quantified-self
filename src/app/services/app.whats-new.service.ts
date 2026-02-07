@@ -94,9 +94,12 @@ export class AppWhatsNewService {
 
     public readonly unreadCount = computed(() => {
         const logs = this.changelogs();
-        const lastSeen = this.userLastSeenDate();
+        const user = this.user();
 
         if (!logs.length) return 0;
+        if (!user) return 0;
+
+        const lastSeen = this.userLastSeenDate();
 
         return logs.filter(log => {
             const logDate = log.date instanceof Timestamp ? log.date.toDate() : new Date(log.date);

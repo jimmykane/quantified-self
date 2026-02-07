@@ -53,6 +53,16 @@
               "prerender": false,
               "budgets": [
                 {
+                  "type": "initial",
+                  "maximumWarning": "1440kb",
+                  "maximumError": "1440kb"
+                },
+                {
+                  "type": "allScript",
+                  "maximumWarning": "11809kb",
+                  "maximumError": "11809kb"
+                },
+                {
                   "type": "anyComponentStyle",
                   "maximumWarning": "6kb"
                 }
@@ -78,10 +88,29 @@
               "prerender": false,
               "budgets": [
                 {
+                  "type": "initial",
+                  "maximumWarning": "1440kb",
+                  "maximumError": "1440kb"
+                },
+                {
+                  "type": "allScript",
+                  "maximumWarning": "11809kb",
+                  "maximumError": "11809kb"
+                },
+                {
                   "type": "anyComponentStyle",
                   "maximumWarning": "6kb"
                 }
               ],
+              "optimization": true,
+              "outputHashing": "all",
+              "sourceMap": {
+                "scripts": true,
+                "styles": false,
+                "hidden": true
+              },
+              "namedChunks": false,
+              "extractLicenses": true,
               "fileReplacements": [
                 {
                   "replace": "src/environments/environment.ts",
