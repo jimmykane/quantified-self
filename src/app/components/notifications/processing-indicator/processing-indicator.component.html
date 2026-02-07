@@ -1,3 +1,4 @@
+@if (totalJobsCount() > 0) {
 <button
     mat-icon-button
     [matMenuTriggerFor]="jobsMenu"
@@ -12,13 +13,16 @@
         }
     </span>
 </button>
+}
 
-<mat-menu #jobsMenu="matMenu" class="jobs-menu">
+<mat-menu #jobsMenu="matMenu" class="glass-card jobs-menu">
     <div class="jobs-header" (click)="$event.stopPropagation()">
-        <div class="jobs-title">Processing Tasks</div>
-        <div class="jobs-summary">{{statusSummary()}}</div>
+        <div class="jobs-header-main">
+            <div class="jobs-title">Processing</div>
+            <div class="jobs-summary">{{statusSummary()}}</div>
+        </div>
         @if (totalJobsCount() > 0) {
-        <mat-progress-bar mode="determinate" [value]="overallProgress()"></mat-progress-bar>
+        <mat-progress-bar [mode]="progressMode()" [value]="overallProgress()"></mat-progress-bar>
         }
     </div>
 
@@ -49,21 +53,12 @@
 
             <div class="job-info">
                 <div class="job-title">{{job.title}}</div>
-                @if (job.details) {
-                <div class="job-details">{{job.details}}</div>
-                }
-                <div class="job-meta">
-                    <mat-chip-set role="list" class="job-status">
-                        <mat-chip role="listitem" [color]="statusColorMap[job.status]" [highlighted]="true"
-                            [disableRipple]="true">
-                            {{statusLabelMap[job.status]}}
-                        </mat-chip>
-                    </mat-chip-set>
+                <div class="job-subline">
+                    <span class="job-status-text">{{statusLabelMap[job.status]}}</span>
+                    @if (job.details) {
+                    <span class="job-details">— {{job.details}}</span>
+                    }
                 </div>
-                @if (job.status === 'processing') {
-                <mat-progress-bar mode="determinate" [value]="job.progress ?? 0">
-                </mat-progress-bar>
-                }
             </div>
 
             <button mat-icon-button (click)="removeJob(job.id)" aria-label="Remove job">

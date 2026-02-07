@@ -33,11 +33,10 @@ export class ProcessingIndicatorComponent {
             return 'No active tasks';
         }
         const finished = this.finishedJobsCount();
-        const progress = this.overallProgress();
         if (this.hasActiveJobs()) {
-            return `Progress ${finished}/${total} (${progress}%)`;
+            return `Done ${finished}/${total}`;
         }
-        return `All ${total} tasks finished`;
+        return `All ${total} done`;
     });
 
     readonly statusLabelMap: Record<JobStatus, string> = {
@@ -64,22 +63,8 @@ export class ProcessingIndicatorComponent {
         if (jobs.length === 0) {
             return 0;
         }
-        const totalProgress = jobs.reduce((acc, job) => acc + this.getJobProgress(job), 0);
-        return Math.round(totalProgress / jobs.length);
-    }
-
-    private getJobProgress(job: BackgroundJob): number {
-        if (typeof job.progress === 'number') {
-            return this.clampProgress(job.progress);
-        }
-        if (this.isFinishedJob(job.status)) {
-            return 100;
-        }
-        return 0;
-    }
-
-    private clampProgress(value: number): number {
-        return Math.min(100, Math.max(0, value));
+        const finished = jobs.filter((job) => this.isFinishedJob(job.status)).length;
+        return Math.round((finished / jobs.length) * 100);
     }
 
     private isActiveJob(status: JobStatus): boolean {

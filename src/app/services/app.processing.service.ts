@@ -22,6 +22,8 @@ export interface BackgroundJob {
 export class AppProcessingService {
     private jobsSubject = new BehaviorSubject<BackgroundJob[]>([]);
     public jobs$ = this.jobsSubject.asObservable();
+    private completedCleanupTimeoutId: ReturnType<typeof setTimeout> | null = null;
+    private readonly completedCleanupDelayMs = 5000;
 
     // Derived observables
     public activeJobs$ = this.jobs$.pipe(
@@ -49,6 +51,7 @@ export class AppProcessingService {
         };
 
         this.jobsSubject.next([newJob, ...this.jobsSubject.value]);
+        this.scheduleCompletedCleanup();
         return id;
     }
 
@@ -56,19 +59,19 @@ export class AppProcessingService {
         const currentJobs = this.jobsSubject.value;
         const index = currentJobs.findIndex(j => j.id === id);
         if (index !== -1) {
+            const previousStatus = currentJobs[index].status;
             const updatedJob = { ...currentJobs[index], ...updates };
             const newJobs = [...currentJobs];
             newJobs[index] = updatedJob;
             this.jobsSubject.next(newJobs);
+            if (previousStatus !== updatedJob.status) {
+                this.scheduleCompletedCleanup();
+            }
         }
     }
 
     completeJob(id: string, details?: string) {
         this.updateJob(id, { status: 'completed', progress: 100, details });
-        // Auto-remove completed jobs after a delay
-        setTimeout(() => {
-            this.removeJob(id);
-        }, 5000);
     }
 
     failJob(id: string, error?: string) {
@@ -82,5 +85,28 @@ export class AppProcessingService {
     removeJob(id: string) {
         const newJobs = this.jobsSubject.value.filter(j => j.id !== id);
         this.jobsSubject.next(newJobs);
+        this.scheduleCompletedCleanup();
+    }
+
+    private scheduleCompletedCleanup() {
+        if (this.completedCleanupTimeoutId) {
+            clearTimeout(this.completedCleanupTimeoutId);
+            this.completedCleanupTimeoutId = null;
+        }
+        const hasActiveJobs = this.jobsSubject.value.some((job) => job.status === 'processing' || job.status === 'pending');
+        if (hasActiveJobs) {
+            return;
+        }
+        const hasCompletedJobs = this.jobsSubject.value.some((job) => job.status === 'completed' || job.status === 'duplicate');
+        if (!hasCompletedJobs) {
+            return;
+        }
+        this.completedCleanupTimeoutId = setTimeout(() => {
+            const remainingJobs = this.jobsSubject.value.filter(
+                (job) => job.status !== 'completed' && job.status !== 'duplicate'
+            );
+            this.jobsSubject.next(remainingJobs);
+            this.completedCleanupTimeoutId = null;
+        }, this.completedCleanupDelayMs);
     }
 }

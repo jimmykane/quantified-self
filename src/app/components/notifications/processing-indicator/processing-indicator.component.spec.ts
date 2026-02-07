@@ -80,15 +80,15 @@ describe('ProcessingIndicatorComponent', () => {
         expect(component.hasActiveJobs()).toBe(true);
     });
 
-    it('should calculate overall progress correctly', () => {
+    it('should calculate overall progress based on completed jobs', () => {
         allJobsSubject.next([
-            { id: '1', title: 'Job 1', status: 'processing', type: 'upload', progress: 50, createdAt: Date.now() },
-            { id: '2', title: 'Job 2', status: 'processing', type: 'upload', progress: 100, createdAt: Date.now() }
+            { id: '1', title: 'Job 1', status: 'completed', type: 'upload', createdAt: Date.now() },
+            { id: '2', title: 'Job 2', status: 'processing', type: 'upload', createdAt: Date.now() }
         ]);
         fixture.detectChanges();
 
         const progress = component.overallProgress();
-        expect(progress).toBe(75); // (50 + 100) / 2 = 75
+        expect(progress).toBe(50); // 1 of 2 jobs finished
     });
 
     it('should return 0 progress if no jobs', () => {
