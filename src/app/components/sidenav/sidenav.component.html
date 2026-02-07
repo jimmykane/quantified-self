@@ -51,6 +51,13 @@
   }
 
   @if (!user) {
+  <mat-list-item routerLinkActive="active" routerLink="/pricing" (click)="sideNav.close();">
+    <mat-icon>card_membership</mat-icon>
+    <span>Membership</span>
+  </mat-list-item>
+  }
+
+  @if (!user) {
   <mat-list-item routerLinkActive="active" routerLink="/login" (click)="sideNav.close();">
     <mat-icon>assignment_ind</mat-icon>
     <span>Login</span>

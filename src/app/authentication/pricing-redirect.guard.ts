@@ -12,10 +12,11 @@ export const pricingRedirectGuard: CanMatchFn = () => {
     const authService = inject(AppAuthService);
     const router = inject(Router);
 
-    return authService.user$.pipe(
+    return authService.authState$.pipe(
         take(1),
-        map(user => {
-            if (user) {
+        map(authUser => {
+            // Treat anonymous auth users as logged-out for pricing/subscriptions routing.
+            if (authUser && !authUser.isAnonymous) {
                 return router.parseUrl('/subscriptions');
             }
             return true;
