@@ -113,12 +113,17 @@ export class BenchmarkBottomSheetComponent {
         }
       });
 
-      const shared = await this.tryNativeShare(dataUrl, filename);
+      const imageBlob = this.dataUrlToBlob(dataUrl);
+      if (!imageBlob) {
+        throw new Error('Unable to convert benchmark image data URL to Blob.');
+      }
+
+      const shared = await this.tryNativeShare(imageBlob, filename);
       if (shared) {
         return;
       }
 
-      this.downloadShareImage(dataUrl, filename);
+      this.downloadShareImage(imageBlob, filename);
     } catch (error) {
       console.error('Failed to share benchmark image', error);
     } finally {
@@ -143,18 +148,24 @@ export class BenchmarkBottomSheetComponent {
     }
   }
 
-  private downloadShareImage(dataUrl: string, filename: string): void {
+  private downloadShareImage(imageBlob: Blob, filename: string): void {
+    const objectUrl = URL.createObjectURL(imageBlob);
     const link = document.createElement('a');
-    link.href = dataUrl;
+    link.href = objectUrl;
     link.download = filename;
     link.rel = 'noopener';
+    link.target = '_self';
+    document.body.appendChild(link);
     link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
   }
 
-  private async tryNativeShare(dataUrl: string, filename: string): Promise<boolean> {
+  private async tryNativeShare(imageBlob: Blob, filename: string): Promise<boolean> {
     if (!('share' in navigator)) return false;
-    const file = this.dataUrlToFile(dataUrl, filename);
-    if (!file) return false;
+    if (typeof File === 'undefined') return false;
+
+    const file = new File([imageBlob], filename, { type: imageBlob.type || 'image/png' });
 
     const shareData: ShareData = {
       files: [file],
@@ -173,8 +184,7 @@ export class BenchmarkBottomSheetComponent {
     }
   }
 
-  private dataUrlToFile(dataUrl: string, filename: string): File | null {
-    if (typeof File === 'undefined') return null;
+  private dataUrlToBlob(dataUrl: string): Blob | null {
     const parts = dataUrl.split(',');
     if (parts.length !== 2) return null;
 
@@ -189,6 +199,6 @@ export class BenchmarkBottomSheetComponent {
       bytes[i] = binary.charCodeAt(i);
     }
 
-    return new File([bytes], filename, { type: mime });
+    return new Blob([bytes], { type: mime });
   }
 }
