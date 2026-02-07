@@ -37,6 +37,7 @@ const routes: Routes = [
     // Public route
     data: {
       title: 'Membership',
+      preload: true,
       description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Suunto, Garmin, and COROS while helping keep the project independent.',
       keywords: 'support, membership, fitness analytics, suunto sync, garmin connect sync, coros integration, independent software'
     }
@@ -53,6 +54,7 @@ const routes: Routes = [
     resolve: { releases: releasesResolver },
     data: {
       title: 'Release Notes',
+      preload: true,
       animation: 'Releases',
       description: 'Stay up to date with the latest features, improvements, and bug fixes in Quantified Self.',
       keywords: 'release notes, changelog, updates, new features, quantified self updates',
@@ -74,25 +76,25 @@ const routes: Routes = [
   {
     path: 'services',
     loadChildren: () => import('./modules/services.module').then(module => module.ServicesModule),
-    data: { title: 'Services', animation: 'Services' },
+    data: { title: 'Services', animation: 'Services', preload: true },
     canMatch: [authGuard, onboardingGuard, proGuard]
   },
   {
     path: 'dashboard',
     loadChildren: () => import('./modules/dashboard.module').then(module => module.DashboardModule),
-    data: { title: 'Dashboard', animation: 'Dashboard' },
+    data: { title: 'Dashboard', animation: 'Dashboard', preload: true },
     canMatch: [authGuard, onboardingGuard]
   },
   {
     path: 'mytracks',
     loadChildren: () => import('./modules/my-tracks.module').then(module => module.MyTracksModule),
-    data: { title: 'MyTracks', animation: 'MyTracks' },
+    data: { title: 'MyTracks', animation: 'MyTracks', preload: true },
     canMatch: [authGuard, onboardingGuard, proGuard]
   },
   {
     path: 'settings',
     loadChildren: () => import('./modules/user.module').then(module => module.UserModule),
-    data: { title: 'Settings', animation: 'User' },
+    data: { title: 'Settings', animation: 'User', preload: true },
     canMatch: [authGuard, onboardingGuard],
   },
   {
@@ -104,7 +106,7 @@ const routes: Routes = [
   {
     path: 'policies',
     loadChildren: () => import('./modules/policies.module').then(module => module.PoliciesModule),
-    data: { title: 'Policies', animation: 'Policies' }
+    data: { title: 'Policies', animation: 'Policies', preload: true }
   },
   {
     path: '',

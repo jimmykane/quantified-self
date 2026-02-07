@@ -7,8 +7,9 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 describe('NetworkAwarePreloadingStrategy', () => {
     let strategy: NetworkAwarePreloadingStrategy;
 
-    // Mock route and load function
-    const mockRoute: Route = { path: 'test' };
+    // Mock routes and load function
+    const preloadRoute: Route = { path: 'test', data: { preload: true } };
+    const noPreloadRoute: Route = { path: 'test' };
     const mockLoad = () => of('loaded');
 
     beforeEach(() => {
@@ -34,11 +35,19 @@ describe('NetworkAwarePreloadingStrategy', () => {
         // Case where navigator.connection is undefined (default implementation)
         // It should proceed with preload
         let result: any = undefined;
-        strategy.preload(mockRoute, mockLoad).subscribe(r => result = r);
+        strategy.preload(preloadRoute, mockLoad).subscribe(r => result = r);
 
         expect(result).toBeUndefined(); // Should be waiting
         vi.advanceTimersByTime(5000); // Wait for the delay
         expect(result).toBe('loaded');
+    });
+
+    it('should NOT preload when route is not marked for preload', () => {
+        let result: any = undefined;
+        strategy.preload(noPreloadRoute, mockLoad).subscribe(r => result = r);
+
+        vi.advanceTimersByTime(5000);
+        expect(result).toBeNull();
     });
 
     it('should NOT preload if saveData is true', () => {
@@ -50,7 +59,7 @@ describe('NetworkAwarePreloadingStrategy', () => {
         });
 
         let result: any = undefined;
-        strategy.preload(mockRoute, mockLoad).subscribe(r => result = r);
+        strategy.preload(preloadRoute, mockLoad).subscribe(r => result = r);
 
         vi.advanceTimersByTime(5000);
         expect(result).toBeNull(); // Should return null (no preload)
@@ -65,7 +74,7 @@ describe('NetworkAwarePreloadingStrategy', () => {
         });
 
         let result: any = undefined;
-        strategy.preload(mockRoute, mockLoad).subscribe(r => result = r);
+        strategy.preload(preloadRoute, mockLoad).subscribe(r => result = r);
 
         vi.advanceTimersByTime(5000);
         expect(result).toBeNull();
@@ -79,7 +88,7 @@ describe('NetworkAwarePreloadingStrategy', () => {
         });
 
         let result: any = undefined;
-        strategy.preload(mockRoute, mockLoad).subscribe(r => result = r);
+        strategy.preload(preloadRoute, mockLoad).subscribe(r => result = r);
 
         vi.advanceTimersByTime(5000);
         expect(result).toBeNull();
@@ -93,7 +102,7 @@ describe('NetworkAwarePreloadingStrategy', () => {
         });
 
         let result: any = undefined;
-        strategy.preload(mockRoute, mockLoad).subscribe(r => result = r);
+        strategy.preload(preloadRoute, mockLoad).subscribe(r => result = r);
 
         expect(result).toBeUndefined();
         vi.advanceTimersByTime(5000);
