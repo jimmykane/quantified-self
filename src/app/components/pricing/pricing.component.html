@@ -74,10 +74,6 @@
       [class.pro-card]="product.metadata['role'] === 'pro'" [class.basic-card]="product.metadata['role'] === 'basic'"
       [class.free-card]="product.metadata['role'] === 'free'">
 
-      @if (product.metadata['role'] === 'pro') {
-      <div class="popular-ribbon pro-ribbon">Most Popular</div>
-      }
-
       <mat-card-header>
         <mat-card-title>
           @if (product.metadata['role'] === 'free') {
