@@ -78,12 +78,50 @@ export class AppShareService {
   }
 
   private async waitForIdle(): Promise<void> {
-    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-    if ('requestIdleCallback' in window) {
-      await new Promise<void>(resolve => (window as any).requestIdleCallback(() => resolve(), { timeout: 250 }));
-    } else {
-      await new Promise<void>(resolve => setTimeout(resolve, 50));
-    }
+    await this.waitForAnimationFrameWithTimeout();
+    await this.waitForIdleWithTimeout();
+  }
+
+  private waitForAnimationFrameWithTimeout(timeoutMs: number = 120): Promise<void> {
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+
+      const timeoutId = window.setTimeout(finish, timeoutMs);
+      requestAnimationFrame(() => {
+        window.clearTimeout(timeoutId);
+        finish();
+      });
+    });
+  }
+
+  private waitForIdleWithTimeout(timeoutMs: number = 300): Promise<void> {
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      const timeoutId = window.setTimeout(finish, timeoutMs);
+
+      if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(() => {
+          window.clearTimeout(timeoutId);
+          finish();
+        }, { timeout: 250 });
+        return;
+      }
+
+      window.setTimeout(() => {
+        window.clearTimeout(timeoutId);
+        finish();
+      }, 50);
+    });
   }
 
   private async loadImage(src: string): Promise<void> {
