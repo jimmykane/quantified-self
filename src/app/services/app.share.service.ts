@@ -5,6 +5,9 @@ export interface ShareBenchmarkOptions {
   watermark?: { brand: string; timestamp: string; url?: string; logoUrl?: string };
   scale?: number;
   width?: number;
+  embedFonts?: boolean;
+  fast?: boolean;
+  renderTimeoutMs?: number;
 }
 
 @Injectable({
@@ -16,6 +19,9 @@ export class AppShareService {
   async shareBenchmarkAsImage(element: HTMLElement, options: ShareBenchmarkOptions = {}): Promise<string> {
     return this.zone.runOutsideAngular(async () => {
       const scale = options.scale ?? 2;
+      const embedFonts = options.embedFonts ?? true;
+      const fast = options.fast ?? false;
+      const renderTimeoutMs = options.renderTimeoutMs ?? 15000;
       const sourceNode = element;
       const clone = sourceNode.cloneNode(true) as HTMLElement;
       clone.classList.add('benchmark-share-export');
@@ -60,13 +66,17 @@ export class AppShareService {
       try {
         await this.waitForIdle();
 
-        const image = await snapdom.toPng(clone, {
-          scale,
-          width: options.width,
-          backgroundColor: 'transparent',
-          embedFonts: true,
-          fast: false,
-        });
+        const image = await this.withTimeout(
+          snapdom.toPng(clone, {
+            scale,
+            width: options.width,
+            backgroundColor: 'transparent',
+            embedFonts,
+            fast,
+          }),
+          renderTimeoutMs,
+          `Benchmark image rendering timed out after ${renderTimeoutMs}ms.`
+        );
 
         return image.src;
       } finally {
@@ -121,6 +131,27 @@ export class AppShareService {
         window.clearTimeout(timeoutId);
         finish();
       }, 50);
+    });
+  }
+
+  private withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      let settled = false;
+      const finishResolve = (value: T) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      };
+      const finishReject = (error: unknown) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        reject(error);
+      };
+      const timeoutId = window.setTimeout(() => finishReject(new Error(message)), timeoutMs);
+
+      promise.then(finishResolve).catch(finishReject);
     });
   }
 
