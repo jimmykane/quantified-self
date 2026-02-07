@@ -6,6 +6,7 @@ import { AppEventColorService } from '../../services/color/app.event.color.servi
 import { EventInterface, UserSummariesSettingsInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { AppShareService } from '../../services/app.share.service';
 import { environment } from '../../../environments/environment';
+import { saveAs } from 'file-saver';
 
 @Component({
   selector: 'app-benchmark-bottom-sheet',
@@ -149,16 +150,7 @@ export class BenchmarkBottomSheetComponent {
   }
 
   private downloadShareImage(imageBlob: Blob, filename: string): void {
-    const objectUrl = URL.createObjectURL(imageBlob);
-    const link = document.createElement('a');
-    link.href = objectUrl;
-    link.download = filename;
-    link.rel = 'noopener';
-    link.target = '_self';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+    saveAs(imageBlob, filename);
   }
 
   private async tryNativeShare(imageBlob: Blob, filename: string): Promise<boolean> {
