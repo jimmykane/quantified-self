@@ -71,7 +71,7 @@ describe('proGuard', () => {
         expect(result).toBe(true);
     });
 
-    it('should redirect to pricing if user is free and subscribed once', async () => {
+    it('should redirect to subscriptions if user is free and subscribed once', async () => {
         authServiceStub.user$ = of({
             uid: '123',
             stripeRole: 'free',
@@ -85,6 +85,6 @@ describe('proGuard', () => {
 
         const result = await TestBed.runInInjectionContext(() => proGuard({} as any, {} as any));
         expect(result).toBe(false);
-        expect(router.navigate).toHaveBeenCalledWith(['/pricing']);
+        expect(router.navigate).toHaveBeenCalledWith(['/subscriptions']);
     });
 });

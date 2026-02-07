@@ -1,5 +1,5 @@
 .pricing-container {
-  padding: 40px 20px;
+  padding: 28px 20px;
   min-height: 80vh;
   display: flex;
   flex-direction: column;
@@ -8,11 +8,11 @@
   background: radial-gradient(circle at center, rgba(var(--mat-sys-primary-rgb, 63, 81, 181), 0.05) 0%, transparent 70%);
 
   h1 {
-    margin-bottom: 50px;
-    font-size: 2.5rem;
+    margin-bottom: 28px;
+    font-size: 2.2rem;
     font-weight: 300;
     text-align: center;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.2px;
   }
 
   .loading-state {
@@ -41,7 +41,7 @@
   .restore-section {
     width: 100%;
     max-width: 600px;
-    margin-bottom: 30px;
+    margin-bottom: 18px;
 
     .restore-alert {
       // background: rgba(var(--accent-rgb), 0.1);
@@ -49,11 +49,11 @@
       // border: 1px solid rgba(var(--accent-rgb), 0.3);
       border: 1px solid rgba(var(--mat-sys-secondary-rgb, 255, 64, 129), 0.3);
       border-radius: 8px;
-      padding: 16px;
+      padding: 12px 14px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 16px;
+      gap: 12px;
 
       p {
         margin: 0;
@@ -67,18 +67,18 @@
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
-    gap: 30px;
+    gap: 18px;
     width: 100%;
-    max-width: 1200px;
+    max-width: 1080px;
   }
 
   /* Use grid for products if we want stricer columns, but flex is good for centering few items */
   .products-grid {
     display: grid;
     /* Grid responsive: min 251px, max 334px cards (decreased by 5%) */
-    grid-template-columns: repeat(auto-fit, minmax(251px, 334px));
+    grid-template-columns: repeat(auto-fit, minmax(242px, 300px));
     justify-content: center;
-    gap: 40px;
+    gap: 22px;
   }
 
   .product-card {
@@ -86,7 +86,7 @@
     flex-direction: column;
     height: 100%;
     transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-    border-radius: 20px;
+    border-radius: 16px;
     overflow: hidden;
     position: relative;
     border: 1px solid rgba(0, 0, 0, 0.08);
@@ -97,8 +97,8 @@
 
     /* Hover effect */
     &:hover {
-      transform: translateY(-8px);
-      box-shadow: 0 16px 32px rgba(0, 0, 0, 0.12);
+      transform: translateY(-5px);
+      box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
       z-index: 2;
     }
 
@@ -122,18 +122,18 @@
       box-shadow: 0 8px 24px rgba(63, 81, 181, 0.15);
 
       /* Make it pop slightly more */
-      transform: scale(1.02);
+      transform: scale(1.01);
 
       &:hover {
-        transform: scale(1.02) translateY(-8px);
-        box-shadow: 0 20px 40px rgba(63, 81, 181, 0.2);
+        transform: scale(1.01) translateY(-5px);
+        box-shadow: 0 16px 28px rgba(63, 81, 181, 0.2);
       }
     }
 
     /* Ribbon for Pro */
     .popular-ribbon {
       position: absolute;
-      top: 20px;
+      top: 14px;
       right: -30px;
       background: #ff4081;
       /* Accent color */
@@ -148,28 +148,28 @@
     }
 
     mat-card-header {
-      padding: 32px 24px 16px;
+      padding: 22px 20px 12px;
       flex-direction: column;
       align-items: center;
       text-align: center;
 
       mat-card-title {
-        font-size: 1.7rem;
+        font-size: 1.5rem;
         font-weight: 400;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
         letter-spacing: -0.5px;
       }
 
       mat-card-subtitle {
-        font-size: 0.95rem;
+        font-size: 0.9rem;
         opacity: 0.7;
         line-height: 1.4;
-        max-width: 80%;
+        max-width: 88%;
       }
     }
 
     mat-card-content {
-      padding: 0 32px 32px;
+      padding: 0 20px 20px;
       flex-grow: 1;
       display: flex;
       flex-direction: column;
@@ -177,7 +177,7 @@
     }
 
     .features-list {
-      margin: 24px 0;
+      margin: 16px 0;
       width: 100%;
       text-align: left;
 
@@ -189,16 +189,16 @@
         li {
           display: flex;
           align-items: center;
-          margin-bottom: 12px;
-          font-size: 0.95rem;
+          margin-bottom: 10px;
+          font-size: 0.9rem;
           // color: rgba(0, 0, 0, 0.87); /* REMOVED */
           line-height: 1.4;
 
           mat-icon {
-            margin-right: 12px;
-            font-size: 20px;
-            width: 20px;
-            height: 20px;
+            margin-right: 10px;
+            font-size: 18px;
+            width: 18px;
+            height: 18px;
           }
 
           strong {
@@ -212,13 +212,13 @@
       margin-top: auto;
       width: 100%;
       text-align: center;
-      padding-top: 24px;
+      padding-top: 14px;
       border-top: 1px solid rgba(0, 0, 0, 0.06);
 
       .price {
-        font-size: 2.8rem;
+        font-size: 2.2rem;
         font-weight: 400;
-        margin: 0 0 20px;
+        margin: 0 0 12px;
         // color: rgba(0, 0, 0, 0.87); /* REMOVED */
         letter-spacing: -1px;
         display: flex;
@@ -226,7 +226,7 @@
         align-items: baseline;
 
         .interval {
-          font-size: 1rem;
+          font-size: 0.9rem;
           font-weight: 400;
           opacity: 0.6;
           margin-left: 4px;
@@ -235,12 +235,13 @@
 
       button {
         width: 100%;
-        padding: 24px 0;
+        min-height: 44px;
+        padding: 10px 0;
         /* Taller buttons */
         border-radius: 8px;
-        font-size: 1.1rem;
+        font-size: 1rem;
         font-weight: 400;
-        line-height: 0;
+        line-height: 1.1;
       }
     }
   }
@@ -252,6 +253,16 @@
 
   :host-context(.dark-theme) .price-section {
     border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  :host-context(.dark-theme) .manage-subscription-container .meta-item {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  :host-context(.dark-theme) .manage-subscription-container .manage-header {
+    border-bottom-color: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.02);
   }
 
   /* Current plan highlight styling - theme aware */
@@ -291,14 +302,275 @@
 
 
   .manage-subscription-container .product-card {
-    max-width: 450px;
-    /* Reuse pro styling */
-    @extend .pro-card;
+    max-width: 760px;
+    width: 100%;
     transform: none !important;
-    /* Disable scale for manage card */
 
     &:hover {
       transform: translateY(-4px) !important;
+    }
+  }
+
+  .manage-subscription-container .manage-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 20px 10px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+
+  .manage-subscription-container .manage-heading {
+    min-width: 0;
+  }
+
+  .manage-subscription-container .manage-title {
+    margin: 0;
+    font-size: 1.7rem;
+    font-weight: 400;
+    line-height: 1.12;
+    letter-spacing: -0.2px;
+  }
+
+  .manage-subscription-container .manage-subtitle {
+    margin-top: 3px;
+    font-size: 0.92rem;
+    opacity: 0.72;
+    line-height: 1.25;
+  }
+
+  .manage-subscription-container .status-chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  .manage-subscription-container .status-loading {
+    font-size: 0.85rem;
+    opacity: 0.7;
+    line-height: 1.2;
+    align-self: center;
+  }
+
+  .manage-subscription-container .manage-content {
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    grid-template-areas:
+      "description meta"
+      ". actions";
+    column-gap: 14px;
+    row-gap: 12px;
+    padding-top: 14px;
+
+    .manage-description {
+      grid-area: description;
+      margin: 0;
+      line-height: 1.35;
+      max-width: 58ch;
+    }
+
+    .subscription-meta-grid {
+      grid-area: meta;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 0;
+    }
+
+    .meta-item {
+      min-height: 0;
+      padding: 8px 10px;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.02);
+    }
+
+    .meta-label {
+      font-size: 0.82rem;
+      opacity: 0.75;
+      margin-bottom: 2px;
+      line-height: 1.2;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .meta-value {
+      font-size: 0.96rem;
+      line-height: 1.25;
+    }
+
+    .subscription-unavailable {
+      grid-area: meta;
+      margin: 0;
+      opacity: 0.7;
+      align-self: start;
+    }
+
+    .manage-actions {
+      grid-area: actions;
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
+      width: auto;
+      text-align: right;
+      justify-self: end;
+      align-self: end;
+    }
+
+    .manage-actions button {
+      width: auto;
+      min-width: 220px;
+      min-height: 42px;
+      padding: 0 18px;
+    }
+  }
+
+  .card-spacer {
+    flex-grow: 1;
+  }
+
+  @media (max-width: 959px) {
+    padding: 20px 16px;
+
+    h1 {
+      margin-bottom: 20px;
+      font-size: 1.95rem;
+    }
+
+    .products-grid {
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 16px;
+      width: 100%;
+      max-width: 760px;
+    }
+
+    .manage-subscription-container .product-card {
+      max-width: 700px;
+      width: 100%;
+    }
+
+    .manage-subscription-container .manage-content {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas:
+        "description"
+        "meta"
+        "actions";
+      row-gap: 10px;
+    }
+
+    .manage-subscription-container .manage-content .manage-actions {
+      justify-self: start;
+    }
+  }
+
+  @media (max-width: 599px) {
+    padding: 16px 12px;
+
+    h1 {
+      margin-bottom: 16px;
+      font-size: 1.6rem;
+    }
+
+    .restore-section {
+      margin-bottom: 14px;
+    }
+
+    .restore-section .restore-alert {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .products-grid {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .product-card {
+      border-radius: 14px;
+
+      .popular-ribbon {
+        top: 12px;
+        right: -34px;
+        font-size: 0.72rem;
+        padding: 5px 36px;
+      }
+
+      mat-card-header {
+        padding: 18px 16px 10px;
+
+        mat-card-title {
+          font-size: 1.35rem;
+        }
+
+        mat-card-subtitle {
+          font-size: 0.85rem;
+        }
+      }
+
+      mat-card-content {
+        padding: 0 16px 16px;
+      }
+
+      .features-list li {
+        font-size: 0.88rem;
+      }
+
+      .price-section .price {
+        font-size: 1.9rem;
+      }
+    }
+
+    .manage-subscription-container .manage-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 14px 16px 10px;
+    }
+
+    .manage-subscription-container .manage-title {
+      font-size: 1.45rem;
+    }
+
+    .manage-subscription-container .manage-subtitle {
+      font-size: 0.86rem;
+    }
+
+    .manage-subscription-container .status-chips {
+      justify-content: flex-start;
+      width: 100%;
+    }
+
+    .manage-subscription-container .manage-content {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas:
+        "description"
+        "meta"
+        "actions";
+      gap: 10px;
+    }
+
+    .manage-subscription-container .manage-content .subscription-meta-grid {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+    }
+
+    .manage-subscription-container .manage-content .meta-item {
+      padding: 9px 10px;
+    }
+
+    .manage-subscription-container .manage-content .manage-actions {
+      width: 100%;
+      justify-self: stretch;
+      text-align: initial;
+    }
+
+    .manage-subscription-container .manage-content .manage-actions button {
+      width: 100%;
+      min-width: 0;
     }
   }
 }

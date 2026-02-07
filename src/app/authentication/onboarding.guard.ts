@@ -63,12 +63,13 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
             const isOnboarding = path.includes('onboarding');
             const isPayment = path.includes('payment/');
             const isPricing = path.includes('pricing');
+            const isSubscriptions = path.includes('subscriptions');
 
-            if (!completed && !isOnboarding && !isPayment && !isPricing) {
+            if (!completed && !isOnboarding && !isPayment && !isPricing && !isSubscriptions) {
                 logger.log(`[OnboardingGuard] Redirecting from /${path} to /onboarding because onboarding is NOT completed.`);
                 router.navigate(['/onboarding']);
             } else {
-                logger.log(`[OnboardingGuard] Allowing access to /${path}. (Completed: ${completed}, IsOnboarding: ${isOnboarding}, IsPayment: ${isPayment}, IsPricing: ${isPricing})`);
+                logger.log(`[OnboardingGuard] Allowing access to /${path}. (Completed: ${completed}, IsOnboarding: ${isOnboarding}, IsPayment: ${isPayment}, IsPricing: ${isPricing}, IsSubscriptions: ${isSubscriptions})`);
             }
         })
     );

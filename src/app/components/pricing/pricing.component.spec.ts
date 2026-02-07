@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { PricingComponent } from './pricing.component';
 import { AppUserService } from '../../services/app.user.service';
-import { AppPaymentService } from '../../services/app.payment.service';
+import { AppPaymentService, StripeSubscription } from '../../services/app.payment.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { of } from 'rxjs';
 import { Auth } from '@angular/fire/auth';
@@ -260,6 +260,53 @@ describe('PricingComponent', () => {
 
         expect(logSpy).toHaveBeenCalledWith('initiated');
         expect(logSpy).toHaveBeenCalledWith('success', 'pro');
+    });
+
+    it('should render pro subscription details inside manage container', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        const subscription: StripeSubscription = {
+            id: 'sub_123',
+            status: 'active',
+            current_period_end: new Date('2026-01-01T00:00:00Z'),
+            current_period_start: new Date('2025-01-01T00:00:00Z'),
+            cancel_at_period_end: false
+        };
+
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('pro');
+        vi.spyOn(paymentService, 'getUserSubscriptions').mockReturnValue(of([subscription]));
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent as string;
+        expect(content).toContain('Pro Membership');
+        expect(content).toContain('Renews on');
+        expect(content).toContain('Manage Subscription');
+    });
+
+    it('should render basic subscription details inside manage container', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        const subscription: StripeSubscription = {
+            id: 'sub_trial',
+            status: 'trialing',
+            current_period_end: { seconds: 1767225600, nanoseconds: 0 },
+            current_period_start: { seconds: 1735689600, nanoseconds: 0 },
+            cancel_at_period_end: true
+        };
+
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('basic');
+        vi.spyOn(paymentService, 'getUserSubscriptions').mockReturnValue(of([subscription]));
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent as string;
+        expect(content).toContain('Basic Membership');
+        expect(content).toContain('Trialing');
+        expect(content).toContain('Ends on');
+        expect(content).toContain('Ends at period end');
     });
 
 });

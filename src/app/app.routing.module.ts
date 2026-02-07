@@ -6,6 +6,7 @@ import { proGuard } from './authentication/pro.guard';
 import { onboardingGuard } from './authentication/onboarding.guard';
 import { adminGuard } from './authentication/admin.guard';
 import { loggedInGuard } from './authentication/logged-in.guard';
+import { pricingRedirectGuard } from './authentication/pricing-redirect.guard';
 import { releasesResolver } from './resolvers/releases.resolver';
 
 const routes: Routes = [
@@ -35,11 +36,21 @@ const routes: Routes = [
     path: 'pricing',
     loadComponent: () => import('./components/pricing/pricing.component').then(m => m.PricingComponent),
     // Public route
+    canMatch: [pricingRedirectGuard],
     data: {
       title: 'Membership',
       preload: true,
       description: 'Support the development of Quantified Self. Unlock unlimited activity history and seamless sync for Suunto, Garmin, and COROS while helping keep the project independent.',
       keywords: 'support, membership, fitness analytics, suunto sync, garmin connect sync, coros integration, independent software'
+    }
+  },
+  {
+    path: 'subscriptions',
+    loadComponent: () => import('./components/pricing/pricing.component').then(m => m.PricingComponent),
+    canMatch: [authGuard],
+    data: {
+      title: 'Subscription',
+      preload: true
     }
   },
   {

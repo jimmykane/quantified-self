@@ -44,22 +44,22 @@ class PermissionsService {
             }
 
             // If they ARE NOT paid, but they ALSO HAVEN'T finished onboarding (terms OR initial sub),
-            // then we should NOT redirect them to /pricing yet.
+            // then we should NOT redirect them to /subscriptions yet.
             // OnboardingGuard will catch them and send them to /onboarding.
             if (!termsAccepted || !hasSubscribedOnce) {
                 this.logger.log('[ProGuard] Access DENIED but deferring to OnboardingGuard (Not fully onboarded)');
-                // We return false but do NOT navigate to /pricing, so OnboardingGuard can win.
+                // We return false but do NOT navigate to /subscriptions, so OnboardingGuard can win.
                 return false;
             }
 
             // If we are here, it means they HAVE accepted terms and HAVE subscribed once before,
-            // but they are currently NOT paid. Land them on /pricing.
-            this.logger.log('[ProGuard] Access DENIED. User is a lapsed pro member. Redirecting to /pricing');
-            this.router.navigate(['/pricing']);
+            // but they are currently NOT paid. Land them on /subscriptions.
+            this.logger.log('[ProGuard] Access DENIED. User is a lapsed pro member. Redirecting to /subscriptions');
+            this.router.navigate(['/subscriptions']);
             return false;
         } catch (error) {
             this.logger.error('[ProGuard] Error', error);
-            this.router.navigate(['/pricing']);
+            this.router.navigate(['/subscriptions']);
             return false;
         }
     }

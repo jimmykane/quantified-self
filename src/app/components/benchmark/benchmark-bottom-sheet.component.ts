@@ -93,16 +93,18 @@ export class BenchmarkBottomSheetComponent {
     }
     this.isSharing = true;
     this.shareTimestamp = new Date();
-    const shareWindow = this.openShareWindow();
+    const isMobile = window.matchMedia('(max-width: 600px)').matches;
 
     try {
-      const isMobile = window.matchMedia('(max-width: 600px)').matches;
       const appUrl = environment.appUrl || window.location.origin;
       const displayUrl = this.getDisplayUrl(appUrl);
       const filename = `benchmark-${this.shareTimestamp.getTime()}.png`;
       const dataUrl = await this.shareService.shareBenchmarkAsImage(this.shareFrame.nativeElement, {
         scale: isMobile ? 1.5 : 2,
         width: 1080,
+        embedFonts: !isMobile,
+        fast: isMobile,
+        renderTimeoutMs: isMobile ? 10000 : 15000,
         watermark: {
           brand: 'Quantified Self',
           timestamp: this.formatShareDate(this.shareTimestamp),
@@ -113,21 +115,11 @@ export class BenchmarkBottomSheetComponent {
 
       const shared = await this.tryNativeShare(dataUrl, filename);
       if (shared) {
-        if (shareWindow) {
-          shareWindow.close();
-        }
         return;
       }
 
-      if (shareWindow) {
-        this.renderShareWindow(shareWindow, dataUrl);
-      } else {
-        this.downloadShareImage(dataUrl, filename);
-      }
+      this.downloadShareImage(dataUrl, filename);
     } catch (error) {
-      if (shareWindow) {
-        this.renderShareWindowError(shareWindow);
-      }
       console.error('Failed to share benchmark image', error);
     } finally {
       this.isSharing = false;
@@ -149,51 +141,6 @@ export class BenchmarkBottomSheetComponent {
     } catch {
       return appUrl.replace(/^https?:\/\//, '');
     }
-  }
-
-  private openShareWindow(): Window | null {
-    const shareWindow = window.open('', '_blank');
-    if (!shareWindow) return null;
-
-    shareWindow.document.write(`
-      <!doctype html>
-      <html>
-        <head><title>Benchmark Share</title></head>
-        <body style="margin:0; background:#111; color:#fff; font-family:Arial, sans-serif; display:flex; justify-content:center; align-items:center; height:100vh;">
-          <div>Generating benchmark image...</div>
-        </body>
-      </html>
-    `);
-    shareWindow.document.close();
-    return shareWindow;
-  }
-
-  private renderShareWindow(shareWindow: Window, dataUrl: string): void {
-    shareWindow.document.open();
-    shareWindow.document.write(`
-      <!doctype html>
-      <html>
-        <head><title>Benchmark Share</title></head>
-        <body style="margin:0; background:#111; display:flex; justify-content:center; align-items:center;">
-          <img src="${dataUrl}" alt="Benchmark Share" style="max-width:100%; height:auto;" />
-        </body>
-      </html>
-    `);
-    shareWindow.document.close();
-  }
-
-  private renderShareWindowError(shareWindow: Window): void {
-    shareWindow.document.open();
-    shareWindow.document.write(`
-      <!doctype html>
-      <html>
-        <head><title>Benchmark Share</title></head>
-        <body style="margin:0; background:#111; color:#fff; font-family:Arial, sans-serif; display:flex; justify-content:center; align-items:center; height:100vh;">
-          <div>Unable to generate the benchmark image.</div>
-        </body>
-      </html>
-    `);
-    shareWindow.document.close();
   }
 
   private downloadShareImage(dataUrl: string, filename: string): void {

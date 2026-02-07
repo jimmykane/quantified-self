@@ -18,7 +18,7 @@ import { RouterModule } from '@angular/router';
           <p>You have canceled the payment process. No charges were made.</p>
         </mat-card-content>
         <mat-card-actions>
-          <button mat-flat-button color="warn" routerLink="/pricing">Try Again</button>
+          <button mat-flat-button color="warn" routerLink="/subscriptions">Try Again</button>
           <button mat-button routerLink="/dashboard">Back to Dashboard</button>
         </mat-card-actions>
       </mat-card>

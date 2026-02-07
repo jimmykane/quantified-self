@@ -58,7 +58,7 @@
   }
 
   @if (user) {
-  <mat-list-item routerLinkActive="active" [routerLink]="hasPaidAccess ? '/mytracks' : '/pricing'"
+  <mat-list-item routerLinkActive="active" [routerLink]="hasPaidAccess ? '/mytracks' : '/subscriptions'"
     (click)="sideNav.close();">
     <mat-icon>layers</mat-icon>
     <span>My Tracks <span class="mat-small">(Beta)</span></span>
@@ -76,7 +76,7 @@
   @if (user) {
   <div class="sidenav-section-header">Account</div>
 
-  <mat-list-item routerLinkActive="active" [routerLink]="hasPaidAccess ? '/services' : '/pricing'"
+  <mat-list-item routerLinkActive="active" [routerLink]="hasPaidAccess ? '/services' : '/subscriptions'"
     (click)="sideNav.close();">
     <mat-icon>leak_add</mat-icon>
     <span>Services</span>
@@ -92,7 +92,7 @@
     <span>Settings</span>
   </mat-list-item>
 
-  <mat-list-item routerLinkActive="active" routerLink="/pricing" (click)="sideNav.close();">
+  <mat-list-item routerLinkActive="active" routerLink="/subscriptions" (click)="sideNav.close();">
     <mat-icon>card_membership</mat-icon>
     <span>Subscription</span>
   </mat-list-item>

@@ -14,7 +14,7 @@
   </button>
 </ng-container>
 
-<a mat-flat-button color="accent" routerLink="/pricing"
+<a mat-flat-button color="accent" routerLink="/subscriptions"
   *ngIf="!hasProAccess && uploadCount !== null && uploadLimit !== null && uploadCount >= uploadLimit"
   [class.icon-only]="isHandset" [matTooltip]="isHandset ? 'Upgrade to Pro' : ''">
   <mat-icon *ngIf="isHandset">upgrade</mat-icon>

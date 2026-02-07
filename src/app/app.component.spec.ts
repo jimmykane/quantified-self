@@ -139,13 +139,13 @@ describe('AppComponent', () => {
         expect(component['analyticsService']).toBeTruthy();
     });
 
-    it('should show navigation for free users on pricing page', () => {
+    it('should show navigation for free users on subscriptions page', () => {
         // Mock user as free
         component['currentUser'] = { stripeRole: undefined };
         component.onboardingCompleted = true;
 
         // Mock router URL
-        mockRouter.url = '/pricing';
+        mockRouter.url = '/subscriptions';
 
         expect(component.showNavigation).toBe(true);
     });
@@ -161,13 +161,13 @@ describe('AppComponent', () => {
         expect(component.showNavigation).toBe(true);
     });
 
-    it('should show navigation for basic users on pricing page', () => {
+    it('should show navigation for basic users on subscriptions page', () => {
         // Mock user as basic
         component['currentUser'] = { stripeRole: 'basic' };
         component.onboardingCompleted = true;
 
         // Mock router URL
-        mockRouter.url = '/pricing';
+        mockRouter.url = '/subscriptions';
 
         expect(component.showNavigation).toBe(true);
     });
