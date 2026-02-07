@@ -22,6 +22,8 @@ class MockBenchmarkReportComponent {
     @Input() event?: EventInterface;
     @Input() unitSettings?: UserUnitSettingsInterface;
     @Input() summariesSettings?: UserSummariesSettingsInterface;
+    @Input() referenceColor?: string;
+    @Input() testColor?: string;
 }
 
 describe('BenchmarkBottomSheetComponent', () => {

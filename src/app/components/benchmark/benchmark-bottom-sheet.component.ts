@@ -1,4 +1,5 @@
-import { Component, ElementRef, Inject, ViewChild } from '@angular/core';
+import { Component, ElementRef, Inject, ViewChild, inject } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
 import { BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
@@ -37,6 +38,7 @@ import { environment } from '../../../environments/environment';
     </div>
   `,
   styleUrls: ['./benchmark-bottom-sheet.component.css'],
+  providers: [DatePipe],
   standalone: false
 })
 export class BenchmarkBottomSheetComponent {
@@ -45,6 +47,8 @@ export class BenchmarkBottomSheetComponent {
   testColor = '';
   isSharing = false;
   shareTimestamp = new Date();
+
+  private datePipe = inject(DatePipe);
 
   constructor(
     @Inject(MAT_BOTTOM_SHEET_DATA) public data: {
@@ -89,11 +93,13 @@ export class BenchmarkBottomSheetComponent {
     }
     this.isSharing = true;
     this.shareTimestamp = new Date();
+    const shareWindow = this.openShareWindow();
 
     try {
       const isMobile = window.matchMedia('(max-width: 600px)').matches;
       const appUrl = environment.appUrl || window.location.origin;
       const displayUrl = this.getDisplayUrl(appUrl);
+      const filename = `benchmark-${this.shareTimestamp.getTime()}.png`;
       const dataUrl = await this.shareService.shareBenchmarkAsImage(this.shareFrame.nativeElement, {
         scale: isMobile ? 1.5 : 2,
         width: 1080,
@@ -105,25 +111,23 @@ export class BenchmarkBottomSheetComponent {
         }
       });
 
-      const shareWindow = window.open();
+      const shared = await this.tryNativeShare(dataUrl, filename);
+      if (shared) {
+        if (shareWindow) {
+          shareWindow.close();
+        }
+        return;
+      }
+
       if (shareWindow) {
-        shareWindow.document.write(`
-          <!doctype html>
-          <html>
-            <head><title>Benchmark Share</title></head>
-            <body style="margin:0; background:#111; display:flex; justify-content:center; align-items:center;">
-              <img src="${dataUrl}" alt="Benchmark Share" style="max-width:100%; height:auto;" />
-            </body>
-          </html>
-        `);
-        shareWindow.document.close();
+        this.renderShareWindow(shareWindow, dataUrl);
       } else {
-        const link = document.createElement('a');
-        link.href = dataUrl;
-        link.download = `benchmark-${this.shareTimestamp.getTime()}.png`;
-        link.click();
+        this.downloadShareImage(dataUrl, filename);
       }
     } catch (error) {
+      if (shareWindow) {
+        this.renderShareWindowError(shareWindow);
+      }
       console.error('Failed to share benchmark image', error);
     } finally {
       this.isSharing = false;
@@ -131,13 +135,12 @@ export class BenchmarkBottomSheetComponent {
   }
 
   private formatShareDate(date: Date): string {
-    return new Intl.DateTimeFormat(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    }).format(date);
+    const datePart = this.datePipe.transform(date, 'mediumDate');
+    const timePart = this.datePipe.transform(date, 'shortTime');
+    if (datePart && timePart) {
+      return `${datePart}, ${timePart}`;
+    }
+    return date.toISOString();
   }
 
   private getDisplayUrl(appUrl: string): string {
@@ -146,5 +149,99 @@ export class BenchmarkBottomSheetComponent {
     } catch {
       return appUrl.replace(/^https?:\/\//, '');
     }
+  }
+
+  private openShareWindow(): Window | null {
+    const shareWindow = window.open('', '_blank');
+    if (!shareWindow) return null;
+
+    shareWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head><title>Benchmark Share</title></head>
+        <body style="margin:0; background:#111; color:#fff; font-family:Arial, sans-serif; display:flex; justify-content:center; align-items:center; height:100vh;">
+          <div>Generating benchmark image...</div>
+        </body>
+      </html>
+    `);
+    shareWindow.document.close();
+    return shareWindow;
+  }
+
+  private renderShareWindow(shareWindow: Window, dataUrl: string): void {
+    shareWindow.document.open();
+    shareWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head><title>Benchmark Share</title></head>
+        <body style="margin:0; background:#111; display:flex; justify-content:center; align-items:center;">
+          <img src="${dataUrl}" alt="Benchmark Share" style="max-width:100%; height:auto;" />
+        </body>
+      </html>
+    `);
+    shareWindow.document.close();
+  }
+
+  private renderShareWindowError(shareWindow: Window): void {
+    shareWindow.document.open();
+    shareWindow.document.write(`
+      <!doctype html>
+      <html>
+        <head><title>Benchmark Share</title></head>
+        <body style="margin:0; background:#111; color:#fff; font-family:Arial, sans-serif; display:flex; justify-content:center; align-items:center; height:100vh;">
+          <div>Unable to generate the benchmark image.</div>
+        </body>
+      </html>
+    `);
+    shareWindow.document.close();
+  }
+
+  private downloadShareImage(dataUrl: string, filename: string): void {
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = filename;
+    link.rel = 'noopener';
+    link.click();
+  }
+
+  private async tryNativeShare(dataUrl: string, filename: string): Promise<boolean> {
+    if (!('share' in navigator)) return false;
+    const file = this.dataUrlToFile(dataUrl, filename);
+    if (!file) return false;
+
+    const shareData: ShareData = {
+      files: [file],
+      title: 'Benchmark Report',
+    };
+
+    if (navigator.canShare && !navigator.canShare(shareData)) {
+      return false;
+    }
+
+    try {
+      await navigator.share(shareData);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private dataUrlToFile(dataUrl: string, filename: string): File | null {
+    if (typeof File === 'undefined') return null;
+    const parts = dataUrl.split(',');
+    if (parts.length !== 2) return null;
+
+    const meta = parts[0];
+    const base64 = parts[1];
+    const mimeMatch = meta.match(/data:(.*?);base64/i);
+    const mime = mimeMatch?.[1] ?? 'image/png';
+
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+
+    return new File([bytes], filename, { type: mime });
   }
 }
