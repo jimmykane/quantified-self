@@ -211,7 +211,7 @@ describe('AppPaymentService', () => {
                 unit_amount: 1000,
                 description: 'Monthly with invalid promo',
                 metadata: {
-                    promotion_code_id: 'TRAIL_START'
+                    promotion_code_id: 'promo_1Syb2dE0WZdfLutFyhPh6zxv'
                 }
             } as any;
 
