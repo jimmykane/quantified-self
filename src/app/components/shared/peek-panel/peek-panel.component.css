@@ -2,8 +2,8 @@
   display: block;
   max-width: 100%;
   --peek-motion-standard: cubic-bezier(0.4, 0, 0.2, 1);
-  --peek-motion-enter-duration: 225ms;
-  --peek-motion-exit-duration: 195ms;
+  --peek-panel-motion-duration: 220ms;
+  --peek-content-motion-duration: 180ms;
 }
 
 .peek-panel {
@@ -12,8 +12,8 @@
   overflow: hidden;
   max-width: 100%;
   transition:
-    width var(--peek-motion-enter-duration) var(--peek-motion-standard),
-    height var(--peek-motion-enter-duration) var(--peek-motion-standard);
+    width var(--peek-panel-motion-duration) var(--peek-motion-standard),
+    height var(--peek-panel-motion-duration) var(--peek-motion-standard);
   will-change: width, height;
 }
 
@@ -63,16 +63,16 @@
 
 .peek-toggle {
   border: 0;
-  background: color-mix(in srgb, var(--mat-app-surface-container-low) 88%, transparent);
-  color: var(--mat-sys-on-surface);
+  background: var(--mat-sys-surface-container-low, var(--mat-app-surface-container-low));
+  color: var(--mat-sys-on-surface-variant, var(--mat-app-on-surface-variant));
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   padding: 0;
   transition:
-    background-color var(--peek-motion-enter-duration) var(--peek-motion-standard),
-    color var(--peek-motion-enter-duration) var(--peek-motion-standard);
+    background-color var(--peek-panel-motion-duration) var(--peek-motion-standard),
+    color var(--peek-panel-motion-duration) var(--peek-motion-standard);
 }
 
 .peek-panel.position-left .peek-toggle,
@@ -82,27 +82,32 @@
 }
 
 .peek-panel.position-left .peek-toggle {
-  border-right: 1px solid color-mix(in srgb, var(--mat-sys-outline) 35%, transparent);
+  border-right: 1px solid var(--mat-sys-outline-variant, var(--mat-app-outline-variant));
 }
 
 .peek-panel.position-right .peek-toggle {
-  border-left: 1px solid color-mix(in srgb, var(--mat-sys-outline) 35%, transparent);
+  border-left: 1px solid var(--mat-sys-outline-variant, var(--mat-app-outline-variant));
 }
 
 .peek-panel.position-top .peek-toggle {
   width: 100%;
   min-height: var(--peek-collapsed-size);
-  border-bottom: 1px solid color-mix(in srgb, var(--mat-sys-outline) 35%, transparent);
+  border-bottom: 1px solid var(--mat-sys-outline-variant, var(--mat-app-outline-variant));
 }
 
 .peek-toggle:hover {
-  background: color-mix(in srgb, var(--mat-app-surface-container-high) 92%, transparent);
+  background: var(--mat-sys-surface-container, var(--mat-app-surface-container-high));
+}
+
+.peek-toggle:active {
+  background: var(--mat-sys-surface-container-high, var(--mat-app-surface-container-high));
 }
 
 .peek-toggle .material-symbols-rounded {
   font-size: 20px;
   transition:
-    color var(--peek-motion-enter-duration) var(--peek-motion-standard);
+    color var(--peek-panel-motion-duration) var(--peek-motion-standard),
+    transform var(--peek-panel-motion-duration) var(--peek-motion-standard);
 }
 
 .peek-main {
@@ -112,26 +117,51 @@
   display: flex;
   flex-direction: column;
   opacity: 1;
-  visibility: visible;
+  transform: translate3d(0, 0, 0);
+  clip-path: inset(0 0 0 0);
   transition:
-    opacity var(--peek-motion-enter-duration) var(--peek-motion-standard),
-    visibility 0s linear 0s;
+    opacity var(--peek-content-motion-duration) var(--peek-motion-standard),
+    transform var(--peek-content-motion-duration) var(--peek-motion-standard),
+    clip-path var(--peek-content-motion-duration) var(--peek-motion-standard);
+  transition-delay: 32ms;
+  will-change: opacity, transform, clip-path;
 }
 
 .peek-panel.position-left.collapsed .peek-main,
 .peek-panel.position-right.collapsed .peek-main,
 .peek-panel.position-top.collapsed .peek-main {
   opacity: 0;
-  visibility: hidden;
   pointer-events: none;
-  transition:
-    opacity var(--peek-motion-exit-duration) var(--peek-motion-standard),
-    visibility 0s linear var(--peek-motion-exit-duration);
+  transition-delay: 0ms;
 }
 
-.peek-panel.position-left.collapsed .peek-panel.glass-card {
-  /* Use standard glass card background */
-  background: var(--mat-sys-surface) !important;
+.peek-panel.position-left.collapsed .peek-main {
+  transform: translateX(-8px);
+  clip-path: inset(0 100% 0 0);
+}
+
+.peek-panel.position-right.collapsed .peek-main {
+  transform: translateX(8px);
+  clip-path: inset(0 0 0 100%);
+}
+
+.peek-panel.position-top.collapsed .peek-main {
+  transform: translateY(-4px);
+  clip-path: inset(0 0 100% 0);
+}
+
+/* Top panels feel better with a pure vertical reveal instead of slide motion. */
+.peek-panel.position-top .peek-main {
+  transform: none;
+  transition:
+    opacity var(--peek-content-motion-duration) var(--peek-motion-standard),
+    clip-path var(--peek-content-motion-duration) var(--peek-motion-standard);
+  transition-delay: 0ms;
+}
+
+.peek-panel.position-top.collapsed .peek-main {
+  transform: none;
+  clip-path: inset(0 0 100% 0);
 }
 
 .peek-header-wrapper {
