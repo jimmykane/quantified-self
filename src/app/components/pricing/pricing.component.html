@@ -30,7 +30,7 @@
         @if (currentRole === 'pro') {
         <p class="manage-description">Your Pro membership does more than unlock features. It helps fund faster updates and keeps Quantified Self a strong alternative to big-tech platforms.</p>
         } @else {
-        <p class="manage-description">Your basic plan is active. You can manage billing or change plans in the customer portal.</p>
+        <p class="manage-description">Your Basic membership gives you room to upload and check your analysis while supporting independent, privacy-first development.</p>
         }
 
         @if (subscriptionSummary$ | async; as summary) {
@@ -55,6 +55,21 @@
         }
 
         <div class="price-section manage-actions">
+          @if (currentRole === 'basic') {
+          <p class="upgrade-hint">Unlock unlimited activities and watch auto-sync with Pro.</p>
+          <div class="manage-actions-buttons">
+            <button mat-stroked-button (click)="manageSubscription()" [disabled]="isLoading">
+              Manage Billing
+            </button>
+            <button mat-flat-button color="primary" (click)="upgradeToPro()" [disabled]="isLoading">
+              @if (isLoading) {
+              <mat-spinner diameter="20"></mat-spinner>
+              } @else {
+              Upgrade to Pro
+              }
+            </button>
+          </div>
+          } @else {
           <button mat-flat-button color="primary" (click)="manageSubscription()" [disabled]="isLoading">
             @if (isLoading) {
             <mat-spinner diameter="20"></mat-spinner>
@@ -62,6 +77,7 @@
             Manage Subscription
             }
           </button>
+          }
         </div>
       </mat-card-content>
     </mat-card>

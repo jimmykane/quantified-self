@@ -213,6 +213,38 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
     }
 
+    async upgradeToPro() {
+        if (this.currentRole !== 'basic') {
+            await this.manageSubscription();
+            return;
+        }
+
+        const confirmed = await firstValueFrom(
+            this.dialog.open(ConfirmationDialogComponent, {
+                data: {
+                    title: 'Upgrade to Pro',
+                    message: 'You will be redirected to our secure billing portal to switch from Basic to Pro.',
+                    confirmText: 'Upgrade to Pro',
+                    cancelText: 'Cancel'
+                }
+            }).afterClosed()
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        this.analyticsService.logManageSubscription();
+        this.isLoading = true;
+        try {
+            await this.paymentService.manageSubscriptions();
+        } catch (error) {
+            this.logger.error('Error redirecting to upgrade flow:', error);
+            alert('Failed to open billing portal. Please try again.');
+            this.isLoading = false;
+        }
+    }
+
     async selectFreeTier() {
         if (!this.authService.currentUser) {
             this.router.navigate(['/login'], { queryParams: { returnUrl: this.getReturnUrl() } });
