@@ -16,7 +16,7 @@ class PermissionsService {
         private logger: LoggerService
     ) { }
 
-    async canMatch(): Promise<boolean> {
+    async canMatch(): Promise<boolean | import('@angular/router').UrlTree> {
         try {
             this.logger.log('[PaidGuard] Checking access...');
             const user = await firstValueFrom(this.authService.user$.pipe(take(1)));
@@ -61,12 +61,10 @@ class PermissionsService {
             // If we are here, it means they HAVE accepted terms and HAVE subscribed once before,
             // but they are currently NOT paid. Land them on /subscriptions.
             this.logger.log('[PaidGuard] Access DENIED. User is a lapsed paid member. Redirecting to /subscriptions');
-            this.router.navigate(['/subscriptions']);
-            return false;
+            return this.router.createUrlTree(['/subscriptions']);
         } catch (error) {
             this.logger.error('[PaidGuard] Error', error);
-            this.router.navigate(['/subscriptions']);
-            return false;
+            return this.router.createUrlTree(['/subscriptions']);
         }
     }
 }

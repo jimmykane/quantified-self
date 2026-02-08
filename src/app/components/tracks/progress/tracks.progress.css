@@ -14,7 +14,8 @@
   flex-direction: column;
   padding: 16px 24px 24px;
   /* Comfortable padding */
-  min-width: 300px;
+  box-sizing: border-box;
+  min-width: min(300px, 100%);
   /* Ensure it's not too narrow */
 }
 

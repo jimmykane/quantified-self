@@ -13,12 +13,14 @@ export const loggedInGuard: CanMatchFn = (route, segments) => {
 
     return authService.user$.pipe(
         take(1),
-        map(user => !user),
-        tap(isLoggedOut => {
-            if (!isLoggedOut) {
+        map(user => {
+            if (user) {
                 // User is logged in, redirect to dashboard
-                router.navigate(['/dashboard']);
+                // Return a UrlTree to cancel current navigation and redirect
+                return router.createUrlTree(['/dashboard']);
             }
+            // User is not logged in, allow access to the route
+            return true;
         })
     );
 };

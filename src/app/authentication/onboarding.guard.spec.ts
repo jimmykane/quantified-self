@@ -16,6 +16,9 @@ describe('onboardingGuard', () => {
     let logger: any;
 
     const mockRouter = {
+        createUrlTree: vi.fn().mockImplementation((commands) => ({
+            toString: () => commands.join('/')
+        })),
         navigate: vi.fn()
     };
 
@@ -69,7 +72,6 @@ describe('onboardingGuard', () => {
 
         const result = await (runGuard(user) as any).toPromise();
         expect(result).toBe(true);
-        expect(router.navigate).not.toHaveBeenCalled();
     });
 
     it('should redirect to onboarding if policies not accepted', async () => {
@@ -82,8 +84,10 @@ describe('onboardingGuard', () => {
         };
 
         const result = await (runGuard(user, [{ path: 'dashboard' }] as any) as any).toPromise();
-        expect(result).toBe(false);
-        expect(router.navigate).toHaveBeenCalledWith(['/onboarding']);
+        // Expect UrlTree
+        expect(result).not.toBe(true);
+        expect(result).not.toBe(false);
+        expect((result as any).toString()).toContain('/onboarding');
     });
 
     it('should redirect to onboarding if no paid access and no subscription history', async () => {
@@ -98,8 +102,10 @@ describe('onboardingGuard', () => {
         };
 
         const result = await (runGuard(user, [{ path: 'dashboard' }] as any) as any).toPromise();
-        expect(result).toBe(false);
-        expect(router.navigate).toHaveBeenCalledWith(['/onboarding']);
+        // Expect UrlTree
+        expect(result).not.toBe(true);
+        expect(result).not.toBe(false);
+        expect((result as any).toString()).toContain('/onboarding');
     });
 
     it('should allow access if hasSubscribedOnce is true', async () => {
@@ -116,7 +122,6 @@ describe('onboardingGuard', () => {
 
         const result = await (runGuard(user) as any).toPromise();
         expect(result).toBe(true);
-        expect(router.navigate).not.toHaveBeenCalled();
     });
 
     it('should allow access if explicitly completed onboarding', async () => {
@@ -131,6 +136,5 @@ describe('onboardingGuard', () => {
 
         const result = await (runGuard(user) as any).toPromise();
         expect(result).toBe(true);
-        expect(router.navigate).not.toHaveBeenCalled();
     });
 });

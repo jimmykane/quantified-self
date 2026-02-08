@@ -1,0 +1,32 @@
+<section
+  class="peek-panel glass-card"
+  [class.position-top]="position === 'top'"
+  [class.position-left]="position === 'left'"
+  [class.position-right]="position === 'right'"
+  [class.top-anchor-left]="topAnchor === 'left'"
+  [class.top-anchor-center]="topAnchor === 'center'"
+  [class.top-anchor-right]="topAnchor === 'right'"
+  [class.expanded]="isExpanded()"
+  [class.collapsed]="!isExpanded()"
+  [style.--peek-expanded-size.px]="expandedSizePx"
+  [style.--peek-collapsed-size.px]="collapsedSizePx"
+>
+  <button
+    type="button"
+    class="peek-toggle"
+    (click)="togglePanel()"
+    [attr.aria-expanded]="isExpanded()"
+    [attr.aria-label]="getAriaLabel()"
+  >
+    <span class="material-symbols-rounded">{{ getToggleIcon() }}</span>
+  </button>
+
+  <div class="peek-main" [attr.inert]="isExpanded() ? null : ''">
+    <div class="peek-header">
+      <ng-content select="[peek-header]"></ng-content>
+    </div>
+    <div class="peek-body qs-scrollbar">
+      <ng-content></ng-content>
+    </div>
+  </div>
+</section>

@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { Router } from '@angular/router';
+import { Router, UrlTree } from '@angular/router';
 import { paidGuard, proGuard } from './pro.guard';
 import { AppAuthService } from './app.auth.service';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
@@ -16,7 +16,9 @@ describe('paidGuard', () => {
         };
 
         const routerSpy = {
-            navigate: vi.fn()
+            createUrlTree: vi.fn().mockImplementation((commands) => ({
+                toString: () => commands.join('/')
+            }))
         };
 
         TestBed.configureTestingModule({
@@ -73,8 +75,10 @@ describe('paidGuard', () => {
         } as any);
 
         const result = await TestBed.runInInjectionContext(() => paidGuard({} as any, [] as any));
-        expect(result).toBe(false);
-        expect(router.navigate).toHaveBeenCalledWith(['/subscriptions']);
+        // Expect a UrlTree (or our mock of it)
+        expect(result).not.toBe(true);
+        expect(result).not.toBe(false);
+        expect((result as any).toString()).toContain('/subscriptions');
     });
 
     it('should deny without redirect when onboarding is incomplete', async () => {
@@ -91,7 +95,6 @@ describe('paidGuard', () => {
 
         const result = await TestBed.runInInjectionContext(() => paidGuard({} as any, [] as any));
         expect(result).toBe(false);
-        expect(router.navigate).not.toHaveBeenCalled();
     });
 
     it('should keep proGuard as a backward-compatible alias', async () => {

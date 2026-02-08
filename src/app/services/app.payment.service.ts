@@ -174,6 +174,7 @@ export class AppPaymentService {
         const priceId = typeof price === 'string' ? price : price.id;
         // Default to subscription if string passed or recurring field present, otherwise payment
         const mode = typeof price === 'string' ? 'subscription' : (price.type === 'recurring' ? 'subscription' : 'payment');
+        const promotionCodeId = this.resolvePromotionCodeId(price);
 
         // Pre-checkout check: Link existing Stripe customer if found
         // This prevents duplicate subscriptions for recreated users
@@ -271,13 +272,17 @@ export class AppPaymentService {
                 price: priceId,
                 success_url: success,
                 cancel_url: cancel,
-                allow_promotion_codes: true,
+                allow_promotion_codes: !promotionCodeId,
                 mode: mode, // Explicitly set mode
                 automatic_tax: { enabled: true },
                 metadata: {
                     firebaseUID: user.uid
                 }
             };
+
+            if (promotionCodeId) {
+                sessionPayload.promotion_code = promotionCodeId;
+            }
 
             if (mode === 'subscription') {
                 // Ensure the metadata is attached to the Subscription object created by this checkout.
@@ -334,6 +339,33 @@ export class AppPaymentService {
             this.logger.error('Error creating checkout doc:', e);
             throw e;
         }
+    }
+
+    private resolvePromotionCodeId(price: string | StripePrice): string | null {
+        if (typeof price === 'string' || !price.metadata) {
+            return null;
+        }
+
+        const keys = ['promotion_code_id', 'promotionCodeId', 'promotion_code', 'promotionCode'];
+        for (const key of keys) {
+            const rawValue = price.metadata[key];
+            if (!rawValue) {
+                continue;
+            }
+
+            const promotionCodeId = rawValue.trim();
+            if (!promotionCodeId) {
+                continue;
+            }
+
+            if (promotionCodeId.startsWith('promo_')) {
+                return promotionCodeId;
+            }
+
+            this.logger.warn(`[appendCheckoutSession] Ignoring metadata '${key}' because '${promotionCodeId}' is not a Stripe promotion code ID (expected prefix: promo_).`);
+        }
+
+        return null;
     }
 
     /**

@@ -3,13 +3,14 @@ import { isPlatformBrowser } from '@angular/common';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import { AppEventService } from '../../services/app.event.service';
-import { take, debounceTime } from 'rxjs/operators';
+import { take, debounceTime, filter } from 'rxjs/operators';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { Subject, Subscription } from 'rxjs';
 import { DateRanges, ActivityTypes } from '@sports-alliance/sports-lib';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
+import { DataPositionInterface } from '@sports-alliance/sports-lib';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { AppFileService } from '../../services/app.file.service';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib';
@@ -31,6 +32,14 @@ import { TracksMapManager } from './tracks-map.manager'; // Imported Manager
 import { MapStyleService } from '../../services/map-style.service';
 import { MapboxStyleSynchronizer } from '../../services/map/mapbox-style-synchronizer';
 import { Search } from '../event-search/event-search.component';
+import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-detection.service';
+import { TripDetectionInput } from '../../services/my-tracks-trip-detection.service';
+import { DetectedTrip } from '../../services/my-tracks-trip-detection.service';
+import { TripLocationLabelService } from '../../services/trip-location-label.service';
+
+interface DetectedTripViewModel extends DetectedTrip {
+  locationLabel: string | null;
+}
 
 @Component({
   selector: 'app-tracks',
@@ -73,8 +82,13 @@ export class TracksComponent implements OnInit, OnDestroy {
   private analyticsService = inject(AppAnalyticsService);
   private userSettingsQuery = inject(AppUserSettingsQueryService);
   private logger = inject(LoggerService);
+  private tripDetectionService = inject(MyTracksTripDetectionService);
+  private tripLocationLabelService = inject(TripLocationLabelService);
 
   public isLoading: WritableSignal<boolean> = signal(false);
+  public detectedTrips: WritableSignal<DetectedTripViewModel[]> = signal([]);
+  public hasEvaluatedTripDetection: WritableSignal<boolean> = signal(false);
+  public detectedTripsPanelExpanded: WritableSignal<boolean> = signal(true);
   // Removed legacy state tracking
 
   constructor(
@@ -147,7 +161,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       if (dataChanged) {
         lastLoadedDataSettings = currentSnapshot;
         this.isLoading.set(true);
-        this.loadTracksMapForUserByDateRange(user, map, settings.dateRange, settings.activityTypes)
+        this.loadTracksMapForUserByDateRange(user, settings.dateRange, settings.activityTypes)
           .catch(err => this.logger.error('Error loading tracks', err))
           .finally(() => this.isLoading.set(false));
       }
@@ -204,13 +218,17 @@ export class TracksComponent implements OnInit, OnDestroy {
         mapInstance.addControl(navControl, 'bottom-right');
 
         this.centerMapToStartingLocation(mapInstance);
-        const user = await this.authService.user$.pipe(take(1)).toPromise() as AppUserInterface | undefined;
-        if (!user) {
-          this.logger.warn('[TracksComponent] User is not available yet. Track loading will wait.');
-        } else {
-          this.user = user;
-          this.userSignal.set(user);
-        }
+        this.eventsSubscription.add(
+          this.authService.user$
+            .pipe(
+              filter((authUser): authUser is AppUserInterface => !!authUser),
+              take(1),
+            )
+            .subscribe((authUser) => {
+              this.user = authUser;
+              this.userSignal.set(authUser);
+            })
+        );
 
         // Restore terrain control (initialSettings already loaded above)
         // Initialize 3D state immediately for responsiveness and test compliance
@@ -312,13 +330,21 @@ export class TracksComponent implements OnInit, OnDestroy {
 
 
 
-  private async loadTracksMapForUserByDateRange(user: AppUserInterface | undefined, map: any, dateRange: DateRanges, activityTypes?: ActivityTypes[]) {
+  private async loadTracksMapForUserByDateRange(user: AppUserInterface | undefined, dateRange: DateRanges, activityTypes?: ActivityTypes[]) {
     if (!user) {
       this.logger.warn('[TracksComponent] Skipping track load because user is undefined.');
       return;
     }
+    this.logger.log('[TracksComponent] Starting track load for trip detection.', {
+      dateRange: DateRanges[dateRange],
+      activityTypes: activityTypes || [],
+      userId: (user as any).uid || (user as any).id || 'unknown'
+    });
+    this.hasTrackBoundsBeenApplied = true;
     const promiseTime = new Date().getTime();
     this.promiseTime = promiseTime
+    this.hasEvaluatedTripDetection.set(false);
+    this.detectedTrips.set([]);
     this.clearProgressAndOpenBottomSheet();
     const dates = getDatesForDateRange(dateRange, user.settings?.unitSettings?.startOfTheWeek || 1);
     const where = []
@@ -353,6 +379,7 @@ export class TracksComponent implements OnInit, OnDestroy {
               return;
             }
             this.tracksMapManager.clearAllTracks();
+            this.hasEvaluatedTripDetection.set(true);
             this.clearProgressAndCloseBottomSheet();
             return;
           }
@@ -372,6 +399,7 @@ export class TracksComponent implements OnInit, OnDestroy {
           let count = 0;
           let addedTrackCount = 0;
           const allCoordinates: number[][] = [];
+          const detectionCandidatesByEvent = new Map<string, TripDetectionInput>();
 
           for (const eventsChunk of chunckedEvents) {
             if (this.promiseTime !== promiseTime) {
@@ -392,6 +420,7 @@ export class TracksComponent implements OnInit, OnDestroy {
                   if (this.promiseTime !== promiseTime) {
                     return
                   }
+                  let hasVisibleTrackForEvent = false;
                   fullEvent.getActivities()
                     .filter((activity: any) => activity.hasPositionData())
                     .filter((activity: any) => !activityTypes || activityTypes.length === 0 || activityTypes.includes(activity.type))
@@ -414,29 +443,42 @@ export class TracksComponent implements OnInit, OnDestroy {
                       if (coordinates.length > 1) {
                         this.tracksMapManager.addTrackFromActivity(activity, coordinates);
                         addedTrackCount++;
-                        coordinates.forEach((c: any) => chunkCoordinates.push(c));
+                        hasVisibleTrackForEvent = true;
+                        coordinates.forEach((coordinate: number[]) => {
+                          chunkCoordinates.push(coordinate);
+                          allCoordinates.push(coordinate);
+                        });
                       }
                     })
+
+                  if (hasVisibleTrackForEvent) {
+                    const detectionInput = this.getTripDetectionInputFromEvent(fullEvent || event);
+                    if (detectionInput) {
+                      detectionCandidatesByEvent.set(detectionInput.eventId, detectionInput);
+                    }
+                  }
+
                   count++;
                   this.updateTotalProgress(Math.ceil((count / events.length) * 100))
                 })
             }))
-
-            // Accumulate coordinates for final fitBounds
-            chunkCoordinates.forEach(c => allCoordinates.push(c));
 
             if (count < events.length && chunkCoordinates.length > 0) {
               this.fitBoundsToTracks(chunkCoordinates);
             }
           }
 
-          // Final fit bounds
           if (allCoordinates.length > 0) {
             this.fitBoundsToTracks(allCoordinates);
           }
           if (addedTrackCount === 0) {
             this.tracksMapManager.clearAllTracks();
           }
+          this.logger.log('[TracksComponent] Prepared trip detection candidates.', {
+            candidateCount: detectionCandidatesByEvent.size,
+            promiseTime
+          });
+          await this.updateDetectedTripsForCurrentLoad(Array.from(detectionCandidatesByEvent.values()), promiseTime);
         } catch (e) {
           this.logger.error('Error loading tracks', e);
         } finally {
@@ -475,6 +517,72 @@ export class TracksComponent implements OnInit, OnDestroy {
     if (!coordinates || coordinates.length === 0) return;
     this.hasTrackBoundsBeenApplied = true;
     this.tracksMapManager.fitBoundsToCoordinates(coordinates);
+  }
+
+  public onDetectedTripSelected(trip: DetectedTripViewModel): void {
+    const coordinates: number[][] = [
+      [trip.bounds.west, trip.bounds.south],
+      [trip.bounds.east, trip.bounds.north],
+    ];
+    this.fitBoundsToTracks(coordinates);
+  }
+
+  private getTripDetectionInputFromEvent(event: any): TripDetectionInput | null {
+    const eventId = event?.getID?.();
+    const startPositionStat = event?.getStat?.(DataStartPosition.type) as DataStartPosition | undefined;
+    const startPosition = startPositionStat?.getValue?.() as DataPositionInterface | undefined;
+    if (!eventId || !startPosition) return null;
+
+    const latitudeDegrees = startPosition.latitudeDegrees;
+    const longitudeDegrees = startPosition.longitudeDegrees;
+
+    if (!Number.isFinite(latitudeDegrees) || !Number.isFinite(longitudeDegrees)) {
+      return null;
+    }
+
+    if (Math.abs(latitudeDegrees) > 90 || Math.abs(longitudeDegrees) > 180) {
+      return null;
+    }
+
+    return {
+      eventId,
+      startDate: event?.startDate,
+      latitudeDegrees,
+      longitudeDegrees,
+    };
+  }
+
+  private async updateDetectedTripsForCurrentLoad(candidates: TripDetectionInput[], promiseTime: number): Promise<void> {
+    this.logger.log('[TracksComponent] Running trip detection update.', {
+      candidateCount: candidates.length,
+      promiseTime,
+      currentPromiseTime: this.promiseTime
+    });
+    const detectedTrips = this.tripDetectionService.detectTrips(candidates);
+    const viewModels = await Promise.all(detectedTrips.map(async (trip) => {
+      const locationLabel = await this.tripLocationLabelService.resolveCountryName(trip.centroidLat, trip.centroidLng);
+
+      return {
+        ...trip,
+        locationLabel,
+      } satisfies DetectedTripViewModel;
+    }));
+
+    if (this.promiseTime !== promiseTime) {
+      this.logger.warn('[TracksComponent] Skipping detected trips update due to stale promiseTime.', {
+        promiseTime,
+        currentPromiseTime: this.promiseTime,
+        detectedTripCount: viewModels.length
+      });
+      return;
+    }
+
+    this.detectedTrips.set(viewModels);
+    this.hasEvaluatedTripDetection.set(true);
+    this.logger.log('[TracksComponent] Detected trips committed to UI state.', {
+      detectedTripCount: viewModels.length,
+      panelExpanded: this.detectedTripsPanelExpanded()
+    });
   }
 
   private markScrolled(map: any) {

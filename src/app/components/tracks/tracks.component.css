@@ -1,67 +1,166 @@
 mat-card {
   padding: 0;
   height: calc(100vh - 60px);
-  /*height: 100vh;*/
   position: relative;
-  /* Ensure absolute children are relative to this card */
-}
-
-app-event-search {
-  height: auto;
-  /* Let it size based on content */
-  display: block;
-  padding: 4px 8px;
-  /* Tighter padding */
-  z-index: 1000;
-  position: absolute;
-  top: 8px;
-  /* Reduced top spacing */
-  margin: auto;
-  left: 50%;
-  transform: translate(-50%, 0);
-
-  /* Prevent it from being too wide on desktop */
-  width: 90%;
-  max-width: 600px;
-}
-
-/* Force opaque background for search buttons on the map */
-app-event-search ::ng-deep .mat-button-toggle-group {
-  background-color: var(--mat-sys-surface) !important;
-  box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.2);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-app-event-search ::ng-deep .mat-button-toggle {
-  background-color: var(--mat-sys-surface);
-}
-
-app-event-search ::ng-deep .mat-button-toggle-checked {
-  background-color: var(--mat-sys-secondary-container) !important;
-  color: var(--mat-sys-on-secondary-container) !important;
 }
 
 #map {
   height: 100%;
 }
 
+app-peek-panel.tracks-search-peek {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(600px, calc(100% - 16px));
+  z-index: 1100;
+}
+
+app-peek-panel.tracks-search-peek app-event-search {
+  display: block;
+  height: auto;
+  padding: 4px 8px;
+}
+
+app-peek-panel.tracks-search-peek app-event-search ::ng-deep .mat-button-toggle-group {
+  background-color: var(--mat-sys-surface) !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+app-peek-panel.tracks-search-peek app-event-search ::ng-deep .mat-button-toggle {
+  background-color: var(--mat-sys-surface);
+}
+
+app-peek-panel.tracks-search-peek app-event-search ::ng-deep .mat-button-toggle-checked {
+  background-color: var(--mat-sys-secondary-container) !important;
+  color: var(--mat-sys-on-secondary-container) !important;
+}
+
 .map-style-controls {
   position: absolute;
   bottom: 30px;
-  /* Adjust as needed to align with other controls */
   left: 10px;
   z-index: 1000;
-  /* Ensure it's above the map */
   background: transparent;
   display: flex;
   align-items: center;
   gap: 8px;
-  /* Space between buttons and spinner */
 }
 
 .map-style-controls mat-button-toggle-group {
   background-color: var(--mat-sys-surface);
-  box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   border-radius: 4px;
+}
+
+app-peek-panel.tracks-trips-peek {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1100;
+  max-width: calc(100vw - 20px);
+  max-height: min(42vh, 320px);
+}
+
+app-peek-panel.tracks-trips-peek .detected-trips-summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+app-peek-panel.tracks-trips-peek .detected-trips-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+app-peek-panel.tracks-trips-peek .detected-trips-badge {
+  min-width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--mat-sys-primary-container) 90%, transparent);
+  color: var(--mat-sys-on-primary-container);
+}
+
+app-peek-panel.tracks-trips-peek .detected-trips-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  max-height: min(32vh, 220px);
+  overflow-y: auto;
+}
+
+app-peek-panel.tracks-trips-peek li {
+  display: block;
+}
+
+app-peek-panel.tracks-trips-peek .detected-trip-button {
+  width: 100%;
+  border: 0;
+  background: color-mix(in srgb, var(--mat-sys-surface-container-low) 92%, transparent);
+  border-radius: 6px;
+  padding: 8px;
+  text-align: left;
+  display: grid;
+  gap: 2px;
+  cursor: pointer;
+}
+
+app-peek-panel.tracks-trips-peek .detected-trip-button:hover {
+  background: color-mix(in srgb, var(--mat-sys-surface-container) 92%, transparent);
+}
+
+app-peek-panel.tracks-trips-peek .trip-location {
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+app-peek-panel.tracks-trips-peek .trip-dates {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--mat-sys-on-surface-variant);
+  overflow-wrap: anywhere;
+}
+
+app-peek-panel.tracks-trips-peek .trip-count {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+app-peek-panel.tracks-trips-peek .detected-trips-empty {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+@media (max-width: 640px) {
+  app-peek-panel.tracks-search-peek {
+    width: calc(100% - 16px);
+  }
+
+  app-peek-panel.tracks-trips-peek {
+    left: 8px;
+    top: 50%;
+    max-width: calc(100vw - 16px);
+    max-height: min(36vh, 260px);
+  }
+
+  app-peek-panel.tracks-trips-peek .detected-trips-list {
+    max-height: min(26vh, 170px);
+  }
 }
