@@ -131,7 +131,68 @@ export class MyTracksTripDetectionService {
       }
     });
 
-    return qualifiedSegments;
+    return this.mergeConsecutiveTrips(qualifiedSegments);
+  }
+
+  private mergeConsecutiveTrips(trips: DetectedTrip[]): DetectedTrip[] {
+    if (trips.length === 0) return [];
+
+    const merged: DetectedTrip[] = [];
+    let currentTrip = trips[0];
+
+    for (let i = 1; i < trips.length; i++) {
+      const nextTrip = trips[i];
+      const distanceKm = this.haversineDistanceKm(
+        currentTrip.centroidLat,
+        currentTrip.centroidLng,
+        nextTrip.centroidLat,
+        nextTrip.centroidLng
+      );
+
+      // If trips are spatially close (within the same "region" defined by MAX_DISTANCE_KM),
+      // we merge them logic, assuming the split was only due to a time gap (rest days).
+      if (distanceKm <= MyTracksTripDetectionService.MAX_DISTANCE_KM) {
+        this.logger.log('[MyTracksTripDetectionService] Merging consecutive trips.', {
+          mergedTripId: currentTrip.tripId,
+          nextTripId: nextTrip.tripId,
+          distanceKm: Number(distanceKm.toFixed(2))
+        });
+
+        // Create a merged trip
+        // We approximate the new centroid by weighted average of activity counts
+        const totalActivities = currentTrip.activityCount + nextTrip.activityCount;
+        const newCentroidLat = (currentTrip.centroidLat * currentTrip.activityCount + nextTrip.centroidLat * nextTrip.activityCount) / totalActivities;
+        const newCentroidLng = (currentTrip.centroidLng * currentTrip.activityCount + nextTrip.centroidLng * nextTrip.activityCount) / totalActivities;
+
+        currentTrip = {
+          tripId: currentTrip.tripId, // Keep the ID of the start of the sequence
+          startDate: currentTrip.startDate,
+          endDate: nextTrip.endDate,
+          activityCount: totalActivities,
+          centroidLat: newCentroidLat,
+          centroidLng: newCentroidLng,
+          bounds: {
+            west: Math.min(currentTrip.bounds.west, nextTrip.bounds.west),
+            east: Math.max(currentTrip.bounds.east, nextTrip.bounds.east),
+            south: Math.min(currentTrip.bounds.south, nextTrip.bounds.south),
+            north: Math.max(currentTrip.bounds.north, nextTrip.bounds.north),
+          }
+        };
+      } else {
+        merged.push(currentTrip);
+        currentTrip = nextTrip;
+      }
+    }
+    merged.push(currentTrip);
+
+    if (merged.length < trips.length) {
+      this.logger.log('[MyTracksTripDetectionService] Merging complete.', {
+        originalCount: trips.length,
+        mergedCount: merged.length
+      });
+    }
+
+    return merged;
   }
 
   private normalize(inputs: TripDetectionInput[]): NormalizationResult {

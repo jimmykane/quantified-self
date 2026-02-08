@@ -39,19 +39,20 @@ describe('MyTracksTripDetectionService', () => {
     expect(detectedTrips[1].tripId).toContain('n1-n3');
   });
 
-  it('splits trips on long time gaps', () => {
+  it('merges trips on long time gaps if location is same (consecutive trips)', () => {
     const detectedTrips = service.detectTrips([
       input('t1', '2024-02-01T08:00:00Z', 40.6401, 22.9444),
       input('t2', '2024-02-03T08:00:00Z', 40.6420, 22.9500),
       input('t3', '2024-02-05T08:00:00Z', 40.6440, 22.9550),
+      // 5 days gap
       input('t4', '2024-02-10T08:00:00Z', 40.6405, 22.9449),
       input('t5', '2024-02-12T08:00:00Z', 40.6430, 22.9510),
       input('t6', '2024-02-14T08:00:00Z', 40.6450, 22.9560),
     ]);
 
-    expect(detectedTrips).toHaveLength(2);
-    expect(detectedTrips[0].activityCount).toBe(3);
-    expect(detectedTrips[1].activityCount).toBe(3);
+    // Previously returned 2, now should merge into 1 because distance is negligible
+    expect(detectedTrips).toHaveLength(1);
+    expect(detectedTrips[0].activityCount).toBe(6);
   });
 
   it('rejects short or sparse segments', () => {

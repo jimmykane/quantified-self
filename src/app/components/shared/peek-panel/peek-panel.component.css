@@ -16,10 +16,6 @@
   will-change: width, height, transform;
 }
 
-.peek-panel.glass-card {
-  /* Increase transparency to make blur effect visible */
-  background: color-mix(in srgb, var(--mat-sys-surface), transparent 40%) !important;
-}
 
 .peek-panel.position-left,
 .peek-panel.position-right {
@@ -154,6 +150,26 @@
 
 .peek-panel.position-top.collapsed .peek-main {
   transform: translateY(-8px);
+}
+
+.peek-panel.position-left.collapsed .peek-panel.glass-card {
+  /* Use standard glass card background */
+  background: var(--mat-sys-surface) !important;
+}
+
+.peek-header-wrapper {
+  display: block;
+  border-bottom: 1px solid var(--mat-app-outline-variant);
+}
+
+/* Target the inner component styles */
+::ng-deep .peek-header-wrapper .bottom-sheet-header {
+  padding: 16px 16px 8px 16px !important;
+  margin-bottom: 0 !important;
+}
+
+.bottom-sheet-content {
+  padding: 0 16px 16px 16px;
 }
 
 .peek-header:empty {

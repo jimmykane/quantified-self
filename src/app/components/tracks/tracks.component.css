@@ -23,21 +23,7 @@ app-peek-panel.tracks-search-peek app-event-search {
   padding: 4px 8px;
 }
 
-app-peek-panel.tracks-search-peek app-event-search ::ng-deep .mat-button-toggle-group {
-  background-color: var(--mat-sys-surface) !important;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  border-radius: 4px;
-  overflow: hidden;
-}
 
-app-peek-panel.tracks-search-peek app-event-search ::ng-deep .mat-button-toggle {
-  background-color: var(--mat-sys-surface);
-}
-
-app-peek-panel.tracks-search-peek app-event-search ::ng-deep .mat-button-toggle-checked {
-  background-color: var(--mat-sys-secondary-container) !important;
-  color: var(--mat-sys-on-secondary-container) !important;
-}
 
 .map-style-controls {
   position: absolute;
@@ -68,15 +54,8 @@ app-peek-panel.tracks-trips-peek {
 
 app-peek-panel.tracks-trips-peek .detected-trips-summary-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
   gap: 8px;
-}
-
-app-peek-panel.tracks-trips-peek .detected-trips-title {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
 }
 
 app-peek-panel.tracks-trips-peek .detected-trips-badge {
@@ -88,7 +67,7 @@ app-peek-panel.tracks-trips-peek .detected-trips-badge {
   justify-content: center;
   font-size: 11px;
   font-weight: 600;
-  background: color-mix(in srgb, var(--mat-sys-primary-container) 90%, transparent);
+  /* background: color-mix(in srgb, var(--mat-sys-primary-container) 90%, transparent); */
   color: var(--mat-sys-on-primary-container);
 }
 
@@ -109,7 +88,7 @@ app-peek-panel.tracks-trips-peek li {
 app-peek-panel.tracks-trips-peek .detected-trip-button {
   width: 100%;
   border: 0;
-  background: color-mix(in srgb, var(--mat-sys-surface-container-low) 92%, transparent);
+  background: transparent;
   border-radius: 6px;
   padding: 8px;
   text-align: left;
@@ -119,7 +98,7 @@ app-peek-panel.tracks-trips-peek .detected-trip-button {
 }
 
 app-peek-panel.tracks-trips-peek .detected-trip-button:hover {
-  background: color-mix(in srgb, var(--mat-sys-surface-container) 92%, transparent);
+  background: color-mix(in srgb, var(--mat-sys-on-surface) 8%, transparent);
 }
 
 app-peek-panel.tracks-trips-peek .trip-location {

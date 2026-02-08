@@ -15,6 +15,8 @@ export class PeekPanelComponent implements OnInit, OnChanges {
   @Input() collapsedSizePx = 44;
   @Input() ariaLabelExpand = 'Expand panel';
   @Input() ariaLabelCollapse = 'Collapse panel';
+  @Input() title = '';
+  @Input() icon?: string;
 
   @Output() expandedChange = new EventEmitter<boolean>();
 

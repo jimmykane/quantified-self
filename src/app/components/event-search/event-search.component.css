@@ -52,7 +52,7 @@ mat-button-toggle-group {
   background: var(--mat-app-surface-container-low) !important;
   border-radius: 16px !important;
   padding: 4px !important;
-  overflow: hidden;
+  /* overflow: hidden; Removed to allow scale transform to be fully visible */
   height: auto !important;
   gap: 4px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
@@ -78,12 +78,18 @@ mat-button-toggle:hover:not(.mat-button-toggle-checked) {
   color: var(--mat-sys-primary) !important;
 }
 
+/* Ensure internal button is transparent so host background shows through */
+::ng-deep mat-button-toggle .mat-button-toggle-button {
+  background-color: transparent !important;
+}
+
 /* Premium Active State */
 mat-button-toggle.mat-button-toggle-checked {
-  background: var(--mat-sys-primary) !important;
+  background-color: var(--mat-sys-primary) !important;
   color: var(--mat-sys-on-primary) !important;
   box-shadow: 0 4px 12px rgba(var(--mat-sys-primary-rgb), 0.3) !important;
   transform: scale(1.02);
+  z-index: 1;
   /* Subtle pop for the active item */
 }
 

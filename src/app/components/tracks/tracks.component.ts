@@ -58,6 +58,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     DateRanges.lastMonth,
     DateRanges.lastThirtyDays,
     DateRanges.thisYear,
+    DateRanges.lastYear,
     DateRanges.all
   ]
   bufferProgress = new Subject<number>();

@@ -27,13 +27,12 @@
   @if (hasEvaluatedTripDetection()) {
   <app-peek-panel class="tracks-trips-peek" position="left" [expanded]="detectedTripsPanelExpanded()"
     (expandedChange)="detectedTripsPanelExpanded.set($event)" [expandedSizePx]="340" [collapsedSizePx]="44"
-    ariaLabelExpand="Expand detected trips" ariaLabelCollapse="Collapse detected trips">
-    <div peek-header>
-      <div class="detected-trips-summary-row">
-        <span class="detected-trips-title">Detected trips</span>
-        <span class="detected-trips-badge">{{ detectedTrips().length }}</span>
-      </div>
+    ariaLabelExpand="Expand detected trips" ariaLabelCollapse="Collapse detected trips" title="Detected trips"
+    icon="route">
+    <div peek-header-actions class="detected-trips-summary-row">
+      <span class="detected-trips-badge">{{ detectedTrips().length }}</span>
     </div>
+
     @if (detectedTrips().length === 0) {
     <p class="detected-trips-empty">No trips detected for this period</p>
     } @else {
@@ -42,7 +41,8 @@
       <li>
         <button type="button" class="detected-trip-button" (click)="onDetectedTripSelected(trip)">
           <span class="trip-location">{{ trip.locationLabel || 'Trip' }}</span>
-          <span class="trip-dates">{{ trip.startDate | date:'mediumDate' }} - {{ trip.endDate | date:'mediumDate' }}</span>
+          <span class="trip-dates">{{ trip.startDate | date:'mediumDate' }} - {{ trip.endDate | date:'mediumDate'
+            }}</span>
           <span class="trip-count">{{ trip.activityCount }} activities</span>
         </button>
       </li>
