@@ -1,26 +1,19 @@
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
-import { proGuard } from './pro.guard';
-import { AppUserService } from '../services/app.user.service';
+import { paidGuard, proGuard } from './pro.guard';
 import { AppAuthService } from './app.auth.service';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { of } from 'rxjs';
 import { LoggerService } from '../services/logger.service';
-import { Firestore } from '@angular/fire/firestore';
-import { signal } from '@angular/core';
 
-describe('proGuard', () => {
+describe('paidGuard', () => {
     let router: Router;
     let authServiceStub: Partial<AppAuthService>;
-    let userServiceStub: Partial<AppUserService>;
 
     beforeEach(() => {
         authServiceStub = {
             user$: of(null)
         };
-        userServiceStub = {
-            hasPaidAccessSignal: signal(false)
-        } as any;
 
         const routerSpy = {
             navigate: vi.fn()
@@ -29,10 +22,8 @@ describe('proGuard', () => {
         TestBed.configureTestingModule({
             providers: [
                 { provide: AppAuthService, useValue: authServiceStub },
-                { provide: AppUserService, useValue: userServiceStub },
                 { provide: Router, useValue: routerSpy },
                 { provide: LoggerService, useValue: { log: vi.fn(), error: vi.fn() } },
-                { provide: Firestore, useValue: {} }
             ]
         });
 
@@ -43,15 +34,14 @@ describe('proGuard', () => {
         authServiceStub.user$ = of({
             uid: '123',
             stripeRole: 'pro',
+            acceptedTos: true,
             acceptedPrivacyPolicy: true,
             acceptedDataPolicy: true,
             acceptedTrackingPolicy: true,
             acceptedDiagnosticsPolicy: true
         } as any);
 
-        userServiceStub.hasPaidAccessSignal.set(true);
-
-        const result = await TestBed.runInInjectionContext(() => proGuard({} as any, {} as any));
+        const result = await TestBed.runInInjectionContext(() => paidGuard({} as any, [] as any));
         expect(result).toBe(true);
     });
 
@@ -59,15 +49,14 @@ describe('proGuard', () => {
         authServiceStub.user$ = of({
             uid: '123',
             stripeRole: 'basic',
+            acceptedTos: true,
             acceptedPrivacyPolicy: true,
             acceptedDataPolicy: true,
             acceptedTrackingPolicy: true,
             acceptedDiagnosticsPolicy: true
         } as any);
 
-        userServiceStub.hasPaidAccessSignal.set(true);
-
-        const result = await TestBed.runInInjectionContext(() => proGuard({} as any, {} as any));
+        const result = await TestBed.runInInjectionContext(() => paidGuard({} as any, [] as any));
         expect(result).toBe(true);
     });
 
@@ -83,8 +72,40 @@ describe('proGuard', () => {
             acceptedDiagnosticsPolicy: true
         } as any);
 
-        const result = await TestBed.runInInjectionContext(() => proGuard({} as any, {} as any));
+        const result = await TestBed.runInInjectionContext(() => paidGuard({} as any, [] as any));
         expect(result).toBe(false);
         expect(router.navigate).toHaveBeenCalledWith(['/subscriptions']);
+    });
+
+    it('should deny without redirect when onboarding is incomplete', async () => {
+        authServiceStub.user$ = of({
+            uid: '123',
+            stripeRole: 'free',
+            acceptedTos: false,
+            hasSubscribedOnce: false,
+            acceptedPrivacyPolicy: true,
+            acceptedDataPolicy: true,
+            acceptedTrackingPolicy: true,
+            acceptedDiagnosticsPolicy: true
+        } as any);
+
+        const result = await TestBed.runInInjectionContext(() => paidGuard({} as any, [] as any));
+        expect(result).toBe(false);
+        expect(router.navigate).not.toHaveBeenCalled();
+    });
+
+    it('should keep proGuard as a backward-compatible alias', async () => {
+        authServiceStub.user$ = of({
+            uid: '123',
+            stripeRole: 'basic',
+            acceptedTos: true,
+            acceptedPrivacyPolicy: true,
+            acceptedDataPolicy: true,
+            acceptedTrackingPolicy: true,
+            acceptedDiagnosticsPolicy: true
+        } as any);
+
+        const result = await TestBed.runInInjectionContext(() => proGuard({} as any, [] as any));
+        expect(result).toBe(true);
     });
 });
