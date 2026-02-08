@@ -16,9 +16,19 @@ type NativeShareStatus = 'shared' | 'unsupported' | 'cancelled' | 'failed';
   template: `
     <div class="bottom-sheet-container">
         <app-bottom-sheet-header title="Hardware Benchmark Analysis" icon="analytics">
-            <button mat-icon-button class="icon-button-square" matTooltip="Share as image" (click)="shareBenchmark()" [disabled]="isSharing" aria-busy="{{isSharing}}">
+            <button mat-icon-button class="icon-button-square" matTooltip="Share options" [matMenuTriggerFor]="shareMenu" [disabled]="isSharing" aria-busy="{{isSharing}}">
                 <mat-icon>share</mat-icon>
             </button>
+            <mat-menu #shareMenu="matMenu" xPosition="before">
+              <button mat-menu-item (click)="shareBenchmark()" [disabled]="isSharing">
+                <mat-icon>share</mat-icon>
+                <span>Share</span>
+              </button>
+              <button mat-menu-item (click)="downloadBenchmark()" [disabled]="isSharing">
+                <mat-icon>download</mat-icon>
+                <span>Save image</span>
+              </button>
+            </mat-menu>
             <button mat-icon-button matTooltip="Re-run with different activities" (click)="rerun()">
                 <mat-icon>refresh</mat-icon>
             </button>
@@ -97,34 +107,14 @@ export class BenchmarkBottomSheetComponent {
       return;
     }
     this.isSharing = true;
-    this.shareTimestamp = new Date();
-    const isMobile = window.matchMedia('(max-width: 600px)').matches;
 
     try {
-      const appUrl = environment.appUrl || window.location.origin;
-      const displayUrl = this.getDisplayUrl(appUrl);
-      const filename = `benchmark-${this.shareTimestamp.getTime()}.png`;
-      const dataUrl = await this.shareService.shareBenchmarkAsImage(this.shareFrame.nativeElement, {
-        scale: isMobile ? 1.5 : 2,
-        width: 1080,
-        embedFonts: !isMobile,
-        fast: isMobile,
-        renderTimeoutMs: isMobile ? 10000 : 15000,
-        watermark: {
-          brand: 'Quantified Self',
-          timestamp: this.formatShareDate(this.shareTimestamp),
-          url: displayUrl,
-          logoUrl: 'assets/logos/app/logo.svg',
-        }
-      });
-
-      const imageBlob = this.dataUrlToBlob(dataUrl);
-      if (!imageBlob) {
-        this.notifyShareIssue('Share failed while preparing the image file.');
+      const payload = await this.buildSharePayload();
+      if (!payload) {
         return;
       }
 
-      const nativeShareStatus = await this.tryNativeShare(imageBlob, filename);
+      const nativeShareStatus = await this.tryNativeShare(payload.imageBlob, payload.filename);
       if (nativeShareStatus === 'shared') {
         return;
       }
@@ -139,11 +129,34 @@ export class BenchmarkBottomSheetComponent {
         this.notifyShareIssue('Native share is not available. Downloading image instead.');
       }
 
-      this.downloadShareImage(imageBlob, filename);
+      this.downloadShareImage(payload.imageBlob, payload.filename);
     } catch (error) {
       console.error('Failed to share benchmark image', error);
       const details = this.getErrorMessage(error);
       this.notifyShareIssue(`Share failed while generating image. ${details}`);
+    } finally {
+      this.isSharing = false;
+    }
+  }
+
+  async downloadBenchmark(): Promise<void> {
+    if (this.isSharing || !this.shareFrame?.nativeElement) {
+      return;
+    }
+    this.isSharing = true;
+
+    try {
+      const payload = await this.buildSharePayload();
+      if (!payload) {
+        return;
+      }
+
+      this.downloadShareImage(payload.imageBlob, payload.filename);
+      this.notifyShareIssue('Benchmark image downloaded.');
+    } catch (error) {
+      console.error('Failed to download benchmark image', error);
+      const details = this.getErrorMessage(error);
+      this.notifyShareIssue(`Download failed while generating image. ${details}`);
     } finally {
       this.isSharing = false;
     }
@@ -164,6 +177,36 @@ export class BenchmarkBottomSheetComponent {
     } catch {
       return appUrl.replace(/^https?:\/\//, '');
     }
+  }
+
+  private async buildSharePayload(): Promise<{ imageBlob: Blob; filename: string } | null> {
+    this.shareTimestamp = new Date();
+    const isMobile = window.matchMedia('(max-width: 600px)').matches;
+    const appUrl = environment.appUrl || window.location.origin;
+    const displayUrl = this.getDisplayUrl(appUrl);
+    const filename = `benchmark-${this.shareTimestamp.getTime()}.png`;
+
+    const dataUrl = await this.shareService.shareBenchmarkAsImage(this.shareFrame!.nativeElement, {
+      scale: isMobile ? 1.5 : 2,
+      width: 1080,
+      embedFonts: !isMobile,
+      fast: isMobile,
+      renderTimeoutMs: isMobile ? 10000 : 15000,
+      watermark: {
+        brand: 'Quantified Self',
+        timestamp: this.formatShareDate(this.shareTimestamp),
+        url: displayUrl,
+        logoUrl: 'assets/logos/app/logo-100x100.png',
+      }
+    });
+
+    const imageBlob = this.dataUrlToBlob(dataUrl);
+    if (!imageBlob) {
+      this.notifyShareIssue('Share failed while preparing the image file.');
+      return null;
+    }
+
+    return { imageBlob, filename };
   }
 
   private downloadShareImage(imageBlob: Blob, filename: string): void {

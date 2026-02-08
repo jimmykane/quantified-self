@@ -36,14 +36,20 @@ export class AppShareService {
       }
 
       if (options.watermark) {
+        let logoUrl: string | undefined;
         if (options.watermark.logoUrl) {
-          await this.loadImage(options.watermark.logoUrl);
+          const logoIsUsable = await this.loadImage(options.watermark.logoUrl);
+          if (logoIsUsable) {
+            logoUrl = options.watermark.logoUrl;
+          } else {
+            console.warn('[AppShareService] Skipping watermark logo: source image cannot be decoded.', options.watermark.logoUrl);
+          }
         }
         const watermark = document.createElement('div');
         watermark.className = 'benchmark-watermark';
         watermark.innerHTML = `
           <div class="watermark-row">
-            ${options.watermark.logoUrl ? `<img class="watermark-logo" src="${options.watermark.logoUrl}" alt="${options.watermark.brand} logo">` : ''}
+            ${logoUrl ? `<img class="watermark-logo" src="${logoUrl}" alt="${options.watermark.brand} logo">` : ''}
             <span class="watermark-brand">${options.watermark.brand}</span>
           </div>
           ${options.watermark.url ? `<span class="watermark-url">${options.watermark.url}</span>` : ''}
@@ -155,12 +161,37 @@ export class AppShareService {
     });
   }
 
-  private async loadImage(src: string): Promise<void> {
-    await new Promise<void>((resolve) => {
+  private async loadImage(src: string): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (result: boolean) => {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      };
+      const timeoutId = window.setTimeout(() => finish(false), 4000);
       const img = new Image();
       img.crossOrigin = 'anonymous';
-      img.onload = () => resolve();
-      img.onerror = () => resolve();
+      img.onload = async () => {
+        if (typeof img.decode === 'function') {
+          try {
+            await img.decode();
+            window.clearTimeout(timeoutId);
+            finish(true);
+            return;
+          } catch {
+            window.clearTimeout(timeoutId);
+            finish(false);
+            return;
+          }
+        }
+        window.clearTimeout(timeoutId);
+        finish(true);
+      };
+      img.onerror = () => {
+        window.clearTimeout(timeoutId);
+        finish(false);
+      };
       img.src = src;
     });
   }
