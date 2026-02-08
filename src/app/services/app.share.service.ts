@@ -10,6 +10,8 @@ export interface ShareBenchmarkOptions {
   renderTimeoutMs?: number;
 }
 
+const TRANSPARENT_PIXEL_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==';
+
 @Injectable({
   providedIn: 'root'
 })
@@ -70,27 +72,68 @@ export class AppShareService {
       document.body.appendChild(wrapper);
 
       try {
-        await this.waitForIdle();
-
-        const image = await this.withTimeout(
-          snapdom.toPng(clone, {
-            scale,
-            width: options.width,
-            backgroundColor: 'transparent',
-            embedFonts,
-            fast,
-          }),
+        const primaryDataUrl = await this.renderCloneToDataUrl(clone, {
+          scale,
+          width: options.width,
+          embedFonts,
+          fast,
           renderTimeoutMs,
-          `Benchmark image rendering timed out after ${renderTimeoutMs}ms.`
-        );
+        });
+        return primaryDataUrl;
+      } catch (error) {
+        if (!this.isSourceDecodeError(error)) {
+          throw error;
+        }
 
-        return image.src;
+        // Retry once with reduced complexity for mobile decoders.
+        const watermark = clone.querySelector('.benchmark-watermark');
+        if (watermark) {
+          watermark.remove();
+        }
+        const fallbackWidth = Number.isFinite(options.width) ? Math.min(options.width!, 720) : Math.min(exportWidth, 720);
+
+        return this.renderCloneToDataUrl(clone, {
+          scale: 1,
+          width: fallbackWidth,
+          embedFonts: false,
+          fast: true,
+          renderTimeoutMs,
+        });
       } finally {
         if (wrapper.parentNode) {
           wrapper.parentNode.removeChild(wrapper);
         }
       }
     });
+  }
+
+  private async renderCloneToDataUrl(
+    clone: HTMLElement,
+    options: {
+      scale: number;
+      width?: number;
+      embedFonts: boolean;
+      fast: boolean;
+      renderTimeoutMs: number;
+    }
+  ): Promise<string> {
+    await this.waitForIdle();
+
+    const imageBlob = await this.withTimeout(
+      snapdom.toBlob(clone, {
+        scale: options.scale,
+        width: options.width,
+        backgroundColor: 'transparent',
+        embedFonts: options.embedFonts,
+        fast: options.fast,
+        type: 'png',
+        fallbackURL: TRANSPARENT_PIXEL_DATA_URL,
+      }),
+      options.renderTimeoutMs,
+      `Benchmark image rendering timed out after ${options.renderTimeoutMs}ms.`
+    );
+
+    return this.blobToDataUrl(imageBlob);
   }
 
   private async waitForIdle(): Promise<void> {
@@ -161,6 +204,15 @@ export class AppShareService {
     });
   }
 
+  private blobToDataUrl(blob: Blob): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Failed to read generated image blob.'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
   private async loadImage(src: string): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
       let settled = false;
@@ -205,5 +257,10 @@ export class AppShareService {
       Array.from(el.children).forEach(child => apply(child));
     };
     apply(targetEl);
+  }
+
+  private isSourceDecodeError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    return /source image cannot be decoded/i.test(error.message);
   }
 }
