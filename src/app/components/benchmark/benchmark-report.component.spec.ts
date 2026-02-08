@@ -1,13 +1,16 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { SimpleChange } from '@angular/core';
 import { BenchmarkReportComponent } from './benchmark-report.component';
 import { BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
+import { AppAnalyticsService } from '../../services/app.analytics.service';
 
 describe('BenchmarkReportComponent', () => {
     let component: BenchmarkReportComponent;
     let fixture: ComponentFixture<BenchmarkReportComponent>;
+    let analyticsService: { logEvent: ReturnType<typeof vi.fn> };
 
     const createMockResult = (cep50: number, correlation: number): BenchmarkResult => ({
         referenceId: 'ref-id',
@@ -31,11 +34,15 @@ describe('BenchmarkReportComponent', () => {
     });
 
     beforeEach(async () => {
+        analyticsService = { logEvent: vi.fn() };
         await TestBed.configureTestingModule({
             declarations: [BenchmarkReportComponent],
             imports: [
                 MatCardModule,
                 MatIconModule
+            ],
+            providers: [
+                { provide: AppAnalyticsService, useValue: analyticsService }
             ]
         }).compileComponents();
 
@@ -45,6 +52,17 @@ describe('BenchmarkReportComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should log benchmark_report_view when result changes to non-null', () => {
+        const result = createMockResult(1.5, 0.99);
+        component.result = result;
+
+        component.ngOnChanges({
+            result: new SimpleChange(null, result, true)
+        });
+
+        expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_report_view');
     });
 
     describe('Grade Calculations', () => {

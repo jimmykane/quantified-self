@@ -1,7 +1,7 @@
 <mat-card class="mat-elevation-z0">
   @if (user) {
   <app-peek-panel class="tracks-search-peek" position="top" topAnchor="center" [defaultExpanded]="true"
-    [expandedSizePx]="360" [collapsedSizePx]="36" ariaLabelExpand="Expand filters" ariaLabelCollapse="Collapse filters">
+    [expandedSizePx]="332" [collapsedSizePx]="32" ariaLabelExpand="Expand filters" ariaLabelCollapse="Collapse filters">
     <app-event-search [startOfTheWeek]="user.settings.unitSettings.startOfTheWeek" [showDatePicker]="false"
       [showActivityTypePicker]="false" [dateRangesToShow]="dateRangesToShow"
       [selectedActivityTypes]="user.settings.myTracksSettings?.activityTypes"
@@ -26,7 +26,7 @@
 
   @if (hasEvaluatedTripDetection()) {
   <app-peek-panel class="tracks-trips-peek" position="left" [expanded]="detectedTripsPanelExpanded()"
-    (expandedChange)="detectedTripsPanelExpanded.set($event)" [expandedSizePx]="340" [collapsedSizePx]="44"
+    (expandedChange)="detectedTripsPanelExpanded.set($event)" [expandedSizePx]="300" [collapsedSizePx]="36"
     ariaLabelExpand="Expand detected trips" ariaLabelCollapse="Collapse detected trips" title="Detected trips"
     icon="route">
     <div peek-header-actions class="detected-trips-summary-row">

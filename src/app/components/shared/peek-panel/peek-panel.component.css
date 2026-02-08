@@ -1,6 +1,9 @@
 :host {
   display: block;
   max-width: 100%;
+  --peek-motion-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --peek-motion-enter-duration: 225ms;
+  --peek-motion-exit-duration: 195ms;
 }
 
 .peek-panel {
@@ -9,11 +12,9 @@
   overflow: hidden;
   max-width: 100%;
   transition:
-    width 280ms cubic-bezier(0.22, 1, 0.36, 1),
-    height 280ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 220ms ease,
-    opacity 180ms ease;
-  will-change: width, height, transform;
+    width var(--peek-motion-enter-duration) var(--peek-motion-standard),
+    height var(--peek-motion-enter-duration) var(--peek-motion-standard);
+  will-change: width, height;
 }
 
 
@@ -48,18 +49,6 @@
   height: min(var(--peek-expanded-size), 100%);
 }
 
-.peek-panel.position-left.collapsed {
-  transform: translateX(-2px);
-}
-
-.peek-panel.position-right.collapsed {
-  transform: translateX(2px);
-}
-
-.peek-panel.position-top.collapsed {
-  transform: translateY(-2px);
-}
-
 .peek-panel.position-top.top-anchor-left {
   margin-inline-end: auto;
 }
@@ -81,7 +70,9 @@
   justify-content: center;
   cursor: pointer;
   padding: 0;
-  transition: background-color 220ms ease, color 220ms ease;
+  transition:
+    background-color var(--peek-motion-enter-duration) var(--peek-motion-standard),
+    color var(--peek-motion-enter-duration) var(--peek-motion-standard);
 }
 
 .peek-panel.position-left .peek-toggle,
@@ -110,7 +101,8 @@
 
 .peek-toggle .material-symbols-rounded {
   font-size: 20px;
-  transition: transform 240ms ease;
+  transition:
+    color var(--peek-motion-enter-duration) var(--peek-motion-standard);
 }
 
 .peek-main {
@@ -121,10 +113,8 @@
   flex-direction: column;
   opacity: 1;
   visibility: visible;
-  transform: translate3d(0, 0, 0);
   transition:
-    opacity 220ms ease,
-    transform 280ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity var(--peek-motion-enter-duration) var(--peek-motion-standard),
     visibility 0s linear 0s;
 }
 
@@ -135,21 +125,8 @@
   visibility: hidden;
   pointer-events: none;
   transition:
-    opacity 140ms ease,
-    transform 180ms ease,
-    visibility 0s linear 180ms;
-}
-
-.peek-panel.position-left.collapsed .peek-main {
-  transform: translateX(-10px);
-}
-
-.peek-panel.position-right.collapsed .peek-main {
-  transform: translateX(10px);
-}
-
-.peek-panel.position-top.collapsed .peek-main {
-  transform: translateY(-8px);
+    opacity var(--peek-motion-exit-duration) var(--peek-motion-standard),
+    visibility 0s linear var(--peek-motion-exit-duration);
 }
 
 .peek-panel.position-left.collapsed .peek-panel.glass-card {

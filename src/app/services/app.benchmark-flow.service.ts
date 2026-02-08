@@ -7,6 +7,7 @@ import { AppEventInterface, BenchmarkOptions, BenchmarkResult, getBenchmarkPairK
 import { AppBenchmarkService } from './app.benchmark.service';
 import { AppEventService } from './app.event.service';
 import { LoggerService } from './logger.service';
+import { AppAnalyticsService } from './app.analytics.service';
 import { BenchmarkBottomSheetComponent } from '../components/benchmark/benchmark-bottom-sheet.component';
 import { BenchmarkSelectionDialogComponent } from '../components/benchmark/benchmark-selection-dialog.component';
 import { firstValueFrom } from 'rxjs';
@@ -31,11 +32,13 @@ export class AppBenchmarkFlowService {
     private snackBar: MatSnackBar,
     private benchmarkService: AppBenchmarkService,
     private eventService: AppEventService,
-    private logger: LoggerService
+    private logger: LoggerService,
+    private analyticsService: AppAnalyticsService
   ) { }
 
   openBenchmarkReport(config: BenchmarkFlowConfig): void {
     if (!config.result) return;
+    this.analyticsService.logEvent('benchmark_report_open');
 
     const sheetRef = this.bottomSheet.open(BenchmarkBottomSheetComponent, {
       data: {
@@ -49,6 +52,7 @@ export class AppBenchmarkFlowService {
 
     sheetRef.afterDismissed().subscribe((res: { rerun?: boolean } | undefined) => {
       if (res?.rerun) {
+        this.analyticsService.logEvent('benchmark_report_rerun');
         this.openBenchmarkSelectionDialog(config);
       }
     });
@@ -70,6 +74,7 @@ export class AppBenchmarkFlowService {
         isLoading: seededActivities.length === 0
       }
     });
+    this.analyticsService.logEvent('benchmark_selection_open');
 
     let resolvedEvent: AppEventInterface = config.event;
     let closed = false;
@@ -80,6 +85,7 @@ export class AppBenchmarkFlowService {
 
     dialogRef.afterClosed().subscribe(async (result: { activities: ActivityInterface[]; options: BenchmarkOptions } | undefined) => {
       if (result && result.activities?.length === 2) {
+        this.analyticsService.logEvent('benchmark_selection_confirm');
         await this.generateAndOpenReport({
           ...config,
           event: resolvedEvent,
@@ -88,7 +94,9 @@ export class AppBenchmarkFlowService {
           test: result.activities[1],
           options: result.options
         });
+        return;
       }
+      this.analyticsService.logEvent('benchmark_selection_cancel');
     });
 
     if (seededActivities.length === 0) {
@@ -112,6 +120,7 @@ export class AppBenchmarkFlowService {
     this.snackBar.open('Generating Benchmark...', undefined, { duration: 2000 });
 
     try {
+      this.analyticsService.logEvent('benchmark_generate_start');
       const benchmarkResult = await this.benchmarkService.generateBenchmark(config.ref, config.test, config.options);
       const key = getBenchmarkPairKey(config.ref.getID()!, config.test.getID()!);
 
@@ -144,10 +153,12 @@ export class AppBenchmarkFlowService {
         });
       }
 
+      this.analyticsService.logEvent('benchmark_generate_success');
       config.onResult?.(benchmarkResult);
       this.openBenchmarkReport({ ...config, result: benchmarkResult });
       this.snackBar.open('Benchmark Generated & Saved!', undefined, { duration: 2000 });
     } catch (error) {
+      this.analyticsService.logEvent('benchmark_generate_failure');
       this.snackBar.open('Benchmark failed: ' + error, 'Close');
       this.logger.error('Benchmark flow failed', error);
     }
