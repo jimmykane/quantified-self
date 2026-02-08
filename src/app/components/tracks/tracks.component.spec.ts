@@ -23,6 +23,7 @@ import { Overlay } from '@angular/cdk/overlay';
 import { MaterialModule } from '../../modules/material.module';
 import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-detection.service';
 import { TripLocationLabelService } from '../../services/trip-location-label.service';
+import { PeekPanelComponent } from '../shared/peek-panel/peek-panel.component';
 
 const waitForAsyncWork = async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -161,7 +162,7 @@ describe('TracksComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      declarations: [TracksComponent],
+      declarations: [TracksComponent, PeekPanelComponent],
       imports: [MaterialModule],
       providers: [
         { provide: AppAuthService, useValue: mockAuthService },
@@ -271,6 +272,31 @@ describe('TracksComponent', () => {
   });
 
   describe('Trip detection suggestions', () => {
+    it('renders both peek panels when user and trip evaluation state are available', () => {
+      component.user = mockUser as any;
+      component.hasEvaluatedTripDetection.set(true);
+      fixture.detectChanges();
+
+      const searchPanel = fixture.nativeElement.querySelector('app-peek-panel.tracks-search-peek');
+      const tripsPanel = fixture.nativeElement.querySelector('app-peek-panel.tracks-trips-peek');
+      expect(searchPanel).not.toBeNull();
+      expect(tripsPanel).not.toBeNull();
+    });
+
+    it('toggles detected-trips panel state without changing settings', () => {
+      component.hasEvaluatedTripDetection.set(true);
+      component.detectedTripsPanelExpanded.set(true);
+      fixture.detectChanges();
+
+      const beforeCalls = mockUserSettingsQuery.updateMyTracksSettings.mock.calls.length;
+      const toggle = fixture.nativeElement.querySelector('.tracks-trips-peek .peek-toggle') as HTMLButtonElement;
+      toggle.click();
+      fixture.detectChanges();
+
+      expect(component.detectedTripsPanelExpanded()).toBe(false);
+      expect(mockUserSettingsQuery.updateMyTracksSettings.mock.calls.length).toBe(beforeCalls);
+    });
+
     it('should generate suggestions from activities in the selected range', async () => {
       const event = createMockEvent('trip-nepal-1', '2024-11-08T08:00:00Z', 27.7172, 85.3240);
       mockEventService.getEventsBy.mockReturnValue(of([event]));

@@ -527,10 +527,6 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.fitBoundsToTracks(coordinates);
   }
 
-  public toggleDetectedTripsPanel(): void {
-    this.detectedTripsPanelExpanded.update((expanded) => !expanded);
-  }
-
   private getTripDetectionInputFromEvent(event: any): TripDetectionInput | null {
     const eventId = event?.getID?.();
     const startPositionStat = event?.getStat?.(DataStartPosition.type) as DataStartPosition | undefined;

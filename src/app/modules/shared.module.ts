@@ -22,6 +22,7 @@ import { ServiceSyncingStateComponent } from '../components/shared/service-synci
 import { ServiceSourceIconComponent } from '../components/event-summary/service-source-icon/service-source-icon.component';
 import { StatusInfoComponent } from '../components/shared/status-info/status-info.component';
 import { BottomSheetHeaderComponent } from '../components/shared/bottom-sheet-header/bottom-sheet-header.component';
+import { PeekPanelComponent } from '../components/shared/peek-panel/peek-panel.component';
 
 @NgModule({
     imports: [
@@ -48,6 +49,7 @@ import { BottomSheetHeaderComponent } from '../components/shared/bottom-sheet-he
         ServiceSourceIconComponent,
         StatusInfoComponent,
         BottomSheetHeaderComponent,
+        PeekPanelComponent,
     ],
     providers: [],
     exports: [
@@ -72,6 +74,7 @@ import { BottomSheetHeaderComponent } from '../components/shared/bottom-sheet-he
         ServiceSourceIconComponent,
         StatusInfoComponent,
         BottomSheetHeaderComponent,
+        PeekPanelComponent,
     ]
 })
 

@@ -1,11 +1,14 @@
 <mat-card class="mat-elevation-z0">
   @if (user) {
-  <app-event-search [startOfTheWeek]="user.settings.unitSettings.startOfTheWeek" [showDatePicker]="false"
-    [showActivityTypePicker]="false" [dateRangesToShow]="dateRangesToShow"
-    [selectedActivityTypes]="user.settings.myTracksSettings?.activityTypes"
-    [selectedDateRange]="user.settings.myTracksSettings?.dateRange" [includeMergedEvents]="false"
-    (searchChange)="search($event)">
-  </app-event-search>
+  <app-peek-panel class="tracks-search-peek" position="top" topAnchor="center" [defaultExpanded]="true"
+    [expandedSizePx]="360" [collapsedSizePx]="36" ariaLabelExpand="Expand filters" ariaLabelCollapse="Collapse filters">
+    <app-event-search [startOfTheWeek]="user.settings.unitSettings.startOfTheWeek" [showDatePicker]="false"
+      [showActivityTypePicker]="false" [dateRangesToShow]="dateRangesToShow"
+      [selectedActivityTypes]="user.settings.myTracksSettings?.activityTypes"
+      [selectedDateRange]="user.settings.myTracksSettings?.dateRange" [includeMergedEvents]="false"
+      (searchChange)="search($event)">
+    </app-event-search>
+  </app-peek-panel>
   }
 
   <div #mapDiv id="map"></div>
@@ -22,35 +25,30 @@
   </div>
 
   @if (hasEvaluatedTripDetection()) {
-  <section class="detected-trips" aria-label="Detected trips in selected range" [class.expanded]="detectedTripsPanelExpanded()"
-    [class.collapsed]="!detectedTripsPanelExpanded()">
-    <button type="button" class="detected-trips-peek" (click)="toggleDetectedTripsPanel()"
-      [attr.aria-expanded]="detectedTripsPanelExpanded()"
-      [attr.aria-label]="detectedTripsPanelExpanded() ? 'Collapse detected trips' : 'Expand detected trips'">
-      <span class="material-symbols-rounded">{{ detectedTripsPanelExpanded() ? 'chevron_left' : 'chevron_right' }}</span>
-    </button>
-
-    <div class="detected-trips-content">
+  <app-peek-panel class="tracks-trips-peek" position="left" [expanded]="detectedTripsPanelExpanded()"
+    (expandedChange)="detectedTripsPanelExpanded.set($event)" [expandedSizePx]="340" [collapsedSizePx]="44"
+    ariaLabelExpand="Expand detected trips" ariaLabelCollapse="Collapse detected trips">
+    <div peek-header>
       <div class="detected-trips-summary-row">
-        <span class="detected-trips-title">Detected Trips In This Range</span>
+        <span class="detected-trips-title">Detected trips</span>
         <span class="detected-trips-badge">{{ detectedTrips().length }}</span>
       </div>
-      @if (detectedTrips().length === 0) {
-      <p class="detected-trips-empty">No trips detected for this period</p>
-      } @else {
-      <ul>
-        @for (trip of detectedTrips(); track trip.tripId) {
-        <li>
-          <button type="button" class="detected-trip-button" (click)="onDetectedTripSelected(trip)">
-            <span class="trip-location">{{ trip.locationLabel || 'Trip' }}</span>
-            <span class="trip-dates">{{ trip.startDate | date:'mediumDate' }} - {{ trip.endDate | date:'mediumDate' }}</span>
-            <span class="trip-count">{{ trip.activityCount }} activities</span>
-          </button>
-        </li>
-        }
-      </ul>
-      }
     </div>
-  </section>
+    @if (detectedTrips().length === 0) {
+    <p class="detected-trips-empty">No trips detected for this period</p>
+    } @else {
+    <ul class="detected-trips-list qs-scrollbar">
+      @for (trip of detectedTrips(); track trip.tripId) {
+      <li>
+        <button type="button" class="detected-trip-button" (click)="onDetectedTripSelected(trip)">
+          <span class="trip-location">{{ trip.locationLabel || 'Trip' }}</span>
+          <span class="trip-dates">{{ trip.startDate | date:'mediumDate' }} - {{ trip.endDate | date:'mediumDate' }}</span>
+          <span class="trip-count">{{ trip.activityCount }} activities</span>
+        </button>
+      </li>
+      }
+    </ul>
+    }
+  </app-peek-panel>
   }
 </mat-card>
