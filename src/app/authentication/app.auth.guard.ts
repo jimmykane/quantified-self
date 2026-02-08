@@ -16,16 +16,16 @@ export const authGuard: CanMatchFn = (route, segments) => {
 
   return authService.user$.pipe(
     take(1),
-    map(user => !!user),
-    tap(loggedIn => {
+    map(user => {
       authService.redirectUrl = null;
-      if (!loggedIn) {
+      if (!user) {
         authService.redirectUrl = url;
-        snackBar.open('You must login first', null, {
+        snackBar.open('You must login first', undefined, {
           duration: 2000,
         });
-        router.navigate(['/login']);
+        return router.createUrlTree(['/login']);
       }
+      return true;
     })
   );
 };

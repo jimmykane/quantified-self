@@ -17,6 +17,9 @@ describe('loggedInGuard', () => {
         };
 
         const routerSpy = {
+            createUrlTree: vi.fn().mockImplementation((commands) => ({
+                toString: () => commands.join('/')
+            })),
             navigate: vi.fn()
         };
 
@@ -37,7 +40,6 @@ describe('loggedInGuard', () => {
         const canMatch = await firstValueFrom(result);
 
         expect(canMatch).toBe(true);
-        expect(router.navigate).not.toHaveBeenCalled();
     });
 
     it('should redirect to dashboard and block access if user is logged in', async () => {
@@ -46,7 +48,9 @@ describe('loggedInGuard', () => {
         const result = TestBed.runInInjectionContext(() => loggedInGuard({} as any, []) as Observable<boolean>);
         const canMatch = await firstValueFrom(result);
 
-        expect(canMatch).toBe(false);
-        expect(router.navigate).toHaveBeenCalledWith(['/dashboard']);
+        // Expect UrlTree
+        expect(canMatch).not.toBe(true);
+        expect(canMatch).not.toBe(false);
+        expect((canMatch as any).toString()).toContain('/dashboard');
     });
 });
