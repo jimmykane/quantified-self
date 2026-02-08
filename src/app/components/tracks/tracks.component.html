@@ -20,4 +20,37 @@
     <mat-spinner diameter="24"></mat-spinner>
     }
   </div>
+
+  @if (hasEvaluatedTripDetection()) {
+  <section class="detected-trips" aria-label="Detected trips in selected range" [class.expanded]="detectedTripsPanelExpanded()"
+    [class.collapsed]="!detectedTripsPanelExpanded()">
+    <button type="button" class="detected-trips-peek" (click)="toggleDetectedTripsPanel()"
+      [attr.aria-expanded]="detectedTripsPanelExpanded()"
+      [attr.aria-label]="detectedTripsPanelExpanded() ? 'Collapse detected trips' : 'Expand detected trips'">
+      <span class="material-symbols-rounded">{{ detectedTripsPanelExpanded() ? 'chevron_left' : 'chevron_right' }}</span>
+    </button>
+
+    <div class="detected-trips-content">
+      <div class="detected-trips-summary-row">
+        <span class="detected-trips-title">Detected Trips In This Range</span>
+        <span class="detected-trips-badge">{{ detectedTrips().length }}</span>
+      </div>
+      @if (detectedTrips().length === 0) {
+      <p class="detected-trips-empty">No trips detected for this period</p>
+      } @else {
+      <ul>
+        @for (trip of detectedTrips(); track trip.tripId) {
+        <li>
+          <button type="button" class="detected-trip-button" (click)="onDetectedTripSelected(trip)">
+            <span class="trip-location">{{ trip.locationLabel || 'Trip' }}</span>
+            <span class="trip-dates">{{ trip.startDate | date:'mediumDate' }} - {{ trip.endDate | date:'mediumDate' }}</span>
+            <span class="trip-count">{{ trip.activityCount }} activities</span>
+          </button>
+        </li>
+        }
+      </ul>
+      }
+    </div>
+  </section>
+  }
 </mat-card>

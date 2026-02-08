@@ -178,6 +178,52 @@ describe('AppPaymentService', () => {
             // CHECK 3: Subscription data must NOT be present
             expect(payload.subscription_data).toBeUndefined();
         });
+
+        it('should set promotion_code and disable manual promotion codes when price metadata contains a valid promotion code ID', async () => {
+            const recurringPriceWithPromo = {
+                id: 'price_recurring_promo',
+                type: 'recurring',
+                active: true,
+                currency: 'usd',
+                unit_amount: 1000,
+                description: 'Monthly with promo',
+                metadata: {
+                    promotion_code_id: 'promo_123456789'
+                }
+            } as any;
+
+            await service.appendCheckoutSession(recurringPriceWithPromo);
+
+            expect(mockAddDoc).toHaveBeenCalled();
+            const args = mockAddDoc.mock.calls[0];
+            const payload = args[1];
+
+            expect(payload.promotion_code).toBe('promo_123456789');
+            expect(payload.allow_promotion_codes).toBe(false);
+        });
+
+        it('should ignore non-ID promotion code metadata and keep manual promotion codes enabled', async () => {
+            const recurringPriceWithInvalidPromo = {
+                id: 'price_recurring_invalid_promo',
+                type: 'recurring',
+                active: true,
+                currency: 'usd',
+                unit_amount: 1000,
+                description: 'Monthly with invalid promo',
+                metadata: {
+                    promotion_code_id: 'TRAIL_START'
+                }
+            } as any;
+
+            await service.appendCheckoutSession(recurringPriceWithInvalidPromo);
+
+            expect(mockAddDoc).toHaveBeenCalled();
+            const args = mockAddDoc.mock.calls[0];
+            const payload = args[1];
+
+            expect(payload.promotion_code).toBeUndefined();
+            expect(payload.allow_promotion_codes).toBe(true);
+        });
     });
     describe('restorePurchases', () => {
         it('should return the role from the cloud function response', async () => {
