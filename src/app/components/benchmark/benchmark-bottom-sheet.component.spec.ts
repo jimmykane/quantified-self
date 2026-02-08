@@ -5,6 +5,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
 import { Component, Input } from '@angular/core';
@@ -67,6 +68,7 @@ describe('BenchmarkBottomSheetComponent', () => {
             providers: [
                 { provide: MatBottomSheetRef, useValue: mockBottomSheetRef },
                 { provide: MAT_BOTTOM_SHEET_DATA, useValue: { result: mockResult, event: { getActivities: () => [] } } },
+                { provide: MatSnackBar, useValue: { open: vi.fn() } },
             ],
         }).compileComponents();
 

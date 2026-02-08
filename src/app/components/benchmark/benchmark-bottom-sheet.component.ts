@@ -1,12 +1,15 @@
 import { Component, ElementRef, Inject, ViewChild, inject } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bottom-sheet';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { EventInterface, UserSummariesSettingsInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { AppShareService } from '../../services/app.share.service';
 import { environment } from '../../../environments/environment';
 import { saveAs } from 'file-saver';
+
+type NativeShareStatus = 'shared' | 'unsupported' | 'cancelled' | 'failed';
 
 @Component({
   selector: 'app-benchmark-bottom-sheet',
@@ -60,7 +63,8 @@ export class BenchmarkBottomSheetComponent {
     },
     private bottomSheetRef: MatBottomSheetRef<BenchmarkBottomSheetComponent>,
     private eventColorService: AppEventColorService,
-    private shareService: AppShareService
+    private shareService: AppShareService,
+    private snackBar: MatSnackBar
   ) {
     this.calculateColors();
   }
@@ -116,17 +120,30 @@ export class BenchmarkBottomSheetComponent {
 
       const imageBlob = this.dataUrlToBlob(dataUrl);
       if (!imageBlob) {
-        throw new Error('Unable to convert benchmark image data URL to Blob.');
+        this.notifyShareIssue('Share failed while preparing the image file.');
+        return;
       }
 
-      const shared = await this.tryNativeShare(imageBlob, filename);
-      if (shared) {
+      const nativeShareStatus = await this.tryNativeShare(imageBlob, filename);
+      if (nativeShareStatus === 'shared') {
         return;
+      }
+      if (nativeShareStatus === 'cancelled') {
+        this.notifyShareIssue('Share canceled.');
+        return;
+      }
+      if (nativeShareStatus === 'failed') {
+        this.notifyShareIssue('Native share failed. Downloading image instead.');
+      }
+      if (nativeShareStatus === 'unsupported') {
+        this.notifyShareIssue('Native share is not available. Downloading image instead.');
       }
 
       this.downloadShareImage(imageBlob, filename);
     } catch (error) {
       console.error('Failed to share benchmark image', error);
+      const details = this.getErrorMessage(error);
+      this.notifyShareIssue(`Share failed while generating image. ${details}`);
     } finally {
       this.isSharing = false;
     }
@@ -153,9 +170,9 @@ export class BenchmarkBottomSheetComponent {
     saveAs(imageBlob, filename);
   }
 
-  private async tryNativeShare(imageBlob: Blob, filename: string): Promise<boolean> {
-    if (!('share' in navigator)) return false;
-    if (typeof File === 'undefined') return false;
+  private async tryNativeShare(imageBlob: Blob, filename: string): Promise<NativeShareStatus> {
+    if (!('share' in navigator)) return 'unsupported';
+    if (typeof File === 'undefined') return 'unsupported';
 
     const file = new File([imageBlob], filename, { type: imageBlob.type || 'image/png' });
     const shareData: ShareData = {
@@ -164,15 +181,38 @@ export class BenchmarkBottomSheetComponent {
     };
 
     if (navigator.canShare && !navigator.canShare(shareData)) {
-      return false;
+      return 'unsupported';
     }
 
     try {
       await navigator.share(shareData);
-      return true;
-    } catch {
-      return false;
+      return 'shared';
+    } catch (error) {
+      if (this.isShareCanceled(error)) {
+        return 'cancelled';
+      }
+      console.error('Native share failed', error);
+      return 'failed';
     }
+  }
+
+  private notifyShareIssue(message: string): void {
+    this.snackBar.open(message, 'Close', { duration: 6000 });
+  }
+
+  private getErrorMessage(error: unknown): string {
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+    if (typeof error === 'string') {
+      return error;
+    }
+    return 'Unknown error';
+  }
+
+  private isShareCanceled(error: unknown): boolean {
+    if (!(error instanceof DOMException)) return false;
+    return error.name === 'AbortError';
   }
 
   private dataUrlToBlob(dataUrl: string): Blob | null {
