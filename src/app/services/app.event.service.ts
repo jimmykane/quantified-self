@@ -33,6 +33,7 @@ import { EventUtilities } from '@sports-alliance/sports-lib';
 
 
 import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
+import type { EventJSONSanitizerIssue } from '../utils/event-json-sanitizer';
 
 import { AppUserService } from './app.user.service';
 import { USAGE_LIMITS } from '../../../functions/src/shared/limits';
@@ -59,7 +60,15 @@ export class AppEventService implements OnDestroy {
   private logger = inject(LoggerService);
   private appEventUtilities = inject(AppEventUtilities);
   private benchmarkAdapter = inject(BenchmarkEventAdapter);
-  private static reportedUnknownTypes = new Set<string>();
+  private static readonly DEDUPE_TTL_MS = 6 * 60 * 60 * 1000;
+  private static readonly SANITIZER_EVENT_TTL_MS = 30 * 60 * 1000;
+  private static readonly DEDUPE_UNKNOWN_TYPES_MAX = 500;
+  private static readonly DEDUPE_SANITIZER_ISSUES_MAX = 5000;
+  private static readonly DEDUPE_SANITIZER_EVENTS_MAX = 1000;
+  private static readonly MAX_ISSUES_PER_REPORT = 20;
+  private static reportedUnknownTypes = new Map<string, number>();
+  private static reportedSanitizerIssues = new Map<string, number>();
+  private static reportedSanitizerEvents = new Map<string, number>();
 
   /**
    * NOTE: We use `runInInjectionContext(this.injector, ...)` for Firebase SDK calls (doc, collection, etc.).
@@ -69,6 +78,50 @@ export class AppEventService implements OnDestroy {
    */
   constructor(
     private windowService: AppWindowService) {
+  }
+
+  private static getSanitizerIssueKey(activityID: string, issue: EventJSONSanitizerIssue): string {
+    return `${activityID}|${issue.kind}|${issue.location}|${issue.path}|${issue.type || 'unknown'}|${issue.reason}`;
+  }
+
+  private static shouldReportKey(cache: Map<string, number>, key: string, ttlMs: number, maxEntries: number): boolean {
+    const now = Date.now();
+    const expiresAt = cache.get(key);
+    if (expiresAt && expiresAt > now) {
+      return false;
+    }
+    cache.delete(key);
+    cache.set(key, now + ttlMs);
+    this.pruneCache(cache, maxEntries, now);
+    return true;
+  }
+
+  private static pruneCache(cache: Map<string, number>, maxEntries: number, now: number): void {
+    for (const [key, expiresAt] of cache) {
+      if (expiresAt <= now) {
+        cache.delete(key);
+      }
+    }
+    while (cache.size > maxEntries) {
+      const oldestKey = cache.keys().next().value as string | undefined;
+      if (!oldestKey) {
+        break;
+      }
+      cache.delete(oldestKey);
+    }
+  }
+
+  private static summarizeIssues(issues: EventJSONSanitizerIssue[]): Record<string, number> {
+    return issues.reduce((summary: Record<string, number>, issue) => {
+      const key = `${issue.kind}:${issue.location}`;
+      summary[key] = (summary[key] || 0) + 1;
+      return summary;
+    }, {});
+  }
+
+  private static buildSanitizerFingerprint(eventID: string, activityID: string, issues: EventJSONSanitizerIssue[]): string[] {
+    const kinds = [...new Set(issues.map(issue => issue.kind))].sort();
+    return ['activity-sanitizer', eventID, activityID, ...kinds];
   }
 
   public getEventAndActivities(user: User, eventID: string): Observable<AppEventInterface> {
@@ -177,9 +230,13 @@ export class AppEventService implements OnDestroy {
         const eventSnapshot = queryDocumentSnapshot.data();
         const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
         if (unknownTypes.length > 0) {
-          const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
+          const newUnknownTypes = unknownTypes.filter(type => AppEventService.shouldReportKey(
+            AppEventService.reportedUnknownTypes,
+            type,
+            AppEventService.DEDUPE_TTL_MS,
+            AppEventService.DEDUPE_UNKNOWN_TYPES_MAX
+          ));
           if (newUnknownTypes.length > 0) {
-            newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
             this.logger.captureMessage('Unknown Data Types in getEventsOnceBy', { extra: { types: newUnknownTypes, eventID: queryDocumentSnapshot.id } });
           }
         }
@@ -255,12 +312,64 @@ export class AppEventService implements OnDestroy {
               intensityZones: activitySnapshot.intensityZones || [],
               events: activitySnapshot.events || []
             };
-            const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(safeActivityData);
+            const { sanitizedJson, unknownTypes, issues } = EventJSONSanitizer.sanitize(safeActivityData);
             if (unknownTypes.length > 0) {
-              const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
+              const newUnknownTypes = unknownTypes.filter(type => AppEventService.shouldReportKey(
+                AppEventService.reportedUnknownTypes,
+                type,
+                AppEventService.DEDUPE_TTL_MS,
+                AppEventService.DEDUPE_UNKNOWN_TYPES_MAX
+              ));
               if (newUnknownTypes.length > 0) {
-                newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
                 this.logger.captureMessage('Unknown Data Types in getActivities', { extra: { types: newUnknownTypes, eventID, activityID: activitySnapshot.id } });
+              }
+            }
+            const actionableIssues = (issues || []).filter(issue => issue.kind !== 'unknown_data_type');
+            if (actionableIssues.length > 0) {
+              const newIssues = actionableIssues.filter(issue => {
+                const issueKey = AppEventService.getSanitizerIssueKey(activitySnapshot.id, issue);
+                return AppEventService.shouldReportKey(
+                  AppEventService.reportedSanitizerIssues,
+                  issueKey,
+                  AppEventService.DEDUPE_TTL_MS,
+                  AppEventService.DEDUPE_SANITIZER_ISSUES_MAX
+                );
+              });
+
+              if (newIssues.length > 0) {
+                const issueSummary = AppEventService.summarizeIssues(newIssues);
+                const cappedIssues = newIssues.slice(0, AppEventService.MAX_ISSUES_PER_REPORT);
+                const issuesTruncated = Math.max(0, newIssues.length - cappedIssues.length);
+                this.logger.warn('[AppEventService] Sanitized malformed activity data', {
+                  eventID,
+                  activityID: activitySnapshot.id,
+                  issueCount: newIssues.length,
+                  issueSummary,
+                  issuesTruncated,
+                  issues: cappedIssues
+                });
+
+                const sentryEventKey = `${eventID}|${activitySnapshot.id}|${Object.keys(issueSummary).sort().join(',')}`;
+                const shouldReportSanitizerEvent = AppEventService.shouldReportKey(
+                  AppEventService.reportedSanitizerEvents,
+                  sentryEventKey,
+                  AppEventService.SANITIZER_EVENT_TTL_MS,
+                  AppEventService.DEDUPE_SANITIZER_EVENTS_MAX
+                );
+
+                if (shouldReportSanitizerEvent) {
+                  this.logger.captureException(new Error('Sanitized malformed activity data in getActivities'), {
+                    fingerprint: AppEventService.buildSanitizerFingerprint(eventID, activitySnapshot.id, newIssues),
+                    extra: {
+                      eventID,
+                      activityID: activitySnapshot.id,
+                      issueCount: newIssues.length,
+                      issueSummary,
+                      issuesTruncated,
+                      issues: cappedIssues
+                    }
+                  });
+                }
               }
             }
             activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>sanitizedJson).setID(activitySnapshot.id));
@@ -838,9 +947,13 @@ export class AppEventService implements OnDestroy {
         return eventSnapshots.map((eventSnapshot) => {
           const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
           if (unknownTypes.length > 0) {
-            const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
+            const newUnknownTypes = unknownTypes.filter(type => AppEventService.shouldReportKey(
+              AppEventService.reportedUnknownTypes,
+              type,
+              AppEventService.DEDUPE_TTL_MS,
+              AppEventService.DEDUPE_UNKNOWN_TYPES_MAX
+            ));
             if (newUnknownTypes.length > 0) {
-              newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
               this.logger.captureMessage('Unknown Data Types in _getEvents', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
             }
           }
@@ -873,9 +986,13 @@ export class AppEventService implements OnDestroy {
         return eventSnapshots.reduce((events: EventInterface[], eventSnapshot) => {
           const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(eventSnapshot);
           if (unknownTypes.length > 0) {
-            const newUnknownTypes = unknownTypes.filter(type => !AppEventService.reportedUnknownTypes.has(type));
+            const newUnknownTypes = unknownTypes.filter(type => AppEventService.shouldReportKey(
+              AppEventService.reportedUnknownTypes,
+              type,
+              AppEventService.DEDUPE_TTL_MS,
+              AppEventService.DEDUPE_UNKNOWN_TYPES_MAX
+            ));
             if (newUnknownTypes.length > 0) {
-              newUnknownTypes.forEach(type => AppEventService.reportedUnknownTypes.add(type));
               this.logger.captureMessage('Unknown Data Types in _getEventsAndActivities', { extra: { types: newUnknownTypes, eventID: eventSnapshot.id } });
             }
           }
