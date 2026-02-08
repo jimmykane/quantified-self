@@ -675,6 +675,13 @@ mat-table {
 /* Ensure bottom sheet scroll areas inherit the QS scrollbar styling */
 .mat-bottom-sheet-container .bottom-sheet-content {
   @extend .qs-scrollbar;
+  &::-webkit-scrollbar-track {
+    background: var(--mat-sys-surface);
+  }
+
+  &::-webkit-scrollbar-corner {
+    background: var(--mat-sys-surface);
+  }
 }
 
 /* Ensure Overlays (Bottom Sheets, Dialogs) are always on top of App Bars and Banners */
