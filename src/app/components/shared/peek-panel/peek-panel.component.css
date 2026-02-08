@@ -16,6 +16,11 @@
   will-change: width, height, transform;
 }
 
+.peek-panel.glass-card {
+  /* Increase transparency to make blur effect visible */
+  background: color-mix(in srgb, var(--mat-sys-surface), transparent 40%) !important;
+}
+
 .peek-panel.position-left,
 .peek-panel.position-right {
   width: var(--peek-collapsed-size);
@@ -162,6 +167,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .peek-panel,
   .peek-main,
   .peek-toggle,
