@@ -119,11 +119,6 @@ export class BenchmarkBottomSheetComponent {
         throw new Error('Unable to convert benchmark image data URL to Blob.');
       }
 
-      const shared = await this.tryNativeShare(imageBlob, filename);
-      if (shared) {
-        return;
-      }
-
       this.downloadShareImage(imageBlob, filename);
     } catch (error) {
       console.error('Failed to share benchmark image', error);
@@ -151,29 +146,6 @@ export class BenchmarkBottomSheetComponent {
 
   private downloadShareImage(imageBlob: Blob, filename: string): void {
     saveAs(imageBlob, filename);
-  }
-
-  private async tryNativeShare(imageBlob: Blob, filename: string): Promise<boolean> {
-    if (!('share' in navigator)) return false;
-    if (typeof File === 'undefined') return false;
-
-    const file = new File([imageBlob], filename, { type: imageBlob.type || 'image/png' });
-
-    const shareData: ShareData = {
-      files: [file],
-      title: 'Benchmark Report',
-    };
-
-    if (navigator.canShare && !navigator.canShare(shareData)) {
-      return false;
-    }
-
-    try {
-      await navigator.share(shareData);
-      return true;
-    } catch {
-      return false;
-    }
   }
 
   private dataUrlToBlob(dataUrl: string): Blob | null {
