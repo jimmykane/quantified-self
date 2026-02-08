@@ -54,11 +54,13 @@ export class TracksComponent implements OnInit, OnDestroy {
   bufferProgress = new Subject<number>();
   totalProgress = new Subject<number>();
 
-  public user!: AppUserInterface;
+  public user: AppUserInterface | undefined;
 
   private mapSignal = signal<any>(null); // Signal to hold map instance for reactive synchronization
+  private userSignal = signal<AppUserInterface | undefined>(undefined);
   private tracksMapManager: TracksMapManager;
   private scrolled = false;
+  private hasTrackBoundsBeenApplied = false;
 
   private eventsSubscription: Subscription = new Subscription();
   private trackLoadingSubscription: Subscription = new Subscription();
@@ -112,10 +114,11 @@ export class TracksComponent implements OnInit, OnDestroy {
     effect(() => {
       const { settings, theme } = viewState();
       const map = this.mapSignal();
+      const user = this.userSignal();
       const synchronizer = this.mapSynchronizer();
       const terrainControl = this.terrainControl();
 
-      if (!map || !synchronizer || !settings) return;
+      if (!map || !synchronizer || !settings || !user) return;
 
       // 1. Update Map Style via Synchronizer
       const mapStyle = settings.mapStyle || 'default';
@@ -144,7 +147,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       if (dataChanged) {
         lastLoadedDataSettings = currentSnapshot;
         this.isLoading.set(true);
-        this.loadTracksMapForUserByDateRange(this.user, map, settings.dateRange, settings.activityTypes)
+        this.loadTracksMapForUserByDateRange(user, map, settings.dateRange, settings.activityTypes)
           .catch(err => this.logger.error('Error loading tracks', err))
           .finally(() => this.isLoading.set(false));
       }
@@ -201,7 +204,13 @@ export class TracksComponent implements OnInit, OnDestroy {
         mapInstance.addControl(navControl, 'bottom-right');
 
         this.centerMapToStartingLocation(mapInstance);
-        this.user = await this.authService.user$.pipe(take(1)).toPromise() as AppUserInterface;
+        const user = await this.authService.user$.pipe(take(1)).toPromise() as AppUserInterface | undefined;
+        if (!user) {
+          this.logger.warn('[TracksComponent] User is not available yet. Track loading will wait.');
+        } else {
+          this.user = user;
+          this.userSignal.set(user);
+        }
 
         // Restore terrain control (initialSettings already loaded above)
         // Initialize 3D state immediately for responsiveness and test compliance
@@ -303,7 +312,11 @@ export class TracksComponent implements OnInit, OnDestroy {
 
 
 
-  private async loadTracksMapForUserByDateRange(user: AppUserInterface, map: any, dateRange: DateRanges, activityTypes?: ActivityTypes[]) {
+  private async loadTracksMapForUserByDateRange(user: AppUserInterface | undefined, map: any, dateRange: DateRanges, activityTypes?: ActivityTypes[]) {
+    if (!user) {
+      this.logger.warn('[TracksComponent] Skipping track load because user is undefined.');
+      return;
+    }
     const promiseTime = new Date().getTime();
     this.promiseTime = promiseTime
     this.clearProgressAndOpenBottomSheet();
@@ -390,7 +403,13 @@ export class TracksComponent implements OnInit, OnDestroy {
                           const lng = Math.round(position.longitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
                           const lat = Math.round(position.latitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
                           return [lng, lat];
-                        });
+                        })
+                        .filter((coordinate: number[]) =>
+                          Number.isFinite(coordinate[0])
+                          && Number.isFinite(coordinate[1])
+                          && Math.abs(coordinate[0]) <= 180
+                          && Math.abs(coordinate[1]) <= 90
+                        );
 
                       if (coordinates.length > 1) {
                         this.tracksMapManager.addTrackFromActivity(activity, coordinates);
@@ -407,13 +426,13 @@ export class TracksComponent implements OnInit, OnDestroy {
             chunkCoordinates.forEach(c => allCoordinates.push(c));
 
             if (count < events.length && chunkCoordinates.length > 0) {
-              this.tracksMapManager.fitBoundsToCoordinates(chunkCoordinates);
+              this.fitBoundsToTracks(chunkCoordinates);
             }
           }
 
           // Final fit bounds
           if (allCoordinates.length > 0) {
-            this.tracksMapManager.fitBoundsToCoordinates(allCoordinates);
+            this.fitBoundsToTracks(allCoordinates);
           }
           if (addedTrackCount === 0) {
             this.tracksMapManager.clearAllTracks();
@@ -436,20 +455,26 @@ export class TracksComponent implements OnInit, OnDestroy {
     if (isPlatformBrowser(this.platformId)) {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(pos => {
-          if (!this.scrolled) {
-            map.flyTo({
-              center: [pos.coords.longitude, pos.coords.latitude], // Mapbox is [lng, lat]
-              zoom: 9,
-              essential: true
-            });
+          if (this.scrolled || this.hasTrackBoundsBeenApplied) return;
 
-            // noMoveStart doesn't seem to have an effect, see Leaflet
-            // issue: https://github.com/Leaflet/Leaflet/issues/5396
-            this.clearScroll(map);
-          }
+          map.flyTo({
+            center: [pos.coords.longitude, pos.coords.latitude], // Mapbox is [lng, lat]
+            zoom: 9,
+            essential: true
+          });
+
+          // noMoveStart doesn't seem to have an effect, see Leaflet
+          // issue: https://github.com/Leaflet/Leaflet/issues/5396
+          this.clearScroll(map);
         });
       }
     }
+  }
+
+  private fitBoundsToTracks(coordinates: number[][]) {
+    if (!coordinates || coordinates.length === 0) return;
+    this.hasTrackBoundsBeenApplied = true;
+    this.tracksMapManager.fitBoundsToCoordinates(coordinates);
   }
 
   private markScrolled(map: any) {
