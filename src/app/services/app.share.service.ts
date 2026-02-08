@@ -95,7 +95,7 @@ export class AppShareService {
         return this.renderCloneToDataUrl(clone, {
           scale: 1,
           width: fallbackWidth,
-          embedFonts: false,
+          embedFonts: true,
           fast: true,
           renderTimeoutMs,
         });

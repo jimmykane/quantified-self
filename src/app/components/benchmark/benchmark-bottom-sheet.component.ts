@@ -189,7 +189,7 @@ export class BenchmarkBottomSheetComponent {
     const dataUrl = await this.shareService.shareBenchmarkAsImage(this.shareFrame!.nativeElement, {
       scale: isMobile ? 1.5 : 2,
       width: 1080,
-      embedFonts: !isMobile,
+      embedFonts: true,
       fast: isMobile,
       renderTimeoutMs: isMobile ? 10000 : 15000,
       watermark: {
