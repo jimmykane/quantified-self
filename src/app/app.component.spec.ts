@@ -19,6 +19,7 @@ import { DomSanitizer } from '@angular/platform-browser';
 import { of, Subject } from 'rxjs';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { ChangeDetectorRef, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 
@@ -86,6 +87,7 @@ describe('AppComponent', () => {
             imports: [
                 MatSidenavModule,
                 MatTabsModule,
+                MatTooltipModule,
                 NoopAnimationsModule,
                 RouterModule
             ],
