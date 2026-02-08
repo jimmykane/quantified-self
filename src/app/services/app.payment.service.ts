@@ -387,7 +387,7 @@ export class AppPaymentService {
      * Opens the Stripe Customer Portal for managing subscriptions.
      */
     async manageSubscriptions(): Promise<void> {
-        const returnUrl = `${this.windowService.currentDomain}/pricing`;
+        const returnUrl = `${this.windowService.currentDomain}/subscriptions`;
 
         try {
             const result = await this.functionsService.call<{ returnUrl: string }, { url: string }>('createPortalLink', { returnUrl });

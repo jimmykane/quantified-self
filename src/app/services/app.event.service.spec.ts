@@ -10,7 +10,7 @@ import { AppFileService } from './app.file.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
-import { of } from 'rxjs';
+import { of, firstValueFrom } from 'rxjs';
 import { AppCacheService } from './app.cache.service';
 import { getMetadata } from '@angular/fire/storage';
 import { webcrypto } from 'node:crypto';
@@ -110,7 +110,7 @@ describe('AppEventService', () => {
         getSubscriptionRole: vi.fn().mockResolvedValue('pro'),
         uid: 'test-uid'
     };
-    const mockLogger = { log: vi.fn(), error: vi.fn(), warn: vi.fn(), captureMessage: vi.fn() };
+    const mockLogger = { log: vi.fn(), error: vi.fn(), warn: vi.fn(), captureMessage: vi.fn(), captureException: vi.fn() };
     const mockFileService = {};
     const mockCompatibility = { checkCompressionSupport: vi.fn().mockReturnValue(true) };
 
@@ -144,7 +144,11 @@ describe('AppEventService', () => {
         vi.clearAllMocks();
 
         // Default mock implementations
-        mocks.sanitize.mockImplementation((json: any) => ({ sanitizedJson: json, unknownTypes: [] }));
+        mocks.sanitize.mockImplementation((json: any) => ({ sanitizedJson: json, unknownTypes: [], issues: [] }));
+        // Reset static dedupe sets between tests
+        (AppEventService as any).reportedUnknownTypes = new Map<string, number>();
+        (AppEventService as any).reportedSanitizerIssues = new Map<string, number>();
+        (AppEventService as any).reportedSanitizerEvents = new Map<string, number>();
         mocks.getEventFromJSON.mockReturnValue({
             setID: vi.fn().mockReturnThis(),
             clearActivities: vi.fn(),
@@ -227,6 +231,205 @@ describe('AppEventService', () => {
         expect(mockLogger.error).not.toHaveBeenCalled();
         expect(result).toBeTruthy();
         expect(result!.getID()).toBe('event1');
+    });
+
+    it('should warn and send to Sentry when sanitizer reports malformed activity issues', async () => {
+        const userId = 'user1';
+        const eventId = 'event1';
+        const user = { uid: userId } as any;
+        const activityId = 'activity-1';
+
+        const mockActivityData = {
+            id: activityId,
+            eventID: eventId,
+            stats: {},
+            laps: [],
+            streams: [],
+            intensityZones: [],
+            events: [{ type: 'Jump Event', data: null }]
+        };
+        const issues = [{
+            kind: 'malformed_event_payload',
+            location: 'events',
+            path: 'events[0].Jump Event',
+            type: 'Jump Event',
+            reason: 'Removed event with malformed payload'
+        }];
+
+        (collection as Mock).mockReturnValue({});
+        (collectionData as Mock).mockReturnValue(of([mockActivityData]));
+        mocks.sanitize.mockReturnValue({
+            sanitizedJson: { ...mockActivityData, events: [] },
+            unknownTypes: [],
+            issues
+        });
+
+        const activities = await firstValueFrom(service.getActivities(user, eventId));
+
+        expect(activities.length).toBe(1);
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+            '[AppEventService] Sanitized malformed activity data',
+            expect.objectContaining({
+                eventID: eventId,
+                activityID: activityId,
+                issues
+            })
+        );
+        expect(mockLogger.captureException).toHaveBeenCalledWith(
+            expect.any(Error),
+            expect.objectContaining({
+                extra: expect.objectContaining({
+                    eventID: eventId,
+                    activityID: activityId,
+                    issues
+                })
+            })
+        );
+    });
+
+    it('should keep unknown-type reporting via captureMessage without captureException', async () => {
+        const userId = 'user1';
+        const eventId = 'event1';
+        const user = { uid: userId } as any;
+        const activityId = 'activity-2';
+
+        const mockActivityData = {
+            id: activityId,
+            eventID: eventId,
+            stats: { UnknownType: 10 },
+            laps: [],
+            streams: [],
+            intensityZones: [],
+            events: []
+        };
+
+        (collection as Mock).mockReturnValue({});
+        (collectionData as Mock).mockReturnValue(of([mockActivityData]));
+        mocks.sanitize.mockReturnValue({
+            sanitizedJson: { ...mockActivityData, stats: {} },
+            unknownTypes: ['UnknownType'],
+            issues: [{
+                kind: 'unknown_data_type',
+                location: 'stats',
+                path: 'stats.UnknownType',
+                type: 'UnknownType',
+                reason: 'Removed unknown stat data type'
+            }]
+        });
+
+        const activities = await firstValueFrom(service.getActivities(user, eventId));
+
+        expect(activities.length).toBe(1);
+        expect(mockLogger.captureMessage).toHaveBeenCalledWith(
+            'Unknown Data Types in getActivities',
+            expect.objectContaining({
+                extra: expect.objectContaining({
+                    eventID: eventId,
+                    activityID: activityId,
+                    types: ['UnknownType']
+                })
+            })
+        );
+        expect(mockLogger.captureException).not.toHaveBeenCalled();
+    });
+
+    it('should cap issue payload size and include Sentry fingerprint', async () => {
+        const eventId = 'event-issues-cap';
+        const activityId = 'activity-cap';
+        const user = { uid: 'user1' } as any;
+
+        const mockActivityData = {
+            id: activityId,
+            eventID: eventId,
+            stats: {},
+            laps: [],
+            streams: [],
+            intensityZones: [],
+            events: []
+        };
+
+        const manyIssues = Array.from({ length: 25 }, (_, i) => ({
+            kind: 'malformed_event_payload',
+            location: 'events',
+            path: `events[${i}].Jump Event`,
+            type: 'Jump Event',
+            reason: 'Removed event with malformed payload'
+        }));
+
+        (collection as Mock).mockReturnValue({});
+        (collectionData as Mock).mockReturnValue(of([mockActivityData]));
+        mocks.sanitize.mockReturnValue({
+            sanitizedJson: mockActivityData,
+            unknownTypes: [],
+            issues: manyIssues
+        });
+
+        await firstValueFrom(service.getActivities(user, eventId));
+
+        expect(mockLogger.captureException).toHaveBeenCalledTimes(1);
+        expect(mockLogger.captureException).toHaveBeenCalledWith(
+            expect.any(Error),
+            expect.objectContaining({
+                fingerprint: expect.arrayContaining(['activity-sanitizer', eventId, activityId, 'malformed_event_payload']),
+                extra: expect.objectContaining({
+                    issueCount: 25,
+                    issuesTruncated: 5,
+                    issues: expect.any(Array)
+                })
+            })
+        );
+
+        const captureArgs = (mockLogger.captureException as Mock).mock.calls[0][1];
+        expect(captureArgs.extra.issues.length).toBe(20);
+    });
+
+    it('should rate-limit Sentry malformed-data reports with same summary signature', async () => {
+        const eventId = 'event-rate-limit';
+        const activityId = 'activity-rate-limit';
+        const user = { uid: 'user1' } as any;
+
+        const mockActivityData = {
+            id: activityId,
+            eventID: eventId,
+            stats: {},
+            laps: [],
+            streams: [],
+            intensityZones: [],
+            events: []
+        };
+
+        (collection as Mock).mockReturnValue({});
+        (collectionData as Mock).mockReturnValue(of([mockActivityData]));
+        mocks.sanitize
+            .mockReturnValueOnce({
+                sanitizedJson: mockActivityData,
+                unknownTypes: [],
+                issues: [{
+                    kind: 'malformed_event_payload',
+                    location: 'events',
+                    path: 'events[0].Jump Event',
+                    type: 'Jump Event',
+                    reason: 'Removed event with malformed payload'
+                }]
+            })
+            .mockReturnValueOnce({
+                sanitizedJson: mockActivityData,
+                unknownTypes: [],
+                issues: [{
+                    kind: 'malformed_event_payload',
+                    location: 'events',
+                    path: 'events[1].Jump Event',
+                    type: 'Jump Event',
+                    reason: 'Removed event with malformed payload'
+                }]
+            });
+
+        await firstValueFrom(service.getActivities(user, eventId));
+        await firstValueFrom(service.getActivities(user, eventId));
+
+        // Warn happens for new issue keys, but Sentry exception is deduped by summary signature TTL cache.
+        expect(mockLogger.warn).toHaveBeenCalledTimes(2);
+        expect(mockLogger.captureException).toHaveBeenCalledTimes(1);
     });
 
     it('should delete all event data', async () => {

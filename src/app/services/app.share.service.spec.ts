@@ -3,9 +3,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { AppShareService } from './app.share.service';
 
 const mocks = vi.hoisted(() => {
-  const toPng = vi.fn();
-  const mockSnapdom = Object.assign(vi.fn(), { toPng });
-  return { toPng, mockSnapdom };
+  const toBlob = vi.fn();
+  const mockSnapdom = Object.assign(vi.fn(), { toBlob });
+  return { toBlob, mockSnapdom };
 });
 
 vi.mock('@zumer/snapdom', () => ({
@@ -50,13 +50,11 @@ describe('AppShareService', () => {
 
   it('returns a png data URL and cleans up the cloned DOM', async () => {
     const source = document.createElement('div');
-    const img = new Image();
-    img.src = 'data:image/png;base64,abc';
-    mocks.toPng.mockResolvedValue(img);
+    mocks.toBlob.mockResolvedValue(new Blob(['abc'], { type: 'image/png' }));
 
     const result = await service.shareBenchmarkAsImage(source, { width: 800 });
 
-    expect(result).toBe('data:image/png;base64,abc');
+    expect(result).toContain('data:image/png;base64,');
     expect(document.querySelector('.benchmark-share-export')).toBeNull();
   });
 
@@ -68,11 +66,9 @@ describe('AppShareService', () => {
     source.appendChild(container);
 
     let capturedElement: HTMLElement | null = null;
-    const img = new Image();
-    img.src = 'data:image/png;base64,abc';
-    mocks.toPng.mockImplementation(async (el: Element) => {
+    mocks.toBlob.mockImplementation(async (el: Element) => {
       capturedElement = el as HTMLElement;
-      return img;
+      return new Blob(['abc'], { type: 'image/png' });
     });
 
     await service.shareBenchmarkAsImage(source, {
@@ -94,5 +90,26 @@ describe('AppShareService', () => {
     expect(watermark).toBeTruthy();
     expect(watermark?.textContent).toContain('Quantified Self');
     expect(watermark?.textContent).toContain('quantified-self.io');
+  });
+
+  it('retries with lightweight options when source decode fails', async () => {
+    const source = document.createElement('div');
+    mocks.toBlob
+      .mockImplementationOnce(async () => {
+        throw new Error('The source image cannot be decoded.');
+      })
+      .mockResolvedValueOnce(new Blob(['abc'], { type: 'image/png' }));
+
+    const result = await service.shareBenchmarkAsImage(source, {
+      width: 1080,
+      watermark: {
+        brand: 'Quantified Self',
+        timestamp: 'Jan 1, 2025',
+        url: 'quantified-self.io',
+      },
+    });
+
+    expect(result).toContain('data:image/png;base64,');
+    expect(mocks.toBlob).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,3 +1,14 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.bottom-sheet-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
 .progress-container {
   display: flex;
   flex-direction: column;
@@ -31,9 +42,4 @@
   /* Soften edges */
   height: 6px !important;
   /* Slightly thicker */
-}
-
-/* Ensure no default card margins interfere since we removed mat-card */
-:host {
-  display: block;
 }

@@ -79,7 +79,7 @@ $app-dark-theme: mat.m2-define-dark-theme((color: (primary: $dark-primary,
 // Apply global background and color based on theme
 html,
 body {
-  height: 100%;
+  // height: 100%;
   margin: 0;
 }
 
@@ -670,11 +670,38 @@ mat-table {
   /* Keep only the top corners rounded; bottom edge stays flush with viewport */
   border-radius: 20px 20px 0 0 !important;
   padding: 16px !important;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Normalize custom wrapper usage so inner content can own scrolling. */
+.mat-bottom-sheet-container>.bottom-sheet-container {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* Ensure bottom sheet scroll areas inherit the QS scrollbar styling */
 .mat-bottom-sheet-container .bottom-sheet-content {
   @extend .qs-scrollbar;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+
+  &::-webkit-scrollbar-track {
+    background: var(--mat-sys-surface);
+  }
+
+  &::-webkit-scrollbar-corner {
+    background: var(--mat-sys-surface);
+  }
+}
+
+@media (max-width: 599px) {
+  .cdk-overlay-pane.qs-bottom-sheet-container .mat-bottom-sheet-container {
+    min-width: 100%;
+    width: 100%;
+  }
 }
 
 /* Ensure Overlays (Bottom Sheets, Dialogs) are always on top of App Bars and Banners */

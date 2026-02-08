@@ -5,7 +5,12 @@ export interface ShareBenchmarkOptions {
   watermark?: { brand: string; timestamp: string; url?: string; logoUrl?: string };
   scale?: number;
   width?: number;
+  embedFonts?: boolean;
+  fast?: boolean;
+  renderTimeoutMs?: number;
 }
+
+const TRANSPARENT_PIXEL_DATA_URL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==';
 
 @Injectable({
   providedIn: 'root'
@@ -16,6 +21,9 @@ export class AppShareService {
   async shareBenchmarkAsImage(element: HTMLElement, options: ShareBenchmarkOptions = {}): Promise<string> {
     return this.zone.runOutsideAngular(async () => {
       const scale = options.scale ?? 2;
+      const embedFonts = options.embedFonts ?? true;
+      const fast = options.fast ?? false;
+      const renderTimeoutMs = options.renderTimeoutMs ?? 15000;
       const sourceNode = element;
       const clone = sourceNode.cloneNode(true) as HTMLElement;
       clone.classList.add('benchmark-share-export');
@@ -30,14 +38,20 @@ export class AppShareService {
       }
 
       if (options.watermark) {
+        let logoUrl: string | undefined;
         if (options.watermark.logoUrl) {
-          await this.loadImage(options.watermark.logoUrl);
+          const logoIsUsable = await this.loadImage(options.watermark.logoUrl);
+          if (logoIsUsable) {
+            logoUrl = options.watermark.logoUrl;
+          } else {
+            console.warn('[AppShareService] Skipping watermark logo: source image cannot be decoded.', options.watermark.logoUrl);
+          }
         }
         const watermark = document.createElement('div');
         watermark.className = 'benchmark-watermark';
         watermark.innerHTML = `
           <div class="watermark-row">
-            ${options.watermark.logoUrl ? `<img class="watermark-logo" src="${options.watermark.logoUrl}" alt="${options.watermark.brand} logo">` : ''}
+            ${logoUrl ? `<img class="watermark-logo" src="${logoUrl}" alt="${options.watermark.brand} logo">` : ''}
             <span class="watermark-brand">${options.watermark.brand}</span>
           </div>
           ${options.watermark.url ? `<span class="watermark-url">${options.watermark.url}</span>` : ''}
@@ -58,17 +72,33 @@ export class AppShareService {
       document.body.appendChild(wrapper);
 
       try {
-        await this.waitForIdle();
-
-        const image = await snapdom.toPng(clone, {
+        const primaryDataUrl = await this.renderCloneToDataUrl(clone, {
           scale,
           width: options.width,
-          backgroundColor: 'transparent',
-          embedFonts: true,
-          fast: false,
+          embedFonts,
+          fast,
+          renderTimeoutMs,
         });
+        return primaryDataUrl;
+      } catch (error) {
+        if (!this.isSourceDecodeError(error)) {
+          throw error;
+        }
 
-        return image.src;
+        // Retry once with reduced complexity for mobile decoders.
+        const watermark = clone.querySelector('.benchmark-watermark');
+        if (watermark) {
+          watermark.remove();
+        }
+        const fallbackWidth = Number.isFinite(options.width) ? Math.min(options.width!, 720) : Math.min(exportWidth, 720);
+
+        return this.renderCloneToDataUrl(clone, {
+          scale: 1,
+          width: fallbackWidth,
+          embedFonts: false,
+          fast: true,
+          renderTimeoutMs,
+        });
       } finally {
         if (wrapper.parentNode) {
           wrapper.parentNode.removeChild(wrapper);
@@ -77,21 +107,143 @@ export class AppShareService {
     });
   }
 
-  private async waitForIdle(): Promise<void> {
-    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-    if ('requestIdleCallback' in window) {
-      await new Promise<void>(resolve => (window as any).requestIdleCallback(() => resolve(), { timeout: 250 }));
-    } else {
-      await new Promise<void>(resolve => setTimeout(resolve, 50));
+  private async renderCloneToDataUrl(
+    clone: HTMLElement,
+    options: {
+      scale: number;
+      width?: number;
+      embedFonts: boolean;
+      fast: boolean;
+      renderTimeoutMs: number;
     }
+  ): Promise<string> {
+    await this.waitForIdle();
+
+    const imageBlob = await this.withTimeout(
+      snapdom.toBlob(clone, {
+        scale: options.scale,
+        width: options.width,
+        backgroundColor: 'transparent',
+        embedFonts: options.embedFonts,
+        fast: options.fast,
+        type: 'png',
+        fallbackURL: TRANSPARENT_PIXEL_DATA_URL,
+      }),
+      options.renderTimeoutMs,
+      `Benchmark image rendering timed out after ${options.renderTimeoutMs}ms.`
+    );
+
+    return this.blobToDataUrl(imageBlob);
   }
 
-  private async loadImage(src: string): Promise<void> {
-    await new Promise<void>((resolve) => {
+  private async waitForIdle(): Promise<void> {
+    await this.waitForAnimationFrameWithTimeout();
+    await this.waitForIdleWithTimeout();
+  }
+
+  private waitForAnimationFrameWithTimeout(timeoutMs: number = 120): Promise<void> {
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+
+      const timeoutId = window.setTimeout(finish, timeoutMs);
+      requestAnimationFrame(() => {
+        window.clearTimeout(timeoutId);
+        finish();
+      });
+    });
+  }
+
+  private waitForIdleWithTimeout(timeoutMs: number = 300): Promise<void> {
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      const timeoutId = window.setTimeout(finish, timeoutMs);
+
+      if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(() => {
+          window.clearTimeout(timeoutId);
+          finish();
+        }, { timeout: 250 });
+        return;
+      }
+
+      window.setTimeout(() => {
+        window.clearTimeout(timeoutId);
+        finish();
+      }, 50);
+    });
+  }
+
+  private withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      let settled = false;
+      const finishResolve = (value: T) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      };
+      const finishReject = (error: unknown) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        reject(error);
+      };
+      const timeoutId = window.setTimeout(() => finishReject(new Error(message)), timeoutMs);
+
+      promise.then(finishResolve).catch(finishReject);
+    });
+  }
+
+  private blobToDataUrl(blob: Blob): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Failed to read generated image blob.'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  private async loadImage(src: string): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (result: boolean) => {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      };
+      const timeoutId = window.setTimeout(() => finish(false), 4000);
       const img = new Image();
       img.crossOrigin = 'anonymous';
-      img.onload = () => resolve();
-      img.onerror = () => resolve();
+      img.onload = async () => {
+        if (typeof img.decode === 'function') {
+          try {
+            await img.decode();
+            window.clearTimeout(timeoutId);
+            finish(true);
+            return;
+          } catch {
+            window.clearTimeout(timeoutId);
+            finish(false);
+            return;
+          }
+        }
+        window.clearTimeout(timeoutId);
+        finish(true);
+      };
+      img.onerror = () => {
+        window.clearTimeout(timeoutId);
+        finish(false);
+      };
       img.src = src;
     });
   }
@@ -105,5 +257,10 @@ export class AppShareService {
       Array.from(el.children).forEach(child => apply(child));
     };
     apply(targetEl);
+  }
+
+  private isSourceDecodeError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false;
+    return /source image cannot be decoded/i.test(error.message);
   }
 }

@@ -137,6 +137,26 @@ describe('AdminChangelogComponent', () => {
         expect(component.editingPost).toBeNull(); // Should reset
     });
 
+    it('should create preview post when date is a string', () => {
+        component.form.patchValue({
+            date: '2025-02-07'
+        });
+
+        const preview = component.previewPost;
+        expect(preview.date).toBeInstanceOf(Timestamp);
+        expect(Number.isNaN(preview.date.toDate().getTime())).toBe(false);
+    });
+
+    it('should normalize timestamp-like date objects when editing', () => {
+        const rawTimestampPost: ChangelogPost = {
+            ...mockChangelog,
+            date: { seconds: 1735689600 } as unknown as Timestamp
+        };
+
+        component.edit(rawTimestampPost);
+        expect(component.form.get('date')?.value instanceof Date).toBe(true);
+    });
+
     it('should validate form before saving', async () => {
         component.createNew();
         component.form.patchValue({ title: '' }); // Invalid
@@ -144,6 +164,23 @@ describe('AdminChangelogComponent', () => {
         await component.save();
 
         expect(whatsNewServiceSpy.createChangelog).not.toHaveBeenCalled();
+    });
+
+    it('should block save when date cannot be normalized', async () => {
+        component.createNew();
+        component.form.patchValue({
+            title: 'New Feature',
+            description: 'Added something cool',
+            date: { unexpected: true },
+            type: 'minor',
+            version: '1.1.0',
+            published: true
+        });
+
+        await component.save();
+
+        expect(whatsNewServiceSpy.createChangelog).not.toHaveBeenCalled();
+        expect(component.form.get('date')?.hasError('invalid')).toBe(true);
     });
 
     it('should delete a changelog', async () => {

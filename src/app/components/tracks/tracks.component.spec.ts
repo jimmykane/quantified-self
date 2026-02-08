@@ -53,6 +53,7 @@ describe('TracksComponent', () => {
             addLayer: vi.fn(),
             getSource: vi.fn().mockReturnValue(null),
             getLayer: vi.fn().mockReturnValue(null),
+            flyTo: vi.fn(),
             setStyle: vi.fn(),
             once: vi.fn().mockImplementation((event, cb) => {
                 if (event === 'style.load') cb();
@@ -154,6 +155,45 @@ describe('TracksComponent', () => {
     });
 
     describe('Initialization robustness', () => {
+        it('should skip geolocation flyTo when track bounds were already applied', () => {
+            const originalGeolocation = navigator.geolocation;
+            let successCallback: ((position: any) => void) | undefined;
+            try {
+                Object.defineProperty(navigator, 'geolocation', {
+                    configurable: true,
+                    value: {
+                        getCurrentPosition: vi.fn().mockImplementation((success: (position: any) => void) => {
+                            successCallback = success;
+                        })
+                    }
+                });
+
+                (component as any).centerMapToStartingLocation(mockMap);
+                (component as any).hasTrackBoundsBeenApplied = true;
+                successCallback?.({
+                    coords: {
+                        longitude: 10,
+                        latitude: 20
+                    }
+                });
+
+                expect(mockMap.flyTo).not.toHaveBeenCalled();
+            } finally {
+                Object.defineProperty(navigator, 'geolocation', {
+                    configurable: true,
+                    value: originalGeolocation
+                });
+            }
+        });
+
+        it('should wait for authenticated user before loading tracks', async () => {
+            const logger = TestBed.inject(LoggerService) as any;
+            await (component as any).loadTracksMapForUserByDateRange(undefined, mockMap, DateRanges.thisWeek, []);
+
+            expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+            expect(logger.warn).toHaveBeenCalledWith('[TracksComponent] Skipping track load because user is undefined.');
+        });
+
         it('should add mapbox-dem source before setting terrain', async () => {
             mockMap.isStyleLoaded.mockReturnValue(true);
             await component.ngOnInit();

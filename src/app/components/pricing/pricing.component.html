@@ -5,31 +5,71 @@
     <p>Verifying subscription...</p>
   </div>
   } @else {
-  <h1>{{ currentRole === 'pro' ? 'Your Subscription' : 'Choose Your Plan' }}</h1>
+  <h1>{{ currentRole === 'pro' || currentRole === 'basic' ? 'Your Subscription' : 'Choose Your Plan' }}</h1>
 
-  <div *ngIf="!currentRole || currentRole === 'free'" class="restore-section">
-    <div class="restore-alert">
-      <p>Already have an active subscription?</p>
-      <button mat-stroked-button color="accent" (click)="restorePurchases()" [disabled]="isLoading">
-        @if (isLoading) {
-        <mat-spinner diameter="20"></mat-spinner>
-        } @else {
-        Restore Access
-        }
-      </button>
-    </div>
-  </div>
-
-  @if (currentRole === 'pro') {
+  @if (currentRole === 'pro' || currentRole === 'basic') {
   <div class="manage-subscription-container">
-    <mat-card class="product-card">
-      <mat-card-header>
-        <mat-card-title>Pro Membership</mat-card-title>
-        <mat-card-subtitle>Active & Verified</mat-card-subtitle>
-      </mat-card-header>
+    <mat-card class="product-card" [class.pro-card]="currentRole === 'pro'" [class.basic-card]="currentRole === 'basic'">
+      <div class="manage-header">
+        <div class="manage-heading">
+          <div class="manage-title">{{ currentRole === 'pro' ? 'Pro Membership' : 'Basic Membership' }}</div>
+          <div class="manage-subtitle">{{ currentRole === 'pro' ? 'Full access plan' : 'Essential access plan' }}</div>
+        </div>
+        @if (subscriptionSummary$ | async; as summary) {
+        <mat-chip-set class="status-chips">
+          <mat-chip color="primary" selected>{{ summary.isTrialing ? 'Trialing' : 'Active' }}</mat-chip>
+          @if (summary.cancelAtPeriodEnd) {
+          <mat-chip color="warn" selected>Ends at period end</mat-chip>
+          }
+        </mat-chip-set>
+        } @else {
+        <span class="status-loading">Syncing...</span>
+        }
+      </div>
       <mat-card-content class="manage-content">
-        <p>Thank you for being a pro member. You have full access to all features.</p>
-        <div class="price-section">
+        @if (currentRole === 'pro') {
+        <p class="manage-description">Your Pro membership does more than unlock features. It helps fund faster updates and keeps Quantified Self a strong alternative to big-tech platforms.</p>
+        } @else {
+        <p class="manage-description">Your Basic membership gives you room to upload and check your analysis while supporting independent, privacy-first development.</p>
+        }
+
+        @if (subscriptionSummary$ | async; as summary) {
+        <div class="subscription-meta-grid">
+          <div class="meta-item">
+            <div class="meta-label">{{ summary.cancelAtPeriodEnd ? 'Ends on' : 'Renews on' }}</div>
+            <div class="meta-value">
+              @if (summary.currentPeriodEnd) {
+              {{ summary.currentPeriodEnd | date:'mediumDate' }}
+              } @else {
+              Date unavailable
+              }
+            </div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-label">Cancellation</div>
+            <div class="meta-value">{{ summary.cancelAtPeriodEnd ? 'Will end at period end' : 'Renews automatically' }}</div>
+          </div>
+        </div>
+        } @else {
+        <p class="subscription-unavailable">Subscription details are syncing. Refresh in a moment.</p>
+        }
+
+        <div class="price-section manage-actions">
+          @if (currentRole === 'basic') {
+          <p class="upgrade-hint">Unlock unlimited activities and watch auto-sync with Pro.</p>
+          <div class="manage-actions-buttons">
+            <button mat-stroked-button (click)="manageSubscription()" [disabled]="isLoading">
+              Manage Billing
+            </button>
+            <button mat-flat-button color="primary" (click)="upgradeToPro()" [disabled]="isLoading">
+              @if (isLoading) {
+              <mat-spinner diameter="20"></mat-spinner>
+              } @else {
+              Upgrade to Pro
+              }
+            </button>
+          </div>
+          } @else {
           <button mat-flat-button color="primary" (click)="manageSubscription()" [disabled]="isLoading">
             @if (isLoading) {
             <mat-spinner diameter="20"></mat-spinner>
@@ -37,6 +77,7 @@
             Manage Subscription
             }
           </button>
+          }
         </div>
       </mat-card-content>
     </mat-card>
@@ -49,41 +90,53 @@
       [class.pro-card]="product.metadata['role'] === 'pro'" [class.basic-card]="product.metadata['role'] === 'basic'"
       [class.free-card]="product.metadata['role'] === 'free'">
 
-      @if (product.metadata['role'] === 'pro') {
-      <div class="popular-ribbon pro-ribbon">Best Value</div>
-      }
-
       <mat-card-header>
         <mat-card-title>
+          @if (product.metadata['role'] === 'free') {
+          Starter
+          } @else if (product.metadata['role'] === 'basic') {
+          Basic
+          } @else if (product.metadata['role'] === 'pro') {
+          Pro
+          } @else {
           {{ product.name }}
+          }
         </mat-card-title>
+        @if (product.metadata['role'] === 'free') {
+        <mat-card-subtitle>Everything you need to get started. Free forever.</mat-card-subtitle>
+        } @else if (product.metadata['role'] === 'basic') {
+        <mat-card-subtitle>For consistent training and deeper tracking.</mat-card-subtitle>
+        } @else if (product.metadata['role'] === 'pro') {
+        <mat-card-subtitle>Full automation and unlimited tracking.</mat-card-subtitle>
+        } @else if (product.description && product.description !== product.name) {
         <mat-card-subtitle>{{ product.description }}</mat-card-subtitle>
+        }
       </mat-card-header>
       <mat-card-content>
         <div class="features-list">
           @if (product.metadata['role'] === 'free') {
           <ul>
+            <li><mat-icon style="color: grey">check</mat-icon> Up to 10 activities</li>
             <li><mat-icon style="color: grey">check</mat-icon> Manual uploads</li>
-            <li><mat-icon style="color: grey">check</mat-icon> Basic analysis</li>
-            <li><mat-icon color="warn">close</mat-icon> No auto-sync</li>
+            <li><mat-icon style="color: grey">check</mat-icon> Core analysis tools</li>
           </ul>
           } @else if (product.metadata['role'] === 'basic') {
           <ul>
-            <li><mat-icon color="accent">check</mat-icon> Track up to 100 activities</li>
-            <li><mat-icon color="warn">close</mat-icon> Manual uploads only</li>
-            <li><mat-icon color="primary">dns</mat-icon> Help keep the project running</li>
+            <li><mat-icon color="accent">check</mat-icon> Up to 100 activities</li>
+            <li><mat-icon color="accent">check</mat-icon> Manual uploads</li>
+            <li><mat-icon color="primary">favorite</mat-icon> Supports independent, privacy-first development</li>
           </ul>
           } @else if (product.metadata['role'] === 'pro') {
           <ul>
-            <li><mat-icon color="primary">check_circle</mat-icon> <strong>No limits</strong>, ever</li>
+            <li><mat-icon color="primary">check_circle</mat-icon> Unlimited activities</li>
             <li><mat-icon color="primary">check_circle</mat-icon> Auto-sync from your watch</li>
-            <li><mat-icon color="warn">favorite</mat-icon> Power the next big update</li>
+            <li><mat-icon color="warn">favorite</mat-icon> Helps fund faster feature releases</li>
           </ul>
           }
         </div>
 
 
-        <div style="flex-grow: 1;"></div>
+        <div class="card-spacer"></div>
         <!-- Since we split into virtual products, each product has exactly 1 price usually -->
         <div *ngFor="let price of product.prices" class="price-section">
           <h3 class="price">
@@ -119,31 +172,19 @@
           } @else {
           <!-- New User (Role is null) choosing Free -->
           <button mat-stroked-button (click)="selectFreeTier()" [disabled]="isLoading">
-            Choose Free Tier
+            Start Free
           </button>
           }
           } @else {
-          <!-- Use 'Upgrade' if we are Basic looking at Pro -->
-          @if (currentRole === 'basic' && product.metadata['role'] === 'pro') {
-          <button mat-flat-button color="accent" (click)="subscribe(price)" [disabled]="isLoading" class="upgrade-btn">
-            @if (loadingPriceId === price.id) {
-            <mat-spinner diameter="20"></mat-spinner>
-            } @else {
-            Upgrade to Pro
-            }
-          </button>
-          }
-          <!-- Otherwise 'Subscribe' (for new users or Free users upgrading to anything) -->
-          @else {
+          <!-- Subscribe for new users or free users upgrading to paid plans -->
           <button mat-flat-button color="primary" (click)="subscribe(price)" [disabled]="isLoading"
             class="subscribe-btn">
             @if (loadingPriceId === price.id) {
             <mat-spinner diameter="20"></mat-spinner>
             } @else {
-            {{ price.recurring ? (product.metadata['role'] | titlecase) : 'Buy Now' }}
+            {{ price.recurring ? 'Choose ' + (product.metadata['role'] | titlecase) : 'Buy Now' }}
             }
           </button>
-          }
           }
           }
 

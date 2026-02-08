@@ -19,6 +19,7 @@ import { DomSanitizer } from '@angular/platform-browser';
 import { of, Subject } from 'rxjs';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { ChangeDetectorRef, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 
@@ -86,6 +87,7 @@ describe('AppComponent', () => {
             imports: [
                 MatSidenavModule,
                 MatTabsModule,
+                MatTooltipModule,
                 NoopAnimationsModule,
                 RouterModule
             ],
@@ -139,13 +141,13 @@ describe('AppComponent', () => {
         expect(component['analyticsService']).toBeTruthy();
     });
 
-    it('should show navigation for free users on pricing page', () => {
+    it('should show navigation for free users on subscriptions page', () => {
         // Mock user as free
         component['currentUser'] = { stripeRole: undefined };
         component.onboardingCompleted = true;
 
         // Mock router URL
-        mockRouter.url = '/pricing';
+        mockRouter.url = '/subscriptions';
 
         expect(component.showNavigation).toBe(true);
     });
@@ -161,13 +163,13 @@ describe('AppComponent', () => {
         expect(component.showNavigation).toBe(true);
     });
 
-    it('should show navigation for basic users on pricing page', () => {
+    it('should show navigation for basic users on subscriptions page', () => {
         // Mock user as basic
         component['currentUser'] = { stripeRole: 'basic' };
         component.onboardingCompleted = true;
 
         // Mock router URL
-        mockRouter.url = '/pricing';
+        mockRouter.url = '/subscriptions';
 
         expect(component.showNavigation).toBe(true);
     });

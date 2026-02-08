@@ -61,8 +61,18 @@ const mockLoggerService = {
 describe('TracksMapManager', () => {
     let manager: TracksMapManager;
     let zone: NgZone;
+    let mapEventHandlers: Record<string, Array<(...args: any[]) => void>>;
 
     beforeEach(() => {
+        mapEventHandlers = {};
+        mockMap.on.mockImplementation((event: string, handler: (...args: any[]) => void) => {
+            mapEventHandlers[event] = mapEventHandlers[event] || [];
+            mapEventHandlers[event].push(handler);
+        });
+        mockMap.off.mockImplementation((event: string, handler: (...args: any[]) => void) => {
+            mapEventHandlers[event] = (mapEventHandlers[event] || []).filter(h => h !== handler);
+        });
+
         zone = new MockNgZone();
         manager = new TracksMapManager(zone, mockEventColorService, mockMapStyleService, mockLoggerService as any);
         manager.setMap(mockMap, mockMapboxGL);
@@ -75,6 +85,11 @@ describe('TracksMapManager', () => {
         mockEventColorService.getColorForActivityTypeByActivityTypeGroup = vi.fn().mockReturnValue('#ff0000');
         mockMapStyleService.adjustColorForTheme = vi.fn().mockReturnValue('#adjustedColor');
     });
+
+    const emitMapEvent = (event: string) => {
+        const handlers = mapEventHandlers[event] || [];
+        handlers.forEach(handler => handler());
+    };
 
     it('should be created', () => {
         expect(manager).toBeTruthy();
@@ -129,6 +144,25 @@ describe('TracksMapManager', () => {
             manager.addTrackFromActivity(mockActivity, coordinates);
 
             expect(mockMap.addSource).not.toHaveBeenCalled();
+        });
+
+        it('should restore track layers after style reload', () => {
+            const mockActivity = {
+                getID: () => '123',
+                type: 'running'
+            };
+            const coordinates = [[0, 0], [1, 1]];
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+
+            manager.addTrackFromActivity(mockActivity, coordinates);
+            expect(mockMap.addSource).toHaveBeenCalledTimes(1);
+            expect(mockMap.addLayer).toHaveBeenCalledTimes(2);
+
+            emitMapEvent('style.load');
+
+            expect(mockMap.addSource).toHaveBeenCalledTimes(2);
+            expect(mockMap.addLayer).toHaveBeenCalledTimes(4);
         });
     });
 

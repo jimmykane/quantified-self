@@ -11,7 +11,6 @@
 
 .bottom-sheet-content {
     /* Removed max-height here, let flex container handle it */
-    overflow-y: auto;
     flex: 1;
     /* Fill remaining space */
     padding: 0 1rem 1rem 1rem;

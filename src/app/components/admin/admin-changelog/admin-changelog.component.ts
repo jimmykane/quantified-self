@@ -68,11 +68,12 @@ export class AdminChangelogComponent implements OnDestroy {
 
     get previewPost(): ChangelogPost {
         const values = this.form.getRawValue();
+        const previewDate = this.coerceDate(values.date);
         return {
             id: 'preview',
             title: values.title || 'Release Title',
             description: values.description || '',
-            date: values.date ? Timestamp.fromDate(values.date) : Timestamp.now(),
+            date: previewDate ? Timestamp.fromDate(previewDate) : Timestamp.now(),
             type: values.type || 'minor',
             version: values.version || '',
             published: values.published ?? false,
@@ -87,10 +88,54 @@ export class AdminChangelogComponent implements OnDestroy {
 
     // Helper for template to handle Timestamp | Date
     postDate(post: ChangelogPost): Date {
-        if (post.date instanceof Timestamp) {
-            return post.date.toDate();
+        const normalizedDate = this.coerceDate(post.date);
+        return normalizedDate ?? new Date();
+    }
+
+    private coerceDate(value: unknown): Date | null {
+        if (!value) return null;
+
+        if (value instanceof Date) {
+            return Number.isNaN(value.getTime()) ? null : value;
         }
-        return post.date as unknown as Date;
+
+        if (value instanceof Timestamp) {
+            const date = value.toDate();
+            return Number.isNaN(date.getTime()) ? null : date;
+        }
+
+        if (typeof value === 'object') {
+            const dateLike = value as {
+                toDate?: () => Date;
+                seconds?: number;
+                _seconds?: number;
+            };
+
+            if (typeof dateLike.toDate === 'function') {
+                const date = dateLike.toDate();
+                if (!(date instanceof Date)) return null;
+                return Number.isNaN(date.getTime()) ? null : date;
+            }
+
+            if (typeof dateLike.seconds === 'number') {
+                const date = new Date(dateLike.seconds * 1000);
+                return Number.isNaN(date.getTime()) ? null : date;
+            }
+
+            if (typeof dateLike._seconds === 'number') {
+                const date = new Date(dateLike._seconds * 1000);
+                return Number.isNaN(date.getTime()) ? null : date;
+            }
+
+            return null;
+        }
+
+        if (typeof value !== 'string' && typeof value !== 'number') {
+            return null;
+        }
+
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? null : date;
     }
 
     ngOnDestroy() {
@@ -133,6 +178,12 @@ export class AdminChangelogComponent implements OnDestroy {
     async save() {
         if (this.form.invalid) return;
 
+        const normalizedDate = this.coerceDate(this.form.get('date')?.value);
+        if (!normalizedDate) {
+            this.form.get('date')?.setErrors({ invalid: true });
+            return;
+        }
+
         this.saving = true;
         try {
             const formData = this.form.value;
@@ -140,7 +191,7 @@ export class AdminChangelogComponent implements OnDestroy {
             const payload: Partial<ChangelogPost> = {
                 title: formData.title,
                 description: formData.description,
-                date: formData.date, // Service should handle Timestamp conversion if needed, but Firestore SDK usually handles Date objects fine
+                date: Timestamp.fromDate(normalizedDate),
                 type: formData.type,
                 version: formData.version || null,
                 published: formData.published

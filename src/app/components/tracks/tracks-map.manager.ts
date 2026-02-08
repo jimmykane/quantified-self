@@ -1,6 +1,6 @@
 import { NgZone } from '@angular/core';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
-import { ActivityTypes, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES, AppThemes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, AppThemes } from '@sports-alliance/sports-lib';
 import { MapStyleService } from '../../services/map-style.service';
 import { LoggerService } from '../../services/logger.service';
 
@@ -8,6 +8,8 @@ export class TracksMapManager {
     private map: any; // Mapbox GL map instance
     private activeLayerIds: string[] = []; // Store IDs of added layers/sources
     private mapboxgl: any; // Mapbox GL JS library reference
+    private tracksByActivityId = new Map<string, { activity: any; coordinates: number[][]; baseColor: string }>();
+    private styleLoadListenerAttached = false;
     private terrainControl: any;
     private pendingTerrainToggle: { enable: boolean; animate: boolean } | null = null;
     private pendingTerrainListenerAttached = false;
@@ -24,6 +26,7 @@ export class TracksMapManager {
     public setMap(map: any, mapboxgl: any) {
         this.map = map;
         this.mapboxgl = mapboxgl;
+        this.attachStyleReloadHandler();
     }
 
     public setIsDarkTheme(isDark: boolean) {
@@ -49,69 +52,57 @@ export class TracksMapManager {
     public addTrackFromActivity(activity: any, coordinates: number[][]) {
         if (!this.map || !coordinates || coordinates.length <= 1) return;
 
-        const activityId = activity.getID() ? activity.getID() : `temp-${Date.now()}-${Math.random()}`;
+        const validCoordinates = coordinates
+            .filter((coordinate) =>
+                Array.isArray(coordinate)
+                && coordinate.length >= 2
+                && Number.isFinite(coordinate[0])
+                && Number.isFinite(coordinate[1])
+                && Math.abs(coordinate[0]) <= 180
+                && Math.abs(coordinate[1]) <= 90
+            )
+            .map((coordinate) => [coordinate[0], coordinate[1]]);
+
+        if (validCoordinates.length <= 1) {
+            this.logger.warn('[TracksMapManager] Skipping track with insufficient valid coordinates.', {
+                activityId: activity?.getID?.()
+            });
+            return;
+        }
+
+        const rawActivityId = activity?.getID?.() ? String(activity.getID()) : `temp-${Date.now()}-${Math.random()}`;
+        const activityId = this.sanitizeLayerId(rawActivityId);
         const sourceId = `track-source-${activityId}`;
         const layerId = `track-layer-${activityId}`;
         const glowLayerId = `track-layer-glow-${activityId}`;
-        const baseColor = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activity.type);
-        const color = this.mapStyleService.adjustColorForTheme(baseColor, this.isDarkTheme ? AppThemes.Dark : AppThemes.Normal);
+        const colorInfo = this.resolveTrackColors(activity?.type);
+        this.tracksByActivityId.set(activityId, {
+            activity,
+            coordinates: validCoordinates,
+            baseColor: colorInfo.baseColor
+        });
 
         this.zone.runOutsideAngular(() => {
-            // Check duplicates inside zone to be safe, though outside is also fine.
-            // But we must wrap the map calls in try/catch for style loading issues.
             try {
-                if (this.map.getSource(sourceId)) return;
-
-                this.map.addSource(sourceId, {
-                    type: 'geojson',
-                    data: {
-                        type: 'Feature',
-                        properties: {},
-                        geometry: {
-                            type: 'LineString',
-                            coordinates: coordinates
-                        }
-                    }
+                this.ensureTrackSource(sourceId, validCoordinates);
+                this.ensureTrackLayer(glowLayerId, sourceId, colorInfo.adjustedColor, {
+                    'line-width': 6,
+                    'line-blur': 3,
+                    'line-opacity': 0.6
+                });
+                this.ensureTrackLayer(layerId, sourceId, colorInfo.adjustedColor, {
+                    'line-width': 2.5,
+                    'line-opacity': 0.9
                 });
 
-                // Add Glow Layer
-                this.map.addLayer({
-                    id: glowLayerId,
-                    type: 'line',
-                    source: sourceId,
-                    layout: { 'line-join': 'round', 'line-cap': 'round' },
-                    paint: {
-                        'line-color': color,
-                        'line-width': 6,
-                        'line-blur': 3,
-                        'line-opacity': 0.6,
-                        'line-emissive-strength': 1.0 // Ensures visibility on Mapbox Standard Night
-                    }
-                });
-
-                // Add Main Track Layer
-                this.map.addLayer({
-                    id: layerId,
-                    type: 'line',
-                    source: sourceId,
-                    layout: { 'line-join': 'round', 'line-cap': 'round' },
-                    paint: {
-                        'line-color': color,
-                        'line-width': 2.5,
-                        'line-opacity': 0.9,
-                        'line-emissive-strength': 1.0 // Ensures visibility on Mapbox Standard Night
-                    }
-                });
-
-                this.activeLayerIds.push(layerId);
-                this.activeLayerIds.push(glowLayerId);
-                this.activeLayerIds.push(sourceId);
-                this.trackLayerBaseColors.set(layerId, baseColor);
-                this.trackLayerBaseColors.set(glowLayerId, baseColor);
+                this.rememberActiveId(layerId);
+                this.rememberActiveId(glowLayerId);
+                this.rememberActiveId(sourceId);
+                this.trackLayerBaseColors.set(layerId, colorInfo.baseColor);
+                this.trackLayerBaseColors.set(glowLayerId, colorInfo.baseColor);
 
             } catch (error: any) {
                 if (error?.message?.includes('Style is not done loading')) {
-                    // console.log('Style loading in progress, retrying track...');
                     this.map.once('style.load', () => this.addTrackFromActivity(activity, coordinates));
                 } else {
                     this.logger.warn('Failed to add track layer:', error);
@@ -137,6 +128,7 @@ export class TracksMapManager {
 
             this.activeLayerIds = [];
             this.trackLayerBaseColors.clear();
+            this.tracksByActivityId.clear();
         });
     }
 
@@ -280,6 +272,92 @@ export class TracksMapManager {
         this.map.on('load', tryApply);
         this.map.on('idle', tryApply);
         tryApply();
+    }
+
+    private attachStyleReloadHandler() {
+        if (!this.map || this.styleLoadListenerAttached || !this.map.on) return;
+        this.styleLoadListenerAttached = true;
+
+        this.map.on('style.load', () => {
+            this.restoreTracksAfterStyleReload();
+        });
+    }
+
+    private restoreTracksAfterStyleReload() {
+        if (!this.map || this.tracksByActivityId.size === 0) return;
+
+        this.zone.runOutsideAngular(() => {
+            this.tracksByActivityId.forEach(({ activity, coordinates }) => {
+                this.addTrackFromActivity(activity, coordinates);
+            });
+            this.refreshTrackColors();
+        });
+    }
+
+    private ensureTrackSource(sourceId: string, coordinates: number[][]) {
+        const sourceData = {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+                type: 'LineString',
+                coordinates
+            }
+        };
+
+        const source = this.map.getSource(sourceId);
+        if (!source) {
+            this.map.addSource(sourceId, {
+                type: 'geojson',
+                data: sourceData
+            });
+            return;
+        }
+
+        if (typeof source.setData === 'function') {
+            source.setData(sourceData);
+        }
+    }
+
+    private ensureTrackLayer(layerId: string, sourceId: string, color: string, paintOverrides: Record<string, number>) {
+        if (this.map.getLayer(layerId)) return;
+
+        this.map.addLayer({
+            id: layerId,
+            type: 'line',
+            source: sourceId,
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: {
+                'line-color': color,
+                ...paintOverrides,
+                'line-emissive-strength': 1.0
+            }
+        });
+    }
+
+    private sanitizeLayerId(activityId: string): string {
+        const sanitized = activityId.replace(/[^a-zA-Z0-9_-]/g, '-');
+        if (sanitized.length > 0) return sanitized;
+        return `track-${Date.now()}`;
+    }
+
+    private isHexColor(value: string | undefined): value is string {
+        if (!value) return false;
+        return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value.trim());
+    }
+
+    private resolveTrackColors(activityType: ActivityTypes | undefined): { baseColor: string; adjustedColor: string } {
+        const fallbackColor = '#2ca3ff';
+        const maybeBaseColor = activityType ? this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType) : undefined;
+        const baseColor = this.isHexColor(maybeBaseColor) ? maybeBaseColor : fallbackColor;
+        const adjusted = this.mapStyleService.adjustColorForTheme(baseColor, this.isDarkTheme ? AppThemes.Dark : AppThemes.Normal);
+        const adjustedColor = this.isHexColor(adjusted) ? adjusted : fallbackColor;
+        return { baseColor, adjustedColor };
+    }
+
+    private rememberActiveId(id: string) {
+        if (!this.activeLayerIds.includes(id)) {
+            this.activeLayerIds.push(id);
+        }
     }
 
     public addControl(control: any, position?: string) {

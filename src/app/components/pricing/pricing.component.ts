@@ -6,13 +6,14 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatBadgeModule } from '@angular/material/badge';
+import { MatListModule } from '@angular/material/list';
 import { AppPaymentService, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { Auth } from '@angular/fire/auth';
 import { LoggerService } from '../../services/logger.service';
-import { Observable, map } from 'rxjs';
+import { Observable, firstValueFrom, map } from 'rxjs';
 import { StripeRole } from '../../models/stripe-role.model';
 import { Router } from '@angular/router';
 
@@ -20,12 +21,18 @@ import { environment } from '../../../environments/environment';
 
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
-import { firstValueFrom } from 'rxjs';
+
+interface SubscriptionSummary {
+    status: StripeSubscription['status'];
+    cancelAtPeriodEnd: boolean;
+    currentPeriodEnd: Date | null;
+    isTrialing: boolean;
+}
 
 @Component({
     selector: 'app-pricing',
     standalone: true,
-    imports: [CommonModule, MatCardModule, MatButtonModule, MatProgressSpinnerModule, MatIconModule, MatChipsModule, MatBadgeModule],
+    imports: [CommonModule, MatCardModule, MatButtonModule, MatProgressSpinnerModule, MatIconModule, MatChipsModule, MatBadgeModule, MatListModule],
     templateUrl: './pricing.component.html',
     styleUrls: ['./pricing.component.scss']
 })
@@ -36,6 +43,8 @@ export class PricingComponent implements OnInit, OnDestroy {
     currentRole: StripeRole | null = null;
     isLoading = false;
     loadingPriceId: string | null = null;
+    activeSubscriptions$: Observable<StripeSubscription[]> | null = null;
+    subscriptionSummary$: Observable<SubscriptionSummary | null> | null = null;
 
     private platformId = inject(PLATFORM_ID);
     private authService = inject(AppAuthService);
@@ -86,14 +95,10 @@ export class PricingComponent implements OnInit, OnDestroy {
         this.isLoadingRole = false;
 
         // Reactive update: specific to subscription changes
-        // When the subscriptions collection updates (Stripe extension sync), 
+        // When the subscriptions collection updates (Stripe extension sync),
         // we force-refresh the user token to get the new claims (set by Cloud Function).
-        this.activeSubscriptions$ = this.paymentService.getUserSubscriptions().pipe(
+        const subscriptions$ = this.paymentService.getUserSubscriptions().pipe(
             map(subs => {
-                // Trigger token refresh in background when subs change
-                // distinctUntilChanged handling is implicit via Firestore subscription emission behavior usually,
-                // but checking if role actually matches current might be good optimization.
-                // For now, simple trigger is robust.
                 this.userService.getSubscriptionRole().then(newRole => {
                     if (this.currentRole !== newRole) {
                         this.currentRole = newRole;
@@ -101,6 +106,11 @@ export class PricingComponent implements OnInit, OnDestroy {
                 });
                 return subs.filter(sub => sub.role !== 'free');
             })
+        );
+
+        this.activeSubscriptions$ = subscriptions$;
+        this.subscriptionSummary$ = subscriptions$.pipe(
+            map(subs => this.buildSubscriptionSummary(subs))
         );
 
         // Reset loading state if user returns to the tab (e.g. from Stripe Checkout via back button)
@@ -125,7 +135,7 @@ export class PricingComponent implements OnInit, OnDestroy {
 
     async subscribe(price: any) {
         if (!this.authService.currentUser) {
-            this.router.navigate(['/login'], { queryParams: { returnUrl: '/pricing' } });
+            this.router.navigate(['/login'], { queryParams: { returnUrl: this.getReturnUrl() } });
             return;
         }
 
@@ -138,8 +148,6 @@ export class PricingComponent implements OnInit, OnDestroy {
         // They must manage/swap their existing subscription via the Portal.
         if (this.currentRole === 'pro' || this.currentRole === 'basic') {
             await this.manageSubscription();
-            // If we are back here, it means manageSubscription failed or was cancelled/completed
-            // (though success usually redirects). We must clear the local loading state if isLoading is false.
             if (!this.isLoading) {
                 this.loadingPriceId = null;
             }
@@ -158,10 +166,8 @@ export class PricingComponent implements OnInit, OnDestroy {
         } catch (error) {
             const errorMessage = (error as Error).message || '';
             if (errorMessage === 'User cancelled redirection to portal.') {
-                // User cancelled the dialog, just stop loading
                 this.logger.log('User cancelled subscription management.');
             } else if (errorMessage.startsWith('SUBSCRIPTION_RESTORED:')) {
-                // Existing subscription was linked, show success message
                 const role = errorMessage.split(':')[1];
                 this.showSubscriptionRestoredDialog(role);
             } else {
@@ -207,26 +213,49 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
     }
 
+    async upgradeToPro() {
+        if (this.currentRole !== 'basic') {
+            await this.manageSubscription();
+            return;
+        }
+
+        const confirmed = await firstValueFrom(
+            this.dialog.open(ConfirmationDialogComponent, {
+                data: {
+                    title: 'Upgrade to Pro',
+                    message: 'You will be redirected to our secure billing portal to switch from Basic to Pro.',
+                    confirmText: 'Upgrade to Pro',
+                    cancelText: 'Cancel'
+                }
+            }).afterClosed()
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        this.analyticsService.logManageSubscription();
+        this.isLoading = true;
+        try {
+            await this.paymentService.manageSubscriptions();
+        } catch (error) {
+            this.logger.error('Error redirecting to upgrade flow:', error);
+            alert('Failed to open billing portal. Please try again.');
+            this.isLoading = false;
+        }
+    }
+
     async selectFreeTier() {
         if (!this.authService.currentUser) {
-            this.router.navigate(['/login']);
+            this.router.navigate(['/login'], { queryParams: { returnUrl: this.getReturnUrl() } });
             return;
         }
 
         this.isLoading = true;
         try {
-            // We need the full user object to pass to setFreeTier.
-            // We can get it from userService.getUserByID or via the authService observable if we had it here.
-            // But simpler: just get the uid and let the service handle it? 
-            // The method signature I added expects 'User' object.
-            // Let's fetch it quickly or assume we have it via a subscription if we inject authService properly.
-            // Actually, `AppUserService` update methods generally take the partial user object or just UID for some things, 
-            // but `updateUserProperties` takes `User`.
-
-            // Let's get the user first.
             const uid = this.auth.currentUser?.uid;
             if (!uid) {
-                this.router.navigate(['/login']);
+                this.router.navigate(['/login'], { queryParams: { returnUrl: this.getReturnUrl() } });
                 return;
             }
             const user = await firstValueFrom(this.userService.getUserByID(uid));
@@ -235,13 +264,7 @@ export class PricingComponent implements OnInit, OnDestroy {
                 this.analyticsService.logSelectFreeTier();
                 await this.userService.setFreeTier(user);
                 this.logger.log('Free tier selected. Waiting for reactive updates to handle navigation.');
-
                 this.planSelected.emit();
-
-                // Do NOT navigate from here. 
-                // The OnboardingComponent listens to user changes and will checkAndAdvance/finishOnboarding automatically.
-                // Navigation here causes a race condition with the guard.
-
                 this.isLoading = false;
             }
         } catch (error) {
@@ -250,12 +273,9 @@ export class PricingComponent implements OnInit, OnDestroy {
         }
     }
 
-    // New property for template
-    activeSubscriptions$: Observable<StripeSubscription[]> | null = null;
-
     async restorePurchases() {
         if (!this.auth.currentUser) {
-            this.router.navigate(['/login'], { queryParams: { returnUrl: '/pricing' } });
+            this.router.navigate(['/login'], { queryParams: { returnUrl: this.getReturnUrl() } });
             return;
         }
 
@@ -290,5 +310,78 @@ export class PricingComponent implements OnInit, OnDestroy {
             }
         });
     }
-}
 
+    private getReturnUrl(): string {
+        const url = this.router.url;
+        return url && url.startsWith('/') ? url : '/subscriptions';
+    }
+
+    private buildSubscriptionSummary(subscriptions: StripeSubscription[]): SubscriptionSummary | null {
+        if (!subscriptions.length) {
+            return null;
+        }
+
+        const withPeriodEnd = subscriptions.map(sub => ({
+            sub,
+            periodEnd: this.normalizeToDate(sub.current_period_end)
+        }));
+
+        const primary = withPeriodEnd.sort((a, b) => {
+            const aTime = a.periodEnd ? a.periodEnd.getTime() : 0;
+            const bTime = b.periodEnd ? b.periodEnd.getTime() : 0;
+            return bTime - aTime;
+        })[0];
+
+        return {
+            status: primary.sub.status,
+            cancelAtPeriodEnd: !!primary.sub.cancel_at_period_end,
+            currentPeriodEnd: primary.periodEnd,
+            isTrialing: primary.sub.status === 'trialing'
+        };
+    }
+
+    private normalizeToDate(value: unknown): Date | null {
+        if (!value) {
+            return null;
+        }
+
+        if (value instanceof Date) {
+            return Number.isNaN(value.getTime()) ? null : value;
+        }
+
+        if (typeof value === 'number') {
+            const isMilliseconds = value > 1_000_000_000_000;
+            const date = new Date(isMilliseconds ? value : value * 1000);
+            return Number.isNaN(date.getTime()) ? null : date;
+        }
+
+        if (typeof value === 'string') {
+            const parsed = new Date(value);
+            return Number.isNaN(parsed.getTime()) ? null : parsed;
+        }
+
+        if (typeof value === 'object') {
+            const maybeTimestamp = value as {
+                toDate?: () => Date;
+                seconds?: number;
+                _seconds?: number;
+            };
+
+            if (typeof maybeTimestamp.toDate === 'function') {
+                const date = maybeTimestamp.toDate();
+                return Number.isNaN(date.getTime()) ? null : date;
+            }
+
+            const seconds = typeof maybeTimestamp.seconds === 'number'
+                ? maybeTimestamp.seconds
+                : (typeof maybeTimestamp._seconds === 'number' ? maybeTimestamp._seconds : undefined);
+
+            if (seconds !== undefined) {
+                const date = new Date(seconds * 1000);
+                return Number.isNaN(date.getTime()) ? null : date;
+            }
+        }
+
+        return null;
+    }
+}
