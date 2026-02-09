@@ -220,6 +220,17 @@
         }
       }
 
+      .trial-offer-copy {
+        margin: 0 0 12px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        background: rgba(var(--mat-sys-primary-rgb, 63, 81, 181), 0.1);
+        border: 1px solid rgba(var(--mat-sys-primary-rgb, 63, 81, 181), 0.25);
+        font-size: 0.82rem;
+        line-height: 1.35;
+        text-align: center;
+      }
+
       button {
         width: 100%;
         min-height: 44px;

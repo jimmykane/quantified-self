@@ -148,6 +148,12 @@
             <span *ngIf="price.recurring" class="interval">/ {{ price.recurring?.interval }}</span>
           </h3>
 
+          @if (shouldShowFirstMonthFreeCopy(product, price)) {
+          <p class="trial-offer-copy">
+            Start with confidence: your first month is free for new members. Applied automatically at checkout.
+          </p>
+          }
+
           <!-- Current Plan Indicator -->
           @if ((product.metadata['role'] === 'free' && (!currentRole || currentRole === 'free')) || (currentRole &&
           product.metadata['role'] === currentRole)) {

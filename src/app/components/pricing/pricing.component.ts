@@ -7,7 +7,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatBadgeModule } from '@angular/material/badge';
 import { MatListModule } from '@angular/material/list';
-import { AppPaymentService, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
+import { AppPaymentService, StripeProduct, StripeSubscription, StripePrice } from '../../services/app.payment.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -132,6 +132,19 @@ export class PricingComponent implements OnInit, OnDestroy {
             this.loadingPriceId = null;
         }
     };
+
+    shouldShowFirstMonthFreeCopy(product: StripeProduct, price: StripePrice): boolean {
+        const role = product.metadata?.['role'];
+        if (role !== 'basic' && role !== 'pro') {
+            return false;
+        }
+
+        if (!price.recurring) {
+            return false;
+        }
+
+        return !this.currentRole || this.currentRole === 'free';
+    }
 
     async subscribe(price: any) {
         if (!this.authService.currentUser) {
