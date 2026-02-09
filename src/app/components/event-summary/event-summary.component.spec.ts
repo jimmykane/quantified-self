@@ -7,6 +7,7 @@ import { ChangeDetectorRef, Component, NO_ERRORS_SCHEMA } from '@angular/core';
 import { EventInterface, User, Privacy, ActivityTypes } from '@sports-alliance/sports-lib';
 import { of } from 'rxjs';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 
 
 
@@ -15,6 +16,7 @@ describe('EventSummaryComponent', () => {
     let fixture: ComponentFixture<EventSummaryComponent>;
     let mockEventService: any;
     let mockBottomSheet: any;
+    let mockBenchmarkFlowService: any;
 
     const mockUser: User = {
         uid: 'test-user-id',
@@ -37,6 +39,12 @@ describe('EventSummaryComponent', () => {
             open: vi.fn(),
         };
 
+        mockBenchmarkFlowService = {
+            openBenchmarkSelectionDialog: vi.fn(),
+            generateAndOpenReport: vi.fn().mockResolvedValue(undefined),
+            openBenchmarkReport: vi.fn(),
+        };
+
         await TestBed.configureTestingModule({
             declarations: [
                 EventSummaryComponent
@@ -46,6 +54,7 @@ describe('EventSummaryComponent', () => {
                 { provide: MatBottomSheet, useValue: mockBottomSheet },
                 { provide: MatSnackBar, useValue: { open: vi.fn() } },
                 { provide: ChangeDetectorRef, useValue: { markForCheck: vi.fn() } },
+                { provide: AppBenchmarkFlowService, useValue: mockBenchmarkFlowService },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();
@@ -113,4 +122,3 @@ describe('EventSummaryComponent', () => {
         });
     });
 });
-
