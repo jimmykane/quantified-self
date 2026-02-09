@@ -102,6 +102,32 @@ describe('TripLocationLabelService', () => {
     });
   });
 
+  it('extracts country from feature context when country is not returned as a top-level feature', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        features: [
+          {
+            text: 'Kathmandu',
+            place_type: ['place'],
+            context: [
+              { id: 'district.1234', text: 'Kathmandu District' },
+              { id: 'country.5678', text: 'Nepal' }
+            ]
+          }
+        ]
+      })
+    } as unknown as Response);
+
+    const resolved = await service.resolveTripLocation(27.7172, 85.3240);
+
+    expect(resolved).toEqual({
+      city: 'Kathmandu',
+      country: 'Nepal',
+      label: 'Kathmandu, Nepal',
+    });
+  });
+
   it('uses cache for repeated centroid lookups', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,

@@ -12,6 +12,12 @@ interface MapboxFeature {
   text?: string;
   place_name?: string;
   place_type?: string[];
+  context?: MapboxContextFeature[];
+}
+
+interface MapboxContextFeature {
+  id?: string;
+  text?: string;
 }
 
 interface MapboxReverseGeocodingResponse {
@@ -73,7 +79,8 @@ export class TripLocationLabelService {
       return null;
     }
 
-    const endpoint = `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitudeDegrees},${latitudeDegrees}.json?types=place,locality,district,region,country&limit=8&access_token=${token}`;
+    // Mapbox reverse geocoding rejects `limit` when multiple `types` are provided.
+    const endpoint = `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitudeDegrees},${latitudeDegrees}.json?types=place,locality,district,region,country&access_token=${token}`;
     const response = await fetch(endpoint);
 
     if (!response.ok) {
@@ -88,10 +95,14 @@ export class TripLocationLabelService {
     const payload = await response.json() as MapboxReverseGeocodingResponse;
     const features = payload.features || [];
 
+    const primaryFeature = features[0] || null;
     const cityFeature = this.findFirstFeatureByType(features, ['place', 'locality', 'district']);
     const countryFeature = this.findFirstFeatureByType(features, ['country']);
-    const city = this.normalizeFeatureLabel(cityFeature);
-    const country = this.normalizeFeatureLabel(countryFeature);
+
+    const city = this.normalizeFeatureLabel(cityFeature)
+      || this.normalizeContextLabel(this.findFirstContextByType(primaryFeature, ['place', 'locality', 'district']));
+    const country = this.normalizeFeatureLabel(countryFeature)
+      || this.normalizeContextLabel(this.findFirstContextByType(primaryFeature, ['country']));
     const label = this.composeLabel(city, country);
 
     const fallbackPath = this.resolveFallbackPath(city, country);
@@ -122,6 +133,17 @@ export class TripLocationLabelService {
     return null;
   }
 
+  private findFirstContextByType(feature: MapboxFeature | null, placeTypes: string[]): MapboxContextFeature | null {
+    const contexts = feature?.context || [];
+    for (const placeType of placeTypes) {
+      const prefix = `${placeType}.`;
+      const context = contexts.find((candidate) => candidate.id?.startsWith(prefix));
+      if (context) return context;
+    }
+
+    return null;
+  }
+
   private normalizeFeatureLabel(feature: MapboxFeature | null): string | null {
     if (!feature) return null;
 
@@ -129,6 +151,13 @@ export class TripLocationLabelService {
     if (!rawLabel) return null;
 
     const normalized = rawLabel.trim();
+    return normalized.length > 0 ? normalized : null;
+  }
+
+  private normalizeContextLabel(context: MapboxContextFeature | null): string | null {
+    if (!context?.text) return null;
+
+    const normalized = context.text.trim();
     return normalized.length > 0 ? normalized : null;
   }
 
