@@ -223,4 +223,5 @@ describe('EventCardComponent', () => {
             expect(component.hasPositionsFlag()).toBe(true);
         });
     });
+
 });

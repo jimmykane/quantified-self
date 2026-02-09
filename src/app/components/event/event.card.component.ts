@@ -30,8 +30,6 @@ import { AppUserSettingsQueryService } from '../../services/app.user-settings-qu
 import { LapTypes } from '@sports-alliance/sports-lib';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { LoggerService } from '../../services/logger.service';
-
-
 @Component({
   selector: 'app-event-card',
   templateUrl: './event.card.component.html',

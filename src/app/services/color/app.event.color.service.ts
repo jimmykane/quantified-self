@@ -117,6 +117,33 @@ export class AppEventColorService {
     return `linear-gradient(135deg, ${solid}, ${solid})`;
   }
 
+  getColorForZoneHex(zone: string): string {
+    switch (zone) {
+      case `Zone 7`:
+      case `Z7`:
+        return AppColors.Purple;
+      case `Zone 6`:
+      case `Z6`:
+        return AppColors.Red;
+      case `Zone 5`:
+      case `Z5`:
+        return AppColors.LightestRed;
+      case `Zone 4`:
+      case `Z4`:
+        return AppColors.Yellow;
+      case `Zone 3`:
+      case `Z3`:
+        return AppColors.Green;
+      case `Zone 2`:
+      case `Z2`:
+        return AppColors.Blue;
+      case `Zone 1`:
+      case `Z1`:
+      default:
+        return AppColors.LightBlue;
+    }
+  }
+
   getColorForZone(zone: string): am4core.Color | null {
     // Get the cached core module from the service (it will be loaded when charts are initialized)
     const core = this.amChartsService.getCachedCore();
@@ -125,29 +152,6 @@ export class AppEventColorService {
       return null;
     }
 
-    switch (zone) {
-      case `Zone 7`:
-      case `Z7`:
-        return core.color(AppColors.Purple);
-      case `Zone 6`:
-      case `Z6`:
-        return core.color(AppColors.Red);
-      case `Zone 5`:
-      case `Z5`:
-        return core.color(AppColors.LightestRed);
-      case `Zone 4`:
-      case `Z4`:
-        return core.color(AppColors.Yellow);
-      case `Zone 3`:
-      case `Z3`:
-        return core.color(AppColors.Green);
-      case `Zone 2`:
-      case `Z2`:
-        return core.color(AppColors.Blue);
-      case `Zone 1`:
-      case `Z1`:
-      default:
-        return core.color(AppColors.LightBlue);
-    }
+    return core.color(this.getColorForZoneHex(zone));
   }
 }

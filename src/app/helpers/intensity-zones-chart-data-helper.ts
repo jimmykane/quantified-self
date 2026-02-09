@@ -2,6 +2,25 @@ import { StatsClassInterface } from '@sports-alliance/sports-lib';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { ActivityUtilities } from '@sports-alliance/sports-lib';
 
+export interface IntensityZonesEChartsSeries {
+  type: string;
+  values: number[];
+  percentages: number[];
+}
+
+export interface IntensityZonesEChartsData {
+  zones: string[];
+  series: IntensityZonesEChartsSeries[];
+}
+
+function getZoneStatsValueMap(statsClassInstances: StatsClassInterface[]): Record<string, number> {
+  return ActivityUtilities.getIntensityZonesStatsAggregated(statsClassInstances).reduce((map: Record<string, number>, stat) => {
+    const value = stat.getValue();
+    map[stat.getType()] = typeof value === 'number' ? value : 0;
+    return map;
+  }, {});
+}
+
 /**
  * Converts intensity zones stats to chart data format.
  * @param statsClassInstances - Array of stats class instances
@@ -11,10 +30,7 @@ export function convertIntensityZonesStatsToChartData(
   statsClassInstances: StatsClassInterface[],
   shortLabels: boolean = false
 ): any[] {
-  const statsTypeMap = ActivityUtilities.getIntensityZonesStatsAggregated(statsClassInstances).reduce((map: { [key: string]: number }, stat) => {
-    map[stat.getType()] = stat.getValue() as any;
-    return map;
-  }, {})
+  const statsTypeMap = getZoneStatsValueMap(statsClassInstances);
 
   const zoneLabel = (num: number) => shortLabels ? `Z${num}` : `Zone ${num}`;
 
@@ -31,6 +47,56 @@ export function convertIntensityZonesStatsToChartData(
     });
     return data;
   }, []);
+}
+
+/**
+ * Converts intensity zone stats to deterministic series data for ECharts.
+ * Keeps zone and series ordering stable based on `DynamicDataLoader.zoneStatsTypeMap`.
+ */
+export function convertIntensityZonesStatsToEchartsData(
+  statsClassInstances: StatsClassInterface[],
+  shortLabels: boolean = false
+): IntensityZonesEChartsData {
+  const statsTypeMap = getZoneStatsValueMap(statsClassInstances);
+  const zoneLabel = (num: number) => shortLabels ? `Z${num}` : `Zone ${num}`;
+
+  const byType = DynamicDataLoader.zoneStatsTypeMap.map(statsToTypeMapEntry => ({
+    type: statsToTypeMapEntry.type,
+    values: statsToTypeMapEntry.stats.map(statType => {
+      const value = statsTypeMap[statType];
+      return typeof value === 'number' ? value : 0;
+    })
+  }));
+
+  const activeSeries = byType.filter(typeEntry => typeEntry.values.some(value => value > 0));
+  const activeZoneIndexes = activeSeries.reduce((indexes: Set<number>, typeEntry) => {
+    typeEntry.values.forEach((value, index) => {
+      if (value > 0) {
+        indexes.add(index);
+      }
+    });
+    return indexes;
+  }, new Set<number>());
+
+  const orderedZoneIndexes = [...activeZoneIndexes].sort((left, right) => left - right);
+  const zones = orderedZoneIndexes.map(index => zoneLabel(index + 1));
+
+  const series: IntensityZonesEChartsSeries[] = activeSeries.map(typeEntry => {
+    const values = orderedZoneIndexes.map(index => typeEntry.values[index] ?? 0);
+    const total = values.reduce((sum, value) => sum + value, 0);
+    const percentages = values.map(value => total > 0 ? (value / total) * 100 : 0);
+
+    return {
+      type: typeEntry.type,
+      values,
+      percentages
+    };
+  });
+
+  return {
+    zones,
+    series
+  };
 }
 
 /**
