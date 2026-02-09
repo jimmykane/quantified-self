@@ -2,35 +2,62 @@
     <mat-card class="onboarding-card">
         <mat-horizontal-stepper [linear]="true" #stepper>
             <!-- Step 1: Terms & Conditions -->
-            <mat-step [stepControl]="termsFormGroup" label="Agreements">
+            <mat-step [stepControl]="termsFormGroup" label="Legal consent">
                 <form [formGroup]="termsFormGroup" class="qs-form">
                     <div class="step-content">
-                        <h2>Welcome to Quantified Self</h2>
-                        <p>Please review and accept our policies to continue.</p>
+                        <div class="step-intro">
+                            <h2 class="step-title">Step 1 of 2: Legal consent</h2>
+                            <p class="step-subtitle">Takes ~30 seconds. Review key points, then confirm your choices.</p>
+                        </div>
+
+                        <section class="policy-summary" aria-labelledby="policy-summary-title">
+                            <h3 id="policy-summary-title">What you agree to</h3>
+                            <ul>
+                                <li>Your account starts private by default, and you control what becomes public.</li>
+                                <li>Subscription and retention rules apply, including a grace period after expiry.</li>
+                                <li>Optional analytics and marketing consent can be changed later in settings.</li>
+                            </ul>
+                        </section>
 
                         <div class="checkbox-group">
-                            <span class="mat-subheader">Please examine the following agreements carefully</span>
+                            <span class="mat-subheader">Confirm your choices</span>
 
                             <ng-container *ngFor="let policy of policies; let last = last">
                                 <section class="policy-item">
-                                    <h3>{{policy.title}}</h3>
-                                    <!-- Use innerHTML for content paragraphs/bullets -->
-                                    <ng-container *ngFor="let item of policy.content">
-                                        <div [innerHTML]="item" class="policy-text" style="margin-bottom: 0.5em;"></div>
-                                    </ng-container>
+                                    <div class="policy-item-copy">
+                                        <h3>{{policy.title}}</h3>
+                                        <p *ngIf="policy.subtitle">{{policy.subtitle}}</p>
+                                    </div>
 
-                                    <mat-checkbox [formControlName]="policy.formControlName">
+                                    <mat-checkbox [formControlName]="policy.formControlName"
+                                        (change)="onPolicyCheckboxChange(policy.id, $event.checked)">
                                         {{policy.checkboxLabel}}
                                         <span class="policy-required-label" *ngIf="!policy.isOptional">(Required)</span>
                                         <span class="policy-optional-label" *ngIf="policy.isOptional">(Optional)</span>
                                     </mat-checkbox>
+
+                                    <button mat-button type="button" class="policy-read-more" (click)="togglePolicyDetails(policy.id)">
+                                        @if (expandedPolicyId === policy.id) {
+                                        Hide details
+                                        } @else {
+                                        Read more
+                                        }
+                                    </button>
+
+                                    <mat-expansion-panel class="policy-details-panel" [expanded]="expandedPolicyId === policy.id"
+                                        (opened)="expandedPolicyId = policy.id"
+                                        (closed)="expandedPolicyId = expandedPolicyId === policy.id ? null : expandedPolicyId">
+                                        <ng-container *ngFor="let item of policy.content">
+                                            <div [innerHTML]="item"></div>
+                                        </ng-container>
+                                    </mat-expansion-panel>
                                 </section>
                                 <mat-divider *ngIf="!last"></mat-divider>
                             </ng-container>
                         </div>
 
                         <div class="qs-form-actions">
-                            <button mat-flat-button color="primary" [disabled]="!termsFormGroup.valid || isLoading"
+                            <button mat-flat-button type="button" color="primary" [disabled]="!termsFormGroup.valid || isLoading"
                                 (click)="onTermsSubmit()">
                                 @if (isLoading) {
                                 Processing...
@@ -38,7 +65,7 @@
                                 Next
                                 }
                             </button>
-                            <button mat-stroked-button color="warn" (click)="logout()">Logout</button>
+                            <button mat-stroked-button type="button" color="warn" (click)="logout()">Logout</button>
                         </div>
                     </div>
                 </form>
