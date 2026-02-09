@@ -1,9 +1,4 @@
-<mat-card-header>
-  <div mat-card-avatar>
-    <mat-icon>linear_scale</mat-icon>
-  </div>
-  <mat-card-title>Laps</mat-card-title>
-</mat-card-header>
+<app-event-section-header icon="linear_scale" title="Laps"></app-event-section-header>
 <mat-tab-group [dynamicHeight]="true">
   @for (availableLapType of availableLapTypes; track availableLapType) {
   <mat-tab [label]="availableLapType">

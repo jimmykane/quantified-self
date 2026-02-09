@@ -1,14 +1,9 @@
 <div class="map-component-wrapper">
-  <div class="map-header">
-    <div class="map-header-avatar">
-      <mat-icon>map</mat-icon>
-    </div>
-    <div class="map-header-actions">
-      <app-map-actions [showLaps]="showLaps" [showArrows]="showArrows" [user]="user"
-        (showLapsChange)="onShowLapsChange($event)" (showArrowsChange)="onShowArrowsChange($event)">
-      </app-map-actions>
-    </div>
-  </div>
+  <app-event-section-header icon="map">
+    <app-map-actions [showLaps]="showLaps" [showArrows]="showArrows" [user]="user"
+      (showLapsChange)="onShowLapsChange($event)" (showArrowsChange)="onShowArrowsChange($event)">
+    </app-map-actions>
+  </app-event-section-header>
   <app-loading-overlay [isLoading]="isLoading" height="60vh">
     @if (googleMap && event.getActivities().length > 1) {
     <mat-card class="map-legend mat-elevation-z0">

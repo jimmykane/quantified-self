@@ -1,13 +1,8 @@
-<div class="chart-header">
-  <div class="chart-header-avatar">
-    <mat-icon>show_chart</mat-icon>
-  </div>
-  <div class="chart-header-actions">
-    <app-event-card-chart-actions [(xAxisType)]="xAxisType" [(showAllData)]="showAllData" [(showLaps)]="showLaps"
-      [(stackYAxes)]="stackYAxes" [event]="event" [user]="user">
-    </app-event-card-chart-actions>
-  </div>
-</div>
+<app-event-section-header icon="show_chart">
+  <app-event-card-chart-actions [(xAxisType)]="xAxisType" [(showAllData)]="showAllData" [(showLaps)]="showLaps"
+    [(stackYAxes)]="stackYAxes" [event]="event" [user]="user">
+  </app-event-card-chart-actions>
+</app-event-section-header>
 <mat-card-content style="position: relative; min-height: 90vh;">
   <app-loading-overlay [isLoading]="isLoading" height="auto">
     <!-- @todo should be different per orientation etc -->

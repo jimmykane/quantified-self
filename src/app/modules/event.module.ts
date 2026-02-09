@@ -28,6 +28,7 @@ import { JumpMarkerPopupComponent } from '../components/event/map/popups/jump-ma
 import { BenchmarkSelectionDialogComponent } from '../components/benchmark/benchmark-selection-dialog.component';
 import { BenchmarkReportComponent } from '../components/benchmark/benchmark-report.component';
 import { BenchmarkBottomSheetComponent } from '../components/benchmark/benchmark-bottom-sheet.component';
+import { EventSectionHeaderComponent } from '../components/event/section-header/event.section-header.component';
 
 @NgModule({
     imports: [
@@ -63,7 +64,8 @@ import { BenchmarkBottomSheetComponent } from '../components/benchmark/benchmark
         JumpMarkerPopupComponent,
         BenchmarkSelectionDialogComponent,
         BenchmarkReportComponent,
-        BenchmarkBottomSheetComponent
+        BenchmarkBottomSheetComponent,
+        EventSectionHeaderComponent
     ]
 })
 

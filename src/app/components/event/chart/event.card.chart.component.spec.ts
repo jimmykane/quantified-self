@@ -13,7 +13,7 @@ import { AppChartSettingsLocalStorageService } from '../../../services/storage/a
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import { LoggerService } from '../../../services/logger.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ChangeDetectorRef, NgZone, signal } from '@angular/core';
+import { ChangeDetectorRef, CUSTOM_ELEMENTS_SCHEMA, NgZone, signal } from '@angular/core';
 import { of } from 'rxjs';
 import { ActivityTypes, DataAltitude } from '@sports-alliance/sports-lib';
 
@@ -93,7 +93,8 @@ describe('EventCardChartComponent', () => {
                 { provide: AppActivityCursorService, useValue: mockActivityCursorService },
                 { provide: MatSnackBar, useValue: mockSnackBar },
                 { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn(), log: vi.fn(), info: vi.fn() } },
-            ]
+            ],
+            schemas: [CUSTOM_ELEMENTS_SCHEMA]
         }).compileComponents();
 
         fixture = TestBed.createComponent(EventCardChartComponent);

@@ -32,7 +32,17 @@ export class MapActionsComponent {
     private userService: AppUserService) {
   }
 
-  async checkBoxChanged(_event) {
+  async onShowLapsToggle(checked: boolean) {
+    this.showLaps = checked;
+    await this.checkBoxChanged();
+  }
+
+  async onShowArrowsToggle(checked: boolean) {
+    this.showArrows = checked;
+    await this.checkBoxChanged();
+  }
+
+  async checkBoxChanged() {
     this.showLapsChange.emit(this.showLaps);
     this.showArrowsChange.emit(this.showArrows);
 

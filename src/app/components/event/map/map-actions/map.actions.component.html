@@ -1,13 +1,24 @@
-<section>
-  <mat-button-toggle-group multiple class="qs-segmented-button-group" appearance="standard">
-    <mat-button-toggle [checked]="showLaps" (change)="showLaps = $event.source.checked; checkBoxChanged($event)"
-      [disabled]="!user" [matTooltip]="user ? 'Show lap markers on map' : 'Sign in to use this'">
-      Show Laps
-    </mat-button-toggle>
-    <mat-button-toggle [checked]="showArrows" (change)="showArrows = $event.source.checked; checkBoxChanged($event)"
-      [disabled]="!user" [matTooltip]="user ? 'Show direction arrows on route' : 'Sign in to use this'">
-      Show Arrows
-    </mat-button-toggle>
-
-  </mat-button-toggle-group>
+<section class="map-actions">
+  <span [matTooltip]="user ? 'Map layers' : 'Sign in to use this'">
+    <button mat-stroked-button class="layers-trigger" [matMenuTriggerFor]="layersMenu" [disabled]="!user"
+      aria-label="Map layers">
+      <mat-icon>layers</mat-icon>
+      Layers
+    </button>
+  </span>
 </section>
+
+<mat-menu #layersMenu="matMenu" xPosition="before">
+  <section mat-menu-item>
+    <mat-slide-toggle class="map-layer-toggle" [checked]="showLaps" [disabled]="!user"
+      (change)="onShowLapsToggle($event.checked)">
+      Show Laps
+    </mat-slide-toggle>
+  </section>
+  <section mat-menu-item>
+    <mat-slide-toggle class="map-layer-toggle" [checked]="showArrows" [disabled]="!user"
+      (change)="onShowArrowsToggle($event.checked)">
+      Show Arrows
+    </mat-slide-toggle>
+  </section>
+</mat-menu>

@@ -1,0 +1,15 @@
+<section class="event-section-header">
+  <div class="event-section-header-leading">
+    <div class="event-section-header-avatar" aria-hidden="true">
+      <mat-icon>{{ icon }}</mat-icon>
+    </div>
+    @if (title) {
+    <div class="event-section-header-title">
+      {{ title }}
+    </div>
+    }
+  </div>
+  <div class="event-section-header-actions">
+    <ng-content></ng-content>
+  </div>
+</section>

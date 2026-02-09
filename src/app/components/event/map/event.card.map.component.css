@@ -4,24 +4,6 @@
   background: transparent;
 }
 
-.map-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px;
-  gap: 16px;
-}
-
-.map-header-avatar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.map-header-actions {
-  flex: 1;
-}
-
 /* map-progress-bar removed, handled by app-loading-overlay */
 
 google-map {
