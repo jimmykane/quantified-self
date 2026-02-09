@@ -1,2 +1,4 @@
-<div #chartDiv [style.min-width.%]="100" [style.min-height.%]="100"></div>
-<app-shade [isActive]="isLoading" [hasError]="data && data.length === 0" [errorMessage]="'Nothing to show'"></app-shade>
+<app-loading-overlay [isLoading]="isLoading" [hasError]="data && data.length === 0" [errorMessage]="'Nothing to show'"
+  [showSkeleton]="false" height="100%" [style.height.%]="100">
+  <div #chartDiv [style.min-width.%]="100" [style.min-height.%]="100"></div>
+</app-loading-overlay>

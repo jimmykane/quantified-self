@@ -62,7 +62,9 @@
 
   <!-- Main Content Area -->
   <main class="settings-content">
-    <form [formGroup]="userSettingsFormGroup" (submit)="onSubmit($event)" class="qs-form">
+    <app-loading-overlay [isLoading]="isSaving || isDeleting" [hasError]="errorSaving || errorDeleting"
+      [errorMessage]="errorSaving || errorDeleting" [showSkeleton]="false" height="auto">
+      <form [formGroup]="userSettingsFormGroup" (submit)="onSubmit($event)" class="qs-form">
 
       <!-- Profile Section -->
       @if (activeSection === 'profile') {
@@ -405,9 +407,7 @@
       </div>
       }
 
-    </form>
-
-    <app-shade [isActive]="isSaving || isDeleting" [hasError]="errorSaving || errorDeleting"
-      [errorMessage]="errorSaving || errorDeleting"></app-shade>
+      </form>
+    </app-loading-overlay>
   </main>
 </div>

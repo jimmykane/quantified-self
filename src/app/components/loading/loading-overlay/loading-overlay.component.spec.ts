@@ -33,10 +33,19 @@ describe('AppLoadingOverlayComponent', () => {
         const shade = fixture.debugElement.query(By.directive(ShadeComponent));
 
         expect(progressBar).toBeTruthy();
-        expect(skeleton).toBeTruthy();
+        expect(skeleton).toBeFalsy();
         // Shade is always present in template but controlled by internal logic or separate inputs
         // The component has *ngIf="showShade" on the shade component
         expect(shade).toBeTruthy();
+    });
+
+    it('should show skeleton when showSkeleton is enabled', () => {
+        component.isLoading = true;
+        component.showSkeleton = true;
+        fixture.detectChanges();
+
+        const skeleton = fixture.debugElement.query(By.css('.overlay-skeleton'));
+        expect(skeleton).toBeTruthy();
     });
 
     it('should hide loading indicators when isLoading is false', () => {

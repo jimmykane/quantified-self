@@ -18,16 +18,11 @@ form {
   gap: 16px;
 }
 
-/* Ensure shade doesn't participate in flex flow */
-app-shade {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 10;
-  pointer-events: none;
-  /* Let clicks pass through if inactive, or handle in component */
+/* Preserve form spacing after moving loading state into app-loading-overlay */
+app-loading-overlay.search-overlay {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 /* Ensure Search Button aligns well */
@@ -112,6 +107,7 @@ mat-button-toggle:active {
   align-items: center;
   flex-wrap: wrap;
   gap: 16px;
+  margin-bottom: 16px;
 }
 
 .merge-toggle-group {

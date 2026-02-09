@@ -1,3 +1,7 @@
+:host {
+    display: block;
+}
+
 .loading-overlay-container {
     position: relative;
     display: block;

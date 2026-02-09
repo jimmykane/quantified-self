@@ -29,4 +29,9 @@ export class JumpMarkerPopupComponent implements OnChanges {
         }
         return val;
     }
+
+    getFormattedHangTime(): string {
+        if (!this.jump?.jumpData?.hang_time) return '-';
+        return this.jump.jumpData.hang_time.getDisplayValue(false, true, true);
+    }
 }

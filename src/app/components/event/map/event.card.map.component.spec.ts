@@ -75,7 +75,7 @@ describe('EventCardMapComponent', () => {
                     provide: MarkerFactoryService,
                     useValue: {
                         createPinMarker: vi.fn(),
-                        // Add other methods if needed, mostly createPinMarker/EventMarker/ClusterMarker
+                        createJumpMarker: vi.fn().mockReturnValue(document.createElement('div')),
                     }
                 },
                 { provide: NgZone, useValue: new NgZone({ enableLongStackTrace: false }) },
@@ -134,6 +134,89 @@ describe('EventCardMapComponent', () => {
         await component.ngOnInit();
 
         expect(component.mapTypeId()).toBe('satellite');
+    });
+
+    it('should use smallest jump marker bucket when hang time is missing', () => {
+        const markerFactory = TestBed.inject(MarkerFactoryService) as any;
+        const jump = {
+            jumpData: {
+                distance: { getValue: () => 1, getDisplayUnit: () => 'm' },
+                score: { getValue: () => 1 },
+            }
+        } as any;
+
+        (component as any).jumpHangTimeMin = 1;
+        (component as any).jumpHangTimeMax = 2;
+
+        component.getJumpMarkerOptions(jump, '#ff0000');
+
+        expect(markerFactory.createJumpMarker).toHaveBeenCalledWith(
+            '#ff0000',
+            EventCardMapComponent.JUMP_MARKER_SIZE_BUCKETS[0]
+        );
+    });
+
+    it('should use middle jump marker bucket when all hang times are identical', () => {
+        const markerFactory = TestBed.inject(MarkerFactoryService) as any;
+        const jump = {
+            jumpData: {
+                hang_time: { getValue: () => 1.5 },
+                distance: { getValue: () => 1, getDisplayUnit: () => 'm' },
+                score: { getValue: () => 1 },
+            }
+        } as any;
+
+        (component as any).jumpHangTimeMin = 1.5;
+        (component as any).jumpHangTimeMax = 1.5;
+
+        component.getJumpMarkerOptions(jump, '#00ff00');
+
+        expect(markerFactory.createJumpMarker).toHaveBeenCalledWith(
+            '#00ff00',
+            EventCardMapComponent.JUMP_MARKER_SIZE_BUCKETS[2]
+        );
+    });
+
+    it('should use largest jump marker bucket for max hang time', () => {
+        const markerFactory = TestBed.inject(MarkerFactoryService) as any;
+        const jump = {
+            jumpData: {
+                hang_time: { getValue: () => 5 },
+                distance: { getValue: () => 1, getDisplayUnit: () => 'm' },
+                score: { getValue: () => 1 },
+            }
+        } as any;
+
+        (component as any).jumpHangTimeMin = 1;
+        (component as any).jumpHangTimeMax = 5;
+
+        component.getJumpMarkerOptions(jump, '#0000ff');
+
+        expect(markerFactory.createJumpMarker).toHaveBeenCalledWith(
+            '#0000ff',
+            EventCardMapComponent.JUMP_MARKER_SIZE_BUCKETS[4]
+        );
+    });
+
+    it('should format hang time in marker title using display formatter with milliseconds', () => {
+        const getDisplayValue = vi.fn().mockReturnValue('01.3s');
+        const jump = {
+            jumpData: {
+                hang_time: {
+                    getValue: () => 1.3,
+                    getDisplayValue
+                },
+                distance: { getValue: () => 3.2, getDisplayUnit: () => 'm' },
+                score: { getValue: () => 8.7 },
+                speed: { getValue: () => 12.3, getDisplayUnit: () => 'km/h' },
+                rotations: { getValue: () => 1.1 }
+            }
+        } as any;
+
+        const options = component.getJumpMarkerOptions(jump, '#111111');
+
+        expect(getDisplayValue).toHaveBeenCalledWith(false, true, true);
+        expect(options.title).toContain('Hang Time: 01.3s');
     });
 
 

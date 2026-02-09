@@ -28,8 +28,7 @@
         @if (jump?.jumpData?.hang_time) {
         <div class="stat-row">
             <span class="label">Hang Time:</span>
-            <span class="value">{{jump?.jumpData?.hang_time?.getDisplayValue()}}
-                {{jump?.jumpData?.hang_time?.getDisplayUnit()}}</span>
+            <span class="value">{{getFormattedHangTime()}}</span>
         </div>
         }
 

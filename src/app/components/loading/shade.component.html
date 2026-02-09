@@ -1,7 +1,7 @@
 @if (isActive || hasError) {
   <div class="loading-shade"
     >
-    @if (isActive) {
+    @if (isActive && showProgressBar) {
       <mat-progress-bar [mode]="mode"></mat-progress-bar>
     }
     @if (hasError && !isActive) {

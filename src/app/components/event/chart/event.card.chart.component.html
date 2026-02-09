@@ -4,7 +4,7 @@
   </app-event-card-chart-actions>
 </app-event-section-header>
 <mat-card-content style="position: relative; min-height: 90vh;">
-  <app-loading-overlay [isLoading]="isLoading" height="auto">
+  <app-loading-overlay [isLoading]="isLoading" [showSkeleton]="true" height="auto">
     <!-- @todo should be different per orientation etc -->
     <div #chartDiv [style.opacity]="isLoading ? 0 : 1"
       style="min-width: 280px; width: 100%; min-height: 90vh; height: 90vh"></div>

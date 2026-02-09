@@ -1,118 +1,119 @@
 @if (searchFormGroup) {
 <form [formGroup]="searchFormGroup" autocomplete="off">
-  <app-shade [isActive]="isLoading"></app-shade>
-  <section class="filters-row"
-    [ngStyle]="{display: showDatePicker || showActivityTypePicker || showMergedEventsToggle ? 'flex' : 'none' }">
-    @if (searchFormGroup) {
-    <mat-form-field [style.display]="showDatePicker ? null : 'none'" class="big qs-subscript-hidden">
-      <mat-label>Select date range</mat-label>
-      <mat-date-range-input [formGroup]="searchFormGroup" [rangePicker]="picker"
-        (click)="setCustomDateRange($event); picker.open()">
-        <input matStartDate [formControl]="startDateControl" placeholder="Start date"
-          (dateChange)="onDateChange($event, true)">
-        <input matEndDate [formControl]="endDateControl" placeholder="End date"
-          (dateChange)="onDateChange($event, false)">
-      </mat-date-range-input>
-      <mat-datepicker-toggle [disabled]='false' matSuffix [for]="picker"></mat-datepicker-toggle>
-      <mat-date-range-picker #picker></mat-date-range-picker>
-      @if (!startDateControl.hasError('matStartDateInvalid') &&
-      !endDateControl.hasError('matStartDateInvalid') && selectedDateRange === dateRanges.custom) {
-      <mat-hint>Select a date range</mat-hint>
+  <app-loading-overlay class="search-overlay" [isLoading]="isLoading" [showSkeleton]="false" height="auto">
+    <section class="filters-row"
+      [ngStyle]="{display: showDatePicker || showActivityTypePicker || showMergedEventsToggle ? 'flex' : 'none' }">
+      @if (searchFormGroup) {
+      <mat-form-field [style.display]="showDatePicker ? null : 'none'" class="big qs-subscript-hidden">
+        <mat-label>Select date range</mat-label>
+        <mat-date-range-input [formGroup]="searchFormGroup" [rangePicker]="picker"
+          (click)="setCustomDateRange($event); picker.open()">
+          <input matStartDate [formControl]="startDateControl" placeholder="Start date"
+            (dateChange)="onDateChange($event, true)">
+          <input matEndDate [formControl]="endDateControl" placeholder="End date"
+            (dateChange)="onDateChange($event, false)">
+        </mat-date-range-input>
+        <mat-datepicker-toggle [disabled]='false' matSuffix [for]="picker"></mat-datepicker-toggle>
+        <mat-date-range-picker #picker></mat-date-range-picker>
+        @if (!startDateControl.hasError('matStartDateInvalid') &&
+        !endDateControl.hasError('matStartDateInvalid') && selectedDateRange === dateRanges.custom) {
+        <mat-hint>Select a date range</mat-hint>
+        }
+        @if (startDateControl.hasError('matStartDateInvalid') ||
+        endDateControl.hasError('matStartDateInvalid')) {
+        <mat-error>Invalid date range</mat-error>
+        }
+      </mat-form-field>
       }
-      @if (startDateControl.hasError('matStartDateInvalid') ||
-      endDateControl.hasError('matStartDateInvalid')) {
-      <mat-error>Invalid date range</mat-error>
+      @if (showActivityTypePicker) {
+      <app-activity-types-multi-select class="big" [selectedActivityTypes]="selectedActivityTypes"
+        (selectedActivityTypesChange)="onActivityTypesChange($event)"></app-activity-types-multi-select>
       }
-    </mat-form-field>
-    }
-    @if (showActivityTypePicker) {
-    <app-activity-types-multi-select class="big" [selectedActivityTypes]="selectedActivityTypes"
-      (selectedActivityTypesChange)="onActivityTypesChange($event)"></app-activity-types-multi-select>
-    }
-    <!--    <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.endDateSmallerThanStartDate">-->
-    <!--      There is something wrong with the date range-->
-    <!--    </mat-error>-->
-    <!--    <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.dateRange">You can select-->
-    <!--      a range up to 3 months-->
-    <!--    </mat-error>-->
-  </section>
-  <section class="button-groups">
-    <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator [value]="selectedDateRange"
-      (change)="dateToggleChange($event)">
-      @if (dateRangesToShow.indexOf(dateRanges.thisWeek) !== -1) {
-      <mat-button-toggle [value]="dateRanges.thisWeek" aria-label="This week">
-        This week
-      </mat-button-toggle>
-      }
-      @if (dateRangesToShow.indexOf(dateRanges.lastWeek) !== -1) {
-      <mat-button-toggle [value]="dateRanges.lastWeek" aria-label="Last week">
-        Last week
-      </mat-button-toggle>
-      }
-      @if (dateRangesToShow.indexOf(dateRanges.lastSevenDays) !== -1) {
-      <mat-button-toggle [value]="dateRanges.lastSevenDays" aria-label="7 days">
-        7 days
-      </mat-button-toggle>
-      }
-    </mat-button-toggle-group>
-    <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator [value]="selectedDateRange"
-      (change)="dateToggleChange($event)">
-      @if (dateRangesToShow.indexOf(dateRanges.thisMonth) !== -1) {
-      <mat-button-toggle [value]="dateRanges.thisMonth" aria-label="This month">
-        This month
-      </mat-button-toggle>
-      }
-      @if (dateRangesToShow.indexOf(dateRanges.lastMonth) !== -1) {
-      <mat-button-toggle [value]="dateRanges.lastMonth" aria-label="Last month">
-        Last month
-      </mat-button-toggle>
-      }
-      @if (dateRangesToShow.indexOf(dateRanges.lastThirtyDays) !== -1) {
-      <mat-button-toggle [value]="dateRanges.lastThirtyDays" aria-label="30 days">
-        30 days
-      </mat-button-toggle>
-      }
-    </mat-button-toggle-group>
-    <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator [value]="selectedDateRange"
-      (change)="dateToggleChange($event)">
-      @if (dateRangesToShow.indexOf(dateRanges.thisYear) !== -1) {
-      <mat-button-toggle [value]="dateRanges.thisYear" aria-label="This year">
-        {{currentYear}}
-      </mat-button-toggle>
-      }
-      @if (dateRangesToShow.indexOf(dateRanges.lastYear) !== -1) {
-      <mat-button-toggle [value]="dateRanges.lastYear" aria-label="Last year">
-        {{currentYear - 1}}
-      </mat-button-toggle>
-      }
-    </mat-button-toggle-group>
-    @if (dateRangesToShow.indexOf(dateRanges.all) !== -1 || dateRangesToShow.indexOf(dateRanges.custom) !== -1) {
-    <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator [value]="selectedDateRange"
-      (change)="dateToggleChange($event)">
-      @if (dateRangesToShow.indexOf(dateRanges.all) !== -1) {
-      <mat-button-toggle [value]="dateRanges.all" aria-label="All">
-        All
-      </mat-button-toggle>
-      }
-      @if (dateRangesToShow.indexOf(dateRanges.custom) !== -1) {
-      <mat-button-toggle [value]="dateRanges.custom" aria-label="Custom">
-        Custom
-      </mat-button-toggle>
-      }
-    </mat-button-toggle-group>
-    }
-    @if (showMergedEventsToggle) {
-    <div class="merge-toggle-group">
-      <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator multiple
-        [value]="includeMergedEvents ? ['merged'] : []" [disabled]="mergedEventsToggleDisabled"
-        (change)="onMergedEventsToggleChange($event)">
-        <mat-button-toggle value="merged" aria-label="Merged">Merged</mat-button-toggle>
+      <!--    <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.endDateSmallerThanStartDate">-->
+      <!--      There is something wrong with the date range-->
+      <!--    </mat-error>-->
+      <!--    <mat-error *ngIf="hasError() && searchFormGroup.errors && searchFormGroup.errors.dateRange">You can select-->
+      <!--      a range up to 3 months-->
+      <!--    </mat-error>-->
+    </section>
+    <section class="button-groups">
+      <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator [value]="selectedDateRange"
+        (change)="dateToggleChange($event)">
+        @if (dateRangesToShow.indexOf(dateRanges.thisWeek) !== -1) {
+        <mat-button-toggle [value]="dateRanges.thisWeek" aria-label="This week">
+          This week
+        </mat-button-toggle>
+        }
+        @if (dateRangesToShow.indexOf(dateRanges.lastWeek) !== -1) {
+        <mat-button-toggle [value]="dateRanges.lastWeek" aria-label="Last week">
+          Last week
+        </mat-button-toggle>
+        }
+        @if (dateRangesToShow.indexOf(dateRanges.lastSevenDays) !== -1) {
+        <mat-button-toggle [value]="dateRanges.lastSevenDays" aria-label="7 days">
+          7 days
+        </mat-button-toggle>
+        }
       </mat-button-toggle-group>
-      @if (mergedEventsToggleDisabled && !includeMergedEvents) {
-      <span class="merge-toggle-hint">{{ mergedEventsToggleHint }}</span>
+      <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator [value]="selectedDateRange"
+        (change)="dateToggleChange($event)">
+        @if (dateRangesToShow.indexOf(dateRanges.thisMonth) !== -1) {
+        <mat-button-toggle [value]="dateRanges.thisMonth" aria-label="This month">
+          This month
+        </mat-button-toggle>
+        }
+        @if (dateRangesToShow.indexOf(dateRanges.lastMonth) !== -1) {
+        <mat-button-toggle [value]="dateRanges.lastMonth" aria-label="Last month">
+          Last month
+        </mat-button-toggle>
+        }
+        @if (dateRangesToShow.indexOf(dateRanges.lastThirtyDays) !== -1) {
+        <mat-button-toggle [value]="dateRanges.lastThirtyDays" aria-label="30 days">
+          30 days
+        </mat-button-toggle>
+        }
+      </mat-button-toggle-group>
+      <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator [value]="selectedDateRange"
+        (change)="dateToggleChange($event)">
+        @if (dateRangesToShow.indexOf(dateRanges.thisYear) !== -1) {
+        <mat-button-toggle [value]="dateRanges.thisYear" aria-label="This year">
+          {{currentYear}}
+        </mat-button-toggle>
+        }
+        @if (dateRangesToShow.indexOf(dateRanges.lastYear) !== -1) {
+        <mat-button-toggle [value]="dateRanges.lastYear" aria-label="Last year">
+          {{currentYear - 1}}
+        </mat-button-toggle>
+        }
+      </mat-button-toggle-group>
+      @if (dateRangesToShow.indexOf(dateRanges.all) !== -1 || dateRangesToShow.indexOf(dateRanges.custom) !== -1) {
+      <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator [value]="selectedDateRange"
+        (change)="dateToggleChange($event)">
+        @if (dateRangesToShow.indexOf(dateRanges.all) !== -1) {
+        <mat-button-toggle [value]="dateRanges.all" aria-label="All">
+          All
+        </mat-button-toggle>
+        }
+        @if (dateRangesToShow.indexOf(dateRanges.custom) !== -1) {
+        <mat-button-toggle [value]="dateRanges.custom" aria-label="Custom">
+          Custom
+        </mat-button-toggle>
+        }
+      </mat-button-toggle-group>
       }
-    </div>
-    }
-  </section>
+      @if (showMergedEventsToggle) {
+      <div class="merge-toggle-group">
+        <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator multiple
+          [value]="includeMergedEvents ? ['merged'] : []" [disabled]="mergedEventsToggleDisabled"
+          (change)="onMergedEventsToggleChange($event)">
+          <mat-button-toggle value="merged" aria-label="Merged">Merged</mat-button-toggle>
+        </mat-button-toggle-group>
+        @if (mergedEventsToggleDisabled && !includeMergedEvents) {
+        <span class="merge-toggle-hint">{{ mergedEventsToggleHint }}</span>
+        }
+      </div>
+      }
+    </section>
+  </app-loading-overlay>
 </form>
 }

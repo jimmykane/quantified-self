@@ -1,4 +1,4 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, Input } from '@angular/core';
 import { rowsAnimation } from '../../animations/animations';
 
 @Component({
@@ -15,5 +15,6 @@ export class ShadeComponent {
   @Input() isActive: boolean;
   @Input() hasError: boolean;
   @Input() errorMessage: string;
-  @Input() mode: 'determinate' | 'indeterminate' | 'buffer' | 'query' = 'buffer';
+  @Input() showProgressBar: boolean = true;
+  @Input() mode: 'determinate' | 'indeterminate' | 'buffer' | 'query' = 'indeterminate';
 }

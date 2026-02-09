@@ -1,30 +1,28 @@
 <section class="component-container">
-  <app-shade [isActive]="!isInitialized"></app-shade>
+  <app-loading-overlay [isLoading]="!isInitialized" [showSkeleton]="false" height="auto">
+    <div class="dashboard-content">
+      @if (user) {
+      <app-event-search [isLoading]="isLoading" [selectedDateRange]="user.settings.dashboardSettings.dateRange"
+        [selectedStartDate]="searchStartDate" [selectedEndDate]="searchEndDate" [startOfTheWeek]="startOfTheWeek"
+        [selectedActivityTypes]="user.settings.dashboardSettings.activityTypes"
+        [showMergedEventsToggle]="hasMergedEvents"
+        [includeMergedEvents]="user.settings.dashboardSettings.includeMergedEvents !== false"
+        (searchChange)="search($event)">
+      </app-event-search>
+      }
 
+      <!-- Removed mat-divider in favor of CSS spacing/gap -->
 
+      @if (user) {
+      <app-summaries [isLoading]="isLoading" [user]="user" [showActions]="!targetUser || targetUser.uid === user.uid"
+        [events]="events">
+      </app-summaries>
+      }
 
-  <div class="dashboard-content">
-    @if (user) {
-    <app-event-search [isLoading]="isLoading" [selectedDateRange]="user.settings.dashboardSettings.dateRange"
-      [selectedStartDate]="searchStartDate" [selectedEndDate]="searchEndDate" [startOfTheWeek]="startOfTheWeek"
-      [selectedActivityTypes]="user.settings.dashboardSettings.activityTypes"
-      [showMergedEventsToggle]="hasMergedEvents"
-      [includeMergedEvents]="user.settings.dashboardSettings.includeMergedEvents !== false"
-      (searchChange)="search($event)">
-    </app-event-search>
-    }
-
-    <!-- Removed mat-divider in favor of CSS spacing/gap -->
-
-    @if (user) {
-    <app-summaries [isLoading]="isLoading" [user]="user" [showActions]="!targetUser || targetUser.uid === user.uid"
-      [events]="events">
-    </app-summaries>
-    }
-
-    @if (user) {
-    <app-event-table [targetUser]="targetUser" [isLoading]="isLoading" [user]="user"
-      [showActions]="!targetUser || targetUser.uid === user.uid" [events]="events"></app-event-table>
-    }
-  </div>
+      @if (user) {
+      <app-event-table [targetUser]="targetUser" [isLoading]="isLoading" [user]="user"
+        [showActions]="!targetUser || targetUser.uid === user.uid" [events]="events"></app-event-table>
+      }
+    </div>
+  </app-loading-overlay>
 </section>

@@ -42,94 +42,94 @@
 
 <!-- Table Section -->
 <div class="glass-card table-container">
-  <div class="table-wrapper qs-scrollbar">
-    <table mat-table [dataSource]="data" matSort [matSortActive]="user.settings.dashboardSettings.tableSettings.active"
-      [matSortDirection]="user.settings.dashboardSettings.tableSettings.direction" matSortDisableClear>
-      @for (column of getColumnsToDisplay(); track column; let isFirst = $first; let isLast = $last; let i = $index) {
-      <ng-container [matColumnDef]="column" [sticky]="isSticky(column)" [stickyEnd]="isStickyEnd(column)">
-        @if (isFirst && showActions) {
-        <th mat-header-cell *matHeaderCellDef>
-          <mat-checkbox (change)="$event ? masterToggle() : null" [checked]="selection.hasValue() && isAllSelected()"
-            [indeterminate]="selection.hasValue() && !isAllSelected()">
-          </mat-checkbox>
-        </th>
+  <app-loading-overlay [isLoading]="isLoading" [hasError]="this.events && this.events.length === 0"
+    [errorMessage]="'Nothing to show'" [showSkeleton]="false" height="auto" borderRadius="12px">
+    <div class="table-wrapper qs-scrollbar">
+      <table mat-table [dataSource]="data" matSort [matSortActive]="user.settings.dashboardSettings.tableSettings.active"
+        [matSortDirection]="user.settings.dashboardSettings.tableSettings.direction" matSortDisableClear>
+        @for (column of getColumnsToDisplay(); track column; let isFirst = $first; let isLast = $last; let i = $index) {
+        <ng-container [matColumnDef]="column" [sticky]="isSticky(column)" [stickyEnd]="isStickyEnd(column)">
+          @if (isFirst && showActions) {
+          <th mat-header-cell *matHeaderCellDef>
+            <mat-checkbox (change)="$event ? masterToggle() : null" [checked]="selection.hasValue() && isAllSelected()"
+              [indeterminate]="selection.hasValue() && !isAllSelected()">
+            </mat-checkbox>
+          </th>
+          }
+          @if (isLast && showActions) {
+          <th mat-header-cell *matHeaderCellDef>
+            <app-event-table-actions [selectedDataTypes]="selectedColumns"
+              (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
+          </th>
+          }
+          @if ((!(isFirst && showActions) && !(isLast && showActions))) {
+          <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">
+            <app-data-type-icon [dataType]="column"></app-data-type-icon>
+          </th>
+          }
+          <td mat-cell matRipple *matCellDef="let row" (click)="onCellClick($event, row, column)">
+            @if (column === 'Checkbox') {
+            <mat-checkbox (click)="$event.stopPropagation()" (change)="$event ? checkBoxClick(row) : null"
+              [checked]="selection.isSelected(row)">
+            </mat-checkbox>
+            }
+            @if (column === 'Actions') {
+            <span>
+              @if (user) {
+              <app-event-actions [user]="user" [event]="$any(row.Event)"
+                [showDownloadOriginal]="true"></app-event-actions>
+              }
+            </span>
+            }
+            @if (column === 'Activity Types') {
+            <span class="activity-type-cell">
+              @if (row['Merged Event']) {
+                <span class="benchmark-icon" [class.is-muted]="!row['Has Benchmark']"
+                  (click)="openBenchmarkFlow($event, row.Event)">
+                  <mat-icon [matTooltip]="row['Has Benchmark'] ? 'View Benchmark Analysis' : 'Generate Benchmark Analysis'"
+                    [style.color]="row['Has Benchmark'] ? getBenchmarkColor(row.Event) : ''">analytics</mat-icon>
+                </span>
+              }
+              @if (!row['Merged Event'] && row[column]) {
+              <app-activity-type-icon [activityType]="row[column]" size="18px" vAlign="middle"></app-activity-type-icon>
+              }
+              {{ row[column] }}
+            </span>
+            }
+            @if (column !== 'Checkbox' && column !== 'Actions' && column !== 'Activity Types' && column!=='Privacy') {
+            <span class="data-cell">
+              {{ row[column] }}
+              @if (column === 'Ascent' && row.isAscentExcluded) {
+              <mat-icon class="excluded-icon" matTooltip="Ascent excluded by settings">info</mat-icon>
+              }
+              @if (column === 'Descent' && row.isDescentExcluded) {
+              <mat-icon class="excluded-icon" matTooltip="Descent excluded by settings">info</mat-icon>
+              }
+            </span>
+            }
+          </td>
+        </ng-container>
         }
-        @if (isLast && showActions) {
-        <th mat-header-cell *matHeaderCellDef>
-          <app-event-table-actions [selectedDataTypes]="selectedColumns"
-            (selectedDataTypesChange)="selectedColumnsChange($event)"></app-event-table-actions>
-        </th>
-        }
-        @if ((!(isFirst && showActions) && !(isLast && showActions))) {
-        <th mat-header-cell *matHeaderCellDef mat-sort-header [disabled]="!isColumnHeaderSortable(column)">
-          <app-data-type-icon [dataType]="column"></app-data-type-icon>
-        </th>
-        }
-        <td mat-cell matRipple *matCellDef="let row" (click)="onCellClick($event, row, column)">
-          @if (column === 'Checkbox') {
-          <mat-checkbox (click)="$event.stopPropagation()" (change)="$event ? checkBoxClick(row) : null"
-            [checked]="selection.isSelected(row)">
-          </mat-checkbox>
-          }
-          @if (column === 'Actions') {
-          <span>
-            @if (user) {
-            <app-event-actions [user]="user" [event]="$any(row.Event)"
-              [showDownloadOriginal]="true"></app-event-actions>
-            }
-          </span>
-          }
-          @if (column === 'Activity Types') {
-          <span class="activity-type-cell">
-            @if (row['Merged Event']) {
-              <span class="benchmark-icon" [class.is-muted]="!row['Has Benchmark']"
-                (click)="openBenchmarkFlow($event, row.Event)">
-                <mat-icon [matTooltip]="row['Has Benchmark'] ? 'View Benchmark Analysis' : 'Generate Benchmark Analysis'"
-                  [style.color]="row['Has Benchmark'] ? getBenchmarkColor(row.Event) : ''">analytics</mat-icon>
-              </span>
-            }
-            @if (!row['Merged Event'] && row[column]) {
-            <app-activity-type-icon [activityType]="row[column]" size="18px" vAlign="middle"></app-activity-type-icon>
-            }
-            {{ row[column] }}
-          </span>
-          }
-          @if (column !== 'Checkbox' && column !== 'Actions' && column !== 'Activity Types' && column!=='Privacy') {
-          <span class="data-cell">
-            {{ row[column] }}
-            @if (column === 'Ascent' && row.isAscentExcluded) {
-            <mat-icon class="excluded-icon" matTooltip="Ascent excluded by settings">info</mat-icon>
-            }
-            @if (column === 'Descent' && row.isDescentExcluded) {
-            <mat-icon class="excluded-icon" matTooltip="Descent excluded by settings">info</mat-icon>
-            }
-          </span>
-          }
-        </td>
-      </ng-container>
-      }
 
 
-      <tr mat-header-row *matHeaderRowDef="getColumnsToDisplay(); sticky: true"></tr>
-      <tr mat-row *matRowDef="let row; columns: getColumnsToDisplay();" [@rowsAnimation]=""
-        [routerLink]="['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
-        [class.merged]="row['Merged Event']" [style.--row-gradient]="row['Gradient']" class="normal-row activity-row">
-      </tr>
+        <tr mat-header-row *matHeaderRowDef="getColumnsToDisplay(); sticky: true"></tr>
+        <tr mat-row *matRowDef="let row; columns: getColumnsToDisplay();" [@rowsAnimation]=""
+          [routerLink]="['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
+          [class.merged]="row['Merged Event']" [style.--row-gradient]="row['Gradient']" class="normal-row activity-row">
+        </tr>
 
-      <!-- Row shown when there is no matching data. -->
-      <tr class="mat-row" *matNoDataRow>
-        <td class="mat-cell" [attr.colspan]="getColumnsToDisplay().length">
-          <span *ngIf="searchTerm">No events found matching "{{searchTerm}}"</span>
-          <span *ngIf="!searchTerm && !isLoading">No events found</span>
-        </td>
-      </tr>
-    </table>
-  </div>
+        <!-- Row shown when there is no matching data. -->
+        <tr class="mat-row" *matNoDataRow>
+          <td class="mat-cell" [attr.colspan]="getColumnsToDisplay().length">
+            <span *ngIf="searchTerm">No events found matching "{{searchTerm}}"</span>
+            <span *ngIf="!searchTerm && !isLoading">No events found</span>
+          </td>
+        </tr>
+      </table>
+    </div>
 
-  <mat-paginator (page)="pageChanges($event)" [length]="data ? data.data.length : 0"
-    [pageSize]="user.settings.dashboardSettings.tableSettings.eventsPerPage" [showFirstLastButtons]="true"
-    [pageSizeOptions]="[10, 25, 50, 100, 250]"></mat-paginator>
-
-  <app-shade [isActive]="isLoading" [hasError]="this.events && this.events.length === 0"
-    [errorMessage]="'Nothing to show'"></app-shade>
+    <mat-paginator (page)="pageChanges($event)" [length]="data ? data.data.length : 0"
+      [pageSize]="user.settings.dashboardSettings.tableSettings.eventsPerPage" [showFirstLastButtons]="true"
+      [pageSizeOptions]="[10, 25, 50, 100, 250]"></mat-paginator>
+  </app-loading-overlay>
 </div>

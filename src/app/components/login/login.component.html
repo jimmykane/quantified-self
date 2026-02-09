@@ -1,45 +1,45 @@
 <div class="login-container">
   <mat-card class="login-card">
-    <app-shade [isActive]="isLoading"></app-shade>
+    <app-loading-overlay [isLoading]="isLoading" [showSkeleton]="false" height="auto">
+      <div class="login-content">
 
-    <div class="login-content">
+        <!-- Email Link Sign In -->
+        <div class="email-section">
+          <h2 class="title">Sign In</h2>
+          <p class="subtitle">Enter your email to receive a secure sign-in link.</p>
 
-      <!-- Email Link Sign In -->
-      <div class="email-section">
-        <h2 class="title">Sign In</h2>
-        <p class="subtitle">Enter your email to receive a secure sign-in link.</p>
+          <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
+            <mat-label>Email Address</mat-label>
+            <input matInput [(ngModel)]="email" type="email" placeholder="name@example.com"
+              (keyup.enter)="email ? sendEmailLink(email) : null" required>
+            <mat-icon matSuffix>email</mat-icon>
+            <mat-hint>We'll send you a magic link to sign in instantly.</mat-hint>
+          </mat-form-field>
 
-        <mat-form-field appearance="outline" class="full-width" subscriptSizing="dynamic">
-          <mat-label>Email Address</mat-label>
-          <input matInput [(ngModel)]="email" type="email" placeholder="name@example.com"
-            (keyup.enter)="email ? sendEmailLink(email) : null" required>
-          <mat-icon matSuffix>email</mat-icon>
-          <mat-hint>We'll send you a magic link to sign in instantly.</mat-hint>
-        </mat-form-field>
+          <button mat-raised-button color="primary" (click)="sendEmailLink(email)" [disabled]="!email || isLoading"
+            class="action-button">
+            Send Magic Link
+          </button>
+        </div>
 
-        <button mat-raised-button color="primary" (click)="sendEmailLink(email)" [disabled]="!email || isLoading"
-          class="action-button">
-          Send Magic Link
-        </button>
+        <div class="divider-container">
+          <div class="divider-line"></div>
+          <span class="divider-text">OR</span>
+          <div class="divider-line"></div>
+        </div>
+
+        <!-- Other Providers -->
+        <div class="social-section">
+          <button mat-stroked-button (click)="signInWithProvider(signInProviders.Google)" class="social-button">
+            <mat-icon class="google-icon" svgIcon="google_logo_light"></mat-icon>
+            Sign in with Google
+          </button>
+          <button mat-stroked-button (click)="signInWithProvider(signInProviders.GitHub)" class="social-button">
+            <mat-icon class="github-icon" svgIcon="github_logo"></mat-icon>
+            Sign in with GitHub
+          </button>
+        </div>
       </div>
-
-      <div class="divider-container">
-        <div class="divider-line"></div>
-        <span class="divider-text">OR</span>
-        <div class="divider-line"></div>
-      </div>
-
-      <!-- Other Providers -->
-      <div class="social-section">
-        <button mat-stroked-button (click)="signInWithProvider(signInProviders.Google)" class="social-button">
-          <mat-icon class="google-icon" svgIcon="google_logo_light"></mat-icon>
-          Sign in with Google
-        </button>
-        <button mat-stroked-button (click)="signInWithProvider(signInProviders.GitHub)" class="social-button">
-          <mat-icon class="github-icon" svgIcon="github_logo"></mat-icon>
-          Sign in with GitHub
-        </button>
-      </div>
-    </div>
+    </app-loading-overlay>
   </mat-card>
 </div>

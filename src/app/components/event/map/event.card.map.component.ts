@@ -40,6 +40,7 @@ import { MarkerFactoryService } from '../../../services/map/marker-factory.servi
   standalone: false
 })
 export class EventCardMapComponent extends MapAbstractDirective implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+  public static readonly JUMP_MARKER_SIZE_BUCKETS = [18, 22, 26, 30, 34] as const;
   @ViewChild(GoogleMap) googleMap!: GoogleMap;
   @Input() event!: EventInterface;
   @Input() targetUserID!: string;
@@ -114,6 +115,8 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   private processSequence = 0;
   private previousState: any = {};
   private pendingFitBoundsTimeout: ReturnType<typeof setTimeout> | null = null;
+  private jumpHangTimeMin: number | null = null;
+  private jumpHangTimeMax: number | null = null;
 
   public mapInstance = signal<google.maps.Map | undefined>(undefined);
   public isMapVisible = signal(true);
@@ -359,17 +362,18 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   getJumpMarkerOptions(jump: DataJumpEvent, color: string): google.maps.marker.AdvancedMarkerElementOptions {
     const data = jump.jumpData;
     const format = (v: number | undefined) => v !== undefined ? Math.round(v * 10) / 10 : '-';
+    const hangTimeDisplay = data.hang_time ? data.hang_time.getDisplayValue(false, true, true) : '-';
     const stats = [
       `Distance: ${format(data.distance.getValue())} ${data.distance.getDisplayUnit()}`,
       `Height: ${data.height ? `${format(data.height.getValue())} ${data.height.getDisplayUnit()}` : '-'}`,
       `Score: ${format(data.score.getValue())}`,
-      `Hang Time: ${data.hang_time ? `${format(data.hang_time.getValue())}` : '-'}`,
+      `Hang Time: ${hangTimeDisplay}`,
       `Speed: ${data.speed ? `${format(data.speed.getValue())} ${data.speed.getDisplayUnit()}` : '-'}`,
       `Rotations: ${data.rotations ? `${format(data.rotations.getValue())}` : '-'}`
     ].join('\n');
 
     const options = {
-      content: this.markerFactory.createJumpMarker(color),
+      content: this.markerFactory.createJumpMarker(color, this.getJumpMarkerSize(jump)),
       title: `Jump Stats:\n${stats}`,
       zIndex: 150,
       gmpClickable: true
@@ -470,6 +474,8 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     this.loading();
     this.noMapData = false;
     this.activitiesMapData = [];
+    this.jumpHangTimeMin = null;
+    this.jumpHangTimeMax = null;
 
     if (!this.selectedActivities?.length) {
       this.noMapData = true;
@@ -526,6 +532,8 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         }, [])
       });
     });
+
+    this.updateJumpHangTimeRange();
     this.loaded();
 
     if (shouldFitBounds) {
@@ -547,6 +555,48 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         this.fitBoundsToActivities();
       }, 500);
     }
+  }
+
+  private updateJumpHangTimeRange() {
+    const hangTimes = this.activitiesMapData
+      .flatMap(data => data.jumps)
+      .map(jump => this.getJumpHangTime(jump.event))
+      .filter((value): value is number => value !== null);
+
+    if (!hangTimes.length) {
+      this.jumpHangTimeMin = null;
+      this.jumpHangTimeMax = null;
+      return;
+    }
+
+    this.jumpHangTimeMin = Math.min(...hangTimes);
+    this.jumpHangTimeMax = Math.max(...hangTimes);
+  }
+
+  private getJumpHangTime(jump: DataJumpEvent): number | null {
+    const raw = jump?.jumpData?.hang_time?.getValue();
+    return typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+  }
+
+  private getJumpMarkerSize(jump: DataJumpEvent): number {
+    const buckets = EventCardMapComponent.JUMP_MARKER_SIZE_BUCKETS;
+    const hangTime = this.getJumpHangTime(jump);
+
+    if (hangTime === null || this.jumpHangTimeMin === null || this.jumpHangTimeMax === null) {
+      return buckets[0];
+    }
+
+    if (this.jumpHangTimeMin === this.jumpHangTimeMax) {
+      return buckets[Math.floor(buckets.length / 2)];
+    }
+
+    const normalized = (hangTime - this.jumpHangTimeMin) / (this.jumpHangTimeMax - this.jumpHangTimeMin);
+    const bucketIndex = Math.min(
+      buckets.length - 1,
+      Math.max(0, Math.floor(normalized * buckets.length))
+    );
+
+    return buckets[bucketIndex];
   }
 
   private fitBoundsToActivities() {
