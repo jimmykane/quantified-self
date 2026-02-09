@@ -28,6 +28,8 @@ vi.mock('@angular/fire/functions', async () => {
 
 const {
     mockAddDoc,
+    mockGetDoc,
+    mockGetDocs,
     mockDocData,
     mockCollection,
     mockDoc,
@@ -38,6 +40,8 @@ const {
 } = vi.hoisted(() => {
     return {
         mockAddDoc: vi.fn(),
+        mockGetDoc: vi.fn(),
+        mockGetDocs: vi.fn(),
         mockDocData: vi.fn(),
         mockCollection: vi.fn(),
         mockDoc: vi.fn(),
@@ -54,6 +58,8 @@ vi.mock('@angular/fire/firestore', async () => {
     return {
         ...actual,
         addDoc: mockAddDoc,
+        getDoc: mockGetDoc,
+        getDocs: mockGetDocs,
         collection: mockCollection,
         doc: mockDoc,
         docData: mockDocData,
@@ -92,6 +98,11 @@ describe('AppPaymentService', () => {
         mockAddDoc.mockResolvedValue({ id: 'test_session_id' });
         mockDocData.mockReturnValue(of({ url: 'http://stripe.com/checkout' }));
         mockCollectionData.mockReturnValue(of([]));
+        mockGetDocs.mockResolvedValue({ docs: [] });
+        mockGetDoc.mockResolvedValue({
+            exists: () => false,
+            data: () => undefined
+        });
         mockRunInInjectionContext.mockImplementation((injector: any, fn: any) => fn());
 
         TestBed.configureTestingModule({
@@ -234,7 +245,7 @@ describe('AppPaymentService', () => {
                 unit_amount: 1000,
                 description: 'Monthly with legacy promo key',
                 metadata: {
-                    promotionCodeId: 'promo_1Syb2dE0WZdfLutFyhPh6zxv'
+                    promotionCodeId: 'promo_111111111'
                 }
             } as any;
 
@@ -246,6 +257,27 @@ describe('AppPaymentService', () => {
 
             expect(payload.promotion_code).toBeUndefined();
             expect(payload.allow_promotion_codes).toBe(true);
+        });
+
+        it('should apply promotion code from stripe_metadata_promotion_code_id fallback field', async () => {
+            const recurringPriceWithPrefixedPromo = {
+                id: 'price_recurring_prefixed_promo',
+                type: 'recurring',
+                active: true,
+                currency: 'usd',
+                unit_amount: 1000,
+                description: 'Monthly with prefixed promo metadata',
+                stripe_metadata_promotion_code_id: 'promo_987654321'
+            } as any;
+
+            await service.appendCheckoutSession(recurringPriceWithPrefixedPromo);
+
+            expect(mockAddDoc).toHaveBeenCalled();
+            const args = mockAddDoc.mock.calls[0];
+            const payload = args[1];
+
+            expect(payload.promotion_code).toBe('promo_987654321');
+            expect(payload.allow_promotion_codes).toBe(false);
         });
     });
     describe('restorePurchases', () => {

@@ -2,13 +2,13 @@ import { Injectable, inject, Injector, runInInjectionContext } from '@angular/co
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { environment } from '../../environments/environment';
-import { Firestore, collection, collectionData, addDoc, doc, docData, query, where } from '@angular/fire/firestore';
+import { Firestore, collection, collectionData, addDoc, doc, docData, getDoc, getDocs, query, where } from '@angular/fire/firestore';
 
 // ... (other imports)
 
 
 import { Auth } from '@angular/fire/auth';
-import { Observable, from, switchMap, filter, take, map, timeout } from 'rxjs';
+import { Observable, from, switchMap, filter, take, map, timeout, firstValueFrom } from 'rxjs';
 import { AppWindowService } from './app.window.service';
 import { LoggerService } from './logger.service';
 import { AppFunctionsService } from './app.functions.service';
@@ -35,6 +35,8 @@ export interface StripePrice {
     interval_count: number | null;
     trial_period_days: number | null;
     metadata?: { [key: string]: string };
+    product?: string;
+    stripe_metadata_promotion_code_id?: string;
     recurring?: {
         interval: 'day' | 'month' | 'week' | 'year';
         interval_count?: number;
@@ -49,6 +51,31 @@ export interface StripeSubscription {
     cancel_at_period_end: boolean;
 }
 
+type CheckoutMode = 'subscription' | 'payment';
+
+interface CheckoutInput {
+    priceId: string;
+    mode: CheckoutMode;
+    productId: string | null;
+}
+
+interface CheckoutSessionPayload {
+    price: string;
+    success_url: string;
+    cancel_url: string;
+    allow_promotion_codes: boolean;
+    mode: CheckoutMode;
+    automatic_tax: { enabled: true };
+    metadata: { firebaseUID: string };
+    promotion_code?: string;
+    subscription_data?: { metadata: { firebaseUID: string } };
+}
+
+interface CheckoutSessionDocumentData {
+    url?: string;
+    error?: string | { message?: string };
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -58,6 +85,8 @@ export class AppPaymentService {
     private functionsService = inject(AppFunctionsService);
     private dialog = inject(MatDialog);
     private injector = inject(Injector);
+    private readonly userCancelledPortalMessage = 'User cancelled redirection to portal.';
+    private readonly maxCheckoutRetryAttempts = 1;
 
     constructor(private windowService: AppWindowService, private logger: LoggerService) { }
 
@@ -154,11 +183,11 @@ export class AppPaymentService {
         const pricesRef = collection(this.firestore, `products/${product.id}/prices`);
         const activePricesQuery = query(pricesRef, where('active', '==', true));
 
-        return new Promise((resolve) => {
-            runInInjectionContext(this.injector, () => collectionData(activePricesQuery, { idField: 'id' })).pipe(take(1)).subscribe((prices) => {
-                resolve({ ...product, prices: prices as StripePrice[] });
-            });
-        });
+        const prices = await firstValueFrom(
+            runInInjectionContext(this.injector, () => collectionData(activePricesQuery, { idField: 'id' })).pipe(take(1))
+        );
+
+        return { ...product, prices: prices as StripePrice[] };
     }
 
     /**
@@ -170,183 +199,236 @@ export class AppPaymentService {
             throw new Error('User must be authenticated to create a checkout session.');
         }
 
-        // Determine priceId and mode
-        const priceId = typeof price === 'string' ? price : price.id;
-        // Default to subscription if string passed or recurring field present, otherwise payment
-        const mode = typeof price === 'string' ? 'subscription' : (price.type === 'recurring' ? 'subscription' : 'payment');
-        const promotionCodeId = this.resolvePromotionCodeId(price);
-
-        // Pre-checkout check: Link existing Stripe customer if found
-        // This prevents duplicate subscriptions for recreated users
-        try {
-            const result = await this.functionsService.call<void, { linked: boolean, role?: string }>('linkExistingStripeCustomer');
-
-            if (result.data.linked) {
-                this.logger.log(`Existing subscription found and linked. Role: ${result.data.role}. Skipping checkout.`);
-                // Force token refresh to pick up new claims
-                await user.getIdToken(true);
-                // Throw a specific error to signal the calling code that we linked instead of checking out
-                throw new Error(`SUBSCRIPTION_RESTORED:${result.data.role}`);
-            }
-        } catch (error: unknown) {
-            const err = error as Error;
-            if (err.message?.startsWith('SUBSCRIPTION_RESTORED:')) {
-                throw error; // Re-throw so the caller can handle it
-            }
-            this.logger.warn('Pre-checkout link check failed, proceeding with checkout:', error);
-            // Continue with checkout if the linking check fails
-        }
-
-        // Check for existing active subscriptions first (only relevant for subscriptions)
-        // If it's a one-time payment mode, we might not need to block?
-        // But let's keep logic simple: manage sub if active sub exists.
-
-        const subscriptionsRef = collection(this.firestore, `customers/${user.uid}/subscriptions`);
-        const activeQuery = query(subscriptionsRef, where('status', 'in', ['active', 'trialing']));
-
-        try {
-            const snapshot = from(runInInjectionContext(this.injector, () => collectionData(activeQuery).pipe(take(1))));
-            const activeSubs = await snapshot.toPromise();
-
-            // Only block/prompt if we are trying to start a NEW subscription while one exists
-            // One-time payments (mode === 'payment') can probably proceed?
-            // User requirement: "I made my free product one time paid" -> imply upgrading/buying.
-            // Let's assume if mode is payment, we allow it (e.g. lifetime), or still warn?
-            // Safer to warn if they have *any* active subscription to avoid confusion,
-            // but stricly speaking a one-time purchase is separate.
-            // Let's stick to existing logic for now but perhaps skip if mode is payment?
-            // For now, keep as is.
-
-            if (activeSubs && activeSubs.length > 0) {
-                // ... existing dialog logic ...
-                // (rest of the block is unchanged, just omitted for brevity in diff if not touching it)
-                // actually I need to include it or carefully slice.
-                // let me just allow the logic to run for now.
-                this.logger.warn('User already has an active subscription. Opening management dialog.');
-
-                const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-                    data: {
-                        title: 'Active Subscription',
-                        message: 'You already have an active subscription. Would you like to manage it instead?',
-                        confirmText: 'Manage Subscription',
-                        cancelText: 'Cancel'
-                    }
-                });
-
-                const confirmed = await new Promise<boolean>(resolve => {
-                    dialogRef.afterClosed().pipe(take(1)).subscribe(result => resolve(!!result));
-                });
-
-                if (confirmed) {
-                    await this.manageSubscriptions();
-                    return; // Successfully handed off to manage portal
-                } else {
-                    // Explicitly throw a known error for cancellation so UI can stop loading
-                    throw new Error('User cancelled redirection to portal.');
-                }
-            }
-        } catch (e: any) {
-            if (e.message === 'User cancelled redirection to portal.') {
-                return;
-            }
-            this.logger.error('Error checking existing subscriptions:', e);
-        }
-
         const success = successUrl || `${this.windowService.currentDomain}/payment/success`;
         const cancel = cancelUrl || `${this.windowService.currentDomain}/payment/cancel`;
+        await this.appendCheckoutSessionWithAttempt(price, user.uid, success, cancel, user, 0);
+    }
 
-        this.logger.log('Creating checkout session for price:', priceId, 'mode:', mode);
-        const checkoutSessionsRef = collection(this.firestore, `customers/${user.uid}/checkout_sessions`);
+    private async appendCheckoutSessionWithAttempt(
+        price: string | StripePrice,
+        userId: string,
+        successUrl: string,
+        cancelUrl: string,
+        user: { getIdToken: (forceRefresh?: boolean) => Promise<string> },
+        attempt: number
+    ): Promise<void> {
+        const checkoutInput = this.resolveCheckoutInput(price);
+        const promotionCodeId = await this.resolvePromotionCodeIdForCheckout(price, checkoutInput);
 
+        await this.runPreCheckoutLinkCheck(user);
+
+        const shouldExitCheckout = await this.handleExistingActiveSubscriptions(userId);
+        if (shouldExitCheckout) {
+            return;
+        }
+
+        this.logger.log('Creating checkout session for price:', checkoutInput.priceId, 'mode:', checkoutInput.mode);
+        const checkoutSessionsRef = collection(this.firestore, `customers/${userId}/checkout_sessions`);
+        const sessionPayload = this.buildCheckoutSessionPayload(checkoutInput, userId, successUrl, cancelUrl, promotionCodeId);
+
+        let checkoutSessionDocId = '';
         try {
-            // CRITICAL FIX: Explicitly add metadata to the session and subscription_data.
-            // The `firestore-stripe-payments` extension relies on finding `firebaseUID` in the Stripe object's metadata
-            // to map the payment/invoice back to the correct Firestore User Document.
-            //
-            // Without this, the extension fails with: 'Value for argument "documentPath" is not a valid resource path'
-            // because it receives an empty UID when processing webhooks (like invoice.paid).
-            //
-            // Stripe DOES NOT automatically propagate Customer metadata to Invoices/Subscriptions.
-            // We must force this propagation here during Checkout Session creation.
-            const sessionPayload: any = {
-                price: priceId,
-                success_url: success,
-                cancel_url: cancel,
-                allow_promotion_codes: !promotionCodeId,
-                mode: mode, // Explicitly set mode
-                automatic_tax: { enabled: true },
-                metadata: {
-                    firebaseUID: user.uid
-                }
-            };
-
-            if (promotionCodeId) {
-                sessionPayload.promotion_code = promotionCodeId;
-            }
-
-            if (mode === 'subscription') {
-                // Ensure the metadata is attached to the Subscription object created by this checkout.
-                // This ensures that future recurring invoices generated from this subscription
-                // will carry this metadata, allowing the extension to process renewal webhooks correctly.
-                sessionPayload.subscription_data = {
-                    metadata: {
-                        firebaseUID: user.uid
-                    }
-                };
-            }
-
             const sessionDoc = await runInInjectionContext(this.injector, () => addDoc(checkoutSessionsRef, sessionPayload));
+            checkoutSessionDocId = sessionDoc.id;
+            this.logger.log('Checkout session created with ID:', checkoutSessionDocId);
+        } catch (error) {
+            this.logger.error('Error creating checkout doc:', error);
+            throw error;
+        }
 
-            this.logger.log('Checkout session created with ID:', sessionDoc.id);
+        let session: CheckoutSessionDocumentData;
+        try {
+            session = await this.waitForCheckoutSessionUpdate(userId, checkoutSessionDocId);
+        } catch (error) {
+            this.logger.error('Error waiting for checkout session URL:', error);
+            const errorName = error instanceof Error ? error.name : '';
+            if (errorName === 'TimeoutError') {
+                alert('Payment system is slow to respond. Please check if the popup was blocked or try again.');
+            } else {
+                alert('An error occurred starting the payment. Please try again.');
+            }
+            return;
+        }
 
-            // Wait for the extension to add the URL
-            const sessionRef = doc(this.firestore, `customers/${user.uid}/checkout_sessions/${sessionDoc.id}`);
+        if (session.error) {
+            const errorMessage = this.getCheckoutErrorMessage(session.error);
+            this.logger.error('Stripe extension returned an error:', session.error);
 
-            runInInjectionContext(this.injector, () => docData(sessionRef)).pipe(
-                filter((session: any) => session?.url || session?.error),
-                take(1),
-                timeout(15000) // Timeout after 15 seconds
-            ).subscribe({
-                next: async (session: any) => {
-                    if (session.error) {
-                        this.logger.error('Stripe extension returned an error:', session.error);
+            if (errorMessage.includes('No such customer') && attempt < this.maxCheckoutRetryAttempts) {
+                this.logger.log('Detected stale Stripe customer ID. Clearing and retrying...');
+                await this.functionsService.call<void, { success: boolean, cleaned: boolean }>('cleanupStripeCustomer');
+                await this.appendCheckoutSessionWithAttempt(price, userId, successUrl, cancelUrl, user, attempt + 1);
+                return;
+            }
 
-                        // Self-healing: If customer not found, clear IDs and retry once
-                        if (session.error.message?.includes('No such customer')) {
-                            this.logger.log('Detected stale Stripe customer ID. Clearing and retrying...');
+            alert(`Payment error: ${errorMessage}`);
+            return;
+        }
 
-                            await this.functionsService.call<void, { success: boolean, cleaned: boolean }>('cleanupStripeCustomer');
+        if (!session.url) {
+            alert('An error occurred starting the payment. Please try again.');
+            return;
+        }
 
-                            // Retry the specific checkout session creation
-                            return this.appendCheckoutSession(priceId, success, cancel);
-                        }
-                        alert(`Payment error: ${session.error.message}`);
-                        return;
-                    }
-                    this.logger.log('Redirecting to Stripe:', session.url);
-                    window.location.assign(session.url);
-                },
-                error: (err) => {
-                    this.logger.error('Error waiting for checkout session URL:', err);
-                    if (err.name === 'TimeoutError') {
-                        alert('Payment system is slow to respond. Please check if the popup was blocked or try again.');
-                    } else {
-                        alert('An error occurred starting the payment. Please try again.');
-                    }
-                }
-            });
-        } catch (e) {
-            this.logger.error('Error creating checkout doc:', e);
-            throw e;
+        this.logger.log('Redirecting to Stripe:', session.url);
+        window.location.assign(session.url);
+    }
+
+    private resolveCheckoutInput(price: string | StripePrice): CheckoutInput {
+        if (typeof price === 'string') {
+            return {
+                priceId: price,
+                mode: 'subscription',
+                productId: null
+            };
+        }
+
+        return {
+            priceId: price.id,
+            mode: price.type === 'recurring' ? 'subscription' : 'payment',
+            productId: price.product ?? null
+        };
+    }
+
+    private async resolvePromotionCodeIdForCheckout(
+        price: string | StripePrice,
+        checkoutInput: CheckoutInput
+    ): Promise<string | null> {
+        const promotionCodeId = this.resolvePromotionCodeId(price);
+        if (promotionCodeId || typeof price === 'string') {
+            return promotionCodeId;
+        }
+
+        return this.resolvePromotionCodeIdFromFirestoreDocument(checkoutInput.priceId, checkoutInput.productId);
+    }
+
+    private async runPreCheckoutLinkCheck(user: { getIdToken: (forceRefresh?: boolean) => Promise<string> }): Promise<void> {
+        try {
+            const result = await this.functionsService.call<void, { linked: boolean, role?: string }>('linkExistingStripeCustomer');
+            if (!result.data.linked) {
+                return;
+            }
+
+            this.logger.log(`Existing subscription found and linked. Role: ${result.data.role}. Skipping checkout.`);
+            await user.getIdToken(true);
+            throw new Error(`SUBSCRIPTION_RESTORED:${result.data.role}`);
+        } catch (error: unknown) {
+            if (error instanceof Error && error.message.startsWith('SUBSCRIPTION_RESTORED:')) {
+                throw error;
+            }
+            this.logger.warn('Pre-checkout link check failed, proceeding with checkout:', error);
         }
     }
 
+    private async handleExistingActiveSubscriptions(userId: string): Promise<boolean> {
+        const subscriptionsRef = collection(this.firestore, `customers/${userId}/subscriptions`);
+        const activeQuery = query(subscriptionsRef, where('status', 'in', ['active', 'trialing']));
+
+        try {
+            const activeSubs = await firstValueFrom(
+                runInInjectionContext(this.injector, () => collectionData(activeQuery).pipe(take(1)))
+            );
+
+            if (!activeSubs.length) {
+                return false;
+            }
+
+            this.logger.warn('User already has an active subscription. Opening management dialog.');
+            const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+                data: {
+                    title: 'Active Subscription',
+                    message: 'You already have an active subscription. Would you like to manage it instead?',
+                    confirmText: 'Manage Subscription',
+                    cancelText: 'Cancel'
+                }
+            });
+
+            const confirmed = !!(await firstValueFrom(dialogRef.afterClosed().pipe(take(1))));
+            if (!confirmed) {
+                throw new Error(this.userCancelledPortalMessage);
+            }
+
+            await this.manageSubscriptions();
+            return true;
+        } catch (error) {
+            if (error instanceof Error && error.message === this.userCancelledPortalMessage) {
+                return true;
+            }
+
+            this.logger.error('Error checking existing subscriptions:', error);
+            return false;
+        }
+    }
+
+    private buildCheckoutSessionPayload(
+        checkoutInput: CheckoutInput,
+        userId: string,
+        successUrl: string,
+        cancelUrl: string,
+        promotionCodeId: string | null
+    ): CheckoutSessionPayload {
+        const payload: CheckoutSessionPayload = {
+            price: checkoutInput.priceId,
+            success_url: successUrl,
+            cancel_url: cancelUrl,
+            allow_promotion_codes: !promotionCodeId,
+            mode: checkoutInput.mode,
+            automatic_tax: { enabled: true },
+            metadata: { firebaseUID: userId }
+        };
+
+        if (promotionCodeId) {
+            payload.promotion_code = promotionCodeId;
+        }
+
+        if (checkoutInput.mode === 'subscription') {
+            payload.subscription_data = {
+                metadata: { firebaseUID: userId }
+            };
+        }
+
+        return payload;
+    }
+
+    private async waitForCheckoutSessionUpdate(userId: string, checkoutSessionDocId: string): Promise<CheckoutSessionDocumentData> {
+        const sessionRef = doc(this.firestore, `customers/${userId}/checkout_sessions/${checkoutSessionDocId}`);
+        const session = await firstValueFrom(
+            runInInjectionContext(this.injector, () => docData(sessionRef)).pipe(
+                filter((sessionData): sessionData is CheckoutSessionDocumentData => {
+                    const data = sessionData as CheckoutSessionDocumentData | null | undefined;
+                    return !!data && (!!data.url || !!data.error);
+                }),
+                take(1),
+                timeout(15000)
+            )
+        );
+        return session;
+    }
+
+    private getCheckoutErrorMessage(error: CheckoutSessionDocumentData['error']): string {
+        if (!error) {
+            return 'Unknown payment error.';
+        }
+
+        if (typeof error === 'string') {
+            return error;
+        }
+
+        if (error.message && error.message.trim()) {
+            return error.message;
+        }
+
+        return 'Unknown payment error.';
+    }
+
     private resolvePromotionCodeId(price: string | StripePrice): string | null {
-        if (typeof price === 'string' || !price.metadata) {
+        if (typeof price === 'string') {
             return null;
         }
 
-        const rawValue = price.metadata.promotion_code_id;
+        const prefixedMetadataValue = price.stripe_metadata_promotion_code_id ?? null;
+        const strictMetadataValue = price.metadata?.promotion_code_id ?? null;
+        const rawValue = strictMetadataValue ?? prefixedMetadataValue;
         if (!rawValue) {
             return null;
         }
@@ -360,7 +442,57 @@ export class AppPaymentService {
             return promotionCodeId;
         }
 
-        this.logger.warn(`[appendCheckoutSession] Ignoring metadata 'promotion_code_id' because '${promotionCodeId}' is not a Stripe promotion code ID (expected prefix: promo_).`);
+        const sourceKey = strictMetadataValue ? 'promotion_code_id' : 'stripe_metadata_promotion_code_id';
+        this.logger.warn(`[appendCheckoutSession] Ignoring metadata '${sourceKey}' because '${promotionCodeId}' is not a Stripe promotion code ID (expected prefix: promo_).`);
+        return null;
+    }
+
+    private async resolvePromotionCodeIdFromFirestoreDocument(priceId: string, productId: string | null): Promise<string | null> {
+        const candidatePaths: string[] = [];
+        if (productId) {
+            candidatePaths.push(`products/${productId}/prices/${priceId}`);
+        }
+
+        try {
+            if (!candidatePaths.length) {
+                const productsRef = collection(this.firestore, 'products');
+                const activeProductsQuery = query(productsRef, where('active', '==', true));
+                const productsSnapshot = await runInInjectionContext(this.injector, () => getDocs(activeProductsQuery));
+                for (const productDoc of productsSnapshot.docs) {
+                    candidatePaths.push(`products/${productDoc.id}/prices/${priceId}`);
+                }
+            }
+
+            for (const path of candidatePaths) {
+                const priceRef = doc(this.firestore, path);
+                const priceSnapshot = await runInInjectionContext(this.injector, () => getDoc(priceRef));
+                if (!priceSnapshot.exists()) {
+                    continue;
+                }
+
+                const data = priceSnapshot.data() as {
+                    metadata?: { [key: string]: string };
+                    stripe_metadata_promotion_code_id?: string;
+                };
+                const strictMetadataValue = data.metadata?.promotion_code_id ?? null;
+                const prefixedMetadataValue = data.stripe_metadata_promotion_code_id ?? null;
+                const rawValue = strictMetadataValue ?? prefixedMetadataValue;
+
+                if (!rawValue) {
+                    return null;
+                }
+
+                const promotionCodeId = rawValue.trim();
+                if (!promotionCodeId.startsWith('promo_')) {
+                    return null;
+                }
+
+                return promotionCodeId;
+            }
+        } catch {
+            // If fallback lookup fails, continue without a promotion code.
+        }
+
         return null;
     }
 
