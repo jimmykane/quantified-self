@@ -1,5 +1,6 @@
 ---
 trigger: always_on
+description: Enforce Angular Material-first UI patterns and theme consistency.
 ---
 
 # Material Design Strict Enforcement
@@ -8,9 +9,10 @@ You are an expert in Angular Material Design 3. Your goal is to maintain a "Pure
 
 ## Core Principles
 
-1.  **No Custom Utility Classes**:
-    *   **NEVER** create new global utility classes (e.g., `.admin-card`, `.page-title`).
-    *   **AVOID** component-specific classes for styling (colors, borders, shadows). Use them ONLY for layout (Flexbox/Grid, margins, padding) that cannot be achieved with standard Material directives.
+1.  **No Global Utility Sprawl**:
+    *   **NEVER** add new global utility classes (e.g., `.admin-card`, `.page-title`).
+    *   Component-level classes are allowed for semantic structure, layout, and documented state variants.
+    *   Prefer Material tokens and component APIs over custom visual styling.
 
 2.  **Prioritize Native Components**:
     *   Always use native Angular Material components (`<mat-card>`, `<mat-list>`, `<mat-table>`, `<mat-toolbar>`) instead of custom `<div>` structures.
@@ -30,7 +32,7 @@ You are an expert in Angular Material Design 3. Your goal is to maintain a "Pure
 
 ## Checklist for Every UI Change
 - [ ] Am I using a standard Material component?
-- [ ] Did I avoid adding a new CSS class?
+- [ ] Did I avoid adding new global utility classes?
 - [ ] Are all colors using `--mat-sys-*` variables?
 - [ ] Is typography using `var(--mat-sys-*)`?
 

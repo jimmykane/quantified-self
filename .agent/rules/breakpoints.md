@@ -5,7 +5,7 @@ description: Use this rule when working with responsive design and media queries
 
 ## Standard Breakpoints
 
-Use these Angular Material-aligned breakpoint values ONLY:
+Use these project breakpoint values only:
 
 | Name | Max-Width | Min-Width | Use Case |
 |------|-----------|-----------|----------|
@@ -17,8 +17,8 @@ Use these Angular Material-aligned breakpoint values ONLY:
 ## Rules
 
 1. **Use Standard Values Only**:
-   - **DO NOT** use arbitrary values like 480px, 650px, 768px, 900px
-   - **ALWAYS** use the values from the table above
+   - **DO NOT** use arbitrary values like 480px, 650px, 768px, 900px.
+   - **ALWAYS** use the values from the table above.
 
 2. **Import Constants for TypeScript**:
    ```typescript
@@ -40,9 +40,9 @@ Use these Angular Material-aligned breakpoint values ONLY:
    @media (min-width: 960px) { }
    ```
 
-4. **Reference**:
+4. **Source of Truth**:
    - TypeScript constants: `src/app/constants/breakpoints.ts`
-   - CSS documentation: `:root` block in `src/styles.css`
+   - SCSS helpers: `src/styles/_breakpoints.scss`
 
 ## Checklist
 - [ ] Am I using standard breakpoint values?
