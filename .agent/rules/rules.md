@@ -1,47 +1,40 @@
 ---
 trigger: always_on
+description: Core project-wide engineering rules for quantified-self.
 ---
 
 # Agent Rules for quantified-self
 
-## Project Overview
-- **Framework**: Angular v20+
-- **Language**: TypeScript (Loose strictness)
-- **Styling**: SCSS, Angular Material, Leaftlet for maps
-- **State Management**: 
-  - **MANDATORY**: Use **Angular Signals** for local component state and service-level state where possible.
-  - Use RxJS (Observables, Subjects) ONLY when necessary for asynchronous streams or complex event handling.
-- **Dependency Injection**:
-  - Supported: Constructor Injection (Legacy/Current).
-  - Preferred for New Code: `inject()` function.
-  - **Signals & Observables Naming**:
-  - **STRICT RULE**: **ALWAYS** use the `$` suffix for Observables (e.g., `user$`, `isLoading$`).
-  - **Signals**: Do **NOT** use the `$` suffix for Signals (e.g., `isLoading`, `user`).
-  - Reason: Clear distinction between streams (Observables) and reactive state (Signals).
+## Scope
+These are baseline rules that apply across the repository unless a deeper `AGENTS.md` overrides scope.
 
-### Firebase
-- Use **Modular SDK** (`@angular/fire` v20+, `firebase` v9+).
-- Imports should be from `@angular/fire/*` or `firebase/*`.
-- Avoid compat libraries unless strictly necessary.
+## Stack
+- Framework: Angular v20+
+- Language: TypeScript (loose strictness)
+- Styling: SCSS + Angular Material
+- Maps: Leaflet
 
-### Styling
-- Use **SCSS** for component styling.
-- Follow **Angular Material** theming conventions.
-- Use `app-service-source-icon` for displaying service logos (Garmin, Suunto, COROS) to ensure they are theme-aware (using `mat-icon` and `svgIcon`).
-- interactive maps use **Leaflet**.
-- **Typography**: Use **Barlow Condensed** for numeric/stat displays (values, diffs, percentages) unless a specific component style dictates otherwise.
-- **No inline component styles**: Avoid `styles: [...]` in components and inline `style=""` in templates; use external `.css/.scss` files and classes instead.
+## Reactivity and Naming
+- Prefer Angular Signals for local and service state.
+- Use RxJS when stream semantics are required.
+- Observables must use `$` suffix; Signals must not.
 
-### General
-- **Browser Compatibility**: Use `BrowserCompatibilityService` to check for modern API support (e.g., `CompressionStream`, `DecompressionStream`) before using them. If unsupported, the service handles showing an upgrade dialog.
-- **Strictness**: The project has `strict` mode potentially off or loose (based on `tsconfig` analysis). Ensure null checks are handled gracefully.
-- **Bailout First**: Always use "bailout first" / "return early" patterns. Avoid deep nesting of `if/else` statements. Handle validation, error checks, and edge cases at the very beginning of functions and return immediately.
-- **Directory Structure**:
-  - `src/app/modules`: Feature modules.
-  - `src/app/services`: Singleton services.
-  - `src/app/components`: Shared components.
+## Dependency Injection
+- Prefer `inject()` for new code.
+- Constructor injection is acceptable in existing code paths.
 
-### Code Quality & safety
-- **NO `any` Casting**:
-  - **STRICT RULE**: Do **NOT** cast objects to `any` (e.g., `const data: any = { ... }`), especially when interacting with **Firestore** or external APIs.
-  - **Reason**: Use strictly typed interfaces (e.g., `EventJSONInterface`) to ensure data integrity and catch type mismatches (like `Date` vs `number` timestamps) at compile time.
+## Firebase
+- Use modular SDK imports (`@angular/fire/*`, `firebase/*`).
+- Avoid compat APIs unless required by existing integration.
+
+## UI and Styling
+- Use external style files; avoid inline template styles and inline component style arrays.
+- Follow Material theming and CSS variable patterns.
+- Use `app-service-source-icon` for Garmin/Suunto/COROS logos.
+- Use Barlow Condensed for numeric/stat displays unless a component intentionally differs.
+
+## General Coding Rules
+- Prefer bailout-first control flow (early returns) over deep nesting.
+- Handle nullable values defensively due to loose strictness.
+- Avoid `any` casts, especially around Firestore/external payloads.
+- Use `BrowserCompatibilityService` for modern API checks before use.

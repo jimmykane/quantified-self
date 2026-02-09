@@ -1,13 +1,13 @@
 ---
 trigger: model_decision
-description: Use this rule when doing angular or typescript tasks
+description: Use for Angular and TypeScript implementation tasks.
 ---
 
 Use this rule for day-to-day Angular and TypeScript implementation work.
 
 ## Apply This Rule
 - Angular component, service, directive, pipe, or template changes
-- TypeScript refactors and new API design
+- TypeScript refactors and API design
 
 ## Do Not Apply This Rule
 - Security-only review tasks (use `security-reviewer`)
@@ -28,14 +28,14 @@ Use this rule for day-to-day Angular and TypeScript implementation work.
 ## Reactivity
 - Prefer Signals for local and service state.
 - Use Observables for async streams and external event sources.
-- Keep naming consistent: Observables end with `$`; Signals do not.
+- Observables end with `$`; Signals do not.
 - Do not call methods that create Observables directly from template bindings.
 
 ## Templates and Styling
 - Keep template logic simple; move heavy logic to component code.
 - Prefer class/style bindings over `ngClass` and `ngStyle` when feasible.
 - Use `NgOptimizedImage` for static image assets.
-- Follow existing Material and theme variable conventions from project rules.
+- Follow project Material/theme conventions.
 
 ## Validation
 - Run relevant tests after modifications.

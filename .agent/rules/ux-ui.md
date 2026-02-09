@@ -1,6 +1,6 @@
 ---
 trigger: model_decision
-description: Use this agent when you need to evaluate frontend code, user interfaces, or web applications for user experience quality
+description: Use for UX, accessibility, and interaction-quality reviews of frontend changes.
 ---
 
 Use this rule to review frontend UX quality, accessibility, and interaction behavior.
@@ -10,61 +10,23 @@ Use this rule to review frontend UX quality, accessibility, and interaction beha
 - Form and interaction flow changes
 - Accessibility and responsive behavior audits
 
+## Do Not Apply This Rule
+- Backend-only logic and infrastructure changes
+
 ## Review Checklist
-
-1. **Accessibility Audit**:
-   - Verify semantic HTML usage and proper heading hierarchy
-   - Check ARIA labels, roles, and states implementation
-   - Ensure keyboard navigation and focus management
-   - Validate color contrast ratios and text sizing
-   - Identify missing alt text or inadequate descriptions
-   - Test for screen reader announcement clarity
-
-2. **Usability Analysis**:
-   - Evaluate interaction patterns for intuitiveness
-   - Assess error handling and user feedback mechanisms
-   - Review form validation and helper text clarity
-   - Check loading states and pass/fail criteria (use `<app-loading-overlay>` for content blocks)
-   - Verify touch target sizes (minimum 44x44px)
-   - Analyze information hierarchy and visual flow
-
-3. **Design Consistency**:
-   - Verify adherence to established design systems
-   - Check component reusability and consistency
-   - Evaluate visual hierarchy and spacing
-   - Review typography scales and readability
-   - Assess color usage and theme implementation
-
-4. **Performance Considerations**:
-   - Identify render-blocking resources
-   - Check for unnecessary re-renders or layout shifts
-   - Evaluate animation performance and smoothness
-   - Review lazy loading implementation
-   - Assess bundle size impact
-
-5. **Responsive Behavior**:
-   - Follow the project breakpoint rule in `.agent/rules/breakpoints.md`
-   - Test breakpoint implementations against that standard
-   - Verify mobile-first approach
-   - Check viewport meta tags and scaling
-   - Evaluate touch gesture support
-   - Review orientation change handling
+1. Accessibility: semantics, ARIA, keyboard flow, focus management, contrast.
+2. Usability: clarity of interactions, validation messaging, loading/empty/error states.
+3. Consistency: spacing, hierarchy, typography, design-system alignment.
+4. Performance perception: avoid jank/layout shift in common interactions.
+5. Responsive behavior: follow `.agent/rules/breakpoints.md`.
 
 ## Review Output
-- **Critical Issues**: Accessibility violations, unusable interfaces, broken interactions
-- **High Priority**: Usability problems, inconsistent patterns, performance bottlenecks
-- **Recommendations**: Enhancement suggestions, best practice improvements
-- **Positive Findings**: Well-implemented patterns worth highlighting
+- Critical Issues
+- High Priority Issues
+- Recommendations
+- Positive Findings
 
-For each issue, provide:
-- Specific location in code
-- Clear explanation of the problem
-- User impact assessment
-- Concrete fix with code example
-- Testing methodology to verify the fix
+For each issue include location, impact, and concrete fix guidance.
 
 ## Context7 Usage
-
-- **Accessibility Guidelines**: Use `context7` to verify WCAG 2.1/2.2 guidelines if you are unsure about a specific accessibility requirement.
-- **Design Systems**: Use `context7` to look up Material Design 3 guidelines or other design system references.
-- **Best Practices**: Use `context7` to research UX best practices for specific patterns (e.g., "mobile navigation patterns", "form validation UX").
+- Use `context7` for WCAG and Material Design references when uncertain.
