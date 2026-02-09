@@ -2,7 +2,7 @@ import { Injectable, inject, Injector, runInInjectionContext } from '@angular/co
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { environment } from '../../environments/environment';
-import { Firestore, collection, collectionData, addDoc, doc, docData, getDoc, getDocs, query, where } from '@angular/fire/firestore';
+import { Firestore, collection, collectionData, addDoc, doc, docData, getDoc, getDocs, limit, query, where } from '@angular/fire/firestore';
 
 // ... (other imports)
 
@@ -87,6 +87,7 @@ export class AppPaymentService {
     private injector = inject(Injector);
     private readonly userCancelledPortalMessage = 'User cancelled redirection to portal.';
     private readonly maxCheckoutRetryAttempts = 1;
+    private readonly subscriptionStatuses: StripeSubscription['status'][] = ['active', 'trialing', 'canceled', 'incomplete', 'incomplete_expired', 'past_due', 'unpaid'];
 
     constructor(private windowService: AppWindowService, private logger: LoggerService) { }
 
@@ -541,6 +542,28 @@ export class AppPaymentService {
                 return from(Promise.all(subsWithRole$));
             })
         ) as Observable<(StripeSubscription & { role?: string })[]>;
+    }
+
+    async hasPaidSubscriptionHistory(): Promise<boolean> {
+        const user = this.auth.currentUser;
+        if (!user) {
+            return false;
+        }
+
+        const subscriptionsRef = collection(this.firestore, `customers/${user.uid}/subscriptions`);
+        const historyQuery = query(
+            subscriptionsRef,
+            where('status', 'in', this.subscriptionStatuses),
+            limit(1)
+        );
+
+        try {
+            const snapshot = await runInInjectionContext(this.injector, () => getDocs(historyQuery));
+            return snapshot.docs.length > 0;
+        } catch (error) {
+            this.logger.warn('Could not verify subscription history. Hiding trial messaging by default.', error);
+            return true;
+        }
     }
 
     /**

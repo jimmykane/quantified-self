@@ -45,6 +45,7 @@ export class PricingComponent implements OnInit, OnDestroy {
     loadingPriceId: string | null = null;
     activeSubscriptions$: Observable<StripeSubscription[]> | null = null;
     subscriptionSummary$: Observable<SubscriptionSummary | null> | null = null;
+    hasPaidSubscriptionHistory: boolean | null = null;
 
     private platformId = inject(PLATFORM_ID);
     private authService = inject(AppAuthService);
@@ -90,8 +91,12 @@ export class PricingComponent implements OnInit, OnDestroy {
         );
 
         // Initial load
-        const role = await this.userService.getSubscriptionRole();
+        const [role, hasPaidSubscriptionHistory] = await Promise.all([
+            this.userService.getSubscriptionRole(),
+            this.paymentService.hasPaidSubscriptionHistory()
+        ]);
         this.currentRole = role;
+        this.hasPaidSubscriptionHistory = hasPaidSubscriptionHistory;
         this.isLoadingRole = false;
 
         // Reactive update: specific to subscription changes
@@ -134,6 +139,10 @@ export class PricingComponent implements OnInit, OnDestroy {
     };
 
     shouldShowFirstMonthFreeCopy(product: StripeProduct, price: StripePrice): boolean {
+        if (this.hasPaidSubscriptionHistory !== false) {
+            return false;
+        }
+
         const role = product.metadata?.['role'];
         if (role !== 'basic' && role !== 'pro') {
             return false;

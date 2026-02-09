@@ -30,6 +30,7 @@ const {
     mockAddDoc,
     mockGetDoc,
     mockGetDocs,
+    mockLimit,
     mockDocData,
     mockCollection,
     mockDoc,
@@ -42,6 +43,7 @@ const {
         mockAddDoc: vi.fn(),
         mockGetDoc: vi.fn(),
         mockGetDocs: vi.fn(),
+        mockLimit: vi.fn(),
         mockDocData: vi.fn(),
         mockCollection: vi.fn(),
         mockDoc: vi.fn(),
@@ -60,6 +62,7 @@ vi.mock('@angular/fire/firestore', async () => {
         addDoc: mockAddDoc,
         getDoc: mockGetDoc,
         getDocs: mockGetDocs,
+        limit: mockLimit,
         collection: mockCollection,
         doc: mockDoc,
         docData: mockDocData,
@@ -94,6 +97,10 @@ describe('AppPaymentService', () => {
     beforeEach(() => {
         vi.clearAllMocks(); // Reset spies
 
+        mockAuth.currentUser = {
+            uid: 'test_user_uid',
+            getIdToken: vi.fn()
+        };
         mockFunctionsService.call.mockReset();
         mockFunctionsService.call.mockResolvedValue({ data: {} });
 
@@ -106,6 +113,7 @@ describe('AppPaymentService', () => {
             exists: () => false,
             data: () => undefined
         });
+        mockLimit.mockImplementation((value: number) => value);
         mockRunInInjectionContext.mockImplementation((injector: any, fn: any) => fn());
 
         TestBed.configureTestingModule({
@@ -420,6 +428,37 @@ describe('AppPaymentService', () => {
 
             expect(role).toBe('pro');
             expect(mockFunctionsService.call).toHaveBeenCalledWith('restoreUserClaims');
+        });
+    });
+
+    describe('hasPaidSubscriptionHistory', () => {
+        it('should return false when there is no authenticated user', async () => {
+            mockAuth.currentUser = null;
+
+            const hasHistory = await service.hasPaidSubscriptionHistory();
+
+            expect(hasHistory).toBe(false);
+            expect(mockGetDocs).not.toHaveBeenCalled();
+        });
+
+        it('should return true when at least one subscription document exists', async () => {
+            mockGetDocs.mockResolvedValueOnce({
+                docs: [{ id: 'sub_123' }]
+            });
+
+            const hasHistory = await service.hasPaidSubscriptionHistory();
+
+            expect(hasHistory).toBe(true);
+            expect(mockGetDocs).toHaveBeenCalledTimes(1);
+            expect(mockLimit).toHaveBeenCalledWith(1);
+        });
+
+        it('should return true when the history query fails (fail-closed for trial messaging)', async () => {
+            mockGetDocs.mockRejectedValueOnce(new Error('Firestore unavailable'));
+
+            const hasHistory = await service.hasPaidSubscriptionHistory();
+
+            expect(hasHistory).toBe(true);
         });
     });
 });
