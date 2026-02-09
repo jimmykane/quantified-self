@@ -8,7 +8,7 @@ import { SideNavComponent } from './components/sidenav/sidenav.component';
 import { environment } from '../environments/environment';
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
-import { provideAuth, getAuth, connectAuthEmulator } from '@angular/fire/auth';
+import { provideAuth, getAuth } from '@angular/fire/auth';
 import { provideFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from '@angular/fire/firestore';
 import { getApp } from '@angular/fire/app';
 import { provideFunctions, getFunctions } from '@angular/fire/functions';
@@ -28,6 +28,7 @@ import { ServiceWorkerModule } from '@angular/service-worker';
 import { UploadActivitiesComponent } from './components/upload/upload-activities/upload-activities.component';
 import { GoogleMapsLoaderService } from './services/google-maps-loader.service';
 import { LoggerService } from './services/logger.service';
+import { maybeConnectAuthEmulator } from './authentication/auth-emulator.config';
 
 import { AppUpdateService } from './services/app.update.service';
 import { OnboardingComponent } from './components/onboarding/onboarding.component';
@@ -83,10 +84,7 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
     }),
     provideAuth(() => {
       const auth = getAuth();
-      if (environment.useAuthEmulator) {
-        connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
-      }
-      return auth;
+      return maybeConnectAuthEmulator(auth);
     }),
     // Use initializeFirestore with ignoreUndefinedProperties to handle undefined values
     // in activity/event data (e.g., TCX files may have undefined creator.manufacturer).

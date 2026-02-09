@@ -14,7 +14,7 @@ export const environment = {
   beta: false,
   localhost: true,
   forceAnalyticsCollection: true,
-  useAuthEmulator: false, // Set to true to use Firebase Auth Emulator
+  useAuthEmulator: false, // Use Firebase Auth Emulator in local development
   firebase: {
     apiKey: 'AIzaSyBdR4jbTKmm_P4L7t26IFAgFn6Eoo02aU0',
     authDomain: 'quantified-self-io.firebaseapp.com',
