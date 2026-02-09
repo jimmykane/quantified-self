@@ -40,11 +40,6 @@ mat-card-header mat-icon {
   align-items: center;
 }
 
-/* --- V2 Layout Tweaks --- */
-.secondary-details-container {
-  margin-top: 0.5rem;
-}
-
 .condensed-stats-row {
   margin-top: 1rem;
   margin-bottom: 0.5rem;
@@ -80,9 +75,17 @@ mat-card-header mat-icon {
 
 /* Ensure identical padding and sizing for alignment */
 .secondary-details-container {
-  padding: 16px;
+  padding: 12px 40px;
+  padding-top: 0;
   box-sizing: border-box;
   width: 100%;
+}
+
+@media (max-width: 599px) {
+  .secondary-details-container {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
 }
 
 .intensity-zones-summary-wrapper {

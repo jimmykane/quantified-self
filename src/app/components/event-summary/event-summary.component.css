@@ -209,6 +209,13 @@
   border-top: 1px solid var(--mat-app-outline-variant);
 }
 
+@media (max-width: 599px) {
+  .summary-stats-area {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
+
 @media (max-width: 900px) {
   .hero-metrics {
     gap: 16px;
