@@ -224,6 +224,29 @@ describe('AppPaymentService', () => {
             expect(payload.promotion_code).toBeUndefined();
             expect(payload.allow_promotion_codes).toBe(true);
         });
+
+        it('should ignore legacy promotion code metadata keys and keep manual promotion codes enabled', async () => {
+            const recurringPriceWithLegacyPromoKey = {
+                id: 'price_recurring_legacy_promo',
+                type: 'recurring',
+                active: true,
+                currency: 'usd',
+                unit_amount: 1000,
+                description: 'Monthly with legacy promo key',
+                metadata: {
+                    promotionCodeId: 'promo_1Syb2dE0WZdfLutFyhPh6zxv'
+                }
+            } as any;
+
+            await service.appendCheckoutSession(recurringPriceWithLegacyPromoKey);
+
+            expect(mockAddDoc).toHaveBeenCalled();
+            const args = mockAddDoc.mock.calls[0];
+            const payload = args[1];
+
+            expect(payload.promotion_code).toBeUndefined();
+            expect(payload.allow_promotion_codes).toBe(true);
+        });
     });
     describe('restorePurchases', () => {
         it('should return the role from the cloud function response', async () => {

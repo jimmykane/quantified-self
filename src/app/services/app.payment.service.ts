@@ -346,25 +346,21 @@ export class AppPaymentService {
             return null;
         }
 
-        const keys = ['promotion_code_id', 'promotionCodeId', 'promotion_code', 'promotionCode'];
-        for (const key of keys) {
-            const rawValue = price.metadata[key];
-            if (!rawValue) {
-                continue;
-            }
-
-            const promotionCodeId = rawValue.trim();
-            if (!promotionCodeId) {
-                continue;
-            }
-
-            if (promotionCodeId.startsWith('promo_')) {
-                return promotionCodeId;
-            }
-
-            this.logger.warn(`[appendCheckoutSession] Ignoring metadata '${key}' because '${promotionCodeId}' is not a Stripe promotion code ID (expected prefix: promo_).`);
+        const rawValue = price.metadata.promotion_code_id;
+        if (!rawValue) {
+            return null;
         }
 
+        const promotionCodeId = rawValue.trim();
+        if (!promotionCodeId) {
+            return null;
+        }
+
+        if (promotionCodeId.startsWith('promo_')) {
+            return promotionCodeId;
+        }
+
+        this.logger.warn(`[appendCheckoutSession] Ignoring metadata 'promotion_code_id' because '${promotionCodeId}' is not a Stripe promotion code ID (expected prefix: promo_).`);
         return null;
     }
 
