@@ -35,7 +35,7 @@ import { Search } from '../event-search/event-search.component';
 import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-detection.service';
 import { TripDetectionInput } from '../../services/my-tracks-trip-detection.service';
 import { DetectedTrip } from '../../services/my-tracks-trip-detection.service';
-import { TripLocationLabelService } from '../../services/trip-location-label.service';
+import { ResolvedTripLocationLabel, TripLocationLabelService } from '../../services/trip-location-label.service';
 
 interface DetectedTripViewModel extends DetectedTrip {
   locationLabel: string | null;
@@ -563,18 +563,18 @@ export class TracksComponent implements OnInit, OnDestroy {
       currentPromiseTime: this.promiseTime
     });
     const detectedTrips = this.tripDetectionService.detectTrips(candidates);
-    const locationLabelPromisesByDestination = new Map<string, Promise<string | null>>();
+    const locationLabelPromisesByDestination = new Map<string, Promise<ResolvedTripLocationLabel | null>>();
     const viewModels = await Promise.all(detectedTrips.map(async (trip) => {
       let locationLabelPromise = locationLabelPromisesByDestination.get(trip.destinationId);
       if (!locationLabelPromise) {
-        locationLabelPromise = this.tripLocationLabelService.resolveCountryName(trip.centroidLat, trip.centroidLng);
+        locationLabelPromise = this.tripLocationLabelService.resolveTripLocation(trip.centroidLat, trip.centroidLng);
         locationLabelPromisesByDestination.set(trip.destinationId, locationLabelPromise);
       }
-      const locationLabel = await locationLabelPromise;
+      const location = await locationLabelPromise;
 
       return {
         ...trip,
-        locationLabel,
+        locationLabel: location?.label || null,
       } satisfies DetectedTripViewModel;
     }));
 

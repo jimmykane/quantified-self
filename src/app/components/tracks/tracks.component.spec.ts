@@ -179,7 +179,8 @@ describe('TracksComponent', () => {
     };
 
     mockTripLocationLabelService = {
-      resolveCountryName: vi.fn().mockResolvedValue(null)
+      resolveTripLocation: vi.fn().mockResolvedValue(null),
+      resolveCountryName: vi.fn().mockResolvedValue(null),
     };
 
     await TestBed.configureTestingModule({
@@ -353,7 +354,11 @@ describe('TracksComponent', () => {
           },
         }
       ]);
-      mockTripLocationLabelService.resolveCountryName.mockResolvedValue('Nepal');
+      mockTripLocationLabelService.resolveTripLocation.mockResolvedValue({
+        city: 'Kathmandu',
+        country: 'Nepal',
+        label: 'Kathmandu, Nepal',
+      });
 
       await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
       await waitForAsyncWork();
@@ -362,7 +367,7 @@ describe('TracksComponent', () => {
       expect(mockTripDetectionService.detectTrips.mock.calls[0][0]).toEqual([
         expect.objectContaining({ eventId: 'trip-nepal-1' })
       ]);
-      expect(component.detectedTrips()[0].locationLabel).toBe('Nepal');
+      expect(component.detectedTrips()[0].locationLabel).toBe('Kathmandu, Nepal');
       expect(component.hasEvaluatedTripDetection()).toBe(true);
     });
 
@@ -408,13 +413,26 @@ describe('TracksComponent', () => {
           },
         },
       ]);
-      mockTripLocationLabelService.resolveCountryName.mockResolvedValue('Nepal');
+      mockTripLocationLabelService.resolveTripLocation.mockResolvedValue({
+        city: 'Kathmandu',
+        country: 'Nepal',
+        label: 'Kathmandu, Nepal',
+      });
 
       await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
       await waitForAsyncWork();
 
-      expect(mockTripLocationLabelService.resolveCountryName).toHaveBeenCalledTimes(1);
-      expect(component.detectedTrips().map((trip) => trip.locationLabel)).toEqual(['Nepal', 'Nepal']);
+      expect(mockTripLocationLabelService.resolveTripLocation).toHaveBeenCalledTimes(1);
+      expect(component.detectedTrips().map((trip) => trip.locationLabel)).toEqual(['Kathmandu, Nepal', 'Kathmandu, Nepal']);
+    });
+
+    it('falls back to "Trip" when location label resolution returns null', () => {
+      component.detectedTrips.set([createDetectedTrip({ locationLabel: null }) as any]);
+      component.hasEvaluatedTripDetection.set(true);
+      fixture.detectChanges();
+
+      const locationLabel = fixture.nativeElement.querySelector('.trip-location') as HTMLElement | null;
+      expect(locationLabel?.textContent?.trim()).toBe('Trip');
     });
 
     it('should recompute suggestions when date range changes', async () => {

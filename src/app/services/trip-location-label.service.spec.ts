@@ -1,22 +1,37 @@
+import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TripLocationLabelService } from './trip-location-label.service';
+import { LoggerService } from './logger.service';
 
 describe('TripLocationLabelService', () => {
   let service: TripLocationLabelService;
+  const loggerMock = {
+    log: vi.fn(),
+  };
 
   beforeEach(() => {
-    service = new TripLocationLabelService();
+    TestBed.configureTestingModule({
+      providers: [
+        TripLocationLabelService,
+        { provide: LoggerService, useValue: loggerMock },
+      ],
+    });
+    service = TestBed.inject(TripLocationLabelService);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('resolves country labels from mapbox geocoding response', async () => {
+  it('returns City, Country labels when place and country are available', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => ({
         features: [
+          {
+            text: 'Kathmandu',
+            place_type: ['place']
+          },
           {
             text: 'Nepal',
             place_type: ['country']
@@ -25,17 +40,25 @@ describe('TripLocationLabelService', () => {
       })
     } as unknown as Response);
 
-    const label = await service.resolveCountryName(27.7172, 85.3240);
+    const resolved = await service.resolveTripLocation(27.7172, 85.3240);
 
-    expect(label).toBe('Nepal');
+    expect(resolved).toEqual({
+      city: 'Kathmandu',
+      country: 'Nepal',
+      label: 'Kathmandu, Nepal',
+    });
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('uses cache for repeated centroid lookups', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+  it('returns country-only labels when no city-like feature exists', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => ({
         features: [
+          {
+            text: 'Ankara Region',
+            place_type: ['region']
+          },
           {
             text: 'Turkey',
             place_type: ['country']
@@ -44,11 +67,63 @@ describe('TripLocationLabelService', () => {
       })
     } as unknown as Response);
 
-    const first = await service.resolveCountryName(39.92032, 32.85411);
-    const second = await service.resolveCountryName(39.92039, 32.85419);
+    const resolved = await service.resolveTripLocation(39.92032, 32.85411);
 
-    expect(first).toBe('Turkey');
-    expect(second).toBe('Turkey');
+    expect(resolved).toEqual({
+      city: null,
+      country: 'Turkey',
+      label: 'Turkey',
+    });
+  });
+
+  it('falls back to district labels when place/locality are unavailable', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        features: [
+          {
+            text: 'Kathmandu District',
+            place_type: ['district']
+          },
+          {
+            text: 'Nepal',
+            place_type: ['country']
+          }
+        ]
+      })
+    } as unknown as Response);
+
+    const resolved = await service.resolveTripLocation(27.70, 85.32);
+
+    expect(resolved).toEqual({
+      city: 'Kathmandu District',
+      country: 'Nepal',
+      label: 'Kathmandu District, Nepal',
+    });
+  });
+
+  it('uses cache for repeated centroid lookups', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        features: [
+          {
+            text: 'Ankara',
+            place_type: ['place']
+          },
+          {
+            text: 'Turkey',
+            place_type: ['country']
+          }
+        ]
+      })
+    } as unknown as Response);
+
+    const first = await service.resolveTripLocation(39.92032, 32.85411);
+    const second = await service.resolveTripLocation(39.92039, 32.85419);
+
+    expect(first?.label).toBe('Ankara, Turkey');
+    expect(second?.label).toBe('Ankara, Turkey');
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
@@ -58,8 +133,30 @@ describe('TripLocationLabelService', () => {
       json: async () => ({})
     } as unknown as Response);
 
-    const label = await service.resolveCountryName(0, 0);
+    const resolved = await service.resolveTripLocation(0, 0);
 
-    expect(label).toBeNull();
+    expect(resolved).toBeNull();
+  });
+
+  it('keeps resolveCountryName for backward compatibility', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        features: [
+          {
+            text: 'Tokyo',
+            place_type: ['place']
+          },
+          {
+            text: 'Japan',
+            place_type: ['country']
+          }
+        ]
+      })
+    } as unknown as Response);
+
+    const country = await service.resolveCountryName(35.6764, 139.6500);
+
+    expect(country).toBe('Japan');
   });
 });
