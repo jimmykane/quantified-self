@@ -1,5 +1,7 @@
 import { Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges, signal } from '@angular/core';
 
+type PeekToggleSizePreset = 'auto' | 'small' | 'medium' | 'large';
+
 @Component({
   selector: 'app-peek-panel',
   templateUrl: './peek-panel.component.html',
@@ -9,6 +11,10 @@ import { Component, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChange
 export class PeekPanelComponent implements OnInit, OnChanges {
   @Input() position: 'top' | 'left' | 'right' = 'left';
   @Input() topAnchor: 'left' | 'center' | 'right' = 'center';
+  @Input() toggleThicknessSize: PeekToggleSizePreset = 'auto';
+  @Input() toggleLengthSize: PeekToggleSizePreset = 'auto';
+  @Input() toggleSize: PeekToggleSizePreset = 'auto';
+  @Input() borderMode: 'panel' | 'content' | 'none' = 'panel';
   @Input() expanded?: boolean;
   @Input() defaultExpanded = false;
   @Input() expandedSizePx = 320;
@@ -64,5 +70,31 @@ export class PeekPanelComponent implements OnInit, OnChanges {
     }
 
     return this.isExpanded() ? 'chevron_left' : 'chevron_right';
+  }
+
+  public getResolvedToggleThicknessSize(): PeekToggleSizePreset {
+    if (this.toggleThicknessSize !== 'auto') {
+      return this.toggleThicknessSize;
+    }
+
+    return this.toggleSize;
+  }
+
+  public getEffectiveCollapsedSizePx(): number {
+    const resolvedSize = this.getResolvedToggleThicknessSize();
+
+    if (resolvedSize === 'small') {
+      return 18;
+    }
+
+    if (resolvedSize === 'medium') {
+      return 30;
+    }
+
+    if (resolvedSize === 'large') {
+      return 40;
+    }
+
+    return this.collapsedSizePx;
   }
 }

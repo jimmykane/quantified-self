@@ -89,7 +89,8 @@ export class TracksComponent implements OnInit, OnDestroy {
   public isLoading: WritableSignal<boolean> = signal(false);
   public detectedTrips: WritableSignal<DetectedTripViewModel[]> = signal([]);
   public hasEvaluatedTripDetection: WritableSignal<boolean> = signal(false);
-  public detectedTripsPanelExpanded: WritableSignal<boolean> = signal(true);
+  public detectedTripsPanelExpanded: WritableSignal<boolean> = signal(false);
+  public searchPeekDefaultExpanded: WritableSignal<boolean> = signal(true);
   // Removed legacy state tracking
 
   constructor(
@@ -113,6 +114,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
     const platformId = inject(PLATFORM_ID);
     this.platformId = platformId;
+    this.searchPeekDefaultExpanded.set(this.resolveDesktopViewportDefault());
 
     // Track last settings to prevent redundant data fetching
     let lastLoadedDataSettings: { dateRange: DateRanges, activityTypes?: ActivityTypes[], mapStyle?: string } | null = null;
@@ -346,6 +348,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.promiseTime = promiseTime
     this.hasEvaluatedTripDetection.set(false);
     this.detectedTrips.set([]);
+    this.detectedTripsPanelExpanded.set(false);
     this.clearProgressAndOpenBottomSheet();
     const dates = getDatesForDateRange(dateRange, user.settings?.unitSettings?.startOfTheWeek || 1);
     const where = []
@@ -560,8 +563,14 @@ export class TracksComponent implements OnInit, OnDestroy {
       currentPromiseTime: this.promiseTime
     });
     const detectedTrips = this.tripDetectionService.detectTrips(candidates);
+    const locationLabelPromisesByDestination = new Map<string, Promise<string | null>>();
     const viewModels = await Promise.all(detectedTrips.map(async (trip) => {
-      const locationLabel = await this.tripLocationLabelService.resolveCountryName(trip.centroidLat, trip.centroidLng);
+      let locationLabelPromise = locationLabelPromisesByDestination.get(trip.destinationId);
+      if (!locationLabelPromise) {
+        locationLabelPromise = this.tripLocationLabelService.resolveCountryName(trip.centroidLat, trip.centroidLng);
+        locationLabelPromisesByDestination.set(trip.destinationId, locationLabelPromise);
+      }
+      const locationLabel = await locationLabelPromise;
 
       return {
         ...trip,
@@ -579,6 +588,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
 
     this.detectedTrips.set(viewModels);
+    this.detectedTripsPanelExpanded.set(viewModels.length > 0);
     this.hasEvaluatedTripDetection.set(true);
     this.logger.log('[TracksComponent] Detected trips committed to UI state.', {
       detectedTripCount: viewModels.length,
@@ -612,6 +622,19 @@ export class TracksComponent implements OnInit, OnDestroy {
   // Refactored helpers
   private isStyleLoaded(): boolean {
     return this.mapSignal() && this.mapSignal().isStyleLoaded();
+  }
+
+  private resolveDesktopViewportDefault(): boolean {
+    if (!isPlatformBrowser(this.platformId)) {
+      return true;
+    }
+
+    const mediaQuery = window.matchMedia?.('(min-width: 641px)');
+    if (mediaQuery) {
+      return mediaQuery.matches;
+    }
+
+    return window.innerWidth >= 641;
   }
 }
 

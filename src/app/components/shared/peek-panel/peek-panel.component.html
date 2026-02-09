@@ -1,8 +1,15 @@
 <section class="peek-panel glass-card" [class.position-top]="position === 'top'"
   [class.position-left]="position === 'left'" [class.position-right]="position === 'right'"
+  [class.toggle-thickness-small]="getResolvedToggleThicknessSize() === 'small'"
+  [class.toggle-thickness-medium]="getResolvedToggleThicknessSize() === 'medium'"
+  [class.toggle-thickness-large]="getResolvedToggleThicknessSize() === 'large'"
+  [class.toggle-length-small]="toggleLengthSize === 'small'" [class.toggle-length-medium]="toggleLengthSize === 'medium'"
+  [class.toggle-length-large]="toggleLengthSize === 'large'"
+  [class.border-mode-none]="borderMode === 'none'"
+  [class.border-mode-content]="borderMode === 'content'" [class.border-mode-panel]="borderMode === 'panel'"
   [class.top-anchor-left]="topAnchor === 'left'" [class.top-anchor-center]="topAnchor === 'center'"
   [class.top-anchor-right]="topAnchor === 'right'" [class.expanded]="isExpanded()" [class.collapsed]="!isExpanded()"
-  [style.--peek-expanded-size.px]="expandedSizePx" [style.--peek-collapsed-size.px]="collapsedSizePx">
+  [style.--peek-expanded-size.px]="expandedSizePx" [style.--peek-collapsed-size.px]="getEffectiveCollapsedSizePx()">
   <button type="button" class="peek-toggle" (click)="togglePanel()" [attr.aria-expanded]="isExpanded()"
     [attr.aria-label]="getAriaLabel()">
     <span class="material-symbols-rounded">{{ getToggleIcon() }}</span>
