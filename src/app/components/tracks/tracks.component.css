@@ -133,8 +133,6 @@ app-peek-panel.tracks-trips-peek .trip-location {
   line-height: 1.3;
   color: var(--mat-sys-on-surface);
   overflow-wrap: anywhere;
-  text-rendering: geometricPrecision;
-  -webkit-font-smoothing: antialiased;
 }
 
 app-peek-panel.tracks-trips-peek .trip-dates {
@@ -142,8 +140,6 @@ app-peek-panel.tracks-trips-peek .trip-dates {
   line-height: 1.3;
   color: var(--mat-sys-on-surface-variant);
   overflow-wrap: anywhere;
-  text-rendering: geometricPrecision;
-  -webkit-font-smoothing: antialiased;
 }
 
 app-peek-panel.tracks-trips-peek .trip-count {
@@ -152,8 +148,6 @@ app-peek-panel.tracks-trips-peek .trip-count {
   font-size: 11px;
   line-height: 1.25;
   color: var(--mat-sys-on-surface-variant);
-  text-rendering: geometricPrecision;
-  -webkit-font-smoothing: antialiased;
 }
 
 app-peek-panel.tracks-trips-peek .detected-trips-empty {

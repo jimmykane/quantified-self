@@ -5,7 +5,6 @@
   --peek-panel-motion-duration: 240ms;
   --peek-content-motion-duration: 260ms;
   --peek-slide-distance: 14px;
-  --peek-topbar-surface: #ffffff;
 }
 
 .peek-panel {
@@ -77,7 +76,6 @@
   flex-direction: column;
   width: 100%;
   transform-origin: center top;
-  background: var(--peek-topbar-surface);
   border-top-left-radius: 0 !important;
   border-top-right-radius: 0 !important;
 }
@@ -128,7 +126,6 @@
   width: 100%;
   min-height: var(--peek-collapsed-size);
   align-self: stretch;
-  background: var(--peek-topbar-surface);
   border-bottom: 1px solid var(--mat-sys-outline-variant, var(--mat-app-outline-variant));
 }
 
@@ -155,38 +152,12 @@
 }
 
 .peek-panel.position-top.collapsed .peek-toggle {
-  background: var(--peek-topbar-surface);
   border-bottom-color: transparent;
 }
 
-.peek-panel.position-top .peek-toggle:hover {
-  background: var(--peek-topbar-surface);
-}
-
-.peek-panel.position-top .peek-toggle:active {
-  background: var(--peek-topbar-surface);
-}
-
-.peek-panel.position-top .peek-toggle:focus {
-  background: var(--peek-topbar-surface);
-}
-
 .peek-panel.position-top .peek-toggle:focus-visible {
-  background: var(--peek-topbar-surface);
   outline: 2px solid color-mix(in srgb, var(--mat-sys-primary, var(--mat-app-primary)) 48%, transparent);
   outline-offset: -2px;
-}
-
-:host-context(.dark-theme) {
-  --peek-topbar-surface: #424242;
-}
-
-:host-context(.dark-theme) .peek-panel.position-top .peek-toggle:hover {
-  background: var(--peek-topbar-surface);
-}
-
-:host-context(.dark-theme) .peek-panel.position-top .peek-toggle:active {
-  background: var(--peek-topbar-surface);
 }
 
 .peek-toggle .material-symbols-rounded {
@@ -270,12 +241,6 @@
     opacity var(--peek-content-motion-duration) var(--peek-motion-standard),
     transform var(--peek-content-motion-duration) var(--peek-motion-standard);
   will-change: max-width, max-height, opacity, transform;
-}
-
-.peek-panel.position-top .peek-main,
-.peek-panel.position-top .peek-header-wrapper,
-.peek-panel.position-top .peek-body {
-  background: var(--peek-topbar-surface);
 }
 
 .peek-panel.position-left .peek-main,
