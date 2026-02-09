@@ -72,21 +72,6 @@
     }
 }
 
-.glass-card {
-    background: var(--mat-sys-surface);
-    border-radius: 16px;
-    padding: 1.5rem;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
-    border: 1px solid var(--mat-sys-outline-variant);
-    backdrop-filter: blur(10px);
-    margin-bottom: 24px;
-
-    :host-context(.dark-theme) & {
-        background: rgba(var(--mat-sys-surface-rgb), 0.6);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-    }
-}
-
 // Custom Form Row override for specifically 3-item row
 .form-row {
     display: flex;

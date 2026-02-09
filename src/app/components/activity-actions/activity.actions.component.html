@@ -1,7 +1,7 @@
 <button mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.preventDefault(); $event.stopPropagation();">
   <mat-icon>more_vert</mat-icon>
 </button>
-<mat-menu #menu="matMenu">
+<mat-menu #menu="matMenu" class="qs-menu-panel">
   <button mat-menu-item (click)="editActivity()">
     <mat-icon>edit</mat-icon>
     <span>Edit</span>

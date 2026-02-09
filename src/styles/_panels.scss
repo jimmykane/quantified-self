@@ -1,0 +1,38 @@
+/* ==========================================================================
+   Shared Glass Panel Primitive
+   Canonical class: .qs-glass-card-panel
+   Backward-compatible alias: .glass-card
+   ========================================================================== */
+
+:root {
+  --qs-glass-panel-bg: var(--mat-app-surface, var(--mat-sys-surface));
+  --qs-glass-panel-border: var(--mat-app-outline-variant);
+  --qs-glass-panel-radius: 20px;
+  --qs-glass-panel-blur: 12px;
+  --qs-glass-panel-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.05),
+    0 2px 4px -1px rgba(0, 0, 0, 0.03),
+    0 10px 15px -3px rgba(0, 0, 0, 0.05);
+}
+
+.qs-glass-card-panel,
+.glass-card {
+  background: var(--qs-glass-panel-bg) !important;
+  backdrop-filter: blur(var(--qs-glass-panel-blur));
+  -webkit-backdrop-filter: blur(var(--qs-glass-panel-blur));
+  border: 1px solid var(--qs-glass-panel-border);
+  border-radius: var(--qs-glass-panel-radius) !important;
+  box-shadow: var(--qs-glass-panel-shadow) !important;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.dark-theme {
+  --qs-glass-panel-bg: var(--mat-app-surface, rgba(30, 30, 30, 0.8));
+
+  .qs-glass-card-panel,
+  .glass-card {
+    background: var(--qs-glass-panel-bg) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2) !important;
+  }
+}

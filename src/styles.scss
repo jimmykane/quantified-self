@@ -6,7 +6,7 @@
 @use 'styles/search';
 @use 'styles/segmented-buttons';
 @use 'styles/google-maps';
-@use 'styles/glass';
+@use 'styles/panels';
 
 // Include the common styles for Angular Material. We include this here so that you only
 // have to load a single css file for Angular Material in your app.
@@ -662,7 +662,7 @@ mat-table {
    Style the sheet once via the Material host class to avoid double-stacking when a panelClass is also present.
 */
 .mat-bottom-sheet-container {
-  @extend .glass-card;
+  @extend .qs-glass-card-panel;
   @extend .qs-scrollbar;
   --mat-bottom-sheet-container-background-color: transparent;
   --mat-bottom-sheet-container-shape: 20px;
@@ -718,9 +718,9 @@ mat-table {
 
   .mat-mdc-dialog-container,
   .mat-mdc-dialog-surface {
+    @extend .qs-glass-card-panel;
+    --qs-glass-panel-blur: 16px;
     background: var(--mat-sys-surface) !important;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 16px !important;
     box-shadow:
@@ -822,19 +822,31 @@ tr.mat-row:focus,
 }
 
 /* ==========================================================================
-   Global Menu Form Layouts
-   Ensures configuration forms inside mat-menu look properly spaced.
+   Global Menu Panel Styles
+   Shared panel classes for action menus and config menus.
    ========================================================================== */
 
-/* Panel Overrides */
-.mat-mdc-menu-panel.qs-config-menu {
-  @extend .glass-card;
-  max-width: none !important;
-  min-width: 300px !important;
+/* Base menu panel style applied globally via MAT_MENU_DEFAULT_OPTIONS */
+.mat-mdc-menu-panel.qs-menu-panel {
+  @extend .qs-glass-card-panel;
   background: var(--mat-sys-surface) !important;
+  min-width: 180px !important;
+  max-width: min(360px, calc(100vw - 24px)) !important;
+}
+
+/* Form-heavy menu panels */
+.mat-mdc-menu-panel.qs-menu-panel-form,
+.mat-mdc-menu-panel.qs-config-menu {
+  min-width: 280px !important;
+  max-width: min(380px, calc(100vw - 24px)) !important;
+}
+
+.mat-mdc-menu-panel.qs-menu-panel .mat-mdc-menu-content {
+  padding: 6px 0;
 }
 
 /* Section/Item Layout for menus used for settings */
+.qs-menu-panel-form,
 .qs-config-menu {
   section[mat-menu-item] {
     height: auto !important;
@@ -860,8 +872,25 @@ tr.mat-row:focus,
 }
 
 .mat-mdc-select-panel.qs-config-submenu {
-  @extend .glass-card;
+  @extend .qs-glass-card-panel;
   background: var(--mat-sys-surface) !important;
   border-radius: 12px !important;
   padding: 4px 0 !important;
+  max-width: min(320px, calc(100vw - 24px)) !important;
+}
+
+.mat-mdc-select-panel.qs-config-submenu-compact {
+  min-width: 104px !important;
+  width: 104px !important;
+  max-width: 104px !important;
+}
+
+.mat-mdc-select-panel.qs-config-submenu-compact .mat-mdc-option {
+  justify-content: center;
+  text-align: center;
+}
+
+.mat-mdc-select-panel.qs-config-submenu-compact .mdc-list-item__primary-text {
+  width: 100%;
+  text-align: center;
 }

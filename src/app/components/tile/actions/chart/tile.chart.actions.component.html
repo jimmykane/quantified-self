@@ -2,7 +2,7 @@
   (click)="$event.preventDefault(); $event.stopPropagation(); fixDisappearIOSBug();">
   <mat-icon>more_vert</mat-icon>
 </button>
-<mat-menu #chartOptions="matMenu" class="qs-config-menu">
+<mat-menu #chartOptions="matMenu" class="qs-menu-panel qs-menu-panel-form qs-config-menu">
   @if (user.settings.dashboardSettings.tiles.length <= 11) { <app-tile-actions-header (add)="addNewTile($event)">
     </app-tile-actions-header>
     }
@@ -105,7 +105,7 @@
     <section mat-menu-item>
       <mat-form-field>
         <mat-label>Column Size</mat-label>
-        <mat-select placeholder="Size" [value]="size.columns" panelClass="qs-config-submenu" panelWidth="96px"
+        <mat-select placeholder="Size" [value]="size.columns" panelClass="qs-config-submenu qs-config-submenu-compact"
           (selectionChange)="changeTileColumnSize($event)">
           <mat-option [value]="1">
             1
@@ -125,7 +125,7 @@
     <section mat-menu-item>
       <mat-form-field>
         <mat-label>Row Size</mat-label>
-        <mat-select placeholder="Size" [value]="size.rows" panelClass="qs-config-submenu" panelWidth="96px"
+        <mat-select placeholder="Size" [value]="size.rows" panelClass="qs-config-submenu qs-config-submenu-compact"
           (selectionChange)="changeTileRowSize($event)">
           <mat-option [value]="1">
             1

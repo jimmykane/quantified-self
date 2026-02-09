@@ -8,7 +8,7 @@
   </span>
 </section>
 
-<mat-menu #layersMenu="matMenu" xPosition="before">
+<mat-menu #layersMenu="matMenu" xPosition="before" class="qs-menu-panel">
   <section mat-menu-item>
     <mat-slide-toggle class="map-layer-toggle" [checked]="showLaps" [disabled]="!user"
       (change)="onShowLapsToggle($event.checked)">

@@ -38,21 +38,6 @@
     }
 }
 
-// Card Styles - Shared
-.glass-card {
-    background: var(--mat-sys-surface, white); // Fallback
-    border-radius: 12px;
-    padding: 1.5rem;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-
-    :host-context(.dark-theme) & {
-        background: rgba(30, 30, 30, 0.6);
-        border: 1px solid rgba(255, 255, 255, 0.05);
-    }
-}
-
 .app-stat-card {
     display: flex;
     flex-direction: column;

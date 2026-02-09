@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { CommonModule } from '@angular/common';
@@ -54,6 +56,18 @@ describe('EventCardChartActionsComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should use form menu panel classes', () => {
+        const templatePath = resolve(process.cwd(), 'src/app/components/event/chart/actions/event.card.chart.actions.component.html');
+        const template = readFileSync(templatePath, 'utf8');
+        expect(template).toMatch(/<mat-menu[^>]*class="[^"]*qs-menu-panel[^"]*qs-menu-panel-form[^"]*qs-config-menu[^"]*"/);
+    });
+
+    it('should apply submenu panel class to x-axis select', () => {
+        const templatePath = resolve(process.cwd(), 'src/app/components/event/chart/actions/event.card.chart.actions.component.html');
+        const template = readFileSync(templatePath, 'utf8');
+        expect(template).toContain('<mat-select [value]="xAxisType" panelClass="qs-config-submenu"');
     });
 
     it('should emit stackYAxes changes and log analytics', async () => {

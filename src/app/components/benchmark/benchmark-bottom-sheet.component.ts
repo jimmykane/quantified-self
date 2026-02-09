@@ -19,7 +19,7 @@ type NativeShareStatus = 'shared' | 'unsupported' | 'cancelled' | 'failed';
             <button mat-icon-button class="icon-button-square" matTooltip="Share options" [matMenuTriggerFor]="shareMenu" [disabled]="isSharing" aria-busy="{{isSharing}}">
                 <mat-icon>share</mat-icon>
             </button>
-            <mat-menu #shareMenu="matMenu" xPosition="before">
+            <mat-menu #shareMenu="matMenu" xPosition="before" class="qs-menu-panel">
               <button mat-menu-item (click)="shareBenchmark()" [disabled]="isSharing">
                 <mat-icon>share</mat-icon>
                 <span>Share</span>

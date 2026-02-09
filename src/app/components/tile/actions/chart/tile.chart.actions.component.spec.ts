@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { TileChartActionsComponent } from './tile.chart.actions.component';
 import { AppUserService } from '../../../../services/app.user.service';
@@ -72,6 +74,19 @@ describe('TileChartActionsComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should use form menu panel classes', () => {
+        const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/chart/tile.chart.actions.component.html');
+        const template = readFileSync(templatePath, 'utf8');
+        expect(template).toMatch(/<mat-menu[^>]*class="[^"]*qs-menu-panel[^"]*qs-menu-panel-form[^"]*qs-config-menu[^"]*"/);
+    });
+
+    it('should use compact submenu panel classes for row and column size selects', () => {
+        const templatePath = resolve(process.cwd(), 'src/app/components/tile/actions/chart/tile.chart.actions.component.html');
+        const template = readFileSync(templatePath, 'utf8');
+        const compactClassMatches = template.match(/panelClass="qs-config-submenu qs-config-submenu-compact"/g) ?? [];
+        expect(compactClassMatches.length).toBe(2);
     });
 
     it('should call deleteTile logic directly', async () => {

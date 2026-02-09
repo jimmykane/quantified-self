@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { MatButtonModule } from '@angular/material/button';
@@ -60,6 +62,12 @@ describe('MapActionsComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should use base menu panel class', () => {
+        const templatePath = resolve(process.cwd(), 'src/app/components/event/map/map-actions/map.actions.component.html');
+        const template = readFileSync(templatePath, 'utf8');
+        expect(template).toContain('<mat-menu #layersMenu="matMenu" xPosition="before" class="qs-menu-panel">');
     });
 
     it('should toggle laps and persist settings', async () => {

@@ -117,8 +117,9 @@ describe('PeekPanelComponent', () => {
     expect(panel.classList.contains('top-anchor-center')).toBe(true);
   });
 
-  it('uses shared glass-card styling class', () => {
+  it('uses shared panel styling classes', () => {
     const panel = fixture.nativeElement.querySelector('.peek-panel') as HTMLElement;
+    expect(panel.classList.contains('qs-glass-card-panel')).toBe(true);
     expect(panel.classList.contains('glass-card')).toBe(true);
   });
 

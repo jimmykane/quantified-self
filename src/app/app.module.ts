@@ -24,6 +24,7 @@ import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { MAT_DIALOG_DEFAULT_OPTIONS } from '@angular/material/dialog';
 import { MAT_BOTTOM_SHEET_DEFAULT_OPTIONS } from '@angular/material/bottom-sheet';
 import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
+import { MAT_MENU_DEFAULT_OPTIONS, MatMenuDefaultOptions } from '@angular/material/menu';
 import { ServiceWorkerModule } from '@angular/service-worker';
 import { UploadActivitiesComponent } from './components/upload/upload-activities/upload-activities.component';
 import { GoogleMapsLoaderService } from './services/google-maps-loader.service';
@@ -42,6 +43,14 @@ import { firstValueFrom } from 'rxjs';
 import { MAT_DATE_LOCALE_PROVIDER, getBrowserLocale } from './shared/adapters/date-locale.config';
 import { APP_STORAGE } from './services/storage/app.storage.token';
 
+export const QS_MENU_DEFAULT_OPTIONS: MatMenuDefaultOptions = {
+  overlayPanelClass: 'qs-menu-panel',
+  hasBackdrop: false,
+  overlapTrigger: false,
+  xPosition: 'after',
+  yPosition: 'below',
+  backdropClass: 'cdk-overlay-transparent-backdrop'
+};
 
 @NgModule({
   declarations: [
@@ -120,6 +129,7 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
     provideRemoteConfig(() => getRemoteConfig()),
     { provide: MAT_FORM_FIELD_DEFAULT_OPTIONS, useValue: { appearance: 'outline' } },
     { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-rounded' } },
+    { provide: MAT_MENU_DEFAULT_OPTIONS, useValue: QS_MENU_DEFAULT_OPTIONS },
     { provide: MAT_DIALOG_DEFAULT_OPTIONS, useValue: { panelClass: 'qs-dialog-container', hasBackdrop: true } },
     { provide: MAT_BOTTOM_SHEET_DEFAULT_OPTIONS, useValue: { autoFocus: 'dialog', panelClass: 'qs-bottom-sheet-container' } },
     MAT_DATE_LOCALE_PROVIDER,
