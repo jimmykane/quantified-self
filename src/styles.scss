@@ -828,8 +828,10 @@ tr.mat-row:focus,
 
 /* Panel Overrides */
 .mat-mdc-menu-panel.qs-config-menu {
+  @extend .glass-card;
   max-width: none !important;
   min-width: 300px !important;
+  background: var(--mat-sys-surface) !important;
 }
 
 /* Section/Item Layout for menus used for settings */
@@ -855,4 +857,11 @@ tr.mat-row:focus,
     width: 100%;
     display: block;
   }
+}
+
+.mat-mdc-select-panel.qs-config-submenu {
+  @extend .glass-card;
+  background: var(--mat-sys-surface) !important;
+  border-radius: 12px !important;
+  padding: 4px 0 !important;
 }

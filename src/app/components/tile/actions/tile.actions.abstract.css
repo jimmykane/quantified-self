@@ -1,6 +1,6 @@
 mat-select {}
 
-section {
+section[mat-menu-item] {
   display: flex;
 }
 

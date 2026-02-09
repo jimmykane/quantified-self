@@ -35,8 +35,7 @@
         @if (jump?.jumpData?.speed) {
         <div class="stat-row">
             <span class="label">Speed:</span>
-            <span class="value">{{jump?.jumpData?.speed?.getDisplayValue()}}
-                {{jump?.jumpData?.speed?.getDisplayUnit()}}</span>
+            <span class="value">{{getFormattedSpeed()}}</span>
         </div>
         }
 

@@ -19,7 +19,7 @@ import {
 import { GoogleMap, MapInfoWindow, MapAdvancedMarker } from '@angular/google-maps';
 import { throttleTime } from 'rxjs/operators';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { EventInterface, ActivityInterface, LapInterface, User, LapTypes, GeoLibAdapter, DataLatitudeDegrees, DataLongitudeDegrees, DataJumpEvent, DataEvent } from '@sports-alliance/sports-lib';
+import { EventInterface, ActivityInterface, LapInterface, User, LapTypes, GeoLibAdapter, DataLatitudeDegrees, DataLongitudeDegrees, DataJumpEvent, DataEvent, DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../../services/app.event.service';
 import { Subject, Subscription, asyncScheduler } from 'rxjs';
 import { AppUserService } from '../../../services/app.user.service';
@@ -363,12 +363,13 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     const data = jump.jumpData;
     const format = (v: number | undefined) => v !== undefined ? Math.round(v * 10) / 10 : '-';
     const hangTimeDisplay = data.hang_time ? data.hang_time.getDisplayValue(false, true, true) : '-';
+    const speedDisplay = this.getJumpSpeedDisplay(jump);
     const stats = [
       `Distance: ${format(data.distance.getValue())} ${data.distance.getDisplayUnit()}`,
       `Height: ${data.height ? `${format(data.height.getValue())} ${data.height.getDisplayUnit()}` : '-'}`,
       `Score: ${format(data.score.getValue())}`,
       `Hang Time: ${hangTimeDisplay}`,
-      `Speed: ${data.speed ? `${format(data.speed.getValue())} ${data.speed.getDisplayUnit()}` : '-'}`,
+      `Speed: ${speedDisplay}`,
       `Rotations: ${data.rotations ? `${format(data.rotations.getValue())}` : '-'}`
     ].join('\n');
 
@@ -576,6 +577,28 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   private getJumpHangTime(jump: DataJumpEvent): number | null {
     const raw = jump?.jumpData?.hang_time?.getValue();
     return typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+  }
+
+  private getJumpSpeedDisplay(jump: DataJumpEvent): string {
+    const speed = jump?.jumpData?.speed;
+    if (!speed) {
+      return '-';
+    }
+
+    try {
+      const convertedStats = DynamicDataLoader.getUnitBasedDataFromDataInstance(
+        speed,
+        this.userSettingsQuery.unitSettings()
+      );
+      const preferredSpeed = convertedStats?.[0];
+      if (preferredSpeed) {
+        return `${preferredSpeed.getDisplayValue()} ${preferredSpeed.getDisplayUnit()}`.trim();
+      }
+    } catch {
+      // Fallback to original speed stat if conversion fails.
+    }
+
+    return `${speed.getDisplayValue()} ${speed.getDisplayUnit()}`.trim();
   }
 
   private getJumpMarkerSize(jump: DataJumpEvent): number {

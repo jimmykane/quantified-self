@@ -10,7 +10,7 @@ import { AppEventService } from '../../../services/app.event.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import { AppThemeService } from '../../../services/app.theme.service';
-import { AppThemes } from '@sports-alliance/sports-lib';
+import { AppThemes, DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { MarkerFactoryService } from '../../../services/map/marker-factory.service';
 import { signal } from '@angular/core';
@@ -160,7 +160,7 @@ describe('EventCardMapComponent', () => {
         const markerFactory = TestBed.inject(MarkerFactoryService) as any;
         const jump = {
             jumpData: {
-                hang_time: { getValue: () => 1.5 },
+                hang_time: { getValue: () => 1.5, getDisplayValue: () => '01.5s' },
                 distance: { getValue: () => 1, getDisplayUnit: () => 'm' },
                 score: { getValue: () => 1 },
             }
@@ -181,7 +181,7 @@ describe('EventCardMapComponent', () => {
         const markerFactory = TestBed.inject(MarkerFactoryService) as any;
         const jump = {
             jumpData: {
-                hang_time: { getValue: () => 5 },
+                hang_time: { getValue: () => 5, getDisplayValue: () => '05.0s' },
                 distance: { getValue: () => 1, getDisplayUnit: () => 'm' },
                 score: { getValue: () => 1 },
             }
@@ -208,7 +208,7 @@ describe('EventCardMapComponent', () => {
                 },
                 distance: { getValue: () => 3.2, getDisplayUnit: () => 'm' },
                 score: { getValue: () => 8.7 },
-                speed: { getValue: () => 12.3, getDisplayUnit: () => 'km/h' },
+                speed: { getValue: () => 12.3, getDisplayValue: () => '12.3', getDisplayUnit: () => 'km/h' },
                 rotations: { getValue: () => 1.1 }
             }
         } as any;
@@ -217,6 +217,27 @@ describe('EventCardMapComponent', () => {
 
         expect(getDisplayValue).toHaveBeenCalledWith(false, true, true);
         expect(options.title).toContain('Hang Time: 01.3s');
+    });
+
+    it('should format speed in marker title using unit-based conversion', () => {
+        const conversionSpy = vi.spyOn(DynamicDataLoader, 'getUnitBasedDataFromDataInstance').mockReturnValue([{
+            getDisplayValue: () => '15.4',
+            getDisplayUnit: () => 'km/h'
+        }] as any);
+        const jump = {
+            jumpData: {
+                hang_time: { getValue: () => 1.3, getDisplayValue: () => '01.3s' },
+                distance: { getValue: () => 3.2, getDisplayUnit: () => 'm' },
+                score: { getValue: () => 8.7 },
+                speed: { getDisplayValue: () => '9.6', getDisplayUnit: () => 'm/s' },
+                rotations: { getValue: () => 1.1 }
+            }
+        } as any;
+
+        const options = component.getJumpMarkerOptions(jump, '#222222');
+
+        expect(options.title).toContain('Speed: 15.4 km/h');
+        conversionSpy.mockRestore();
     });
 
 

@@ -7,10 +7,17 @@
     font-family: 'Noto Sans', sans-serif !important;
 }
 
+/* Override the broad host selector for value cells only */
+:host .value {
+    font-family: 'Barlow Condensed', 'Noto Sans', sans-serif !important;
+}
+
 .popup-container {
     padding: 16px;
-    /* Back to original padding for compactness */
-    min-width: 220px;
+    min-width: 0;
+    width: min(320px, calc(100vw - 48px));
+    max-width: calc(100vw - 48px);
+    box-sizing: border-box;
 }
 
 .popup-header {
@@ -27,12 +34,12 @@
 
 .card-title {
     margin: 0;
-    font-size: 1.125rem !important;
+    font-size: 1rem !important;
     font-weight: 500;
     color: var(--mat-sys-on-surface) !important;
     display: block;
     /* Removed flex */
-    line-height: 32px !important;
+    line-height: 30px !important;
     /* Force match close-btn height */
 }
 
@@ -73,7 +80,7 @@
 }
 
 .label {
-    font-size: 0.8rem;
+    font-size: 0.76rem;
     /* Compact labels */
     font-weight: 400;
     color: var(--mat-app-on-surface-variant);
@@ -82,9 +89,23 @@
 }
 
 .value {
-    font-size: 0.95rem;
+    font-size: 0.88rem;
     /* Balanced values */
     font-weight: 500;
     color: var(--mat-app-on-surface);
     text-align: right;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+@media (max-width: 480px) {
+    .popup-container {
+        padding: 12px;
+        width: min(300px, calc(100vw - 32px));
+        max-width: calc(100vw - 32px);
+    }
+
+    .stats-grid {
+        gap: 6px 10px;
+    }
 }
