@@ -1,3 +1,11 @@
+:host {
+  position: absolute;
+  inset: 0;
+  z-index: 500;
+  display: block;
+  pointer-events: none;
+}
+
 .loading-shade {
   position: absolute;
   top: 0;
@@ -5,22 +13,22 @@
   bottom: 0;
   right: 0;
   background: rgba(0, 0, 0, 0.6);
-  z-index: 500;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding-left: 5em;
-  padding-right: 5em;
+  padding: 1rem;
   border-radius: 0.5em;
+  pointer-events: auto;
 }
 
 
 .error {
   color: #FFFFFF;
-  /*max-width: 360px;*/
+  max-width: min(36rem, 90%);
   text-align: center;
-  /*font-weight: 400;*/
   font-size: 1.5em;
+  line-height: 1.3;
 }
 
 

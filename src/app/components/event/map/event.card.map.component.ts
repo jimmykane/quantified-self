@@ -534,6 +534,14 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       });
     });
 
+    // Treat "activities without any usable position samples" as no map data.
+    const hasRenderableMapData = this.activitiesMapData.some((data) => data.positions.length > 0);
+    if (!hasRenderableMapData) {
+      this.noMapData = true;
+      this.loaded();
+      return;
+    }
+
     this.updateJumpHangTimeRange();
     this.loaded();
 

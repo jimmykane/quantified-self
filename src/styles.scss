@@ -894,3 +894,24 @@ tr.mat-row:focus,
   width: 100%;
   text-align: center;
 }
+
+/* ==========================================================================
+   Global Button Ripple Shape
+   Ensure ripple/state layers follow the effective button radius even when
+   components override button border-radius locally.
+   ========================================================================== */
+.mdc-button .mdc-button__ripple,
+.mdc-button .mat-mdc-button-persistent-ripple,
+.mdc-button .mat-mdc-button-persistent-ripple::before,
+.mdc-button .mat-ripple-element,
+.mdc-icon-button .mat-mdc-button-persistent-ripple,
+.mdc-icon-button .mat-mdc-button-persistent-ripple::before,
+.mdc-icon-button .mat-ripple-element {
+  border-radius: inherit !important;
+}
+
+/* Clip animated ripple to the button's rounded corners. */
+.mdc-button .mat-mdc-button-persistent-ripple,
+.mdc-icon-button .mat-mdc-button-persistent-ripple {
+  overflow: hidden;
+}

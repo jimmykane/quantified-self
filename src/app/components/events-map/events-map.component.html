@@ -1,5 +1,5 @@
-<app-loading-overlay [isLoading]="isLoading" [hasError]="markers && markers.length === 0"
-  [errorMessage]="'Nothing to show'" [showSkeleton]="false" height="100%">
+<app-loading-overlay [isLoading]="isLoading" [hasError]="noMapData"
+  [errorMessage]="'Nothing to show'" [showSkeleton]="false" height="100%" minHeight="100%">
   <!-- Selected Event Card -->
   @if (selectedEvent) {
   <mat-card>

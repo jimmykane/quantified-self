@@ -78,6 +78,17 @@ mat-button-toggle:hover:not(.mat-button-toggle-checked) {
   background-color: transparent !important;
 }
 
+/* Keep ripple/state layers rounded to match our custom toggle radius. */
+::ng-deep mat-button-toggle .mat-button-toggle-ripple {
+  border-radius: inherit !important;
+  overflow: hidden;
+}
+
+::ng-deep mat-button-toggle .mat-ripple-element,
+::ng-deep mat-button-toggle .mat-button-toggle-focus-overlay {
+  border-radius: inherit !important;
+}
+
 /* Premium Active State */
 mat-button-toggle.mat-button-toggle-checked {
   background-color: var(--mat-sys-primary) !important;

@@ -210,6 +210,34 @@ describe('EventsMapComponent', () => {
     });
 
     describe('initMapData (called via onMapReady)', () => {
+        it('should set noMapData when there are no events', () => {
+            component.events = [];
+            component.apiLoaded.set(true);
+
+            const mockMap = new (window as any).google.maps.Map();
+            component['nativeMap'] = mockMap;
+
+            component['initMapData']();
+
+            expect(component.noMapData).toBe(true);
+            expect(component.markers.length).toBe(0);
+        });
+
+        it('should set noMapData when events have no start positions', () => {
+            mockEvent.getStat.mockReturnValue(null);
+            mockEvent.getID.mockReturnValue('evt-no-start');
+            component.events = [mockEvent];
+            component.apiLoaded.set(true);
+
+            const mockMap = new (window as any).google.maps.Map();
+            component['nativeMap'] = mockMap;
+
+            component['initMapData']();
+
+            expect(component.noMapData).toBe(true);
+            expect(component.markers.length).toBe(0);
+        });
+
         it('should create markers for events', () => {
             // Mock Stat for position
             const mockStat = { getValue: () => ({ latitudeDegrees: 10, longitudeDegrees: 20 }) } as DataStartPosition;
@@ -233,6 +261,7 @@ describe('EventsMapComponent', () => {
             component['initMapData'](); // Call private method directly
 
             expect(component.markers.length).toBe(1);
+            expect(component.noMapData).toBe(false);
             expect((window as any).google.maps.marker.AdvancedMarkerElement).toHaveBeenCalledWith(expect.objectContaining({
                 // map: mockMap, // Map is not passed to constructor, it's set via setMap later
                 title: 'Running for 1h and 10km'

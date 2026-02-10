@@ -54,6 +54,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
 
   public latLngArray: google.maps.LatLng[] = [];
   public markers: google.maps.marker.AdvancedMarkerElement[] = [];
+  public noMapData = false;
   public selectedEvent: EventInterface;
   public selectedEventPositionsByActivity: { activity: ActivityInterface, color: string, positions: DataPositionInterface[] }[];
 
@@ -199,6 +200,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     }
     this.markerActivityTypes.clear();
     this.markers = []; // Ensure markers array is reset
+    this.noMapData = false;
 
     // Create and add markers
     if (this.events?.length) {
@@ -215,6 +217,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       }
 
       this.markers = this.getMarkersFromEvents(this.events);
+      this.noMapData = this.markers.length === 0;
       this.logger.info('[perf] events_map_create_markers', {
         durationMs: Number((performance.now() - markerCreationStart).toFixed(2)),
         inputEvents,
@@ -231,6 +234,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       markers: this.markers?.length || 0,
       clusterMarkers: !!this.clusterMarkers,
     });
+    this.noMapData = true;
   }
 
   private async initMapDataChunked(runId: number, events: EventInterface[], initStart: number, markerCreationStart: number, inputEvents: number): Promise<void> {
@@ -243,6 +247,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       return;
     }
     this.markers = markers;
+    this.noMapData = this.markers.length === 0;
     this.logger.info('[perf] events_map_create_markers', {
       durationMs: Number((performance.now() - markerCreationStart).toFixed(2)),
       inputEvents,
