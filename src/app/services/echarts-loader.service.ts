@@ -47,7 +47,11 @@ export class EChartsLoaderService {
 
         this.cachedCore = core;
         return core;
-      })();
+      })().catch((error) => {
+        // Allow retry if the first lazy-load attempt fails.
+        this.loader = null;
+        throw error;
+      });
     }
 
     return this.loader;

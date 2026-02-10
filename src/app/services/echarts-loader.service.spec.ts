@@ -71,13 +71,41 @@ describe('EChartsLoaderService', () => {
     ]);
   });
 
+  it('should deduplicate concurrent load calls', async () => {
+    const [coreA, coreB, coreC] = await Promise.all([
+      service.load(),
+      service.load(),
+      service.load(),
+    ]);
+
+    expect(coreA).toBe(coreB);
+    expect(coreB).toBe(coreC);
+    expect(echartsCoreMock.use).toHaveBeenCalledTimes(1);
+  });
+
+  it('should recover from a failed initial load and allow retry', async () => {
+    echartsCoreMock.use.mockImplementationOnce(() => {
+      throw new Error('load failed');
+    });
+
+    await expect(service.load()).rejects.toThrow('load failed');
+    expect(echartsCoreMock.use).toHaveBeenCalledTimes(1);
+
+    const retriedCore = await service.load();
+
+    expect(retriedCore).toBeDefined();
+    expect(echartsCoreMock.use).toHaveBeenCalledTimes(2);
+  });
+
   it('should initialize chart instance with theme', async () => {
     const chart = { id: 'chart-1' };
     const container = document.createElement('div');
+    const runOutsideAngularSpy = vi.spyOn(zone, 'runOutsideAngular');
     echartsCoreMock.init.mockReturnValue(chart);
 
     const initialized = await service.init(container, 'dark');
 
+    expect(runOutsideAngularSpy).toHaveBeenCalled();
     expect(echartsCoreMock.init).toHaveBeenCalledWith(container, 'dark');
     expect(initialized).toBe(chart);
   });
