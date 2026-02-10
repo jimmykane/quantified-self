@@ -1,7 +1,9 @@
 import {
+  DataAscent,
   DataAltitudeAvg,
   DataCadenceMax,
   DataCadenceMin,
+  DataDescent,
   DataFeeling,
   DataPowerMax,
   DataPowerMin,
@@ -30,5 +32,19 @@ describe('DataTypeIconComponent', () => {
 
     expect(component.getColumnHeaderIcon(DataFeeling.type)).toBe('mood');
     expect(component.getColumnHeaderIcon(DataRPE.type)).toBe('fitness_center');
+  });
+
+  it('should map ascent and descent to elevation', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon(DataAscent.type)).toBe('elevation');
+    expect(component.getColumnHeaderIcon(DataDescent.type)).toBe('elevation');
+  });
+
+  it('should return mirror class for descent only', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIconClass(DataDescent.type)).toBe('icon-mirror-x');
+    expect(component.getColumnHeaderIconClass(DataAscent.type)).toBeNull();
   });
 });

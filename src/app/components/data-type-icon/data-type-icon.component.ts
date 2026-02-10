@@ -72,6 +72,14 @@ export class DataTypeIconComponent {
   @Input() size: string;
   @Input() vAlign: string;
 
+  getColumnHeaderIconClass(statName: string): string | null {
+    if (statName === DataDescent.type) {
+      return 'icon-mirror-x';
+    }
+
+    return null;
+  }
+
   getColumnHeaderIcon(statName): string {
     switch (statName) {
       case DataDistance.type:
@@ -166,7 +174,7 @@ export class DataTypeIconComponent {
       case DataAscent.type:
         return 'elevation';
       case DataDescent.type:
-        return 'trending_down';
+        return 'elevation';
       case DataHeartRateAvg.type:
       case DataHeartRateMax.type:
       case DataHeartRateMin.type:

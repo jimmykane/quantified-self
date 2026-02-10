@@ -1,5 +1,6 @@
 @if (getColumnHeaderIcon(dataType)) {
 <mat-icon matTooltip="{{dataType}}"
+  [ngClass]="getColumnHeaderIconClass(dataType)"
   [ngStyle]="{'font-size': size ? size : '24px', 'width':  size ? size : '24px', 'height':  size ? size : '24px', 'vertical-align': vAlign? vAlign : 'middle'}">
   {{ getColumnHeaderIcon(dataType) }}
 </mat-icon>
