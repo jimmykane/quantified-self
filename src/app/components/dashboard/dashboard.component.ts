@@ -1,6 +1,6 @@
 import { Component, OnChanges, OnDestroy, OnInit, inject } from '@angular/core';
 import { AppEventService } from '../../services/app.event.service';
-import { asyncScheduler, of, Subscription } from 'rxjs';
+import { of, Subscription } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -10,9 +10,10 @@ import { DateRanges } from '@sports-alliance/sports-lib';
 import { Search } from '../event-search/event-search.component';
 import { AppUserService } from '../../services/app.user.service';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
-import { distinctUntilChanged, map, switchMap, take, tap, throttleTime } from 'rxjs/operators';
+import { distinctUntilChanged, map, switchMap, take, tap } from 'rxjs/operators';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { LoggerService } from '../../services/logger.service';
 
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { WhereFilterOp } from 'firebase/firestore';
@@ -40,7 +41,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public hasMergedEvents = false;
 
   private shouldSearch: boolean;
+  private hasResolvedDataForInitialRender = false;
   private analyticsService = inject(AppAnalyticsService);
+  private logger = inject(LoggerService);
 
 
   constructor(public authService: AppAuthService,
@@ -52,11 +55,14 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   async ngOnInit() {
+    const initStart = performance.now();
 
     const resolvedData = this.route.snapshot.data['dashboardData'];
     if (resolvedData) {
+      const resolvedDataStart = performance.now();
       this.events = resolvedData.events || [];
       this.user = resolvedData.user;
+      this.hasResolvedDataForInitialRender = !!resolvedData.user;
       this.targetUser = resolvedData.targetUser;
       this.hasMergedEvents = resolvedData.hasMergedEvents ?? this.events?.some(event => event.isMerge) ?? false;
       this.isLoading = false;
@@ -74,6 +80,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         }
         this.startOfTheWeek = this.user.settings.unitSettings?.startOfTheWeek;
       }
+      this.logPerf('resolved_dashboard_data', resolvedDataStart, { events: this.events?.length || 0 });
     }
 
     this.shouldSearch = false;
@@ -81,8 +88,10 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     // @todo make this an obsrvbl
     const userID = this.route.snapshot.paramMap.get('userID');
     if (userID && !this.targetUser) { // Only fetch if not resolved
+      const targetUserFetchStart = performance.now();
       try {
         this.targetUser = await this.userService.getUserByID(userID).pipe(take(1)).toPromise();
+        this.logPerf('target_user_fetch', targetUserFetchStart, { userID });
       } catch (e) {
         return this.router.navigate(['dashboard']).then(() => {
           this.snackBar.open('Page not found');
@@ -90,6 +99,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       }
     }
     this.dataSubscription = this.authService.user$.pipe(switchMap((user: AppUserInterface | null) => {
+      const userEmissionStart = performance.now();
 
       if (this.shouldSearch || !this.isInitialized) {
         this.isLoading = true;
@@ -101,6 +111,21 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
           this.snackBar.open('You were signed out out')
         });
         return of({ user: null, events: null });
+      }
+
+      // Resolver already loaded the same dataset once; skip duplicate live query on first paint.
+      if (
+        this.hasResolvedDataForInitialRender
+        && !this.shouldSearch
+        && this.isInitialized
+        && this.user?.uid === user.uid
+      ) {
+        this.hasResolvedDataForInitialRender = false;
+        this.logger.info('[perf] dashboard_skip_initial_live_query', {
+          events: this.events?.length || 0,
+          userID: user.uid,
+        });
+        return of({ events: this.events || [], user });
       }
 
 
@@ -173,22 +198,32 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
             });
           }),
           tap((eventsArray: EventInterface[]) => {
+            this.logPerf('events_listener_emit', userEmissionStart, { incomingEvents: eventsArray?.length || 0 });
             this.hasMergedEvents = eventsArray.some(event => event.isMerge);
           }),
           map((eventsArray: EventInterface[]) => {
-            const t0 = performance.now();
+            const filterStart = performance.now();
             let filteredEvents = eventsArray;
             if (!includeMergedEvents) {
               filteredEvents = filteredEvents.filter(event => !event.isMerge);
             }
             if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
+              this.logPerf('events_filtering', filterStart, {
+                includeMergedEvents,
+                activityTypeFilters: 0,
+                resultCount: filteredEvents.length,
+              });
               return filteredEvents;
             }
             const result = filteredEvents.filter(event => {
               const hasType = event.getActivityTypesAsArray().some(activityType => user.settings.dashboardSettings.activityTypes.indexOf(ActivityTypes[activityType]) >= 0);
               return hasType;
             });
-
+            this.logPerf('events_filtering', filterStart, {
+              includeMergedEvents,
+              activityTypeFilters: user.settings.dashboardSettings.activityTypes.length,
+              resultCount: result.length,
+            });
             return result;
           }))
         .pipe(map((events) => {
@@ -201,8 +236,10 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       this.user = eventsAndUser.user;
       this.isLoading = false;
       this.isInitialized = true;
+      this.logger.info('[perf] dashboard_state_update', { events: this.events.length });
 
     });
+    this.logPerf('dashboard_init', initStart);
   }
 
   async search(search: Search) {
@@ -230,5 +267,12 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     if (this.dataSubscription) {
       this.dataSubscription.unsubscribe();
     }
+  }
+
+  private logPerf(step: string, start: number, meta?: Record<string, unknown>) {
+    this.logger.info(`[perf] dashboard_${step}`, {
+      durationMs: Number((performance.now() - start).toFixed(2)),
+      ...(meta || {}),
+    });
   }
 }

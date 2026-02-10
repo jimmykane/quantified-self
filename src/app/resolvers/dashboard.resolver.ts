@@ -10,6 +10,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { WhereFilterOp } from 'firebase/firestore';
 import { getDatesForDateRange } from '../helpers/date-range-helper';
+import { LoggerService } from '../services/logger.service';
 
 export interface DashboardResolverData {
     events: EventInterface[];
@@ -17,6 +18,8 @@ export interface DashboardResolverData {
     targetUser?: AppUserInterface | null;
     hasMergedEvents?: boolean;
 }
+
+let dashboardResolverRunCounter = 0;
 
 export const dashboardResolver: ResolveFn<DashboardResolverData> = (
     route: ActivatedRouteSnapshot,
@@ -27,10 +30,18 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
     const authService = inject(AppAuthService);
     const router = inject(Router);
     const snackBar = inject(MatSnackBar);
+    const logger = inject(LoggerService);
     const injector = inject(Injector);
+    const runId = ++dashboardResolverRunCounter;
+    const resolverStart = performance.now();
 
     // Get optional target user ID from route
     const targetUserID = route.paramMap.get('userID');
+    logger.info('[perf] dashboard_resolver_start', {
+        runId,
+        url: state?.url || null,
+        targetUserID: targetUserID || null,
+    });
 
     return authService.user$.pipe(
         take(1),
@@ -38,19 +49,34 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
             if (!user) {
                 // If user is not authenticated, redirect to login and return empty data
                 router.navigate(['login']);
+                logger.info('[perf] dashboard_resolver_unauthenticated', {
+                    runId,
+                    durationMs: Number((performance.now() - resolverStart).toFixed(2)),
+                });
                 return { events: [], user: null, targetUser: null, hasMergedEvents: false };
             }
 
             let targetUser: AppUserInterface | undefined = undefined;
             if (targetUserID) {
+                const targetUserFetchStart = performance.now();
                 try {
                     // We need to convert the Observable to a Promise or handle it in RxJS chain
                     // Converting to promise inside async switchMap is okay for clarity 
                     // provided we handle concurrency correct, but better to use RxJS
                     targetUser = await userService.getUserByID(targetUserID).pipe(take(1)).toPromise();
+                    logger.info('[perf] dashboard_resolver_target_user_fetch', {
+                        runId,
+                        durationMs: Number((performance.now() - targetUserFetchStart).toFixed(2)),
+                        targetUserID,
+                    });
                 } catch (e) {
                     snackBar.open('Page not found');
                     router.navigate(['dashboard']);
+                    logger.warn('[perf] dashboard_resolver_target_user_fetch_failed', {
+                        runId,
+                        durationMs: Number((performance.now() - targetUserFetchStart).toFixed(2)),
+                        targetUserID,
+                    });
                     return { events: [], user: user, targetUser: null, hasMergedEvents: false };
                 }
             }
@@ -62,6 +88,10 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
             // So we use `user.settings`.
 
             if (!user.settings?.dashboardSettings) {
+                logger.info('[perf] dashboard_resolver_missing_settings', {
+                    runId,
+                    durationMs: Number((performance.now() - resolverStart).toFixed(2)),
+                });
                 return { events: [], user: user, targetUser, hasMergedEvents: false };
             }
 
@@ -102,13 +132,36 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
             const userContext = targetUser ? targetUser : user;
             const limit = 0;
 
-            const events = await firstValueFrom(eventService.getEventsOnceBy(userContext, where, 'startDate', false, limit));
+            const eventsFetchStart = performance.now();
+            const events = await firstValueFrom(eventService.getEventsOnceBy(
+                userContext,
+                where,
+                'startDate',
+                false,
+                limit,
+                {
+                    preferCache: true,
+                    warmServer: true
+                }
+            ));
+            logger.info('[perf] dashboard_resolver_events_fetch', {
+                runId,
+                durationMs: Number((performance.now() - eventsFetchStart).toFixed(2)),
+                whereClauses: where.length,
+                events: events?.length || 0,
+                userContextUID: userContext?.uid || null,
+            });
             const rawEvents = events || [];
             const hasMergedEvents = rawEvents.some(event => event.isMerge);
             const filteredByMerge = includeMergedEvents ? rawEvents : rawEvents.filter(event => !event.isMerge);
 
             // Filter by Activity Types
             if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
+                logger.info('[perf] dashboard_resolver_complete', {
+                    runId,
+                    durationMs: Number((performance.now() - resolverStart).toFixed(2)),
+                    returnedEvents: filteredByMerge?.length || 0,
+                });
                 return { events: filteredByMerge || [], user: user, targetUser, hasMergedEvents };
             }
 
@@ -116,6 +169,11 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
                 return event.getActivityTypesAsArray().some(activityType => user.settings!.dashboardSettings!.activityTypes!.indexOf(ActivityTypes[activityType as unknown as keyof typeof ActivityTypes]) >= 0)
             });
 
+            logger.info('[perf] dashboard_resolver_complete', {
+                runId,
+                durationMs: Number((performance.now() - resolverStart).toFixed(2)),
+                returnedEvents: filteredEvents.length,
+            });
             return { events: filteredEvents, user: user, targetUser, hasMergedEvents };
         })),
         map((result) => {

@@ -75,6 +75,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   selection = new SelectionModel(true, []);
 
   selectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
+  displayedColumns: string[] = [];
 
   public show = true
 
@@ -82,6 +83,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
   private sortSubscription!: Subscription;
   private breakpointSubscription!: Subscription;
   private isHandset = false;
+  private readonly defaultSelectedColumns = AppUserUtilities.getDefaultSelectedTableColumns();
 
 
   private searchSubject: Subject<string> = new Subject();
@@ -112,11 +114,15 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       return;
     }
     if (this.events && simpleChanges.events && this.data.paginator && this.data.sort) { // If there is no paginator and sort then the compoenent is not initialized on view
-      this.processChanges();
+      this.processChanges('on_changes_events');
     }
     if (this.user && simpleChanges.user) {
       this.selectedColumns = this.user.settings?.dashboardSettings?.tableSettings?.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns();
       this.paginator?._changePageSize(this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 10);
+      this.updateDisplayedColumns();
+    }
+    if (simpleChanges.showActions) {
+      this.updateDisplayedColumns();
     }
   }
 
@@ -124,6 +130,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     if (!this.user) {
       throw new Error(`Component needs user`)
     }
+    this.updateDisplayedColumns();
     this.searchSubject.pipe(
       debounceTime(250)
     ).subscribe(searchTextValue => {
@@ -133,9 +140,13 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     this.breakpointSubscription = this.breakpointObserver
       .observe([AppBreakpoints.HandsetOrTabletPortrait])
       .subscribe(result => {
-        this.isHandset = result.matches;
-        if (this.events) {
-          this.processChanges();
+        const nextIsHandset = result.matches;
+        if (nextIsHandset === this.isHandset) {
+          return;
+        }
+        this.isHandset = nextIsHandset;
+        if (this.events && this.data.paginator && this.data.sort) {
+          this.processChanges('breakpoint_change');
         }
         this.changeDetector.markForCheck();
       });
@@ -155,7 +166,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       }
     });
     if (this.events) {
-      this.processChanges();
+      this.processChanges('after_view_init');
     }
   }
 
@@ -250,6 +261,11 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       event.stopPropagation();
       this.checkBoxClick(row);
     }
+  }
+
+  trackByEventId = (index: number, row: StatRowElement): string | number => {
+    const event = row?.Event as EventInterface | undefined;
+    return event?.getID ? event.getID() : index;
   }
 
   isAllSelected() {
@@ -432,7 +448,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       if (this.events) {
         const deletedIds = new Set(eventsToDelete.map(e => e.getID()));
         this.events = this.events.filter(e => !deletedIds.has(e.getID()));
-        this.processChanges();
+        this.processChanges('after_delete_selection');
       }
 
       this.analyticsService.logEvent('delete_events');
@@ -584,25 +600,25 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   // Todo cache this please
   getColumnsToDisplay() {
-    // push all the rest
-    let columns = [
+    return this.displayedColumns;
+  }
+
+  private updateDisplayedColumns() {
+    const sortedSelectedColumns = (this.selectedColumns || [])
+      .filter(column => column !== 'Description')
+      .sort((a, b) => this.defaultSelectedColumns.indexOf(a) - this.defaultSelectedColumns.indexOf(b));
+
+    const columns = [
       'Checkbox',
       'Start Date',
-      ...(this.selectedColumns || [])
-        .filter(column => column !== 'Description')
-        .sort(function (a, b) {
-          const defaultColumns = AppUserUtilities.getDefaultSelectedTableColumns();
-          return defaultColumns.indexOf(a) - defaultColumns.indexOf(b);
-        }),
+      ...sortedSelectedColumns,
       'Description',
-      'Actions'
-    ]
+      'Actions',
+    ];
 
-    if (!this.showActions) {
-      columns = columns.filter(column => column !== 'Checkbox' && column !== 'Actions');
-    }
-
-    return columns
+    this.displayedColumns = this.showActions
+      ? columns
+      : columns.filter(column => column !== 'Checkbox' && column !== 'Actions');
   }
 
   async saveEventDescription(description: string, event: EventInterface) {
@@ -654,6 +670,7 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   async selectedColumnsChange(event: string[]) {
     this.selectedColumns = event
+    this.updateDisplayedColumns();
     this.user.settings.dashboardSettings.tableSettings.selectedColumns = this.selectedColumns
     await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
   }
@@ -673,46 +690,57 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     return false
   }
 
-  private processChanges() {
-    if (!this.events) {
+  private processChanges(trigger: string = 'unknown') {
+    if (!this.events || !this.user) {
       return;
     }
+    const processStart = performance.now();
+    const dateFormat = this.isHandset ? 'd MMM yy' : 'EEEEEE d MMM yy HH:mm';
+    const removedAscentTypes = new Set((this.user.settings.summariesSettings?.removeAscentForEventTypes || []) as ActivityTypes[]);
+    const removedDescentTypes = new Set((((this.user.settings.summariesSettings as any)?.removeDescentForEventTypes || [])) as ActivityTypes[]);
+    const rows: StatRowElement[] = [];
 
     this.selection.clear();
-    // this.data = new MatTableDataSource<any>(data);
-    this.data.data = this.events.reduce((EventRowElementsArray, event) => {
+    for (const event of this.events) {
       if (!event) {
-        return EventRowElementsArray;
+        continue;
       }
 
-      const statRowElement = this.getStatsRowElement(event.getStatsAsArray(), (<DataActivityTypes>event.getStat(DataActivityTypes.type)) ? (<DataActivityTypes>event.getStat(DataActivityTypes.type)).getValue() : [ActivityTypes.unknown], this.user.settings.unitSettings, event.isMerge);
+      const activityTypesStat = <DataActivityTypes>event.getStat(DataActivityTypes.type);
+      const statRowElement = this.getStatsRowElement(
+        event.getStatsAsArray(),
+        activityTypesStat ? activityTypesStat.getValue() : [ActivityTypes.unknown],
+        this.user.settings.unitSettings,
+        event.isMerge
+      );
+      const activityTypes = event.getActivityTypesAsArray();
+      const primaryActivityType = activityTypes.length > 1
+        ? ActivityTypes.Multisport
+        : (ActivityTypes[activityTypes[0] as keyof typeof ActivityTypes] || ActivityTypes.unknown);
 
       statRowElement['Privacy'] = event.privacy;
       statRowElement['Name'] = event.name;
-      const dateFormat = this.isHandset ? 'd MMM yy' : 'EEEEEE d MMM yy HH:mm';
       statRowElement['Start Date'] = (event.startDate instanceof Date && !isNaN(+event.startDate)) ? this.datePipe.transform(event.startDate, dateFormat) : 'None?';
       statRowElement['Activity Types'] = event.getActivityTypesAsString();
       statRowElement['Merged Event'] = event.isMerge;
       statRowElement['Description'] = event.description;
       statRowElement['Device Names'] = event.getDeviceNamesAsString();
       statRowElement['Color'] = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(
-        event.getActivityTypesAsArray().length > 1 ? ActivityTypes.Multisport : ActivityTypes[event.getActivityTypesAsArray()[0] as keyof typeof ActivityTypes]
+        primaryActivityType
       );
       statRowElement['Gradient'] = this.eventColorService.getGradientForActivityTypeGroup(
-        event.getActivityTypesAsArray().length > 1 ? ActivityTypes.Multisport : ActivityTypes[event.getActivityTypesAsArray()[0] as keyof typeof ActivityTypes]
+        primaryActivityType
       );
       statRowElement['Event'] = event;
 
-      const activityTypes = event.getActivityTypesAsArray();
-
       statRowElement.isAscentExcluded = activityTypes.some(type =>
         AppEventUtilities.shouldExcludeAscent(type as ActivityTypes) ||
-        (this.user.settings.summariesSettings?.removeAscentForEventTypes || []).includes(type as any)
+        removedAscentTypes.has(type as any)
       );
 
       statRowElement.isDescentExcluded = activityTypes.some(type =>
         AppEventUtilities.shouldExcludeDescent(type as ActivityTypes) ||
-        ((this.user.settings.summariesSettings as any)?.removeDescentForEventTypes || []).includes(type as any)
+        removedDescentTypes.has(type as any)
       );
 
       statRowElement['Has Benchmark'] = (event as any).benchmarkResult || ((event as any).benchmarkResults && Object.keys((event as any).benchmarkResults).length > 0);
@@ -723,9 +751,17 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
       statRowElement['sort.Description'] = statRowElement['Description'];
       statRowElement['sort.Device Names'] = statRowElement['Device Names'];
 
-      EventRowElementsArray.push(statRowElement);
-      return EventRowElementsArray;
-    }, []);
+      rows.push(statRowElement);
+    }
+    this.data.data = rows;
+    this.logger.info('[perf] event_table_process_changes', {
+      durationMs: Number((performance.now() - processStart).toFixed(2)),
+      trigger,
+      inputEvents: this.events.length,
+      outputRows: this.data.data.length,
+      isHandset: this.isHandset,
+      pageSize: this.paginator?.pageSize || this.user.settings?.dashboardSettings?.tableSettings?.eventsPerPage || 0,
+    });
     this.loaded();
 
   }

@@ -8,6 +8,7 @@ import { AppUserSettingsQueryService } from '../../../services/app.user-settings
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { buildDiffMapForStats } from '../../../helpers/stats-diff.helper';
 import { getDefaultSummaryStatTypes } from '../../../helpers/summary-stats.helper';
+import { LoggerService } from '../../../services/logger.service';
 
 @Component({
   selector: 'app-event-card-stats-grid',
@@ -32,6 +33,7 @@ export class EventCardStatsGridComponent implements OnChanges {
 
   private userSettingsQuery = inject(AppUserSettingsQueryService);
   private eventColorService = inject(AppEventColorService);
+  private logger = inject(LoggerService);
 
   public get unitSettings() {
     return this.userSettingsQuery.unitSettings();
@@ -42,13 +44,16 @@ export class EventCardStatsGridComponent implements OnChanges {
   }
 
   ngOnChanges(simpleChanges: SimpleChanges) {
+    const ngChangesStart = performance.now();
     if (!this.selectedActivities.length) {
       this.stats = [];
       this.showDiff = false;
       this.diffByType = new Map();
+      this.logPerf('empty_selection', ngChangesStart);
       return;
     }
 
+    const statsBuildStart = performance.now();
     if ((this.selectedActivities.length === 1 && this.event.getActivities().length === 1)
       || this.selectedActivities.length === this.event.getActivities().length) {
       this.stats = [...this.event.getStats().values()];
@@ -58,28 +63,44 @@ export class EventCardStatsGridComponent implements OnChanges {
     } else {
       this.stats = ActivityUtilities.getSummaryStatsForActivities(this.selectedActivities);
     }
+    this.logPerf('build_stats', statsBuildStart, {
+      selectedActivities: this.selectedActivities.length,
+      statsCount: this.stats.length,
+      eventId: this.event?.getID?.(),
+    });
 
     if (this.statsToShow) {
       this.displayedStatsToShow = this.statsToShow;
       this.updateDiffMap();
+      this.logPerf('ng_on_changes_total', ngChangesStart, { usedStatsOverride: true });
       return;
     }
 
     const activityTypes = (this.selectedActivities || []).map((activity: ActivityInterface) => activity.type).filter(type => !!type) as ActivityTypes[];
 
     // the order here is important
+    const summaryTypesStart = performance.now();
     this.displayedStatsToShow = getDefaultSummaryStatTypes(activityTypes, this.summariesSettings);
+    this.logPerf('build_default_summary_stat_types', summaryTypesStart, {
+      activityTypes: activityTypes.length,
+      displayedStats: this.displayedStatsToShow.length,
+      eventId: this.event?.getID?.(),
+    });
 
     this.updateDiffMap();
+    this.logPerf('ng_on_changes_total', ngChangesStart, { usedStatsOverride: false });
   }
 
   private updateDiffMap() {
+    const diffStart = performance.now();
     this.showDiff = !!this.event?.isMerge && this.selectedActivities.length === 2;
     if (!this.showDiff || !this.unitSettings) {
       this.diffByType = new Map();
+      this.logPerf('update_diff_map', diffStart, { showDiff: false });
       return;
     }
     this.diffByType = this.buildDiffMap();
+    this.logPerf('update_diff_map', diffStart, { showDiff: true, diffCount: this.diffByType.size });
   }
 
   private buildDiffMap(): Map<string, { display: string; percent: number; color: string }> {
@@ -93,5 +114,12 @@ export class EventCardStatsGridComponent implements OnChanges {
       });
     });
     return coloredMap;
+  }
+
+  private logPerf(step: string, start: number, meta?: Record<string, unknown>) {
+    this.logger.info(`[perf] event_card_stats_grid_${step}`, {
+      durationMs: Number((performance.now() - start).toFixed(2)),
+      ...(meta || {}),
+    });
   }
 }

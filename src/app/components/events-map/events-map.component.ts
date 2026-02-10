@@ -101,6 +101,9 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   private nativeMap: google.maps.Map;
   private markerClusterer: MarkerClusterer;
   private markerActivityTypes = new Map<google.maps.marker.AdvancedMarkerElement, ActivityTypes>();
+  private mapDataRunId = 0;
+  private readonly markerChunkThreshold = 250;
+  private readonly markerChunkSize = 80;
 
   constructor(
     private zone: NgZone,
@@ -143,7 +146,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     this.apiLoaded.set(true);
     this.changeDetectorRef.markForCheck();
     if (this.nativeMap) {
-      this.initMapData();
+      void this.initMapData();
     }
   }
 
@@ -152,6 +155,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   }
 
   onMapReady(map: google.maps.Map) {
+    const mapReadyStart = performance.now();
     this.zone.runOutsideAngular(() => {
       this.nativeMap = map;
 
@@ -161,8 +165,13 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       }
 
       if (this.apiLoaded()) {
-        this.initMapData();
+        void this.initMapData();
       }
+    });
+    this.logger.info('[perf] events_map_on_map_ready', {
+      durationMs: Number((performance.now() - mapReadyStart).toFixed(2)),
+      events: this.events?.length || 0,
+      clusterMarkers: !!this.clusterMarkers,
     });
     this.changeDetectorRef.detectChanges();
   }
@@ -171,12 +180,15 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     if (!this.nativeMap || !this.apiLoaded()) return;
 
     this.zone.runOutsideAngular(() => {
-      this.initMapData();
+      void this.initMapData();
     });
   }
 
   private initMapData() {
     if (!this.nativeMap) return;
+    const runId = ++this.mapDataRunId;
+    const initStart = performance.now();
+    const inputEvents = this.events?.length || 0;
 
     // Clear existing markers unconditionally
     if (this.markers) {
@@ -190,110 +202,181 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
 
     // Create and add markers
     if (this.events?.length) {
+      const markerCreationStart = performance.now();
+      const useChunkedMarkerBuild = this.events.length >= this.markerChunkThreshold;
+
+      if (useChunkedMarkerBuild) {
+        this.logger.info('[perf] events_map_create_markers_deferred_start', {
+          inputEvents,
+          chunkSize: this.markerChunkSize,
+        });
+        void this.initMapDataChunked(runId, this.events, initStart, markerCreationStart, inputEvents);
+        return;
+      }
 
       this.markers = this.getMarkersFromEvents(this.events);
-      // for AdvancedMarkerElement, setting map via constructor is enough, or set properties.
-      // But standard way is map. But we might use clusterer.
-      // If using clusterer, we add to clusterer. If not, we add to map.
-      if (!this.clusterMarkers) {
-        this.markers.forEach(marker => marker.map = this.nativeMap);
-      }
-
-      if (this.clusterMarkers) {
-        if (!this.markerClusterer) {
-          this.markerClusterer = new MarkerClusterer({
-            map: this.nativeMap,
-            markers: this.markers,
-            renderer: {
-              render: ({ count, position, markers }) => {
-                // Calculate prevailing activity type group
-                const groupCounts = new Map<string, number>();
-                let maxCount = 0;
-                let prevailingGroup: string | null = null;
-
-                if (markers) {
-                  for (const marker of markers) {
-                    if (marker instanceof google.maps.marker.AdvancedMarkerElement) {
-                      const activityType = this.markerActivityTypes.get(marker);
-                      if (activityType !== undefined) {
-                        const group = ActivityTypesHelper.getActivityGroupForActivityType(activityType);
-                        const currentCount = (groupCounts.get(group) || 0) + 1;
-                        groupCounts.set(group, currentCount);
-
-                        if (currentCount > maxCount) {
-                          maxCount = currentCount;
-                          prevailingGroup = group;
-                        }
-                      }
-                    }
-                  }
-                }
-
-                let clusterColor: string | undefined;
-                if (prevailingGroup) {
-                  // We can't easily get color by group name directly from service if it only takes ActivityType enum.
-                  // But we can find an ActivityType that belongs to this group.
-                  // Or better, we can modify/extend AppEventColorService or helper usage.
-                  // Actually, usage in marker loop was:
-                  // this.eventColorService.getColorForActivityTypeByActivityTypeGroup(type)
-                  // So we just need ONE type that maps to this group.
-                  // Let's find one.
-                  // Simpler appproach: Iterate types, count group. Store ONE representative type for the max group.
-
-                  // Re-doing simple loop for representative type
-                  const groupCountsMap = new Map<string, number>();
-                  const groupRepresentativeType = new Map<string, ActivityTypes>();
-
-                  let maxVal = 0;
-                  let maxGroup = '';
-
-                  for (const marker of markers) {
-                    if (marker instanceof google.maps.marker.AdvancedMarkerElement) {
-                      const activityType = this.markerActivityTypes.get(marker);
-                      if (activityType !== undefined) {
-                        const group = ActivityTypesHelper.getActivityGroupForActivityType(activityType);
-                        const val = (groupCountsMap.get(group) || 0) + 1;
-                        groupCountsMap.set(group, val);
-                        groupRepresentativeType.set(group, activityType); // Update representative (any is fine)
-
-                        if (val > maxVal) {
-                          maxVal = val;
-                          maxGroup = group;
-                        }
-                      }
-                    }
-                  }
-
-                  if (maxGroup && groupRepresentativeType.has(maxGroup)) {
-                    clusterColor = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(groupRepresentativeType.get(maxGroup)!);
-                  }
-                }
-
-                return new google.maps.marker.AdvancedMarkerElement({
-                  position,
-                  content: this.markerFactory.createClusterMarker(count, clusterColor),
-                  zIndex: Number(google.maps.Marker.MAX_ZINDEX) + count,
-                });
-              }
-            },
-            onClusterClick: (event, cluster, map) => {
-              if (cluster.bounds) {
-                map.fitBounds(cluster.bounds, 100);
-              }
-            }
-          });
-        } else {
-          this.markerClusterer.addMarkers(this.markers);
-
-        }
-      }
-
-      // Fit bounds to show all events
-      const startPositions = this.getStartPositionsFromEvents(this.events);
-      if (startPositions.length > 0) {
-        this.nativeMap.fitBounds(this.getBounds(startPositions), 100);
-      }
+      this.logger.info('[perf] events_map_create_markers', {
+        durationMs: Number((performance.now() - markerCreationStart).toFixed(2)),
+        inputEvents,
+        markers: this.markers.length,
+        mode: 'sync',
+      });
+      this.renderMarkersAndBounds(this.events, initStart, inputEvents);
+      return;
     }
+
+    this.logger.info('[perf] events_map_init_total', {
+      durationMs: Number((performance.now() - initStart).toFixed(2)),
+      inputEvents,
+      markers: this.markers?.length || 0,
+      clusterMarkers: !!this.clusterMarkers,
+    });
+  }
+
+  private async initMapDataChunked(runId: number, events: EventInterface[], initStart: number, markerCreationStart: number, inputEvents: number): Promise<void> {
+    const markers = await this.getMarkersFromEventsChunked(events, runId);
+    if (runId !== this.mapDataRunId) {
+      this.logger.info('[perf] events_map_create_markers_cancelled', {
+        inputEvents,
+        runId,
+      });
+      return;
+    }
+    this.markers = markers;
+    this.logger.info('[perf] events_map_create_markers', {
+      durationMs: Number((performance.now() - markerCreationStart).toFixed(2)),
+      inputEvents,
+      markers: this.markers.length,
+      mode: 'chunked',
+      chunkSize: this.markerChunkSize,
+    });
+    this.renderMarkersAndBounds(events, initStart, inputEvents);
+  }
+
+  private renderMarkersAndBounds(events: EventInterface[], initStart: number, inputEvents: number): void {
+    // for AdvancedMarkerElement, setting map via constructor is enough, or set properties.
+    // But standard way is map. But we might use clusterer.
+    // If using clusterer, we add to clusterer. If not, we add to map.
+    if (!this.clusterMarkers) {
+      const attachStart = performance.now();
+      this.markers.forEach(marker => marker.map = this.nativeMap);
+      this.logger.info('[perf] events_map_attach_markers', {
+        durationMs: Number((performance.now() - attachStart).toFixed(2)),
+        markers: this.markers.length,
+      });
+    }
+
+    if (this.clusterMarkers) {
+      const clusterStart = performance.now();
+      if (!this.markerClusterer) {
+        this.markerClusterer = new MarkerClusterer({
+          map: this.nativeMap,
+          markers: this.markers,
+          renderer: {
+            render: ({ count, position, markers }) => {
+              // Calculate prevailing activity type group
+              const groupCounts = new Map<string, number>();
+              let maxCount = 0;
+              let prevailingGroup: string | null = null;
+
+              if (markers) {
+                for (const marker of markers) {
+                  if (marker instanceof google.maps.marker.AdvancedMarkerElement) {
+                    const activityType = this.markerActivityTypes.get(marker);
+                    if (activityType !== undefined) {
+                      const group = ActivityTypesHelper.getActivityGroupForActivityType(activityType);
+                      const currentCount = (groupCounts.get(group) || 0) + 1;
+                      groupCounts.set(group, currentCount);
+
+                      if (currentCount > maxCount) {
+                        maxCount = currentCount;
+                        prevailingGroup = group;
+                      }
+                    }
+                  }
+                }
+              }
+
+              let clusterColor: string | undefined;
+              if (prevailingGroup) {
+                // We can't easily get color by group name directly from service if it only takes ActivityType enum.
+                // But we can find an ActivityType that belongs to this group.
+                // Or better, we can modify/extend AppEventColorService or helper usage.
+                // Actually, usage in marker loop was:
+                // this.eventColorService.getColorForActivityTypeByActivityTypeGroup(type)
+                // So we just need ONE type that maps to this group.
+                // Let's find one.
+                // Simpler appproach: Iterate types, count group. Store ONE representative type for the max group.
+
+                // Re-doing simple loop for representative type
+                const groupCountsMap = new Map<string, number>();
+                const groupRepresentativeType = new Map<string, ActivityTypes>();
+
+                let maxVal = 0;
+                let maxGroup = '';
+
+                for (const marker of markers) {
+                  if (marker instanceof google.maps.marker.AdvancedMarkerElement) {
+                    const activityType = this.markerActivityTypes.get(marker);
+                    if (activityType !== undefined) {
+                      const group = ActivityTypesHelper.getActivityGroupForActivityType(activityType);
+                      const val = (groupCountsMap.get(group) || 0) + 1;
+                      groupCountsMap.set(group, val);
+                      groupRepresentativeType.set(group, activityType); // Update representative (any is fine)
+
+                      if (val > maxVal) {
+                        maxVal = val;
+                        maxGroup = group;
+                      }
+                    }
+                  }
+                }
+
+                if (maxGroup && groupRepresentativeType.has(maxGroup)) {
+                  clusterColor = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(groupRepresentativeType.get(maxGroup)!);
+                }
+              }
+
+              return new google.maps.marker.AdvancedMarkerElement({
+                position,
+                content: this.markerFactory.createClusterMarker(count, clusterColor),
+                zIndex: Number(google.maps.Marker.MAX_ZINDEX) + count,
+              });
+            }
+          },
+          onClusterClick: (event, cluster, map) => {
+            if (cluster.bounds) {
+              map.fitBounds(cluster.bounds, 100);
+            }
+          }
+        });
+      } else {
+        this.markerClusterer.addMarkers(this.markers);
+      }
+      this.logger.info('[perf] events_map_cluster_markers', {
+        durationMs: Number((performance.now() - clusterStart).toFixed(2)),
+        markers: this.markers.length,
+        createdClusterer: !!this.markerClusterer,
+      });
+    }
+
+    // Fit bounds to show all events
+    const startPositions = this.getStartPositionsFromEvents(events);
+    if (startPositions.length > 0) {
+      const fitStart = performance.now();
+      this.nativeMap.fitBounds(this.getBounds(startPositions), 100);
+      this.logger.info('[perf] events_map_fit_bounds', {
+        durationMs: Number((performance.now() - fitStart).toFixed(2)),
+        positions: startPositions.length,
+      });
+    }
+
+    this.logger.info('[perf] events_map_init_total', {
+      durationMs: Number((performance.now() - initStart).toFixed(2)),
+      inputEvents,
+      markers: this.markers?.length || 0,
+      clusterMarkers: !!this.clusterMarkers,
+    });
   }
 
 
@@ -323,72 +406,125 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   }
 
   private getMarkersFromEvents(events: EventInterface[]): google.maps.marker.AdvancedMarkerElement[] {
-    return events.reduce((markersArray: google.maps.marker.AdvancedMarkerElement[], event: EventInterface) => {
-      const eventStartPositionStat = <DataStartPosition>event.getStat(DataStartPosition.type);
-      if (eventStartPositionStat) {
-        const location = eventStartPositionStat.getValue();
-        const activityType = event.getActivityTypesAsArray().length > 1 ? ActivityTypes.Multisport : event.getActivityTypesAsArray()[0] as unknown as ActivityTypes;
-
-        const color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType);
-
-        const marker = new this.AdvancedMarkerElement!({
-          position: { lat: location.latitudeDegrees, lng: location.longitudeDegrees },
-          title: `${event.getActivityTypesAsString()} for ${event.getDuration().getDisplayValue(false, false)} and ${event.getDistance().getDisplayValue()}`,
-          content: this.markerFactory.createEventMarker(color)
-        });
-
-        // Store activity type for this marker
-        this.markerActivityTypes.set(marker, activityType);
-
+    const buildStart = performance.now();
+    const markers = events.reduce((markersArray: google.maps.marker.AdvancedMarkerElement[], event: EventInterface) => {
+      const marker = this.createMarkerForEvent(event);
+      if (marker) {
         markersArray.push(marker);
-
-        marker.addListener('gmp-click', async () => {
-          this.loading();
-          this.selectedEventPositionsByActivity = [];
-
-          // Use attachStreamsToEventWithActivities to get event with activities + streams
-          // This handles original file parsing on the fly if needed
-          const types = [DataLatitudeDegrees.type, DataLongitudeDegrees.type];
-
-          // We only need one emission
-          const populatedEvent = await this.eventService.attachStreamsToEventWithActivities(
-            this.user,
-            event,
-            types
-          ).pipe(take(1)).toPromise();
-
-          if (!populatedEvent) {
-            this.loaded();
-            return;
-          }
-
-          const activities = populatedEvent.getActivities();
-          if (!activities || activities.length === 0) {
-            this.loaded();
-            return;
-          }
-
-          for (const activity of activities) {
-            this.selectedEventPositionsByActivity.push({
-              activity: activity,
-              color: this.eventColorService.getActivityColor(activities, activity),
-              positions: activity.getSquashedPositionData()
-            });
-          }
-
-          const allPositions = this.selectedEventPositionsByActivity.reduce((accu, positionByActivity) => {
-            return accu.concat(positionByActivity.positions);
-          }, []);
-
-          if (allPositions.length > 0) {
-            this.nativeMap.fitBounds(this.getBounds(allPositions), 100);
-          }
-
-          this.selectedEvent = populatedEvent;
-          this.loaded();
-        });
       }
       return markersArray;
     }, []);
+    this.logger.info('[perf] events_map_get_markers_from_events', {
+      durationMs: Number((performance.now() - buildStart).toFixed(2)),
+      inputEvents: events?.length || 0,
+      markers: markers.length,
+      mode: 'sync',
+    });
+    return markers;
+  }
+
+  private async getMarkersFromEventsChunked(events: EventInterface[], runId: number): Promise<google.maps.marker.AdvancedMarkerElement[]> {
+    const buildStart = performance.now();
+    const markers: google.maps.marker.AdvancedMarkerElement[] = [];
+
+    for (let index = 0; index < events.length; index += this.markerChunkSize) {
+      if (runId !== this.mapDataRunId) {
+        return [];
+      }
+      const chunk = events.slice(index, index + this.markerChunkSize);
+      for (const event of chunk) {
+        const marker = this.createMarkerForEvent(event);
+        if (marker) {
+          markers.push(marker);
+        }
+      }
+      if (index + this.markerChunkSize < events.length) {
+        await this.yieldToMainThread();
+      }
+    }
+
+    this.logger.info('[perf] events_map_get_markers_from_events', {
+      durationMs: Number((performance.now() - buildStart).toFixed(2)),
+      inputEvents: events?.length || 0,
+      markers: markers.length,
+      mode: 'chunked',
+      chunkSize: this.markerChunkSize,
+    });
+    return markers;
+  }
+
+  private createMarkerForEvent(event: EventInterface): google.maps.marker.AdvancedMarkerElement | null {
+    const eventStartPositionStat = <DataStartPosition>event.getStat(DataStartPosition.type);
+    if (!eventStartPositionStat || !this.AdvancedMarkerElement) {
+      return null;
+    }
+    const location = eventStartPositionStat.getValue();
+    const activityTypes = event.getActivityTypesAsArray();
+    const activityType = activityTypes.length > 1 ? ActivityTypes.Multisport : activityTypes[0] as unknown as ActivityTypes;
+    const color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType);
+
+    const marker = new this.AdvancedMarkerElement({
+      position: { lat: location.latitudeDegrees, lng: location.longitudeDegrees },
+      title: `${event.getActivityTypesAsString()} for ${event.getDuration().getDisplayValue(false, false)} and ${event.getDistance().getDisplayValue()}`,
+      content: this.markerFactory.createEventMarker(color)
+    });
+
+    // Store activity type for this marker
+    this.markerActivityTypes.set(marker, activityType);
+    this.bindMarkerClick(marker, event);
+
+    return marker;
+  }
+
+  private bindMarkerClick(marker: google.maps.marker.AdvancedMarkerElement, event: EventInterface): void {
+    marker.addListener('gmp-click', async () => {
+      this.loading();
+      this.selectedEventPositionsByActivity = [];
+
+      // Use attachStreamsToEventWithActivities to get event with activities + streams
+      // This handles original file parsing on the fly if needed
+      const types = [DataLatitudeDegrees.type, DataLongitudeDegrees.type];
+
+      // We only need one emission
+      const populatedEvent = await this.eventService.attachStreamsToEventWithActivities(
+        this.user,
+        event,
+        types
+      ).pipe(take(1)).toPromise();
+
+      if (!populatedEvent) {
+        this.loaded();
+        return;
+      }
+
+      const activities = populatedEvent.getActivities();
+      if (!activities || activities.length === 0) {
+        this.loaded();
+        return;
+      }
+
+      for (const activity of activities) {
+        this.selectedEventPositionsByActivity.push({
+          activity: activity,
+          color: this.eventColorService.getActivityColor(activities, activity),
+          positions: activity.getSquashedPositionData()
+        });
+      }
+
+      const allPositions = this.selectedEventPositionsByActivity.reduce((accu, positionByActivity) => {
+        return accu.concat(positionByActivity.positions);
+      }, []);
+
+      if (allPositions.length > 0) {
+        this.nativeMap.fitBounds(this.getBounds(allPositions), 100);
+      }
+
+      this.selectedEvent = populatedEvent;
+      this.loaded();
+    });
+  }
+
+  private yieldToMainThread(): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, 0));
   }
 }

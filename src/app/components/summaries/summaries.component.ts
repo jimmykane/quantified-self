@@ -155,6 +155,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
   }
 
   private async unsubscribeAndCreateCharts() {
+    const buildStart = performance.now();
     this.unsubscribeFromAll();
     // Subscribe to the chartTheme changes
     this.chartThemeSubscription = this.themeService.getChartTheme().subscribe((chartTheme) => {
@@ -165,10 +166,19 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     }
 
     const newTiles = this.getChartsAndData(this.user.settings.dashboardSettings.tiles, this.events);
+    this.logger.log('[perf] summaries_build_tiles', {
+      durationMs: Number((performance.now() - buildStart).toFixed(2)),
+      inputEvents: this.events?.length || 0,
+      generatedTiles: newTiles.length,
+    });
     // if there are no current charts get and assign and get done
     if (!this.tiles.length && newTiles.length) {
       this.tiles = newTiles;
       this.loaded();
+      this.logger.log('[perf] summaries_commit_tiles', {
+        durationMs: Number((performance.now() - buildStart).toFixed(2)),
+        finalTiles: this.tiles.length,
+      });
       return;
     }
 
@@ -193,6 +203,10 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
     // Here we need to remove non existing ones
     this.tiles = this.tiles.filter(chart => newTiles.find(newChart => newChart.order === chart.order));
     this.loaded();
+    this.logger.log('[perf] summaries_commit_tiles', {
+      durationMs: Number((performance.now() - buildStart).toFixed(2)),
+      finalTiles: this.tiles.length,
+    });
   }
 
   /**

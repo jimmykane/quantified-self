@@ -9,6 +9,7 @@ import { AppUserService } from '../services/app.user.service';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { dashboardResolver, DashboardResolverData } from './dashboard.resolver';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { LoggerService } from '../services/logger.service';
 
 describe('dashboardResolver', () => {
     const executeResolver: ResolveFn<DashboardResolverData> = (...resolverParameters) =>
@@ -19,6 +20,7 @@ describe('dashboardResolver', () => {
     let authServiceSpy: any;
     let routerSpy: any;
     let snackBarSpy: any;
+    let loggerSpy: any;
 
     const mockUser = new User('testUser') as AppUserInterface;
     mockUser.settings = {
@@ -38,6 +40,7 @@ describe('dashboardResolver', () => {
         authServiceSpy = { user$: of(mockUser) };
         routerSpy = { navigate: vi.fn() };
         snackBarSpy = { open: vi.fn() };
+        loggerSpy = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), log: vi.fn() };
 
         TestBed.configureTestingModule({
             providers: [
@@ -45,7 +48,8 @@ describe('dashboardResolver', () => {
                 { provide: AppUserService, useValue: userServiceSpy },
                 { provide: AppAuthService, useValue: authServiceSpy },
                 { provide: Router, useValue: routerSpy },
-                { provide: MatSnackBar, useValue: snackBarSpy }
+                { provide: MatSnackBar, useValue: snackBarSpy },
+                { provide: LoggerService, useValue: loggerSpy }
             ]
         });
     });

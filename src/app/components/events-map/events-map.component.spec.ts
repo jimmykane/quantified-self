@@ -58,7 +58,9 @@ describe('EventsMapComponent', () => {
         };
         mockLogger = {
             error: vi.fn(),
-            log: vi.fn()
+            log: vi.fn(),
+            info: vi.fn(),
+            warn: vi.fn()
         };
         mockThemeService = {
             appTheme: signal(AppThemes.Normal),

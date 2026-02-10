@@ -10,7 +10,7 @@ import { LoggerService } from './logger.service';
 })
 export class GoogleMapsLoaderService {
 
-    private appCheck = inject(AppCheck);
+    private appCheck = inject(AppCheck, { optional: true });
     private injector = inject(EnvironmentInjector);
     private logger = inject(LoggerService);
 
@@ -22,8 +22,12 @@ export class GoogleMapsLoaderService {
             v: 'weekly',
         });
 
-        // Initialize App Check for Maps immediately
-        this.initializeGoogleMapsAppCheck();
+        // Initialize App Check for Maps only when App Check is configured.
+        if (this.appCheck) {
+            this.initializeGoogleMapsAppCheck();
+        } else {
+            this.logger.log('[GoogleMaps] App Check not configured, skipping token provider setup');
+        }
     }
 
     /**
@@ -40,10 +44,13 @@ export class GoogleMapsLoaderService {
      * See: https://developers.google.com/maps/documentation/javascript/places-app-check#step-4-initialize-the-places-and-app-check-apis
      */
     private async initializeGoogleMapsAppCheck() {
+        if (!this.appCheck) {
+            return;
+        }
         const { Settings } = await importLibrary('core');
         (Settings.getInstance() as any).fetchAppCheckToken = () => {
             return runInInjectionContext(this.injector, () => {
-                return getToken(this.appCheck).then((tokenResult) => {
+                return getToken(this.appCheck!).then((tokenResult) => {
                     return { token: tokenResult.token };
                 }).catch((error) => {
                     this.logger.error('[GoogleMaps] App Check token fetch failed:', error);

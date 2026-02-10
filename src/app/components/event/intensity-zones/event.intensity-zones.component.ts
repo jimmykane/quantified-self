@@ -51,6 +51,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
   private isMobile = false;
   private breakpointSubscription: Subscription;
   private resizeObserver: ResizeObserver | null = null;
+  private resizeFrameId: number | null = null;
 
   constructor(
     private breakpointObserver: BreakpointObserver,
@@ -92,6 +93,10 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       this.resizeObserver.disconnect();
       this.resizeObserver = null;
     }
+    if (this.resizeFrameId !== null && typeof cancelAnimationFrame !== 'undefined') {
+      cancelAnimationFrame(this.resizeFrameId);
+      this.resizeFrameId = null;
+    }
     this.eChartsLoader.dispose(this.chart);
     this.chart = null;
   }
@@ -116,10 +121,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
 
     this.zone.runOutsideAngular(() => {
       this.resizeObserver = new ResizeObserver(() => {
-        if (!this.chart) {
-          return;
-        }
-        this.eChartsLoader.resize(this.chart);
+        this.scheduleResize();
       });
       this.resizeObserver.observe(this.chartDiv.nativeElement);
     });
@@ -133,7 +135,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     const data = convertIntensityZonesStatsToEchartsData(this.activities, this.isMobile);
     const option = this.buildChartOption(data);
     this.eChartsLoader.setOption(this.chart, option, { notMerge: true, lazyUpdate: true });
-    this.eChartsLoader.resize(this.chart);
+    this.scheduleResize();
   }
 
   private buildChartOption(data: IntensityZonesEChartsData): ChartOption {
@@ -168,7 +170,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
               return '';
             }
             const duration = new DataDuration(value).getDisplayValue();
-            const percent = Math.round(seriesEntry.percentages[dataIndex] ?? 0);
+            const percent = this.formatPercentage(seriesEntry.percentages[dataIndex] ?? 0);
             return `(${percent}%) {zone_${dataIndex}|${duration}}`;
           },
           rich: zoneRichStyles
@@ -223,7 +225,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
           }
 
           const value = currentSeries.values[dataIndex] ?? 0;
-          const percent = Math.round(currentSeries.percentages[dataIndex] ?? 0);
+          const percent = this.formatPercentage(currentSeries.percentages[dataIndex] ?? 0);
           const duration = new DataDuration(value).getDisplayValue();
           return `${params.marker}<b>${zone}</b><br/>${currentSeries.type}: <b>${percent}%</b><br/>Time: <b>${duration}</b>`;
         }
@@ -265,17 +267,74 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     return option;
   }
 
-  private createZoneRichStyles(zones: string[]): Record<string, { backgroundColor: string; borderRadius: number; color: string; fontWeight: number; padding: number[] }> {
+  private createZoneRichStyles(zones: string[]): Record<string, {
+    backgroundColor: string;
+    borderRadius: number;
+    color: string;
+    fontWeight: number;
+    width: number;
+    align: 'center';
+    verticalAlign: 'middle';
+    lineHeight: number;
+    padding: number[];
+  }> {
+    const badgeWidth = this.isMobile ? 28 : 56;
+    const badgeLineHeight = this.isMobile ? 16 : 18;
+
     return zones.reduce((styles, zone, zoneIndex) => {
       styles[`zone_${zoneIndex}`] = {
         backgroundColor: this.eventColorService.getColorForZoneHex(zone),
         borderRadius: 6,
         color: '#ffffff',
         fontWeight: 600,
-        padding: [2, 6, 2, 6],
+        width: badgeWidth,
+        align: 'center',
+        verticalAlign: 'middle',
+        lineHeight: badgeLineHeight,
+        padding: [1, 4, 1, 4],
       };
       return styles;
-    }, {} as Record<string, { backgroundColor: string; borderRadius: number; color: string; fontWeight: number; padding: number[] }>);
+    }, {} as Record<string, {
+      backgroundColor: string;
+      borderRadius: number;
+      color: string;
+      fontWeight: number;
+      width: number;
+      align: 'center';
+      verticalAlign: 'middle';
+      lineHeight: number;
+      padding: number[];
+    }>);
+  }
+
+  private scheduleResize(): void {
+    if (!this.chart) {
+      return;
+    }
+
+    if (typeof requestAnimationFrame === 'undefined') {
+      this.eChartsLoader.resize(this.chart);
+      return;
+    }
+
+    if (this.resizeFrameId !== null) {
+      return;
+    }
+
+    this.resizeFrameId = requestAnimationFrame(() => {
+      this.resizeFrameId = null;
+      if (!this.chart) {
+        return;
+      }
+      this.eChartsLoader.resize(this.chart);
+    });
+  }
+
+  private formatPercentage(value: number): number {
+    if (!Number.isFinite(value)) {
+      return 0;
+    }
+    return Math.round(Math.max(0, value));
   }
 
   private getLegendLabel(type: string): string {

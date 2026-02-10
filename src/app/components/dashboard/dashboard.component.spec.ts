@@ -110,6 +110,17 @@ describe('DashboardComponent', () => {
         expect(component.isLoading).toBe(false);
     });
 
+    it('should skip duplicate initial live query when resolver already returned user data', async () => {
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.events = [{ id: 'event1' }];
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+        expect(component.events.length).toBe(1);
+    });
+
     it('should update events when service emits new data', async () => {
         const eventsSubject = new BehaviorSubject([{ id: 'event1' }]);
         mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());

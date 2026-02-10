@@ -27,6 +27,9 @@ describe('EventIntensityZonesComponent', () => {
   let breakpointSubject: Subject<{ matches: boolean }>;
   let resizeObserverRecords: ResizeObserverRecord[];
   let originalResizeObserver: typeof ResizeObserver | undefined;
+  let originalRequestAnimationFrame: typeof requestAnimationFrame | undefined;
+  let originalCancelAnimationFrame: typeof cancelAnimationFrame | undefined;
+  let requestAnimationFrameMock: ReturnType<typeof vi.fn>;
 
   let mockLoader: {
     init: ReturnType<typeof vi.fn>;
@@ -56,6 +59,15 @@ describe('EventIntensityZonesComponent', () => {
     breakpointSubject = new Subject<{ matches: boolean }>();
     resizeObserverRecords = [];
     originalResizeObserver = globalThis.ResizeObserver;
+    originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+
+    requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    globalThis.requestAnimationFrame = requestAnimationFrameMock as unknown as typeof requestAnimationFrame;
+    globalThis.cancelAnimationFrame = vi.fn();
 
     class ResizeObserverMock {
       public observe = vi.fn();
@@ -125,6 +137,16 @@ describe('EventIntensityZonesComponent', () => {
       globalThis.ResizeObserver = originalResizeObserver;
     } else {
       delete (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
+    }
+    if (originalRequestAnimationFrame) {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    } else {
+      delete (globalThis as { requestAnimationFrame?: typeof requestAnimationFrame }).requestAnimationFrame;
+    }
+    if (originalCancelAnimationFrame) {
+      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    } else {
+      delete (globalThis as { cancelAnimationFrame?: typeof cancelAnimationFrame }).cancelAnimationFrame;
     }
 
     document.body.classList.remove('dark-theme');
@@ -239,6 +261,9 @@ describe('EventIntensityZonesComponent', () => {
     expect(mockColorService.getColorForZoneHex).toHaveBeenCalledWith('Zone 2');
     expect(mockColorService.getColorForZoneHex).toHaveBeenCalledWith('Zone 3');
     expect(option.yAxis.axisLabel.rich.zone_0.backgroundColor).toBe('color-Zone 1');
+    expect(option.yAxis.axisLabel.rich.zone_0.align).toBe('center');
+    expect(option.yAxis.axisLabel.rich.zone_0.verticalAlign).toBe('middle');
+    expect(option.yAxis.axisLabel.rich.zone_0.width).toBe(56);
     expect(option.series[0].label.rich.zone_2.backgroundColor).toBe('color-Zone 3');
   });
 
@@ -291,6 +316,36 @@ describe('EventIntensityZonesComponent', () => {
     expect(formatter({ dataIndex: 99, seriesIndex: 0, marker: '' })).toBe('');
   });
 
+  it('should use consistent percentage rounding between labels and tooltip', async () => {
+    mockedConvert.mockReturnValue({
+      zones: ['Zone 1'],
+      series: [
+        {
+          type: 'Heart Rate',
+          values: [120],
+          percentages: [49.6],
+        },
+      ],
+    });
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const option = getLastOption();
+    const labelFormatter = option.series[0].label.formatter as (params: { dataIndex: number }) => string;
+    const tooltipFormatter = option.tooltip.formatter as (params: {
+      dataIndex: number;
+      seriesIndex: number;
+      marker: string;
+    }) => string;
+
+    const labelText = labelFormatter({ dataIndex: 0 });
+    const tooltipText = tooltipFormatter({ dataIndex: 0, seriesIndex: 0, marker: '' });
+
+    expect(labelText).toContain('(50%)');
+    expect(tooltipText).toContain('50%');
+  });
+
   it('should handle empty converted data gracefully', async () => {
     mockedConvert.mockReturnValue({
       zones: [],
@@ -311,13 +366,44 @@ describe('EventIntensityZonesComponent', () => {
     await fixture.whenStable();
 
     expect(resizeObserverRecords).toHaveLength(1);
+    const baselineResizeCalls = mockLoader.resize.mock.calls.length;
+    const baselineRafCalls = requestAnimationFrameMock.mock.calls.length;
 
     const observer = resizeObserverRecords[0];
     expect(observer.observe).toHaveBeenCalledWith(component.chartDiv.nativeElement);
 
     observer.trigger();
 
-    expect(mockLoader.resize).toHaveBeenCalledTimes(2);
+    expect(requestAnimationFrameMock.mock.calls.length).toBeGreaterThanOrEqual(baselineRafCalls);
+    expect(mockLoader.resize.mock.calls.length).toBeGreaterThanOrEqual(baselineResizeCalls);
+  });
+
+  it('should throttle rapid resize observer callbacks to one resize per animation frame', async () => {
+    const rafCallbacks: FrameRequestCallback[] = [];
+    let rafHandle = 0;
+
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      rafCallbacks.push(callback);
+      rafHandle += 1;
+      return rafHandle;
+    }) as typeof requestAnimationFrame;
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const baselineResizeCalls = mockLoader.resize.mock.calls.length;
+    const observer = resizeObserverRecords[0];
+
+    observer.trigger();
+    observer.trigger();
+    observer.trigger();
+
+    expect(mockLoader.resize).toHaveBeenCalledTimes(baselineResizeCalls);
+    expect(rafCallbacks).toHaveLength(1);
+
+    rafCallbacks[0](16);
+
+    expect(mockLoader.resize).toHaveBeenCalledTimes(baselineResizeCalls + 1);
   });
 
   it('should skip ResizeObserver setup when API is unavailable', async () => {

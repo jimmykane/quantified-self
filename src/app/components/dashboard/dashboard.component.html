@@ -14,9 +14,13 @@
       <!-- Removed mat-divider in favor of CSS spacing/gap -->
 
       @if (user) {
+      @defer (on idle) {
       <app-summaries [isLoading]="isLoading" [user]="user" [showActions]="!targetUser || targetUser.uid === user.uid"
         [events]="events">
       </app-summaries>
+      } @placeholder {
+      <div style="min-height: 120px;"></div>
+      }
       }
 
       @if (user) {

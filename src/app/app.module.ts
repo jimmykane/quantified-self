@@ -12,7 +12,7 @@ import { provideAuth, getAuth } from '@angular/fire/auth';
 import { provideFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from '@angular/fire/firestore';
 import { getApp } from '@angular/fire/app';
 import { provideFunctions, getFunctions } from '@angular/fire/functions';
-import { provideAppCheck, initializeAppCheck, ReCaptchaV3Provider, AppCheck } from '@angular/fire/app-check';
+import { provideAppCheck, initializeAppCheck, ReCaptchaV3Provider } from '@angular/fire/app-check';
 import { providePerformance, getPerformance } from '@angular/fire/performance';
 import { provideAnalytics, getAnalytics, ScreenTrackingService, UserTrackingService, setAnalyticsCollectionEnabled, initializeAnalytics } from '@angular/fire/analytics';
 import { provideRemoteConfig, getRemoteConfig } from '@angular/fire/remote-config';
@@ -52,6 +52,8 @@ export const QS_MENU_DEFAULT_OPTIONS: MatMenuDefaultOptions = {
   backdropClass: 'cdk-overlay-transparent-backdrop'
 };
 
+const enableAppCheck = environment.production || environment.beta || environment.localhost;
+
 @NgModule({
   declarations: [
     AppComponent,
@@ -82,15 +84,11 @@ export const QS_MENU_DEFAULT_OPTIONS: MatMenuDefaultOptions = {
     },
     provideHttpClient(withInterceptorsFromDi()),
     provideFirebaseApp(() => initializeApp(environment.firebase)),
-    provideAppCheck(() => {
+    ...(enableAppCheck ? [provideAppCheck(() => {
       const provider = new ReCaptchaV3Provider(environment.firebase.recaptchaSiteKey);
-      if (!environment.production && !environment.beta) {
-        (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
-      } else {
-        (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = false;
-      }
+      (window as any).FIREBASE_APPCHECK_DEBUG_TOKEN = !environment.production && !environment.beta;
       return initializeAppCheck(getApp(), { provider, isTokenAutoRefreshEnabled: true });
-    }),
+    })] : []),
     provideAuth(() => {
       const auth = getAuth();
       return maybeConnectAuthEmulator(auth);
@@ -105,7 +103,7 @@ export const QS_MENU_DEFAULT_OPTIONS: MatMenuDefaultOptions = {
         useFetchStreams: true,
         localCache: persistentLocalCache({
           tabManager: persistentMultipleTabManager(),
-          cacheSizeBytes: 104857600 // 100 MB
+          cacheSizeBytes: 1073741824 // 1 GB
         }),
 
       });

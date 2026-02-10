@@ -45,9 +45,9 @@
   <app-loading-overlay [isLoading]="isLoading" [hasError]="this.events && this.events.length === 0"
     [errorMessage]="'Nothing to show'" [showSkeleton]="false" height="auto" borderRadius="12px">
     <div class="table-wrapper qs-scrollbar">
-      <table mat-table [dataSource]="data" matSort [matSortActive]="user.settings.dashboardSettings.tableSettings.active"
+      <table mat-table [dataSource]="data" [trackBy]="trackByEventId" matSort [matSortActive]="user.settings.dashboardSettings.tableSettings.active"
         [matSortDirection]="user.settings.dashboardSettings.tableSettings.direction" matSortDisableClear>
-        @for (column of getColumnsToDisplay(); track column; let isFirst = $first; let isLast = $last; let i = $index) {
+        @for (column of displayedColumns; track column; let isFirst = $first; let isLast = $last) {
         <ng-container [matColumnDef]="column" [sticky]="isSticky(column)" [stickyEnd]="isStickyEnd(column)">
           @if (isFirst && showActions) {
           <th mat-header-cell *matHeaderCellDef>
@@ -67,7 +67,7 @@
             <app-data-type-icon [dataType]="column"></app-data-type-icon>
           </th>
           }
-          <td mat-cell matRipple *matCellDef="let row" (click)="onCellClick($event, row, column)">
+          <td mat-cell *matCellDef="let row" (click)="onCellClick($event, row, column)">
             @if (column === 'Checkbox') {
             <mat-checkbox (click)="$event.stopPropagation()" (change)="$event ? checkBoxClick(row) : null"
               [checked]="selection.isSelected(row)">
@@ -112,15 +112,15 @@
         }
 
 
-        <tr mat-header-row *matHeaderRowDef="getColumnsToDisplay(); sticky: true"></tr>
-        <tr mat-row *matRowDef="let row; columns: getColumnsToDisplay();" [@rowsAnimation]=""
+        <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns;"
           [routerLink]="['/user', (targetUser && targetUser.uid) || user.uid, 'event', row.Event.getID()]"
           [class.merged]="row['Merged Event']" [style.--row-gradient]="row['Gradient']" class="normal-row activity-row">
         </tr>
 
         <!-- Row shown when there is no matching data. -->
         <tr class="mat-row" *matNoDataRow>
-          <td class="mat-cell" [attr.colspan]="getColumnsToDisplay().length">
+          <td class="mat-cell" [attr.colspan]="displayedColumns.length">
             <span *ngIf="searchTerm">No events found matching "{{searchTerm}}"</span>
             <span *ngIf="!searchTerm && !isLoading">No events found</span>
           </td>
