@@ -61,6 +61,10 @@
   letter-spacing: 0.5px;
 }
 
+.mat-mdc-cell {
+  font-family: 'Barlow Condensed', sans-serif;
+}
+
 .mat-mdc-row {
   transition: background-color 0.2s;
 }
