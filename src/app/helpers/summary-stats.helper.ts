@@ -1,24 +1,11 @@
 import {
   ActivityTypes,
   ActivityTypesHelper,
-  DataAerobicTrainingEffect,
-  DataAltitudeMax,
-  DataAltitudeMin,
   DataAscent,
-  DataCadenceAvg,
   DataDescent,
-  DataDistance,
-  DataDuration,
-  DataEnergy,
-  DataHeartRateAvg,
-  DataMovingTime,
-  DataPeakEPOC,
-  DataPowerAvg,
-  DataRecoveryTime,
   DataSpeedAvg,
-  DataTemperatureAvg,
-  DataVO2Max,
 } from '@sports-alliance/sports-lib';
+import { EVENT_SUMMARY_DEFAULT_STAT_TYPES } from '../constants/event-summary-metric-groups';
 import { AppEventUtilities } from '../utils/app.event.utilities';
 
 export interface SummaryStatsSettingsLike {
@@ -30,27 +17,7 @@ export const getDefaultSummaryStatTypes = (
   activityTypes: ActivityTypes[],
   summariesSettings?: SummaryStatsSettingsLike | null
 ): string[] => {
-  const statsToShow = [
-    DataDuration.type,
-    DataMovingTime.type,
-    DataDistance.type,
-    DataSpeedAvg.type,
-    DataEnergy.type,
-    DataHeartRateAvg.type,
-    DataCadenceAvg.type,
-    DataPowerAvg.type,
-    DataAscent.type,
-    DataDescent.type,
-    DataAltitudeMax.type,
-    DataAltitudeMin.type,
-    DataRecoveryTime.type,
-    DataPeakEPOC.type,
-    DataAerobicTrainingEffect.type,
-    DataVO2Max.type,
-    DataTemperatureAvg.type,
-  ];
-
-  return statsToShow.reduce((statsAccu: string[], statType: string) => {
+  return EVENT_SUMMARY_DEFAULT_STAT_TYPES.reduce((statsAccu: string[], statType: string) => {
     if (statType === DataAscent.type) {
       if (
         AppEventUtilities.shouldExcludeAscent(activityTypes)
@@ -72,8 +39,8 @@ export const getDefaultSummaryStatTypes = (
         const metrics = ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(activityType);
         return [...new Set([...speedMetricsAccu, ...(metrics || [])]).values()];
       }, [] as string[]);
-      return [...statsAccu, ...speedMetrics];
+      return [...new Set([...statsAccu, ...speedMetrics]).values()];
     }
-    return [...statsAccu, statType];
+    return [...new Set([...statsAccu, statType]).values()];
   }, [] as string[]);
 };

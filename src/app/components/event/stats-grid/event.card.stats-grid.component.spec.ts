@@ -4,7 +4,7 @@ import { AppUserSettingsQueryService } from '../../../services/app.user-settings
 import { signal, NO_ERRORS_SCHEMA } from '@angular/core';
 import { ActivityTypes, UserSummariesSettingsInterface, UserUnitSettingsInterface, ActivityUtilities, DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { SimpleChange } from '@angular/core';
-import { DataAscent, DataDescent, DataDuration } from '@sports-alliance/sports-lib';
+import { DataAscent, DataDescent, DataDuration, DataPowerAvg } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { vi } from 'vitest';
 
@@ -242,5 +242,77 @@ describe('EventCardStatsGridComponent', () => {
 
         expect(component.showDiff).toBe(false);
         expect(component.diffByType.size).toBe(0);
+    });
+
+    it('should build metric tabs and default to General when available', () => {
+        const activity = { type: ActivityTypes.Cycling } as any;
+        const mockEvent = {
+            isMerge: false,
+            getActivities: () => [activity],
+            getStats: () => new Map(),
+        } as any;
+
+        component.event = mockEvent;
+        component.selectedActivities = [activity];
+        component.statsToShow = [DataDuration.type, DataPowerAvg.type];
+
+        component.ngOnChanges({
+            event: new SimpleChange(null, mockEvent, true),
+            selectedActivities: new SimpleChange(null, component.selectedActivities, true),
+            statsToShow: new SimpleChange(null, component.statsToShow, true),
+        });
+
+        expect(component.metricTabs.map(tab => tab.label)).toEqual(['General', 'Power']);
+        expect(component.selectedTabIndex).toBe(0);
+    });
+
+    it('should fallback to first visible tab when General is not available', () => {
+        const activity = { type: ActivityTypes.Cycling } as any;
+        const mockEvent = {
+            isMerge: false,
+            getActivities: () => [activity],
+            getStats: () => new Map(),
+        } as any;
+
+        component.event = mockEvent;
+        component.selectedActivities = [activity];
+        component.statsToShow = [DataPowerAvg.type];
+
+        component.ngOnChanges({
+            event: new SimpleChange(null, mockEvent, true),
+            selectedActivities: new SimpleChange(null, component.selectedActivities, true),
+            statsToShow: new SimpleChange(null, component.statsToShow, true),
+        });
+
+        expect(component.metricTabs.map(tab => tab.label)).toEqual(['Power']);
+        expect(component.selectedTabIndex).toBe(0);
+    });
+
+    it('should clear grouped tabs and selected index on empty selection', () => {
+        const activity = { type: ActivityTypes.Cycling } as any;
+        const mockEvent = {
+            isMerge: false,
+            getActivities: () => [activity],
+            getStats: () => new Map(),
+        } as any;
+
+        component.event = mockEvent;
+        component.selectedActivities = [activity];
+        component.statsToShow = [DataDuration.type, DataPowerAvg.type];
+
+        component.ngOnChanges({
+            event: new SimpleChange(null, mockEvent, true),
+            selectedActivities: new SimpleChange(null, component.selectedActivities, true),
+            statsToShow: new SimpleChange(null, component.statsToShow, true),
+        });
+
+        component.selectedActivities = [];
+        component.ngOnChanges({
+            selectedActivities: new SimpleChange([activity], [], false),
+        });
+
+        expect(component.metricTabs.length).toBe(0);
+        expect(component.displayedStatsToShow.length).toBe(0);
+        expect(component.selectedTabIndex).toBe(0);
     });
 });

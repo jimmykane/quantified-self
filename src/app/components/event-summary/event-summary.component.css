@@ -310,34 +310,38 @@
 
 
 /* Stats Grid Action Buttons */
+.summary-stats-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.summary-stats-actions .stat-item {
+  border: 1px solid var(--mat-app-outline-variant);
+}
+
 .devices-item,
 .show-more-item {
   display: flex !important;
-  /* Ensure grouping container is flex row */
   flex-direction: row !important;
   align-items: center;
   gap: 12px;
-  /* Match standard grid gap */
   cursor: pointer;
-  background: var(--mat-app-surface-container-high);
+  background: var(--mat-app-surface-container-low);
   border-radius: 12px;
-  transition: all 0.2s ease;
-  min-height: 100% !important;
-  /* Stretch to fill the grid cell */
-  /* Allow natural height, preventing row expansion */
-  /* Prevent stretching to fill grid cell height */
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   justify-content: flex-start;
-  /* Align left like standard grid items */
-  padding: 8px 12px;
-  /* Add some padding */
+  padding: 10px 12px;
   box-sizing: border-box;
 }
 
 .devices-item:hover,
 .show-more-item:hover {
-  background: var(--mat-app-surface-container-highest);
+  background-color: var(--mat-app-surface-container-high);
+  border-color: var(--mat-app-primary);
   transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .devices-item:active,
@@ -346,28 +350,11 @@
   box-shadow: none;
 }
 
-.devices-item .stat-value-grid,
-.show-more-item .stat-value-grid {
-  color: var(--mat-app-primary);
-  font-weight: 500;
-  font-size: 1.1rem;
-  font-family: 'Barlow Condensed', sans-serif;
-}
-
 .devices-item .stat-avatar mat-icon,
 .show-more-item .stat-avatar mat-icon {
   color: var(--mat-app-primary);
 }
 
-.devices-item .stat-content,
-.show-more-item .stat-content {
-  display: flex !important;
-  flex-direction: row !important;
-  align-items: center;
-  gap: 6px;
-}
-
-/* Replicating HeaderStats styles for projected content */
 .devices-item .stat-avatar,
 .show-more-item .stat-avatar {
   flex-shrink: 0;
@@ -380,12 +367,10 @@
 .show-more-item .stat-content {
   display: flex !important;
   flex-direction: column !important;
-  /* Standard stack: Label on top, Value below */
   align-items: flex-start !important;
   justify-content: center;
   min-width: 0;
   gap: 0 !important;
-  /* Reset any gap */
 }
 
 .devices-item .stat-label,
@@ -408,4 +393,18 @@
   line-height: 1.2;
   white-space: nowrap;
   font-family: 'Barlow Condensed', sans-serif;
+}
+
+@media (max-width: 599px) {
+  .summary-stats-actions {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .devices-item,
+  .show-more-item {
+    padding: 8px 10px;
+    border-radius: 8px;
+    gap: 8px;
+  }
 }

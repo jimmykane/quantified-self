@@ -6,7 +6,11 @@ import { DataVO2Max } from '@sports-alliance/sports-lib';
 import { DataDeviceNames } from '@sports-alliance/sports-lib';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { DataPowerAvg } from '@sports-alliance/sports-lib';
+import { DataPowerMax } from '@sports-alliance/sports-lib';
+import { DataPowerMin } from '@sports-alliance/sports-lib';
 import { DataCadenceAvg } from '@sports-alliance/sports-lib';
+import { DataCadenceMax } from '@sports-alliance/sports-lib';
+import { DataCadenceMin } from '@sports-alliance/sports-lib';
 import {
   DataSpeedAvg, DataSpeedAvgFeetPerMinute, DataSpeedAvgFeetPerSecond,
   DataSpeedAvgKilometersPerHour, DataSpeedAvgKnots, DataSpeedAvgMetersPerMinute,
@@ -15,12 +19,15 @@ import {
 import { DataPaceAvg, DataPaceAvgMinutesPerMile } from '@sports-alliance/sports-lib';
 import { DataSwimPaceAvg, DataSwimPaceAvgMinutesPer100Yard } from '@sports-alliance/sports-lib';
 import { DataTemperatureAvg } from '@sports-alliance/sports-lib';
+import { DataTemperatureMax } from '@sports-alliance/sports-lib';
+import { DataTemperatureMin } from '@sports-alliance/sports-lib';
 import { DataAscent } from '@sports-alliance/sports-lib';
 import { DataDescent } from '@sports-alliance/sports-lib';
 import { DataHeartRateAvg } from '@sports-alliance/sports-lib';
 import { DataEnergy } from '@sports-alliance/sports-lib';
 import { DataAltitudeMax } from '@sports-alliance/sports-lib';
 import { DataAltitudeMin } from '@sports-alliance/sports-lib';
+import { DataAltitudeAvg } from '@sports-alliance/sports-lib';
 import {
   DataVerticalSpeedAvg,
   DataVerticalSpeedAvgFeetPerHour,
@@ -49,6 +56,8 @@ import { DataMovingTime } from '@sports-alliance/sports-lib';
 import { DataRecoveryTime } from '@sports-alliance/sports-lib';
 import { DataHeartRateMin } from '@sports-alliance/sports-lib';
 import { DataHeartRateMax } from '@sports-alliance/sports-lib';
+import { DataFeeling } from '@sports-alliance/sports-lib';
+import { DataRPE } from '@sports-alliance/sports-lib';
 
 @Component({
   selector: 'app-data-type-icon',
@@ -78,13 +87,19 @@ export class DataTypeIconComponent {
       case 'privacy':
         return 'visibility';
       case DataPowerAvg.type:
+      case DataPowerMax.type:
+      case DataPowerMin.type:
         return 'bolt';
       case DataCadenceAvg.type:
+      case DataCadenceMax.type:
+      case DataCadenceMin.type:
         return 'cached';
       case DataAltitudeMax.type:
         return 'vertical_align_top';
       case DataAltitudeMin.type:
         return 'vertical_align_bottom';
+      case DataAltitudeAvg.type:
+        return 'vertical_align_center';
       case DataVerticalSpeedAvg.type:
       case DataVerticalSpeedAvgFeetPerHour.type:
       case DataVerticalSpeedAvgFeetPerMinute.type:
@@ -106,6 +121,8 @@ export class DataTypeIconComponent {
       case DataPaceAvgMinutesPerMile.type:
         return 'directions_run';
       case DataTemperatureAvg.type:
+      case DataTemperatureMax.type:
+      case DataTemperatureMin.type:
         return 'device_thermostat';
       case DataRecoveryTime.type:
         return 'update';
@@ -154,6 +171,10 @@ export class DataTypeIconComponent {
       case DataHeartRateMax.type:
       case DataHeartRateMin.type:
         return 'ecg_heart';
+      case DataFeeling.type:
+        return 'mood';
+      case DataRPE.type:
+        return 'fitness_center';
       case DataEnergy.type:
         return 'bolt';
       case DataSwimPaceAvg.type:

@@ -121,4 +121,35 @@ describe('EventSummaryComponent', () => {
             expect(stats.length).toBe(2);
         });
     });
+
+    describe('summary actions placement', () => {
+        it('should render show more action outside the stats grid component', () => {
+            const outsideAction = fixture.nativeElement.querySelector('.summary-stats-actions .show-more-item');
+            const insideGridAction = fixture.nativeElement.querySelector('app-event-card-stats-grid .show-more-item');
+
+            expect(outsideAction).toBeTruthy();
+            expect(insideGridAction).toBeFalsy();
+        });
+
+        it('should render sensors action in summary actions area when devices exist', () => {
+            const devicesFixture = TestBed.createComponent(EventSummaryComponent);
+            const devicesComponent = devicesFixture.componentInstance;
+
+            devicesComponent.event = mockEvent;
+            devicesComponent.user = mockUser;
+            devicesComponent.selectedActivities = [
+                {
+                    creator: {
+                        devices: [{ name: 'HRM' }]
+                    }
+                } as any
+            ];
+
+            devicesFixture.detectChanges();
+
+            const sensorsAction = devicesFixture.nativeElement.querySelector('.summary-stats-actions .devices-item');
+            expect(devicesComponent.hasDevices).toBe(true);
+            expect(sensorsAction).toBeTruthy();
+        });
+    });
 });

@@ -9,6 +9,10 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { buildDiffMapForStats } from '../../../helpers/stats-diff.helper';
 import { getDefaultSummaryStatTypes } from '../../../helpers/summary-stats.helper';
 import { LoggerService } from '../../../services/logger.service';
+import {
+  EVENT_SUMMARY_DEFAULT_GROUP_ID,
+} from '../../../constants/event-summary-metric-groups';
+import { buildSummaryMetricTabs, SummaryMetricTab } from '../../../helpers/summary-metric-tabs.helper';
 
 @Component({
   selector: 'app-event-card-stats-grid',
@@ -28,6 +32,8 @@ export class EventCardStatsGridComponent implements OnChanges {
 
   public displayedStatsToShow: string[] = [];
   public stats: DataInterface[] = [];
+  public metricTabs: SummaryMetricTab[] = [];
+  public selectedTabIndex = 0;
   public showDiff = false;
   public diffByType = new Map<string, { display: string; percent: number; color: string }>();
 
@@ -46,7 +52,10 @@ export class EventCardStatsGridComponent implements OnChanges {
   ngOnChanges(simpleChanges: SimpleChanges) {
     const ngChangesStart = performance.now();
     if (!this.selectedActivities.length) {
+      this.displayedStatsToShow = [];
       this.stats = [];
+      this.metricTabs = [];
+      this.selectedTabIndex = 0;
       this.showDiff = false;
       this.diffByType = new Map();
       this.logPerf('empty_selection', ngChangesStart);
@@ -71,6 +80,7 @@ export class EventCardStatsGridComponent implements OnChanges {
 
     if (this.statsToShow) {
       this.displayedStatsToShow = this.statsToShow;
+      this.updateTabs();
       this.updateDiffMap();
       this.logPerf('ng_on_changes_total', ngChangesStart, { usedStatsOverride: true });
       return;
@@ -87,8 +97,13 @@ export class EventCardStatsGridComponent implements OnChanges {
       eventId: this.event?.getID?.(),
     });
 
+    this.updateTabs();
     this.updateDiffMap();
     this.logPerf('ng_on_changes_total', ngChangesStart, { usedStatsOverride: false });
+  }
+
+  public onSelectedTabIndexChange(index: number) {
+    this.selectedTabIndex = index;
   }
 
   private updateDiffMap() {
@@ -114,6 +129,24 @@ export class EventCardStatsGridComponent implements OnChanges {
       });
     });
     return coloredMap;
+  }
+
+  private updateTabs() {
+    this.metricTabs = buildSummaryMetricTabs(this.displayedStatsToShow);
+    this.resetSelectedTab();
+  }
+
+  private resetSelectedTab() {
+    if (!this.metricTabs.length) {
+      this.selectedTabIndex = 0;
+      return;
+    }
+
+    const defaultTabIndex = this.metricTabs.findIndex((tab) => {
+      return tab.id === EVENT_SUMMARY_DEFAULT_GROUP_ID;
+    });
+
+    this.selectedTabIndex = defaultTabIndex >= 0 ? defaultTabIndex : 0;
   }
 
   private logPerf(step: string, start: number, meta?: Record<string, unknown>) {

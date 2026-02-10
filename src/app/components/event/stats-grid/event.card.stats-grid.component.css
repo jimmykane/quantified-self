@@ -1,3 +1,7 @@
-[grid-suffix] {
-    display: contents;
+:host {
+  display: block;
+}
+
+.summary-metric-tabs {
+  width: 100%;
 }
