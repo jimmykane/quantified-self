@@ -46,5 +46,36 @@ export const buildSummaryMetricTabs = (resolvedMetricTypes: string[]): SummaryMe
 
   return EVENT_SUMMARY_METRIC_GROUPS
     .map((group) => tabMap.get(group.id))
-    .filter((tab): tab is SummaryMetricTab => !!tab && tab.metricTypes.length > 0);
+    .filter((tab): tab is SummaryMetricTab => !!tab && tab.metricTypes.length > 0)
+    .map((tab) => {
+      const groupConfig = EVENT_SUMMARY_METRIC_GROUPS.find((group) => group.id === tab.id);
+      if (!groupConfig || !groupConfig.metricTypes.length) {
+        return tab;
+      }
+
+      const groupOrder = new Map<string, number>();
+      groupConfig.metricTypes.forEach((metricType, index) => {
+        groupOrder.set(metricType, index);
+      });
+
+      const orderedMetricTypes = [...tab.metricTypes].sort((left, right) => {
+        const leftOrder = groupOrder.get(left);
+        const rightOrder = groupOrder.get(right);
+        if (leftOrder === undefined && rightOrder === undefined) {
+          return 0;
+        }
+        if (leftOrder === undefined) {
+          return 1;
+        }
+        if (rightOrder === undefined) {
+          return -1;
+        }
+        return leftOrder - rightOrder;
+      });
+
+      return {
+        ...tab,
+        metricTypes: orderedMetricTypes,
+      };
+    });
 };

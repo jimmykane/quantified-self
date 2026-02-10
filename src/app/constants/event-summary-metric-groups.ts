@@ -35,7 +35,7 @@ import {
 } from '@sports-alliance/sports-lib';
 
 export type EventSummaryMetricGroupId =
-  | 'general'
+  | 'overall'
   | 'speed'
   | 'power'
   | 'altitude'
@@ -50,17 +50,26 @@ export interface EventSummaryMetricGroupConfig {
   metricTypes: string[];
 }
 
-export const EVENT_SUMMARY_DEFAULT_GROUP_ID: EventSummaryMetricGroupId = 'general';
+export const EVENT_SUMMARY_DEFAULT_GROUP_ID: EventSummaryMetricGroupId = 'overall';
 
 export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
   {
-    id: 'general',
-    label: 'General',
+    id: 'overall',
+    label: 'Overall',
     metricTypes: [
       DataDuration.type,
       DataMovingTime.type,
       DataDistance.type,
-      DataEnergy.type,
+      DataSpeedAvg.type,
+      DataPaceAvg.type,
+      DataSwimPaceAvg.type,
+      DataGradeAdjustedPaceAvg.type,
+      DataGradeAdjustedSpeedAvg.type,
+      DataHeartRateAvg.type,
+      DataPowerAvg.type,
+      DataAscent.type,
+      DataDescent.type,
+      DataCadenceAvg.type,
     ],
   },
   {

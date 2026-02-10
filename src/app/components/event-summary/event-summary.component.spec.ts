@@ -124,8 +124,8 @@ describe('EventSummaryComponent', () => {
 
     describe('summary actions placement', () => {
         it('should render show more action outside the stats grid component', () => {
-            const outsideAction = fixture.nativeElement.querySelector('.summary-stats-actions .show-more-item');
-            const insideGridAction = fixture.nativeElement.querySelector('app-event-card-stats-grid .show-more-item');
+            const outsideAction = fixture.nativeElement.querySelector('.summary-stats-actions .show-more-button');
+            const insideGridAction = fixture.nativeElement.querySelector('app-event-card-stats-grid .show-more-button');
 
             expect(outsideAction).toBeTruthy();
             expect(insideGridAction).toBeFalsy();
@@ -147,7 +147,7 @@ describe('EventSummaryComponent', () => {
 
             devicesFixture.detectChanges();
 
-            const sensorsAction = devicesFixture.nativeElement.querySelector('.summary-stats-actions .devices-item');
+            const sensorsAction = devicesFixture.nativeElement.querySelector('.summary-stats-actions .devices-button');
             expect(devicesComponent.hasDevices).toBe(true);
             expect(sensorsAction).toBeTruthy();
         });

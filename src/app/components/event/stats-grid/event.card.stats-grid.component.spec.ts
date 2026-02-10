@@ -4,7 +4,7 @@ import { AppUserSettingsQueryService } from '../../../services/app.user-settings
 import { signal, NO_ERRORS_SCHEMA } from '@angular/core';
 import { ActivityTypes, UserSummariesSettingsInterface, UserUnitSettingsInterface, ActivityUtilities, DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { SimpleChange } from '@angular/core';
-import { DataAscent, DataDescent, DataDuration, DataPowerAvg } from '@sports-alliance/sports-lib';
+import { DataAscent, DataDescent, DataDuration, DataPowerAvg, DataTemperatureMax } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { vi } from 'vitest';
 
@@ -244,7 +244,7 @@ describe('EventCardStatsGridComponent', () => {
         expect(component.diffByType.size).toBe(0);
     });
 
-    it('should build metric tabs and default to General when available', () => {
+    it('should build metric tabs and default to Overall when available', () => {
         const activity = { type: ActivityTypes.Cycling } as any;
         const mockEvent = {
             isMerge: false,
@@ -262,11 +262,11 @@ describe('EventCardStatsGridComponent', () => {
             statsToShow: new SimpleChange(null, component.statsToShow, true),
         });
 
-        expect(component.metricTabs.map(tab => tab.label)).toEqual(['General', 'Power']);
+        expect(component.metricTabs.map(tab => tab.label)).toEqual(['Overall']);
         expect(component.selectedTabIndex).toBe(0);
     });
 
-    it('should fallback to first visible tab when General is not available', () => {
+    it('should fallback to first visible tab when Overall is not available', () => {
         const activity = { type: ActivityTypes.Cycling } as any;
         const mockEvent = {
             isMerge: false,
@@ -276,7 +276,7 @@ describe('EventCardStatsGridComponent', () => {
 
         component.event = mockEvent;
         component.selectedActivities = [activity];
-        component.statsToShow = [DataPowerAvg.type];
+        component.statsToShow = [DataTemperatureMax.type];
 
         component.ngOnChanges({
             event: new SimpleChange(null, mockEvent, true),
@@ -284,7 +284,7 @@ describe('EventCardStatsGridComponent', () => {
             statsToShow: new SimpleChange(null, component.statsToShow, true),
         });
 
-        expect(component.metricTabs.map(tab => tab.label)).toEqual(['Power']);
+        expect(component.metricTabs.map(tab => tab.label)).toEqual(['Environment']);
         expect(component.selectedTabIndex).toBe(0);
     });
 
