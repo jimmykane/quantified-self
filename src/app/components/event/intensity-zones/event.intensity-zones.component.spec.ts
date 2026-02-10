@@ -162,10 +162,18 @@ describe('EventIntensityZonesComponent', () => {
     expect(mockLoader.setOption).toHaveBeenCalledTimes(1);
     expect(mockLoader.resize).toHaveBeenCalledTimes(1);
     expect(mockedConvert).toHaveBeenCalledWith(component.activities, false);
-    expect(option.grid.right).toBe(112);
+    expect(option.grid.left).toBe(6);
+    expect(option.grid.right).toBe(24);
+    expect(option.grid.top).toBe(10);
+    expect(option.grid.bottom).toBe(38);
     expect(option.series[0].clip).toBe(false);
     expect(option.series[0].label.position).toBe('right');
     expect(option.series[0].label.align).toBe('left');
+    expect(option.legend.left).toBe('center');
+    expect(option.legend.bottom).toBe(0);
+    expect(option.legend.orient).toBe('horizontal');
+    expect(option.legend.selectedMode).toBe(true);
+    expect(fixture.nativeElement.querySelector('.intensity-zones-helper-text')).toBeNull();
   });
 
   it('should ignore ngOnChanges before chart initialization', () => {
@@ -211,7 +219,8 @@ describe('EventIntensityZonesComponent', () => {
     expect(mockedConvert).toHaveBeenLastCalledWith(component.activities, true);
     expect(mockLoader.setOption).toHaveBeenCalledTimes(2);
     const option = getLastOption();
-    expect(option.grid.right).toBe(76);
+    expect(option.grid.right).toBe(16);
+    expect(option.grid.bottom).toBe(32);
   });
 
   it('should apply dark theme styles when chartTheme is dark', async () => {
@@ -286,7 +295,7 @@ describe('EventIntensityZonesComponent', () => {
     const formatter = option.series[0].label.formatter as (params: { dataIndex: number }) => string;
 
     expect(formatter({ dataIndex: 1 })).toBe('');
-    expect(formatter({ dataIndex: 0 })).toContain(') {zone_0|');
+    expect(formatter({ dataIndex: 0 })).toBe('{zone_0|100%}');
   });
 
   it('should format tooltip content with zone, series, percentage, and duration', async () => {
@@ -316,6 +325,25 @@ describe('EventIntensityZonesComponent', () => {
     expect(formatter({ dataIndex: 99, seriesIndex: 0, marker: '' })).toBe('');
   });
 
+  it('should use compact legend labels for common metrics', async () => {
+    mockedConvert.mockReturnValue({
+      zones: ['Zone 1'],
+      series: [
+        { type: 'Heart Rate', values: [100], percentages: [50] },
+        { type: 'Power', values: [100], percentages: [50] },
+        { type: 'Speed', values: [100], percentages: [50] },
+      ],
+    });
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const option = getLastOption();
+    expect(option.series[0].name).toBe('HR');
+    expect(option.series[1].name).toBe('PWR');
+    expect(option.series[2].name).toBe('SPD');
+  });
+
   it('should use consistent percentage rounding between labels and tooltip', async () => {
     mockedConvert.mockReturnValue({
       zones: ['Zone 1'],
@@ -342,7 +370,8 @@ describe('EventIntensityZonesComponent', () => {
     const labelText = labelFormatter({ dataIndex: 0 });
     const tooltipText = tooltipFormatter({ dataIndex: 0, seriesIndex: 0, marker: '' });
 
-    expect(labelText).toContain('(50%)');
+    expect(labelText).toContain('50%');
+    expect(labelText).not.toContain('m');
     expect(tooltipText).toContain('50%');
   });
 

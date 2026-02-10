@@ -30,6 +30,7 @@ import { AppUserSettingsQueryService } from '../../services/app.user-settings-qu
 import { LapTypes } from '@sports-alliance/sports-lib';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { LoggerService } from '../../services/logger.service';
+import { shouldRenderIntensityZonesChart } from '../../helpers/intensity-zones-chart-data-helper';
 @Component({
   selector: 'app-event-card',
   templateUrl: './event.card.component.html',
@@ -65,7 +66,7 @@ export class EventCardComponent implements OnInit {
   );
 
   public hasIntensityZonesFlag = computed(() =>
-    this.event()?.getActivities().some(a => a.intensityZones?.length > 0) ?? false
+    shouldRenderIntensityZonesChart(this.selectedActivitiesInstant())
   );
 
   public hasDevicesFlag = computed(() =>

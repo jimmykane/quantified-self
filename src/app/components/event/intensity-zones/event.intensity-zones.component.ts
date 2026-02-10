@@ -142,7 +142,8 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     const darkTheme = this.isDarkThemeActive();
     const textColor = darkTheme ? '#ffffff' : '#2a2a2a';
     const gridLineColor = darkTheme ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)';
-    const rightPadding = this.isMobile ? 76 : 112;
+    const rightPadding = this.isMobile ? 16 : 24;
+    const bottomPadding = this.isMobile ? 32 : 38;
     const zoneRichStyles = this.createZoneRichStyles(data.zones);
     const series = data.series.map((seriesEntry, seriesIndex) => {
       const displayName = this.getLegendLabel(seriesEntry.type);
@@ -169,14 +170,13 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
             if (value <= 0.1) {
               return '';
             }
-            const duration = new DataDuration(value).getDisplayValue();
             const percent = this.formatPercentage(seriesEntry.percentages[dataIndex] ?? 0);
-            return `(${percent}%) {zone_${dataIndex}|${duration}}`;
+            return `{zone_${dataIndex}|${percent}%}`;
           },
           rich: zoneRichStyles
         },
         emphasis: {
-          focus: 'series'
+          focus: 'none'
         },
         tooltip: {
           valueFormatter: (value: number) => new DataDuration(value).getDisplayValue()
@@ -192,16 +192,18 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         fontFamily: "'Barlow Condensed', sans-serif"
       },
       grid: {
-        left: 8,
+        left: 6,
         right: rightPadding,
-        top: 12,
-        bottom: 8,
+        top: 10,
+        bottom: bottomPadding,
         containLabel: true
       },
       legend: {
         show: true,
-        right: 0,
+        selectedMode: true,
+        left: 'center',
         bottom: 0,
+        orient: 'horizontal',
         textStyle: {
           color: textColor,
           fontFamily: "'Barlow Condensed', sans-serif",
@@ -338,7 +340,17 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
   }
 
   private getLegendLabel(type: string): string {
-    return type === DataHeartRate.type ? 'HR' : type;
+    const normalizedType = `${type}`.trim().toLowerCase();
+    if (type === DataHeartRate.type || normalizedType === 'heart rate') {
+      return 'HR';
+    }
+    if (normalizedType === 'power') {
+      return 'PWR';
+    }
+    if (normalizedType === 'speed') {
+      return 'SPD';
+    }
+    return type;
   }
 
   private getSeriesColor(type: string): string {

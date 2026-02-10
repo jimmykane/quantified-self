@@ -3,7 +3,8 @@ import { ActivityUtilities } from '@sports-alliance/sports-lib';
 import {
     convertIntensityZonesStatsToChartData,
     convertIntensityZonesStatsToEchartsData,
-    getActiveDataTypes
+    getActiveDataTypes,
+    shouldRenderIntensityZonesChart
 } from './intensity-zones-chart-data-helper';
 
 // Mock the sports-lib dependencies
@@ -203,5 +204,44 @@ describe('getActiveDataTypes', () => {
         ];
         const result = getActiveDataTypes(data);
         expect(result.size).toBe(0);
+    });
+});
+
+describe('shouldRenderIntensityZonesChart', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('should return false when there is no active series', () => {
+        vi.mocked(ActivityUtilities.getIntensityZonesStatsAggregated).mockReturnValue([
+            { getType: () => 'Zone1HR', getValue: () => 0 },
+            { getType: () => 'Zone2HR', getValue: () => 0 },
+            { getType: () => 'Zone1Power', getValue: () => 0 },
+            { getType: () => 'Zone2Power', getValue: () => 0 },
+        ] as any);
+
+        expect(shouldRenderIntensityZonesChart([])).toBe(false);
+    });
+
+    it('should return false when all active data is in one zone only', () => {
+        vi.mocked(ActivityUtilities.getIntensityZonesStatsAggregated).mockReturnValue([
+            { getType: () => 'Zone1HR', getValue: () => 10 },
+            { getType: () => 'Zone2HR', getValue: () => 0 },
+            { getType: () => 'Zone1Power', getValue: () => 20 },
+            { getType: () => 'Zone2Power', getValue: () => 0 },
+        ] as any);
+
+        expect(shouldRenderIntensityZonesChart([])).toBe(false);
+    });
+
+    it('should return true when data spans multiple zones', () => {
+        vi.mocked(ActivityUtilities.getIntensityZonesStatsAggregated).mockReturnValue([
+            { getType: () => 'Zone1HR', getValue: () => 10 },
+            { getType: () => 'Zone2HR', getValue: () => 5 },
+            { getType: () => 'Zone1Power', getValue: () => 0 },
+            { getType: () => 'Zone2Power', getValue: () => 12 },
+        ] as any);
+
+        expect(shouldRenderIntensityZonesChart([])).toBe(true);
     });
 });

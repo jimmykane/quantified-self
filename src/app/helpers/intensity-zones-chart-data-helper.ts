@@ -100,6 +100,15 @@ export function convertIntensityZonesStatsToEchartsData(
 }
 
 /**
+ * Determines whether an intensity-zones chart is meaningful enough to render.
+ * Hides charts with no active series or where all active data collapses to a single zone.
+ */
+export function shouldRenderIntensityZonesChart(statsClassInstances: StatsClassInterface[]): boolean {
+  const data = convertIntensityZonesStatsToEchartsData(statsClassInstances);
+  return data.series.length > 0 && data.zones.length > 1;
+}
+
+/**
  * Scans the chart data to find which types have non-zero values.
  * @param data - The chart data returned by convertIntensityZonesStatsToChartData
  * @returns A Set of types that have at least one non-zero value.

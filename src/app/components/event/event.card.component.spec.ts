@@ -12,6 +12,11 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { EventInterface, User, ActivityInterface, ChartThemes, AppThemes, XAxisTypes } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
+import { shouldRenderIntensityZonesChart } from '../../helpers/intensity-zones-chart-data-helper';
+
+vi.mock('../../helpers/intensity-zones-chart-data-helper', () => ({
+    shouldRenderIntensityZonesChart: vi.fn(),
+}));
 
 describe('EventCardComponent', () => {
     let component: EventCardComponent;
@@ -26,6 +31,7 @@ describe('EventCardComponent', () => {
     let mockRouter: any;
     let mockLoggerService: any;
     let mockBottomSheet: any;
+    const mockedShouldRenderIntensityZonesChart = vi.mocked(shouldRenderIntensityZonesChart);
 
     const mockUser = new User('testUser');
     mockUser.settings = {
@@ -73,6 +79,8 @@ describe('EventCardComponent', () => {
     } as unknown as EventInterface;
 
     beforeEach(async () => {
+        mockedShouldRenderIntensityZonesChart.mockReturnValue(false);
+
         mockActivatedRoute = {
             data: of({ event: mockEvent }),
             snapshot: {
@@ -147,6 +155,7 @@ describe('EventCardComponent', () => {
         expect(component.event()).toBe(mockEvent);
         expect(mockActivitySelectionService.selectedActivities.clear).toHaveBeenCalled();
         expect(mockActivitySelectionService.selectedActivities.select).toHaveBeenCalled();
+        expect(mockedShouldRenderIntensityZonesChart).toHaveBeenCalled();
     });
 
     it('should set targetUserID signal from route', () => {
@@ -167,6 +176,11 @@ describe('EventCardComponent', () => {
     });
 
     it('should compute hasIntensityZonesFlag as false when no zones', () => {
+        expect(component.hasIntensityZonesFlag()).toBe(false);
+    });
+
+    it('should compute hasIntensityZonesFlag as false when data collapses to one zone', () => {
+        mockedShouldRenderIntensityZonesChart.mockReturnValue(false);
         expect(component.hasIntensityZonesFlag()).toBe(false);
     });
 
@@ -198,6 +212,7 @@ describe('EventCardComponent', () => {
         } as unknown as EventInterface;
 
         beforeEach(() => {
+            mockedShouldRenderIntensityZonesChart.mockReturnValue(true);
             // Update the route data mock
             mockActivatedRoute.data = of({ event: eventWithData });
 
