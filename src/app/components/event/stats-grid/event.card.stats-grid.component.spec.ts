@@ -4,9 +4,17 @@ import { AppUserSettingsQueryService } from '../../../services/app.user-settings
 import { signal, NO_ERRORS_SCHEMA } from '@angular/core';
 import { ActivityTypes, UserSummariesSettingsInterface, UserUnitSettingsInterface, ActivityUtilities, DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { SimpleChange } from '@angular/core';
-import { DataAscent, DataDescent, DataDuration, DataPowerAvg, DataTemperatureMax } from '@sports-alliance/sports-lib';
+import { DataAscent, DataDescent, DataDuration, DataPowerAvg, DataPowerMax, DataPowerMin, DataTemperatureMax } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { vi } from 'vitest';
+import { afterEach, vi } from 'vitest';
+
+const createStat = (type: string) => ({
+    getType: () => type,
+    getDisplayType: () => type,
+    getDisplayValue: () => '1',
+    getDisplayUnit: () => '',
+    getValue: () => 1,
+}) as any;
 
 describe('EventCardStatsGridComponent', () => {
     let component: EventCardStatsGridComponent;
@@ -53,6 +61,10 @@ describe('EventCardStatsGridComponent', () => {
         } as any;
         component.event = mockEvent;
         component.selectedActivities = [];
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
     });
 
     it('should create', () => {
@@ -227,9 +239,9 @@ describe('EventCardStatsGridComponent', () => {
         } as any;
         const mockEvent = {
             isMerge: false,
-            getActivities: () => [activity],
+            getActivities: () => [activity, activity],
             getActivityTypesAsArray: () => [ActivityTypes.Cycling],
-            getStats: () => [],
+            getStats: () => new Map(),
         } as any;
 
         component.event = mockEvent;
@@ -244,12 +256,94 @@ describe('EventCardStatsGridComponent', () => {
         expect(component.diffByType.size).toBe(0);
     });
 
+    it('should include composite family min/max in diff map when avg is requested', () => {
+        const powerAvgStat = {
+            getType: () => DataPowerAvg.type,
+            getDisplayType: () => 'Average Power',
+            getDisplayValue: () => '250',
+            getDisplayUnit: () => 'W',
+            getValue: () => 250
+        };
+        const powerMinStat = {
+            getType: () => DataPowerMin.type,
+            getDisplayType: () => 'Minimum Power',
+            getDisplayValue: () => '120',
+            getDisplayUnit: () => 'W',
+            getValue: () => 120
+        };
+        const powerMaxStat = {
+            getType: () => DataPowerMax.type,
+            getDisplayType: () => 'Maximum Power',
+            getDisplayValue: () => '680',
+            getDisplayUnit: () => 'W',
+            getValue: () => 680
+        };
+
+        const activity1 = {
+            type: ActivityTypes.Cycling,
+            getStat: (type: string) => {
+                if (type === DataPowerAvg.type) return { getValue: () => 250 };
+                if (type === DataPowerMin.type) return { getValue: () => 120 };
+                if (type === DataPowerMax.type) return { getValue: () => 680 };
+                return null;
+            },
+            getStatsAsArray: () => [powerAvgStat, powerMinStat, powerMaxStat],
+        } as any;
+
+        const activity2 = {
+            type: ActivityTypes.Cycling,
+            getStat: (type: string) => {
+                if (type === DataPowerAvg.type) return { getValue: () => 230 };
+                if (type === DataPowerMin.type) return { getValue: () => 110 };
+                if (type === DataPowerMax.type) return { getValue: () => 650 };
+                return null;
+            },
+            getStatsAsArray: () => [powerAvgStat, powerMinStat, powerMaxStat],
+        } as any;
+
+        const mockEvent = {
+            isMerge: true,
+            getActivities: () => [activity1, activity2],
+            getStats: () => new Map([
+                [DataPowerAvg.type, powerAvgStat],
+                [DataPowerMin.type, powerMinStat],
+                [DataPowerMax.type, powerMaxStat],
+            ]),
+        } as any;
+
+        vi.spyOn(DynamicDataLoader, 'getUnitBasedDataFromDataInstance').mockImplementation((stat: any) => [stat]);
+        vi.spyOn(DynamicDataLoader, 'getDataInstanceFromDataType').mockReturnValue({
+            getDisplayValue: () => '10',
+            getDisplayUnit: () => 'W'
+        } as any);
+
+        component.event = mockEvent;
+        component.selectedActivities = [activity1, activity2];
+        component.statsToShow = [DataPowerAvg.type];
+
+        component.ngOnChanges({
+            event: new SimpleChange(null, mockEvent, true),
+            selectedActivities: new SimpleChange(null, component.selectedActivities, true),
+            statsToShow: new SimpleChange(null, component.statsToShow, true),
+        });
+
+        expect(component.showDiff).toBe(true);
+        expect(component.diffByType.has(DataPowerAvg.type)).toBe(true);
+        expect(component.diffByType.has(DataPowerMin.type)).toBe(true);
+        expect(component.diffByType.has(DataPowerMax.type)).toBe(true);
+    });
+
     it('should build metric tabs and default to Overall when available', () => {
         const activity = { type: ActivityTypes.Cycling } as any;
+        const durationStat = createStat(DataDuration.type);
+        const powerStat = createStat(DataPowerAvg.type);
         const mockEvent = {
             isMerge: false,
             getActivities: () => [activity],
-            getStats: () => new Map(),
+            getStats: () => new Map([
+                [DataDuration.type, durationStat],
+                [DataPowerAvg.type, powerStat],
+            ]),
         } as any;
 
         component.event = mockEvent;
@@ -262,16 +356,19 @@ describe('EventCardStatsGridComponent', () => {
             statsToShow: new SimpleChange(null, component.statsToShow, true),
         });
 
-        expect(component.metricTabs.map(tab => tab.label)).toEqual(['Overall']);
+        expect(component.metricTabs.map(tab => tab.label)).toEqual(['Overall', 'Performance']);
         expect(component.selectedTabIndex).toBe(0);
     });
 
     it('should fallback to first visible tab when Overall is not available', () => {
         const activity = { type: ActivityTypes.Cycling } as any;
+        const temperatureStat = createStat(DataTemperatureMax.type);
         const mockEvent = {
             isMerge: false,
             getActivities: () => [activity],
-            getStats: () => new Map(),
+            getStats: () => new Map([
+                [DataTemperatureMax.type, temperatureStat],
+            ]),
         } as any;
 
         component.event = mockEvent;
@@ -286,6 +383,31 @@ describe('EventCardStatsGridComponent', () => {
 
         expect(component.metricTabs.map(tab => tab.label)).toEqual(['Environment']);
         expect(component.selectedTabIndex).toBe(0);
+    });
+
+    it('should hide tabs without matching stat data', () => {
+        const activity = { type: ActivityTypes.Cycling } as any;
+        const durationStat = createStat(DataDuration.type);
+        const mockEvent = {
+            isMerge: false,
+            getActivities: () => [activity],
+            getStats: () => new Map([
+                [DataDuration.type, durationStat],
+            ]),
+        } as any;
+
+        component.event = mockEvent;
+        component.selectedActivities = [activity];
+        component.statsToShow = [DataDuration.type, DataPowerAvg.type];
+
+        component.ngOnChanges({
+            event: new SimpleChange(null, mockEvent, true),
+            selectedActivities: new SimpleChange(null, component.selectedActivities, true),
+            statsToShow: new SimpleChange(null, component.statsToShow, true),
+        });
+
+        expect(component.metricTabs.map(tab => tab.label)).toEqual(['Overall']);
+        expect(component.metricTabs[0].metricTypes).toEqual([DataDuration.type]);
     });
 
     it('should clear grouped tabs and selected index on empty selection', () => {

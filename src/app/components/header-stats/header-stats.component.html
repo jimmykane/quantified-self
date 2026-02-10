@@ -2,30 +2,48 @@
   <!-- Grid Layout -->
   @if (layout === 'grid') {
   <section class="grid">
-    @for (stat of displayedStats; track stat) {
+    @for (card of displayedStatCards; track card.id) {
     <div class="stat-item">
       <div class="stat-avatar">
-        <app-data-type-icon [size]="'24px'" [vAlign]="'middle'" [dataType]="stat.getType()"></app-data-type-icon>
+        <app-data-type-icon [size]="'24px'" [vAlign]="'middle'" [dataType]="card.iconType"></app-data-type-icon>
       </div>
       <div class="stat-content">
         <div class="stat-label">
-          {{stat.getDisplayType()}}
+          {{card.label}}
         </div>
+        @if (card.isComposite) {
+        <div class="stat-values-stack">
+          @for (valueItem of card.valueItems; track valueItem.type) {
+          <div class="stat-value-row">
+            <div class="stat-value-main">
+              <span class="stat-value-key">{{ valueItem.key }}</span>
+              <span>{{valueItem.displayValue}} {{valueItem.displayUnit}}</span>
+            </div>
+            @if (getDiffForType(valueItem.type); as diff) {
+            <div class="stat-value-diff">
+              <span class="stat-diff-value">Δ {{ diff.display }}</span>
+              <span class="stat-diff-percent" [style.color]="diff.color">
+                {{ diff.percent.toFixed(1) }}%
+              </span>
+            </div>
+            }
+          </div>
+          }
+        </div>
+        } @else {
+        @if (card.valueItems[0]; as valueItem) {
         <div class="stat-value-grid">
-          {{stat.getDisplayValue()}} {{stat.getDisplayUnit()}}
+          {{valueItem.displayValue}} {{valueItem.displayUnit}}
         </div>
-        @if (getDiffForStat(stat); as diff) {
+        @if (getDiffForType(valueItem.type); as diff) {
         <div class="stat-diff">
-          <span class="stat-diff-value">
-            Δ {{ diff.display }}
-          </span>
-          <span class="stat-diff-percent" [style.color]="diff.color">
-            {{ diff.percent.toFixed(1) }}%
-          </span>
+          <span class="stat-diff-value">Δ {{ diff.display }}</span>
+          <span class="stat-diff-percent" [style.color]="diff.color">{{ diff.percent.toFixed(1) }}%</span>
         </div>
         }
+        }
+        }
       </div>
-
     </div>
     }
     <ng-content select="[grid-suffix]"></ng-content>

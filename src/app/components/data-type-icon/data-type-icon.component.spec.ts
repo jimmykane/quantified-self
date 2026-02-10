@@ -12,6 +12,7 @@ import {
   DataTemperatureMin
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
+import { EVENT_SUMMARY_METRIC_GROUPS } from '../../constants/event-summary-metric-groups';
 import { DataTypeIconComponent } from './data-type-icon.component';
 
 describe('DataTypeIconComponent', () => {
@@ -46,5 +47,23 @@ describe('DataTypeIconComponent', () => {
 
     expect(component.getColumnHeaderIconClass(DataDescent.type)).toBe('icon-mirror-x');
     expect(component.getColumnHeaderIconClass(DataAscent.type)).toBeNull();
+  });
+
+  it('should provide icon mappings for all configured performance tab metrics', () => {
+    const component = new DataTypeIconComponent();
+    const performanceGroup = EVENT_SUMMARY_METRIC_GROUPS.find((group) => group.id === 'performance');
+    const performanceMetricTypes = performanceGroup?.metricTypes || [];
+
+    expect(performanceMetricTypes.length).toBeGreaterThan(0);
+    performanceMetricTypes.forEach((metricType) => {
+      expect(component.getColumnHeaderIcon(metricType) || component.getColumnHeaderSVGIcon(metricType)).toBeTruthy();
+    });
+  });
+
+  it('should provide icon mappings for ascent and descent time', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon('Ascent Time')).toBe('elevation');
+    expect(component.getColumnHeaderIcon('Descent Time')).toBe('elevation');
   });
 });

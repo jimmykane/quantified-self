@@ -65,6 +65,7 @@ section.grid {
   align-items: flex-start;
   justify-content: center;
   min-width: 0;
+  width: 100%;
 }
 
 .stat-label {
@@ -113,6 +114,51 @@ section.grid {
   font-weight: 600;
   flex: 0 0 auto;
   text-align: right;
+}
+
+.stat-values-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.stat-value-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.stat-value-main {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.95rem;
+  font-weight: 400;
+  color: var(--mat-app-on-surface);
+  line-height: 1.2;
+  white-space: nowrap;
+  font-family: 'Barlow Condensed', sans-serif;
+}
+
+.stat-value-key {
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--mat-app-on-surface-variant);
+  opacity: 0.9;
+}
+
+.stat-value-diff {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.62rem;
+  line-height: 1.05;
+  width: 100%;
+  font-family: 'Barlow Condensed', sans-serif;
+  opacity: 0.8;
 }
 
 /* Condensed (Chips) Container */
@@ -170,5 +216,17 @@ section.condensed {
 
   .stat-value-grid {
     font-size: 0.8rem;
+  }
+
+  .stat-value-main {
+    font-size: 0.72rem;
+  }
+
+  .stat-value-key {
+    font-size: 0.5rem;
+  }
+
+  .stat-value-diff {
+    font-size: 0.52rem;
   }
 }

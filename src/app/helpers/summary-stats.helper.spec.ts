@@ -25,6 +25,10 @@ describe('getDefaultSummaryStatTypes', () => {
     expect(stats).toContain(DataHeartRateMin.type);
     expect(stats).toContain(DataFeeling.type);
     expect(stats).toContain(DataRPE.type);
+    expect(stats).toContain('Power Normalized');
+    expect(stats).toContain('Power Training Stress Score');
+    expect(stats).toContain('Ascent Time');
+    expect(stats).toContain('Descent Time');
   });
 
   it('should keep speed derivation behavior by activity type', () => {

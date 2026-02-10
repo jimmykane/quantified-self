@@ -1,5 +1,7 @@
 import {
+  DataAccumulatedPower,
   DataAerobicTrainingEffect,
+  DataAirPower,
   DataAltitudeAvg,
   DataAltitudeMax,
   DataAltitudeMin,
@@ -20,9 +22,12 @@ import {
   DataMovingTime,
   DataPaceAvg,
   DataPeakEPOC,
+  DataPower,
   DataPowerAvg,
+  DataPowerLeft,
   DataPowerMax,
   DataPowerMin,
+  DataPowerRight,
   DataRecoveryTime,
   DataRPE,
   DataSpeedAvg,
@@ -36,10 +41,8 @@ import {
 
 export type EventSummaryMetricGroupId =
   | 'overall'
-  | 'speed'
-  | 'power'
+  | 'performance'
   | 'altitude'
-  | 'technical'
   | 'environment'
   | 'physiological'
   | 'other';
@@ -48,7 +51,34 @@ export interface EventSummaryMetricGroupConfig {
   id: EventSummaryMetricGroupId;
   label: string;
   metricTypes: string[];
+  singleValueTypes?: string[];
 }
+
+// Non-exported sports-lib stat types (present at runtime in lib/esm/index.js).
+const POWER_LIB_EXTRA_TYPE_STRINGS: string[] = [
+  'Power Normalized',
+  'Power Intensity Factor',
+  'Power Training Stress Score',
+  'Power Work',
+  'PowerWattsPerKg',
+  'CriticalPower',
+  'WPrime',
+  'Form Power',
+  'Power Pod',
+  'Average Air Power',
+  'Maximum Air Power',
+  'Minimum Air Power',
+  'Power Pedal Smoothness Left',
+  'Power Pedal Smoothness Right',
+  'Power Torque Effectiveness Left',
+  'Power Torque Effectiveness Right',
+  'Power Zone Target',
+];
+
+const ALTITUDE_LIB_EXTRA_TYPE_STRINGS: string[] = [
+  'Ascent Time',
+  'Descent Time',
+];
 
 export const EVENT_SUMMARY_DEFAULT_GROUP_ID: EventSummaryMetricGroupId = 'overall';
 
@@ -63,18 +93,26 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataSpeedAvg.type,
       DataPaceAvg.type,
       DataSwimPaceAvg.type,
-      DataGradeAdjustedPaceAvg.type,
-      DataGradeAdjustedSpeedAvg.type,
       DataHeartRateAvg.type,
       DataPowerAvg.type,
+      DataRecoveryTime.type,
+      DataVO2Max.type,
       DataAscent.type,
       DataDescent.type,
       DataCadenceAvg.type,
     ],
+    singleValueTypes: [
+      DataHeartRateAvg.type,
+      DataPowerAvg.type,
+      DataSpeedAvg.type,
+      DataPaceAvg.type,
+      DataSwimPaceAvg.type,
+      DataCadenceAvg.type,
+    ],
   },
   {
-    id: 'speed',
-    label: 'Speed',
+    id: 'performance',
+    label: 'Performance',
     metricTypes: [
       DataSpeedAvg.type,
       DataPaceAvg.type,
@@ -82,41 +120,38 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataGradeAdjustedPaceAvg.type,
       DataGradeAdjustedSpeedAvg.type,
       DataVerticalSpeedAvg.type,
-    ],
-  },
-  {
-    id: 'power',
-    label: 'Power',
-    metricTypes: [
+      DataCadenceAvg.type,
+      DataCadenceMax.type,
+      DataCadenceMin.type,
+      DataPower.type,
       DataPowerAvg.type,
       DataPowerMax.type,
       DataPowerMin.type,
+      DataPowerLeft.type,
+      DataPowerRight.type,
+      DataAccumulatedPower.type,
+      DataAirPower.type,
+      ...POWER_LIB_EXTRA_TYPE_STRINGS,
+    ],
+    singleValueTypes: [
+      DataVerticalSpeedAvg.type,
     ],
   },
   {
     id: 'altitude',
     label: 'Altitude',
-    metricTypes: [
-      DataAscent.type,
-      DataDescent.type,
-      DataAltitudeMax.type,
-      DataAltitudeMin.type,
-      DataAltitudeAvg.type,
-    ],
-  },
-  {
-    id: 'technical',
-    label: 'Technical',
-    metricTypes: [
-      DataCadenceAvg.type,
-      DataCadenceMax.type,
-      DataCadenceMin.type,
-    ],
+    metricTypes: [],
   },
   {
     id: 'environment',
     label: 'Environment',
     metricTypes: [
+      DataAscent.type,
+      DataDescent.type,
+      ...ALTITUDE_LIB_EXTRA_TYPE_STRINGS,
+      DataAltitudeMax.type,
+      DataAltitudeMin.type,
+      DataAltitudeAvg.type,
       DataTemperatureAvg.type,
       DataTemperatureMax.type,
       DataTemperatureMin.type,
@@ -126,6 +161,7 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
     id: 'physiological',
     label: 'Physiological',
     metricTypes: [
+      DataEnergy.type,
       DataHeartRateAvg.type,
       DataHeartRateMax.type,
       DataHeartRateMin.type,
@@ -151,11 +187,18 @@ export const EVENT_SUMMARY_DEFAULT_STAT_TYPES: string[] = [
   DataSpeedAvg.type,
   DataVerticalSpeedAvg.type,
   DataEnergy.type,
+  DataPower.type,
   DataPowerAvg.type,
   DataPowerMax.type,
   DataPowerMin.type,
+  DataPowerLeft.type,
+  DataPowerRight.type,
+  DataAccumulatedPower.type,
+  DataAirPower.type,
+  ...POWER_LIB_EXTRA_TYPE_STRINGS,
   DataAscent.type,
   DataDescent.type,
+  ...ALTITUDE_LIB_EXTRA_TYPE_STRINGS,
   DataAltitudeMax.type,
   DataAltitudeMin.type,
   DataAltitudeAvg.type,

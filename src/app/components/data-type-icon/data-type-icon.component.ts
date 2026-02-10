@@ -8,6 +8,11 @@ import { DataActivityTypes } from '@sports-alliance/sports-lib';
 import { DataPowerAvg } from '@sports-alliance/sports-lib';
 import { DataPowerMax } from '@sports-alliance/sports-lib';
 import { DataPowerMin } from '@sports-alliance/sports-lib';
+import { DataPower } from '@sports-alliance/sports-lib';
+import { DataPowerLeft } from '@sports-alliance/sports-lib';
+import { DataPowerRight } from '@sports-alliance/sports-lib';
+import { DataAccumulatedPower } from '@sports-alliance/sports-lib';
+import { DataAirPower } from '@sports-alliance/sports-lib';
 import { DataCadenceAvg } from '@sports-alliance/sports-lib';
 import { DataCadenceMax } from '@sports-alliance/sports-lib';
 import { DataCadenceMin } from '@sports-alliance/sports-lib';
@@ -97,7 +102,40 @@ export class DataTypeIconComponent {
       case DataPowerAvg.type:
       case DataPowerMax.type:
       case DataPowerMin.type:
+      case DataPower.type:
+      case 'CriticalPower':
+      case 'Form Power':
         return 'bolt';
+      case DataPowerLeft.type:
+      case 'Power Pedal Smoothness Left':
+      case 'Power Torque Effectiveness Left':
+        return 'keyboard_double_arrow_left';
+      case DataPowerRight.type:
+      case 'Power Pedal Smoothness Right':
+      case 'Power Torque Effectiveness Right':
+        return 'keyboard_double_arrow_right';
+      case DataAccumulatedPower.type:
+      case 'Power Work':
+        return 'stacked_bar_chart';
+      case DataAirPower.type:
+      case 'Average Air Power':
+      case 'Maximum Air Power':
+      case 'Minimum Air Power':
+        return 'air';
+      case 'Power Normalized':
+        return 'tune';
+      case 'Power Intensity Factor':
+        return 'multiline_chart';
+      case 'Power Training Stress Score':
+        return 'monitor_heart';
+      case 'PowerWattsPerKg':
+        return 'monitor_weight';
+      case 'WPrime':
+        return 'battery_charging_full';
+      case 'Power Pod':
+        return 'sensors';
+      case 'Power Zone Target':
+        return 'track_changes';
       case DataCadenceAvg.type:
       case DataCadenceMax.type:
       case DataCadenceMin.type:
@@ -172,8 +210,10 @@ export class DataTypeIconComponent {
       case 'Cumulative Operating Time':
         return 'timer';
       case DataAscent.type:
+      case 'Ascent Time':
         return 'elevation';
       case DataDescent.type:
+      case 'Descent Time':
         return 'elevation';
       case DataHeartRateAvg.type:
       case DataHeartRateMax.type:

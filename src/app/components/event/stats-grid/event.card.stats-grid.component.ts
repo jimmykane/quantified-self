@@ -13,6 +13,7 @@ import {
   EVENT_SUMMARY_DEFAULT_GROUP_ID,
 } from '../../../constants/event-summary-metric-groups';
 import { buildSummaryMetricTabs, SummaryMetricTab } from '../../../helpers/summary-metric-tabs.helper';
+import { expandStatsTypesForCompositeDiff } from '../../../helpers/header-stats-composite.helper';
 
 @Component({
   selector: 'app-event-card-stats-grid',
@@ -119,7 +120,8 @@ export class EventCardStatsGridComponent implements OnChanges {
   }
 
   private buildDiffMap(): Map<string, { display: string; percent: number; color: string }> {
-    const diffMap = buildDiffMapForStats(this.stats, this.displayedStatsToShow, this.selectedActivities, this.unitSettings);
+    const compositeAwareTypes = expandStatsTypesForCompositeDiff(this.displayedStatsToShow);
+    const diffMap = buildDiffMapForStats(this.stats, compositeAwareTypes, this.selectedActivities, this.unitSettings);
     const coloredMap = new Map<string, { display: string; percent: number; color: string }>();
     diffMap.forEach((diff, type) => {
       coloredMap.set(type, {
@@ -132,7 +134,13 @@ export class EventCardStatsGridComponent implements OnChanges {
   }
 
   private updateTabs() {
-    this.metricTabs = buildSummaryMetricTabs(this.displayedStatsToShow);
+    const availableStatTypes = new Set(this.stats.map((stat) => stat.getType()));
+    this.metricTabs = buildSummaryMetricTabs(this.displayedStatsToShow)
+      .map((tab) => ({
+        ...tab,
+        metricTypes: tab.metricTypes.filter((metricType) => availableStatTypes.has(metricType)),
+      }))
+      .filter((tab) => tab.metricTypes.length > 0);
     this.resetSelectedTab();
   }
 
