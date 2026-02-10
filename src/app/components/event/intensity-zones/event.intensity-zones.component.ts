@@ -142,9 +142,14 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     const darkTheme = this.isDarkThemeActive();
     const textColor = darkTheme ? '#ffffff' : '#2a2a2a';
     const gridLineColor = darkTheme ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)';
-    const rightPadding = this.isMobile ? 16 : 24;
+    const zoneBackgroundOpacity = darkTheme ? 0.18 : 0.12;
+    const rightPadding = this.isMobile ? 8 : 10;
     const bottomPadding = this.isMobile ? 32 : 38;
-    const zoneRichStyles = this.createZoneRichStyles(data.zones);
+    const zoneAxisRichStyles = this.createZoneAxisRichStyles(data.zones);
+    const zoneBulletRichStyles = this.createZoneBulletRichStyles(data.zones);
+    const zoneBackgroundColors = data.zones.map(zone =>
+      this.toTransparentColor(this.eventColorService.getColorForZoneHex(zone), zoneBackgroundOpacity)
+    );
     const series = data.series.map((seriesEntry, seriesIndex) => {
       const displayName = this.getLegendLabel(seriesEntry.type);
       return {
@@ -173,7 +178,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
             const percent = this.formatPercentage(seriesEntry.percentages[dataIndex] ?? 0);
             return `{zone_${dataIndex}|${percent}%}`;
           },
-          rich: zoneRichStyles
+          rich: zoneBulletRichStyles
         },
         emphasis: {
           focus: 'none'
@@ -192,9 +197,9 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         fontFamily: "'Barlow Condensed', sans-serif"
       },
       grid: {
-        left: 6,
+        left: 0,
         right: rightPadding,
-        top: 10,
+        top: 8,
         bottom: bottomPadding,
         containLabel: true
       },
@@ -244,6 +249,12 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         data: data.zones,
         axisTick: { show: false },
         axisLine: { show: false },
+        splitArea: {
+          show: true,
+          areaStyle: {
+            color: zoneBackgroundColors
+          }
+        },
         splitLine: {
           show: true,
           lineStyle: {
@@ -260,7 +271,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
             }
             return `{zone_${zoneIndex}|${value}}`;
           },
-          rich: zoneRichStyles
+          rich: zoneAxisRichStyles
         }
       },
       series
@@ -269,7 +280,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     return option;
   }
 
-  private createZoneRichStyles(zones: string[]): Record<string, {
+  private createZoneAxisRichStyles(zones: string[]): Record<string, {
     backgroundColor: string;
     borderRadius: number;
     color: string;
@@ -294,6 +305,46 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         verticalAlign: 'middle',
         lineHeight: badgeLineHeight,
         padding: [1, 4, 1, 4],
+      };
+      return styles;
+    }, {} as Record<string, {
+      backgroundColor: string;
+      borderRadius: number;
+      color: string;
+      fontWeight: number;
+      width: number;
+      align: 'center';
+      verticalAlign: 'middle';
+      lineHeight: number;
+      padding: number[];
+    }>);
+  }
+
+  private createZoneBulletRichStyles(zones: string[]): Record<string, {
+    backgroundColor: string;
+    borderRadius: number;
+    color: string;
+    fontWeight: number;
+    width: number;
+    align: 'center';
+    verticalAlign: 'middle';
+    lineHeight: number;
+    padding: number[];
+  }> {
+    const bulletWidth = this.isMobile ? 20 : 26;
+    const bulletLineHeight = this.isMobile ? 14 : 16;
+
+    return zones.reduce((styles, zone, zoneIndex) => {
+      styles[`zone_${zoneIndex}`] = {
+        backgroundColor: this.eventColorService.getColorForZoneHex(zone),
+        borderRadius: 6,
+        color: '#ffffff',
+        fontWeight: 600,
+        width: bulletWidth,
+        align: 'center',
+        verticalAlign: 'middle',
+        lineHeight: bulletLineHeight,
+        padding: [0, 2, 0, 2],
       };
       return styles;
     }, {} as Record<string, {
@@ -337,6 +388,31 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       return 0;
     }
     return Math.round(Math.max(0, value));
+  }
+
+  private toTransparentColor(hex: string, alpha: number): string {
+    const normalized = `${hex}`.trim();
+    const clampedAlpha = Math.max(0, Math.min(1, alpha));
+
+    const sixDigit = normalized.match(/^#([a-fA-F0-9]{6})$/);
+    if (sixDigit) {
+      const value = sixDigit[1];
+      const red = parseInt(value.substring(0, 2), 16);
+      const green = parseInt(value.substring(2, 4), 16);
+      const blue = parseInt(value.substring(4, 6), 16);
+      return `rgba(${red}, ${green}, ${blue}, ${clampedAlpha})`;
+    }
+
+    const threeDigit = normalized.match(/^#([a-fA-F0-9]{3})$/);
+    if (threeDigit) {
+      const value = threeDigit[1];
+      const red = parseInt(`${value[0]}${value[0]}`, 16);
+      const green = parseInt(`${value[1]}${value[1]}`, 16);
+      const blue = parseInt(`${value[2]}${value[2]}`, 16);
+      return `rgba(${red}, ${green}, ${blue}, ${clampedAlpha})`;
+    }
+
+    return normalized;
   }
 
   private getLegendLabel(type: string): string {

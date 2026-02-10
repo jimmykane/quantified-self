@@ -162,13 +162,18 @@ describe('EventIntensityZonesComponent', () => {
     expect(mockLoader.setOption).toHaveBeenCalledTimes(1);
     expect(mockLoader.resize).toHaveBeenCalledTimes(1);
     expect(mockedConvert).toHaveBeenCalledWith(component.activities, false);
-    expect(option.grid.left).toBe(6);
-    expect(option.grid.right).toBe(24);
-    expect(option.grid.top).toBe(10);
+    expect(option.grid.left).toBe(0);
+    expect(option.grid.right).toBe(10);
+    expect(option.grid.top).toBe(8);
     expect(option.grid.bottom).toBe(38);
     expect(option.series[0].clip).toBe(false);
     expect(option.series[0].label.position).toBe('right');
     expect(option.series[0].label.align).toBe('left');
+    expect(option.yAxis.splitArea.show).toBe(true);
+    expect(option.yAxis.splitArea.areaStyle.color).toEqual([
+      'rgba(22, 180, 234, 0.12)',
+      'rgba(22, 180, 234, 0.12)',
+    ]);
     expect(option.legend.left).toBe('center');
     expect(option.legend.bottom).toBe(0);
     expect(option.legend.orient).toBe('horizontal');
@@ -219,7 +224,7 @@ describe('EventIntensityZonesComponent', () => {
     expect(mockedConvert).toHaveBeenLastCalledWith(component.activities, true);
     expect(mockLoader.setOption).toHaveBeenCalledTimes(2);
     const option = getLastOption();
-    expect(option.grid.right).toBe(16);
+    expect(option.grid.right).toBe(8);
     expect(option.grid.bottom).toBe(32);
   });
 
@@ -232,6 +237,10 @@ describe('EventIntensityZonesComponent', () => {
     const option = getLastOption();
     expect(option.tooltip?.backgroundColor).toBe('#303030');
     expect(option.legend?.textStyle?.color).toBe('#ffffff');
+    expect(option.yAxis.splitArea.areaStyle.color).toEqual([
+      'rgba(22, 180, 234, 0.18)',
+      'rgba(22, 180, 234, 0.18)',
+    ]);
   });
 
   it('should apply dark theme styles from body class even with light chartTheme', async () => {
@@ -273,6 +282,7 @@ describe('EventIntensityZonesComponent', () => {
     expect(option.yAxis.axisLabel.rich.zone_0.align).toBe('center');
     expect(option.yAxis.axisLabel.rich.zone_0.verticalAlign).toBe('middle');
     expect(option.yAxis.axisLabel.rich.zone_0.width).toBe(56);
+    expect(option.series[0].label.rich.zone_0.width).toBe(26);
     expect(option.series[0].label.rich.zone_2.backgroundColor).toBe('color-Zone 3');
   });
 
