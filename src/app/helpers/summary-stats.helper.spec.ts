@@ -5,6 +5,7 @@ import {
   DataDescent,
   DataFeeling,
   DataGradeAdjustedPaceAvg,
+  DataGradeAdjustedSpeedAvg,
   DataHeartRateMin,
   DataPaceAvg,
   DataPowerMax,
@@ -29,6 +30,12 @@ describe('getDefaultSummaryStatTypes', () => {
     expect(stats).toContain('Power Training Stress Score');
     expect(stats).toContain('Ascent Time');
     expect(stats).toContain('Descent Time');
+    expect(stats).toContain('Average Absolute Pressure');
+    expect(stats).toContain('Average Grade');
+    expect(stats).toContain('Average Ground Contact Time');
+    expect(stats).toContain('Average Leg Stiffness');
+    expect(stats).toContain('Average EVPE');
+    expect(stats).toContain('Average EHPE');
   });
 
   it('should keep speed derivation behavior by activity type', () => {
@@ -37,8 +44,28 @@ describe('getDefaultSummaryStatTypes', () => {
 
     expect(runningStats).toContain(DataPaceAvg.type);
     expect(runningStats).toContain(DataGradeAdjustedPaceAvg.type);
+    expect(runningStats).toContain('Minimum Grade Adjusted Pace');
+    expect(runningStats).toContain('Maximum Grade Adjusted Pace');
+    expect(runningStats).not.toContain(DataGradeAdjustedSpeedAvg.type);
+    expect(runningStats).not.toContain('Minimum Grade Adjusted Speed');
     expect(runningStats).not.toContain(DataSpeedAvg.type);
     expect(cyclingStats).toContain(DataSpeedAvg.type);
+    expect(cyclingStats).toContain(DataGradeAdjustedSpeedAvg.type);
+    expect(cyclingStats).toContain('Minimum Grade Adjusted Speed');
+    expect(cyclingStats).toContain('Maximum Grade Adjusted Speed');
+    expect(cyclingStats).not.toContain(DataGradeAdjustedPaceAvg.type);
+    expect(cyclingStats).not.toContain('Minimum Grade Adjusted Pace');
+  });
+
+  it('should include both grade-adjusted families for mixed speed/pace activities', () => {
+    const stats = getDefaultSummaryStatTypes([ActivityTypes.TrailRunning]);
+
+    expect(stats).toContain(DataGradeAdjustedPaceAvg.type);
+    expect(stats).toContain(DataGradeAdjustedSpeedAvg.type);
+    expect(stats).toContain('Minimum Grade Adjusted Pace');
+    expect(stats).toContain('Maximum Grade Adjusted Pace');
+    expect(stats).toContain('Minimum Grade Adjusted Speed');
+    expect(stats).toContain('Maximum Grade Adjusted Speed');
   });
 
   it('should still exclude ascent and descent when manually configured', () => {

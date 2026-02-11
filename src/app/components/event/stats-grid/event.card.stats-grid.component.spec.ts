@@ -333,6 +333,87 @@ describe('EventCardStatsGridComponent', () => {
         expect(component.diffByType.has(DataPowerMax.type)).toBe(true);
     });
 
+    it('should include ground-contact family min/max in diff map when avg is requested', () => {
+        const gctAvgType = 'Average Ground Contact Time';
+        const gctMinType = 'Minimum Ground Contact Time';
+        const gctMaxType = 'Maximum Ground Contact Time';
+
+        const gctAvgStat = {
+            getType: () => gctAvgType,
+            getDisplayType: () => gctAvgType,
+            getDisplayValue: () => '250',
+            getDisplayUnit: () => 'ms',
+            getValue: () => 250
+        };
+        const gctMinStat = {
+            getType: () => gctMinType,
+            getDisplayType: () => gctMinType,
+            getDisplayValue: () => '210',
+            getDisplayUnit: () => 'ms',
+            getValue: () => 210
+        };
+        const gctMaxStat = {
+            getType: () => gctMaxType,
+            getDisplayType: () => gctMaxType,
+            getDisplayValue: () => '320',
+            getDisplayUnit: () => 'ms',
+            getValue: () => 320
+        };
+
+        const activity1 = {
+            type: ActivityTypes.Running,
+            getStat: (type: string) => {
+                if (type === gctAvgType) return { getValue: () => 250 };
+                if (type === gctMinType) return { getValue: () => 210 };
+                if (type === gctMaxType) return { getValue: () => 320 };
+                return null;
+            },
+            getStatsAsArray: () => [gctAvgStat, gctMinStat, gctMaxStat],
+        } as any;
+
+        const activity2 = {
+            type: ActivityTypes.Running,
+            getStat: (type: string) => {
+                if (type === gctAvgType) return { getValue: () => 260 };
+                if (type === gctMinType) return { getValue: () => 220 };
+                if (type === gctMaxType) return { getValue: () => 330 };
+                return null;
+            },
+            getStatsAsArray: () => [gctAvgStat, gctMinStat, gctMaxStat],
+        } as any;
+
+        const mockEvent = {
+            isMerge: true,
+            getActivities: () => [activity1, activity2],
+            getStats: () => new Map([
+                [gctAvgType, gctAvgStat],
+                [gctMinType, gctMinStat],
+                [gctMaxType, gctMaxStat],
+            ]),
+        } as any;
+
+        vi.spyOn(DynamicDataLoader, 'getUnitBasedDataFromDataInstance').mockImplementation((stat: any) => [stat]);
+        vi.spyOn(DynamicDataLoader, 'getDataInstanceFromDataType').mockReturnValue({
+            getDisplayValue: () => '10',
+            getDisplayUnit: () => 'ms'
+        } as any);
+
+        component.event = mockEvent;
+        component.selectedActivities = [activity1, activity2];
+        component.statsToShow = [gctAvgType];
+
+        component.ngOnChanges({
+            event: new SimpleChange(null, mockEvent, true),
+            selectedActivities: new SimpleChange(null, component.selectedActivities, true),
+            statsToShow: new SimpleChange(null, component.statsToShow, true),
+        });
+
+        expect(component.showDiff).toBe(true);
+        expect(component.diffByType.has(gctAvgType)).toBe(true);
+        expect(component.diffByType.has(gctMinType)).toBe(true);
+        expect(component.diffByType.has(gctMaxType)).toBe(true);
+    });
+
     it('should build metric tabs and default to Overall when available', () => {
         const activity = { type: ActivityTypes.Cycling } as any;
         const durationStat = createStat(DataDuration.type);

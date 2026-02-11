@@ -1,5 +1,9 @@
 import {
   DataAccumulatedPower,
+  DataAbsolutePressure,
+  DataAbsolutePressureAvg,
+  DataAbsolutePressureMax,
+  DataAbsolutePressureMin,
   DataAerobicTrainingEffect,
   DataAirPower,
   DataAltitudeAvg,
@@ -19,7 +23,19 @@ import {
   DataHeartRateAvg,
   DataHeartRateMax,
   DataHeartRateMin,
+  DataEHPE,
+  DataEHPEAvg,
+  DataEHPEMax,
+  DataEHPEMin,
+  DataEVPE,
+  DataEVPEAvg,
+  DataEVPEMax,
+  DataEVPEMin,
   DataMovingTime,
+  DataNumberOfSatellites,
+  DataNumberOfSatellitesAvg,
+  DataNumberOfSatellitesMax,
+  DataNumberOfSatellitesMin,
   DataPaceAvg,
   DataPeakEPOC,
   DataPower,
@@ -30,6 +46,10 @@ import {
   DataPowerRight,
   DataRecoveryTime,
   DataRPE,
+  DataSatellite5BestSNR,
+  DataSatellite5BestSNRAvg,
+  DataSatellite5BestSNRMax,
+  DataSatellite5BestSNRMin,
   DataSpeedAvg,
   DataSwimPaceAvg,
   DataTemperatureAvg,
@@ -88,13 +108,41 @@ const PHYSIOLOGICAL_EXTRA_TYPE_STRINGS: string[] = [
   'Weight',
 ];
 
-const ENVIRONMENT_EXTRA_TYPE_STRINGS: string[] = [
-  'Absolute Pressure',
-];
-
 const PERFORMANCE_EXTRA_TYPE_STRINGS: string[] = [
   'Effort Pace',
   'EPOC',
+];
+
+export const EVENT_SUMMARY_GRADE_ADJUSTED_SPEED_TYPES: string[] = [
+  DataGradeAdjustedSpeedAvg.type,
+  'Minimum Grade Adjusted Speed',
+  'Maximum Grade Adjusted Speed',
+];
+
+export const EVENT_SUMMARY_GRADE_ADJUSTED_PACE_TYPES: string[] = [
+  DataGradeAdjustedPaceAvg.type,
+  'Minimum Grade Adjusted Pace',
+  'Maximum Grade Adjusted Pace',
+];
+
+const PERFORMANCE_RUN_DYNAMICS_TYPE_STRINGS: string[] = [
+  'Average Ground Contact Time',
+  'Minimum Ground Contact Time',
+  'Maximum Ground Contact Time',
+  'Stance Time',
+  'Stance Time Balance Left',
+  'Stance Time Balance Right',
+  'Ground Contact Time Balance Left',
+  'Ground Contact Time Balance Right',
+  'Vertical Oscillation',
+  'Vertical Ratio',
+  'Average Vertical Ratio',
+  'Minimum Vertical Ratio',
+  'Maximum Vertical Ratio',
+  'Leg Stiffness',
+  'Average Leg Stiffness',
+  'Minimum Leg Stiffness',
+  'Maximum Leg Stiffness',
 ];
 
 const DEVICE_EXTRA_TYPE_STRINGS: string[] = [
@@ -102,6 +150,44 @@ const DEVICE_EXTRA_TYPE_STRINGS: string[] = [
   'Battery Consumption',
   'Battery Current',
   'Battery Voltage',
+  'Distance (Stryd)',
+  'GNSS Distance',
+];
+
+const DEVICE_SIGNAL_EXTRA_TYPE_STRINGS: string[] = [
+  DataEVPE.type,
+  DataEVPEAvg.type,
+  DataEVPEMin.type,
+  DataEVPEMax.type,
+  DataEHPE.type,
+  DataEHPEAvg.type,
+  DataEHPEMin.type,
+  DataEHPEMax.type,
+  DataSatellite5BestSNR.type,
+  DataSatellite5BestSNRAvg.type,
+  DataSatellite5BestSNRMin.type,
+  DataSatellite5BestSNRMax.type,
+  DataNumberOfSatellites.type,
+  DataNumberOfSatellitesAvg.type,
+  DataNumberOfSatellitesMin.type,
+  DataNumberOfSatellitesMax.type,
+];
+
+const ENVIRONMENT_ABSOLUTE_PRESSURE_TYPE_STRINGS: string[] = [
+  DataAbsolutePressure.type,
+  DataAbsolutePressureAvg.type,
+  DataAbsolutePressureMin.type,
+  DataAbsolutePressureMax.type,
+];
+
+const ENVIRONMENT_GRADE_TYPE_STRINGS: string[] = [
+  'Grade',
+  'Average Grade',
+  'Minimum Grade',
+  'Maximum Grade',
+];
+
+const ENVIRONMENT_DISTANCE_TYPE_STRINGS: string[] = [
   'Distance (Stryd)',
   'GNSS Distance',
 ];
@@ -143,8 +229,8 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataSpeedAvg.type,
       DataPaceAvg.type,
       DataSwimPaceAvg.type,
-      DataGradeAdjustedPaceAvg.type,
-      DataGradeAdjustedSpeedAvg.type,
+      ...EVENT_SUMMARY_GRADE_ADJUSTED_PACE_TYPES,
+      ...EVENT_SUMMARY_GRADE_ADJUSTED_SPEED_TYPES,
       DataVerticalSpeedAvg.type,
       DataCadenceAvg.type,
       DataCadenceMax.type,
@@ -157,7 +243,11 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataPowerRight.type,
       DataAccumulatedPower.type,
       DataAirPower.type,
+      DataHeartRateAvg.type,
+      DataHeartRateMax.type,
+      DataHeartRateMin.type,
       ...PERFORMANCE_EXTRA_TYPE_STRINGS,
+      ...PERFORMANCE_RUN_DYNAMICS_TYPE_STRINGS,
       ...POWER_LIB_EXTRA_TYPE_STRINGS,
     ],
     singleValueTypes: [
@@ -182,7 +272,9 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataTemperatureAvg.type,
       DataTemperatureMax.type,
       DataTemperatureMin.type,
-      ...ENVIRONMENT_EXTRA_TYPE_STRINGS,
+      ...ENVIRONMENT_ABSOLUTE_PRESSURE_TYPE_STRINGS,
+      ...ENVIRONMENT_GRADE_TYPE_STRINGS,
+      ...ENVIRONMENT_DISTANCE_TYPE_STRINGS,
     ],
   },
   {
@@ -190,6 +282,7 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
     label: 'Device',
     metricTypes: [
       ...DEVICE_EXTRA_TYPE_STRINGS,
+      ...DEVICE_SIGNAL_EXTRA_TYPE_STRINGS,
     ],
   },
   {
@@ -221,6 +314,8 @@ export const EVENT_SUMMARY_DEFAULT_STAT_TYPES: string[] = [
   DataMovingTime.type,
   DataDistance.type,
   DataSpeedAvg.type,
+  ...EVENT_SUMMARY_GRADE_ADJUSTED_SPEED_TYPES,
+  ...EVENT_SUMMARY_GRADE_ADJUSTED_PACE_TYPES,
   DataVerticalSpeedAvg.type,
   DataEnergy.type,
   DataPower.type,
@@ -232,6 +327,7 @@ export const EVENT_SUMMARY_DEFAULT_STAT_TYPES: string[] = [
   DataAccumulatedPower.type,
   DataAirPower.type,
   ...PERFORMANCE_EXTRA_TYPE_STRINGS,
+  ...PERFORMANCE_RUN_DYNAMICS_TYPE_STRINGS,
   ...POWER_LIB_EXTRA_TYPE_STRINGS,
   DataAscent.type,
   DataDescent.type,
@@ -245,8 +341,11 @@ export const EVENT_SUMMARY_DEFAULT_STAT_TYPES: string[] = [
   DataTemperatureAvg.type,
   DataTemperatureMax.type,
   DataTemperatureMin.type,
-  ...ENVIRONMENT_EXTRA_TYPE_STRINGS,
+  ...ENVIRONMENT_ABSOLUTE_PRESSURE_TYPE_STRINGS,
+  ...ENVIRONMENT_GRADE_TYPE_STRINGS,
+  ...ENVIRONMENT_DISTANCE_TYPE_STRINGS,
   ...DEVICE_EXTRA_TYPE_STRINGS,
+  ...DEVICE_SIGNAL_EXTRA_TYPE_STRINGS,
   DataHeartRateAvg.type,
   DataHeartRateMax.type,
   DataHeartRateMin.type,

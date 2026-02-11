@@ -4,6 +4,9 @@ import {
   DataDuration,
   DataGradeAdjustedPaceAvg,
   DataGradeAdjustedSpeedAvg,
+  DataHeartRateAvg,
+  DataHeartRateMax,
+  DataHeartRateMin,
   DataPaceAvg,
   DataPowerAvg,
   DataRecoveryTime,
@@ -177,8 +180,6 @@ describe('buildSummaryMetricTabs', () => {
       'Battery Consumption',
       'Battery Current',
       'Battery Voltage',
-      'Distance (Stryd)',
-      'GNSS Distance',
     ]);
 
     expect(tabs.map((tab) => tab.id)).toEqual(['device']);
@@ -187,8 +188,149 @@ describe('buildSummaryMetricTabs', () => {
       'Battery Consumption',
       'Battery Current',
       'Battery Voltage',
+    ]);
+  });
+
+  it('should map new environment grade and pressure families', () => {
+    const tabs = buildSummaryMetricTabs([
+      'Absolute Pressure',
+      'Average Absolute Pressure',
+      'Minimum Absolute Pressure',
+      'Maximum Absolute Pressure',
+      'Grade',
+      'Average Grade',
+      'Minimum Grade',
+      'Maximum Grade',
       'Distance (Stryd)',
       'GNSS Distance',
+    ]);
+
+    expect(tabs.map((tab) => tab.id)).toEqual(['environment', 'device']);
+
+    const environmentTab = tabs.find((tab) => tab.id === 'environment');
+    expect(environmentTab?.metricTypes).toEqual([
+      'Absolute Pressure',
+      'Average Absolute Pressure',
+      'Minimum Absolute Pressure',
+      'Maximum Absolute Pressure',
+      'Grade',
+      'Average Grade',
+      'Minimum Grade',
+      'Maximum Grade',
+      'Distance (Stryd)',
+      'GNSS Distance',
+    ]);
+
+    const deviceTab = tabs.find((tab) => tab.id === 'device');
+    expect(deviceTab?.metricTypes).toEqual([
+      'Distance (Stryd)',
+      'GNSS Distance',
+    ]);
+  });
+
+  it('should map requested performance run-dynamics metrics', () => {
+    const tabs = buildSummaryMetricTabs([
+      'Form Power',
+      'Average Ground Contact Time',
+      'Minimum Ground Contact Time',
+      'Maximum Ground Contact Time',
+      'Stance Time',
+      'Stance Time Balance Left',
+      'Vertical Oscillation',
+      'Vertical Ratio',
+      'Average Vertical Ratio',
+      'Minimum Vertical Ratio',
+      'Maximum Vertical Ratio',
+      'Leg Stiffness',
+      'Average Leg Stiffness',
+      'Minimum Leg Stiffness',
+      'Maximum Leg Stiffness',
+    ]);
+
+    expect(tabs.map((tab) => tab.id)).toEqual(['performance']);
+    expect(tabs[0].metricTypes).toEqual([
+      'Average Ground Contact Time',
+      'Minimum Ground Contact Time',
+      'Maximum Ground Contact Time',
+      'Stance Time',
+      'Stance Time Balance Left',
+      'Vertical Oscillation',
+      'Vertical Ratio',
+      'Average Vertical Ratio',
+      'Minimum Vertical Ratio',
+      'Maximum Vertical Ratio',
+      'Leg Stiffness',
+      'Average Leg Stiffness',
+      'Minimum Leg Stiffness',
+      'Maximum Leg Stiffness',
+      'Form Power',
+    ]);
+  });
+
+  it('should map EVPE, EHPE and satellite families to device tab', () => {
+    const tabs = buildSummaryMetricTabs([
+      'EVPE',
+      'Average EVPE',
+      'Minimum EVPE',
+      'Maximum EVPE',
+      'EHPE',
+      'Average EHPE',
+      'Minimum EHPE',
+      'Maximum EHPE',
+      'Satellite 5 Best SNR',
+      'Average Satellite 5 Best SNR',
+      'Minimum Satellite 5 Best SNR',
+      'Maximum Satellite 5 Best SNR',
+      'Number of Satellites',
+      'Average Number of Satellites',
+      'Minimum Number of Satellites',
+      'Maximum Number of Satellites',
+    ]);
+
+    expect(tabs.map((tab) => tab.id)).toEqual(['device']);
+    expect(tabs[0].metricTypes).toEqual([
+      'EVPE',
+      'Average EVPE',
+      'Minimum EVPE',
+      'Maximum EVPE',
+      'EHPE',
+      'Average EHPE',
+      'Minimum EHPE',
+      'Maximum EHPE',
+      'Satellite 5 Best SNR',
+      'Average Satellite 5 Best SNR',
+      'Minimum Satellite 5 Best SNR',
+      'Maximum Satellite 5 Best SNR',
+      'Number of Satellites',
+      'Average Number of Satellites',
+      'Minimum Number of Satellites',
+      'Maximum Number of Satellites',
+    ]);
+  });
+
+  it('should keep physiological metrics and also expose heart rate in performance', () => {
+    const tabs = buildSummaryMetricTabs([
+      DataHeartRateAvg.type,
+      DataHeartRateMax.type,
+      DataHeartRateMin.type,
+      DataEnergy.type,
+    ]);
+
+    expect(tabs.map((tab) => tab.id)).toEqual(['overall', 'performance', 'physiological']);
+
+    const performanceTab = tabs.find((tab) => tab.id === 'performance');
+    expect(performanceTab?.metricTypes).toEqual([
+      DataHeartRateAvg.type,
+      DataHeartRateMax.type,
+      DataHeartRateMin.type,
+    ]);
+
+    const physiologicalTab = tabs.find((tab) => tab.id === 'physiological');
+    expect(physiologicalTab?.metricTypes).toEqual([
+      DataEnergy.type,
+      DataHeartRateAvg.type,
+      DataHeartRateMax.type,
+      DataHeartRateMin.type,
     ]);
   });
 });

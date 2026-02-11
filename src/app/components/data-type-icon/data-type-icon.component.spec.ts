@@ -66,4 +66,40 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon('Ascent Time')).toBe('elevation');
     expect(component.getColumnHeaderIcon('Descent Time')).toBe('elevation');
   });
+
+  it('should provide icon mappings for requested environment metrics', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon('Average Absolute Pressure')).toBe('compress');
+    expect(component.getColumnHeaderIcon('Minimum Absolute Pressure')).toBe('compress');
+    expect(component.getColumnHeaderIcon('Maximum Absolute Pressure')).toBe('compress');
+    expect(component.getColumnHeaderIcon('Average Grade')).toBe('landscape');
+    expect(component.getColumnHeaderIcon('Minimum Grade')).toBe('landscape');
+    expect(component.getColumnHeaderIcon('Maximum Grade')).toBe('landscape');
+  });
+
+  it('should provide icon mappings for requested performance run-dynamics metrics', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon('Average Ground Contact Time')).toBe('directions_walk');
+    expect(component.getColumnHeaderIcon('Minimum Ground Contact Time')).toBe('directions_walk');
+    expect(component.getColumnHeaderIcon('Maximum Ground Contact Time')).toBe('directions_walk');
+    expect(component.getColumnHeaderIcon('Vertical Oscillation')).toBe('swap_vert');
+    expect(component.getColumnHeaderIcon('Average Vertical Ratio')).toBe('show_chart');
+    expect(component.getColumnHeaderIcon('Average Leg Stiffness')).toBe('accessibility_new');
+    expect(component.getColumnHeaderIcon('Stance Time')).toBe('directions_walk');
+    expect(component.getColumnHeaderIcon('Stance Time Balance Left')).toBe('directions_walk');
+  });
+
+  it('should provide icon mappings for requested device metrics', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon('Average EVPE')).toBe('monitor_heart');
+    expect(component.getColumnHeaderIcon('Average EHPE')).toBe('monitor_heart');
+    expect(component.getColumnHeaderIcon('Average Satellite 5 Best SNR')).toBe('satellite_alt');
+    expect(component.getColumnHeaderIcon('Average Number of Satellites')).toBe('satellite_alt');
+    expect(component.getColumnHeaderIcon('Battery Charge')).toBe('battery_full');
+    expect(component.getColumnHeaderIcon('Battery Consumption')).toBe('battery_alert');
+    expect(component.getColumnHeaderIcon('Battery Current')).toBe('electric_bolt');
+  });
 });

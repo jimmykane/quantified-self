@@ -165,11 +165,22 @@ export class DataTypeIconComponent {
         return 'speed';
       case DataPaceAvg.type:
       case DataPaceAvgMinutesPerMile.type:
+      case 'Effort Pace':
         return 'directions_run';
       case DataTemperatureAvg.type:
       case DataTemperatureMax.type:
       case DataTemperatureMin.type:
         return 'device_thermostat';
+      case 'Absolute Pressure':
+      case 'Average Absolute Pressure':
+      case 'Minimum Absolute Pressure':
+      case 'Maximum Absolute Pressure':
+        return 'compress';
+      case 'Grade':
+      case 'Average Grade':
+      case 'Minimum Grade':
+      case 'Maximum Grade':
+        return 'landscape';
       case DataRecoveryTime.type:
         return 'update';
       case DataVO2Max.type:
@@ -189,7 +200,12 @@ export class DataTypeIconComponent {
       case 'Software Info':
         return 'system_update_alt';
       case 'Battery Level':
+      case 'Battery Charge':
         return 'battery_full';
+      case 'Battery Consumption':
+        return 'battery_alert';
+      case 'Battery Current':
+        return 'electric_bolt';
       case 'Battery Voltage':
         return 'bolt';
       case 'Product I. D.':
@@ -234,8 +250,53 @@ export class DataTypeIconComponent {
         return 'pace';
       case DataPeakEPOC.type:
         return null;
+      case 'EPOC':
+      case 'EVPE':
+      case 'Average EVPE':
+      case 'Minimum EVPE':
+      case 'Maximum EVPE':
+      case 'EHPE':
+      case 'Average EHPE':
+      case 'Minimum EHPE':
+      case 'Maximum EHPE':
+        return 'monitor_heart';
+      case 'Distance (Stryd)':
+      case 'GNSS Distance':
+        return 'route';
+      case 'Average Ground Contact Time':
+      case 'Minimum Ground Contact Time':
+      case 'Maximum Ground Contact Time':
+      case 'Stance Time':
+      case 'Stance Time Balance Left':
+      case 'Stance Time Balance Right':
+      case 'Ground Contact Time Balance Left':
+      case 'Ground Contact Time Balance Right':
+        return 'directions_walk';
+      case 'Vertical Oscillation':
+        return 'swap_vert';
+      case 'Vertical Ratio':
+      case 'Average Vertical Ratio':
+      case 'Minimum Vertical Ratio':
+      case 'Maximum Vertical Ratio':
+        return 'show_chart';
+      case 'Leg Stiffness':
+      case 'Average Leg Stiffness':
+      case 'Minimum Leg Stiffness':
+      case 'Maximum Leg Stiffness':
+        return 'accessibility_new';
+      case 'Satellite 5 Best SNR':
+      case 'Average Satellite 5 Best SNR':
+      case 'Minimum Satellite 5 Best SNR':
+      case 'Maximum Satellite 5 Best SNR':
+      case 'Number of Satellites':
+      case 'Average Number of Satellites':
+      case 'Minimum Number of Satellites':
+      case 'Maximum Number of Satellites':
+        return 'satellite_alt';
       case DataGradeAdjustedPaceAvg.type:
       case DataGradeAdjustedPaceAvgMinutesPerMile.type:
+      case 'Minimum Grade Adjusted Pace':
+      case 'Maximum Grade Adjusted Pace':
         return 'directions_run';
       case DataGradeAdjustedSpeedAvg.type:
       case DataGradeAdjustedSpeedAvgFeetPerMinute.type:
@@ -244,6 +305,8 @@ export class DataTypeIconComponent {
       case DataGradeAdjustedSpeedAvgMetersPerMinute.type:
       case DataGradeAdjustedSpeedAvgMilesPerHour.type:
       case DataGradeAdjustedSpeedAvgKnots.type:
+      case 'Minimum Grade Adjusted Speed':
+      case 'Maximum Grade Adjusted Speed':
         return 'speed';
       default:
         return null;

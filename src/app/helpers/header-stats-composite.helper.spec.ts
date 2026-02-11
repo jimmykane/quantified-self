@@ -35,6 +35,7 @@ describe('header-stats-composite.helper', () => {
       resolveMetricFamilyTypes(DataAltitudeAvg.type),
       resolveMetricFamilyTypes(DataSpeedAvgKilometersPerHour.type),
       resolveMetricFamilyTypes(DataPaceAvgMinutesPerMile.type),
+      resolveMetricFamilyTypes('Average Ground Contact Time'),
     ];
 
     families.forEach((family) => {
@@ -57,6 +58,14 @@ describe('header-stats-composite.helper', () => {
     expect(expanded.filter((type) => type === DataPowerAvg.type).length).toBe(1);
     expect(expanded.filter((type) => type === DataPowerMin.type).length).toBe(1);
     expect(expanded.filter((type) => type === DataPowerMax.type).length).toBe(1);
+  });
+
+  it('should expand diff source types for ground contact time family', () => {
+    const expanded = expandStatsTypesForCompositeDiff(['Average Ground Contact Time']);
+
+    expect(expanded).toContain('Average Ground Contact Time');
+    expect(expanded).toContain('Minimum Ground Contact Time');
+    expect(expanded).toContain('Maximum Ground Contact Time');
   });
 
   it('should force single card by family when avg type is configured as single-value', () => {
