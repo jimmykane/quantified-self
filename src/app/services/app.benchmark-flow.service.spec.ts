@@ -92,8 +92,7 @@ describe('AppBenchmarkFlowService', () => {
 
     expect(bottomSheet.open).toHaveBeenCalledTimes(1);
     expect(dialog.open).toHaveBeenCalledTimes(1);
-    expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_report_open');
-    expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_report_rerun');
+    expect(analyticsService.logEvent).not.toHaveBeenCalled();
   });
 
   it('opens selection dialog and runs benchmark when two activities returned', async () => {
@@ -113,8 +112,7 @@ describe('AppBenchmarkFlowService', () => {
       test: activityB,
       options
     }));
-    expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_selection_open');
-    expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_selection_confirm');
+    expect(analyticsService.logEvent).not.toHaveBeenCalled();
   });
 
   it('loads activities when missing and user provided', async () => {
@@ -135,8 +133,7 @@ describe('AppBenchmarkFlowService', () => {
 
     expect(eventService.getEventActivitiesAndAllStreams).toHaveBeenCalledWith(user, emptyEvent.getID());
     expect(dialog.open).toHaveBeenCalledTimes(1);
-    expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_selection_open');
-    expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_selection_cancel');
+    expect(analyticsService.logEvent).not.toHaveBeenCalled();
   });
 
   it('generates, persists, and reopens report', async () => {

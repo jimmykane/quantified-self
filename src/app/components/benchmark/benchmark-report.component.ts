@@ -11,7 +11,6 @@ import {
     UserUnitSettingsInterface
 } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
-import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { buildDiffMapForStats, buildStatDisplayList } from '../../helpers/stats-diff.helper';
 import { BenchmarkQualityIssue, BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
 
@@ -254,12 +253,8 @@ export class BenchmarkReportComponent implements OnChanges {
     expandedIssueGroups = new Set<string>();
 
     private eventColorService = inject(AppEventColorService);
-    private analyticsService = inject(AppAnalyticsService);
 
     ngOnChanges(changes: SimpleChanges) {
-        if (changes['result']?.currentValue) {
-            this.analyticsService.logEvent('benchmark_report_view');
-        }
         if (changes['result'] || changes['event'] || changes['unitSettings'] || changes['summariesSettings']) {
             this.updateDiffChips();
             this.updateQualityIssueGroups();
