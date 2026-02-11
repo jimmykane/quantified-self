@@ -31,6 +31,7 @@ import { LoggerService } from '../../services/logger.service';
 import { TracksMapManager } from './tracks-map.manager'; // Imported Manager
 import { MapStyleService } from '../../services/map-style.service';
 import { MapboxStyleSynchronizer } from '../../services/map/mapbox-style-synchronizer';
+import { MapStyleName } from '../../services/map/map-style.types';
 import { Search } from '../event-search/event-search.component';
 import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-detection.service';
 import { TripDetectionInput } from '../../services/my-tracks-trip-detection.service';
@@ -139,6 +140,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
       // 1. Update Map Style via Synchronizer
       const mapStyle = settings.mapStyle || 'default';
+      this.tracksMapManager.setMapStyle(mapStyle as MapStyleName);
       const resolved = this.mapStyleService.resolve(mapStyle, theme);
       synchronizer.update(resolved);
 

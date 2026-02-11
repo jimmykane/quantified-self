@@ -2,7 +2,11 @@ import { NgZone } from '@angular/core';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { ActivityTypes, AppThemes } from '@sports-alliance/sports-lib';
 import { MapStyleService } from '../../services/map-style.service';
+import { MapStyleName } from '../../services/map/map-style.types';
 import { LoggerService } from '../../services/logger.service';
+
+type TrackStyleMode = 'dark-glow' | 'light-contrast';
+type TrackLayerRole = 'glow' | 'casing' | 'main';
 
 export class TracksMapManager {
     private map: any; // Mapbox GL map instance
@@ -14,6 +18,7 @@ export class TracksMapManager {
     private pendingTerrainToggle: { enable: boolean; animate: boolean } | null = null;
     private pendingTerrainListenerAttached = false;
     private isDarkTheme = false;
+    private mapStyle: MapStyleName = 'default';
     private trackLayerBaseColors = new Map<string, string>();
 
     constructor(
@@ -31,6 +36,10 @@ export class TracksMapManager {
 
     public setIsDarkTheme(isDark: boolean) {
         this.isDarkTheme = isDark;
+    }
+
+    public setMapStyle(mapStyle: MapStyleName) {
+        this.mapStyle = mapStyle ?? 'default';
     }
 
     public getMap(): any {
@@ -75,6 +84,7 @@ export class TracksMapManager {
         const sourceId = `track-source-${activityId}`;
         const layerId = `track-layer-${activityId}`;
         const glowLayerId = `track-layer-glow-${activityId}`;
+        const casingLayerId = `track-layer-casing-${activityId}`;
         const colorInfo = this.resolveTrackColors(activity?.type);
         this.tracksByActivityId.set(activityId, {
             activity,
@@ -85,21 +95,17 @@ export class TracksMapManager {
         this.zone.runOutsideAngular(() => {
             try {
                 this.ensureTrackSource(sourceId, validCoordinates);
-                this.ensureTrackLayer(glowLayerId, sourceId, colorInfo.adjustedColor, {
-                    'line-width': 6,
-                    'line-blur': 3,
-                    'line-opacity': 0.6
-                });
-                this.ensureTrackLayer(layerId, sourceId, colorInfo.adjustedColor, {
-                    'line-width': 2.5,
-                    'line-opacity': 0.9
-                });
+                this.ensureTrackLayer(glowLayerId, sourceId, this.buildLayerPaint('glow', colorInfo.baseColor));
+                this.ensureTrackLayer(casingLayerId, sourceId, this.buildLayerPaint('casing', colorInfo.baseColor));
+                this.ensureTrackLayer(layerId, sourceId, this.buildLayerPaint('main', colorInfo.baseColor));
 
-                this.rememberActiveId(layerId);
                 this.rememberActiveId(glowLayerId);
+                this.rememberActiveId(casingLayerId);
+                this.rememberActiveId(layerId);
                 this.rememberActiveId(sourceId);
-                this.trackLayerBaseColors.set(layerId, colorInfo.baseColor);
                 this.trackLayerBaseColors.set(glowLayerId, colorInfo.baseColor);
+                this.trackLayerBaseColors.set(casingLayerId, colorInfo.baseColor);
+                this.trackLayerBaseColors.set(layerId, colorInfo.baseColor);
 
             } catch (error: any) {
                 if (error?.message?.includes('Style is not done loading')) {
@@ -147,9 +153,9 @@ export class TracksMapManager {
             this.trackLayerBaseColors.forEach((baseColor, layerId) => {
                 if (!this.map.getLayer?.(layerId) || !this.map.setPaintProperty) return;
                 try {
-                    const color = this.mapStyleService.adjustColorForTheme(baseColor, this.isDarkTheme ? AppThemes.Dark : AppThemes.Normal);
-                    this.map.setPaintProperty(layerId, 'line-color', color);
-                    this.map.setPaintProperty(layerId, 'line-emissive-strength', 1.0);
+                    const role = this.resolveLayerRole(layerId);
+                    const paint = this.buildLayerPaint(role, baseColor);
+                    this.applyPaintProperties(layerId, paint);
                 } catch (error: any) {
                     if (error?.message?.includes('Style is not done loading')) {
                         this.map.once('style.load', () => this.refreshTrackColors());
@@ -318,7 +324,7 @@ export class TracksMapManager {
         }
     }
 
-    private ensureTrackLayer(layerId: string, sourceId: string, color: string, paintOverrides: Record<string, number>) {
+    private ensureTrackLayer(layerId: string, sourceId: string, paint: Record<string, number | string>) {
         if (this.map.getLayer(layerId)) return;
 
         this.map.addLayer({
@@ -327,9 +333,7 @@ export class TracksMapManager {
             source: sourceId,
             layout: { 'line-join': 'round', 'line-cap': 'round' },
             paint: {
-                'line-color': color,
-                ...paintOverrides,
-                'line-emissive-strength': 1.0
+                ...paint
             }
         });
     }
@@ -352,6 +356,160 @@ export class TracksMapManager {
         const adjusted = this.mapStyleService.adjustColorForTheme(baseColor, this.isDarkTheme ? AppThemes.Dark : AppThemes.Normal);
         const adjustedColor = this.isHexColor(adjusted) ? adjusted : fallbackColor;
         return { baseColor, adjustedColor };
+    }
+
+    private resolveStyleMode(): TrackStyleMode {
+        if (this.mapStyle === 'default' && this.isDarkTheme) {
+            return 'dark-glow';
+        }
+        return 'light-contrast';
+    }
+
+    private isBusyMapStyle(): boolean {
+        return this.mapStyle === 'satellite' || this.mapStyle === 'outdoors';
+    }
+
+    private resolveLayerRole(layerId: string): TrackLayerRole {
+        if (layerId.includes('track-layer-glow-')) return 'glow';
+        if (layerId.includes('track-layer-casing-')) return 'casing';
+        return 'main';
+    }
+
+    private buildLayerPaint(role: TrackLayerRole, baseColor: string): Record<string, number | string> {
+        const theme = this.isDarkTheme ? AppThemes.Dark : AppThemes.Normal;
+        const styleMode = this.resolveStyleMode();
+        const isBusy = this.isBusyMapStyle();
+        const mainColor = this.getSafeColor(
+            this.mapStyleService.adjustColorForTheme(baseColor, theme),
+            baseColor
+        );
+        const casingColor = this.deriveCasingColor(baseColor, isBusy);
+
+        if (styleMode === 'dark-glow') {
+            switch (role) {
+                case 'glow':
+                    return {
+                        'line-color': mainColor,
+                        'line-width': 7,
+                        'line-blur': 4,
+                        'line-opacity': 0.55,
+                        'line-emissive-strength': 1.0
+                    };
+                case 'casing':
+                    return {
+                        'line-color': casingColor,
+                        'line-width': 0,
+                        'line-blur': 0,
+                        'line-opacity': 0,
+                        'line-emissive-strength': 0
+                    };
+                case 'main':
+                default:
+                    return {
+                        'line-color': mainColor,
+                        'line-width': 3,
+                        'line-blur': 0,
+                        'line-opacity': 0.95,
+                        'line-emissive-strength': 1.0
+                    };
+            }
+        }
+
+        switch (role) {
+            case 'glow':
+                return {
+                    'line-color': mainColor,
+                    'line-width': 0,
+                    'line-blur': 0,
+                    'line-opacity': 0,
+                    'line-emissive-strength': 0
+                };
+            case 'casing':
+                return {
+                    'line-color': casingColor,
+                    'line-width': isBusy ? 6.5 : 5.5,
+                    'line-blur': 0,
+                    'line-opacity': isBusy ? 0.85 : 0.75,
+                    'line-emissive-strength': 0
+                };
+            case 'main':
+            default:
+                return {
+                    'line-color': mainColor,
+                    'line-width': isBusy ? 3.2 : 3.0,
+                    'line-blur': 0,
+                    'line-opacity': 0.95,
+                    'line-emissive-strength': 0.6
+                };
+        }
+    }
+
+    private applyPaintProperties(layerId: string, paint: Record<string, number | string>) {
+        Object.entries(paint).forEach(([property, value]) => {
+            this.map.setPaintProperty(layerId, property, value);
+        });
+    }
+
+    private getSafeColor(color: string, fallback: string): string {
+        return this.isHexColor(color) ? color : fallback;
+    }
+
+    private deriveCasingColor(baseColor: string, isBusy: boolean): string {
+        const fallback = isBusy ? '#111111' : '#1a1a1a';
+        if (!this.isHexColor(baseColor)) return fallback;
+        let hex = baseColor.trim().toLowerCase();
+        if (hex.startsWith('#')) hex = hex.slice(1);
+        if (hex.length === 3) hex = `${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`;
+        if (!/^[0-9a-f]{6}$/.test(hex)) return fallback;
+
+        const r = parseInt(hex.slice(0, 2), 16) / 255;
+        const g = parseInt(hex.slice(2, 4), 16) / 255;
+        const b = parseInt(hex.slice(4, 6), 16) / 255;
+
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        let h = 0;
+        let s = 0;
+        let l = (max + min) / 2;
+
+        if (max !== min) {
+            const d = max - min;
+            s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+            switch (max) {
+                case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                case g: h = (b - r) / d + 2; break;
+                case b: h = (r - g) / d + 4; break;
+            }
+            h /= 6;
+        }
+
+        const targetL = isBusy ? 0.15 : 0.18;
+        const minS = isBusy ? 0.55 : 0.5;
+        l = targetL;
+        s = Math.max(s, minS);
+
+        const hue2rgb = (p: number, q: number, t: number) => {
+            if (t < 0) t += 1;
+            if (t > 1) t -= 1;
+            if (t < 1 / 6) return p + (q - p) * 6 * t;
+            if (t < 1 / 2) return q;
+            if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+            return p;
+        };
+
+        let nr: number, ng: number, nb: number;
+        if (s === 0) {
+            nr = ng = nb = l;
+        } else {
+            const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+            const p = 2 * l - q;
+            nr = hue2rgb(p, q, h + 1 / 3);
+            ng = hue2rgb(p, q, h);
+            nb = hue2rgb(p, q, h - 1 / 3);
+        }
+
+        const toHex = (v: number) => Math.round(v * 255).toString(16).padStart(2, '0');
+        return `#${toHex(nr)}${toHex(ng)}${toHex(nb)}`;
     }
 
     private rememberActiveId(id: string) {
