@@ -385,7 +385,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   }
 
   // If we finished the loop without returning, it means every token attempt failed.
-  logger.error(new Error(`Could not process ANY tokens for ${queueItem.id} after checking all ${tokenQuerySnapshots.size} tokens. Increasing retry count.`));
+  logger.error(new Error(`Could not process ANY tokens for ${queueItem.id} after checking all ${tokenQuerySnapshots.size} tokens. Last error: ${lastError.message}. Increasing retry count.`));
   return increaseRetryCountForQueueItem(queueItem, lastError, retryIncrement, bulkWriter);
 }
 
