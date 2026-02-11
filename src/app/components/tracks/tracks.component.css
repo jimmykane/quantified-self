@@ -2,7 +2,12 @@ mat-card {
   padding: 0;
   position: relative;
   height: calc(100vh - var(--qs-layout-top-offset, 64px));
-  height: calc(100dvh - var(--qs-layout-top-offset, 64px));
+}
+
+@supports (height: 100dvh) {
+  mat-card {
+    height: calc(100dvh - var(--qs-layout-top-offset, 64px));
+  }
 }
 
 #map {
