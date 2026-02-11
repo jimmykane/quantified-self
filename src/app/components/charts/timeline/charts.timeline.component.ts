@@ -26,6 +26,7 @@ import { ChartHelper } from '../../event/chart/chart-helper';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../../services/logger.service';
+import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
 
 @Component({
   selector: 'app-timeline-chart',
@@ -151,7 +152,8 @@ export class ChartsTimelineComponent extends DashboardChartAbstractDirective imp
     label.adapter.add('text', (text, target, key) => {
       const data = this.getAggregateData((<am4charts.Series>target.parent).chart.data, this.chartDataValueType);
       // return `[font-size: 1.3em]${value.getDisplayType()}[/] [bold font-size: 1.4em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType} )`;
-      return `[font-size: 1.3em]${data.getDisplayType()}[/]
+      const normalizedLabel = normalizeUnitDerivedTypeLabel(data.getType(), data.getDisplayType());
+      return `[font-size: 1.3em]${normalizedLabel}[/]
               [font-size: 1.4em]${data.getDisplayValue()}${data.getDisplayUnit()}[/]
               [font-size: 1.0em]${this.chartDataValueType}[/]`
     });

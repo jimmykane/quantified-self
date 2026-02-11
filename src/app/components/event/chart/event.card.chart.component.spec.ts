@@ -15,7 +15,7 @@ import { LoggerService } from '../../../services/logger.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ChangeDetectorRef, CUSTOM_ELEMENTS_SCHEMA, NgZone, signal } from '@angular/core';
 import { of } from 'rxjs';
-import { ActivityTypes, DataAltitude } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataAltitude, DataPowerAvg, DataSpeedAvgKilometersPerHour } from '@sports-alliance/sports-lib';
 
 describe('EventCardChartComponent', () => {
     let component: EventCardChartComponent;
@@ -54,7 +54,9 @@ describe('EventCardChartComponent', () => {
             getChartTheme: vi.fn().mockReturnValue({}),
             load: vi.fn().mockResolvedValue({ core: {}, charts: {} })
         };
-        mockEventColorService = {};
+        mockEventColorService = {
+            getActivityColor: vi.fn().mockReturnValue('#ff0000')
+        };
         mockUserService = {
             getUser: vi.fn().mockReturnValue(of({})),
             getUserChartDataTypesToUse: vi.fn().mockReturnValue([])
@@ -184,6 +186,102 @@ describe('EventCardChartComponent', () => {
             const label = (component as any).createLabel(mockContainer, series, labelDataMock);
 
             expect(label).toBeDefined();
+        });
+    });
+
+    describe('createOrUpdateChartSeries labels', () => {
+        it('should normalize unit-derived speed label in tooltip, legend, and dummyData displayName', () => {
+            const activity = {
+                creator: { name: 'Garmin' },
+                getID: () => 'a1'
+            } as any;
+            const stream = { type: DataSpeedAvgKilometersPerHour.type } as any;
+
+            component.event = {
+                getActivities: () => [activity, { creator: { name: 'Coros' }, getID: () => 'a2' }],
+                isMultiSport: () => false,
+                getActivityTypesAsArray: () => [ActivityTypes.Cycling],
+            } as any;
+
+            (component as any).chart = {
+                isDisposed: () => false,
+                series: {
+                    values: [],
+                    push: vi.fn((series: any) => series),
+                },
+                yAxes: {
+                    getIndex: vi.fn().mockReturnValue({}),
+                    push: vi.fn().mockReturnValue({}),
+                },
+            };
+            (component as any).charts = {
+                LineSeries: function () {
+                    return {
+                        adapter: { add: vi.fn() },
+                        events: { on: vi.fn() },
+                        dataFields: {},
+                        legendSettings: {},
+                    };
+                },
+            };
+
+            vi.spyOn(component as any, 'attachSeriesEventListeners').mockImplementation(() => { });
+            vi.spyOn(component as any, 'convertStreamDataToSeriesData').mockReturnValue([]);
+            vi.spyOn(component as any, 'getYAxisForSeries').mockReturnValue({});
+
+            const series = (component as any).createOrUpdateChartSeries(activity, stream);
+
+            expect(series).toBeTruthy();
+            expect(series.dummyData.displayName).toBe('Average Speed');
+            expect(series.tooltipText).toContain('Average Speed');
+            expect(series.legendSettings.labelText).toContain('Average Speed');
+        });
+
+        it('should keep non-unit-derived power labels unchanged', () => {
+            const activity = {
+                creator: { name: 'Garmin' },
+                getID: () => 'a1'
+            } as any;
+            const stream = { type: DataPowerAvg.type } as any;
+
+            component.event = {
+                getActivities: () => [activity, { creator: { name: 'Coros' }, getID: () => 'a2' }],
+                isMultiSport: () => false,
+                getActivityTypesAsArray: () => [ActivityTypes.Cycling],
+            } as any;
+
+            (component as any).chart = {
+                isDisposed: () => false,
+                series: {
+                    values: [],
+                    push: vi.fn((series: any) => series),
+                },
+                yAxes: {
+                    getIndex: vi.fn().mockReturnValue({}),
+                    push: vi.fn().mockReturnValue({}),
+                },
+            };
+            (component as any).charts = {
+                LineSeries: function () {
+                    return {
+                        adapter: { add: vi.fn() },
+                        events: { on: vi.fn() },
+                        dataFields: {},
+                        legendSettings: {},
+                    };
+                },
+            };
+
+            vi.spyOn(component as any, 'attachSeriesEventListeners').mockImplementation(() => { });
+            vi.spyOn(component as any, 'convertStreamDataToSeriesData').mockReturnValue([]);
+            vi.spyOn(component as any, 'getYAxisForSeries').mockReturnValue({});
+
+            const series = (component as any).createOrUpdateChartSeries(activity, stream);
+
+            expect(series).toBeTruthy();
+            expect(series.dummyData.displayName).toBe('Average Power');
+            expect(series.tooltipText).toContain('Average Power');
+            expect(series.legendSettings.labelText).toContain('Average Power');
         });
     });
 });

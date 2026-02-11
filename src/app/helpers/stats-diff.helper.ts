@@ -1,4 +1,5 @@
 import { ActivityInterface, DataInterface, DynamicDataLoader, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import { normalizeUnitDerivedTypeLabel } from './stat-label.helper';
 
 export interface StatDiffResult {
   display: string;
@@ -93,7 +94,10 @@ export const buildStatDisplayList = (
         return;
       }
       seen.add(displayType);
-      displayList.push({ type: displayType, label: unitStat.getDisplayType() });
+      displayList.push({
+        type: displayType,
+        label: normalizeUnitDerivedTypeLabel(displayType, unitStat.getDisplayType()),
+      });
     });
   });
 

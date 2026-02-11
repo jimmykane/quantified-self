@@ -23,6 +23,7 @@ import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-com
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../../services/logger.service';
+import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
 
 
 @Component({
@@ -113,7 +114,8 @@ export class ChartsPieComponent extends DashboardChartAbstractDirective implemen
     }
     label.adapter.add('textOutput', (text, target, key) => {
       const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(text));
-      return `[font-size: 1.2em]${data.getDisplayType()}[/]
+      const normalizedLabel = normalizeUnitDerivedTypeLabel(data.getType(), data.getDisplayType());
+      return `[font-size: 1.2em]${normalizedLabel}[/]
               [font-size: 1.3em]${data.getDisplayValue()}${data.getDisplayUnit()}[/]
               [font-size: 0.9em]${this.chartDataValueType}[/]`
     });

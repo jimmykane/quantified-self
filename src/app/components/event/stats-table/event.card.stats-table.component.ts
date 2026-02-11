@@ -17,6 +17,7 @@ import { SelectionModel } from '@angular/cdk/collections';
 import { DataExportService } from '../../../services/data-export.service';
 import { expandCollapse } from '../../../animations/animations';
 import { computeStatDiff } from '../../../helpers/stats-diff.helper';
+import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
 
 @Component({
   selector: 'app-event-stats-table',
@@ -36,6 +37,7 @@ export class EventCardStatsTableComponent implements OnChanges {
   columns!: string[];
   appColors = AppColors;
   selection = new SelectionModel<any>(true, []);
+  private readonly rowTypeKey = '__statType';
 
   constructor(
     private eventColorService: AppEventColorService,
@@ -115,6 +117,7 @@ export class EventCardStatsTableComponent implements OnChanges {
     // Create the data as rows
     const data = Array.from(stats.values()).reduce((array, stat) => {
       let isComplexObject = false;
+      const rowLabel = normalizeUnitDerivedTypeLabel(stat.getType(), stat.getDisplayType());
       const row = this.selectedActivities.reduce((rowObj: any, activity, index) => {
         const activityStat = activity.getStat(stat.getType());
         if (!activityStat) {
@@ -133,7 +136,7 @@ export class EventCardStatsTableComponent implements OnChanges {
           ' ' +
           (displayUnit || '');
         return rowObj;
-      }, { Name: `${stat.getDisplayType()}` } as any);
+      }, { Name: rowLabel, [this.rowTypeKey]: stat.getType() } as any);
 
       if (!isComplexObject) {
         array.push(row);
@@ -146,7 +149,7 @@ export class EventCardStatsTableComponent implements OnChanges {
     if (this.event?.isMerge && this.selectedActivities.length === 2) {
       this.columns = this.columns.concat(['Difference']);
       Array.from(stats.values()).forEach((stat: DataInterface) => {
-        const row = data.find(r => r.Name === stat.getDisplayType());
+        const row = data.find(r => r[this.rowTypeKey] === stat.getType());
         if (!row) {
           return;
         }

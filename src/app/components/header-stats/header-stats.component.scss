@@ -11,15 +11,17 @@ section.grid {
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 12px;
   padding: 8px 0;
+  align-items: start;
 }
 
 .stat-item {
   display: flex;
   flex-direction: row;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-start;
   padding: 10px 12px;
   min-width: 0;
+  align-self: start;
   border: 1px solid var(--mat-app-outline-variant);
   border-radius: 12px;
   background-color: var(--mat-app-surface-container-low);
@@ -123,30 +125,43 @@ section.grid {
   width: 100%;
 }
 
-.stat-value-row {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.stat-value-main {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  font-size: 0.95rem;
-  font-weight: 400;
-  color: var(--mat-app-on-surface);
-  line-height: 1.2;
-  white-space: nowrap;
-  font-family: 'Barlow Condensed', sans-serif;
-}
-
 .stat-value-key {
-  font-size: 0.55rem;
+  font-size: 0.52rem;
   font-weight: 600;
   letter-spacing: 0.06em;
   color: var(--mat-app-on-surface-variant);
   opacity: 0.9;
+  text-align: left;
+}
+
+.stat-values-compact {
+  display: grid;
+  grid-template-rows: auto auto;
+  row-gap: 2px;
+  width: 100%;
+}
+
+.stat-keys-row,
+.stat-values-row,
+.stat-diff-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  column-gap: 8px;
+}
+
+.stat-values-row {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.96rem;
+  line-height: 1.12;
+  color: var(--mat-app-on-surface);
+}
+
+.stat-value-cell {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stat-value-diff {
@@ -159,6 +174,24 @@ section.grid {
   width: 100%;
   font-family: 'Barlow Condensed', sans-serif;
   opacity: 0.8;
+}
+
+.stat-diff-row {
+  margin-top: 2px;
+}
+
+.stat-diff-cell {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 0.58rem;
+  line-height: 1.05;
+  font-family: 'Barlow Condensed', sans-serif;
+}
+
+.stat-diff-cell-empty {
+  visibility: hidden;
 }
 
 /* Condensed (Chips) Container */
@@ -223,10 +256,19 @@ section.condensed {
   }
 
   .stat-value-key {
+    font-size: 0.47rem;
+  }
+
+  .stat-values-row {
+    font-size: 0.74rem;
+  }
+
+  .stat-diff-cell {
     font-size: 0.5rem;
   }
 
-  .stat-value-diff {
-    font-size: 0.52rem;
+  // Give composite cards more horizontal space on mobile while keeping desktop layout.
+  .stat-item--composite {
+    grid-column: span 2;
   }
 }

@@ -1,4 +1,5 @@
 import { DataInterface, DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { normalizeUnitDerivedStatLabel, normalizeUnitDerivedTypeLabel } from './stat-label.helper';
 
 export type HeaderStatValueKind = 'avg' | 'min' | 'max' | 'single';
 
@@ -85,7 +86,7 @@ const createValueItem = (
     kind,
     key,
     type: stat.getType(),
-    displayType: stat.getDisplayType(),
+    displayType: normalizeUnitDerivedStatLabel(stat),
     displayValue: toDisplayText(stat.getDisplayValue()),
     displayUnit: toDisplayText(stat.getDisplayUnit()),
   };
@@ -94,7 +95,7 @@ const createValueItem = (
 const createSingleCard = (stat: DataInterface): HeaderStatCard => {
   return {
     id: `single:${stat.getType()}`,
-    label: stat.getDisplayType(),
+    label: normalizeUnitDerivedStatLabel(stat),
     iconType: stat.getType(),
     isComposite: false,
     valueItems: [createValueItem('single', 'VALUE', stat)],
@@ -191,7 +192,7 @@ export const buildHeaderStatCards = (
 
     cards.push({
       id: familyKey,
-      label: familyTypes.familyType,
+      label: normalizeUnitDerivedTypeLabel(familyTypes.familyType, familyTypes.familyType),
       iconType: valueItems[0].type,
       isComposite: true,
       valueItems,

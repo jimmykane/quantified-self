@@ -3,7 +3,7 @@
   @if (layout === 'grid') {
   <section class="grid">
     @for (card of displayedStatCards; track card.id) {
-    <div class="stat-item">
+    <div class="stat-item" [class.stat-item--composite]="card.isComposite">
       <div class="stat-avatar">
         <app-data-type-icon [size]="'24px'" [vAlign]="'middle'" [dataType]="card.iconType"></app-data-type-icon>
       </div>
@@ -12,20 +12,28 @@
           {{card.label}}
         </div>
         @if (card.isComposite) {
-        <div class="stat-values-stack">
-          @for (valueItem of card.valueItems; track valueItem.type) {
-          <div class="stat-value-row">
-            <div class="stat-value-main">
-              <span class="stat-value-key">{{ valueItem.key }}</span>
-              <span>{{valueItem.displayValue}} {{valueItem.displayUnit}}</span>
-            </div>
+        <div class="stat-values-compact">
+          <div class="stat-keys-row">
+            @for (valueItem of card.valueItems; track valueItem.type) {
+            <span class="stat-value-key">{{ valueItem.key }}</span>
+            }
+          </div>
+          <div class="stat-values-row">
+            @for (valueItem of card.valueItems; track valueItem.type) {
+            <span class="stat-value-cell">{{valueItem.displayValue}} {{valueItem.displayUnit}}</span>
+            }
+          </div>
+          @if (showDiff) {
+          <div class="stat-diff-row">
+            @for (valueItem of card.valueItems; track valueItem.type) {
             @if (getDiffForType(valueItem.type); as diff) {
-            <div class="stat-value-diff">
+            <span class="stat-diff-cell">
               <span class="stat-diff-value">Δ {{ diff.display }}</span>
-              <span class="stat-diff-percent" [style.color]="diff.color">
-                {{ diff.percent.toFixed(1) }}%
-              </span>
-            </div>
+              <span class="stat-diff-percent" [style.color]="diff.color">{{ diff.percent.toFixed(1) }}%</span>
+            </span>
+            } @else {
+            <span class="stat-diff-cell stat-diff-cell-empty"></span>
+            }
             }
           </div>
           }
@@ -55,7 +63,7 @@
   <section class="condensed">
     <mat-chip-set role="list">
       @for (stat of displayedStats; track stat) {
-      <mat-chip role="listitem" [matTooltip]="stat.getDisplayType()" class="stat-chip" [highlighted]="false"
+      <mat-chip role="listitem" [matTooltip]="getNormalizedStatLabel(stat)" class="stat-chip" [highlighted]="false"
         [disableRipple]="true">
         <app-data-type-icon matChipAvatar [size]="'18px'" [vAlign]="'middle'"
           [dataType]="stat.getType()"></app-data-type-icon>

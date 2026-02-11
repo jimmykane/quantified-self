@@ -24,6 +24,7 @@ import { LoggerService } from '../../../services/logger.service';
 import { AppColors } from '../../../services/color/app.colors';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { ChartDataCategoryTypes, TimeIntervals } from '@sports-alliance/sports-lib';
+import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
 
 
 @Component({
@@ -67,7 +68,8 @@ export class ChartsColumnsComponent extends DashboardChartAbstractDirective impl
     chartTitle.adapter.add('text', (text, target, key) => {
       const data = target.parent.parent.parent.parent['data'];
       const value = this.getAggregateData(data, this.chartDataValueType);
-      return `[font-size: 1.4em]${value.getDisplayType()}[/] [bold font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType}${this.chartDataCategoryType === ChartDataCategoryTypes.DateType ? ` @ ${TimeIntervals[this.chartDataTimeInterval]}` : ``})`;
+      const normalizedLabel = normalizeUnitDerivedTypeLabel(value.getType(), value.getDisplayType());
+      return `[font-size: 1.4em]${normalizedLabel}[/] [bold font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType}${this.chartDataCategoryType === ChartDataCategoryTypes.DateType ? ` @ ${TimeIntervals[this.chartDataTimeInterval]}` : ``})`;
     });
     chartTitle.marginTop = core.percent(20);
     const categoryAxis = this.vertical ? chart.xAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval, charts)) : chart.yAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval, charts));

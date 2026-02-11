@@ -98,6 +98,7 @@ import { AppEventInterface } from '../../../../../functions/src/shared/app-event
 import { AppColors } from '../../../services/color/app.colors';
 import { ActivityUtilities } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../../services/logger.service';
+import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 8;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 1.5;
@@ -584,41 +585,43 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           }
 
           // Here we have all the data we need
+          const streamType = series.dummyData.stream.type;
+          const streamDataClass = DynamicDataLoader.getDataClassFromDataType(streamType);
           const labelData = <LabelData>{
-            name: DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).type,
+            name: normalizeUnitDerivedTypeLabel(streamType, streamDataClass.displayType || streamDataClass.type),
             average: {
-              value: data.length ? `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getAverage(data)).getDisplayValue()}` : '--',
-              unit: `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getAverage(data)).getDisplayUnit()}`
+              value: data.length ? `${<string>DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getAverage(data)).getDisplayValue()}` : '--',
+              unit: `${<string>DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getAverage(data)).getDisplayUnit()}`
             },
             max: {
-              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data)).getDisplayValue()}` : '--',
-              unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data)).getDisplayUnit()}`
+              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getMax(data)).getDisplayValue()}` : '--',
+              unit: `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getMax(data)).getDisplayUnit()}`
             },
             min: {
-              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMin(data)).getDisplayValue()}` : '--',
-              unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMin(data)).getDisplayUnit()}`
+              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getMin(data)).getDisplayValue()}` : '--',
+              unit: `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getMin(data)).getDisplayUnit()}`
             },
             minToMaxDiff: {
-              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)).getDisplayValue()}` : '--',
-              unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)).getDisplayUnit()}`
+              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)).getDisplayValue()}` : '--',
+              unit: `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)).getDisplayUnit()}`
             }
           };
 
           if (this.doesDataTypeSupportGainOrLoss(series.dummyData.stream.type)) {
             labelData.gain = {
-              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
-              unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayUnit()}`
+              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
+              unit: `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayUnit()}`
             };
             labelData.loss = {
-              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
-              unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayUnit()}`
+              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
+              unit: `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayUnit()}`
             };
           }
 
-          if (this.doesDataTypeSupportSlope(series.dummyData.stream.type) && seriesXAxisType === XAxisTypes.Distance) {
+          if (this.doesDataTypeSupportSlope(streamType) && seriesXAxisType === XAxisTypes.Distance) {
             labelData.slopePercentage = {
-              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)) / ((end as number) - (start as number)) * 100).getDisplayValue()}` : '--',
-              unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)) / ((end as number) - (start as number)) * 100).getDisplayUnit()}`
+              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(streamType, (ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)) / ((end as number) - (start as number)) * 100).getDisplayValue()}` : '--',
+              unit: `${DynamicDataLoader.getDataInstanceFromDataType(streamType, (ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)) / ((end as number) - (start as number)) * 100).getDisplayUnit()}`
             };
           }
 
@@ -1291,16 +1294,23 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     series.dummyData = {
       activity: activity,
       stream: stream,
-      displayName: DynamicDataLoader.getDataClassFromDataType(stream.type).displayType
+      displayName: normalizeUnitDerivedTypeLabel(
+        stream.type,
+        DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type
+      )
     };
 
     this.attachSeriesEventListeners(series);
 
-    series.tooltipText = ([DataPace.type, DataSwimPace.type, DataSwimPaceMinutesPer100Yard.type, DataPaceMinutesPerMile.type, DataGradeAdjustedPace.type, DataGradeAdjustedPaceMinutesPerMile.type].indexOf(stream.type) !== -1) ?
-      `${this.event.getActivities().length === 1 || this.event.isMultiSport() ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY.formatDuration()} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`
-      : `${this.event.getActivities().length === 1 || this.event.isMultiSport() ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
+    const streamDataClass = DynamicDataLoader.getDataClassFromDataType(stream.type);
+    const normalizedLabel = normalizeUnitDerivedTypeLabel(stream.type, streamDataClass.displayType || streamDataClass.type);
+    const activityPrefix = this.event.getActivities().length === 1 || this.event.isMultiSport() ? '' : `${activity.creator.name} `;
 
-    series.legendSettings.labelText = `${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} ` + (DynamicDataLoader.getDataClassFromDataType(stream.type).unit ? ` (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})` : '') + ` [${this.core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity)).toString()}]${this.event.getActivities().length === 1 || this.event.isMultiSport() ? '' : activity.creator.name}[/]`;
+    series.tooltipText = ([DataPace.type, DataSwimPace.type, DataSwimPaceMinutesPer100Yard.type, DataPaceMinutesPerMile.type, DataGradeAdjustedPace.type, DataGradeAdjustedPaceMinutesPerMile.type].indexOf(stream.type) !== -1) ?
+      `${activityPrefix}${normalizedLabel} {valueY.formatDuration()} ${streamDataClass.unit}`
+      : `${activityPrefix}${normalizedLabel} {valueY} ${streamDataClass.unit}`;
+
+    series.legendSettings.labelText = `${normalizedLabel} ` + (streamDataClass.unit ? ` (${streamDataClass.unit})` : '') + ` [${this.core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity)).toString()}]${this.event.getActivities().length === 1 || this.event.isMultiSport() ? '' : activity.creator.name}[/]`;
 
     series.adapter.add('fill', (fill, target) => {
       return this.getSeriesColor(target);

@@ -3,6 +3,7 @@ import { DataInterface } from '@sports-alliance/sports-lib';
 import { UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { buildHeaderStatCards, HeaderStatCard } from '../../helpers/header-stats-composite.helper';
+import { normalizeUnitDerivedStatLabel } from '../../helpers/stat-label.helper';
 
 @Component({
   selector: 'app-header-stats',
@@ -63,6 +64,10 @@ export class HeaderStatsComponent implements OnChanges {
       return null;
     }
     return this.diffByType.get(statType) || null;
+  }
+
+  getNormalizedStatLabel(stat: DataInterface) {
+    return normalizeUnitDerivedStatLabel(stat);
   }
 
 

@@ -85,6 +85,40 @@ describe('header-stats-composite.helper', () => {
 
     expect(cards.length).toBe(1);
     expect(cards[0].isComposite).toBe(false);
+    expect(cards[0].label).toBe('Average Speed');
     expect(cards[0].valueItems.map((item) => item.type)).toEqual([avgStat.getType()]);
+  });
+
+  it('should normalize composite family and value labels for unit-derived stats', () => {
+    const speedFamily = resolveMetricFamilyTypes(DataSpeedAvgKilometersPerHour.type)!;
+
+    const createStat = (type: string, label: string, value: string, unit = '') => ({
+      getType: () => type,
+      getDisplayType: () => label,
+      getDisplayValue: () => value,
+      getDisplayUnit: () => unit,
+    } as any);
+
+    const avgStat = createStat(speedFamily.avgType!, 'Average speed in kilometers per hour', '30', 'km/h');
+    const minStat = createStat(speedFamily.minType!, 'Minimum speed in kilometers per hour', '10', 'km/h');
+    const maxStat = createStat(speedFamily.maxType!, 'Maximum speed in kilometers per hour', '55', 'km/h');
+
+    const cards = buildHeaderStatCards(
+      [avgStat],
+      new Map([
+        [avgStat.getType(), avgStat],
+        [minStat.getType(), minStat],
+        [maxStat.getType(), maxStat],
+      ])
+    );
+
+    expect(cards.length).toBe(1);
+    expect(cards[0].isComposite).toBe(true);
+    expect(cards[0].label).toBe('Speed');
+    expect(cards[0].valueItems.map((item) => item.displayType)).toEqual([
+      'Average Speed',
+      'Minimum Speed',
+      'Maximum Speed',
+    ]);
   });
 });

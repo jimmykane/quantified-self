@@ -7,6 +7,7 @@ import {
   DataPowerAvg,
   DataPowerMax,
   DataPowerMin,
+  DataSpeedAvgKilometersPerHour,
   DynamicDataLoader,
 } from '@sports-alliance/sports-lib';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -156,5 +157,18 @@ describe('HeaderStatsComponent', () => {
     expect(component.displayedStatCards.length).toBe(1);
     expect(component.displayedStatCards[0].isComposite).toBe(false);
     expect(component.displayedStatCards[0].valueItems.map(item => item.type)).toEqual([DataHeartRateAvg.type]);
+  });
+
+  it('should normalize unit-derived labels while keeping non-unit labels unchanged', () => {
+    const derived = createStat(
+      DataSpeedAvgKilometersPerHour.type,
+      'Average speed in kilometers per hour',
+      '31',
+      'km/h'
+    );
+    const nonDerived = createStat(DataPowerAvg.type, 'Average Power', '250', 'W');
+
+    expect(component.getNormalizedStatLabel(derived)).toBe('Average Speed');
+    expect(component.getNormalizedStatLabel(nonDerived)).toBe('Average Power');
   });
 });
