@@ -3,6 +3,7 @@ import { AppLoadingOverlayComponent } from './loading-overlay.component';
 import { AppSkeletonComponent } from '../skeleton/app.skeleton.component';
 import { ShadeComponent } from '../shade.component';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatIconModule } from '@angular/material/icon';
 import { By } from '@angular/platform-browser';
 
 describe('AppLoadingOverlayComponent', () => {
@@ -12,7 +13,7 @@ describe('AppLoadingOverlayComponent', () => {
     beforeEach(async () => {
         await TestBed.configureTestingModule({
             declarations: [AppLoadingOverlayComponent, AppSkeletonComponent, ShadeComponent],
-            imports: [MatProgressBarModule]
+            imports: [MatProgressBarModule, MatIconModule]
         }).compileComponents();
 
         fixture = TestBed.createComponent(AppLoadingOverlayComponent);

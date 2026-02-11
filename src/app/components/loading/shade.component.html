@@ -1,12 +1,17 @@
 @if (isActive || hasError) {
-  <div class="loading-shade"
-    >
+  <div class="loading-shade" [class.error-state]="hasError && !isActive">
     @if (isActive && showProgressBar) {
       <mat-progress-bar [mode]="mode"></mat-progress-bar>
     }
     @if (hasError && !isActive) {
       <div class="error">
-        {{ errorMessage }}
+        <mat-icon aria-hidden="true">{{ icon }}</mat-icon>
+        <div class="error-copy">
+          <div class="title">{{ errorMessage }}</div>
+          @if (hint) {
+            <div class="hint">{{ hint }}</div>
+          }
+        </div>
       </div>
     }
   </div>

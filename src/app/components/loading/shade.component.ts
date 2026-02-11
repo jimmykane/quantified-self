@@ -15,6 +15,8 @@ export class ShadeComponent {
   @Input() isActive: boolean;
   @Input() hasError: boolean;
   @Input() errorMessage: string;
+  @Input() hint?: string;
+  @Input() icon: string = 'insights';
   @Input() showProgressBar: boolean = true;
   @Input() mode: 'determinate' | 'indeterminate' | 'buffer' | 'query' = 'indeterminate';
 }

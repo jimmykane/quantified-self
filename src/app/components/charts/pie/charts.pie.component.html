@@ -1,4 +1,5 @@
-<app-loading-overlay [isLoading]="isLoading" [hasError]="data && data.length === 0" [errorMessage]="'Nothing to show'"
-  [showSkeleton]="false" height="100%" [style.height.%]="100">
+<app-loading-overlay [isLoading]="isLoading" [hasError]="data && data.length === 0" [errorMessage]="'No data yet'"
+  [errorHint]="'Try a different date range or metric'" [errorIcon]="'pie_chart'" [showSkeleton]="false" height="100%"
+  [style.height.%]="100">
   <div #chartDiv [style.min-width.%]="100" [style.min-height.%]="100"></div>
 </app-loading-overlay>

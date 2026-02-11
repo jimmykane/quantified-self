@@ -1,5 +1,6 @@
 <app-loading-overlay [isLoading]="isLoading" [hasError]="noMapData"
-  [errorMessage]="'Nothing to show'" [showSkeleton]="false" height="100%" minHeight="100%">
+  [errorMessage]="'No map data yet'" [errorHint]="'Pan/zoom wider or load more activities to see clusters'"
+  [errorIcon]="'heatmap'" [showSkeleton]="false" height="100%" minHeight="100%">
   <!-- Selected Event Card -->
   @if (selectedEvent) {
   <mat-card>

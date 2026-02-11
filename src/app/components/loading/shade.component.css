@@ -12,7 +12,7 @@
   left: 0;
   bottom: 0;
   right: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.55);
   z-index: 1;
   display: flex;
   align-items: center;
@@ -22,18 +22,37 @@
   pointer-events: auto;
 }
 
-
 .error {
-  color: #FFFFFF;
-  max-width: min(36rem, 90%);
+  color: #ffffff;
+  max-width: min(38rem, 92%);
   text-align: center;
-  font-size: 1.5em;
-  line-height: 1.3;
+  font-size: 1rem;
+  line-height: 1.4;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  backdrop-filter: blur(6px);
 }
 
+.error mat-icon {
+  font-size: 28px;
+  height: 28px;
+  width: 28px;
+  color: currentColor;
+  opacity: 0.85;
+}
 
-.message {
-  color: #FFFFFF;
-  max-width: 360px;
-  text-align: center;
+.error-copy .title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.error-copy .hint {
+  margin-top: 2px;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.8);
 }

@@ -18,4 +18,6 @@ export class AppLoadingOverlayComponent {
     @Input() showProgressBar: boolean = true;
     @Input() showSkeleton: boolean = false;
     @Input() showShade: boolean = true; // Option to include the shade/dimming effect
+    @Input() errorHint: string = '';
+    @Input() errorIcon: string = 'insights';
 }
