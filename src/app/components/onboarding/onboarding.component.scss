@@ -2,8 +2,15 @@
     display: flex;
     justify-content: center;
     padding: 2rem 1rem;
-    min-height: calc(100vh - 64px);
+    min-height: calc(100vh - var(--qs-effective-top-offset, 0px));
+    padding-bottom: 0;
     /* Inherits background from body/theme */
+}
+
+@supports (height: 100dvh) {
+    .onboarding-container {
+        min-height: calc(100dvh - var(--qs-effective-top-offset, 0px));
+    }
 }
 
 .onboarding-card {
@@ -148,6 +155,7 @@
 @media (max-width: 959px) {
     .onboarding-container {
         padding: 1rem 0.75rem;
+        padding-bottom: 0;
     }
 
     .qs-form-actions {

@@ -2,7 +2,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: calc(100vh - 105px);
+    min-height: calc(100vh - var(--qs-effective-top-offset, 0px));
     /* Adjust based on navbar height if any */
     padding: 20px;
     // background-color: #f5f5f5; /* REMOVED: Managed by global theme */
@@ -12,6 +12,12 @@
         align-items: flex-start;
         /* Move to top on mobile */
         padding-top: 40px;
+    }
+}
+
+@supports (height: 100dvh) {
+    .login-container {
+        min-height: calc(100dvh - var(--qs-effective-top-offset, 0px));
     }
 }
 

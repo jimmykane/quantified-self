@@ -626,11 +626,15 @@ mat-table {
 }
 
 /* Reusable Custom Scrollbar */
-.qs-scrollbar {
+@mixin qs-scrollbar-skin {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--mat-sys-on-surface) 36%, transparent) transparent;
+
   &::-webkit-scrollbar {
-    height: 8px;
+    height: 10px;
     /* Horizontal scrollbar height */
-    width: 8px;
+    width: 10px;
     /* Vertical scrollbar width */
   }
 
@@ -639,23 +643,62 @@ mat-table {
   }
 
   &::-webkit-scrollbar-thumb {
-    background-color: rgba(0, 0, 0, 0.2);
-    border-radius: 4px;
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 30%, transparent);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
   }
 
   &::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(0, 0, 0, 0.3);
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 46%, transparent);
   }
+
+  &::-webkit-scrollbar-thumb:active {
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 56%, transparent);
+  }
+}
+
+.qs-scrollbar {
+  @include qs-scrollbar-skin;
+}
+
+/* Also style shell-level scroll containers (their scrollbar is often the visible one) */
+.app-sidenav-container .mat-drawer-content,
+.app-sidenav-container .mat-drawer-inner-container {
+  @include qs-scrollbar-skin;
 }
 
 /* Dark theme support for global scrollbar */
 .dark-theme .qs-scrollbar {
+  scrollbar-color: color-mix(in srgb, var(--mat-sys-on-surface) 44%, transparent) transparent;
+
   &::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 40%, transparent);
   }
 
   &::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(255, 255, 255, 0.3);
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 56%, transparent);
+  }
+
+  &::-webkit-scrollbar-thumb:active {
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 66%, transparent);
+  }
+}
+
+.dark-theme .app-sidenav-container .mat-drawer-content,
+.dark-theme .app-sidenav-container .mat-drawer-inner-container {
+  scrollbar-color: color-mix(in srgb, var(--mat-sys-on-surface) 44%, transparent) transparent;
+
+  &::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 40%, transparent);
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 56%, transparent);
+  }
+
+  &::-webkit-scrollbar-thumb:active {
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 66%, transparent);
   }
 }
 

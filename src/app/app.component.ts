@@ -76,6 +76,10 @@ export class AppComponent implements OnInit, OnDestroy {
   private breakpointObserver = inject(BreakpointObserver);
   public isHandset = toSignal(this.breakpointObserver.observe([Breakpoints.XSmall, Breakpoints.Small]).pipe(map(result => result.matches)), { initialValue: false });
 
+  get layoutTopOffsetPx(): number {
+    return this.showNavigation ? this.bannerHeight + 64 : 0;
+  }
+
   constructor(
     public authService: AppAuthService,
     private userService: AppUserService,
@@ -160,6 +164,8 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private updateOnboardingState() {
+    const previousOnboardingRoute = this.isOnboardingRoute;
+    const previousOnboardingCompleted = this.onboardingCompleted;
     const user = this.currentUser;
     const url = this.router.url;
     this.isOnboardingRoute = url.includes('onboarding');
@@ -186,7 +192,13 @@ export class AppComponent implements OnInit, OnDestroy {
       // Not logged in - show chrome (login/landing page)
       this.onboardingCompleted = true;
     }
-    this.changeDetectorRef.detectChanges();
+    const hasStateChanged =
+      previousOnboardingRoute !== this.isOnboardingRoute ||
+      previousOnboardingCompleted !== this.onboardingCompleted;
+
+    if (hasStateChanged) {
+      this.changeDetectorRef.detectChanges();
+    }
   }
 
   get showNavigation(): boolean {
@@ -223,8 +235,12 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   onBannerHeightChanged(height: number) {
+    const nextHasBanner = height > 0;
+    if (this.bannerHeight === height && this.hasBanner === nextHasBanner) {
+      return;
+    }
     this.bannerHeight = height;
-    this.hasBanner = height > 0;
+    this.hasBanner = nextHasBanner;
     this.changeDetectorRef.detectChanges();
   }
 

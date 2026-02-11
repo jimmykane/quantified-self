@@ -1,10 +1,16 @@
 :host {
     display: block;
-    min-height: 100vh;
+    min-height: calc(100vh - var(--qs-effective-top-offset, 0px));
     // background: var(--background-color, #f5f7fa); /* REMOVED: Managed by global theme */
     /* Fallback or use app var */
 
     // color: #333; /* REMOVED */
+}
+
+@supports (height: 100dvh) {
+    :host {
+        min-height: calc(100dvh - var(--qs-effective-top-offset, 0px));
+    }
 }
 
 section.component-container {
