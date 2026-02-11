@@ -11,9 +11,11 @@ const echartsCoreMock = vi.hoisted(() => ({
 
 const echartsModulesMock = vi.hoisted(() => ({
   barChart: { chart: 'bar' },
+  pieChart: { chart: 'pie' },
   gridComponent: { component: 'grid' },
   tooltipComponent: { component: 'tooltip' },
   legendComponent: { component: 'legend' },
+  titleComponent: { component: 'title' },
   canvasRenderer: { renderer: 'canvas' },
 }));
 
@@ -24,12 +26,14 @@ vi.mock('echarts/core', () => ({
 
 vi.mock('echarts/charts', () => ({
   BarChart: echartsModulesMock.barChart,
+  PieChart: echartsModulesMock.pieChart,
 }));
 
 vi.mock('echarts/components', () => ({
   GridComponent: echartsModulesMock.gridComponent,
   TooltipComponent: echartsModulesMock.tooltipComponent,
   LegendComponent: echartsModulesMock.legendComponent,
+  TitleComponent: echartsModulesMock.titleComponent,
 }));
 
 vi.mock('echarts/renderers', () => ({
@@ -64,9 +68,11 @@ describe('EChartsLoaderService', () => {
     expect(echartsCoreMock.use).toHaveBeenCalledTimes(1);
     expect(echartsCoreMock.use).toHaveBeenCalledWith([
       echartsModulesMock.barChart,
+      echartsModulesMock.pieChart,
       echartsModulesMock.gridComponent,
       echartsModulesMock.tooltipComponent,
       echartsModulesMock.legendComponent,
+      echartsModulesMock.titleComponent,
       echartsModulesMock.canvasRenderer,
     ]);
   });

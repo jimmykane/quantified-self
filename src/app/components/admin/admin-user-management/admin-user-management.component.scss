@@ -164,9 +164,9 @@
     position: relative;
     box-sizing: border-box;
 
-    canvas {
-        width: 100% !important;
-        height: 100% !important;
+    .echart-surface {
+        width: 100%;
+        height: 240px;
     }
 }
 

@@ -98,10 +98,12 @@
                 <mat-spinner diameter="40"></mat-spinner>
             </div>
 
-            <div class="chart-wrapper" *ngIf="!loading && stats?.advanced?.retryHistogram" style="height: 220px;">
-                <canvas baseChart [data]="barChartData" [options]="barChartOptions" [plugins]="barChartPlugins"
-                    [legend]="barChartLegend" [type]="'bar'">
-                </canvas>
+            <div class="chart-wrapper" *ngIf="!loading && stats?.advanced?.retryHistogram">
+                <div #retryChart class="echart-surface"></div>
+                <div class="chart-empty-overlay" *ngIf="!hasRetryData">
+                    <mat-icon>check_circle</mat-icon>
+                    <span>No pending retries right now</span>
+                </div>
             </div>
         </div>
     </div>

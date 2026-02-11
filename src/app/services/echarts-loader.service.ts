@@ -39,9 +39,11 @@ export class EChartsLoaderService {
 
         core.use([
           charts.BarChart,
+          charts.PieChart,
           components.GridComponent,
           components.TooltipComponent,
           components.LegendComponent,
+          components.TitleComponent,
           renderers.CanvasRenderer
         ]);
 

@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, inject } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
@@ -13,9 +13,6 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { BaseChartDirective } from 'ng2-charts';
-import { ChartConfiguration, ChartOptions } from 'chart.js';
-import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
 import { Subject } from 'rxjs';
 import { debounceTime, distinctUntilChanged, takeUntil } from 'rxjs/operators';
 
@@ -26,6 +23,8 @@ import { LoggerService } from '../../../services/logger.service';
 import { ConfirmationDialogComponent } from '../../confirmation-dialog/confirmation-dialog.component';
 import { AdminResolverData } from '../../../resolvers/admin.resolver';
 import { AppThemes } from '@sports-alliance/sports-lib';
+import type { EChartsType } from 'echarts/core';
+import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 
 export interface UserStats {
     total: number;
@@ -34,6 +33,8 @@ export interface UserStats {
     free: number;
     providers?: Record<string, number>;
 }
+
+type ChartOption = Parameters<EChartsType['setOption']>[0];
 
 @Component({
     selector: 'app-admin-user-management',
@@ -55,12 +56,11 @@ export interface UserStats {
         MatSelectModule,
         MatDialogModule,
         MatSnackBarModule,
-        BaseChartDirective
-    ],
-    providers: [provideCharts(withDefaultRegisterables())]
+    ]
 })
-export class AdminUserManagementComponent implements OnInit, OnDestroy {
+export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterViewInit {
     @ViewChild(MatSort) sort!: MatSort;
+    @ViewChild('authChart', { static: true }) authChartRef!: ElementRef<HTMLDivElement>;
 
     // Injected services
     private adminService = inject(AdminService);
@@ -71,6 +71,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy {
     private dialog = inject(MatDialog);
     private snackBar = inject(MatSnackBar);
     private logger = inject(LoggerService);
+    private eChartsLoader = inject(EChartsLoaderService);
 
     // Data state
     users: AdminUser[] = [];
@@ -96,23 +97,15 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy {
     private searchSubject = new Subject<string>();
     private destroy$ = new Subject<void>();
 
-    // Chart configuration
-    public authPieChartData: ChartConfiguration<'pie'>['data'] = {
-        labels: [],
-        datasets: [{ data: [], backgroundColor: [] }]
-    };
-    public authPieChartOptions: ChartOptions<'pie'> = {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { position: 'right', labels: { padding: 20 } }
-        }
-    };
+    private chart: EChartsType | null = null;
+    private isDark = false;
+    private resizeObserver: ResizeObserver | null = null;
+    private providerData: Record<string, number> | null = null;
 
     private readonly CHART_TEXT_DARK = 'rgba(255, 255, 255, 0.8)';
     private readonly CHART_TEXT_LIGHT = 'rgba(0, 0, 0, 0.8)';
 
-    ngOnInit(): void {
+    async ngOnInit(): Promise<void> {
         // Handle search debounce
         this.searchSubject.pipe(
             debounceTime(300),
@@ -126,7 +119,8 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy {
 
         // Handle theme changes for chart
         this.appThemeService.getAppTheme().pipe(takeUntil(this.destroy$)).subscribe(theme => {
-            this.updateChartTheme(theme);
+            this.isDark = theme === AppThemes.Dark;
+            this.updateChartTheme();
         });
 
         // Use resolved data if available
@@ -151,9 +145,21 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy {
         }
     }
 
+    async ngAfterViewInit(): Promise<void> {
+        await this.initializeChart();
+        this.updateChartTheme();
+        this.updateAuthChart(this.providerData ?? {});
+    }
+
     ngOnDestroy(): void {
         this.destroy$.next();
         this.destroy$.complete();
+        if (this.resizeObserver) {
+            this.resizeObserver.disconnect();
+            this.resizeObserver = null;
+        }
+        this.eChartsLoader.dispose(this.chart);
+        this.chart = null;
     }
 
     fetchUsers(): void {
@@ -184,45 +190,8 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy {
     }
 
     private updateAuthChart(providers: Record<string, number>): void {
-        const providerLabels: Record<string, string> = {
-            'google.com': 'Google',
-            'password': 'Email/Password',
-            'apple.com': 'Apple',
-            'facebook.com': 'Facebook'
-        };
-        const providerColors: Record<string, string> = {
-            'google.com': '#4285F4',
-            'password': '#34A853',
-            'apple.com': '#555555',
-            'facebook.com': '#1877F2'
-        };
-
-        this.authPieChartData = {
-            labels: Object.keys(providers).map(p => providerLabels[p] || p),
-            datasets: [{
-                data: Object.values(providers),
-                backgroundColor: Object.keys(providers).map(p => providerColors[p] || '#9E9E9E')
-            }]
-        };
-    }
-
-    private updateChartTheme(theme: AppThemes): void {
-        const isDark = theme === AppThemes.Dark;
-        const textColor = isDark ? this.CHART_TEXT_DARK : this.CHART_TEXT_LIGHT;
-
-        this.authPieChartOptions = {
-            ...this.authPieChartOptions,
-            plugins: {
-                ...this.authPieChartOptions!.plugins,
-                legend: {
-                    ...this.authPieChartOptions!.plugins!.legend,
-                    labels: {
-                        ...((this.authPieChartOptions!.plugins!.legend as any)?.labels || {}),
-                        color: textColor
-                    }
-                }
-            }
-        };
+        this.providerData = providers;
+        this.renderAuthChart();
     }
 
     onPageChange(event: PageEvent): void {
@@ -339,5 +308,162 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy {
             case 'coros': return 'assets/logos/coros.svg';
             default: return '';
         }
+    }
+
+    private async initializeChart(): Promise<void> {
+        if (!this.authChartRef?.nativeElement) {
+            return;
+        }
+        try {
+            this.chart = await this.eChartsLoader.init(this.authChartRef.nativeElement);
+            this.setupResizeObserver();
+        } catch (error) {
+            this.logger.error('[AdminUserManagementComponent] Failed to initialize ECharts', error);
+        }
+    }
+
+    private setupResizeObserver(): void {
+        if (typeof ResizeObserver === 'undefined' || !this.authChartRef?.nativeElement) {
+            return;
+        }
+        this.resizeObserver = new ResizeObserver(() => this.scheduleResize());
+        this.resizeObserver.observe(this.authChartRef.nativeElement);
+    }
+
+    private scheduleResize(): void {
+        if (!this.chart) return;
+        if (typeof requestAnimationFrame === 'undefined') {
+            this.eChartsLoader.resize(this.chart);
+            return;
+        }
+        requestAnimationFrame(() => this.eChartsLoader.resize(this.chart!));
+    }
+
+    private renderAuthChart(): void {
+        if (!this.chart || !this.providerData || Object.keys(this.providerData).length === 0) {
+            return;
+        }
+
+        const option = this.buildAuthChartOption(this.providerData);
+        this.eChartsLoader.setOption(this.chart, option, { notMerge: true, lazyUpdate: true });
+        this.scheduleResize();
+    }
+
+    private buildAuthChartOption(providers: Record<string, number>): ChartOption {
+        const providerLabels: Record<string, string> = {
+            'google.com': 'Google',
+            'password': 'Email/Password',
+            'apple.com': 'Apple',
+            'facebook.com': 'Facebook'
+        };
+        const providerColors: Record<string, string> = {
+            'google.com': '#4285F4',
+            'password': '#34A853',
+            'apple.com': '#555555',
+            'facebook.com': '#1877F2'
+        };
+
+        const entries = Object.entries(providers);
+        const total = entries.reduce((sum, [, value]) => sum + value, 0);
+        const sorted = [...entries].sort((a, b) => b[1] - a[1]);
+        const topProvider = sorted[0]?.[0];
+
+        const textColor = this.isDark ? this.CHART_TEXT_DARK : this.CHART_TEXT_LIGHT;
+        const borderColor = this.isDark ? 'rgba(255,255,255,0.05)' : '#ffffff';
+
+        const seriesData = entries.map(([key, value]) => ({
+            name: providerLabels[key] || key,
+            value,
+            itemStyle: { color: providerColors[key] || '#9E9E9E' }
+        }));
+
+        const centerText = total > 0 ? `${total}` : '0';
+        const centerSubtitle = topProvider ? `${providerLabels[topProvider] || topProvider}` : 'No data';
+
+        const option: ChartOption = {
+            tooltip: {
+                trigger: 'item',
+                formatter: '{b}: {c} ({d}%)'
+            },
+            legend: {
+                orient: 'vertical',
+                right: 10,
+                top: 'center',
+                textStyle: { color: textColor }
+            },
+            series: [
+                {
+                    name: 'Auth Provider Breakdown',
+                    type: 'pie',
+                    radius: ['55%', '72%'],
+                    center: ['38%', '50%'],
+                    avoidLabelOverlap: true,
+                    label: { show: false },
+                    labelLine: { show: false },
+                    itemStyle: {
+                        borderColor,
+                        borderWidth: 2
+                    },
+                    data: seriesData
+                }
+            ],
+            graphic: [
+                {
+                    type: 'group',
+                    left: '38%',
+                    top: 'center',
+                    bounding: 'raw',
+                    children: [
+                        {
+                            type: 'text',
+                            style: {
+                                text: centerText,
+                                fontSize: 24,
+                                fontWeight: 700,
+                                fill: textColor,
+                                textAlign: 'center'
+                            },
+                            left: 'center',
+                            top: -12
+                        },
+                        {
+                            type: 'text',
+                            style: {
+                                text: 'accounts',
+                                fontSize: 12,
+                                fontWeight: 400,
+                                fill: textColor,
+                                opacity: 0.75,
+                                textAlign: 'center'
+                            },
+                            left: 'center',
+                            top: 10
+                        },
+                        {
+                            type: 'text',
+                            style: {
+                                text: centerSubtitle,
+                                fontSize: 12,
+                                fontWeight: 500,
+                                fill: textColor,
+                                opacity: 0.9,
+                                textAlign: 'center'
+                            },
+                            left: 'center',
+                            top: 28
+                        }
+                    ]
+                }
+            ]
+        };
+
+        return option;
+    }
+
+    private updateChartTheme(): void {
+        if (!this.chart) {
+            return;
+        }
+        this.renderAuthChart();
     }
 }

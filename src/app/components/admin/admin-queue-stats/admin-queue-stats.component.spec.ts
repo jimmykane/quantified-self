@@ -6,21 +6,42 @@ import { of } from 'rxjs';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { SimpleChange } from '@angular/core';
+import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 
 describe('AdminQueueStatsComponent', () => {
     let component: AdminQueueStatsComponent;
     let fixture: ComponentFixture<AdminQueueStatsComponent>;
     let mockThemeService: any;
+    let mockEchartsService: any;
+
+    if (!(global as any).requestAnimationFrame) {
+        (global as any).requestAnimationFrame = (cb: FrameRequestCallback) => setTimeout(cb, 0);
+    }
 
     beforeEach(async () => {
         mockThemeService = {
             getAppTheme: vi.fn().mockReturnValue(of(AppThemes.Light))
         };
 
+        const chartMock = {
+            setOption: vi.fn(),
+            resize: vi.fn(),
+            dispose: vi.fn(),
+            isDisposed: vi.fn().mockReturnValue(false)
+        };
+
+        mockEchartsService = {
+            init: vi.fn().mockResolvedValue(chartMock),
+            setOption: vi.fn(),
+            resize: vi.fn(),
+            dispose: vi.fn()
+        };
+
         await TestBed.configureTestingModule({
             imports: [AdminQueueStatsComponent],
             providers: [
-                { provide: AppThemeService, useValue: mockThemeService }
+                { provide: AppThemeService, useValue: mockThemeService },
+                { provide: EChartsLoaderService, useValue: mockEchartsService }
             ]
         }).compileComponents();
 
@@ -58,7 +79,7 @@ describe('AdminQueueStatsComponent', () => {
     });
 
     describe('Chart Updates', () => {
-        it('should update chart data on input change', () => {
+        it('should update chart data on input change', async () => {
             const mockStats: QueueStats = {
                 pending: 10,
                 succeeded: 100,
@@ -78,13 +99,16 @@ describe('AdminQueueStatsComponent', () => {
                 dlq: { total: 0, byContext: [], byProvider: [] }
             };
 
-            // Direct assignment + OnChanges simulation
+            (component as any).retryChartRef = { nativeElement: document.createElement('div') };
+            (component as any).chart = {};
             component.stats = mockStats;
             component.ngOnChanges({
                 stats: new SimpleChange(null, mockStats, true)
             });
 
-            expect(component.barChartData.datasets[0].data).toEqual([5, 3, 2]);
+            expect(mockEchartsService.setOption).toHaveBeenCalled();
+            const optionArg = mockEchartsService.setOption.mock.calls[0][1];
+            expect(optionArg.series[0].data).toEqual([5, 3, 2]);
         });
     });
 });
