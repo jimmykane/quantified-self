@@ -1,7 +1,13 @@
 /* Main App Layout */
 /* Note: margin-top is set dynamically via [style.margin-top.px] binding */
 mat-sidenav-container {
-  min-height: calc(100vh - 64px);
+  min-height: calc(100vh - 64px - var(--qs-banner-height, 0px));
+}
+
+@supports (height: 100dvh) {
+  mat-sidenav-container {
+    min-height: calc(100dvh - 64px - var(--qs-banner-height, 0px));
+  }
 }
 
 mat-sidenav {

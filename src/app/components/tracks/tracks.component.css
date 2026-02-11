@@ -1,7 +1,8 @@
 mat-card {
   padding: 0;
-  height: calc(100vh - 60px);
   position: relative;
+  height: calc(100vh - var(--qs-layout-top-offset, 64px));
+  height: calc(100dvh - var(--qs-layout-top-offset, 64px));
 }
 
 #map {

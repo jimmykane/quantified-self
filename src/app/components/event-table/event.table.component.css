@@ -149,7 +149,6 @@ mat-icon {
   border: 1px solid var(--mat-app-outline-variant);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
   overflow: hidden;
-  margin-bottom: 3rem;
   width: 100%;
   max-width: 100%;
 }

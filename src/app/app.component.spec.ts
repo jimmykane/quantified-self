@@ -180,6 +180,16 @@ describe('AppComponent', () => {
         expect(bannerComponent).toBeTruthy();
     });
 
+    it('should expose layout css variables based on banner height', () => {
+        component.onBannerHeightChanged(36);
+        fixture.detectChanges();
+
+        const wrapper = fixture.nativeElement.querySelector('.app-layout-wrapper') as HTMLElement | null;
+        expect(wrapper).toBeTruthy();
+        expect(wrapper?.style.getPropertyValue('--qs-layout-top-offset')).toBe('100px');
+        expect(wrapper?.style.getPropertyValue('--qs-banner-height')).toBe('36px');
+    });
+
     it('should return true for isDashboardRoute when url includes dashboard', () => {
         mockRouter.url = '/dashboard';
         expect(component.isDashboardRoute).toBe(true);

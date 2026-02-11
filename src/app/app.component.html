@@ -5,7 +5,9 @@
 </div>
 }
 
-<div [class.has-banner]="hasBanner" class="app-layout-wrapper">
+<div [class.has-banner]="hasBanner" class="app-layout-wrapper"
+  [style.--qs-layout-top-offset]="(bannerHeight + 64) + 'px'"
+  [style.--qs-banner-height]="bannerHeight + 'px'">
   <app-grace-period-banner (heightChanged)="onBannerHeightChanged($event)"></app-grace-period-banner>
 
   <app-route-loader></app-route-loader>
