@@ -44,6 +44,7 @@ export type EventSummaryMetricGroupId =
   | 'performance'
   | 'altitude'
   | 'environment'
+  | 'device'
   | 'physiological'
   | 'other';
 
@@ -78,6 +79,31 @@ const POWER_LIB_EXTRA_TYPE_STRINGS: string[] = [
 const ALTITUDE_LIB_EXTRA_TYPE_STRINGS: string[] = [
   'Ascent Time',
   'Descent Time',
+];
+
+const PHYSIOLOGICAL_EXTRA_TYPE_STRINGS: string[] = [
+  'Age',
+  'Gender',
+  'Height',
+  'Weight',
+];
+
+const ENVIRONMENT_EXTRA_TYPE_STRINGS: string[] = [
+  'Absolute Pressure',
+];
+
+const PERFORMANCE_EXTRA_TYPE_STRINGS: string[] = [
+  'Effort Pace',
+  'EPOC',
+];
+
+const DEVICE_EXTRA_TYPE_STRINGS: string[] = [
+  'Battery Charge',
+  'Battery Consumption',
+  'Battery Current',
+  'Battery Voltage',
+  'Distance (Stryd)',
+  'GNSS Distance',
 ];
 
 export const EVENT_SUMMARY_DEFAULT_GROUP_ID: EventSummaryMetricGroupId = 'overall';
@@ -131,6 +157,7 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataPowerRight.type,
       DataAccumulatedPower.type,
       DataAirPower.type,
+      ...PERFORMANCE_EXTRA_TYPE_STRINGS,
       ...POWER_LIB_EXTRA_TYPE_STRINGS,
     ],
     singleValueTypes: [
@@ -155,6 +182,14 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataTemperatureAvg.type,
       DataTemperatureMax.type,
       DataTemperatureMin.type,
+      ...ENVIRONMENT_EXTRA_TYPE_STRINGS,
+    ],
+  },
+  {
+    id: 'device',
+    label: 'Device',
+    metricTypes: [
+      ...DEVICE_EXTRA_TYPE_STRINGS,
     ],
   },
   {
@@ -171,6 +206,7 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataRecoveryTime.type,
       DataFeeling.type,
       DataRPE.type,
+      ...PHYSIOLOGICAL_EXTRA_TYPE_STRINGS,
     ],
   },
   {
@@ -195,6 +231,7 @@ export const EVENT_SUMMARY_DEFAULT_STAT_TYPES: string[] = [
   DataPowerRight.type,
   DataAccumulatedPower.type,
   DataAirPower.type,
+  ...PERFORMANCE_EXTRA_TYPE_STRINGS,
   ...POWER_LIB_EXTRA_TYPE_STRINGS,
   DataAscent.type,
   DataDescent.type,
@@ -208,6 +245,8 @@ export const EVENT_SUMMARY_DEFAULT_STAT_TYPES: string[] = [
   DataTemperatureAvg.type,
   DataTemperatureMax.type,
   DataTemperatureMin.type,
+  ...ENVIRONMENT_EXTRA_TYPE_STRINGS,
+  ...DEVICE_EXTRA_TYPE_STRINGS,
   DataHeartRateAvg.type,
   DataHeartRateMax.type,
   DataHeartRateMin.type,
@@ -217,4 +256,5 @@ export const EVENT_SUMMARY_DEFAULT_STAT_TYPES: string[] = [
   DataVO2Max.type,
   DataFeeling.type,
   DataRPE.type,
+  ...PHYSIOLOGICAL_EXTRA_TYPE_STRINGS,
 ];

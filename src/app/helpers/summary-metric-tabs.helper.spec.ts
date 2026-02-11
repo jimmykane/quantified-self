@@ -1,4 +1,5 @@
 import {
+  DataAirPower,
   DataEnergy,
   DataDuration,
   DataGradeAdjustedPaceAvg,
@@ -128,6 +129,66 @@ describe('buildSummaryMetricTabs', () => {
       DataEnergy.type,
       DataVO2Max.type,
       DataRecoveryTime.type,
+    ]);
+  });
+
+  it('should map requested extras into physiological, environment, and performance tabs', () => {
+    const tabs = buildSummaryMetricTabs([
+      'Age',
+      'Gender',
+      'Height',
+      'Weight',
+      'Absolute Pressure',
+      DataAirPower.type,
+      'Effort Pace',
+      'Form Power',
+      'EPOC',
+    ]);
+
+    expect(tabs.map((tab) => tab.id)).toEqual([
+      'performance',
+      'environment',
+      'physiological',
+    ]);
+
+    const performanceTab = tabs.find((tab) => tab.id === 'performance');
+    expect(performanceTab?.metricTypes).toEqual([
+      DataAirPower.type,
+      'Effort Pace',
+      'EPOC',
+      'Form Power',
+    ]);
+
+    const environmentTab = tabs.find((tab) => tab.id === 'environment');
+    expect(environmentTab?.metricTypes).toEqual(['Absolute Pressure']);
+
+    const physiologicalTab = tabs.find((tab) => tab.id === 'physiological');
+    expect(physiologicalTab?.metricTypes).toEqual([
+      'Age',
+      'Gender',
+      'Height',
+      'Weight',
+    ]);
+  });
+
+  it('should map device metrics into the new device tab', () => {
+    const tabs = buildSummaryMetricTabs([
+      'Battery Charge',
+      'Battery Consumption',
+      'Battery Current',
+      'Battery Voltage',
+      'Distance (Stryd)',
+      'GNSS Distance',
+    ]);
+
+    expect(tabs.map((tab) => tab.id)).toEqual(['device']);
+    expect(tabs[0].metricTypes).toEqual([
+      'Battery Charge',
+      'Battery Consumption',
+      'Battery Current',
+      'Battery Voltage',
+      'Distance (Stryd)',
+      'GNSS Distance',
     ]);
   });
 });
