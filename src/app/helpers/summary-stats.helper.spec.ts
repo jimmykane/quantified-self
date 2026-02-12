@@ -36,7 +36,13 @@ describe('getDefaultSummaryStatTypes', () => {
     expect(stats).toContain('Average Leg Stiffness');
     expect(stats).toContain('Average EVPE');
     expect(stats).toContain('Average EHPE');
+    expect(stats).toContain('Jump Count');
+    expect(stats).toContain('Avg VAM');
+    expect(stats).toContain('Avg Respiration Rate');
+    expect(stats).toContain('Min Respiration Rate');
+    expect(stats).toContain('Max Respiration Rate');
     expect(stats).toContain('Fitness Age');
+    expect(stats).toContain('Anaerobic Training Effect');
     expect(stats).toContain('Gender');
     expect(stats).toContain('Height');
     expect(stats).toContain('Weight');

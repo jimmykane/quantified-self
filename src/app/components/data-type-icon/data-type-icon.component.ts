@@ -103,6 +103,7 @@ export class DataTypeIconComponent {
       case DataPowerMax.type:
       case DataPowerMin.type:
       case DataPower.type:
+      case 'FTP':
       case 'CriticalPower':
       case 'Form Power':
         return 'bolt';
@@ -167,6 +168,8 @@ export class DataTypeIconComponent {
       case DataPaceAvgMinutesPerMile.type:
       case 'Effort Pace':
         return 'directions_run';
+      case 'Avg VAM':
+        return 'trending_up';
       case DataTemperatureAvg.type:
       case DataTemperatureMax.type:
       case DataTemperatureMin.type:
@@ -235,6 +238,10 @@ export class DataTypeIconComponent {
       case DataHeartRateMax.type:
       case DataHeartRateMin.type:
         return 'ecg_heart';
+      case 'Avg Respiration Rate':
+      case 'Min Respiration Rate':
+      case 'Max Respiration Rate':
+        return 'respiratory_rate';
       case DataFeeling.type:
         return 'mood';
       case DataRPE.type:
@@ -254,6 +261,7 @@ export class DataTypeIconComponent {
       case DataSwimPaceAvgMinutesPer100Yard.type:
         return 'pool';
       case DataAerobicTrainingEffect.type:
+      case 'Anaerobic Training Effect':
         return 'cardio_load';
       case DataMovingTime.type:
         return 'pace';
@@ -277,6 +285,8 @@ export class DataTypeIconComponent {
       case 'Avg Grit':
       case 'Total Grit':
         return 'terrain';
+      case 'Jump Count':
+        return 'format_list_numbered';
       case 'Distance (Stryd)':
       case 'GNSS Distance':
         return 'route';

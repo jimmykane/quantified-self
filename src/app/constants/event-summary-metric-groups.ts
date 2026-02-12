@@ -80,6 +80,7 @@ const POWER_LIB_EXTRA_TYPE_STRINGS: string[] = [
   'Power Normalized',
   'Power Intensity Factor',
   'Power Training Stress Score',
+  'FTP',
   'Power Work',
   'PowerWattsPerKg',
   'CriticalPower',
@@ -102,6 +103,9 @@ const ALTITUDE_LIB_EXTRA_TYPE_STRINGS: string[] = [
 ];
 
 const PHYSIOLOGICAL_EXTRA_TYPE_STRINGS: string[] = [
+  'Avg Respiration Rate',
+  'Min Respiration Rate',
+  'Max Respiration Rate',
   'Weight',
   'Height',
   'Gender',
@@ -112,7 +116,9 @@ const PHYSIOLOGICAL_EXTRA_TYPE_STRINGS: string[] = [
 
 const PERFORMANCE_EXTRA_TYPE_STRINGS: string[] = [
   'Effort Pace',
+  'Avg VAM',
   'EPOC',
+  'Jump Count',
   'Flow',
   'Avg Flow',
   'Total Flow',
@@ -302,6 +308,7 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataVO2Max.type,
       DataPeakEPOC.type,
       DataAerobicTrainingEffect.type,
+      'Anaerobic Training Effect',
       DataRecoveryTime.type,
       DataFeeling.type,
       DataRPE.type,
@@ -358,6 +365,7 @@ export const EVENT_SUMMARY_DEFAULT_STAT_TYPES: string[] = [
   DataRecoveryTime.type,
   DataPeakEPOC.type,
   DataAerobicTrainingEffect.type,
+  'Anaerobic Training Effect',
   DataVO2Max.type,
   DataFeeling.type,
   DataRPE.type,

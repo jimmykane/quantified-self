@@ -145,8 +145,10 @@ describe('buildSummaryMetricTabs', () => {
       'Absolute Pressure',
       DataAirPower.type,
       'Effort Pace',
+      'Avg VAM',
       'Form Power',
       'EPOC',
+      'Jump Count',
     ]);
 
     expect(tabs.map((tab) => tab.id)).toEqual([
@@ -159,7 +161,9 @@ describe('buildSummaryMetricTabs', () => {
     expect(performanceTab?.metricTypes).toEqual([
       DataAirPower.type,
       'Effort Pace',
+      'Avg VAM',
       'EPOC',
+      'Jump Count',
       'Form Power',
     ]);
 
@@ -328,6 +332,34 @@ describe('buildSummaryMetricTabs', () => {
       DataHeartRateAvg.type,
       DataHeartRateMax.type,
       DataHeartRateMin.type,
+    ]);
+  });
+
+  it('should map aerobic and anaerobic training effect to physiological', () => {
+    const tabs = buildSummaryMetricTabs([
+      'Aerobic Training Effect',
+      'Anaerobic Training Effect',
+    ]);
+
+    expect(tabs.map((tab) => tab.id)).toEqual(['physiological']);
+    expect(tabs[0].metricTypes).toEqual([
+      'Aerobic Training Effect',
+      'Anaerobic Training Effect',
+    ]);
+  });
+
+  it('should map respiration rate family to physiological tab', () => {
+    const tabs = buildSummaryMetricTabs([
+      'Avg Respiration Rate',
+      'Min Respiration Rate',
+      'Max Respiration Rate',
+    ]);
+
+    expect(tabs.map((tab) => tab.id)).toEqual(['physiological']);
+    expect(tabs[0].metricTypes).toEqual([
+      'Avg Respiration Rate',
+      'Min Respiration Rate',
+      'Max Respiration Rate',
     ]);
   });
 });

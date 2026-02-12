@@ -102,6 +102,38 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon('Total Grit')).toBe('terrain');
   });
 
+  it('should provide icon mappings for FTP', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon('FTP')).toBe('bolt');
+  });
+
+  it('should provide icon mapping for Jump Count', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon('Jump Count')).toBe('format_list_numbered');
+  });
+
+  it('should provide icon mapping for Avg VAM', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon('Avg VAM')).toBe('trending_up');
+  });
+
+  it('should provide icon mappings for respiration rate metrics', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon('Avg Respiration Rate')).toBe('respiratory_rate');
+    expect(component.getColumnHeaderIcon('Min Respiration Rate')).toBe('respiratory_rate');
+    expect(component.getColumnHeaderIcon('Max Respiration Rate')).toBe('respiratory_rate');
+  });
+
+  it('should provide icon mapping for anaerobic training effect', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon('Anaerobic Training Effect')).toBe('cardio_load');
+  });
+
   it('should provide icon mappings for requested device metrics', () => {
     const component = new DataTypeIconComponent();
 
