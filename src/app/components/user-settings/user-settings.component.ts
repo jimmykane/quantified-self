@@ -56,6 +56,17 @@ export class UserSettingsComponent implements OnChanges {
   public errorDeleting;
   public errorSaving;
   public activeSection: 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units' = 'profile';
+  public readonly sectionOrder: Array<'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units'> = [
+    'profile',
+    'app',
+    'dashboard',
+    'map',
+    'charts',
+    'units',
+  ];
+  public readonly tabsStickyHeader = true;
+  public readonly tabsTopOffset = '0px';
+  public readonly tabsLazyContent = false;
 
   public xAxisTypes = XAxisTypes;
 
@@ -224,6 +235,24 @@ export class UserSettingsComponent implements OnChanges {
 
   isMandatoryDescentExclusion(type: any): boolean {
     return this.mandatoryDescentExclusions.indexOf(type) >= 0;
+  }
+
+  get selectedSectionIndex(): number {
+    const index = this.sectionOrder.indexOf(this.activeSection);
+    return index >= 0 ? index : 0;
+  }
+
+  onSelectedSectionIndexChange(index: number) {
+    this.activeSection = this.indexToSectionId(index);
+  }
+
+  sectionIdToIndex(section: 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units'): number {
+    const index = this.sectionOrder.indexOf(section);
+    return index >= 0 ? index : 0;
+  }
+
+  indexToSectionId(index: number): 'profile' | 'app' | 'dashboard' | 'map' | 'charts' | 'units' {
+    return this.sectionOrder[index] || 'profile';
   }
 
   async onSubmit(event) {

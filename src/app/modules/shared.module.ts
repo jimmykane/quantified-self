@@ -23,6 +23,8 @@ import { ServiceSourceIconComponent } from '../components/event-summary/service-
 import { StatusInfoComponent } from '../components/shared/status-info/status-info.component';
 import { BottomSheetHeaderComponent } from '../components/shared/bottom-sheet-header/bottom-sheet-header.component';
 import { PeekPanelComponent } from '../components/shared/peek-panel/peek-panel.component';
+import { MaterialPillTabsComponent } from '../components/shared/material-pill-tabs/material-pill-tabs.component';
+import { MaterialPillTabDirective } from '../components/shared/material-pill-tabs/material-pill-tab.directive';
 
 @NgModule({
     imports: [
@@ -50,6 +52,8 @@ import { PeekPanelComponent } from '../components/shared/peek-panel/peek-panel.c
         StatusInfoComponent,
         BottomSheetHeaderComponent,
         PeekPanelComponent,
+        MaterialPillTabsComponent,
+        MaterialPillTabDirective,
     ],
     providers: [],
     exports: [
@@ -75,6 +79,8 @@ import { PeekPanelComponent } from '../components/shared/peek-panel/peek-panel.c
         StatusInfoComponent,
         BottomSheetHeaderComponent,
         PeekPanelComponent,
+        MaterialPillTabsComponent,
+        MaterialPillTabDirective,
     ]
 })
 

@@ -109,6 +109,26 @@ describe('UserSettingsComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('should map section id to tab index and back', () => {
+        expect(component.sectionIdToIndex('profile')).toBe(0);
+        expect(component.sectionIdToIndex('units')).toBe(5);
+        expect(component.indexToSectionId(1)).toBe('app');
+        expect(component.indexToSectionId(99)).toBe('profile');
+    });
+
+    it('should update active section when selected tab index changes', () => {
+        component.activeSection = 'profile';
+        component.onSelectedSectionIndexChange(3);
+        expect(component.activeSection).toBe('map');
+        expect(component.selectedSectionIndex).toBe(3);
+    });
+
+    it('should enable sticky tabs config for shared tabs wrapper', () => {
+        expect(component.tabsStickyHeader).toBe(true);
+        expect(component.tabsTopOffset).toBe('0px');
+        expect(component.tabsLazyContent).toBe(false);
+    });
+
     it('should default privacy to Private if user.privacy is missing', () => {
         // mockUser has no privacy property
         component.ngOnChanges();

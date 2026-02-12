@@ -14,67 +14,8 @@
 
 /* Horizontal Chip Navigation */
 .settings-nav {
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    // background-color: rgba(244, 247, 246, 0.95); /* REMOVED */
-    background: inherit;
-    backdrop-filter: blur(10px);
     padding: 16px 0;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
     margin-bottom: 0;
-}
-
-:host-context(.dark-theme) .settings-nav {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.nav-list {
-    display: flex;
-    gap: 12px;
-    list-style: none;
-    padding: 12px 40px;
-    margin: 0 auto;
-    max-width: 900px;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-}
-
-.nav-list::-webkit-scrollbar {
-    display: none;
-}
-
-.nav-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    border-radius: 20px;
-    font-weight: 400;
-    font-size: 0.95rem;
-    // color: var(--text-secondary); /* REMOVED */
-    opacity: 0.7;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    // background-color: white; /* REMOVED */
-    background-color: rgba(0, 0, 0, 0.05);
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    white-space: nowrap;
-}
-
-:host-context(.dark-theme) .nav-item {
-    background-color: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.nav-item.active {
-    opacity: 1;
-    background-color: var(--mat-sys-primary-container);
-    color: var(--mat-sys-on-primary-container);
-    border-color: var(--mat-sys-primary);
-    font-weight: 500;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 /* Main Content Area */
@@ -138,7 +79,7 @@
 
 /* Mobile Responsive Adjustments */
 @media (max-width: 600px) {
-    .nav-list {
+    .settings-nav {
         padding: 0 16px;
     }
 

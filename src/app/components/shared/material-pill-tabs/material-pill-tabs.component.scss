@@ -1,0 +1,74 @@
+:host {
+  display: block;
+}
+
+:host ::ng-deep .material-pill-tabs .mat-mdc-tab-header {
+  border-bottom: 0;
+}
+
+:host ::ng-deep .material-pill-tabs.sticky-header .mat-mdc-tab-header {
+  position: sticky;
+  top: var(--pill-tabs-sticky-top, 0px);
+  z-index: 110;
+  background: inherit;
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+:host ::ng-deep .material-pill-tabs .mdc-tab-indicator {
+  display: none;
+}
+
+:host ::ng-deep .material-pill-tabs .mat-mdc-tab-labels {
+  gap: 12px;
+  padding: 12px 0;
+}
+
+:host ::ng-deep .material-pill-tabs .mdc-tab {
+  height: auto;
+  min-width: unset;
+  padding: 0;
+  border-radius: 20px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background-color: rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+:host ::ng-deep .material-pill-tabs .mdc-tab:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+:host ::ng-deep .material-pill-tabs .mdc-tab.mdc-tab--active {
+  background-color: var(--mat-sys-primary-container);
+  border-color: var(--mat-sys-primary);
+}
+
+:host ::ng-deep .material-pill-tabs .mdc-tab .mdc-tab__text-label {
+  opacity: 0.75;
+  font-size: 0.95rem;
+  padding: 8px 16px;
+}
+
+:host ::ng-deep .material-pill-tabs .mdc-tab.mdc-tab--active .mdc-tab__text-label {
+  opacity: 1;
+  font-weight: 500;
+  color: var(--mat-sys-on-primary-container);
+}
+
+:host ::ng-deep .material-pill-tabs.compact .mdc-tab .mdc-tab__text-label {
+  font-size: 0.85rem;
+  padding: 6px 12px;
+}
+
+:host-context(.dark-theme) ::ng-deep .material-pill-tabs .mdc-tab {
+  border-color: rgba(255, 255, 255, 0.1);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+:host-context(.dark-theme) ::ng-deep .material-pill-tabs .mdc-tab:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+:host-context(.dark-theme) ::ng-deep .material-pill-tabs.sticky-header .mat-mdc-tab-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
