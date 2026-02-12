@@ -16,6 +16,8 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { MatMenuModule } from '@angular/material/menu';
+import { ActivityUtilities, EventUtilities } from '@sports-alliance/sports-lib';
+import { of } from 'rxjs';
 
 vi.mock('@angular/fire/analytics', () => ({
     Analytics: class { },
@@ -36,6 +38,8 @@ describe('EventActionsComponent', () => {
             getEventMetaData: vi.fn(),
             getEventAsJSONBloB: vi.fn(),
             getEventAsGPXBloB: vi.fn(),
+            attachStreamsToEventWithActivities: vi.fn(),
+            writeAllEventData: vi.fn().mockResolvedValue(true),
         };
         mockFileService = {
             downloadAsZip: vi.fn(),
@@ -248,6 +252,46 @@ describe('EventActionsComponent', () => {
             const mockActivity = { hasPositionData: () => false };
             vi.spyOn(component.event, 'getActivities').mockReturnValue([mockActivity] as any);
             expect(component.hasPositionalData()).toBeFalsy();
+        });
+    });
+
+    describe('reGenerateStatistics', () => {
+        it('should clear and regenerate activity stats while preserving non-regenerated stat types', async () => {
+            const oldOnlyStat = { getType: () => 'old-only' };
+            const staleRegeneratedStat = { getType: () => 'to-regenerate', stale: true };
+            const generatedStat = { getType: () => 'to-regenerate', stale: false };
+            const statsMap = new Map<string, any>([
+                ['old-only', oldOnlyStat],
+                ['to-regenerate', staleRegeneratedStat],
+            ]);
+
+            const activityWithStats = {
+                clearStats: vi.fn(),
+                getAllStreams: vi.fn().mockReturnValue([]),
+                hasStreamData: vi.fn().mockReturnValue(false),
+                hasPositionData: vi.fn().mockReturnValue(false),
+                getStats: vi.fn().mockImplementation(() => statsMap),
+                getStat: vi.fn().mockImplementation((type: string) => statsMap.get(type)),
+                addStat: vi.fn().mockImplementation((stat: any) => statsMap.set(stat.getType(), stat)),
+            };
+            activityWithStats.clearStats.mockImplementation(() => statsMap.clear());
+
+            vi.spyOn(component.event, 'getActivities').mockReturnValue([activityWithStats] as any);
+            mockEventService.attachStreamsToEventWithActivities.mockReturnValue(of(component.event));
+            const generateMissingStatsSpy = vi.spyOn(ActivityUtilities, 'generateMissingStreamsAndStatsForActivity').mockImplementation((activity: any) => {
+                activity.addStat(generatedStat);
+            });
+            const reGenerateStatsSpy = vi.spyOn(EventUtilities, 'reGenerateStatsForEvent').mockImplementation(() => { });
+
+            await component.reGenerateStatistics();
+
+            expect(mockEventService.attachStreamsToEventWithActivities).toHaveBeenCalledWith(component.user, component.event);
+            expect(activityWithStats.clearStats).toHaveBeenCalledTimes(1);
+            expect(generateMissingStatsSpy).toHaveBeenCalledWith(activityWithStats as any);
+            expect(statsMap.get('old-only')).toBe(oldOnlyStat);
+            expect(statsMap.get('to-regenerate')).toBe(generatedStat);
+            expect(reGenerateStatsSpy).toHaveBeenCalledWith(component.event);
+            expect(mockEventService.writeAllEventData).toHaveBeenCalledWith(component.user, component.event);
         });
     });
 });

@@ -144,8 +144,15 @@ export class EventActionsComponent implements OnInit, OnDestroy {
     await this.eventService.attachStreamsToEventWithActivities(this.user, this.event as any).pipe(take(1)).toPromise();
 
     this.event.getActivities().forEach(activity => {
+      const previousStats = new Map(activity.getStats());
       activity.clearStats();
       ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity);
+
+      previousStats.forEach((stat, type) => {
+        if (!activity.getStat(type)) {
+          activity.addStat(stat);
+        }
+      });
     });
 
     EventUtilities.reGenerateStatsForEvent(this.event);
