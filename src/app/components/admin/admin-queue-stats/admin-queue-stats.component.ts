@@ -33,9 +33,29 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     @Input() loading = false;
     hasRetryData = false;
 
-    @ViewChild('retryChart', { static: true }) retryChartRef!: ElementRef<HTMLDivElement>;
+    @ViewChild('retryChart')
+    set retryChartRef(ref: ElementRef<HTMLDivElement> | undefined) {
+        this._retryChartRef = ref;
+
+        if (!ref) {
+            if (this.resizeObserver) {
+                this.resizeObserver.disconnect();
+                this.resizeObserver = null;
+            }
+            this.eChartsLoader.dispose(this.chart);
+            this.chart = null;
+            return;
+        }
+
+        if (this.viewInitialized) {
+            void this.tryInitializeChartAndRender();
+        }
+    }
 
     private chart: EChartsType | null = null;
+    private chartInitialization: Promise<void> | null = null;
+    private viewInitialized = false;
+    private _retryChartRef: ElementRef<HTMLDivElement> | undefined;
     private isDark = false;
     private resizeObserver: ResizeObserver | null = null;
 
@@ -60,13 +80,13 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     }
 
     async ngAfterViewInit(): Promise<void> {
-        await this.initializeChart();
-        this.updateChartData();
+        this.viewInitialized = true;
+        await this.tryInitializeChartAndRender();
     }
 
     ngOnChanges(changes: SimpleChanges): void {
-        if (changes['stats']) {
-            this.updateChartData();
+        if (changes['stats'] || changes['loading']) {
+            void this.tryInitializeChartAndRender();
         }
     }
 
@@ -81,28 +101,40 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
         this.chart = null;
     }
 
+    private async tryInitializeChartAndRender(): Promise<void> {
+        await this.initializeChart();
+        this.updateChartData();
+    }
+
     private async initializeChart(): Promise<void> {
-        if (!this.retryChartRef?.nativeElement) {
+        if (this.chart || this.chartInitialization || !this._retryChartRef?.nativeElement) {
             return;
         }
 
-        try {
-            this.chart = await this.eChartsLoader.init(this.retryChartRef.nativeElement);
-            this.setupResizeObserver();
-        } catch (error) {
-            console.error('[AdminQueueStatsComponent] Failed to initialize ECharts', error);
-        }
+        const container = this._retryChartRef.nativeElement;
+        this.chartInitialization = (async () => {
+            try {
+                this.chart = await this.eChartsLoader.init(container);
+                this.setupResizeObserver(container);
+            } catch (error) {
+                console.error('[AdminQueueStatsComponent] Failed to initialize ECharts', error);
+            } finally {
+                this.chartInitialization = null;
+            }
+        })();
+
+        await this.chartInitialization;
     }
 
-    private setupResizeObserver(): void {
-        if (typeof ResizeObserver === 'undefined' || !this.retryChartRef?.nativeElement) {
+    private setupResizeObserver(container: HTMLElement): void {
+        if (typeof ResizeObserver === 'undefined') {
             return;
         }
 
         this.resizeObserver = new ResizeObserver(() => {
             this.scheduleResize();
         });
-        this.resizeObserver.observe(this.retryChartRef.nativeElement);
+        this.resizeObserver.observe(container);
     }
 
     private scheduleResize(): void {
@@ -115,7 +147,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     }
 
     private updateChartData(): void {
-        if (!this.chart || !this.retryChartRef?.nativeElement) {
+        if (!this.chart || !this._retryChartRef?.nativeElement) {
             return;
         }
 

@@ -79,6 +79,43 @@ describe('AdminQueueStatsComponent', () => {
     });
 
     describe('Chart Updates', () => {
+        it('should initialize chart when retry container appears after async stats load', async () => {
+            component.loading = true;
+            component.stats = null;
+            fixture.detectChanges();
+            await fixture.whenStable();
+
+            expect(mockEchartsService.init).not.toHaveBeenCalled();
+
+            const asyncStats: QueueStats = {
+                pending: 4,
+                succeeded: 20,
+                stuck: 1,
+                providers: [],
+                advanced: {
+                    throughput: 11,
+                    maxLagMs: 2000,
+                    retryHistogram: {
+                        '0-3': 2,
+                        '4-7': 1,
+                        '8-9': 0
+                    },
+                    topErrors: []
+                },
+                cloudTasks: { pending: 1, succeeded: 2, failed: 0 },
+                dlq: { total: 0, byContext: [], byProvider: [] }
+            };
+
+            component.loading = false;
+            component.stats = asyncStats;
+            fixture.detectChanges();
+            await fixture.whenStable();
+            await new Promise(resolve => setTimeout(resolve, 0));
+
+            expect(mockEchartsService.init).toHaveBeenCalledTimes(1);
+            expect(mockEchartsService.setOption).toHaveBeenCalled();
+        });
+
         it('should update chart data on input change', async () => {
             const mockStats: QueueStats = {
                 pending: 10,
@@ -99,12 +136,11 @@ describe('AdminQueueStatsComponent', () => {
                 dlq: { total: 0, byContext: [], byProvider: [] }
             };
 
-            (component as any).retryChartRef = { nativeElement: document.createElement('div') };
-            (component as any).chart = {};
             component.stats = mockStats;
-            component.ngOnChanges({
-                stats: new SimpleChange(null, mockStats, true)
-            });
+            component.ngOnChanges({ stats: new SimpleChange(null, mockStats, true) });
+            fixture.detectChanges();
+            await fixture.whenStable();
+            await new Promise(resolve => setTimeout(resolve, 0));
 
             expect(mockEchartsService.setOption).toHaveBeenCalled();
             const optionArg = mockEchartsService.setOption.mock.calls[0][1];
