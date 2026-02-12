@@ -4,6 +4,7 @@
 
 :host ::ng-deep .material-pill-tabs .mat-mdc-tab-header {
   border-bottom: 0;
+  padding-inline: 8px;
 }
 
 :host ::ng-deep .material-pill-tabs.sticky-header .mat-mdc-tab-header {
@@ -12,7 +13,6 @@
   z-index: 110;
   background: inherit;
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 :host ::ng-deep .material-pill-tabs .mdc-tab-indicator {
@@ -25,6 +25,8 @@
 }
 
 :host ::ng-deep .material-pill-tabs .mdc-tab {
+  position: relative;
+  overflow: hidden;
   height: auto;
   min-width: unset;
   padding: 0;
@@ -32,6 +34,16 @@
   border: 1px solid rgba(0, 0, 0, 0.08);
   background-color: rgba(0, 0, 0, 0.05);
   transition: all 0.2s ease;
+}
+
+:host ::ng-deep .material-pill-tabs .mdc-tab .mdc-tab__ripple,
+:host ::ng-deep .material-pill-tabs .mdc-tab .mdc-tab__ripple::before,
+:host ::ng-deep .material-pill-tabs .mdc-tab .mdc-tab__ripple::after,
+:host ::ng-deep .material-pill-tabs .mdc-tab .mat-mdc-tab-ripple,
+:host ::ng-deep .material-pill-tabs .mdc-tab .mat-mdc-tab-ripple::before,
+:host ::ng-deep .material-pill-tabs .mdc-tab .mat-mdc-tab-ripple::after,
+:host ::ng-deep .material-pill-tabs .mdc-tab .mat-ripple-element {
+  border-radius: inherit !important;
 }
 
 :host ::ng-deep .material-pill-tabs .mdc-tab:hover {
@@ -67,8 +79,4 @@
 
 :host-context(.dark-theme) ::ng-deep .material-pill-tabs .mdc-tab:hover {
   background-color: rgba(255, 255, 255, 0.1);
-}
-
-:host-context(.dark-theme) ::ng-deep .material-pill-tabs.sticky-header .mat-mdc-tab-header {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }

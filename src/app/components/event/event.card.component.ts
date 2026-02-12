@@ -158,4 +158,5 @@ export class EventCardComponent implements OnInit {
         this.currentUser.set(user);
       });
   }
+
 }

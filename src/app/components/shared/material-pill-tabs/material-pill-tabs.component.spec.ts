@@ -39,6 +39,26 @@ class HostComponent {
   }
 }
 
+@Component({
+  template: `
+    <app-material-pill-tabs [selectedIndex]="selectedIndex">
+      @if (showTabs) {
+        <ng-template appMaterialPillTab="One">
+          <div id="dynamic-content-one">One</div>
+        </ng-template>
+        <ng-template appMaterialPillTab="Two">
+          <div id="dynamic-content-two">Two</div>
+        </ng-template>
+      }
+    </app-material-pill-tabs>
+  `,
+  standalone: false,
+})
+class DynamicHostComponent {
+  selectedIndex = 0;
+  showTabs = false;
+}
+
 describe('MaterialPillTabsComponent', () => {
   let fixture: ComponentFixture<HostComponent>;
   let host: HostComponent;
@@ -46,7 +66,7 @@ describe('MaterialPillTabsComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [MaterialModule, NoopAnimationsModule],
-      declarations: [MaterialPillTabsComponent, MaterialPillTabDirective, HostComponent],
+      declarations: [MaterialPillTabsComponent, MaterialPillTabDirective, HostComponent, DynamicHostComponent],
     }).compileComponents();
 
     fixture = TestBed.createComponent(HostComponent);
@@ -114,5 +134,22 @@ describe('MaterialPillTabsComponent', () => {
     fixture.detectChanges();
     const wrapper = fixture.debugElement.query(By.directive(MaterialPillTabsComponent)).componentInstance as MaterialPillTabsComponent;
     expect(wrapper.lazyContent).toBe(false);
+    expect(fixture.nativeElement.querySelector('#content-one')).toBeTruthy();
+  });
+
+  it('should render projected tabs that are added dynamically', async () => {
+    const dynamicFixture = TestBed.createComponent(DynamicHostComponent);
+    dynamicFixture.detectChanges();
+
+    let tabs = dynamicFixture.nativeElement.querySelectorAll('[role="tab"]');
+    expect(tabs.length).toBe(0);
+
+    dynamicFixture.componentInstance.showTabs = true;
+    dynamicFixture.detectChanges();
+    await dynamicFixture.whenStable();
+    dynamicFixture.detectChanges();
+
+    tabs = dynamicFixture.nativeElement.querySelectorAll('[role="tab"]');
+    expect(tabs.length).toBe(2);
   });
 });

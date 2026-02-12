@@ -1,5 +1,6 @@
 import {
   AfterContentInit,
+  ChangeDetectorRef,
   ChangeDetectionStrategy,
   Component,
   ContentChildren,
@@ -34,10 +35,14 @@ export class MaterialPillTabsComponent implements AfterContentInit {
 
   tabs: MaterialPillTabDirective[] = [];
 
+  constructor(private cdr: ChangeDetectorRef) {}
+
   ngAfterContentInit() {
     this.tabs = this.projectedTabs.toArray();
+    this.cdr.markForCheck();
     this.projectedTabs.changes.subscribe((tabs) => {
       this.tabs = tabs.toArray();
+      this.cdr.markForCheck();
     });
   }
 
