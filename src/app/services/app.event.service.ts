@@ -47,9 +47,16 @@ import { AppCacheService } from './app.cache.service';
 import { BenchmarkEventAdapter } from './benchmark-event.adapter';
 import { SPORTS_LIB_VERSION } from '../constants/sports-lib-version.browser';
 
-interface GetEventsOnceOptions {
+export interface GetEventsOnceOptions {
   preferCache?: boolean;
   warmServer?: boolean;
+}
+
+export type EventsOnceSource = 'cache' | 'server';
+
+export interface GetEventsOnceResult {
+  events: EventInterface[];
+  source: EventsOnceSource;
 }
 
 
@@ -236,6 +243,24 @@ export class AppEventService implements OnDestroy {
     limitCount: number = 10,
     options: GetEventsOnceOptions = {}
   ): Observable<EventInterface[]> {
+    return this.getEventsOnceByWithMeta(
+      user,
+      whereClauses,
+      orderByField,
+      asc,
+      limitCount,
+      options
+    ).pipe(map(result => result.events));
+  }
+
+  public getEventsOnceByWithMeta(
+    user: User,
+    whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [],
+    orderByField: string = 'startDate',
+    asc: boolean = false,
+    limitCount: number = 10,
+    options: GetEventsOnceOptions = {}
+  ): Observable<GetEventsOnceResult> {
     const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount);
     const queryStart = performance.now();
     const preferCache = options.preferCache === true;
@@ -995,7 +1020,12 @@ export class AppEventService implements OnDestroy {
       }));
   }
 
-  private async fetchEventsOnceCacheFirst(q: any, userID: string, queryStart: number, warmServer: boolean): Promise<EventInterface[]> {
+  private async fetchEventsOnceCacheFirst(
+    q: any,
+    userID: string,
+    queryStart: number,
+    warmServer: boolean
+  ): Promise<GetEventsOnceResult> {
     const cacheStart = performance.now();
     try {
       const cacheSnapshot = await runInInjectionContext(this.injector, () => getDocsFromCache(q));
@@ -1011,7 +1041,10 @@ export class AppEventService implements OnDestroy {
         if (warmServer) {
           this.warmEventsOnceServerQuery(q, userID);
         }
-        return cacheEvents;
+        return {
+          events: cacheEvents,
+          source: 'cache',
+        };
       }
       this.logger.info('[perf] app_event_service_get_events_once_cache_first_fallback', {
         reason: 'empty_cache',
@@ -1029,7 +1062,7 @@ export class AppEventService implements OnDestroy {
     return this.fetchEventsOnceFromServer(q, userID, queryStart);
   }
 
-  private async fetchEventsOnceFromServer(q: any, userID: string, queryStart: number): Promise<EventInterface[]> {
+  private async fetchEventsOnceFromServer(q: any, userID: string, queryStart: number): Promise<GetEventsOnceResult> {
     const querySnapshot = await runInInjectionContext(this.injector, () => getDocs(q));
     this.logger.info('[perf] app_event_service_get_events_once_get_docs', {
       durationMs: Number((performance.now() - queryStart).toFixed(2)),
@@ -1038,7 +1071,10 @@ export class AppEventService implements OnDestroy {
       hasPendingWrites: querySnapshot?.metadata?.hasPendingWrites,
       userID,
     });
-    return this.deserializeEventsFromQueryDocs(querySnapshot.docs, userID, 'app_event_service_get_events_once_deserialize', querySnapshot.size);
+    return {
+      events: this.deserializeEventsFromQueryDocs(querySnapshot.docs, userID, 'app_event_service_get_events_once_deserialize', querySnapshot.size),
+      source: 'server',
+    };
   }
 
   private warmEventsOnceServerQuery(q: any, userID: string): void {

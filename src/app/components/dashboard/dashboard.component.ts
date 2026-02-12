@@ -10,7 +10,7 @@ import { DateRanges } from '@sports-alliance/sports-lib';
 import { Search } from '../event-search/event-search.component';
 import { AppUserService } from '../../services/app.user.service';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
-import { distinctUntilChanged, map, switchMap, take, tap } from 'rxjs/operators';
+import { distinctUntilChanged, filter, map, switchMap, take, tap } from 'rxjs/operators';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../services/logger.service';
@@ -41,7 +41,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public hasMergedEvents = false;
 
   private shouldSearch: boolean;
-  private hasResolvedDataForInitialRender = false;
+  private initialLiveReconcilePending = false;
+  private initialResolvedEventsForReconcile: EventInterface[] = [];
+  private initialResolvedUserIDForReconcile: string | null = null;
   private analyticsService = inject(AppAnalyticsService);
   private logger = inject(LoggerService);
 
@@ -62,7 +64,9 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       const resolvedDataStart = performance.now();
       this.events = resolvedData.events || [];
       this.user = resolvedData.user;
-      this.hasResolvedDataForInitialRender = !!resolvedData.user;
+      this.initialLiveReconcilePending = !!resolvedData.user;
+      this.initialResolvedEventsForReconcile = this.events || [];
+      this.initialResolvedUserIDForReconcile = resolvedData.user?.uid || null;
       this.targetUser = resolvedData.targetUser;
       this.hasMergedEvents = resolvedData.hasMergedEvents ?? this.events?.some(event => event.isMerge) ?? false;
       this.isLoading = false;
@@ -112,22 +116,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         });
         return of({ user: null, events: null });
       }
-
-      // Resolver already loaded the same dataset once; skip duplicate live query on first paint.
-      if (
-        this.hasResolvedDataForInitialRender
-        && !this.shouldSearch
-        && this.isInitialized
-        && this.user?.uid === user.uid
-      ) {
-        this.hasResolvedDataForInitialRender = false;
-        this.logger.info('[perf] dashboard_skip_initial_live_query', {
-          events: this.events?.length || 0,
-          userID: user.uid,
-        });
-        return of({ events: this.events || [], user });
-      }
-
 
 
       if (this.user && (
@@ -187,21 +175,41 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       return this.eventService
         .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit)
         .pipe(
-          distinctUntilChanged((p: EventInterface[], c: EventInterface[]) => {
-            if (p?.length !== c?.length) return false;
-            return p.every((event, index) => {
-              const prev = p[index];
-              const curr = c[index];
-              return prev.getID() === curr.getID() &&
-                prev.name === curr.name &&
-                prev.startDate?.getTime() === curr.startDate?.getTime();
-            });
+          distinctUntilChanged((p: EventInterface[], c: EventInterface[]) => this.areEventsEquivalentByIdentity(p, c)),
+          map((eventsArray: EventInterface[]) => {
+            if (this.initialLiveReconcilePending && this.initialResolvedUserIDForReconcile !== user.uid) {
+              this.initialLiveReconcilePending = false;
+            }
+
+            const shouldAttemptInitialReconcile = this.initialLiveReconcilePending
+              && this.initialResolvedUserIDForReconcile === user.uid
+              && !this.shouldSearch;
+
+            if (shouldAttemptInitialReconcile) {
+              this.initialLiveReconcilePending = false;
+              const isDuplicateOfResolvedData = this.areEventsEquivalentByIdentity(this.initialResolvedEventsForReconcile, eventsArray);
+              if (isDuplicateOfResolvedData) {
+                this.logger.info('[perf] dashboard_skip_initial_live_duplicate', {
+                  events: eventsArray?.length || 0,
+                  userID: user.uid,
+                });
+                return { eventsArray, skipInitialStateUpdate: true };
+              }
+            }
+
+            return { eventsArray, skipInitialStateUpdate: false };
           }),
-          tap((eventsArray: EventInterface[]) => {
+          tap(({ eventsArray, skipInitialStateUpdate }) => {
+            if (skipInitialStateUpdate) {
+              return;
+            }
             this.logPerf('events_listener_emit', userEmissionStart, { incomingEvents: eventsArray?.length || 0 });
             this.hasMergedEvents = eventsArray.some(event => event.isMerge);
           }),
-          map((eventsArray: EventInterface[]) => {
+          map(({ eventsArray, skipInitialStateUpdate }) => {
+            if (skipInitialStateUpdate) {
+              return null;
+            }
             const filterStart = performance.now();
             let filteredEvents = eventsArray;
             if (!includeMergedEvents) {
@@ -225,10 +233,11 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
               resultCount: result.length,
             });
             return result;
+          }),
+          filter((eventsArray: EventInterface[] | null): eventsArray is EventInterface[] => eventsArray !== null),
+          map((events) => {
+            return { events: events, user: user }
           }))
-        .pipe(map((events) => {
-          return { events: events, user: user }
-        }))
     })).subscribe((eventsAndUser) => {
 
       this.shouldSearch = false;
@@ -274,5 +283,45 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       durationMs: Number((performance.now() - start).toFixed(2)),
       ...(meta || {}),
     });
+  }
+
+  private areEventsEquivalentByIdentity(previousEvents: EventInterface[] = [], currentEvents: EventInterface[] = []): boolean {
+    if (previousEvents?.length !== currentEvents?.length) {
+      return false;
+    }
+    return previousEvents.every((previousEvent, index) => {
+      const currentEvent = currentEvents[index];
+      return this.getEventStableID(previousEvent) === this.getEventStableID(currentEvent)
+        && previousEvent?.name === currentEvent?.name
+        && this.getEventStableStartDate(previousEvent) === this.getEventStableStartDate(currentEvent);
+    });
+  }
+
+  private getEventStableID(event: EventInterface | undefined): string | null {
+    if (!event) {
+      return null;
+    }
+    const eventAny = event as any;
+    if (typeof eventAny.getID === 'function') {
+      return eventAny.getID();
+    }
+    return eventAny.id || null;
+  }
+
+  private getEventStableStartDate(event: EventInterface | undefined): number | null {
+    if (!event) {
+      return null;
+    }
+    const startDate = (event as any).startDate;
+    if (startDate instanceof Date) {
+      return startDate.getTime();
+    }
+    if (startDate && typeof startDate.getTime === 'function') {
+      return startDate.getTime();
+    }
+    if (typeof startDate === 'number') {
+      return startDate;
+    }
+    return null;
   }
 }

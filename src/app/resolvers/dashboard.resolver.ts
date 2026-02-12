@@ -1,6 +1,6 @@
 import { inject, Injector, runInInjectionContext } from '@angular/core';
 import { ActivatedRouteSnapshot, ResolveFn, Router, RouterStateSnapshot } from '@angular/router';
-import { AppEventService } from '../services/app.event.service';
+import { AppEventService, type EventsOnceSource } from '../services/app.event.service';
 import { AppUserService } from '../services/app.user.service';
 import { EventInterface, ActivityTypes, DateRanges, DaysOfTheWeek } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../models/app-user.interface';
@@ -17,6 +17,7 @@ export interface DashboardResolverData {
     user: AppUserInterface | null;
     targetUser?: AppUserInterface | null;
     hasMergedEvents?: boolean;
+    eventsSource?: EventsOnceSource;
 }
 
 let dashboardResolverRunCounter = 0;
@@ -133,7 +134,7 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
             const limit = 0;
 
             const eventsFetchStart = performance.now();
-            const events = await firstValueFrom(eventService.getEventsOnceBy(
+            const eventsResult = await firstValueFrom(eventService.getEventsOnceByWithMeta(
                 userContext,
                 where,
                 'startDate',
@@ -141,17 +142,18 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
                 limit,
                 {
                     preferCache: true,
-                    warmServer: true
+                    warmServer: false
                 }
             ));
             logger.info('[perf] dashboard_resolver_events_fetch', {
                 runId,
                 durationMs: Number((performance.now() - eventsFetchStart).toFixed(2)),
                 whereClauses: where.length,
-                events: events?.length || 0,
+                events: eventsResult?.events?.length || 0,
+                source: eventsResult?.source || null,
                 userContextUID: userContext?.uid || null,
             });
-            const rawEvents = events || [];
+            const rawEvents = eventsResult?.events || [];
             const hasMergedEvents = rawEvents.some(event => event.isMerge);
             const filteredByMerge = includeMergedEvents ? rawEvents : rawEvents.filter(event => !event.isMerge);
 
@@ -162,7 +164,13 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
                     durationMs: Number((performance.now() - resolverStart).toFixed(2)),
                     returnedEvents: filteredByMerge?.length || 0,
                 });
-                return { events: filteredByMerge || [], user: user, targetUser, hasMergedEvents };
+                return {
+                    events: filteredByMerge || [],
+                    user: user,
+                    targetUser,
+                    hasMergedEvents,
+                    eventsSource: eventsResult?.source
+                };
             }
 
             const filteredEvents = (filteredByMerge || []).filter(event => {
@@ -174,7 +182,13 @@ export const dashboardResolver: ResolveFn<DashboardResolverData> = (
                 durationMs: Number((performance.now() - resolverStart).toFixed(2)),
                 returnedEvents: filteredEvents.length,
             });
-            return { events: filteredEvents, user: user, targetUser, hasMergedEvents };
+            return {
+                events: filteredEvents,
+                user: user,
+                targetUser,
+                hasMergedEvents,
+                eventsSource: eventsResult?.source
+            };
         })),
         map((result) => {
             return result as DashboardResolverData;

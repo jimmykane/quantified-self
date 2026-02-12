@@ -110,15 +110,56 @@ describe('DashboardComponent', () => {
         expect(component.isLoading).toBe(false);
     });
 
-    it('should skip duplicate initial live query when resolver already returned user data', async () => {
+    it('should attach initial live query when resolver already returned user data', async () => {
         mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
         mockActivatedRoute.snapshot.data.dashboardData.events = [{ id: 'event1' }];
 
         fixture.detectChanges();
         await fixture.whenStable();
 
-        expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
+        expect(mockEventService.getEventsBy).toHaveBeenCalled();
         expect(component.events.length).toBe(1);
+    });
+
+    it('should skip only the first identical live emission and then update on subsequent changes', async () => {
+        const resolvedEvents = [{ id: 'event1' }] as any;
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.events = resolvedEvents;
+
+        const eventsSubject = new BehaviorSubject([{ id: 'event1' }] as any);
+        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.events).toBe(resolvedEvents);
+
+        const updatedEvents = [{ id: 'event1' }, { id: 'event2' }] as any;
+        eventsSubject.next(updatedEvents);
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.events).toEqual(updatedEvents);
+        expect(component.events).not.toBe(resolvedEvents);
+    });
+
+    it('should stay live-reactive after cache-backed resolver data', async () => {
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.events = [{ id: 'event1' }];
+        mockActivatedRoute.snapshot.data.dashboardData.eventsSource = 'cache';
+
+        const eventsSubject = new BehaviorSubject([{ id: 'event1' }] as any);
+        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        eventsSubject.next([{ id: 'event1' }, { id: 'event2' }] as any);
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.events.length).toBe(2);
+        expect((component.events[1] as any).id).toBe('event2');
     });
 
     it('should update events when service emits new data', async () => {
