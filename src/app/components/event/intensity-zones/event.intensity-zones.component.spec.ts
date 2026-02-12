@@ -221,7 +221,7 @@ describe('EventIntensityZonesComponent', () => {
     expect(mockedConvert).toHaveBeenLastCalledWith(component.activities, true);
     expect(mockLoader.setOption).toHaveBeenCalledTimes(2);
     const option = getLastOption();
-    expect(option.grid.right).toBe(0);
+    expect(option.grid.right).toBe(16);
     expect(option.grid.bottom).toBe(0);
   });
 
@@ -279,7 +279,7 @@ describe('EventIntensityZonesComponent', () => {
     expect(option.yAxis.axisLabel.rich.zone_0.align).toBe('center');
     expect(option.yAxis.axisLabel.rich.zone_0.verticalAlign).toBe('middle');
     expect(option.yAxis.axisLabel.rich.zone_0.width).toBe(56);
-    expect(option.series[0].label.rich.zone_0.width).toBe(26);
+    expect(option.series[0].label.rich.zone_0.width).toBe(22);
     expect(option.series[0].label.rich.zone_2.backgroundColor).toBe('color-Zone 3');
   });
 

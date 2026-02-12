@@ -201,9 +201,9 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
         type: 'line',
         name: seriesEntry.label,
         data: chartData,
-        showSymbol: !hasMultipleSeries,
+        showSymbol: true,
         symbol: 'circle',
-        symbolSize: this.isMobile ? 4 : 5,
+        symbolSize: this.isMobile ? 6 : 7,
         smooth: hasMultipleSeries ? 0.18 : 0.28,
         clip: false,
         lineStyle: {
@@ -215,6 +215,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
         },
         emphasis: {
           focus: hasMultipleSeries ? 'series' : 'none',
+          scale: true,
         },
         z: 10 + index,
       };
@@ -305,7 +306,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
       },
       xAxis: {
         type: 'category',
-        boundaryGap: false,
+        boundaryGap: true,
         data: xDurations,
         axisLabel: {
           interval: 0,

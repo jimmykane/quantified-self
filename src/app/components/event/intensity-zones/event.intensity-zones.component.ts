@@ -143,6 +143,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     const textColor = darkTheme ? '#ffffff' : '#2a2a2a';
     const gridLineColor = darkTheme ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)';
     const zoneBackgroundOpacity = darkTheme ? 0.18 : 0.12;
+    const rightInset = this.isMobile ? 16 : 0;
     const zoneAxisRichStyles = this.createZoneAxisRichStyles(data.zones);
     const zoneBulletRichStyles = this.createZoneBulletRichStyles(data.zones);
     const zoneBackgroundColors = data.zones.map(zone =>
@@ -163,10 +164,10 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         label: {
           show: true,
           position: 'right',
-          distance: 8,
+          distance: 4,
           align: 'left',
           color: textColor,
-          padding: [1, 4, 1, 4],
+          padding: [0, 2, 0, 2],
           formatter: (params: { dataIndex: number }) => {
             const dataIndex = params.dataIndex;
             const value = seriesEntry.values[dataIndex] ?? 0;
@@ -196,7 +197,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       },
       grid: {
         left: 0,
-        right: 0,
+        right: rightInset,
         top: 0,
         bottom: 0,
         containLabel: true
@@ -329,7 +330,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     lineHeight: number;
     padding: number[];
   }> {
-    const bulletWidth = this.isMobile ? 20 : 26;
+    const bulletWidth = this.isMobile ? 18 : 22;
     const bulletLineHeight = this.isMobile ? 14 : 16;
 
     return zones.reduce((styles, zone, zoneIndex) => {
@@ -342,7 +343,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         align: 'center',
         verticalAlign: 'middle',
         lineHeight: bulletLineHeight,
-        padding: [0, 2, 0, 2],
+        padding: [0, 1, 0, 1],
       };
       return styles;
     }, {} as Record<string, {
