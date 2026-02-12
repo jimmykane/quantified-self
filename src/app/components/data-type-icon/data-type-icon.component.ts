@@ -239,6 +239,15 @@ export class DataTypeIconComponent {
         return 'mood';
       case DataRPE.type:
         return 'fitness_center';
+      case 'Weight':
+        return 'monitor_weight';
+      case 'Height':
+        return 'height';
+      case 'Gender':
+        return 'wc';
+      case 'Fitness Age':
+      case 'Age':
+        return 'cake';
       case DataEnergy.type:
         return 'bolt';
       case DataSwimPaceAvg.type:
@@ -260,6 +269,14 @@ export class DataTypeIconComponent {
       case 'Minimum EHPE':
       case 'Maximum EHPE':
         return 'monitor_heart';
+      case 'Flow':
+      case 'Avg Flow':
+      case 'Total Flow':
+        return 'water';
+      case 'Grit':
+      case 'Avg Grit':
+      case 'Total Grit':
+        return 'terrain';
       case 'Distance (Stryd)':
       case 'GNSS Distance':
         return 'route';

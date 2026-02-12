@@ -57,8 +57,19 @@ section.grid {
 .stat-avatar {
   flex-shrink: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
+}
+
+.stat-avatar-unit {
+  font-size: 0.5rem;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mat-app-on-surface-variant);
+  opacity: 0.85;
 }
 
 .stat-content {
@@ -162,6 +173,19 @@ section.grid {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Composite cards need wider value rendering to avoid desktop truncation. */
+.stat-item--composite .stat-values-row {
+  font-size: 0.9rem;
+}
+
+.stat-item--composite .stat-value-cell {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.15;
+  word-break: break-word;
 }
 
 .stat-value-diff {

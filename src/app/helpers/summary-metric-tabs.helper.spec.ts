@@ -141,6 +141,7 @@ describe('buildSummaryMetricTabs', () => {
       'Gender',
       'Height',
       'Weight',
+      'Fitness Age',
       'Absolute Pressure',
       DataAirPower.type,
       'Effort Pace',
@@ -167,10 +168,11 @@ describe('buildSummaryMetricTabs', () => {
 
     const physiologicalTab = tabs.find((tab) => tab.id === 'physiological');
     expect(physiologicalTab?.metricTypes).toEqual([
-      'Age',
-      'Gender',
-      'Height',
       'Weight',
+      'Height',
+      'Gender',
+      'Fitness Age',
+      'Age',
     ]);
   });
 
@@ -205,7 +207,7 @@ describe('buildSummaryMetricTabs', () => {
       'GNSS Distance',
     ]);
 
-    expect(tabs.map((tab) => tab.id)).toEqual(['environment', 'device']);
+    expect(tabs.map((tab) => tab.id)).toEqual(['environment']);
 
     const environmentTab = tabs.find((tab) => tab.id === 'environment');
     expect(environmentTab?.metricTypes).toEqual([
@@ -221,11 +223,6 @@ describe('buildSummaryMetricTabs', () => {
       'GNSS Distance',
     ]);
 
-    const deviceTab = tabs.find((tab) => tab.id === 'device');
-    expect(deviceTab?.metricTypes).toEqual([
-      'Distance (Stryd)',
-      'GNSS Distance',
-    ]);
   });
 
   it('should map requested performance run-dynamics metrics', () => {

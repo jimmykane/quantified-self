@@ -91,6 +91,17 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon('Stance Time Balance Left')).toBe('directions_walk');
   });
 
+  it('should provide icon mappings for grit and flow metrics', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon('Flow')).toBe('water');
+    expect(component.getColumnHeaderIcon('Avg Flow')).toBe('water');
+    expect(component.getColumnHeaderIcon('Total Flow')).toBe('water');
+    expect(component.getColumnHeaderIcon('Grit')).toBe('terrain');
+    expect(component.getColumnHeaderIcon('Avg Grit')).toBe('terrain');
+    expect(component.getColumnHeaderIcon('Total Grit')).toBe('terrain');
+  });
+
   it('should provide icon mappings for requested device metrics', () => {
     const component = new DataTypeIconComponent();
 
@@ -101,5 +112,15 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon('Battery Charge')).toBe('battery_full');
     expect(component.getColumnHeaderIcon('Battery Consumption')).toBe('battery_alert');
     expect(component.getColumnHeaderIcon('Battery Current')).toBe('electric_bolt');
+  });
+
+  it('should provide icon mappings for physiological profile metrics', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon('Weight')).toBe('monitor_weight');
+    expect(component.getColumnHeaderIcon('Height')).toBe('height');
+    expect(component.getColumnHeaderIcon('Gender')).toBe('wc');
+    expect(component.getColumnHeaderIcon('Fitness Age')).toBe('cake');
+    expect(component.getColumnHeaderIcon('Age')).toBe('cake');
   });
 });

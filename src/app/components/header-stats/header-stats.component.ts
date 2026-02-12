@@ -70,5 +70,22 @@ export class HeaderStatsComponent implements OnChanges {
     return normalizeUnitDerivedStatLabel(stat);
   }
 
+  getCompositeUnit(card: HeaderStatCard): string {
+    if (!card.isComposite || !card.valueItems.length) {
+      return '';
+    }
+
+    const nonEmptyUnits = card.valueItems
+      .map((item) => item.displayUnit?.trim())
+      .filter((unit): unit is string => !!unit);
+
+    if (!nonEmptyUnits.length) {
+      return '';
+    }
+
+    const uniqueUnits = [...new Set(nonEmptyUnits).values()];
+    return uniqueUnits[0];
+  }
+
 
 }

@@ -36,6 +36,10 @@ describe('getDefaultSummaryStatTypes', () => {
     expect(stats).toContain('Average Leg Stiffness');
     expect(stats).toContain('Average EVPE');
     expect(stats).toContain('Average EHPE');
+    expect(stats).toContain('Fitness Age');
+    expect(stats).toContain('Gender');
+    expect(stats).toContain('Height');
+    expect(stats).toContain('Weight');
   });
 
   it('should keep speed derivation behavior by activity type', () => {

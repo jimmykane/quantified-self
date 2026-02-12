@@ -102,15 +102,23 @@ const ALTITUDE_LIB_EXTRA_TYPE_STRINGS: string[] = [
 ];
 
 const PHYSIOLOGICAL_EXTRA_TYPE_STRINGS: string[] = [
-  'Age',
-  'Gender',
-  'Height',
   'Weight',
+  'Height',
+  'Gender',
+  'Fitness Age',
+  // Backward-compatible fallback if older payloads still emit plain Age.
+  'Age',
 ];
 
 const PERFORMANCE_EXTRA_TYPE_STRINGS: string[] = [
   'Effort Pace',
   'EPOC',
+  'Flow',
+  'Avg Flow',
+  'Total Flow',
+  'Grit',
+  'Avg Grit',
+  'Total Grit',
 ];
 
 export const EVENT_SUMMARY_GRADE_ADJUSTED_SPEED_TYPES: string[] = [
@@ -150,8 +158,6 @@ const DEVICE_EXTRA_TYPE_STRINGS: string[] = [
   'Battery Consumption',
   'Battery Current',
   'Battery Voltage',
-  'Distance (Stryd)',
-  'GNSS Distance',
 ];
 
 const DEVICE_SIGNAL_EXTRA_TYPE_STRINGS: string[] = [

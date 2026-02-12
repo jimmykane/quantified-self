@@ -6,6 +6,9 @@
     <div class="stat-item" [class.stat-item--composite]="card.isComposite">
       <div class="stat-avatar">
         <app-data-type-icon [size]="'24px'" [vAlign]="'middle'" [dataType]="card.iconType"></app-data-type-icon>
+        @if (card.isComposite && getCompositeUnit(card); as unit) {
+        <span class="stat-avatar-unit">{{ unit }}</span>
+        }
       </div>
       <div class="stat-content">
         <div class="stat-label">
@@ -20,7 +23,7 @@
           </div>
           <div class="stat-values-row">
             @for (valueItem of card.valueItems; track valueItem.type) {
-            <span class="stat-value-cell">{{valueItem.displayValue}} {{valueItem.displayUnit}}</span>
+            <span class="stat-value-cell">{{valueItem.displayValue}}</span>
             }
           </div>
           @if (showDiff) {
