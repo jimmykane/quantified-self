@@ -162,29 +162,6 @@ describe('DashboardComponent', () => {
         expect((component.events[1] as any).id).toBe('event2');
     });
 
-    it('should suppress repeated initial duplicates across auth re-emissions', async () => {
-        const authUserSubject = new BehaviorSubject(mockUser);
-        mockAuthService.user$ = authUserSubject.asObservable();
-
-        const resolvedEvents = [{ id: 'event1' }] as any;
-        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
-        mockActivatedRoute.snapshot.data.dashboardData.events = resolvedEvents;
-
-        mockEventService.getEventsBy.mockImplementation(() => of([{ id: 'event1' }] as any));
-
-        fixture.detectChanges();
-        await fixture.whenStable();
-
-        expect(component.events).toBe(resolvedEvents);
-
-        authUserSubject.next(mockUser);
-        fixture.detectChanges();
-        await fixture.whenStable();
-
-        expect(mockEventService.getEventsBy).toHaveBeenCalledTimes(2);
-        expect(component.events).toBe(resolvedEvents);
-    });
-
     it('should update events when service emits new data', async () => {
         const eventsSubject = new BehaviorSubject([{ id: 'event1' }]);
         mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());

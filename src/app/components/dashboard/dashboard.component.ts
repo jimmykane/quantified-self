@@ -177,14 +177,16 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         .pipe(
           distinctUntilChanged((p: EventInterface[], c: EventInterface[]) => this.areEventsEquivalentByIdentity(p, c)),
           map((eventsArray: EventInterface[]) => {
-            const isInitialReconcileContextValid = this.initialResolvedUserIDForReconcile === user.uid
-              && !this.shouldSearch;
-
-            if (this.initialLiveReconcilePending && !isInitialReconcileContextValid) {
+            if (this.initialLiveReconcilePending && this.initialResolvedUserIDForReconcile !== user.uid) {
               this.initialLiveReconcilePending = false;
             }
 
-            if (this.initialLiveReconcilePending) {
+            const shouldAttemptInitialReconcile = this.initialLiveReconcilePending
+              && this.initialResolvedUserIDForReconcile === user.uid
+              && !this.shouldSearch;
+
+            if (shouldAttemptInitialReconcile) {
+              this.initialLiveReconcilePending = false;
               const isDuplicateOfResolvedData = this.areEventsEquivalentByIdentity(this.initialResolvedEventsForReconcile, eventsArray);
               if (isDuplicateOfResolvedData) {
                 this.logger.info('[perf] dashboard_skip_initial_live_duplicate', {
@@ -193,8 +195,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
                 });
                 return { eventsArray, skipInitialStateUpdate: true };
               }
-              // Reconcile mode ends once live data diverges from resolver snapshot.
-              this.initialLiveReconcilePending = false;
             }
 
             return { eventsArray, skipInitialStateUpdate: false };
