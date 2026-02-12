@@ -132,6 +132,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.routerEventSubscription = this.router.events.subscribe((event) => {
       if (event instanceof NavigationEnd) {
         this.updateOnboardingState();
+        this.scrollToTopAfterNavigation();
       }
     });
 
@@ -249,6 +250,26 @@ export class AppComponent implements OnInit, OnDestroy {
       return null;
     }
     return outlet && outlet.activatedRouteData && outlet.activatedRouteData['animation'];
+  }
+
+  private scrollToTopAfterNavigation(): void {
+    if (typeof document === 'undefined' || typeof window === 'undefined') {
+      return;
+    }
+
+    // Reset the shell scroller used by mat-sidenav layouts.
+    const shellScroller = document.querySelector('.app-sidenav-container .mat-drawer-content') as HTMLElement | null;
+    if (shellScroller) {
+      shellScroller.scrollTop = 0;
+      shellScroller.scrollLeft = 0;
+    }
+
+    // Keep default window restoration behavior aligned as a fallback.
+    try {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    } catch {
+      window.scrollTo(0, 0);
+    }
   }
 
   private triggerCircularReveal(x: number, y: number, theme: any) {

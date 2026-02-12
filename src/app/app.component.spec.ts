@@ -14,7 +14,7 @@ import { AppWhatsNewService } from './services/app.whats-new.service';
 import { MatDialog } from '@angular/material/dialog';
 
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
-import { Router, RouterModule, ActivatedRoute } from '@angular/router';
+import { Router, RouterModule, ActivatedRoute, NavigationEnd } from '@angular/router';
 import { DomSanitizer } from '@angular/platform-browser';
 import { of, Subject } from 'rxjs';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -232,5 +232,38 @@ describe('AppComponent', () => {
     it('should return false for isHomeRoute when url is /dashboard', () => {
         mockRouter.url = '/dashboard';
         expect(component.isHomeRoute).toBe(false);
+    });
+
+    it('prepareRoute should return Event animation after first load', () => {
+        (component as any).isFirstLoad = false;
+        const outlet = { activatedRouteData: { animation: 'Event' } } as any;
+
+        expect(component.prepareRoute(outlet)).toBe('Event');
+    });
+
+    it('prepareRoute should return non-Event animation after first load', () => {
+        (component as any).isFirstLoad = false;
+        const outlet = { activatedRouteData: { animation: 'Dashboard' } } as any;
+
+        expect(component.prepareRoute(outlet)).toBe('Dashboard');
+    });
+
+    it('should reset scroll to top on NavigationEnd', () => {
+        const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => { });
+        fixture.detectChanges();
+
+        const shellScroller = fixture.nativeElement.querySelector('.mat-drawer-content') as HTMLElement | null;
+        if (shellScroller) {
+            shellScroller.scrollTop = 120;
+            shellScroller.scrollLeft = 20;
+        }
+
+        (mockRouter.events as Subject<any>).next(new NavigationEnd(1, '/dashboard', '/dashboard'));
+
+        if (shellScroller) {
+            expect(shellScroller.scrollTop).toBe(0);
+            expect(shellScroller.scrollLeft).toBe(0);
+        }
+        expect(scrollSpy).toHaveBeenCalled();
     });
 });

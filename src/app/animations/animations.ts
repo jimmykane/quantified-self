@@ -27,18 +27,17 @@ export const expandCollapse =
 export const slideInAnimation =
   trigger('routeAnimations', [
     transition('* <=> *', [
-      query(':enter, :leave', style({ position: 'fixed', width: '100%' }), { optional: true }),
+      query(':enter, :leave', style({ position: 'absolute', inset: 0, width: '100%' }), { optional: true }),
       group([
         query(':enter', [
-          style({ opacity: 0, transform: 'translateX(100%)' }),
-          animate('0.65s ease', style({ opacity: 1, transform: 'translateX(0%)' }))
+          style({ opacity: 0 }),
+          animate('220ms ease-out', style({ opacity: 1 }))
         ], { optional: true }),
         query(':leave', [
-          style({ opacity: 1, transform: 'translateX(0%)' }),
-          animate('0.65s ease', style({ opacity: 0, transform: 'translateX(-100%)' }))
+          style({ opacity: 1 }),
+          animate('180ms ease-in', style({ opacity: 0 }))
         ], { optional: true }),
       ])
     ]),
   ]);
-
 
