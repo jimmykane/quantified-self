@@ -28,9 +28,9 @@
 
   @if (hasEvaluatedTripDetection() && detectedTrips().length > 0) {
   <div class="tracks-trips-peek-anchor">
-    <app-peek-panel class="tracks-trips-peek" position="left" toggleThicknessSize="small" toggleLengthSize="small"
+    <app-peek-panel class="tracks-trips-peek" position="left" toggleLengthSize="small"
       [expanded]="detectedTripsPanelExpanded()"
-      (expandedChange)="detectedTripsPanelExpanded.set($event)" [expandedSizePx]="300" [collapsedSizePx]="30"
+      (expandedChange)="detectedTripsPanelExpanded.set($event)" [expandedSizePx]="300" [collapsedSizePx]="28"
       ariaLabelExpand="Expand detected trips" ariaLabelCollapse="Collapse detected trips" title="Detected trips"
       icon="route">
       <div peek-header-actions class="detected-trips-summary-row">
