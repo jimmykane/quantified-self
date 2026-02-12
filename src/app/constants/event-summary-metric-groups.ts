@@ -1,4 +1,5 @@
 import {
+  DataStore,
   DataAccumulatedPower,
   DataAbsolutePressure,
   DataAbsolutePressureAvg,
@@ -75,95 +76,93 @@ export interface EventSummaryMetricGroupConfig {
   singleValueTypes?: string[];
 }
 
-// Non-exported sports-lib stat types (present at runtime in lib/esm/index.js).
 const POWER_LIB_EXTRA_TYPE_STRINGS: string[] = [
-  'Power Normalized',
-  'Power Intensity Factor',
-  'Power Training Stress Score',
-  'FTP',
-  'Power Work',
-  'PowerWattsPerKg',
-  'CriticalPower',
-  'WPrime',
-  'Form Power',
-  'Power Pod',
-  'Average Air Power',
-  'Maximum Air Power',
-  'Minimum Air Power',
-  'Power Pedal Smoothness Left',
-  'Power Pedal Smoothness Right',
-  'Power Torque Effectiveness Left',
-  'Power Torque Effectiveness Right',
-  'Power Zone Target',
+  DataStore.DataPowerNormalized.type,
+  DataStore.DataPowerIntensityFactor.type,
+  DataStore.DataPowerTrainingStressScore.type,
+  DataStore.DataFTP.type,
+  DataStore.DataPowerWork.type,
+  DataStore.DataPowerWattsPerKg.type,
+  DataStore.DataCriticalPower.type,
+  DataStore.DataWPrime.type,
+  DataStore.DataFormPower.type,
+  DataStore.DataPowerPodUsed.type,
+  DataStore.DataAirPowerAvg.type,
+  DataStore.DataAirPowerMax.type,
+  DataStore.DataAirPowerMin.type,
+  DataStore.DataPowerPedalSmoothnessLeft.type,
+  DataStore.DataPowerPedalSmoothnessRight.type,
+  DataStore.DataPowerTorqueEffectivenessLeft.type,
+  DataStore.DataPowerTorqueEffectivenessRight.type,
+  DataStore.DataTargetPowerZone.type,
 ];
 
 const ALTITUDE_LIB_EXTRA_TYPE_STRINGS: string[] = [
-  'Ascent Time',
-  'Descent Time',
+  DataStore.DataAscentTime.type,
+  DataStore.DataDescentTime.type,
 ];
 
 const PHYSIOLOGICAL_EXTRA_TYPE_STRINGS: string[] = [
-  'Avg Respiration Rate',
-  'Min Respiration Rate',
-  'Max Respiration Rate',
-  'Weight',
-  'Height',
-  'Gender',
-  'Fitness Age',
-  // Backward-compatible fallback if older payloads still emit plain Age.
-  'Age',
+  DataStore.DataAvgRespirationRate.type,
+  DataStore.DataMinRespirationRate.type,
+  DataStore.DataMaxRespirationRate.type,
+  DataStore.DataWeight.type,
+  DataStore.DataHeight.type,
+  DataStore.DataGender.type,
+  DataStore.DataFitnessAge.type,
+  DataStore.DataAge.type,
 ];
 
 const PERFORMANCE_EXTRA_TYPE_STRINGS: string[] = [
-  'Effort Pace',
-  'Avg VAM',
-  'EPOC',
-  'Jump Count',
-  'Flow',
-  'Avg Flow',
-  'Total Flow',
-  'Grit',
-  'Avg Grit',
-  'Total Grit',
+  DataStore.DataEffortPace.type,
+  DataStore.DataAvgVAM.type,
+  DataStore.DataEPOC.type,
+  DataStore.DataJumpCount.type,
+  DataStore.DataFlow.type,
+  DataStore.DataAvgFlow.type,
+  DataStore.DataTotalFlow.type,
+  DataStore.DataGrit.type,
+  DataStore.DataAvgGrit.type,
+  DataStore.DataTotalGrit.type,
 ];
 
 export const EVENT_SUMMARY_GRADE_ADJUSTED_SPEED_TYPES: string[] = [
   DataGradeAdjustedSpeedAvg.type,
-  'Minimum Grade Adjusted Speed',
-  'Maximum Grade Adjusted Speed',
+  DataStore.DataGradeAdjustedSpeedMin.type,
+  DataStore.DataGradeAdjustedSpeedMax.type,
 ];
 
 export const EVENT_SUMMARY_GRADE_ADJUSTED_PACE_TYPES: string[] = [
   DataGradeAdjustedPaceAvg.type,
-  'Minimum Grade Adjusted Pace',
-  'Maximum Grade Adjusted Pace',
+  DataStore.DataGradeAdjustedPaceMin.type,
+  DataStore.DataGradeAdjustedPaceMax.type,
 ];
 
 const PERFORMANCE_RUN_DYNAMICS_TYPE_STRINGS: string[] = [
-  'Average Ground Contact Time',
-  'Minimum Ground Contact Time',
-  'Maximum Ground Contact Time',
-  'Stance Time',
-  'Stance Time Balance Left',
-  'Stance Time Balance Right',
-  'Ground Contact Time Balance Left',
-  'Ground Contact Time Balance Right',
-  'Vertical Oscillation',
-  'Vertical Ratio',
-  'Average Vertical Ratio',
-  'Minimum Vertical Ratio',
-  'Maximum Vertical Ratio',
-  'Leg Stiffness',
-  'Average Leg Stiffness',
-  'Minimum Leg Stiffness',
-  'Maximum Leg Stiffness',
+  DataStore.DataGroundContactTimeAvg.type,
+  DataStore.DataGroundContactTimeMin.type,
+  DataStore.DataGroundContactTimeMax.type,
+  DataStore.DataStanceTime.type,
+  DataStore.DataStanceTimeBalanceLeft.type,
+  DataStore.DataStanceTimeBalanceRight.type,
+  DataStore.DataGroundContactTimeBalanceLeft.type,
+  DataStore.DataGroundContactTimeBalanceRight.type,
+  DataStore.DataVerticalOscillation.type,
+  DataStore.DataVerticalRatio.type,
+  DataStore.DataVerticalRatioAvg.type,
+  DataStore.DataVerticalRatioMin.type,
+  DataStore.DataVerticalRatioMax.type,
+  DataStore.DataLegStiffness.type,
+  DataStore.DataLegStiffnessAvg.type,
+  DataStore.DataLegStiffnessMin.type,
+  DataStore.DataLegStiffnessMax.type,
 ];
 
 const DEVICE_EXTRA_TYPE_STRINGS: string[] = [
-  'Battery Charge',
-  'Battery Consumption',
-  'Battery Current',
-  'Battery Voltage',
+  DataStore.DataBatteryCharge.type,
+  DataStore.DataBatteryConsumption.type,
+  DataStore.DataBatteryCurrent.type,
+  DataStore.DataBatteryVoltage.type,
 ];
 
 const DEVICE_SIGNAL_EXTRA_TYPE_STRINGS: string[] = [
@@ -193,15 +192,15 @@ const ENVIRONMENT_ABSOLUTE_PRESSURE_TYPE_STRINGS: string[] = [
 ];
 
 const ENVIRONMENT_GRADE_TYPE_STRINGS: string[] = [
-  'Grade',
-  'Average Grade',
-  'Minimum Grade',
-  'Maximum Grade',
+  DataStore.DataGrade.type,
+  DataStore.DataGradeAvg.type,
+  DataStore.DataGradeMin.type,
+  DataStore.DataGradeMax.type,
 ];
 
 const ENVIRONMENT_DISTANCE_TYPE_STRINGS: string[] = [
-  'Distance (Stryd)',
-  'GNSS Distance',
+  DataStore.DataStrydDistance.type,
+  DataStore.DataGNSSDistance.type,
 ];
 
 export const EVENT_SUMMARY_DEFAULT_GROUP_ID: EventSummaryMetricGroupId = 'overall';
@@ -302,13 +301,10 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
     label: 'Physiological',
     metricTypes: [
       DataEnergy.type,
-      DataHeartRateAvg.type,
-      DataHeartRateMax.type,
-      DataHeartRateMin.type,
       DataVO2Max.type,
       DataPeakEPOC.type,
       DataAerobicTrainingEffect.type,
-      'Anaerobic Training Effect',
+      DataStore.DataAnaerobicTrainingEffect.type,
       DataRecoveryTime.type,
       DataFeeling.type,
       DataRPE.type,
@@ -365,7 +361,7 @@ export const EVENT_SUMMARY_DEFAULT_STAT_TYPES: string[] = [
   DataRecoveryTime.type,
   DataPeakEPOC.type,
   DataAerobicTrainingEffect.type,
-  'Anaerobic Training Effect',
+  DataStore.DataAnaerobicTrainingEffect.type,
   DataVO2Max.type,
   DataFeeling.type,
   DataRPE.type,

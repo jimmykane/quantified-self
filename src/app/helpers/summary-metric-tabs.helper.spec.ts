@@ -1,5 +1,7 @@
 import {
+  DataAbsolutePressure,
   DataAirPower,
+  DataStore,
   DataEnergy,
   DataDuration,
   DataGradeAdjustedPaceAvg,
@@ -137,18 +139,18 @@ describe('buildSummaryMetricTabs', () => {
 
   it('should map requested extras into physiological, environment, and performance tabs', () => {
     const tabs = buildSummaryMetricTabs([
-      'Age',
-      'Gender',
-      'Height',
-      'Weight',
-      'Fitness Age',
-      'Absolute Pressure',
+      DataStore.DataAge.type,
+      DataStore.DataGender.type,
+      DataStore.DataHeight.type,
+      DataStore.DataWeight.type,
+      DataStore.DataFitnessAge.type,
+      DataAbsolutePressure.type,
       DataAirPower.type,
-      'Effort Pace',
-      'Avg VAM',
-      'Form Power',
-      'EPOC',
-      'Jump Count',
+      DataStore.DataEffortPace.type,
+      DataStore.DataAvgVAM.type,
+      DataStore.DataFormPower.type,
+      DataStore.DataEPOC.type,
+      DataStore.DataJumpCount.type,
     ]);
 
     expect(tabs.map((tab) => tab.id)).toEqual([
@@ -160,23 +162,23 @@ describe('buildSummaryMetricTabs', () => {
     const performanceTab = tabs.find((tab) => tab.id === 'performance');
     expect(performanceTab?.metricTypes).toEqual([
       DataAirPower.type,
-      'Effort Pace',
-      'Avg VAM',
-      'EPOC',
-      'Jump Count',
-      'Form Power',
+      DataStore.DataEffortPace.type,
+      DataStore.DataAvgVAM.type,
+      DataStore.DataEPOC.type,
+      DataStore.DataJumpCount.type,
+      DataStore.DataFormPower.type,
     ]);
 
     const environmentTab = tabs.find((tab) => tab.id === 'environment');
-    expect(environmentTab?.metricTypes).toEqual(['Absolute Pressure']);
+    expect(environmentTab?.metricTypes).toEqual([DataAbsolutePressure.type]);
 
     const physiologicalTab = tabs.find((tab) => tab.id === 'physiological');
     expect(physiologicalTab?.metricTypes).toEqual([
-      'Weight',
-      'Height',
-      'Gender',
-      'Fitness Age',
-      'Age',
+      DataStore.DataWeight.type,
+      DataStore.DataHeight.type,
+      DataStore.DataGender.type,
+      DataStore.DataFitnessAge.type,
+      DataStore.DataAge.type,
     ]);
   });
 
@@ -329,9 +331,6 @@ describe('buildSummaryMetricTabs', () => {
     const physiologicalTab = tabs.find((tab) => tab.id === 'physiological');
     expect(physiologicalTab?.metricTypes).toEqual([
       DataEnergy.type,
-      DataHeartRateAvg.type,
-      DataHeartRateMax.type,
-      DataHeartRateMin.type,
     ]);
   });
 
@@ -350,16 +349,16 @@ describe('buildSummaryMetricTabs', () => {
 
   it('should map respiration rate family to physiological tab', () => {
     const tabs = buildSummaryMetricTabs([
-      'Avg Respiration Rate',
-      'Min Respiration Rate',
-      'Max Respiration Rate',
+      DataStore.DataAvgRespirationRate.type,
+      DataStore.DataMinRespirationRate.type,
+      DataStore.DataMaxRespirationRate.type,
     ]);
 
     expect(tabs.map((tab) => tab.id)).toEqual(['physiological']);
     expect(tabs[0].metricTypes).toEqual([
-      'Avg Respiration Rate',
-      'Min Respiration Rate',
-      'Max Respiration Rate',
+      DataStore.DataAvgRespirationRate.type,
+      DataStore.DataMinRespirationRate.type,
+      DataStore.DataMaxRespirationRate.type,
     ]);
   });
 });

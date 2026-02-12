@@ -1,5 +1,6 @@
 import {
   ActivityTypes,
+  DataStore,
   DataAscent,
   DataCadenceMin,
   DataDescent,
@@ -36,16 +37,16 @@ describe('getDefaultSummaryStatTypes', () => {
     expect(stats).toContain('Average Leg Stiffness');
     expect(stats).toContain('Average EVPE');
     expect(stats).toContain('Average EHPE');
-    expect(stats).toContain('Jump Count');
-    expect(stats).toContain('Avg VAM');
-    expect(stats).toContain('Avg Respiration Rate');
-    expect(stats).toContain('Min Respiration Rate');
-    expect(stats).toContain('Max Respiration Rate');
-    expect(stats).toContain('Fitness Age');
-    expect(stats).toContain('Anaerobic Training Effect');
-    expect(stats).toContain('Gender');
-    expect(stats).toContain('Height');
-    expect(stats).toContain('Weight');
+    expect(stats).toContain(DataStore.DataJumpCount.type);
+    expect(stats).toContain(DataStore.DataAvgVAM.type);
+    expect(stats).toContain(DataStore.DataAvgRespirationRate.type);
+    expect(stats).toContain(DataStore.DataMinRespirationRate.type);
+    expect(stats).toContain(DataStore.DataMaxRespirationRate.type);
+    expect(stats).toContain(DataStore.DataFitnessAge.type);
+    expect(stats).toContain(DataStore.DataAnaerobicTrainingEffect.type);
+    expect(stats).toContain(DataStore.DataGender.type);
+    expect(stats).toContain(DataStore.DataHeight.type);
+    expect(stats).toContain(DataStore.DataWeight.type);
   });
 
   it('should keep speed derivation behavior by activity type', () => {
