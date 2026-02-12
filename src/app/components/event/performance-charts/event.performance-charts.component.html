@@ -1,0 +1,27 @@
+<div class="performance-charts-container">
+  @if (shouldShowTabs) {
+  <mat-tab-group class="performance-charts-tabs">
+    <mat-tab label="Intensity">
+      <ng-template matTabContent>
+        <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme">
+        </app-event-intensity-zones>
+      </ng-template>
+    </mat-tab>
+
+    <mat-tab label="Power Curve">
+      <ng-template matTabContent>
+        <app-event-power-curve [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme"
+          [isMerge]="isMerge">
+        </app-event-power-curve>
+      </ng-template>
+    </mat-tab>
+  </mat-tab-group>
+  } @else if (hasIntensity) {
+  <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme">
+  </app-event-intensity-zones>
+  } @else if (hasPowerCurve) {
+  <app-event-power-curve [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme"
+    [isMerge]="isMerge">
+  </app-event-power-curve>
+  }
+</div>

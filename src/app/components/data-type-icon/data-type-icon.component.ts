@@ -168,6 +168,7 @@ export class DataTypeIconComponent {
       case DataPaceAvgMinutesPerMile.type:
       case 'Effort Pace':
         return 'directions_run';
+      case 'Average VAM':
       case 'Avg VAM':
         return 'trending_up';
       case DataTemperatureAvg.type:
@@ -238,6 +239,9 @@ export class DataTypeIconComponent {
       case DataHeartRateMax.type:
       case DataHeartRateMin.type:
         return 'ecg_heart';
+      case 'Average Respiration Rate':
+      case 'Minimum Respiration Rate':
+      case 'Maximum Respiration Rate':
       case 'Avg Respiration Rate':
       case 'Min Respiration Rate':
       case 'Max Respiration Rate':
@@ -278,10 +282,12 @@ export class DataTypeIconComponent {
       case 'Maximum EHPE':
         return 'monitor_heart';
       case 'Flow':
+      case 'Average Flow':
       case 'Avg Flow':
       case 'Total Flow':
         return 'water';
       case 'Grit':
+      case 'Average Grit':
       case 'Avg Grit':
       case 'Total Grit':
         return 'terrain';

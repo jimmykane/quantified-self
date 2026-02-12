@@ -1,0 +1,15 @@
+:host {
+  display: block;
+  width: 100%;
+  --performance-chart-height: 30vh;
+  --performance-chart-min-height: 260px;
+}
+
+.performance-charts-container {
+  display: block;
+  width: 100%;
+}
+
+.performance-charts-tabs {
+  width: 100%;
+}

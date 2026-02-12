@@ -40,10 +40,12 @@ export class EChartsLoaderService {
         core.use([
           charts.BarChart,
           charts.PieChart,
+          charts.LineChart,
           components.GridComponent,
           components.TooltipComponent,
           components.LegendComponent,
           components.TitleComponent,
+          components.AxisPointerComponent,
           renderers.CanvasRenderer
         ]);
 

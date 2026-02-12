@@ -1,4 +1,4 @@
-.intensity-zones-container {
+.power-curve-container {
   display: flex;
   flex-direction: column;
   padding-top: 0;
@@ -9,6 +9,6 @@
   background: transparent;
 }
 
-.intensity-zones-chart {
+.power-curve-chart {
   flex: 1 1 auto;
 }

@@ -13,9 +13,13 @@ import { EventInterface, User, ActivityInterface, ChartThemes, AppThemes, XAxisT
 import { LoggerService } from '../../services/logger.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { shouldRenderIntensityZonesChart } from '../../helpers/intensity-zones-chart-data-helper';
+import { shouldRenderPowerCurveChart } from '../../helpers/power-curve-chart-data-helper';
 
 vi.mock('../../helpers/intensity-zones-chart-data-helper', () => ({
     shouldRenderIntensityZonesChart: vi.fn(),
+}));
+vi.mock('../../helpers/power-curve-chart-data-helper', () => ({
+    shouldRenderPowerCurveChart: vi.fn(),
 }));
 
 describe('EventCardComponent', () => {
@@ -32,6 +36,7 @@ describe('EventCardComponent', () => {
     let mockLoggerService: any;
     let mockBottomSheet: any;
     const mockedShouldRenderIntensityZonesChart = vi.mocked(shouldRenderIntensityZonesChart);
+    const mockedShouldRenderPowerCurveChart = vi.mocked(shouldRenderPowerCurveChart);
 
     const mockUser = new User('testUser');
     mockUser.settings = {
@@ -80,6 +85,7 @@ describe('EventCardComponent', () => {
 
     beforeEach(async () => {
         mockedShouldRenderIntensityZonesChart.mockReturnValue(false);
+        mockedShouldRenderPowerCurveChart.mockReturnValue(false);
 
         mockActivatedRoute = {
             data: of({ event: mockEvent }),
@@ -156,6 +162,7 @@ describe('EventCardComponent', () => {
         expect(mockActivitySelectionService.selectedActivities.clear).toHaveBeenCalled();
         expect(mockActivitySelectionService.selectedActivities.select).toHaveBeenCalled();
         expect(mockedShouldRenderIntensityZonesChart).toHaveBeenCalled();
+        expect(mockedShouldRenderPowerCurveChart).toHaveBeenCalled();
     });
 
     it('should set targetUserID signal from route', () => {
@@ -182,6 +189,14 @@ describe('EventCardComponent', () => {
     it('should compute hasIntensityZonesFlag as false when data collapses to one zone', () => {
         mockedShouldRenderIntensityZonesChart.mockReturnValue(false);
         expect(component.hasIntensityZonesFlag()).toBe(false);
+    });
+
+    it('should compute hasPowerCurveFlag as false when no power curve exists', () => {
+        expect(component.hasPowerCurveFlag()).toBe(false);
+    });
+
+    it('should compute hasPerformanceChartsFlag as false when intensity and power curve are both unavailable', () => {
+        expect(component.hasPerformanceChartsFlag()).toBe(false);
     });
 
     it('should compute hasDevicesFlag as false when no devices', () => {
@@ -213,6 +228,7 @@ describe('EventCardComponent', () => {
 
         beforeEach(() => {
             mockedShouldRenderIntensityZonesChart.mockReturnValue(true);
+            mockedShouldRenderPowerCurveChart.mockReturnValue(true);
             // Update the route data mock
             mockActivatedRoute.data = of({ event: eventWithData });
 
@@ -236,6 +252,14 @@ describe('EventCardComponent', () => {
 
         it('should compute hasPositionsFlag as true when position data exists', () => {
             expect(component.hasPositionsFlag()).toBe(true);
+        });
+
+        it('should compute hasPowerCurveFlag as true when power curve exists', () => {
+            expect(component.hasPowerCurveFlag()).toBe(true);
+        });
+
+        it('should compute hasPerformanceChartsFlag as true when either chart is available', () => {
+            expect(component.hasPerformanceChartsFlag()).toBe(true);
         });
     });
 

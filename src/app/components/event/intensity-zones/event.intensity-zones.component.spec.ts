@@ -163,9 +163,9 @@ describe('EventIntensityZonesComponent', () => {
     expect(mockLoader.resize).toHaveBeenCalledTimes(1);
     expect(mockedConvert).toHaveBeenCalledWith(component.activities, false);
     expect(option.grid.left).toBe(0);
-    expect(option.grid.right).toBe(10);
-    expect(option.grid.top).toBe(8);
-    expect(option.grid.bottom).toBe(38);
+    expect(option.grid.right).toBe(0);
+    expect(option.grid.top).toBe(0);
+    expect(option.grid.bottom).toBe(0);
     expect(option.series[0].clip).toBe(false);
     expect(option.series[0].label.position).toBe('right');
     expect(option.series[0].label.align).toBe('left');
@@ -174,10 +174,7 @@ describe('EventIntensityZonesComponent', () => {
       'rgba(22, 180, 234, 0.12)',
       'rgba(22, 180, 234, 0.12)',
     ]);
-    expect(option.legend.left).toBe('center');
-    expect(option.legend.bottom).toBe(0);
-    expect(option.legend.orient).toBe('horizontal');
-    expect(option.legend.selectedMode).toBe(true);
+    expect(option.legend.show).toBe(false);
     expect(fixture.nativeElement.querySelector('.intensity-zones-helper-text')).toBeNull();
   });
 
@@ -224,8 +221,8 @@ describe('EventIntensityZonesComponent', () => {
     expect(mockedConvert).toHaveBeenLastCalledWith(component.activities, true);
     expect(mockLoader.setOption).toHaveBeenCalledTimes(2);
     const option = getLastOption();
-    expect(option.grid.right).toBe(8);
-    expect(option.grid.bottom).toBe(32);
+    expect(option.grid.right).toBe(0);
+    expect(option.grid.bottom).toBe(0);
   });
 
   it('should apply dark theme styles when chartTheme is dark', async () => {

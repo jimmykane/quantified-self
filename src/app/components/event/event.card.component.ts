@@ -31,6 +31,7 @@ import { LapTypes } from '@sports-alliance/sports-lib';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { LoggerService } from '../../services/logger.service';
 import { shouldRenderIntensityZonesChart } from '../../helpers/intensity-zones-chart-data-helper';
+import { shouldRenderPowerCurveChart } from '../../helpers/power-curve-chart-data-helper';
 @Component({
   selector: 'app-event-card',
   templateUrl: './event.card.component.html',
@@ -67,6 +68,14 @@ export class EventCardComponent implements OnInit {
 
   public hasIntensityZonesFlag = computed(() =>
     shouldRenderIntensityZonesChart(this.selectedActivitiesInstant())
+  );
+
+  public hasPowerCurveFlag = computed(() =>
+    shouldRenderPowerCurveChart(this.selectedActivitiesInstant())
+  );
+
+  public hasPerformanceChartsFlag = computed(() =>
+    this.hasIntensityZonesFlag() || this.hasPowerCurveFlag()
   );
 
   public hasDevicesFlag = computed(() =>

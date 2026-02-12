@@ -88,13 +88,12 @@ mat-card-header mat-icon {
   }
 }
 
-.intensity-zones-summary-wrapper {
+.performance-charts-summary-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 16px;
   width: 100%;
 }
 
-.intensity-zones-summary-wrapper mat-divider {
+.performance-charts-summary-wrapper mat-divider {
   margin-bottom: 8px;
 }
