@@ -52,6 +52,7 @@ describe('LoginComponent', () => {
 
     beforeEach(() => {
         vi.clearAllMocks(); // Clear spies to prevent accumulation
+        (mockRouter.navigate as any).mockResolvedValue(true);
 
         mockAuthService = {
             user$: new BehaviorSubject(null),
@@ -379,6 +380,26 @@ describe('LoginComponent', () => {
 
         expect(mockRouter.navigate).toHaveBeenCalledTimes(1);
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
+    });
+
+    it('should retry dashboard navigation after a rejected navigation attempt', async () => {
+        const mockRedirectResult = { user: { uid: 'retry-user' }, credential: { signInMethod: 'google.com' } };
+        (mockAuthService.getRedirectResult as any).mockResolvedValue(mockRedirectResult);
+        (mockRouter.navigate as any)
+            .mockRejectedValueOnce(new Error('guard failure'))
+            .mockResolvedValueOnce(true);
+
+        component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'retry-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'retry-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockRouter.navigate).toHaveBeenCalledTimes(2);
+        expect(mockRouter.navigate).toHaveBeenNthCalledWith(1, ['/dashboard']);
+        expect(mockRouter.navigate).toHaveBeenNthCalledWith(2, ['/dashboard']);
     });
 
     it('should handle failed redirect result on init', async () => {

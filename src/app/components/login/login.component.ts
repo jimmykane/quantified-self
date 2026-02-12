@@ -343,12 +343,12 @@ export class LoginComponent implements OnInit, OnDestroy {
     }
 
     this.dashboardNavigationInFlight = true;
-    this.hasNavigatedToDashboard = true;
     try {
       const didNavigate = await this.router.navigate(['/dashboard']);
-      if (didNavigate === false) {
-        this.hasNavigatedToDashboard = false;
-      }
+      this.hasNavigatedToDashboard = didNavigate === true;
+    } catch (error) {
+      this.hasNavigatedToDashboard = false;
+      this.logger.error('Dashboard navigation failed', error);
     } finally {
       this.dashboardNavigationInFlight = false;
     }
