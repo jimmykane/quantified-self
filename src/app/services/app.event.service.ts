@@ -3,7 +3,7 @@ import { EventInterface } from '@sports-alliance/sports-lib';
 import { ActivityParsingOptions } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, of, zip } from 'rxjs';
-import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, doc, docData, getDoc, getDocs, getDocsFromCache, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, CollectionReference, getCountFromServer } from '@angular/fire/firestore';
+import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, CollectionReference, Query, QuerySnapshot, DocumentData, getCountFromServer } from '@angular/fire/firestore';
 import { catchError, map, switchMap, take, distinctUntilChanged, tap } from 'rxjs/operators';
 import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
@@ -953,20 +953,10 @@ export class AppEventService implements OnDestroy {
 
   private _getEvents(user: User, whereClauses: { fieldPath: string | any, opStr: any, value: any }[] = [], orderByField: string = 'startDate', asc: boolean = false, limitCount: number = 10, startAfterDoc?: any, endBeforeDoc?: any): Observable<EventInterface[]> {
     this.logger.log('[AppEventService] _getEvents fetching. user:', user.uid, 'where:', JSON.stringify(whereClauses));
-    const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount, startAfterDoc, endBeforeDoc);
+    const q = this.getEventQueryForUser(user, whereClauses, orderByField, asc, limitCount, startAfterDoc, endBeforeDoc) as Query<DocumentData>;
     const queryStart = performance.now();
-    let emissionCount = 0;
 
-    return runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })).pipe(
-      tap((eventSnapshots: any[]) => {
-        emissionCount += 1;
-        this.logger.log('[perf] app_event_service_get_events_collection_emit', {
-          durationMs: Number((performance.now() - queryStart).toFixed(2)),
-          emissionCount,
-          snapshots: eventSnapshots?.length || 0,
-          userID: user.uid,
-        });
-      }),
+    return this.listenToEventQueryData(q, user.uid, queryStart).pipe(
       distinctUntilChanged((p, c) => {
         const compareStart = performance.now();
         const isEqual = JSON.stringify(p) === JSON.stringify(c);
@@ -1018,6 +1008,52 @@ export class AppEventService implements OnDestroy {
         });
         return events;
       }));
+  }
+
+  private listenToEventQueryData(q: Query<DocumentData>, userID: string, queryStart: number): Observable<any[]> {
+    return new Observable<any[]>((subscriber) => {
+      let emissionCount = 0;
+      let hasEmitted = false;
+
+      const unsubscribe = runInInjectionContext(this.injector, () => onSnapshot(
+        q,
+        { includeMetadataChanges: false },
+        (querySnapshot: QuerySnapshot<DocumentData>) => {
+          const docChanges = querySnapshot.docChanges({ includeMetadataChanges: false });
+
+          // Ignore follow-up snapshots that have zero document changes.
+          // These can occur during cache/server reconciliation and are duplicates for dashboard usage.
+          if (hasEmitted && docChanges.length === 0) {
+            this.logger.log('[perf] app_event_service_get_events_collection_emit_skipped', {
+              durationMs: Number((performance.now() - queryStart).toFixed(2)),
+              snapshots: querySnapshot?.size || 0,
+              userID,
+              reason: 'no_doc_changes',
+            });
+            return;
+          }
+
+          hasEmitted = true;
+          emissionCount += 1;
+          this.logger.log('[perf] app_event_service_get_events_collection_emit', {
+            durationMs: Number((performance.now() - queryStart).toFixed(2)),
+            emissionCount,
+            snapshots: querySnapshot?.size || 0,
+            userID,
+          });
+
+          const eventSnapshots = querySnapshot.docs.map((queryDocumentSnapshot) => ({
+            ...(queryDocumentSnapshot.data() as Record<string, unknown>),
+            id: queryDocumentSnapshot.id,
+          }));
+
+          subscriber.next(eventSnapshots);
+        },
+        (error) => subscriber.error(error)
+      ));
+
+      return { unsubscribe };
+    });
   }
 
   private async fetchEventsOnceCacheFirst(
