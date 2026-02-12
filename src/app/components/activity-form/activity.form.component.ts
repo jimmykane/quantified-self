@@ -199,7 +199,7 @@ export class ActivityFormComponent implements OnInit {
 
       if (this.activityFormGroup.get('distance').dirty) {
         this.activity.addStat(new DataDistance(this.activityFormGroup.get('distance').value));
-        // This regenerates the event distance and its ugly as it doesnt save it
+        // This regenerates the event distance and it's ugly as it doesn't save it
         this.event.addStat(new DataDistance(this.event.getActivities().reduce((distance, activity) => {
           const activityDistance = activity.getStat(DataDistance.type);
           if (activityDistance) {

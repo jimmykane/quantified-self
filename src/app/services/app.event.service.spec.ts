@@ -432,6 +432,20 @@ describe('AppEventService', () => {
         expect(mockLogger.captureException).toHaveBeenCalledTimes(1);
     });
 
+    it('should emit event when attachStreamsLegacy gets an event with zero activities', async () => {
+        const user = { uid: 'user1' } as any;
+        const event = {
+            getActivities: vi.fn().mockReturnValue([]),
+            getID: vi.fn().mockReturnValue('event-no-activities')
+        } as any;
+        const getAllStreamsSpy = vi.spyOn(service as any, 'getAllStreams');
+
+        const result = await firstValueFrom((service as any).attachStreamsLegacy(user, event));
+
+        expect(result).toBe(event);
+        expect(getAllStreamsSpy).not.toHaveBeenCalled();
+    });
+
     it('should delete all event data', async () => {
         const userId = 'user1';
         const eventId = 'event1';

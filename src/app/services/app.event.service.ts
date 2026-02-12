@@ -710,14 +710,19 @@ export class AppEventService implements OnDestroy {
   }
 
   private attachStreamsLegacy(user: User, event: EventInterface, streamTypes?: string[]): Observable<EventInterface> {
-    // Get all the streams for all activities and subscribe to them with latest emition for all streams
+    // Get all streams for all activities and subscribe with the latest emission for each stream.
+    const activities = event.getActivities();
+    if (!activities || activities.length === 0) {
+      return of(event);
+    }
+
     return combineLatest(
-      event.getActivities().map((activity) => {
+      activities.map((activity) => {
         return (streamTypes ? this.getStreamsByTypes(user.uid, event.getID(), activity.getID(), streamTypes) : this.getAllStreams(user, event.getID(), activity.getID()))
           .pipe(map((streams) => {
             streams = streams || [];
             // debugger;
-            // This time we dont want to just get the streams but we want to attach them to the parent obj
+            // This time we do not want to just get the streams; we want to attach them to the parent object
             activity.clearStreams();
             try {
               activity.addStreams(streams);

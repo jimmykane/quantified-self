@@ -23,7 +23,7 @@ Check it out live at [quantified-self.io](https://www.quantified-self.io/).
 
 - **Frontend**: Angular v20+, Angular Material, RxJS.
 - **Backend**: Firebase (Functions, Firestore, Hosting, Storage, Auth).
-- **Visualization**: AmCharts 4, Chart.js, Leaflet.
+- **Visualization**: AmCharts 4, ECharts, Google Maps / Mapbox GL.
 - **Parsing**: [Quantified Self Lib](https://github.com/jimmykane/quantified-self-lib) (Custom parser for FIT/TCX/GPX).
 - **Testing**: Vitest.
 

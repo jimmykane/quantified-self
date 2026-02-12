@@ -525,7 +525,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       let start: Date | number = 0;
       let end: Date | number = 0;
       // Use local check for xAxisType or just this.xAxisType (if multisport check needed, replicate logic or store it)
-      // For now using this.xAxisType as it's the setting. Multisport hack might break interacttivity if type mismatch?
+      // For now using this.xAxisType as it's the setting. Multisport hack might break interactivity if type mismatch?
       // Replicating hack:
       const currentXAxisType = this.event.isMultiSport() ? XAxisTypes.Time : this.xAxisType;
 
