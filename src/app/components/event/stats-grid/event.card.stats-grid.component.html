@@ -5,7 +5,7 @@
     <mat-tab [label]="tab.label">
         <ng-template matTabContent>
             <app-header-stats [statsToShow]="tab.metricTypes" [layout]="layout" [stats]="stats" [unitSettings]="unitSettings"
-                [showDiff]="showDiff" [diffByType]="diffByType" [singleValueTypes]="tab.singleValueTypes">
+                [showDiff]="showDiff" [diffByType]="diffByType" [singleValueTypes]="getSingleValueTypesForTab(tab)">
             </app-header-stats>
         </ng-template>
     </mat-tab>

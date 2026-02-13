@@ -38,6 +38,7 @@ export class EventCardStatsTableComponent implements OnChanges {
   appColors = AppColors;
   selection = new SelectionModel<any>(true, []);
   private readonly rowTypeKey = '__statType';
+  private readonly verticalSpeedRegex = /vertical speed/i;
 
   constructor(
     private eventColorService: AppEventColorService,
@@ -60,6 +61,23 @@ export class EventCardStatsTableComponent implements OnChanges {
       return `${label} ${color}`;
     });
     this.columns = ['Name'].concat(activityColumnKeys);
+
+    const selectedVerticalSpeedUnitTypes = [...new Set(this.userUnitSettings.verticalSpeedUnits || [])];
+    const selectedActivitiesVerticalSpeed = this.selectedActivities.map((activity, index) => {
+      const activityStats = activity.getStatsAsArray?.() || [];
+      return {
+        index,
+        activityType: activity?.type || '',
+        stats: activityStats
+          .filter((stat: DataInterface) => this.isVerticalSpeedStat(stat))
+          .map((stat: DataInterface) => ({
+            type: this.getSafeType(stat),
+            displayType: this.getSafeDisplayType(stat),
+            displayValue: this.getSafeDisplayValue(stat),
+            displayUnit: this.getSafeDisplayUnit(stat),
+          })),
+      };
+    });
 
     // Collect all the stat types from all the activities
     const stats = this.selectedActivities.reduce((statsMap: Map<string, DataInterface>, activity) => {
@@ -143,6 +161,36 @@ export class EventCardStatsTableComponent implements OnChanges {
       }
       return array;
     }, [] as any[]);
+
+    const includedVerticalSpeedTypes = Array.from(stats.values())
+      .map((stat) => this.getSafeType(stat))
+      .filter((type) => this.isVerticalSpeedType(type));
+    const availableVerticalSpeedTypes = selectedActivitiesVerticalSpeed
+      .flatMap((entry) => entry.stats.map((stat) => stat.type))
+      .filter((type) => !!type);
+    const filteredOutVerticalSpeedTypes = availableVerticalSpeedTypes
+      .filter((type) => !includedVerticalSpeedTypes.includes(type));
+    const renderedVerticalSpeedRows = data
+      .filter((row: any) => this.isVerticalSpeedType(row[this.rowTypeKey]))
+      .map((row: any) => ({
+        type: row[this.rowTypeKey],
+        name: row.Name,
+        values: activityColumnKeys.map((columnKey) => ({
+          column: columnKey,
+          value: row[columnKey] || '',
+        })),
+      }));
+
+    console.info('[debug] event_stats_table_vertical_speed', {
+      eventId: this.event?.getID?.(),
+      isMerge: !!this.event?.isMerge,
+      selectedActivitiesCount: this.selectedActivities.length,
+      selectedVerticalSpeedUnitTypes,
+      selectedActivitiesVerticalSpeed,
+      includedVerticalSpeedTypes: [...new Set(includedVerticalSpeedTypes).values()],
+      filteredOutVerticalSpeedTypes: [...new Set(filteredOutVerticalSpeedTypes).values()],
+      renderedVerticalSpeedRows,
+    });
 
     // If we are comparing only 2 activities then add a diff column.
     // @todo support more than 2 activities for diff
@@ -291,5 +339,46 @@ export class EventCardStatsTableComponent implements OnChanges {
       return ActivityTypes[activityType] || String(activityType);
     }
     return String(activityType);
+  }
+
+  private isVerticalSpeedStat(stat: DataInterface): boolean {
+    return this.isVerticalSpeedType(this.getSafeType(stat))
+      || this.verticalSpeedRegex.test(this.getSafeDisplayType(stat));
+  }
+
+  private isVerticalSpeedType(type: string): boolean {
+    return !!type && this.verticalSpeedRegex.test(type);
+  }
+
+  private getSafeType(stat: DataInterface): string {
+    try {
+      return String(stat?.getType?.() || '');
+    } catch {
+      return '';
+    }
+  }
+
+  private getSafeDisplayType(stat: DataInterface): string {
+    try {
+      return String(stat?.getDisplayType?.() || '');
+    } catch {
+      return '';
+    }
+  }
+
+  private getSafeDisplayValue(stat: DataInterface): string {
+    try {
+      return String(stat?.getDisplayValue?.() ?? '');
+    } catch {
+      return '';
+    }
+  }
+
+  private getSafeDisplayUnit(stat: DataInterface): string {
+    try {
+      return String(stat?.getDisplayUnit?.() ?? '');
+    } catch {
+      return '';
+    }
   }
 }

@@ -65,15 +65,6 @@ section.grid {
   gap: 2px;
 }
 
-.stat-avatar-unit {
-  font-size: 0.5rem;
-  line-height: 1;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--mat-app-on-surface-variant);
-  opacity: 0.85;
-}
-
 .stat-content {
   display: flex;
   flex-direction: column;
@@ -84,7 +75,7 @@ section.grid {
 }
 
 .stat-label {
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   font-weight: 400;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -98,7 +89,7 @@ section.grid {
 }
 
 .stat-value-grid {
-  font-size: 1.1rem;
+  font-size: 1.14rem;
   font-weight: 400;
   color: var(--mat-app-on-surface);
   line-height: 1.2;
@@ -166,9 +157,10 @@ section.grid {
 
 .stat-values-row {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 0.96rem;
+  font-size: 1rem;
   line-height: 1.12;
   color: var(--mat-app-on-surface);
+  position: relative;
 }
 
 .stat-value-cell {
@@ -178,17 +170,30 @@ section.grid {
   text-overflow: ellipsis;
 }
 
+.stat-values-unit-prefix {
+  position: absolute;
+  left: -24px;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.5rem;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mat-app-on-surface-variant);
+  opacity: 0.85;
+}
+
 /* Composite cards need wider value rendering to avoid desktop truncation. */
 .stat-item--composite .stat-values-row {
-  font-size: 0.9rem;
+  font-size: 0.94rem;
 }
 
 .stat-item--composite .stat-value-cell {
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   line-height: 1.15;
-  word-break: break-word;
+  word-break: normal;
 }
 
 .stat-value-diff {
@@ -206,6 +211,22 @@ section.grid {
 .stat-delta-row,
 .stat-percent-row {
   margin-top: 2px;
+}
+
+.stat-delta-row {
+  position: relative;
+}
+
+.stat-delta-prefix {
+  position: absolute;
+  left: -24px;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.5rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--mat-app-on-surface-variant);
+  opacity: 0.9;
 }
 
 .stat-delta-cell,
@@ -252,6 +273,7 @@ section.condensed {
 /* Desktop Styles (Medium and up) */
 @include bp.medium-and-up {
   section.grid {
+    grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
     column-gap: 2rem;
     /* More breathing room on desktop */
   }

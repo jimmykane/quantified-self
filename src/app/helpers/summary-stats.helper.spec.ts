@@ -79,15 +79,49 @@ describe('getDefaultSummaryStatTypes', () => {
     expect(cyclingStats).not.toContain('Minimum Grade Adjusted Pace');
   });
 
-  it('should include both grade-adjusted families for mixed speed/pace activities', () => {
+  it('should prefer pace-derived families over speed when activity exposes both', () => {
     const stats = getDefaultSummaryStatTypes([ActivityTypes.TrailRunning]);
 
     expect(stats).toContain(DataGradeAdjustedPaceAvg.type);
-    expect(stats).toContain(DataGradeAdjustedSpeedAvg.type);
     expect(stats).toContain('Minimum Grade Adjusted Pace');
     expect(stats).toContain('Maximum Grade Adjusted Pace');
-    expect(stats).toContain('Minimum Grade Adjusted Speed');
-    expect(stats).toContain('Maximum Grade Adjusted Speed');
+    expect(stats).not.toContain(DataSpeedAvg.type);
+    expect(stats).not.toContain(DataGradeAdjustedSpeedAvg.type);
+    expect(stats).not.toContain('Minimum Grade Adjusted Speed');
+    expect(stats).not.toContain('Maximum Grade Adjusted Speed');
+  });
+
+  it('should normalize raw running aliases to running pace families', () => {
+    const stats = getDefaultSummaryStatTypes(['running' as unknown as ActivityTypes]);
+
+    expect(stats).toContain(DataPaceAvg.type);
+    expect(stats).toContain(DataGradeAdjustedPaceAvg.type);
+    expect(stats).toContain('Minimum Grade Adjusted Pace');
+    expect(stats).toContain('Maximum Grade Adjusted Pace');
+    expect(stats).not.toContain(DataSpeedAvg.type);
+    expect(stats).not.toContain(DataGradeAdjustedSpeedAvg.type);
+    expect(stats).not.toContain('Minimum Grade Adjusted Speed');
+  });
+
+  it('should normalize non-canonical running strings (case/whitespace) to pace families', () => {
+    const stats = getDefaultSummaryStatTypes([' RUNNING ' as unknown as ActivityTypes]);
+
+    expect(stats).toContain(DataPaceAvg.type);
+    expect(stats).toContain(DataGradeAdjustedPaceAvg.type);
+    expect(stats).toContain('Minimum Grade Adjusted Pace');
+    expect(stats).not.toContain(DataGradeAdjustedSpeedAvg.type);
+    expect(stats).not.toContain('Minimum Grade Adjusted Speed');
+  });
+
+  it('should normalize raw trail aliases to mixed speed/pace families', () => {
+    const stats = getDefaultSummaryStatTypes(['running_trail' as unknown as ActivityTypes]);
+
+    expect(stats).toContain(DataPaceAvg.type);
+    expect(stats).toContain(DataGradeAdjustedPaceAvg.type);
+    expect(stats).toContain('Minimum Grade Adjusted Pace');
+    expect(stats).not.toContain(DataSpeedAvg.type);
+    expect(stats).not.toContain(DataGradeAdjustedSpeedAvg.type);
+    expect(stats).not.toContain('Minimum Grade Adjusted Speed');
   });
 
   it('should still exclude ascent and descent when manually configured', () => {

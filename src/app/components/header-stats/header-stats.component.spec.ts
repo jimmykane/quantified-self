@@ -171,4 +171,44 @@ describe('HeaderStatsComponent', () => {
     expect(component.getNormalizedStatLabel(derived)).toBe('Average Speed');
     expect(component.getNormalizedStatLabel(nonDerived)).toBe('Average Power');
   });
+
+  it('should hide NaN values from cards and remove single-value cards that only contain NaN', () => {
+    component.layout = 'grid';
+    component.statsToShow = [DataPowerAvg.type, DataHeartRateAvg.type];
+    component.stats = [
+      createStat(DataPowerAvg.type, 'Average Power', 'NaN', 'W'),
+      createStat(DataPowerMin.type, 'Minimum Power', '120', 'W'),
+      createStat(DataPowerMax.type, 'Maximum Power', '680', 'W'),
+      createStat(DataHeartRateAvg.type, 'Average Heart Rate', 'NaN', 'bpm'),
+    ];
+
+    applyChanges(component);
+
+    expect(component.displayedStatCards.length).toBe(1);
+    expect(component.displayedStatCards[0].label).toBe('Power');
+    expect(component.displayedStatCards[0].valueItems.map(item => item.key)).toEqual(['MIN', 'MAX']);
+  });
+
+  it('should hide NaN diffs for display and composite visibility checks', () => {
+    component.layout = 'grid';
+    component.showDiff = true;
+    component.diffByType = new Map([
+      [DataPowerAvg.type, { display: 'NaN', percent: NaN, color: '#0f0' }],
+      [DataPowerMin.type, { display: '5 W', percent: 2, color: '#0f0' }],
+    ]);
+    component.statsToShow = [DataPowerAvg.type];
+    component.stats = [
+      createStat(DataPowerAvg.type, 'Average Power', '250', 'W'),
+      createStat(DataPowerMin.type, 'Minimum Power', '120', 'W'),
+      createStat(DataPowerMax.type, 'Maximum Power', '680', 'W'),
+    ];
+
+    applyChanges(component);
+
+    const card = component.displayedStatCards[0];
+    expect(component.getDiffForType(DataPowerAvg.type)).toBeNull();
+    expect(component.getDiffForType(DataPowerMin.type)).toBeTruthy();
+    expect(component.hasCompositeDiff(card)).toBe(true);
+  });
+
 });

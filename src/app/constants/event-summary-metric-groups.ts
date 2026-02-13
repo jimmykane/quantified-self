@@ -369,7 +369,6 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       ...POWER_LIB_EXTRA_TYPE_STRINGS,
     ],
     singleValueTypes: [
-      DataVerticalSpeedAvg.type,
       DataAvgFlow.type,
     ],
   },

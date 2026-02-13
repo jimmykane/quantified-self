@@ -78,7 +78,7 @@ describe('buildSummaryMetricTabs', () => {
     expect(tabs[1].metricTypes).toEqual([DataPowerAvg.type]);
   });
 
-  it('should keep performance tab speed metric order and configured vertical speed single-value override', () => {
+  it('should keep performance tab speed metric order and configured single-value overrides', () => {
     const tabs = buildSummaryMetricTabs([
       DataVerticalSpeedAvg.type,
       DataGradeAdjustedSpeedAvg.type,
@@ -98,7 +98,7 @@ describe('buildSummaryMetricTabs', () => {
       DataGradeAdjustedSpeedAvg.type,
       DataVerticalSpeedAvg.type,
     ]);
-    expect(performanceTab?.singleValueTypes).toEqual([DataVerticalSpeedAvg.type, DataAvgFlow.type]);
+    expect(performanceTab?.singleValueTypes).toEqual([DataAvgFlow.type]);
   });
 
   it('should map extended power types and keep removed speed/power zone durations in Other', () => {

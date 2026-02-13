@@ -6,9 +6,6 @@
     <div class="stat-item" [class.stat-item--composite]="card.isComposite">
       <div class="stat-avatar">
         <app-data-type-icon [size]="'24px'" [vAlign]="'middle'" [dataType]="card.iconType"></app-data-type-icon>
-        @if (card.isComposite && getCompositeUnit(card); as unit) {
-        <span class="stat-avatar-unit">{{ unit }}</span>
-        }
       </div>
       <div class="stat-content">
         <div class="stat-label">
@@ -22,15 +19,21 @@
             }
           </div>
           <div class="stat-values-row">
+            @if (card.isComposite && getCompositeUnit(card); as unit) {
+            <span class="stat-values-unit-prefix">{{ unit }}</span>
+            }
             @for (valueItem of card.valueItems; track valueItem.type) {
             <span class="stat-value-cell">{{valueItem.displayValue}}</span>
             }
           </div>
           @if (showDiff) {
           <div class="stat-delta-row">
+            @if (hasCompositeDiff(card)) {
+            <span class="stat-delta-prefix">Δ</span>
+            }
             @for (valueItem of card.valueItems; track valueItem.type) {
             @if (getDiffForType(valueItem.type); as diff) {
-            <span class="stat-delta-cell">Δ {{ diff.display }}</span>
+            <span class="stat-delta-cell">{{ diff.display }}</span>
             } @else {
             <span class="stat-delta-cell stat-delta-cell-empty"></span>
             }

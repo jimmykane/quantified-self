@@ -52,7 +52,13 @@ export class HeaderStatsComponent implements OnChanges {
     });
 
     this.displayedStats = enrichedStats;
-    this.displayedStatCards = buildHeaderStatCards(this.displayedStats, expandedStatsMap, this.singleValueTypes);
+
+    this.displayedStatCards = buildHeaderStatCards(this.displayedStats, expandedStatsMap, this.singleValueTypes)
+      .map((card) => ({
+        ...card,
+        valueItems: card.valueItems.filter((valueItem) => !this.isInvalidDisplayToken(valueItem.displayValue)),
+      }))
+      .filter((card) => card.valueItems.length > 0);
   }
 
   getDiffForStat(stat: DataInterface) {
@@ -63,7 +69,17 @@ export class HeaderStatsComponent implements OnChanges {
     if (!this.showDiff || !this.diffByType) {
       return null;
     }
-    return this.diffByType.get(statType) || null;
+    const diff = this.diffByType.get(statType);
+    if (!diff) {
+      return null;
+    }
+    if (this.isInvalidDisplayToken(diff.display)) {
+      return null;
+    }
+    if (!Number.isFinite(diff.percent)) {
+      return null;
+    }
+    return diff;
   }
 
   getNormalizedStatLabel(stat: DataInterface) {
@@ -87,5 +103,25 @@ export class HeaderStatsComponent implements OnChanges {
     return uniqueUnits[0];
   }
 
+  hasCompositeDiff(card: HeaderStatCard): boolean {
+    if (!this.showDiff || !this.diffByType || !card?.isComposite) {
+      return false;
+    }
+    return card.valueItems.some((item) => !!this.getDiffForType(item.type));
+  }
+
+  private isInvalidDisplayToken(value: unknown): boolean {
+    if (typeof value === 'number') {
+      return !Number.isFinite(value);
+    }
+    if (value === null || value === undefined) {
+      return false;
+    }
+    const normalized = String(value).trim();
+    if (!normalized) {
+      return false;
+    }
+    return /\bnan\b/i.test(normalized);
+  }
 
 }
