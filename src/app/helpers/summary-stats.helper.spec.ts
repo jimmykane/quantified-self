@@ -8,6 +8,12 @@ import {
   DataGradeAdjustedPaceAvg,
   DataGradeAdjustedSpeedAvg,
   DataHeartRateMin,
+  DataJumpCount,
+  DataJumpDistanceAvg,
+  DataJumpHeightAvg,
+  DataJumpRotationsMin,
+  DataJumpScoreAvg,
+  DataJumpSpeedMax,
   DataPaceAvg,
   DataPowerMax,
   DataRPE,
@@ -37,7 +43,12 @@ describe('getDefaultSummaryStatTypes', () => {
     expect(stats).toContain('Average Leg Stiffness');
     expect(stats).toContain('Average EVPE');
     expect(stats).toContain('Average EHPE');
-    expect(stats).toContain(DataStore.DataJumpCount.type);
+    expect(stats).toContain(DataJumpCount.type);
+    expect(stats).toContain(DataJumpDistanceAvg.type);
+    expect(stats).toContain(DataJumpHeightAvg.type);
+    expect(stats).toContain(DataJumpSpeedMax.type);
+    expect(stats).toContain(DataJumpRotationsMin.type);
+    expect(stats).toContain(DataJumpScoreAvg.type);
     expect(stats).toContain(DataStore.DataAvgVAM.type);
     expect(stats).toContain(DataStore.DataAvgRespirationRate.type);
     expect(stats).toContain(DataStore.DataMinRespirationRate.type);

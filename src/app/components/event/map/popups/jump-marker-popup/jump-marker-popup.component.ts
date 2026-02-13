@@ -1,5 +1,5 @@
 import { Component, Input, OnChanges, Output, EventEmitter } from '@angular/core';
-import { DataJumpEvent, DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { DataInterface, DataJumpEvent, DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { AppUserSettingsQueryService } from '../../../../../services/app.user-settings-query.service';
 
 @Component({
@@ -22,15 +22,43 @@ export class JumpMarkerPopupComponent implements OnChanges {
         // Component receives new jump data
     }
 
-    getFormattedScore(): string {
-        if (!this.jump?.jumpData?.score) return '-';
-        // Use any cast to avoid strict type issues with potential library mismatches
-        const val = (this.jump.jumpData.score as any).getDisplayValue();
-        const num = parseFloat(val);
-        if (!isNaN(num)) {
-            return num.toFixed(1);
+    private getUnitAwareStat(stat: DataInterface | null | undefined): DataInterface | null {
+        if (!stat) {
+            return null;
         }
-        return val;
+
+        try {
+            const convertedStats = DynamicDataLoader.getUnitBasedDataFromDataInstance(
+                stat,
+                this.userSettingsQuery.unitSettings()
+            );
+            return convertedStats?.[0] ?? stat;
+        } catch {
+            return stat;
+        }
+    }
+
+    private formatStatDisplay(stat: DataInterface | null | undefined): string {
+        const preferredStat = this.getUnitAwareStat(stat);
+        if (!preferredStat) {
+            return '-';
+        }
+
+        const value = preferredStat.getDisplayValue();
+        const unit = preferredStat.getDisplayUnit();
+        return `${value} ${unit}`.trim();
+    }
+
+    getFormattedDistance(): string {
+        return this.formatStatDisplay(this.jump?.jumpData?.distance ?? null);
+    }
+
+    getFormattedHeight(): string {
+        return this.formatStatDisplay(this.jump?.jumpData?.height ?? null);
+    }
+
+    getFormattedScore(): string {
+        return this.formatStatDisplay(this.jump?.jumpData?.score ?? null);
     }
 
     getFormattedHangTime(): string {
@@ -39,22 +67,10 @@ export class JumpMarkerPopupComponent implements OnChanges {
     }
 
     getFormattedSpeed(): string {
-        const speed = this.jump?.jumpData?.speed;
-        if (!speed) return '-';
+        return this.formatStatDisplay(this.jump?.jumpData?.speed ?? null);
+    }
 
-        try {
-            const convertedStats = DynamicDataLoader.getUnitBasedDataFromDataInstance(
-                speed,
-                this.userSettingsQuery.unitSettings()
-            );
-            const preferredSpeed = convertedStats?.[0];
-            if (preferredSpeed) {
-                return `${preferredSpeed.getDisplayValue()} ${preferredSpeed.getDisplayUnit()}`.trim();
-            }
-        } catch {
-            // Fallback to original speed stat if conversion fails.
-        }
-
-        return `${speed.getDisplayValue()} ${speed.getDisplayUnit()}`.trim();
+    getFormattedRotations(): string {
+        return this.formatStatDisplay(this.jump?.jumpData?.rotations ?? null);
     }
 }

@@ -7,6 +7,44 @@ import {
   DataFeeling,
   DataPowerMax,
   DataPowerMin,
+  DataJumpCount,
+  DataJumpDistance,
+  DataJumpDistanceAvg,
+  DataJumpDistanceMax,
+  DataJumpDistanceMin,
+  DataJumpHangTimeAvg,
+  DataJumpHangTimeMax,
+  DataJumpHangTimeMin,
+  DataJumpHeightAvg,
+  DataJumpHeightMax,
+  DataJumpHeightMin,
+  DataJumpRotationsAvg,
+  DataJumpRotationsMax,
+  DataJumpRotationsMin,
+  DataJumpScoreAvg,
+  DataJumpScoreMax,
+  DataJumpScoreMin,
+  DataJumpSpeedAvg,
+  DataJumpSpeedAvgFeetPerMinute,
+  DataJumpSpeedAvgFeetPerSecond,
+  DataJumpSpeedAvgKilometersPerHour,
+  DataJumpSpeedAvgKnots,
+  DataJumpSpeedAvgMetersPerMinute,
+  DataJumpSpeedAvgMilesPerHour,
+  DataJumpSpeedMax,
+  DataJumpSpeedMaxFeetPerMinute,
+  DataJumpSpeedMaxFeetPerSecond,
+  DataJumpSpeedMaxKilometersPerHour,
+  DataJumpSpeedMaxKnots,
+  DataJumpSpeedMaxMetersPerMinute,
+  DataJumpSpeedMaxMilesPerHour,
+  DataJumpSpeedMin,
+  DataJumpSpeedMinFeetPerMinute,
+  DataJumpSpeedMinFeetPerSecond,
+  DataJumpSpeedMinKilometersPerHour,
+  DataJumpSpeedMinKnots,
+  DataJumpSpeedMinMetersPerMinute,
+  DataJumpSpeedMinMilesPerHour,
   DataRPE,
   DataTemperatureMax,
   DataTemperatureMin
@@ -111,7 +149,49 @@ describe('DataTypeIconComponent', () => {
   it('should provide icon mapping for Jump Count', () => {
     const component = new DataTypeIconComponent();
 
-    expect(component.getColumnHeaderIcon('Jump Count')).toBe('format_list_numbered');
+    expect(component.getColumnHeaderIcon(DataJumpCount.type)).toBe('format_list_numbered');
+  });
+
+  it('should provide icon mappings for jump stat families', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon(DataJumpDistance.type)).toBe('straighten');
+    expect(component.getColumnHeaderIcon(DataJumpDistanceAvg.type)).toBe('straighten');
+    expect(component.getColumnHeaderIcon(DataJumpDistanceMin.type)).toBe('straighten');
+    expect(component.getColumnHeaderIcon(DataJumpDistanceMax.type)).toBe('straighten');
+    expect(component.getColumnHeaderIcon(DataJumpHangTimeAvg.type)).toBe('schedule');
+    expect(component.getColumnHeaderIcon(DataJumpHangTimeMin.type)).toBe('schedule');
+    expect(component.getColumnHeaderIcon(DataJumpHangTimeMax.type)).toBe('schedule');
+    expect(component.getColumnHeaderIcon(DataJumpHeightAvg.type)).toBe('height');
+    expect(component.getColumnHeaderIcon(DataJumpHeightMin.type)).toBe('height');
+    expect(component.getColumnHeaderIcon(DataJumpHeightMax.type)).toBe('height');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedAvg.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedMin.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedMax.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedAvgKilometersPerHour.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedAvgMilesPerHour.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedAvgFeetPerSecond.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedAvgMetersPerMinute.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedAvgFeetPerMinute.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedAvgKnots.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedMinKilometersPerHour.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedMinMilesPerHour.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedMinFeetPerSecond.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedMinMetersPerMinute.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedMinFeetPerMinute.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedMinKnots.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedMaxKilometersPerHour.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedMaxMilesPerHour.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedMaxFeetPerSecond.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedMaxMetersPerMinute.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedMaxFeetPerMinute.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpSpeedMaxKnots.type)).toBe('speed');
+    expect(component.getColumnHeaderIcon(DataJumpRotationsAvg.type)).toBe('autorenew');
+    expect(component.getColumnHeaderIcon(DataJumpRotationsMin.type)).toBe('autorenew');
+    expect(component.getColumnHeaderIcon(DataJumpRotationsMax.type)).toBe('autorenew');
+    expect(component.getColumnHeaderIcon(DataJumpScoreAvg.type)).toBe('military_tech');
+    expect(component.getColumnHeaderIcon(DataJumpScoreMin.type)).toBe('military_tech');
+    expect(component.getColumnHeaderIcon(DataJumpScoreMax.type)).toBe('military_tech');
   });
 
   it('should provide icon mapping for Avg VAM', () => {

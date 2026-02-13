@@ -2,6 +2,9 @@ import {
   DataAltitudeAvg,
   DataCadenceAvg,
   DataHeartRateAvg,
+  DataJumpHeightAvg,
+  DataJumpHeightMax,
+  DataJumpHeightMin,
   DataPaceAvgMinutesPerMile,
   DataPowerAvg,
   DataPowerMax,
@@ -36,6 +39,7 @@ describe('header-stats-composite.helper', () => {
       resolveMetricFamilyTypes(DataSpeedAvgKilometersPerHour.type),
       resolveMetricFamilyTypes(DataPaceAvgMinutesPerMile.type),
       resolveMetricFamilyTypes('Average Ground Contact Time'),
+      resolveMetricFamilyTypes(DataJumpHeightAvg.type),
     ];
 
     families.forEach((family) => {
@@ -66,6 +70,24 @@ describe('header-stats-composite.helper', () => {
     expect(expanded).toContain('Average Ground Contact Time');
     expect(expanded).toContain('Minimum Ground Contact Time');
     expect(expanded).toContain('Maximum Ground Contact Time');
+  });
+
+  it('should resolve jump height family with avg/min/max triplet', () => {
+    const family = resolveMetricFamilyTypes(DataJumpHeightAvg.type);
+
+    expect(family).toBeTruthy();
+    expect(family?.familyType).toBe('Jump Height');
+    expect(family?.avgType).toBe(DataJumpHeightAvg.type);
+    expect(family?.minType).toBe(DataJumpHeightMin.type);
+    expect(family?.maxType).toBe(DataJumpHeightMax.type);
+  });
+
+  it('should expand diff source types for jump height family', () => {
+    const expanded = expandStatsTypesForCompositeDiff([DataJumpHeightAvg.type]);
+
+    expect(expanded).toContain(DataJumpHeightAvg.type);
+    expect(expanded).toContain(DataJumpHeightMin.type);
+    expect(expanded).toContain(DataJumpHeightMax.type);
   });
 
   it('should force single card by family when avg type is configured as single-value', () => {

@@ -63,6 +63,44 @@ import { DataHeartRateMin } from '@sports-alliance/sports-lib';
 import { DataHeartRateMax } from '@sports-alliance/sports-lib';
 import { DataFeeling } from '@sports-alliance/sports-lib';
 import { DataRPE } from '@sports-alliance/sports-lib';
+import { DataJumpCount } from '@sports-alliance/sports-lib';
+import { DataJumpDistance } from '@sports-alliance/sports-lib';
+import { DataJumpDistanceAvg } from '@sports-alliance/sports-lib';
+import { DataJumpDistanceMax } from '@sports-alliance/sports-lib';
+import { DataJumpDistanceMin } from '@sports-alliance/sports-lib';
+import { DataJumpHangTimeAvg } from '@sports-alliance/sports-lib';
+import { DataJumpHangTimeMax } from '@sports-alliance/sports-lib';
+import { DataJumpHangTimeMin } from '@sports-alliance/sports-lib';
+import { DataJumpHeightAvg } from '@sports-alliance/sports-lib';
+import { DataJumpHeightMax } from '@sports-alliance/sports-lib';
+import { DataJumpHeightMin } from '@sports-alliance/sports-lib';
+import { DataJumpRotationsAvg } from '@sports-alliance/sports-lib';
+import { DataJumpRotationsMax } from '@sports-alliance/sports-lib';
+import { DataJumpRotationsMin } from '@sports-alliance/sports-lib';
+import { DataJumpScoreAvg } from '@sports-alliance/sports-lib';
+import { DataJumpScoreMax } from '@sports-alliance/sports-lib';
+import { DataJumpScoreMin } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedAvg } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedAvgFeetPerMinute } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedAvgFeetPerSecond } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedAvgKilometersPerHour } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedAvgKnots } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedAvgMetersPerMinute } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedAvgMilesPerHour } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedMax } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedMaxFeetPerMinute } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedMaxFeetPerSecond } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedMaxKilometersPerHour } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedMaxKnots } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedMaxMetersPerMinute } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedMaxMilesPerHour } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedMin } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedMinFeetPerMinute } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedMinFeetPerSecond } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedMinKilometersPerHour } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedMinKnots } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedMinMetersPerMinute } from '@sports-alliance/sports-lib';
+import { DataJumpSpeedMinMilesPerHour } from '@sports-alliance/sports-lib';
 
 @Component({
   selector: 'app-data-type-icon',
@@ -291,8 +329,51 @@ export class DataTypeIconComponent {
       case 'Avg Grit':
       case 'Total Grit':
         return 'terrain';
-      case 'Jump Count':
+      case DataJumpCount.type:
         return 'format_list_numbered';
+      case DataJumpDistance.type:
+      case DataJumpDistanceAvg.type:
+      case DataJumpDistanceMin.type:
+      case DataJumpDistanceMax.type:
+        return 'straighten';
+      case DataJumpHangTimeAvg.type:
+      case DataJumpHangTimeMin.type:
+      case DataJumpHangTimeMax.type:
+        return 'schedule';
+      case DataJumpHeightAvg.type:
+      case DataJumpHeightMin.type:
+      case DataJumpHeightMax.type:
+        return 'height';
+      case DataJumpSpeedAvg.type:
+      case DataJumpSpeedMin.type:
+      case DataJumpSpeedMax.type:
+      case DataJumpSpeedAvgKilometersPerHour.type:
+      case DataJumpSpeedAvgMilesPerHour.type:
+      case DataJumpSpeedAvgFeetPerSecond.type:
+      case DataJumpSpeedAvgMetersPerMinute.type:
+      case DataJumpSpeedAvgFeetPerMinute.type:
+      case DataJumpSpeedAvgKnots.type:
+      case DataJumpSpeedMinKilometersPerHour.type:
+      case DataJumpSpeedMinMilesPerHour.type:
+      case DataJumpSpeedMinFeetPerSecond.type:
+      case DataJumpSpeedMinMetersPerMinute.type:
+      case DataJumpSpeedMinFeetPerMinute.type:
+      case DataJumpSpeedMinKnots.type:
+      case DataJumpSpeedMaxKilometersPerHour.type:
+      case DataJumpSpeedMaxMilesPerHour.type:
+      case DataJumpSpeedMaxFeetPerSecond.type:
+      case DataJumpSpeedMaxMetersPerMinute.type:
+      case DataJumpSpeedMaxFeetPerMinute.type:
+      case DataJumpSpeedMaxKnots.type:
+        return 'speed';
+      case DataJumpRotationsAvg.type:
+      case DataJumpRotationsMin.type:
+      case DataJumpRotationsMax.type:
+        return 'autorenew';
+      case DataJumpScoreAvg.type:
+      case DataJumpScoreMin.type:
+      case DataJumpScoreMax.type:
+        return 'military_tech';
       case 'Distance (Stryd)':
       case 'GNSS Distance':
         return 'route';

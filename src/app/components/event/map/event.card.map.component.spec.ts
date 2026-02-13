@@ -26,6 +26,11 @@ describe('EventCardMapComponent', () => {
     let mockCursorService: any;
     let mockThemeService: any;
 
+    const makeStat = (value: string, unit = '') => ({
+        getDisplayValue: () => value,
+        getDisplayUnit: () => unit
+    });
+
     beforeEach(async () => {
         const mockLoader = {
             importLibrary: vi.fn().mockResolvedValue({
@@ -140,8 +145,8 @@ describe('EventCardMapComponent', () => {
         const markerFactory = TestBed.inject(MarkerFactoryService) as any;
         const jump = {
             jumpData: {
-                distance: { getValue: () => 1, getDisplayUnit: () => 'm' },
-                score: { getValue: () => 1 },
+                distance: makeStat('1', 'm'),
+                score: makeStat('1'),
             }
         } as any;
 
@@ -161,8 +166,8 @@ describe('EventCardMapComponent', () => {
         const jump = {
             jumpData: {
                 hang_time: { getValue: () => 1.5, getDisplayValue: () => '01.5s' },
-                distance: { getValue: () => 1, getDisplayUnit: () => 'm' },
-                score: { getValue: () => 1 },
+                distance: makeStat('1', 'm'),
+                score: makeStat('1'),
             }
         } as any;
 
@@ -182,8 +187,8 @@ describe('EventCardMapComponent', () => {
         const jump = {
             jumpData: {
                 hang_time: { getValue: () => 5, getDisplayValue: () => '05.0s' },
-                distance: { getValue: () => 1, getDisplayUnit: () => 'm' },
-                score: { getValue: () => 1 },
+                distance: makeStat('1', 'm'),
+                score: makeStat('1'),
             }
         } as any;
 
@@ -206,10 +211,10 @@ describe('EventCardMapComponent', () => {
                     getValue: () => 1.3,
                     getDisplayValue
                 },
-                distance: { getValue: () => 3.2, getDisplayUnit: () => 'm' },
-                score: { getValue: () => 8.7 },
-                speed: { getValue: () => 12.3, getDisplayValue: () => '12.3', getDisplayUnit: () => 'km/h' },
-                rotations: { getValue: () => 1.1 }
+                distance: makeStat('3.2', 'm'),
+                score: makeStat('8.7'),
+                speed: makeStat('12.3', 'km/h'),
+                rotations: makeStat('1.1')
             }
         } as any;
 
@@ -227,16 +232,42 @@ describe('EventCardMapComponent', () => {
         const jump = {
             jumpData: {
                 hang_time: { getValue: () => 1.3, getDisplayValue: () => '01.3s' },
-                distance: { getValue: () => 3.2, getDisplayUnit: () => 'm' },
-                score: { getValue: () => 8.7 },
+                distance: makeStat('3.2', 'm'),
+                score: makeStat('8.7'),
                 speed: { getDisplayValue: () => '9.6', getDisplayUnit: () => 'm/s' },
-                rotations: { getValue: () => 1.1 }
+                rotations: makeStat('1.1')
             }
         } as any;
 
         const options = component.getJumpMarkerOptions(jump, '#222222');
 
         expect(options.title).toContain('Speed: 15.4 km/h');
+        conversionSpy.mockRestore();
+    });
+
+    it('should format distance in marker title using unit-based conversion', () => {
+        const conversionSpy = vi.spyOn(DynamicDataLoader, 'getUnitBasedDataFromDataInstance').mockImplementation((stat: any) => {
+            if (stat?.getDisplayUnit?.() === 'm') {
+                return [{
+                    getDisplayValue: () => '10.5',
+                    getDisplayUnit: () => 'ft'
+                }] as any;
+            }
+            return [stat] as any;
+        });
+        const jump = {
+            jumpData: {
+                hang_time: { getValue: () => 1.3, getDisplayValue: () => '01.3s' },
+                distance: makeStat('3.2', 'm'),
+                score: makeStat('8.7'),
+                speed: makeStat('9.6', 'm/s'),
+                rotations: makeStat('1.1')
+            }
+        } as any;
+
+        const options = component.getJumpMarkerOptions(jump, '#222222');
+
+        expect(options.title).toContain('Distance: 10.5 ft');
         conversionSpy.mockRestore();
     });
 

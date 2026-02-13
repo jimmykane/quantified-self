@@ -50,6 +50,28 @@ describe('JumpMarkerPopupComponent', () => {
         conversionSpy.mockRestore();
     });
 
+    it('should return converted distance display using unit settings', () => {
+        const component = new JumpMarkerPopupComponent({ unitSettings: vi.fn().mockReturnValue({ distanceUnits: ['ft'] }) } as any);
+        const convertedDistance = {
+            getDisplayValue: vi.fn().mockReturnValue('34.4'),
+            getDisplayUnit: vi.fn().mockReturnValue('ft')
+        };
+        const conversionSpy = vi.spyOn(DynamicDataLoader, 'getUnitBasedDataFromDataInstance')
+            .mockReturnValue([convertedDistance] as any);
+
+        component.jump = {
+            jumpData: {
+                distance: {
+                    getDisplayValue: vi.fn().mockReturnValue('10.5'),
+                    getDisplayUnit: vi.fn().mockReturnValue('m')
+                }
+            }
+        } as any;
+
+        expect(component.getFormattedDistance()).toBe('34.4 ft');
+        conversionSpy.mockRestore();
+    });
+
     it('should fallback to raw speed when conversion fails', () => {
         const component = new JumpMarkerPopupComponent({ unitSettings: vi.fn().mockReturnValue({}) } as any);
         const conversionSpy = vi.spyOn(DynamicDataLoader, 'getUnitBasedDataFromDataInstance')
@@ -66,5 +88,19 @@ describe('JumpMarkerPopupComponent', () => {
 
         expect(component.getFormattedSpeed()).toBe('9.6 m/s');
         conversionSpy.mockRestore();
+    });
+
+    it('should render score using sports-lib display formatting', () => {
+        const component = new JumpMarkerPopupComponent({ unitSettings: vi.fn().mockReturnValue({}) } as any);
+        component.jump = {
+            jumpData: {
+                score: {
+                    getDisplayValue: vi.fn().mockReturnValue('7.3'),
+                    getDisplayUnit: vi.fn().mockReturnValue('')
+                }
+            }
+        } as any;
+
+        expect(component.getFormattedScore()).toBe('7.3');
     });
 });

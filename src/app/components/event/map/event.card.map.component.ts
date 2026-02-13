@@ -19,7 +19,7 @@ import {
 import { GoogleMap, MapInfoWindow, MapAdvancedMarker } from '@angular/google-maps';
 import { throttleTime } from 'rxjs/operators';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { EventInterface, ActivityInterface, LapInterface, User, LapTypes, GeoLibAdapter, DataLatitudeDegrees, DataLongitudeDegrees, DataJumpEvent, DataEvent, DynamicDataLoader } from '@sports-alliance/sports-lib';
+import { EventInterface, ActivityInterface, LapInterface, User, LapTypes, GeoLibAdapter, DataLatitudeDegrees, DataLongitudeDegrees, DataJumpEvent, DataEvent, DynamicDataLoader, DataInterface } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../../services/app.event.service';
 import { Subject, Subscription, asyncScheduler } from 'rxjs';
 import { AppUserService } from '../../../services/app.user.service';
@@ -361,16 +361,19 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
   getJumpMarkerOptions(jump: DataJumpEvent, color: string): google.maps.marker.AdvancedMarkerElementOptions {
     const data = jump.jumpData;
-    const format = (v: number | undefined) => v !== undefined ? Math.round(v * 10) / 10 : '-';
     const hangTimeDisplay = data.hang_time ? data.hang_time.getDisplayValue(false, true, true) : '-';
-    const speedDisplay = this.getJumpSpeedDisplay(jump);
+    const distanceDisplay = this.getJumpStatDisplay(data.distance);
+    const heightDisplay = this.getJumpStatDisplay(data.height);
+    const scoreDisplay = this.getJumpStatDisplay(data.score);
+    const speedDisplay = this.getJumpStatDisplay(data.speed);
+    const rotationsDisplay = this.getJumpStatDisplay(data.rotations);
     const stats = [
-      `Distance: ${format(data.distance.getValue())} ${data.distance.getDisplayUnit()}`,
-      `Height: ${data.height ? `${format(data.height.getValue())} ${data.height.getDisplayUnit()}` : '-'}`,
-      `Score: ${format(data.score.getValue())}`,
+      `Distance: ${distanceDisplay}`,
+      `Height: ${heightDisplay}`,
+      `Score: ${scoreDisplay}`,
       `Hang Time: ${hangTimeDisplay}`,
       `Speed: ${speedDisplay}`,
-      `Rotations: ${data.rotations ? `${format(data.rotations.getValue())}` : '-'}`
+      `Rotations: ${rotationsDisplay}`
     ].join('\n');
 
     const options = {
@@ -587,26 +590,29 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     return typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
   }
 
-  private getJumpSpeedDisplay(jump: DataJumpEvent): string {
-    const speed = jump?.jumpData?.speed;
-    if (!speed) {
-      return '-';
+  private getPreferredUnitStat(stat: DataInterface | null | undefined): DataInterface | null {
+    if (!stat) {
+      return null;
     }
 
     try {
       const convertedStats = DynamicDataLoader.getUnitBasedDataFromDataInstance(
-        speed,
+        stat,
         this.userSettingsQuery.unitSettings()
       );
-      const preferredSpeed = convertedStats?.[0];
-      if (preferredSpeed) {
-        return `${preferredSpeed.getDisplayValue()} ${preferredSpeed.getDisplayUnit()}`.trim();
-      }
+      return convertedStats?.[0] ?? stat;
     } catch {
-      // Fallback to original speed stat if conversion fails.
+      return stat;
+    }
+  }
+
+  private getJumpStatDisplay(stat: DataInterface | null | undefined): string {
+    const preferredStat = this.getPreferredUnitStat(stat);
+    if (!preferredStat) {
+      return '-';
     }
 
-    return `${speed.getDisplayValue()} ${speed.getDisplayUnit()}`.trim();
+    return `${preferredStat.getDisplayValue()} ${preferredStat.getDisplayUnit()}`.trim();
   }
 
   private getJumpMarkerSize(jump: DataJumpEvent): number {
