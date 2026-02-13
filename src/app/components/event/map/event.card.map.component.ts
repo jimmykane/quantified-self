@@ -91,6 +91,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     controlSize: 32,
     disableDefaultUI: true,
     backgroundColor: 'transparent',
+    gestureHandling: 'cooperative',
     fullscreenControl: true,
     scaleControl: true,
     rotateControl: true,

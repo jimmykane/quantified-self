@@ -68,6 +68,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     controlSize: 32,
     disableDefaultUI: true,
     backgroundColor: 'transparent',
+    gestureHandling: 'cooperative',
     mapTypeControl: false,
     mapTypeControlOptions: {
       mapTypeIds: ['roadmap', 'hybrid', 'terrain']
