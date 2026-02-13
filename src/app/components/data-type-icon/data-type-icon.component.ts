@@ -101,6 +101,10 @@ import { DataJumpSpeedMinKilometersPerHour } from '@sports-alliance/sports-lib';
 import { DataJumpSpeedMinKnots } from '@sports-alliance/sports-lib';
 import { DataJumpSpeedMinMetersPerMinute } from '@sports-alliance/sports-lib';
 import { DataJumpSpeedMinMilesPerHour } from '@sports-alliance/sports-lib';
+import { DataVerticalOscillation } from '@sports-alliance/sports-lib';
+import { DataVerticalOscillationAvg } from '@sports-alliance/sports-lib';
+import { DataVerticalOscillationMax } from '@sports-alliance/sports-lib';
+import { DataVerticalOscillationMin } from '@sports-alliance/sports-lib';
 
 @Component({
   selector: 'app-data-type-icon',
@@ -386,6 +390,10 @@ export class DataTypeIconComponent {
       case 'Ground Contact Time Balance Left':
       case 'Ground Contact Time Balance Right':
         return 'directions_walk';
+      case DataVerticalOscillation.type:
+      case DataVerticalOscillationAvg.type:
+      case DataVerticalOscillationMin.type:
+      case DataVerticalOscillationMax.type:
       case 'Vertical Oscillation':
         return 'swap_vert';
       case 'Vertical Ratio':

@@ -47,7 +47,11 @@ import {
   DataJumpSpeedMinMilesPerHour,
   DataRPE,
   DataTemperatureMax,
-  DataTemperatureMin
+  DataTemperatureMin,
+  DataVerticalOscillation,
+  DataVerticalOscillationAvg,
+  DataVerticalOscillationMax,
+  DataVerticalOscillationMin
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
 import { EVENT_SUMMARY_METRIC_GROUPS } from '../../constants/event-summary-metric-groups';
@@ -122,6 +126,10 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon('Average Ground Contact Time')).toBe('directions_walk');
     expect(component.getColumnHeaderIcon('Minimum Ground Contact Time')).toBe('directions_walk');
     expect(component.getColumnHeaderIcon('Maximum Ground Contact Time')).toBe('directions_walk');
+    expect(component.getColumnHeaderIcon(DataVerticalOscillation.type)).toBe('swap_vert');
+    expect(component.getColumnHeaderIcon(DataVerticalOscillationAvg.type)).toBe('swap_vert');
+    expect(component.getColumnHeaderIcon(DataVerticalOscillationMin.type)).toBe('swap_vert');
+    expect(component.getColumnHeaderIcon(DataVerticalOscillationMax.type)).toBe('swap_vert');
     expect(component.getColumnHeaderIcon('Vertical Oscillation')).toBe('swap_vert');
     expect(component.getColumnHeaderIcon('Average Vertical Ratio')).toBe('show_chart');
     expect(component.getColumnHeaderIcon('Average Leg Stiffness')).toBe('accessibility_new');

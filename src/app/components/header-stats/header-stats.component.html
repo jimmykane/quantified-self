@@ -27,15 +27,21 @@
             }
           </div>
           @if (showDiff) {
-          <div class="stat-diff-row">
+          <div class="stat-delta-row">
             @for (valueItem of card.valueItems; track valueItem.type) {
             @if (getDiffForType(valueItem.type); as diff) {
-            <span class="stat-diff-cell">
-              <span class="stat-diff-value">Δ {{ diff.display }}</span>
-              <span class="stat-diff-percent" [style.color]="diff.color">{{ diff.percent.toFixed(1) }}%</span>
-            </span>
+            <span class="stat-delta-cell">Δ {{ diff.display }}</span>
             } @else {
-            <span class="stat-diff-cell stat-diff-cell-empty"></span>
+            <span class="stat-delta-cell stat-delta-cell-empty"></span>
+            }
+            }
+          </div>
+          <div class="stat-percent-row">
+            @for (valueItem of card.valueItems; track valueItem.type) {
+            @if (getDiffForType(valueItem.type); as diff) {
+            <span class="stat-percent-cell" [style.color]="diff.color">{{ diff.percent.toFixed(1) }}%</span>
+            } @else {
+            <span class="stat-percent-cell stat-percent-cell-empty"></span>
             }
             }
           </div>
