@@ -103,13 +103,16 @@ export class EventCardStatsTableComponent implements OnChanges {
         const isSwimming = [ActivityTypes.Swimming, ActivityTypes['Open water swimming']].includes(activity.type as any);
 
         // Define unit preferences and their base types
-        const unitPreferences: { baseType: string, units: string[], onlyIfSwimming?: boolean }[] = [
+        const unitPreferences: { baseType: string, units: string[], derivedTypes: Set<string>, onlyIfSwimming?: boolean }[] = [
           { baseType: DataSwimPace.type, units: this.userUnitSettings.swimPaceUnits, onlyIfSwimming: true },
           { baseType: DataPace.type, units: this.userUnitSettings.paceUnits },
           { baseType: DataGradeAdjustedPace.type, units: this.userUnitSettings.gradeAdjustedPaceUnits },
           { baseType: DataSpeed.type, units: this.userUnitSettings.speedUnits },
           { baseType: DataVerticalSpeed.type, units: this.userUnitSettings.verticalSpeedUnits },
-        ];
+        ].map((preference) => ({
+          ...preference,
+          derivedTypes: this.getPreferredDerivedTypes(preference.units),
+        }));
 
         // Check each preference
         for (const pref of unitPreferences) {
@@ -117,7 +120,7 @@ export class EventCardStatsTableComponent implements OnChanges {
             if (pref.onlyIfSwimming && !isSwimming) {
               return;
             }
-            if (pref.units.includes(statType)) {
+            if (pref.derivedTypes.has(statType)) {
               statsMap.set(statType, stat);
             }
             return;
@@ -380,5 +383,31 @@ export class EventCardStatsTableComponent implements OnChanges {
     } catch {
       return '';
     }
+  }
+
+  private getPreferredDerivedTypes(unitTypes: string[] = []): Set<string> {
+    const preferredTypes = new Set<string>();
+
+    unitTypes.forEach((unitType) => {
+      if (!unitType) {
+        return;
+      }
+
+      preferredTypes.add(unitType);
+      const avgType = DynamicDataLoader.dataTypeAvgDataType[unitType];
+      const minType = DynamicDataLoader.dataTypeMinDataType[unitType];
+      const maxType = DynamicDataLoader.dataTypeMaxDataType[unitType];
+      if (avgType) {
+        preferredTypes.add(avgType);
+      }
+      if (minType) {
+        preferredTypes.add(minType);
+      }
+      if (maxType) {
+        preferredTypes.add(maxType);
+      }
+    });
+
+    return preferredTypes;
   }
 }

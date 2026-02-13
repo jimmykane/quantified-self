@@ -7,6 +7,10 @@ import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import {
     ActivityInterface,
+    DataPace,
+    DataPaceAvg,
+    DataPaceMax,
+    DataPaceMin,
     DataSpeedAvgKilometersPerHour,
     DataSpeedAvgMilesPerHour,
     EventInterface,
@@ -339,5 +343,56 @@ describe('EventCardStatsTableComponent', () => {
         const speedRows = component.data.data.filter(row => row.Name === 'Average Speed');
         expect(speedRows.length).toBe(2);
         speedRows.forEach((row) => expect(row['Difference']).toBeDefined());
+    });
+
+    it('should include pace avg/min/max when base pace unit is selected', () => {
+        component.userUnitSettings = {
+            ...mockUserUnitSettings,
+            paceUnits: [DataPace.type],
+        } as unknown as UserUnitSettingsInterface;
+
+        const avgStat = {
+            getType: () => DataPaceAvg.type,
+            getDisplayType: () => 'Average Pace',
+            getDisplayValue: () => '5:00',
+            getDisplayUnit: () => '/km',
+            getValue: () => 300
+        };
+        const minStat = {
+            getType: () => DataPaceMin.type,
+            getDisplayType: () => 'Minimum Pace',
+            getDisplayValue: () => '3:40',
+            getDisplayUnit: () => '/km',
+            getValue: () => 220
+        };
+        const maxStat = {
+            getType: () => DataPaceMax.type,
+            getDisplayType: () => 'Maximum Pace',
+            getDisplayValue: () => '6:20',
+            getDisplayUnit: () => '/km',
+            getValue: () => 380
+        };
+
+        const activity = {
+            ...mockActivity,
+            creator: { name: 'Device A' },
+            getStatsAsArray: () => [avgStat, minStat, maxStat],
+            getStat: (type: string) => {
+                if (type === DataPaceAvg.type) return avgStat;
+                if (type === DataPaceMin.type) return minStat;
+                if (type === DataPaceMax.type) return maxStat;
+                return null;
+            },
+            getID: () => 'act1'
+        } as unknown as ActivityInterface;
+
+        component.event = { ...mockEvent, isMerge: false } as EventInterface;
+        component.selectedActivities = [activity];
+        component.ngOnChanges({});
+
+        const rowTypes = component.data.data.map((row: any) => row['__statType']);
+        expect(rowTypes).toContain(DataPaceAvg.type);
+        expect(rowTypes).toContain(DataPaceMin.type);
+        expect(rowTypes).toContain(DataPaceMax.type);
     });
 });
