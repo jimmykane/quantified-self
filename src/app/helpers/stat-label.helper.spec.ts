@@ -12,6 +12,18 @@ describe('stat-label.helper', () => {
     expect(normalizeUnitDerivedTypeLabel('Average speed in kilometers per hour')).toBe('Average Speed');
     expect(normalizeUnitDerivedTypeLabel('minimum pace in minutes per mile')).toBe('Minimum Pace');
     expect(normalizeUnitDerivedTypeLabel('MAXIMUM speed in miles per hour')).toBe('Maximum Speed');
+    expect(normalizeUnitDerivedTypeLabel('Average jump speed in kilometers per hour')).toBe('Average Jump Speed');
+    expect(normalizeUnitDerivedTypeLabel('Minimum jump speed in miles per hour')).toBe('Minimum Jump Speed');
+  });
+
+  it('should normalize unit-derived base family labels for jump speed variants', () => {
+    expect(normalizeUnitDerivedTypeLabel('jump speed in kilometers per hour')).toBe('Jump Speed');
+    expect(normalizeUnitDerivedTypeLabel('Jump speed in knots')).toBe('Jump Speed');
+  });
+
+  it('should use fallback label to disambiguate overlapping unit-derived variants', () => {
+    expect(normalizeUnitDerivedTypeLabel('Distance in miles', 'Jump Distance')).toBe('Jump Distance');
+    expect(normalizeUnitDerivedTypeLabel('Distance in miles', 'GNSS Distance')).toBe('GNSS Distance');
   });
 
   it('should leave non-unit-derived labels unchanged', () => {

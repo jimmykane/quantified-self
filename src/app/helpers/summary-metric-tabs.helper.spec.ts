@@ -1,5 +1,6 @@
 import {
   DataAbsolutePressure,
+  DataAvgFlow,
   DataAirPower,
   DataJumpCount,
   DataJumpDistance,
@@ -97,7 +98,7 @@ describe('buildSummaryMetricTabs', () => {
       DataGradeAdjustedSpeedAvg.type,
       DataVerticalSpeedAvg.type,
     ]);
-    expect(performanceTab?.singleValueTypes).toEqual([DataVerticalSpeedAvg.type]);
+    expect(performanceTab?.singleValueTypes).toEqual([DataVerticalSpeedAvg.type, DataAvgFlow.type]);
   });
 
   it('should map extended power types and keep removed speed/power zone durations in Other', () => {

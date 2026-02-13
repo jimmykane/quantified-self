@@ -11,7 +11,7 @@ section.grid {
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   gap: 12px;
   padding: 8px 0;
-  align-items: start;
+  align-items: stretch;
 }
 
 .stat-item {
@@ -21,7 +21,8 @@ section.grid {
   justify-content: flex-start;
   padding: 10px 12px;
   min-width: 0;
-  align-self: start;
+  box-sizing: border-box;
+  align-self: stretch;
   border: 1px solid var(--mat-app-outline-variant);
   border-radius: 12px;
   background-color: var(--mat-app-surface-container-low);
@@ -60,6 +61,7 @@ section.grid {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  align-self: flex-start;
   gap: 2px;
 }
 
@@ -76,7 +78,7 @@ section.grid {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  justify-content: center;
+  justify-content: flex-start;
   min-width: 0;
   width: 100%;
 }
@@ -264,7 +266,8 @@ section.condensed {
 
   .stat-avatar {
     width: 16px;
-    height: 16px;
+    min-height: 16px;
+    height: auto;
   }
 
   .stat-label {

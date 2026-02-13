@@ -45,7 +45,6 @@ import {
   DataEVPEMin,
   DataFeeling,
   DataFitnessAge,
-  DataFlow,
   DataFormPower,
   DataFTP,
   DataGender,
@@ -135,7 +134,6 @@ import {
   DataTemperatureAvg,
   DataTemperatureMax,
   DataTemperatureMin,
-  DataTotalFlow,
   DataTotalGrit,
   DataVerticalOscillation,
   DataVerticalRatio,
@@ -205,9 +203,7 @@ const PERFORMANCE_EXTRA_TYPE_STRINGS: string[] = [
   DataEffortPace.type,
   DataAvgVAM.type,
   DataEPOC.type,
-  DataFlow.type,
   DataAvgFlow.type,
-  DataTotalFlow.type,
   DataGrit.type,
   DataAvgGrit.type,
   DataTotalGrit.type,
@@ -374,6 +370,7 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
     ],
     singleValueTypes: [
       DataVerticalSpeedAvg.type,
+      DataAvgFlow.type,
     ],
   },
   {
