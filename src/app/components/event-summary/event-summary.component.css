@@ -226,6 +226,11 @@
     padding-left: 12px;
     padding-right: 12px;
   }
+
+  .summary-activities-toggles {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
 }
 
 @media (max-width: 900px) {
