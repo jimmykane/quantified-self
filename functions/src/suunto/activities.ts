@@ -142,6 +142,12 @@ export const importActivityToSuuntoApp = onCall({
                 continue;
               }
 
+              // Check for "Already exists" before logging generic status to avoid "ERROR" noise
+              if (statusJson.status === 'ERROR' && statusJson.message === 'Already exists') {
+                logger.info(`Activity already exists in Suunto for user ${userID}.`);
+                return { status: 'info', code: 'ALREADY_EXISTS', message: 'Activity already exists in Suunto' };
+              }
+
               status = statusJson.status;
               logger.info(`Upload status (attempt ${attempts}/${maxAttempts}) for user ${userID}, id ${uploadId}: ${status}`, statusJson);
 
@@ -149,10 +155,7 @@ export const importActivityToSuuntoApp = onCall({
                 logger.info(`Successfully processed activity for user ${userID}. WorkoutKey: ${statusJson.workoutKey}`);
                 return { status: 'success', message: 'Activity uploaded to Suunto', workoutKey: statusJson.workoutKey };
               } else if (status === 'ERROR') {
-                if (statusJson.message === 'Already exists') {
-                  logger.info(`Activity already exists in Suunto for user ${userID}.`);
-                  return { status: 'info', code: 'ALREADY_EXISTS', message: 'Activity already exists in Suunto' };
-                }
+                // The "Already exists" case is handled above
                 throw new HttpsError('internal', `Suunto processing failed: ${statusJson.message}`);
               } else if (status === 'NEW' || status === 'ACCEPTED') {
                 // Continue polling
