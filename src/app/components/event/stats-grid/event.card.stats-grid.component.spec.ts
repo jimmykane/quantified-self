@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { EventCardStatsGridComponent } from './event.card.stats-grid.component';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
-import { signal, NO_ERRORS_SCHEMA } from '@angular/core';
+import { ElementRef, signal, NO_ERRORS_SCHEMA } from '@angular/core';
 import { ActivityTypes, UserSummariesSettingsInterface, UserUnitSettingsInterface, ActivityUtilities, DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { SimpleChange } from '@angular/core';
 import { DataAscent, DataDescent, DataDuration, DataPaceAvg, DataPowerAvg, DataPowerMax, DataPowerMin, DataTemperatureMax } from '@sports-alliance/sports-lib';
@@ -17,11 +17,31 @@ const createStat = (type: string) => ({
     getValue: () => 1,
 }) as any;
 
+const createTabGroupElement = (heights: number[]): HTMLElement => {
+    const tabGroupElement = document.createElement('div');
+    const tabBodyWrapper = document.createElement('div');
+    tabBodyWrapper.className = 'mat-mdc-tab-body-wrapper';
+    tabGroupElement.appendChild(tabBodyWrapper);
+
+    heights.forEach((height) => {
+        const tabBodyContent = document.createElement('div');
+        tabBodyContent.className = 'mat-mdc-tab-body-content';
+        Object.defineProperty(tabBodyContent, 'scrollHeight', {
+            configurable: true,
+            get: () => height,
+        });
+        tabBodyWrapper.appendChild(tabBodyContent);
+    });
+
+    return tabGroupElement;
+};
+
 describe('EventCardStatsGridComponent', () => {
     let component: EventCardStatsGridComponent;
     let fixture: ComponentFixture<EventCardStatsGridComponent>;
     let mockUserSettingsQueryService: any;
     let mockEventSummaryTabsLocalStorageService: any;
+    const originalResizeObserver = globalThis.ResizeObserver;
 
     const mockUnitSettings: UserUnitSettingsInterface = {
         distanceUnits: 'kilometers',
@@ -72,6 +92,11 @@ describe('EventCardStatsGridComponent', () => {
     });
 
     afterEach(() => {
+        if (originalResizeObserver) {
+            (globalThis as any).ResizeObserver = originalResizeObserver;
+        } else {
+            delete (globalThis as any).ResizeObserver;
+        }
         vi.restoreAllMocks();
     });
 
@@ -819,5 +844,65 @@ describe('EventCardStatsGridComponent', () => {
         expect(component.getTabIcon('device')).toBe('devices');
         expect(component.getTabIcon('physiological')).toBe('demography');
         expect(component.getTabIcon('other')).toBe('category');
+    });
+
+    it('should apply tallest tab panel height as shared min-height', () => {
+        const tabGroupElement = createTabGroupElement([120, 220, 190]);
+        component.summaryTabGroupRef = new ElementRef(tabGroupElement);
+
+        (component as any).syncTabBodyHeight();
+
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('220px');
+    });
+
+    it('should coalesce repeated height sync scheduling into one animation frame', () => {
+        const tabGroupElement = createTabGroupElement([100, 140]);
+        component.summaryTabGroupRef = new ElementRef(tabGroupElement);
+
+        let scheduledCallback: FrameRequestCallback | null = null;
+        const rafSpy = vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
+            scheduledCallback = callback;
+            return 99;
+        });
+        const syncSpy = vi.spyOn(component as any, 'syncTabBodyHeight');
+
+        (component as any).scheduleTabBodyHeightSync();
+        (component as any).scheduleTabBodyHeightSync();
+
+        expect(rafSpy).toHaveBeenCalledTimes(1);
+        expect(syncSpy).not.toHaveBeenCalled();
+
+        scheduledCallback?.(0);
+        expect(syncSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should safely skip observer setup when ResizeObserver is unavailable', () => {
+        (globalThis as any).ResizeObserver = undefined;
+        component.summaryTabGroupRef = new ElementRef(createTabGroupElement([120]));
+
+        expect(() => (component as any).setupTabBodyResizeObserver()).not.toThrow();
+        expect((component as any).resizeObserver).toBeNull();
+    });
+
+    it('should disconnect observer and cancel pending frame on destroy', () => {
+        const disconnectSpy = vi.fn();
+        (globalThis as any).ResizeObserver = vi.fn().mockImplementation(() => ({
+            observe: vi.fn(),
+            disconnect: disconnectSpy,
+        }));
+
+        component.summaryTabGroupRef = new ElementRef(createTabGroupElement([120, 180]));
+
+        vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(() => 77);
+        const cancelSpy = vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => { });
+
+        (component as any).setupTabBodyResizeObserver();
+        (component as any).scheduleTabBodyHeightSync();
+        component.ngOnDestroy();
+
+        expect(disconnectSpy).toHaveBeenCalledTimes(1);
+        expect(cancelSpy).toHaveBeenCalledWith(77);
+        expect((component as any).resizeObserver).toBeNull();
+        expect((component as any).measureRafId).toBeNull();
     });
 });

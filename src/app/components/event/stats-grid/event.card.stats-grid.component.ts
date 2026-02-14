@@ -1,4 +1,15 @@
-import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges, inject } from '@angular/core';
+import {
+  AfterViewInit,
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  Input,
+  OnChanges,
+  OnDestroy,
+  SimpleChanges,
+  ViewChild,
+  inject
+} from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { DataInterface } from '@sports-alliance/sports-lib';
@@ -36,7 +47,8 @@ const SUMMARY_TAB_ICONS: Record<EventSummaryMetricGroupId, string> = {
   standalone: false
 })
 
-export class EventCardStatsGridComponent implements OnChanges {
+export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, OnDestroy {
+  @ViewChild('summaryTabGroup', { read: ElementRef }) summaryTabGroupRef?: ElementRef<HTMLElement>;
   @Input() event!: EventInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
   // @Input() unitSettings = AppUserService.getDefaultUserUnitSettings(); // Removed, using service signal
@@ -49,6 +61,9 @@ export class EventCardStatsGridComponent implements OnChanges {
   public selectedTabIndex = 0;
   public showDiff = false;
   public diffByType = new Map<string, { display: string; percent: number; color: string }>();
+  private resizeObserver: ResizeObserver | null = null;
+  private measureRafId: number | null = null;
+  private lastAppliedMinHeightPx = 0;
 
   private userSettingsQuery = inject(AppUserSettingsQueryService);
   private eventColorService = inject(AppEventColorService);
@@ -63,6 +78,16 @@ export class EventCardStatsGridComponent implements OnChanges {
     return this.userSettingsQuery.summariesSettings();
   }
 
+  ngAfterViewInit() {
+    this.setupTabBodyResizeObserver();
+    this.scheduleTabBodyHeightSync();
+  }
+
+  ngOnDestroy() {
+    this.cancelScheduledTabBodyHeightSync();
+    this.teardownTabBodyResizeObserver();
+  }
+
   ngOnChanges(simpleChanges: SimpleChanges) {
     const ngChangesStart = performance.now();
     if (!this.selectedActivities.length) {
@@ -72,6 +97,10 @@ export class EventCardStatsGridComponent implements OnChanges {
       this.selectedTabIndex = 0;
       this.showDiff = false;
       this.diffByType = new Map();
+      this.lastAppliedMinHeightPx = 0;
+      this.clearTabBodyMinHeight();
+      this.cancelScheduledTabBodyHeightSync();
+      this.teardownTabBodyResizeObserver();
       this.logPerf('empty_selection', ngChangesStart);
       return;
     }
@@ -120,6 +149,7 @@ export class EventCardStatsGridComponent implements OnChanges {
     if (selectedTabId) {
       this.eventSummaryTabsLocalStorageService.setLastSelectedStatsTabId(selectedTabId);
     }
+    this.scheduleTabBodyHeightSync();
   }
 
   public getSingleValueTypesForTab(tab: SummaryMetricTab): string[] {
@@ -177,6 +207,101 @@ export class EventCardStatsGridComponent implements OnChanges {
       }))
       .filter((tab) => tab.metricTypes.length > 0);
     this.resetSelectedTab();
+    this.setupTabBodyResizeObserver();
+    this.scheduleTabBodyHeightSync();
+  }
+
+  private scheduleTabBodyHeightSync() {
+    if (this.measureRafId !== null) {
+      return;
+    }
+
+    if (typeof requestAnimationFrame === 'undefined') {
+      this.syncTabBodyHeight();
+      return;
+    }
+
+    this.measureRafId = requestAnimationFrame(() => {
+      this.measureRafId = null;
+      this.syncTabBodyHeight();
+    });
+  }
+
+  private syncTabBodyHeight() {
+    const tabGroupElement = this.summaryTabGroupRef?.nativeElement;
+    if (!tabGroupElement) {
+      return;
+    }
+
+    const tabBodyWrapper = tabGroupElement.querySelector<HTMLElement>('.mat-mdc-tab-body-wrapper');
+    if (!tabBodyWrapper) {
+      return;
+    }
+
+    const tabBodyContents = tabGroupElement.querySelectorAll<HTMLElement>('.mat-mdc-tab-body-content');
+    if (!tabBodyContents.length) {
+      return;
+    }
+
+    const maxHeight = Array.from(tabBodyContents).reduce((currentMax, tabBodyContent) => {
+      return Math.max(currentMax, Math.ceil(tabBodyContent.scrollHeight));
+    }, 0);
+
+    if (maxHeight === this.lastAppliedMinHeightPx) {
+      return;
+    }
+
+    this.lastAppliedMinHeightPx = maxHeight;
+    tabGroupElement.style.setProperty('--summary-tabs-body-min-height', `${maxHeight}px`);
+  }
+
+  private setupTabBodyResizeObserver() {
+    this.teardownTabBodyResizeObserver();
+
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const tabGroupElement = this.summaryTabGroupRef?.nativeElement;
+    if (!tabGroupElement) {
+      return;
+    }
+
+    const tabBodyContents = tabGroupElement.querySelectorAll<HTMLElement>('.mat-mdc-tab-body-content');
+    if (!tabBodyContents.length) {
+      return;
+    }
+
+    this.resizeObserver = new ResizeObserver(() => {
+      this.scheduleTabBodyHeightSync();
+    });
+    tabBodyContents.forEach((tabBodyContent) => {
+      this.resizeObserver?.observe(tabBodyContent);
+    });
+  }
+
+  private teardownTabBodyResizeObserver() {
+    if (!this.resizeObserver) {
+      return;
+    }
+
+    this.resizeObserver.disconnect();
+    this.resizeObserver = null;
+  }
+
+  private cancelScheduledTabBodyHeightSync() {
+    if (this.measureRafId === null || typeof cancelAnimationFrame === 'undefined') {
+      this.measureRafId = null;
+      return;
+    }
+
+    cancelAnimationFrame(this.measureRafId);
+    this.measureRafId = null;
+  }
+
+  private clearTabBodyMinHeight() {
+    const tabGroupElement = this.summaryTabGroupRef?.nativeElement;
+    tabGroupElement?.style.removeProperty('--summary-tabs-body-min-height');
   }
 
   private resetSelectedTab() {

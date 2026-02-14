@@ -28,6 +28,10 @@
   align-items: center;
 }
 
+:host ::ng-deep .summary-metric-tabs .mat-mdc-tab-body-wrapper {
+  min-height: var(--summary-tabs-body-min-height, 0px);
+}
+
 @media (max-width: 599px) {
   .summary-tab-label {
     justify-content: center;
