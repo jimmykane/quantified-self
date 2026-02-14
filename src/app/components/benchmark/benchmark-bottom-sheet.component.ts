@@ -39,7 +39,7 @@ type NativeShareStatus = 'shared' | 'unsupported' | 'cancelled' | 'failed';
         <mat-progress-bar *ngIf="isSharing" class="share-progress" mode="indeterminate" color="accent"></mat-progress-bar>
         <div class="bottom-sheet-content qs-scrollbar">
             <div #shareFrame class="benchmark-share-frame">
-              <app-benchmark-report 
+              <app-benchmark-report
                   [result]="data.result"
                   [event]="data.event"
                   [unitSettings]="data.unitSettings"

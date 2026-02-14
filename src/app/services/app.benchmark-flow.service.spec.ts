@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { of } from 'rxjs';
+import { Overlay } from '@angular/cdk/overlay';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -15,6 +16,7 @@ import { AppAnalyticsService } from './app.analytics.service';
 describe('AppBenchmarkFlowService', () => {
   let service: AppBenchmarkFlowService;
   let bottomSheet: { open: ReturnType<typeof vi.fn> };
+  let overlay: { scrollStrategies: { noop: ReturnType<typeof vi.fn> } };
   let dialog: { open: ReturnType<typeof vi.fn> };
   let snackBar: { open: ReturnType<typeof vi.fn> };
   let benchmarkService: { generateBenchmark: ReturnType<typeof vi.fn> };
@@ -48,6 +50,7 @@ describe('AppBenchmarkFlowService', () => {
 
   beforeEach(() => {
     bottomSheet = { open: vi.fn().mockReturnValue({ afterDismissed: () => of(undefined) }) };
+    overlay = { scrollStrategies: { noop: vi.fn().mockReturnValue({}) } };
     dialog = { open: vi.fn().mockReturnValue({ afterClosed: () => of(undefined), componentInstance: { setActivities: vi.fn() } }) };
     snackBar = { open: vi.fn() };
     benchmarkService = { generateBenchmark: vi.fn() };
@@ -62,6 +65,7 @@ describe('AppBenchmarkFlowService', () => {
       providers: [
         AppBenchmarkFlowService,
         { provide: MatBottomSheet, useValue: bottomSheet },
+        { provide: Overlay, useValue: overlay },
         { provide: MatDialog, useValue: dialog },
         { provide: MatSnackBar, useValue: snackBar },
         { provide: AppBenchmarkService, useValue: benchmarkService },

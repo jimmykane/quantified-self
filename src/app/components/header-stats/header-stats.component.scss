@@ -189,6 +189,10 @@ section.grid {
   font-size: 0.94rem;
 }
 
+.stat-item--composite {
+  min-width: 180px;
+}
+
 .stat-item--composite .stat-value-cell {
   white-space: nowrap;
   overflow: hidden;
@@ -329,5 +333,6 @@ section.condensed {
   // Temporary: keep composite cards same width behavior as desktop on mobile.
   .stat-item--composite {
     grid-column: auto;
+    min-width: 0;
   }
 }
