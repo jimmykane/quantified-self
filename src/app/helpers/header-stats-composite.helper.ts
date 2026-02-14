@@ -48,6 +48,27 @@ const toDisplayText = (value: unknown): string => {
   return String(value);
 };
 
+const stripTrailingDisplayUnit = (displayValue: string, displayUnit: string): string => {
+  const value = displayValue.trim();
+  const unit = displayUnit.trim();
+  if (!unit || !value) {
+    return value;
+  }
+
+  const lowerValue = value.toLowerCase();
+  const lowerUnit = unit.toLowerCase();
+  const spacedUnitSuffix = ` ${lowerUnit}`;
+
+  if (lowerValue.endsWith(spacedUnitSuffix)) {
+    return value.slice(0, value.length - spacedUnitSuffix.length).trim();
+  }
+  if (lowerValue.endsWith(lowerUnit)) {
+    return value.slice(0, value.length - lowerUnit.length).trim();
+  }
+
+  return value;
+};
+
 const normalizeFamilyKey = (type: string): string => {
   return type.replace(STAT_KIND_PREFIX_REGEX, '').trim().toLowerCase();
 };
@@ -182,7 +203,11 @@ export const buildHeaderStatCards = (
       if (!familyStat) {
         return;
       }
-      valueItems.push(createValueItem(entry.kind, entry.key, familyStat));
+      const valueItem = createValueItem(entry.kind, entry.key, familyStat);
+      valueItems.push({
+        ...valueItem,
+        displayValue: stripTrailingDisplayUnit(valueItem.displayValue, valueItem.displayUnit),
+      });
     });
 
     if (!valueItems.length) {

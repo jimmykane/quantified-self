@@ -33,7 +33,7 @@
             }
             @for (valueItem of card.valueItems; track valueItem.type) {
             @if (getDiffForType(valueItem.type); as diff) {
-            <span class="stat-delta-cell">{{ diff.display }}</span>
+            <span class="stat-delta-cell">{{ getCompositeDeltaDisplay(diff.display, valueItem.displayUnit) }}</span>
             } @else {
             <span class="stat-delta-cell stat-delta-cell-empty"></span>
             }

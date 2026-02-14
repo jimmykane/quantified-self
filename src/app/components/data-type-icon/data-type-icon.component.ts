@@ -145,10 +145,12 @@ export class DataTypeIconComponent {
       case DataPowerMax.type:
       case DataPowerMin.type:
       case DataPower.type:
-      case 'FTP':
-      case 'CriticalPower':
       case 'Form Power':
         return 'bolt';
+      case 'FTP':
+        return 'recent_patient';
+      case 'CriticalPower':
+        return 'offline_bolt';
       case DataPowerLeft.type:
       case 'Power Pedal Smoothness Left':
       case 'Power Torque Effectiveness Left':
@@ -166,7 +168,7 @@ export class DataTypeIconComponent {
       case 'Minimum Air Power':
         return 'air';
       case 'Power Normalized':
-        return 'tune';
+        return 'electric_bolt';
       case 'Power Intensity Factor':
         return 'multiline_chart';
       case 'Power Training Stress Score':
@@ -182,13 +184,13 @@ export class DataTypeIconComponent {
       case DataCadenceAvg.type:
       case DataCadenceMax.type:
       case DataCadenceMin.type:
-        return 'cached';
+        return 'cadence';
       case DataAltitudeMax.type:
-        return 'vertical_align_top';
+        return 'landscape';
       case DataAltitudeMin.type:
-        return 'vertical_align_bottom';
+        return 'landscape';
       case DataAltitudeAvg.type:
-        return 'vertical_align_center';
+        return 'landscape';
       case DataVerticalSpeedAvg.type:
       case DataVerticalSpeedAvgFeetPerHour.type:
       case DataVerticalSpeedAvgFeetPerMinute.type:
@@ -197,7 +199,7 @@ export class DataTypeIconComponent {
       case DataVerticalSpeedAvgMilesPerHour.type:
       case DataVerticalSpeedAvgMetersPerHour.type:
       case DataVerticalSpeedAvgMetersPerMinute.type:
-        return 'vertical_align_center';
+        return 'unfold_more_double';
       case DataSpeedAvg.type:
       case DataSpeedAvgKilometersPerHour.type:
       case DataSpeedAvgMilesPerHour.type:
@@ -209,7 +211,7 @@ export class DataTypeIconComponent {
       case DataPaceAvg.type:
       case DataPaceAvgMinutesPerMile.type:
       case 'Effort Pace':
-        return 'directions_run';
+        return 'steps';
       case 'Average VAM':
       case 'Avg VAM':
         return 'trending_up';
@@ -226,7 +228,7 @@ export class DataTypeIconComponent {
       case 'Average Grade':
       case 'Minimum Grade':
       case 'Maximum Grade':
-        return 'landscape';
+        return 'tools_level';
       case DataRecoveryTime.type:
         return 'update';
       case DataVO2Max.type:
@@ -302,7 +304,7 @@ export class DataTypeIconComponent {
       case 'Age':
         return 'cake';
       case DataEnergy.type:
-        return 'bolt';
+        return 'metabolism';
       case DataSwimPaceAvg.type:
       case DataSwimPaceAvgMinutesPer100Yard.type:
         return 'pool';
@@ -379,8 +381,9 @@ export class DataTypeIconComponent {
       case DataJumpScoreMax.type:
         return 'military_tech';
       case 'Distance (Stryd)':
-      case 'GNSS Distance':
         return 'route';
+      case 'GNSS Distance':
+        return 'satellite_alt';
       case 'Average Ground Contact Time':
       case 'Minimum Ground Contact Time':
       case 'Maximum Ground Contact Time':
@@ -389,7 +392,7 @@ export class DataTypeIconComponent {
       case 'Stance Time Balance Right':
       case 'Ground Contact Time Balance Left':
       case 'Ground Contact Time Balance Right':
-        return 'directions_walk';
+        return 'step_over';
       case DataVerticalOscillation.type:
       case DataVerticalOscillationAvg.type:
       case DataVerticalOscillationMin.type:
@@ -400,7 +403,7 @@ export class DataTypeIconComponent {
       case 'Average Vertical Ratio':
       case 'Minimum Vertical Ratio':
       case 'Maximum Vertical Ratio':
-        return 'show_chart';
+        return 'arrows_outward';
       case 'Leg Stiffness':
       case 'Average Leg Stiffness':
       case 'Minimum Leg Stiffness':
@@ -419,7 +422,7 @@ export class DataTypeIconComponent {
       case DataGradeAdjustedPaceAvgMinutesPerMile.type:
       case 'Minimum Grade Adjusted Pace':
       case 'Maximum Grade Adjusted Pace':
-        return 'directions_run';
+        return 'steps';
       case DataGradeAdjustedSpeedAvg.type:
       case DataGradeAdjustedSpeedAvgFeetPerMinute.type:
       case DataGradeAdjustedSpeedAvgFeetPerSecond.type:

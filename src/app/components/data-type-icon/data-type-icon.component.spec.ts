@@ -1,10 +1,15 @@
 import {
   DataAscent,
   DataAltitudeAvg,
+  DataAltitudeMax,
+  DataAltitudeMin,
   DataCadenceMax,
   DataCadenceMin,
   DataDescent,
+  DataEnergy,
   DataFeeling,
+  DataGradeAdjustedPaceAvg,
+  DataPaceAvg,
   DataPowerMax,
   DataPowerMin,
   DataJumpCount,
@@ -48,6 +53,7 @@ import {
   DataRPE,
   DataTemperatureMax,
   DataTemperatureMin,
+  DataVerticalSpeedAvg,
   DataVerticalOscillation,
   DataVerticalOscillationAvg,
   DataVerticalOscillationMax,
@@ -63,11 +69,14 @@ describe('DataTypeIconComponent', () => {
 
     expect(component.getColumnHeaderIcon(DataPowerMax.type)).toBe('bolt');
     expect(component.getColumnHeaderIcon(DataPowerMin.type)).toBe('bolt');
-    expect(component.getColumnHeaderIcon(DataCadenceMax.type)).toBe('cached');
-    expect(component.getColumnHeaderIcon(DataCadenceMin.type)).toBe('cached');
+    expect(component.getColumnHeaderIcon(DataCadenceMax.type)).toBe('cadence');
+    expect(component.getColumnHeaderIcon(DataCadenceMin.type)).toBe('cadence');
     expect(component.getColumnHeaderIcon(DataTemperatureMax.type)).toBe('device_thermostat');
     expect(component.getColumnHeaderIcon(DataTemperatureMin.type)).toBe('device_thermostat');
-    expect(component.getColumnHeaderIcon(DataAltitudeAvg.type)).toBe('vertical_align_center');
+    expect(component.getColumnHeaderIcon(DataAltitudeMax.type)).toBe('landscape');
+    expect(component.getColumnHeaderIcon(DataAltitudeMin.type)).toBe('landscape');
+    expect(component.getColumnHeaderIcon(DataAltitudeAvg.type)).toBe('landscape');
+    expect(component.getColumnHeaderIcon(DataVerticalSpeedAvg.type)).toBe('unfold_more_double');
   });
 
   it('should return icons for physiological subjective metrics', () => {
@@ -115,26 +124,26 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon('Average Absolute Pressure')).toBe('compress');
     expect(component.getColumnHeaderIcon('Minimum Absolute Pressure')).toBe('compress');
     expect(component.getColumnHeaderIcon('Maximum Absolute Pressure')).toBe('compress');
-    expect(component.getColumnHeaderIcon('Average Grade')).toBe('landscape');
-    expect(component.getColumnHeaderIcon('Minimum Grade')).toBe('landscape');
-    expect(component.getColumnHeaderIcon('Maximum Grade')).toBe('landscape');
+    expect(component.getColumnHeaderIcon('Average Grade')).toBe('tools_level');
+    expect(component.getColumnHeaderIcon('Minimum Grade')).toBe('tools_level');
+    expect(component.getColumnHeaderIcon('Maximum Grade')).toBe('tools_level');
   });
 
   it('should provide icon mappings for requested performance run-dynamics metrics', () => {
     const component = new DataTypeIconComponent();
 
-    expect(component.getColumnHeaderIcon('Average Ground Contact Time')).toBe('directions_walk');
-    expect(component.getColumnHeaderIcon('Minimum Ground Contact Time')).toBe('directions_walk');
-    expect(component.getColumnHeaderIcon('Maximum Ground Contact Time')).toBe('directions_walk');
+    expect(component.getColumnHeaderIcon('Average Ground Contact Time')).toBe('step_over');
+    expect(component.getColumnHeaderIcon('Minimum Ground Contact Time')).toBe('step_over');
+    expect(component.getColumnHeaderIcon('Maximum Ground Contact Time')).toBe('step_over');
     expect(component.getColumnHeaderIcon(DataVerticalOscillation.type)).toBe('swap_vert');
     expect(component.getColumnHeaderIcon(DataVerticalOscillationAvg.type)).toBe('swap_vert');
     expect(component.getColumnHeaderIcon(DataVerticalOscillationMin.type)).toBe('swap_vert');
     expect(component.getColumnHeaderIcon(DataVerticalOscillationMax.type)).toBe('swap_vert');
     expect(component.getColumnHeaderIcon('Vertical Oscillation')).toBe('swap_vert');
-    expect(component.getColumnHeaderIcon('Average Vertical Ratio')).toBe('show_chart');
+    expect(component.getColumnHeaderIcon('Average Vertical Ratio')).toBe('arrows_outward');
     expect(component.getColumnHeaderIcon('Average Leg Stiffness')).toBe('accessibility_new');
-    expect(component.getColumnHeaderIcon('Stance Time')).toBe('directions_walk');
-    expect(component.getColumnHeaderIcon('Stance Time Balance Left')).toBe('directions_walk');
+    expect(component.getColumnHeaderIcon('Stance Time')).toBe('step_over');
+    expect(component.getColumnHeaderIcon('Stance Time Balance Left')).toBe('step_over');
   });
 
   it('should provide icon mappings for grit and flow metrics', () => {
@@ -151,7 +160,9 @@ describe('DataTypeIconComponent', () => {
   it('should provide icon mappings for FTP', () => {
     const component = new DataTypeIconComponent();
 
-    expect(component.getColumnHeaderIcon('FTP')).toBe('bolt');
+    expect(component.getColumnHeaderIcon('FTP')).toBe('recent_patient');
+    expect(component.getColumnHeaderIcon('CriticalPower')).toBe('offline_bolt');
+    expect(component.getColumnHeaderIcon('Power Normalized')).toBe('electric_bolt');
   });
 
   it('should provide icon mapping for Jump Count', () => {
@@ -208,6 +219,23 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon('Avg VAM')).toBe('trending_up');
   });
 
+  it('should provide icon mappings for GNSS and Stryd distance', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon('GNSS Distance')).toBe('satellite_alt');
+    expect(component.getColumnHeaderIcon('Distance (Stryd)')).toBe('route');
+  });
+
+  it('should provide icon mappings for pace and grade adjusted pace metrics', () => {
+    const component = new DataTypeIconComponent();
+
+    expect(component.getColumnHeaderIcon(DataPaceAvg.type)).toBe('steps');
+    expect(component.getColumnHeaderIcon('Effort Pace')).toBe('steps');
+    expect(component.getColumnHeaderIcon(DataGradeAdjustedPaceAvg.type)).toBe('steps');
+    expect(component.getColumnHeaderIcon('Minimum Grade Adjusted Pace')).toBe('steps');
+    expect(component.getColumnHeaderIcon('Maximum Grade Adjusted Pace')).toBe('steps');
+  });
+
   it('should provide icon mappings for respiration rate metrics', () => {
     const component = new DataTypeIconComponent();
 
@@ -237,6 +265,7 @@ describe('DataTypeIconComponent', () => {
   it('should provide icon mappings for physiological profile metrics', () => {
     const component = new DataTypeIconComponent();
 
+    expect(component.getColumnHeaderIcon(DataEnergy.type)).toBe('metabolism');
     expect(component.getColumnHeaderIcon('Weight')).toBe('monitor_weight');
     expect(component.getColumnHeaderIcon('Height')).toBe('height');
     expect(component.getColumnHeaderIcon('Gender')).toBe('wc');

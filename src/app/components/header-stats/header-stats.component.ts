@@ -110,6 +110,28 @@ export class HeaderStatsComponent implements OnChanges {
     return card.valueItems.some((item) => !!this.getDiffForType(item.type));
   }
 
+  getCompositeDeltaDisplay(display: string, unit: string): string {
+    const normalizedDisplay = String(display ?? '').trim();
+    const normalizedUnit = String(unit ?? '').trim();
+    if (!normalizedDisplay || !normalizedUnit) {
+      return normalizedDisplay;
+    }
+
+    const lowerDisplay = normalizedDisplay.toLowerCase();
+    const lowerUnit = normalizedUnit.toLowerCase();
+    const spacedUnitSuffix = ` ${lowerUnit}`;
+
+    if (lowerDisplay.endsWith(spacedUnitSuffix)) {
+      return normalizedDisplay.slice(0, normalizedDisplay.length - spacedUnitSuffix.length).trim();
+    }
+
+    if (lowerDisplay.endsWith(lowerUnit)) {
+      return normalizedDisplay.slice(0, normalizedDisplay.length - lowerUnit.length).trim();
+    }
+
+    return normalizedDisplay;
+  }
+
   private isInvalidDisplayToken(value: unknown): boolean {
     if (typeof value === 'number') {
       return !Number.isFinite(value);

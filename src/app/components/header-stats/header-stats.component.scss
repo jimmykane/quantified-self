@@ -8,7 +8,7 @@
 /* Grid Container */
 section.grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
   padding: 8px 0;
   align-items: stretch;
@@ -189,8 +189,11 @@ section.grid {
   font-size: 0.94rem;
 }
 
-.stat-item--composite {
-  min-width: 180px;
+.stat-item--composite .stat-values-unit-prefix {
+  font-size: 0.58rem;
+  font-weight: 600;
+  color: var(--mat-app-on-surface);
+  opacity: 1;
 }
 
 .stat-item--composite .stat-value-cell {
@@ -278,7 +281,7 @@ section.condensed {
 /* Desktop Styles (Medium and up) */
 @include bp.medium-and-up {
   section.grid {
-    grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     column-gap: 2rem;
     /* More breathing room on desktop */
   }

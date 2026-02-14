@@ -152,4 +152,31 @@ describe('header-stats-composite.helper', () => {
       'Maximum Speed',
     ]);
   });
+
+  it('should strip trailing units from composite value display cells', () => {
+    const createStat = (type: string, label: string, value: string, unit = '') => ({
+      getType: () => type,
+      getDisplayType: () => label,
+      getDisplayValue: () => value,
+      getDisplayUnit: () => unit,
+    } as any);
+
+    const avgStat = createStat(DataPowerAvg.type, 'Average Power', '250 W', 'W');
+    const minStat = createStat(DataPowerMin.type, 'Minimum Power', '120 W', 'W');
+    const maxStat = createStat(DataPowerMax.type, 'Maximum Power', '680 W', 'W');
+
+    const cards = buildHeaderStatCards(
+      [avgStat],
+      new Map([
+        [avgStat.getType(), avgStat],
+        [minStat.getType(), minStat],
+        [maxStat.getType(), maxStat],
+      ])
+    );
+
+    expect(cards.length).toBe(1);
+    expect(cards[0].isComposite).toBe(true);
+    expect(cards[0].valueItems.map((item) => item.displayValue)).toEqual(['250', '120', '680']);
+    expect(cards[0].valueItems.map((item) => item.displayUnit)).toEqual(['W', 'W', 'W']);
+  });
 });

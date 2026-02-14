@@ -211,4 +211,10 @@ describe('HeaderStatsComponent', () => {
     expect(component.hasCompositeDiff(card)).toBe(true);
   });
 
+  it('should strip trailing units from composite delta display', () => {
+    expect(component.getCompositeDeltaDisplay('10 W', 'W')).toBe('10');
+    expect(component.getCompositeDeltaDisplay('10w', 'W')).toBe('10');
+    expect(component.getCompositeDeltaDisplay('10', 'W')).toBe('10');
+  });
+
 });
