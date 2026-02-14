@@ -1,5 +1,4 @@
 import { Injectable } from '@angular/core';
-import { Overlay } from '@angular/cdk/overlay';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -29,7 +28,6 @@ interface BenchmarkFlowConfig {
 export class AppBenchmarkFlowService {
   constructor(
     private bottomSheet: MatBottomSheet,
-    private overlay: Overlay,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
     private benchmarkService: AppBenchmarkService,
@@ -49,8 +47,7 @@ export class AppBenchmarkFlowService {
         summariesSettings: config.user?.settings?.summariesSettings,
         brandText: (config.user as any)?.brandText ?? null,
       },
-      autoFocus: 'dialog',
-      scrollStrategy: this.overlay.scrollStrategies.noop()
+      autoFocus: 'dialog'
     });
 
     sheetRef.afterDismissed().subscribe((res: { rerun?: boolean } | undefined) => {

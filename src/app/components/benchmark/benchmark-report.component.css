@@ -254,32 +254,6 @@ li {
   border-radius: 12px;
 }
 
-.metric-card-header {
-  display: flex;
-  align-items: center;
-  padding: 1rem 1rem 0.5rem;
-}
-
-.metric-card-heading {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.metric-card-title {
-  font: var(--mat-sys-title-medium);
-  color: var(--mat-sys-on-surface);
-}
-
-.metric-card-subtitle {
-  font: var(--mat-sys-body-small);
-  color: var(--mat-sys-on-surface-variant);
-}
-
-.metric-card-content {
-  padding: 0 1rem 1rem;
-}
-
 .metric-card .grade-avatar {
   display: flex;
   align-items: center;
@@ -323,6 +297,7 @@ li {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 1rem;
+  padding-top: 1rem;
   text-align: center;
 }
 

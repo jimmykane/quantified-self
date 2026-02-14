@@ -85,17 +85,15 @@ interface InsightItem {
       </div>
 
       <!-- Verdict Summary -->
-      <div class="verdict-card metric-card" [ngClass]="getOverallGrade()">
-        <div class="metric-card-header">
-          <div class="grade-avatar" [ngClass]="getOverallGrade()">
+      <mat-card class="verdict-card" [ngClass]="getOverallGrade()">
+        <mat-card-header>
+          <div mat-card-avatar class="grade-avatar" [ngClass]="getOverallGrade()">
             <mat-icon>{{ getGradeIcon(getOverallGrade()) }}</mat-icon>
           </div>
-          <div class="metric-card-heading">
-            <div class="metric-card-title">{{ getVerdictTitle() }}</div>
-            <div class="metric-card-subtitle">Hardware Benchmark Analysis</div>
-          </div>
-        </div>
-        <div class="metric-card-content">
+          <mat-card-title>{{ getVerdictTitle() }}</mat-card-title>
+          <mat-card-subtitle>Hardware Benchmark Analysis</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
           <ul class="verdict-list">
             <li *ngFor="let insight of getInsights()">
               <mat-icon [ngClass]="insight.grade">{{ getGradeIcon(insight.grade) }}</mat-icon>
@@ -103,8 +101,8 @@ interface InsightItem {
               <span *ngIf="insight.value" class="insight-value">{{ insight.value }}</span>
             </li>
           </ul>
-        </div>
-      </div>
+        </mat-card-content>
+      </mat-card>
 
       <!-- Diff Chips -->
       <div class="diff-chips-section" *ngIf="diffChips.length > 0">
@@ -124,17 +122,15 @@ interface InsightItem {
       </div>
 
       <!-- GNSS Section -->
-      <section class="metric-card gnss-card">
-        <div class="metric-card-header">
-            <div class="grade-avatar" [ngClass]="getGnssGrade()">
+      <mat-card class="metric-card gnss-card">
+        <mat-card-header>
+            <div mat-card-avatar class="grade-avatar" [ngClass]="getGnssGrade()">
                 <mat-icon>{{ getGradeIcon(getGnssGrade()) }}</mat-icon>
             </div>
-            <div class="metric-card-heading">
-              <div class="metric-card-title">GNSS Accuracy</div>
-              <div class="metric-card-subtitle">Positional Deviation</div>
-            </div>
-        </div>
-        <div class="metric-card-content stats-grid">
+            <mat-card-title>GNSS Accuracy</mat-card-title>
+            <mat-card-subtitle>Positional Deviation</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content class="stats-grid">
             <div class="stat-item">
                 <span class="label">CEP 50%</span>
                 <span class="value">{{ result.metrics.gnss.cep50 | number:'1.2-2' }}m</span>
@@ -151,20 +147,18 @@ interface InsightItem {
                 <span class="label">Max Dev</span>
                 <span class="value highlight">{{ result.metrics.gnss.maxDeviation | number:'1.1-1' }}m</span>
             </div>
-        </div>
-      </section>
+        </mat-card-content>
+      </mat-card>
 
-      <section class="metric-card info-card" *ngIf="result && (result.alignmentApplied || (result.qualityIssues && result.qualityIssues.length > 0))">
-        <div class="metric-card-header">
-            <div class="grade-avatar">
+      <mat-card class="metric-card info-card" *ngIf="result && (result.alignmentApplied || (result.qualityIssues && result.qualityIssues.length > 0))">
+        <mat-card-header>
+            <div mat-card-avatar class="grade-avatar">
                 <mat-icon>tune</mat-icon>
             </div>
-            <div class="metric-card-heading">
-              <div class="metric-card-title">Data Quality</div>
-              <div class="metric-card-subtitle">Preprocessing & Artifacts</div>
-            </div>
-        </div>
-        <div class="metric-card-content">
+            <mat-card-title>Data Quality</mat-card-title>
+            <mat-card-subtitle>Preprocessing & Artifacts</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
             <div class="quality-item" *ngIf="result.alignmentApplied">
                 <mat-icon class="info-icon">schedule</mat-icon>
                 <span>Auto-aligned by <strong>{{ result.timeOffsetSeconds }}s</strong> to maximize correlation.</span>
@@ -209,21 +203,19 @@ interface InsightItem {
                     </div>
                 </div>
             </div>
-        </div>
-      </section>
+        </mat-card-content>
+      </mat-card>
 
       <div class="streams-container">
-        <section class="metric-card stream-card" *ngFor="let stream of objectKeys(result.metrics.streamMetrics)">
-            <div class="metric-card-header">
-                <div class="grade-avatar" [ngClass]="getCorrelationGrade(result.metrics.streamMetrics[stream].pearsonCorrelation)">
+        <mat-card class="metric-card stream-card" *ngFor="let stream of objectKeys(result.metrics.streamMetrics)">
+            <mat-card-header>
+                <div mat-card-avatar class="grade-avatar" [ngClass]="getCorrelationGrade(result.metrics.streamMetrics[stream].pearsonCorrelation)">
                     <mat-icon>{{ getGradeIcon(getCorrelationGrade(result.metrics.streamMetrics[stream].pearsonCorrelation)) }}</mat-icon>
                 </div>
-                <div class="metric-card-heading">
-                  <div class="metric-card-title">{{ stream }}</div>
-                  <div class="metric-card-subtitle">{{ getCorrelationLabel(result.metrics.streamMetrics[stream].pearsonCorrelation) }}</div>
-                </div>
-            </div>
-            <div class="metric-card-content">
+                <mat-card-title>{{ stream }}</mat-card-title>
+                <mat-card-subtitle>{{ getCorrelationLabel(result.metrics.streamMetrics[stream].pearsonCorrelation) }}</mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content>
                 <div class="correlation-meter">
                     <div class="bar-bg">
                         <div class="bar-fill" 
@@ -239,8 +231,8 @@ interface InsightItem {
                     <span>RMSE: <span class="stat-val">{{ result.metrics.streamMetrics[stream].rootMeanSquareError | number:'1.1-1' }}</span></span>
                     <span>MAE: <span class="stat-val">{{ result.metrics.streamMetrics[stream].meanAbsoluteError | number:'1.1-1' }}</span></span>
                 </div>
-            </div>
-        </section>
+            </mat-card-content>
+        </mat-card>
       </div>
 
     </div>
