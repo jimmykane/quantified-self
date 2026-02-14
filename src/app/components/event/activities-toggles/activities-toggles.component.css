@@ -124,9 +124,9 @@
 .chip-device-edit-button {
   margin-left: auto;
   width: 20px;
-  height: 20px;
+  height: 20px !important;
   min-width: 20px;
-  padding: 0;
+  padding: 0 !important;
   line-height: 20px;
   color: var(--mat-app-on-surface-variant);
 }
@@ -142,6 +142,7 @@
   .activity-chips {
     gap: 10px;
   }
+
   .activity-chip {
     flex: 1 1 100%;
     min-width: auto;
