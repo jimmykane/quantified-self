@@ -23,6 +23,14 @@
         matTooltip="This will re-calculate statistics like distance, ascent, descent etc...">info</mat-icon>
     </span>
   </button>
+  <div class="menu-item-tooltip-wrapper" [matTooltip]="getReimportDisabledReason()"
+    [matTooltipDisabled]="canReimportFromOriginalFile()">
+    <button mat-menu-item class="reimport-stat-item" (click)="reImportActivityFromFile()"
+      [disabled]="!canReimportFromOriginalFile()">
+      <mat-icon>upload_file</mat-icon>
+      <span>Reimport activity from file</span>
+    </button>
+  </div>
   <button mat-menu-item (click)="downloadJSON()">
     <mat-icon>file_download</mat-icon>
     <span>Download as JSON</span>

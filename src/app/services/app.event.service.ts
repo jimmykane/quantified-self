@@ -47,6 +47,7 @@ import { AppCacheService } from './app.cache.service';
 import { BenchmarkEventAdapter } from './benchmark-event.adapter';
 import { SPORTS_LIB_VERSION } from '../constants/sports-lib-version.browser';
 import { buildActivityEditWritePayload, buildActivityWriteData, buildEventWriteData } from '../utils/activity-edit.persistence';
+import { AppOriginalFileHydrationService } from './app.original-file-hydration.service';
 
 export interface GetEventsOnceOptions {
   preferCache?: boolean;
@@ -73,6 +74,7 @@ export class AppEventService implements OnDestroy {
   private logger = inject(LoggerService);
   private appEventUtilities = inject(AppEventUtilities);
   private benchmarkAdapter = inject(BenchmarkEventAdapter);
+  private originalFileHydrationService = inject(AppOriginalFileHydrationService);
   private static readonly DEDUPE_TTL_MS = 6 * 60 * 60 * 1000;
   private static readonly SANITIZER_EVENT_TTL_MS = 30 * 60 * 1000;
   private static readonly DEDUPE_UNKNOWN_TYPES_MAX = 500;
@@ -733,75 +735,41 @@ export class AppEventService implements OnDestroy {
    * @private
    */
   public attachStreamsToEventWithActivities(user: User, event: AppEventInterface, streamTypes?: string[], merge: boolean = true, skipEnrichment: boolean = false): Observable<EventInterface> {
-    // Original File Reading Strategy:
-    // ---------------------------------
-    // Events store original file metadata in two fields (written by EventWriter):
-    //   - originalFiles (array): Canonical source, always an array even for single files
-    //   - originalFile (object): Legacy pointer to first file, for backwards compatibility
-    //
-    // Priority: Check originalFiles first (handles both merged events and normalized single-file cases)
-    // Fallback: Check originalFile only for older events written before the normalization was added
-    //
-    // See EventWriter.writeAllEventData() JSDoc for the full dual-field strategy explanation.
     this.logger.log(`[AppEventService] attachStreams for ${event.getID()}. originalFile: ${!!event.originalFile}, originalFiles: ${!!event.originalFiles}`);
+    const hasOriginalFiles = (event.originalFiles && event.originalFiles.length > 0)
+      || (event.originalFile && event.originalFile.path);
 
-    // Primary path: Use originalFiles array (canonical source)
-    if (event.originalFiles && event.originalFiles.length > 0) {
-      this.logger.log('[AppEventService] Using client-side parsing for (Multiple)', event.getID());
-      return from(this.calculateStreamsFromWithOrchestration(event, skipEnrichment)).pipe(
-        map((fullEvent) => {
-          if (!fullEvent) return event;
-
-          if (merge === false) {
-            // Return fresh event (disposable)
-            // We need to ensure it has an ID matching the requested one for consistency, though export might not care.
-            fullEvent.setID(event.getID());
-            if (event.startDate) {
-              // Try to preserve start date if needed
-              // fullEvent.startDate = event.startDate; // EventInterface might not have setter, but let's assume it's fine
-            }
-            return fullEvent;
-          }
-
-          event.clearActivities();
-          event.addActivities(fullEvent.getActivities());
-          return event;
-        }),
-        catchError((e) => {
-          this.logger.error('Failed to parse original files, falling back to legacy streams', e);
-          return this.attachStreamsLegacy(user, event, streamTypes);
-        })
-      );
+    if (!hasOriginalFiles) {
+      this.logger.log('[AppEventService] Fallback to legacy streams for', event.getID());
+      return this.attachStreamsLegacy(user, event, streamTypes);
     }
 
-    // Legacy fallback: Use originalFile for events written before dual-field normalization
-    if (event.originalFile && event.originalFile.path) {
-      this.logger.log('[AppEventService] Using client-side parsing for (Single)', event.getID());
-      return from(this.calculateStreamsFromWithOrchestration(event, skipEnrichment)).pipe(
-        map((fullEvent) => {
-          if (!fullEvent) return event;
+    return from(this.originalFileHydrationService.parseEventFromOriginalFiles(event, {
+      skipEnrichment,
+      strictAllFilesRequired: false,
+      preserveActivityIdsFromEvent: true,
+      mergeMultipleFiles: true,
+    })).pipe(
+      map((parseResult) => {
+        const fullEvent = parseResult.finalEvent;
+        if (!fullEvent) {
+          throw new Error('Could not build event from original source files');
+        }
 
-          if (merge === false) {
-            fullEvent.setID(event.getID());
-            return fullEvent;
-          }
+        if (merge === false) {
+          fullEvent.setID(event.getID());
+          return fullEvent;
+        }
 
-          // Merge logic: Copy activities/streams from fullEvent to event
-          // We assume the file is the source of truth.
-          // Keep the ID and other metadata from Firestore, but replace activities
-          event.clearActivities();
-          event.addActivities(fullEvent.getActivities());
-          return event;
-        }),
-        catchError((e) => {
-          this.logger.error('Failed to parse original file, falling back to legacy streams', e);
-          return this.attachStreamsLegacy(user, event, streamTypes);
-        })
-      );
-    }
-
-    this.logger.log('[AppEventService] Fallback to legacy streams for', event.getID());
-    return this.attachStreamsLegacy(user, event, streamTypes);
+        event.clearActivities();
+        event.addActivities(fullEvent.getActivities());
+        return event;
+      }),
+      catchError((error) => {
+        this.logger.error('[AppEventService] Failed to attach streams from original files, falling back to legacy streams', error);
+        return this.attachStreamsLegacy(user, event, streamTypes);
+      }),
+    );
   }
 
   private attachStreamsLegacy(user: User, event: EventInterface, streamTypes?: string[]): Observable<EventInterface> {
@@ -908,37 +876,7 @@ export class AppEventService implements OnDestroy {
   // ... (imports)
 
   public async downloadFile(path: string): Promise<ArrayBuffer> {
-    const fileRef = runInInjectionContext(this.injector, () => ref(this.storage, path));
-
-    try {
-      // 1. Fetch Metadata (fast) to get generation ID
-      const metadata = await runInInjectionContext(this.injector, () => getMetadata(fileRef));
-      const generation = metadata.generation;
-
-      // 2. Check Cache
-      const cached = await this.cacheService.getFile(path);
-
-      if (cached && cached.generation === generation) {
-        this.logger.log(`[AppEventService] Cache HIT for ${path}`);
-        return this.fileService.decompressIfNeeded(cached.buffer, path);
-      }
-
-      this.logger.log(`[AppEventService] Cache MISS/STALE for ${path} (Cloud Gen: ${generation}, Cached Gen: ${cached?.generation})`);
-
-      // 3. Download fresh
-      const buffer = await runInInjectionContext(this.injector, () => getBytes(fileRef));
-
-      // 4. Update Cache
-      await this.cacheService.setFile(path, { buffer, generation });
-
-      return this.fileService.decompressIfNeeded(buffer, path);
-
-    } catch (e) {
-      this.logger.error(`[AppEventService] Error downloading/caching file ${path}`, e);
-      // Fallback to direct download if metadata/cache fails
-      const buffer = await runInInjectionContext(this.injector, () => getBytes(fileRef));
-      return this.fileService.decompressIfNeeded(buffer, path);
-    }
+    return this.originalFileHydrationService.downloadFile(path);
   }
 
   private async decompressIfNeeded(buffer: ArrayBuffer, path: string): Promise<ArrayBuffer> {

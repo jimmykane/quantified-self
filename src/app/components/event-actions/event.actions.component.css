@@ -14,9 +14,17 @@ mat-icon.toolTip{
   margin-top: 6px;
 }
 
+.reimport-stat-item {
+  margin-top: 2px;
+}
+
 .menu-item-with-tooltip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   line-height: 1.2;
+}
+
+.menu-item-tooltip-wrapper {
+  display: block;
 }

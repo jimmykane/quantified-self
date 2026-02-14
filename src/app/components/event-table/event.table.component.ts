@@ -31,7 +31,7 @@ import { debounceTime, take, map } from 'rxjs/operators';
 import { firstValueFrom, race, Subject, Subscription } from 'rxjs';
 import { rowsAnimation, expandCollapse } from '../../animations/animations';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
-import { DeleteConfirmationComponent } from '../delete-confirmation/delete-confirmation.component';
+import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
 import { AppUserService } from '../../services/app.user.service';
 import { AppUserUtilities } from '../../utils/app.user.utilities';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -431,7 +431,15 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   async deleteSelection() {
     this.loading();
-    const dialogRef = this.dialog.open(DeleteConfirmationComponent);
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      data: {
+        title: 'Are you sure you want to delete?',
+        message: 'All data will be permanently deleted. This operation cannot be undone.',
+        confirmLabel: 'Delete',
+        cancelLabel: 'Cancel',
+        confirmColor: 'warn',
+      }
+    });
     this.deleteConfirmationSubscription = dialogRef.afterClosed().subscribe(async (result) => {
       if (!result) {
         this.loaded();

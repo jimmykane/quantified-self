@@ -9,7 +9,7 @@ import { PrivacyIconComponent } from '../components/privacy-icon/privacy-icon.co
 import { EventActionsComponent } from '../components/event-actions/event.actions.component';
 import { EventFormComponent } from '../components/event-form/event.form.component';
 import { ActivityFormComponent } from '../components/activity-form/activity.form.component';
-import { DeleteConfirmationComponent } from '../components/delete-confirmation/delete-confirmation.component';
+import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { DataTypeIconComponent } from '../components/data-type-icon/data-type-icon.component';
 
 import { RouterModule } from '@angular/router';
@@ -40,7 +40,7 @@ import { MaterialPillTabDirective } from '../components/shared/material-pill-tab
         EventActionsComponent,
         EventFormComponent,
         ActivityFormComponent,
-        DeleteConfirmationComponent,
+        ConfirmationDialogComponent,
         DataTypeIconComponent,
         EventSearchComponent,
         ActivityTypesMultiSelectComponent,
@@ -67,7 +67,7 @@ import { MaterialPillTabDirective } from '../components/shared/material-pill-tab
         EventActionsComponent,
         EventFormComponent,
         ActivityFormComponent,
-        DeleteConfirmationComponent,
+        ConfirmationDialogComponent,
         DataTypeIconComponent,
         ReactiveFormsModule,
         FormsModule,

@@ -1,0 +1,364 @@
+import { TestBed } from '@angular/core/testing';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { Storage } from '@angular/fire/storage';
+import { AppOriginalFileHydrationService } from './app.original-file-hydration.service';
+import { AppFileService } from './app.file.service';
+import { LoggerService } from './logger.service';
+import { AppEventUtilities } from '../utils/app.event.utilities';
+import { AppCacheService } from './app.cache.service';
+import {
+  EventImporterFIT,
+  EventImporterGPX,
+  EventImporterSuuntoJSON,
+  EventImporterSuuntoSML,
+  EventImporterTCX,
+  EventUtilities
+} from '@sports-alliance/sports-lib';
+
+const storageMocks = vi.hoisted(() => ({
+  ref: vi.fn(),
+  getMetadata: vi.fn(),
+  getBytes: vi.fn(),
+}));
+
+vi.mock('@angular/fire/storage', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@angular/fire/storage')>();
+  return {
+    ...actual,
+    ref: storageMocks.ref,
+    getMetadata: storageMocks.getMetadata,
+    getBytes: storageMocks.getBytes,
+  };
+});
+
+describe('AppOriginalFileHydrationService', () => {
+  let service: AppOriginalFileHydrationService;
+  let fileServiceMock: any;
+  let eventUtilitiesMock: any;
+  let cacheServiceMock: any;
+  let loggerMock: any;
+
+  beforeEach(() => {
+    fileServiceMock = {
+      decompressIfNeeded: vi.fn(async (buffer: ArrayBuffer) => buffer),
+    };
+    eventUtilitiesMock = {
+      enrich: vi.fn(),
+    };
+    cacheServiceMock = {
+      getFile: vi.fn(),
+      setFile: vi.fn(),
+    };
+    loggerMock = {
+      log: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    storageMocks.ref.mockReturnValue({});
+    storageMocks.getMetadata.mockResolvedValue({ generation: 'gen-1' });
+    storageMocks.getBytes.mockResolvedValue(new ArrayBuffer(8));
+
+    TestBed.configureTestingModule({
+      providers: [
+        AppOriginalFileHydrationService,
+        { provide: Storage, useValue: {} },
+        { provide: AppFileService, useValue: fileServiceMock },
+        { provide: LoggerService, useValue: loggerMock },
+        { provide: AppEventUtilities, useValue: eventUtilitiesMock },
+        { provide: AppCacheService, useValue: cacheServiceMock }
+      ]
+    });
+
+    service = TestBed.inject(AppOriginalFileHydrationService);
+  });
+
+  it('should parse single-file events successfully', async () => {
+    const event = {
+      originalFile: { path: 'users/u/events/e/original.fit' },
+      getActivities: () => [],
+    } as any;
+    const parsedEvent = {
+      getActivities: () => [],
+    } as any;
+    vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue({ event: parsedEvent });
+
+    const result = await service.parseEventFromOriginalFiles(event, {
+      preserveActivityIdsFromEvent: false,
+    });
+
+    expect(result.finalEvent).toBe(parsedEvent);
+    expect(result.parsedEvents).toEqual([parsedEvent]);
+    expect(result.failedFiles).toEqual([]);
+    expect(result.sourceFilesCount).toBe(1);
+  });
+
+  it('should preserve activity IDs and creator overrides by default', async () => {
+    const parsedActivity = {
+      setID: vi.fn(),
+      creator: { name: 'Parser name' },
+    };
+    const existingActivity = {
+      getID: () => 'existing-activity-id',
+      creator: { name: 'User renamed device' },
+    };
+    const event = {
+      originalFile: { path: 'users/u/events/e/original.fit' },
+      getActivities: () => [existingActivity],
+    } as any;
+    const parsedEvent = {
+      getActivities: () => [parsedActivity],
+    } as any;
+    vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue({ event: parsedEvent });
+
+    await service.parseEventFromOriginalFiles(event);
+
+    expect(parsedActivity.setID).toHaveBeenCalledWith('existing-activity-id');
+    expect(parsedActivity.creator.name).toBe('User renamed device');
+  });
+
+  it('should parse multi-file events and merge parsed results', async () => {
+    const event = {
+      originalFiles: [
+        { path: 'users/u/events/e/original_0.fit' },
+        { path: 'users/u/events/e/original_1.fit' },
+      ],
+      getActivities: () => [],
+    } as any;
+    const parsedEvent1 = { getActivities: () => [] } as any;
+    const parsedEvent2 = { getActivities: () => [] } as any;
+    const mergedEvent = { getActivities: () => [] } as any;
+    vi.spyOn(service as any, 'fetchAndParseOneFile')
+      .mockResolvedValueOnce({ event: parsedEvent1 })
+      .mockResolvedValueOnce({ event: parsedEvent2 });
+    vi.spyOn(EventUtilities, 'mergeEvents').mockReturnValue(mergedEvent as any);
+
+    const result = await service.parseEventFromOriginalFiles(event, {
+      preserveActivityIdsFromEvent: false,
+    });
+
+    expect(EventUtilities.mergeEvents).toHaveBeenCalledWith([parsedEvent1, parsedEvent2]);
+    expect(result.finalEvent).toBe(mergedEvent);
+    expect(result.sourceFilesCount).toBe(2);
+    expect(result.failedFiles).toEqual([]);
+  });
+
+  it('should not merge when mergeMultipleFiles is disabled', async () => {
+    const event = {
+      originalFiles: [
+        { path: 'users/u/events/e/original_0.fit' },
+        { path: 'users/u/events/e/original_1.fit' },
+      ],
+      getActivities: () => [],
+    } as any;
+    const parsedEvent1 = { getActivities: () => [] } as any;
+    const parsedEvent2 = { getActivities: () => [] } as any;
+    vi.spyOn(service as any, 'fetchAndParseOneFile')
+      .mockResolvedValueOnce({ event: parsedEvent1 })
+      .mockResolvedValueOnce({ event: parsedEvent2 });
+    const mergeSpy = vi.spyOn(EventUtilities, 'mergeEvents');
+
+    const result = await service.parseEventFromOriginalFiles(event, {
+      preserveActivityIdsFromEvent: false,
+      mergeMultipleFiles: false,
+    });
+
+    expect(mergeSpy).not.toHaveBeenCalled();
+    expect(result.finalEvent).toBe(parsedEvent1);
+  });
+
+  it('should fail strict parsing when one source file fails', async () => {
+    const event = {
+      originalFiles: [
+        { path: 'users/u/events/e/original_0.fit' },
+        { path: 'users/u/events/e/original_1.fit' },
+      ],
+      getActivities: () => [],
+    } as any;
+    const parsedEvent = { getActivities: () => [] } as any;
+    vi.spyOn(service as any, 'fetchAndParseOneFile')
+      .mockResolvedValueOnce({ event: parsedEvent })
+      .mockResolvedValueOnce({ event: null, reason: 'Parse error' });
+
+    const result = await service.parseEventFromOriginalFiles(event, {
+      strictAllFilesRequired: true,
+      preserveActivityIdsFromEvent: false,
+    });
+
+    expect(result.finalEvent).toBeNull();
+    expect(result.parsedEvents).toEqual([parsedEvent]);
+    expect(result.failedFiles).toEqual([
+      { path: 'users/u/events/e/original_1.fit', reason: 'Parse error' },
+    ]);
+  });
+
+  it('should return empty finalEvent when all source files fail in non-strict mode', async () => {
+    const event = {
+      originalFiles: [
+        { path: 'users/u/events/e/original_0.fit' },
+        { path: 'users/u/events/e/original_1.fit' },
+      ],
+      getActivities: () => [],
+    } as any;
+    vi.spyOn(service as any, 'fetchAndParseOneFile')
+      .mockResolvedValueOnce({ event: null, reason: 'first failed' })
+      .mockResolvedValueOnce({ event: null, reason: 'second failed' });
+
+    const result = await service.parseEventFromOriginalFiles(event, {
+      strictAllFilesRequired: false,
+      preserveActivityIdsFromEvent: false,
+    });
+
+    expect(result.finalEvent).toBeNull();
+    expect(result.parsedEvents).toEqual([]);
+    expect(result.failedFiles).toHaveLength(2);
+  });
+
+  it('should normalize .gz extension paths correctly', () => {
+    const extension = (service as any).getNormalizedExtensionFromPath('users/u/events/e/original.fit.gz');
+    expect(extension).toBe('fit');
+  });
+
+  it('should return empty extension when none exists', () => {
+    const extension = (service as any).getNormalizedExtensionFromPath('users/u/events/e/original');
+    expect(extension).toBe('users/u/events/e/original');
+  });
+
+  it('should return source file from legacy originalFile metadata', async () => {
+    const parsedEvent = { getActivities: () => [] } as any;
+    vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue({ event: parsedEvent });
+    const event = {
+      originalFile: { path: 'legacy.fit' },
+      getActivities: () => [],
+    } as any;
+
+    const result = await service.parseEventFromOriginalFiles(event, {
+      preserveActivityIdsFromEvent: false,
+    });
+
+    expect(result.sourceFilesCount).toBe(1);
+    expect(result.finalEvent).toBe(parsedEvent);
+  });
+
+  it('should return empty source list when no metadata exists', async () => {
+    const event = {
+      getActivities: () => [],
+    } as any;
+
+    const result = await service.parseEventFromOriginalFiles(event, {
+      preserveActivityIdsFromEvent: false,
+    });
+
+    expect(result.sourceFilesCount).toBe(0);
+    expect(result.finalEvent).toBeNull();
+  });
+
+  it('downloadFile should return cached buffer when generation matches', async () => {
+    const cachedBuffer = new ArrayBuffer(16);
+    cacheServiceMock.getFile.mockResolvedValue({ buffer: cachedBuffer, generation: 'gen-1' });
+
+    const result = await service.downloadFile('users/u/events/e/original.fit');
+
+    expect(storageMocks.getMetadata).toHaveBeenCalled();
+    expect(storageMocks.getBytes).not.toHaveBeenCalled();
+    expect(result).toBe(cachedBuffer);
+  });
+
+  it('downloadFile should download and cache buffer when cache is missing', async () => {
+    const downloadedBuffer = new ArrayBuffer(20);
+    cacheServiceMock.getFile.mockResolvedValue(undefined);
+    storageMocks.getBytes.mockResolvedValue(downloadedBuffer);
+
+    const result = await service.downloadFile('users/u/events/e/original.fit');
+
+    expect(storageMocks.getBytes).toHaveBeenCalled();
+    expect(cacheServiceMock.setFile).toHaveBeenCalledWith('users/u/events/e/original.fit', {
+      buffer: downloadedBuffer,
+      generation: 'gen-1',
+    });
+    expect(result).toBe(downloadedBuffer);
+  });
+
+  it('downloadFile should fallback to direct download on metadata/cache error', async () => {
+    const fallbackBuffer = new ArrayBuffer(24);
+    storageMocks.getMetadata.mockRejectedValue(new Error('metadata failed'));
+    storageMocks.getBytes.mockResolvedValue(fallbackBuffer);
+
+    const result = await service.downloadFile('users/u/events/e/original.fit');
+
+    expect(storageMocks.getBytes).toHaveBeenCalled();
+    expect(result).toBe(fallbackBuffer);
+    expect(loggerMock.error).toHaveBeenCalled();
+  });
+
+  it('should parse FIT files and apply enrichment', async () => {
+    const activity = {};
+    const parsedEvent = { getActivities: () => [activity] } as any;
+    vi.spyOn(service, 'downloadFile').mockResolvedValue(new ArrayBuffer(8));
+    vi.spyOn(EventImporterFIT, 'getFromArrayBuffer').mockResolvedValue(parsedEvent as any);
+    eventUtilitiesMock.enrich.mockImplementation(() => undefined);
+
+    const result = await (service as any).fetchAndParseOneFile({ path: 'users/u/events/e/original.fit' }, false);
+
+    expect(EventImporterFIT.getFromArrayBuffer).toHaveBeenCalled();
+    expect(eventUtilitiesMock.enrich).toHaveBeenCalledWith(activity, ['Time', 'Duration']);
+    expect(result.event).toBe(parsedEvent);
+  });
+
+  it('should parse GPX/TCX/JSON/SML extensions', async () => {
+    const parsedEvent = { getActivities: () => [] } as any;
+    vi.spyOn(service, 'downloadFile').mockResolvedValue(new TextEncoder().encode('<xml></xml>').buffer as ArrayBuffer);
+    vi.spyOn(EventImporterGPX, 'getFromString').mockResolvedValue(parsedEvent as any);
+    vi.spyOn(EventImporterTCX, 'getFromXML').mockResolvedValue(parsedEvent as any);
+    vi.spyOn(EventImporterSuuntoJSON, 'getFromJSONString').mockResolvedValue(parsedEvent as any);
+    vi.spyOn(EventImporterSuuntoSML, 'getFromXML').mockResolvedValue(parsedEvent as any);
+
+    const gpxResult = await (service as any).fetchAndParseOneFile({ path: 'users/u/events/e/original.gpx' }, true);
+    const tcxResult = await (service as any).fetchAndParseOneFile({ path: 'users/u/events/e/original.tcx' }, true);
+    const jsonData = new TextEncoder().encode('{"foo":"bar"}').buffer as ArrayBuffer;
+    vi.spyOn(service, 'downloadFile').mockResolvedValueOnce(jsonData);
+    const jsonResult = await (service as any).fetchAndParseOneFile({ path: 'users/u/events/e/original.json' }, true);
+    const smlResult = await (service as any).fetchAndParseOneFile({ path: 'users/u/events/e/original.sml' }, true);
+
+    expect(gpxResult.event).toBe(parsedEvent);
+    expect(tcxResult.event).toBe(parsedEvent);
+    expect(jsonResult.event).toBe(parsedEvent);
+    expect(smlResult.event).toBe(parsedEvent);
+  });
+
+  it('should warn and continue on duplicate stream enrichment errors', async () => {
+    const activity = {};
+    const parsedEvent = { getActivities: () => [activity] } as any;
+    vi.spyOn(service, 'downloadFile').mockResolvedValue(new ArrayBuffer(8));
+    vi.spyOn(EventImporterFIT, 'getFromArrayBuffer').mockResolvedValue(parsedEvent as any);
+    eventUtilitiesMock.enrich.mockImplementation(() => {
+      throw new Error('Duplicate type of stream');
+    });
+
+    const result = await (service as any).fetchAndParseOneFile({ path: 'users/u/events/e/original.fit' }, false);
+
+    expect(result.event).toBe(parsedEvent);
+    expect(loggerMock.warn).toHaveBeenCalled();
+  });
+
+  it('should return parse failure when enrichment throws non-duplicate error', async () => {
+    const activity = {};
+    const parsedEvent = { getActivities: () => [activity] } as any;
+    vi.spyOn(service, 'downloadFile').mockResolvedValue(new ArrayBuffer(8));
+    vi.spyOn(EventImporterFIT, 'getFromArrayBuffer').mockResolvedValue(parsedEvent as any);
+    eventUtilitiesMock.enrich.mockImplementation(() => {
+      throw new Error('hard fail');
+    });
+
+    const result = await (service as any).fetchAndParseOneFile({ path: 'users/u/events/e/original.fit' }, false);
+
+    expect(result.event).toBeNull();
+    expect(result.reason).toContain('hard fail');
+  });
+
+  it('should return parse failure for unsupported extension', async () => {
+    vi.spyOn(service, 'downloadFile').mockResolvedValue(new ArrayBuffer(8));
+    const result = await (service as any).fetchAndParseOneFile({ path: 'users/u/events/e/original.xyz' });
+    expect(result.event).toBeNull();
+    expect(result.reason).toContain('Unsupported original file extension');
+  });
+});

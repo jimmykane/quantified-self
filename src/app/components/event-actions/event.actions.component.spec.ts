@@ -13,10 +13,11 @@ import { AppWindowService } from '../../services/app.window.service';
 import { Clipboard } from '@angular/cdk/clipboard';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
+import { AppEventReprocessService, ReprocessError } from '../../services/app.event-reprocess.service';
+import { AppProcessingService } from '../../services/app.processing.service';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { MatMenuModule } from '@angular/material/menu';
-import { ActivityUtilities, EventUtilities } from '@sports-alliance/sports-lib';
 import { of } from 'rxjs';
 
 vi.mock('@angular/fire/analytics', () => ({
@@ -29,8 +30,11 @@ describe('EventActionsComponent', () => {
     let component: EventActionsComponent;
     let fixture: ComponentFixture<EventActionsComponent>;
     let mockEventService: any;
+    let mockEventReprocessService: any;
+    let mockProcessingService: any;
     let mockFileService: any;
     let mockSnackBar: any;
+    let mockDialog: any;
 
     beforeEach(async () => {
         mockEventService = {
@@ -38,8 +42,17 @@ describe('EventActionsComponent', () => {
             getEventMetaData: vi.fn(),
             getEventAsJSONBloB: vi.fn(),
             getEventAsGPXBloB: vi.fn(),
-            attachStreamsToEventWithActivities: vi.fn(),
             writeAllEventData: vi.fn().mockResolvedValue(true),
+        };
+        mockEventReprocessService = {
+            regenerateEventStatistics: vi.fn().mockResolvedValue({ event: null }),
+            reimportEventFromOriginalFiles: vi.fn().mockResolvedValue({ event: null }),
+        };
+        mockProcessingService = {
+            addJob: vi.fn().mockReturnValue('job-id'),
+            updateJob: vi.fn(),
+            completeJob: vi.fn(),
+            failJob: vi.fn(),
         };
         mockFileService = {
             downloadAsZip: vi.fn(),
@@ -69,18 +82,25 @@ describe('EventActionsComponent', () => {
         mockSnackBar = {
             open: vi.fn(),
         };
+        mockDialog = {
+            open: vi.fn().mockReturnValue({
+                afterClosed: () => of(true),
+            }),
+        };
 
         await TestBed.configureTestingModule({
             declarations: [EventActionsComponent],
             imports: [HttpClientTestingModule, MatMenuModule],
             providers: [
                 { provide: AppEventService, useValue: mockEventService },
+                { provide: AppEventReprocessService, useValue: mockEventReprocessService },
+                { provide: AppProcessingService, useValue: mockProcessingService },
                 { provide: AppFileService, useValue: mockFileService },
                 { provide: MatSnackBar, useValue: mockSnackBar },
                 { provide: Analytics, useValue: null }, // Mock Analytics
                 { provide: Auth, useValue: { currentUser: { uid: 'test-user' } } }, // Mock Auth
                 { provide: Router, useValue: { navigate: vi.fn() } },
-                { provide: MatDialog, useValue: { open: vi.fn() } },
+                { provide: MatDialog, useValue: mockDialog },
                 { provide: MatBottomSheet, useValue: { open: vi.fn() } },
                 { provide: AppSharingService, useValue: { getShareURLForEvent: vi.fn() } },
                 { provide: AppWindowService, useValue: { windowRef: { open: vi.fn() } } },
@@ -270,42 +290,88 @@ describe('EventActionsComponent', () => {
     });
 
     describe('reGenerateStatistics', () => {
-        it('should clear and regenerate activity stats while preserving non-regenerated stat types', async () => {
-            const oldOnlyStat = { getType: () => 'old-only' };
-            const staleRegeneratedStat = { getType: () => 'to-regenerate', stale: true };
-            const generatedStat = { getType: () => 'to-regenerate', stale: false };
-            const statsMap = new Map<string, any>([
-                ['old-only', oldOnlyStat],
-                ['to-regenerate', staleRegeneratedStat],
-            ]);
+        it('should delegate to AppEventReprocessService and complete processing job', async () => {
+            await component.reGenerateStatistics();
+            expect(mockEventReprocessService.regenerateEventStatistics).toHaveBeenCalledWith(
+                component.user,
+                component.event,
+                expect.objectContaining({ onProgress: expect.any(Function) }),
+            );
+            expect(mockProcessingService.addJob).toHaveBeenCalledWith('process', 'Re-calculating activity statistics...');
+            expect(mockProcessingService.completeJob).toHaveBeenCalled();
+        });
 
-            const activityWithStats = {
-                clearStats: vi.fn(),
-                getAllStreams: vi.fn().mockReturnValue([]),
-                hasStreamData: vi.fn().mockReturnValue(false),
-                hasPositionData: vi.fn().mockReturnValue(false),
-                getStats: vi.fn().mockImplementation(() => statsMap),
-                getStat: vi.fn().mockImplementation((type: string) => statsMap.get(type)),
-                addStat: vi.fn().mockImplementation((stat: any) => statsMap.set(stat.getType(), stat)),
-            };
-            activityWithStats.clearStats.mockImplementation(() => statsMap.clear());
-
-            vi.spyOn(component.event, 'getActivities').mockReturnValue([activityWithStats] as any);
-            mockEventService.attachStreamsToEventWithActivities.mockReturnValue(of(component.event));
-            const generateMissingStatsSpy = vi.spyOn(ActivityUtilities, 'generateMissingStreamsAndStatsForActivity').mockImplementation((activity: any) => {
-                activity.addStat(generatedStat);
+        it('should do nothing when confirmation is cancelled', async () => {
+            mockDialog.open.mockReturnValueOnce({
+                afterClosed: () => of(false),
             });
-            const reGenerateStatsSpy = vi.spyOn(EventUtilities, 'reGenerateStatsForEvent').mockImplementation(() => { });
 
             await component.reGenerateStatistics();
 
-            expect(mockEventService.attachStreamsToEventWithActivities).toHaveBeenCalledWith(component.user, component.event);
-            expect(activityWithStats.clearStats).toHaveBeenCalledTimes(1);
-            expect(generateMissingStatsSpy).toHaveBeenCalledWith(activityWithStats as any);
-            expect(statsMap.get('old-only')).toBe(oldOnlyStat);
-            expect(statsMap.get('to-regenerate')).toBe(generatedStat);
-            expect(reGenerateStatsSpy).toHaveBeenCalledWith(component.event);
-            expect(mockEventService.writeAllEventData).toHaveBeenCalledWith(component.user, component.event);
+            expect(mockEventReprocessService.regenerateEventStatistics).not.toHaveBeenCalled();
+            expect(mockProcessingService.addJob).not.toHaveBeenCalled();
+        });
+
+        it('should fail processing job and show snackbar on regenerate failure', async () => {
+            mockEventReprocessService.regenerateEventStatistics.mockRejectedValueOnce(
+                new ReprocessError('PARSE_FAILED', 'boom'),
+            );
+
+            await component.reGenerateStatistics();
+
+            expect(mockProcessingService.failJob).toHaveBeenCalled();
+            expect(mockSnackBar.open).toHaveBeenCalledWith('Could not parse the original source file.', undefined, {
+                duration: 4000,
+            });
+        });
+    });
+
+    describe('reImportActivityFromFile', () => {
+        it('should delegate reimport to AppEventReprocessService', async () => {
+            (component.event as any).originalFile = { path: 'path/to/file.fit' };
+
+            await component.reImportActivityFromFile();
+
+            expect(mockEventReprocessService.reimportEventFromOriginalFiles).toHaveBeenCalledWith(
+                component.user,
+                component.event,
+                expect.objectContaining({ onProgress: expect.any(Function) }),
+            );
+            expect(mockProcessingService.completeJob).toHaveBeenCalled();
+        });
+
+        it('should not reimport when confirmation is cancelled', async () => {
+            (component.event as any).originalFile = { path: 'path/to/file.fit' };
+            mockDialog.open.mockReturnValueOnce({
+                afterClosed: () => of(false),
+            });
+
+            await component.reImportActivityFromFile();
+
+            expect(mockEventReprocessService.reimportEventFromOriginalFiles).not.toHaveBeenCalled();
+        });
+
+        it('should not call reimport when original file metadata is missing', async () => {
+            (component.event as any).originalFile = undefined;
+            (component.event as any).originalFiles = undefined;
+
+            await component.reImportActivityFromFile();
+
+            expect(mockEventReprocessService.reimportEventFromOriginalFiles).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('reimport visibility helpers', () => {
+        it('canReimportFromOriginalFile should return true when originalFiles exists', () => {
+            (component.event as any).originalFiles = [{ path: 'file.fit' }];
+            expect(component.canReimportFromOriginalFile()).toBe(true);
+        });
+
+        it('canReimportFromOriginalFile should return false and expose disabled reason', () => {
+            (component.event as any).originalFile = undefined;
+            (component.event as any).originalFiles = undefined;
+            expect(component.canReimportFromOriginalFile()).toBe(false);
+            expect(component.getReimportDisabledReason()).toContain('No original source files');
         });
     });
 });

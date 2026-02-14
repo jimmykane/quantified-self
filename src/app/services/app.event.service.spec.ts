@@ -1077,4 +1077,138 @@ describe('AppEventService', () => {
             expect(parsedActivity1.setID).not.toHaveBeenCalled();
         });
     });
+
+    describe('delegation', () => {
+        it('should fallback to attachStreamsLegacy when event has no original file metadata', async () => {
+            const legacyResultEvent = { getID: () => 'event-legacy' } as any;
+            vi.spyOn(service as any, 'attachStreamsLegacy').mockReturnValue(of(legacyResultEvent));
+            const event = {
+                getID: () => 'event-1',
+                originalFile: undefined,
+                originalFiles: [],
+                getActivities: vi.fn().mockReturnValue([]),
+            } as any;
+
+            const result = await firstValueFrom(service.attachStreamsToEventWithActivities({ uid: 'u1' } as any, event));
+
+            expect((service as any).attachStreamsLegacy).toHaveBeenCalled();
+            expect(result).toBe(legacyResultEvent);
+        });
+
+        it('should delegate downloadFile to AppOriginalFileHydrationService', async () => {
+            const hydrationService = (service as any).originalFileHydrationService;
+            const expectedBuffer = new ArrayBuffer(4);
+            vi.spyOn(hydrationService, 'downloadFile').mockResolvedValue(expectedBuffer);
+
+            const result = await service.downloadFile('users/u1/events/e1/original.fit');
+
+            expect(hydrationService.downloadFile).toHaveBeenCalledWith('users/u1/events/e1/original.fit');
+            expect(result).toBe(expectedBuffer);
+        });
+
+        it('should delegate attachStreamsToEventWithActivities to AppOriginalFileHydrationService parsing', async () => {
+            const hydrationService = (service as any).originalFileHydrationService;
+            const parsedActivity = { getID: () => 'a-1' } as any;
+            const parsedEvent = {
+                setID: vi.fn().mockReturnThis(),
+                getActivities: vi.fn().mockReturnValue([parsedActivity]),
+            } as any;
+            vi.spyOn(hydrationService, 'parseEventFromOriginalFiles').mockResolvedValue({
+                finalEvent: parsedEvent,
+                parsedEvents: [parsedEvent],
+                sourceFilesCount: 1,
+                failedFiles: []
+            });
+
+            const event = {
+                getID: () => 'event-1',
+                originalFile: { path: 'users/u1/events/e1/original.fit' },
+                clearActivities: vi.fn(),
+                addActivities: vi.fn(),
+            } as any;
+
+            const result = await firstValueFrom(service.attachStreamsToEventWithActivities({ uid: 'u1' } as any, event));
+
+            expect(hydrationService.parseEventFromOriginalFiles).toHaveBeenCalledWith(
+                event,
+                expect.objectContaining({
+                    strictAllFilesRequired: false,
+                    preserveActivityIdsFromEvent: true,
+                    mergeMultipleFiles: true,
+                }),
+            );
+            expect(event.clearActivities).toHaveBeenCalled();
+            expect(event.addActivities).toHaveBeenCalledWith([parsedActivity]);
+            expect(result).toBe(event);
+        });
+
+        it('should return parsed event directly when merge=false', async () => {
+            const hydrationService = (service as any).originalFileHydrationService;
+            const parsedEvent = {
+                setID: vi.fn().mockReturnThis(),
+                getActivities: vi.fn().mockReturnValue([{ getID: () => 'a-1' }]),
+            } as any;
+            vi.spyOn(hydrationService, 'parseEventFromOriginalFiles').mockResolvedValue({
+                finalEvent: parsedEvent,
+                parsedEvents: [parsedEvent],
+                sourceFilesCount: 1,
+                failedFiles: []
+            });
+            const event = {
+                getID: () => 'event-1',
+                originalFile: { path: 'users/u1/events/e1/original.fit' },
+                clearActivities: vi.fn(),
+                addActivities: vi.fn(),
+            } as any;
+
+            const result = await firstValueFrom(service.attachStreamsToEventWithActivities({ uid: 'u1' } as any, event, undefined, false));
+
+            expect(parsedEvent.setID).toHaveBeenCalledWith('event-1');
+            expect(result).toBe(parsedEvent);
+            expect(event.clearActivities).not.toHaveBeenCalled();
+        });
+
+        it('should fallback to attachStreamsLegacy when parser throws', async () => {
+            const hydrationService = (service as any).originalFileHydrationService;
+            vi.spyOn(hydrationService, 'parseEventFromOriginalFiles').mockRejectedValue(new Error('parse blew up'));
+            const legacyResultEvent = { getID: () => 'event-1' } as any;
+            vi.spyOn(service as any, 'attachStreamsLegacy').mockReturnValue(of(legacyResultEvent));
+            const event = {
+                getID: () => 'event-1',
+                originalFile: { path: 'users/u1/events/e1/original.fit' },
+                clearActivities: vi.fn(),
+                addActivities: vi.fn(),
+                getActivities: vi.fn().mockReturnValue([]),
+            } as any;
+
+            const result = await firstValueFrom(service.attachStreamsToEventWithActivities({ uid: 'u1' } as any, event));
+
+            expect((service as any).attachStreamsLegacy).toHaveBeenCalled();
+            expect(result).toBe(legacyResultEvent);
+        });
+
+        it('should fallback to attachStreamsLegacy when parser returns no finalEvent', async () => {
+            const hydrationService = (service as any).originalFileHydrationService;
+            vi.spyOn(hydrationService, 'parseEventFromOriginalFiles').mockResolvedValue({
+                finalEvent: null,
+                parsedEvents: [],
+                sourceFilesCount: 1,
+                failedFiles: [{ path: 'users/u1/events/e1/original.fit', reason: 'fail' }],
+            });
+            const legacyResultEvent = { getID: () => 'event-1' } as any;
+            vi.spyOn(service as any, 'attachStreamsLegacy').mockReturnValue(of(legacyResultEvent));
+            const event = {
+                getID: () => 'event-1',
+                originalFile: { path: 'users/u1/events/e1/original.fit' },
+                clearActivities: vi.fn(),
+                addActivities: vi.fn(),
+                getActivities: vi.fn().mockReturnValue([]),
+            } as any;
+
+            const result = await firstValueFrom(service.attachStreamsToEventWithActivities({ uid: 'u1' } as any, event));
+
+            expect((service as any).attachStreamsLegacy).toHaveBeenCalled();
+            expect(result).toBe(legacyResultEvent);
+        });
+    });
 });
