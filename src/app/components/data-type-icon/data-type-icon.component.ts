@@ -41,7 +41,8 @@ import {
   DataVerticalSpeedAvgKilometerPerHour,
   DataVerticalSpeedAvgMetersPerHour,
   DataVerticalSpeedAvgMetersPerMinute,
-  DataVerticalSpeedAvgMilesPerHour
+  DataVerticalSpeedAvgMilesPerHour,
+  DataVerticalSpeedMax
 } from '@sports-alliance/sports-lib';
 import { DataAerobicTrainingEffect } from '@sports-alliance/sports-lib';
 import { DataPeakEPOC } from '@sports-alliance/sports-lib';
@@ -199,6 +200,7 @@ export class DataTypeIconComponent {
       case DataVerticalSpeedAvgMilesPerHour.type:
       case DataVerticalSpeedAvgMetersPerHour.type:
       case DataVerticalSpeedAvgMetersPerMinute.type:
+      case DataVerticalSpeedMax.type:
         return 'unfold_more_double';
       case DataSpeedAvg.type:
       case DataSpeedAvgKilometersPerHour.type:

@@ -36,7 +36,7 @@ import {
   DataRPE,
   DataSpeedAvg,
   DataSwimPaceAvg,
-  DataVerticalSpeedAvg,
+  DataVerticalSpeedMax,
   DataVO2Max,
 } from '@sports-alliance/sports-lib';
 import { describe, expect, it } from 'vitest';
@@ -80,7 +80,7 @@ describe('buildSummaryMetricTabs', () => {
 
   it('should keep performance tab speed metric order and configured single-value overrides', () => {
     const tabs = buildSummaryMetricTabs([
-      DataVerticalSpeedAvg.type,
+      DataVerticalSpeedMax.type,
       DataGradeAdjustedSpeedAvg.type,
       DataGradeAdjustedPaceAvg.type,
       DataPaceAvg.type,
@@ -96,7 +96,7 @@ describe('buildSummaryMetricTabs', () => {
       DataSwimPaceAvg.type,
       DataGradeAdjustedPaceAvg.type,
       DataGradeAdjustedSpeedAvg.type,
-      DataVerticalSpeedAvg.type,
+      DataVerticalSpeedMax.type,
     ]);
     expect(performanceTab?.singleValueTypes).toEqual([DataAvgFlow.type]);
   });
@@ -110,7 +110,12 @@ describe('buildSummaryMetricTabs', () => {
       'Speed Zone Two Duration',
     ]);
 
-    expect(tabs.map((tab) => tab.id)).toEqual(['performance', 'other']);
+    expect(tabs.map((tab) => tab.id)).toEqual(['overall', 'performance', 'other']);
+
+    const overallTab = tabs.find((tab) => tab.id === 'overall');
+    expect(overallTab?.metricTypes).toEqual([
+      'Power Normalized',
+    ]);
 
     const performanceTab = tabs.find((tab) => tab.id === 'performance');
     expect(performanceTab?.metricTypes).toEqual([
