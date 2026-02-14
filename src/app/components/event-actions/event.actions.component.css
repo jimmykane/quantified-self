@@ -5,9 +5,18 @@
 }
 
 mat-icon.toolTip{
-  margin-left: 0.5em;
   font-size: 18px;
   width: 18px;
   height: 18px;
-  vertical-align: sub;
+}
+
+.regenerate-stat-item {
+  margin-top: 6px;
+}
+
+.menu-item-with-tooltip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.2;
 }

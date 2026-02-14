@@ -112,12 +112,12 @@ export class EventActionsComponent implements OnInit, OnDestroy {
 
   isHydrated() {
     const activities = this.event.getActivities();
-    return activities.length > 0 && activities[0].getAllStreams().length > 0;
+    return activities.some(activity => activity.getAllStreams().length > 0);
   }
 
   hasDistance() {
     const activities = this.event.getActivities();
-    return activities.length > 0 && activities[0].hasStreamData(DataDistance.type);
+    return activities.some(activity => activity.hasStreamData(DataDistance.type));
   }
 
   hasPositionalData() {

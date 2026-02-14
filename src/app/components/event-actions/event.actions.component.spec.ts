@@ -201,7 +201,7 @@ describe('EventActionsComponent', () => {
     });
 
     describe('isHydrated', () => {
-        it('should return true if first activity has streams', () => {
+        it('should return true if any activity has streams', () => {
             const mockActivity = { getAllStreams: () => ['stream1'] };
             vi.spyOn(component.event, 'getActivities').mockReturnValue([mockActivity] as any);
             expect(component.isHydrated()).toBe(true);
@@ -212,15 +212,22 @@ describe('EventActionsComponent', () => {
             expect(component.isHydrated()).toBe(false);
         });
 
-        it('should return false if first activity has no streams', () => {
+        it('should return false if no activity has streams', () => {
             const mockActivity = { getAllStreams: () => [] };
             vi.spyOn(component.event, 'getActivities').mockReturnValue([mockActivity] as any);
             expect(component.isHydrated()).toBe(false);
         });
+
+        it('should return true if first activity has no streams but another has streams', () => {
+            const mockActivity1 = { getAllStreams: () => [] };
+            const mockActivity2 = { getAllStreams: () => ['stream1'] };
+            vi.spyOn(component.event, 'getActivities').mockReturnValue([mockActivity1, mockActivity2] as any);
+            expect(component.isHydrated()).toBe(true);
+        });
     });
 
     describe('hasDistance', () => {
-        it('should return true if first activity has distance stream', () => {
+        it('should return true if any activity has distance stream', () => {
             const mockActivity = { hasStreamData: vi.fn().mockReturnValue(true) };
             vi.spyOn(component.event, 'getActivities').mockReturnValue([mockActivity] as any);
             expect(component.hasDistance()).toBe(true);
@@ -230,6 +237,13 @@ describe('EventActionsComponent', () => {
         it('should return false if no activities', () => {
             vi.spyOn(component.event, 'getActivities').mockReturnValue([]);
             expect(component.hasDistance()).toBe(false);
+        });
+
+        it('should return true if first activity has no distance but another does', () => {
+            const mockActivity1 = { hasStreamData: vi.fn().mockReturnValue(false) };
+            const mockActivity2 = { hasStreamData: vi.fn().mockReturnValue(true) };
+            vi.spyOn(component.event, 'getActivities').mockReturnValue([mockActivity1, mockActivity2] as any);
+            expect(component.hasDistance()).toBe(true);
         });
     });
 
