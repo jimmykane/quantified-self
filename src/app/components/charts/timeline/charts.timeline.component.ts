@@ -18,8 +18,6 @@ import type * as am4core from '@amcharts/amcharts4/core';
 import type * as am4charts from '@amcharts/amcharts4/charts';
 import type * as am4plugins_timeline from '@amcharts/amcharts4/plugins/timeline';
 
-
-import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-component.directive';
 import { SummariesChartDataInterface } from '../../summaries/summaries.component';
 import { ChartHelper } from '../../event/chart/chart-helper';
@@ -90,7 +88,10 @@ export class ChartsTimelineComponent extends DashboardChartAbstractDirective imp
       if (!chartDataItem) {
         return `[bold font-size: 0.8em]${text}[/]`;
       }
-      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, chartDataItem[this.chartDataValueType]);
+      const data = this.getDataInstanceOrNull(chartDataItem[this.chartDataValueType]);
+      if (!data) {
+        return `[bold font-size: 0.8em]${text}[/]`;
+      }
       return `[bold font-size: 0.8em]${text} ${data.getDisplayValue()} ${data.getDisplayUnit()}[/]`;
     });
 
@@ -139,7 +140,10 @@ export class ChartsTimelineComponent extends DashboardChartAbstractDirective imp
       if (!target.dataItem || !target.dataItem.dataContext) {
         return '';
       }
-      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[this.chartDataValueType]);
+      const data = this.getDataInstanceOrNull(target.dataItem.dataContext[this.chartDataValueType]);
+      if (!data) {
+        return '';
+      }
       return `${'{dateY}{categoryY}'} ${target.dataItem.dataContext['count'] ? `(x${target.dataItem.dataContext['count']})` : ``} [bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b] (${this.chartDataValueType})`
     });
 
@@ -151,6 +155,10 @@ export class ChartsTimelineComponent extends DashboardChartAbstractDirective imp
     label.verticalCenter = 'middle';
     label.adapter.add('text', (text, target, key) => {
       const data = this.getAggregateData((<am4charts.Series>target.parent).chart.data, this.chartDataValueType);
+      if (!data) {
+        return `[font-size: 1.3em]${this.chartDataValueType || 'Value'}[/]
+                [font-size: 1.4em]--[/]`;
+      }
       // return `[font-size: 1.3em]${value.getDisplayType()}[/] [bold font-size: 1.4em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType} )`;
       const normalizedLabel = normalizeUnitDerivedTypeLabel(data.getType(), data.getDisplayType());
       return `[font-size: 1.3em]${normalizedLabel}[/]

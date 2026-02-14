@@ -141,11 +141,22 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   public get hideAllSeriesOnInit() { return this.userSettingsQuery.chartSettings()?.hideAllSeriesOnInit ?? false; }
   public get lapTypes() { return this.userSettingsQuery.chartSettings()?.lapTypes ?? AppUserUtilities.getDefaultChartLapTypes(); }
 
-  public get xAxisType() { return this.userSettingsQuery.chartSettings()?.xAxisType ?? XAxisTypes.Duration; }
+  public get xAxisType() { return this.xAxisTypeOverride ?? this.userSettingsQuery.chartSettings()?.xAxisType ?? XAxisTypes.Duration; }
   public set xAxisType(value: XAxisTypes) {
-    if (value !== this.xAxisType) {
-      this.userSettingsQuery.updateChartSettings({ xAxisType: value });
+    if (value === this.xAxisType) {
+      return;
     }
+    this.xAxisTypeOverride = value;
+    void this.checkForUpdates('xAxisType-setter');
+    void this.userSettingsQuery.updateChartSettings({ xAxisType: value })
+      .then(() => {
+        this.xAxisTypeOverride = null;
+      })
+      .catch((error) => {
+        this.logger.error('[EventCardChart] Failed to persist xAxisType setting', error);
+        this.xAxisTypeOverride = null;
+        void this.checkForUpdates('xAxisType-revert');
+      });
   }
 
   public get downSamplingLevel() { return this.userSettingsQuery.chartSettings()?.downSamplingLevel ?? AppUserUtilities.getDefaultDownSamplingLevel(); }
@@ -185,6 +196,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   // Track previous state for change detection
   private previousState: any = {};
+  private xAxisTypeOverride: XAxisTypes | null = null;
 
 
   public distanceAxesForActivitiesMap = new Map<string, StreamInterface>();
@@ -321,6 +333,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     return {
       ...settings,
+      xAxisType: this.xAxisType,
       chartTheme: theme,
       unitSettings: units,
       dataTypesToUse: (this.dataTypesToUse || []).sort(),
@@ -587,41 +600,52 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           // Here we have all the data we need
           const streamType = series.dummyData.stream.type;
           const streamDataClass = DynamicDataLoader.getDataClassFromDataType(streamType);
+          const averageDisplay = this.getDisplayFromDataType(streamType, ActivityUtilities.getAverage(data));
+          const maxDisplay = this.getDisplayFromDataType(streamType, ActivityUtilities.getMax(data));
+          const minDisplay = this.getDisplayFromDataType(streamType, ActivityUtilities.getMin(data));
+          const minToMaxDiffDisplay = this.getDisplayFromDataType(streamType, ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data));
           const labelData = <LabelData>{
             name: normalizeUnitDerivedTypeLabel(streamType, streamDataClass.displayType || streamDataClass.type),
             average: {
-              value: data.length ? `${<string>DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getAverage(data)).getDisplayValue()}` : '--',
-              unit: `${<string>DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getAverage(data)).getDisplayUnit()}`
+              value: averageDisplay.value,
+              unit: averageDisplay.unit
             },
             max: {
-              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getMax(data)).getDisplayValue()}` : '--',
-              unit: `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getMax(data)).getDisplayUnit()}`
+              value: maxDisplay.value,
+              unit: maxDisplay.unit
             },
             min: {
-              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getMin(data)).getDisplayValue()}` : '--',
-              unit: `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getMin(data)).getDisplayUnit()}`
+              value: minDisplay.value,
+              unit: minDisplay.unit
             },
             minToMaxDiff: {
-              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)).getDisplayValue()}` : '--',
-              unit: `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)).getDisplayUnit()}`
+              value: minToMaxDiffDisplay.value,
+              unit: minToMaxDiffDisplay.unit
             }
           };
 
           if (this.doesDataTypeSupportGainOrLoss(series.dummyData.stream.type)) {
+            const gainDisplay = this.getDisplayFromDataType(streamType, ActivityUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold));
+            const lossDisplay = this.getDisplayFromDataType(streamType, ActivityUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold));
             labelData.gain = {
-              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
-              unit: `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayUnit()}`
+              value: gainDisplay.value,
+              unit: gainDisplay.unit
             };
             labelData.loss = {
-              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
-              unit: `${DynamicDataLoader.getDataInstanceFromDataType(streamType, ActivityUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayUnit()}`
+              value: lossDisplay.value,
+              unit: lossDisplay.unit
             };
           }
 
           if (this.doesDataTypeSupportSlope(streamType) && seriesXAxisType === XAxisTypes.Distance) {
+            const distanceRange = ((end as number) - (start as number));
+            const slopeValue = distanceRange !== 0
+              ? (ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)) / distanceRange * 100
+              : null;
+            const slopeDisplay = this.getDisplayFromDataType(streamType, slopeValue);
             labelData.slopePercentage = {
-              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(streamType, (ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)) / ((end as number) - (start as number)) * 100).getDisplayValue()}` : '--',
-              unit: `${DynamicDataLoader.getDataInstanceFromDataType(streamType, (ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)) / ((end as number) - (start as number)) * 100).getDisplayUnit()}`
+              value: slopeDisplay.value,
+              unit: slopeDisplay.unit
             };
           }
 
@@ -1454,14 +1478,24 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           if (axisSeries.hidden) {
             return;
           }
-          if (DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]) {
-            map.min += `${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}`
+          const activity = axisSeries?.dummyData?.activity;
+          const streamType = axisSeries?.dummyData?.stream?.type;
+          if (!activity || !streamType) {
+            return;
           }
-          if (DynamicDataLoader.dataTypeAvgDataType[axisSeries.dummyData.stream.type]) {
-            map.avg += `${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeAvgDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeAvgDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}`
+
+          const minDataType = DynamicDataLoader.dataTypeMinDataType[streamType];
+          const avgDataType = DynamicDataLoader.dataTypeAvgDataType[streamType];
+          const maxDataType = DynamicDataLoader.dataTypeMaxDataType[streamType];
+
+          if (minDataType) {
+            map.min += this.getActivityStatDisplay(activity, minDataType);
           }
-          if (DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]) {
-            map.max += `${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}`
+          if (avgDataType) {
+            map.avg += this.getActivityStatDisplay(activity, avgDataType);
+          }
+          if (maxDataType) {
+            map.max += this.getActivityStatDisplay(activity, maxDataType);
           }
           if (index + 1 !== (<AxisRendererY>target.parent).axis.series.length) {
             map.min += `, `
@@ -2178,6 +2212,42 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     this.getSubscriptions().forEach(subscription => subscription.unsubscribe());
   }
 
+  private getDisplayFromDataType(dataType: string, value: unknown): { value: string; unit: string } {
+    const numericValue = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(numericValue)) {
+      return { value: '--', unit: '' };
+    }
+
+    try {
+      const data = DynamicDataLoader.getDataInstanceFromDataType(dataType, numericValue);
+      if (!data) {
+        return { value: '--', unit: '' };
+      }
+      return {
+        value: `${data.getDisplayValue()}`,
+        unit: `${data.getDisplayUnit()}`
+      };
+    } catch (error) {
+      this.logger.warn('[EventCardChartComponent] Could not format chart value', {
+        dataType,
+        numericValue,
+        error
+      });
+      return { value: '--', unit: '' };
+    }
+  }
+
+  private getActivityStatDisplay(activity: ActivityInterface, dataType: string): string {
+    if (!dataType) {
+      return '--';
+    }
+    const stat = activity.getStat(dataType);
+    if (!stat) {
+      return '--';
+    }
+    return `${stat.getDisplayValue()}${stat.getDisplayUnit()}`;
+  }
+
   private addXAxis(chart: am4charts.XYChart, xAxisType: XAxisTypes): am4charts.ValueAxis | am4charts.DateAxis {
     let xAxis;
     switch (xAxisType) {
@@ -2196,13 +2266,19 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           if (!(target.dataItem as am4charts.ValueAxisDataItem).value) {
             return '';
           }
-          const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, (target.dataItem as am4charts.ValueAxisDataItem).value);
-          return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
+          const display = this.getDisplayFromDataType(DataDistance.type, (target.dataItem as am4charts.ValueAxisDataItem).value);
+          if (display.value === '--') {
+            return '';
+          }
+          return `[bold font-size: 1.0em]${display.value}[/]${display.unit}[/]`
         });
         // xAxis.tooltipText = '{valueX}'
         xAxis.adapter.add('getTooltipText', (text, target) => {
-          const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, Number(text));
-          return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
+          const display = this.getDisplayFromDataType(DataDistance.type, text);
+          if (display.value === '--') {
+            return '';
+          }
+          return `[bold font-size: 1.0em]${display.value}[/]${display.unit}[/]`
         });
         // xAxis.renderer.labels.template.marginRight = 10;
         xAxis.min = 0;

@@ -65,6 +65,9 @@ export class ChartsXYComponent extends DashboardChartAbstractDirective implement
     chartTitle.adapter.add('text', (text, target, key) => {
       const data = target.parent.parent.parent.parent['data'];
       const value = this.getAggregateData(data, this.chartDataValueType);
+      if (!value) {
+        return `[font-family: 'Barlow Condensed', sans-serif font-size: 1.4em]${this.chartDataValueType || 'Value'}[/] [bold font-family: 'Barlow Condensed', sans-serif font-size: 1.3em]--[/]`;
+      }
       const normalizedLabel = normalizeUnitDerivedTypeLabel(value.getType(), value.getDisplayType());
       return `[font-family: 'Barlow Condensed', sans-serif font-size: 1.4em]${normalizedLabel}[/] [bold font-family: 'Barlow Condensed', sans-serif font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType}${this.chartDataCategoryType === ChartDataCategoryTypes.DateType ? ` @ ${TimeIntervals[this.chartDataTimeInterval]}` : ``})`;
     });
@@ -100,7 +103,10 @@ export class ChartsXYComponent extends DashboardChartAbstractDirective implement
     valueAxis.numberFormatter.numberFormat = `#`;
     // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartDataType).unit}`;
     valueAxis.renderer.labels.template.adapter.add('text', (text, target) => {
-      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(text));
+      const data = this.getDataInstanceOrNull(text);
+      if (!data) {
+        return '';
+      }
       return `[bold font-family: 'Barlow Condensed', sans-serif font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
     });
     valueAxis.renderer.labels.template.adapter.add('dx', (text, target) => {
@@ -146,7 +152,10 @@ export class ChartsXYComponent extends DashboardChartAbstractDirective implement
       if (!target.dataItem || !target.dataItem.dataContext) {
         return '';
       }
-      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[this.chartDataValueType]);
+      const data = this.getDataInstanceOrNull(target.dataItem.dataContext[this.chartDataValueType]);
+      if (!data) {
+        return '';
+      }
       return `{dateX}{categoryX}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
     });
     // bullet.filters.push(ChartHelper.getShadowFilter());
@@ -171,7 +180,13 @@ export class ChartsXYComponent extends DashboardChartAbstractDirective implement
       const categoryLabel = series.bullets.push(new charts.LabelBullet());
       categoryLabel.dy = -15;
       categoryLabel.label.adapter.add('text', (text, target) => {
-        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext[this.chartDataValueType]));
+        if (!target.dataItem || !target.dataItem.dataContext) {
+          return '';
+        }
+        const data = this.getDataInstanceOrNull(target.dataItem.dataContext[this.chartDataValueType]);
+        if (!data) {
+          return '';
+        }
         return `[bold font-family: 'Barlow Condensed', sans-serif font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
       });
       categoryLabel.label.background = new core.RoundedRectangle();
