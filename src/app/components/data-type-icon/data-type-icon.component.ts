@@ -287,7 +287,7 @@ export class DataTypeIconComponent {
       case 'Avg Respiration Rate':
       case 'Min Respiration Rate':
       case 'Max Respiration Rate':
-        return 'respiratory_rate';
+        return 'pulmonology';
       case DataFeeling.type:
         return 'mood';
       case DataRPE.type:

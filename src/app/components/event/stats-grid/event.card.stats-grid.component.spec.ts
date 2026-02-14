@@ -810,4 +810,14 @@ describe('EventCardStatsGridComponent', () => {
         expect(component.selectedTabIndex).toBe(1);
         expect(mockEventSummaryTabsLocalStorageService.setLastSelectedStatsTabId).toHaveBeenCalledWith('performance');
     });
+
+    it('should return the configured icon for each summary tab id', () => {
+        expect(component.getTabIcon('overall')).toBe('leaderboard');
+        expect(component.getTabIcon('performance')).toBe('monitoring');
+        expect(component.getTabIcon('altitude')).toBe('terrain');
+        expect(component.getTabIcon('environment')).toBe('landscape_2');
+        expect(component.getTabIcon('device')).toBe('devices');
+        expect(component.getTabIcon('physiological')).toBe('demography');
+        expect(component.getTabIcon('other')).toBe('category');
+    });
 });

@@ -211,9 +211,9 @@ describe('DataTypeIconComponent', () => {
   it('should provide icon mappings for respiration rate metrics', () => {
     const component = new DataTypeIconComponent();
 
-    expect(component.getColumnHeaderIcon('Avg Respiration Rate')).toBe('respiratory_rate');
-    expect(component.getColumnHeaderIcon('Min Respiration Rate')).toBe('respiratory_rate');
-    expect(component.getColumnHeaderIcon('Max Respiration Rate')).toBe('respiratory_rate');
+    expect(component.getColumnHeaderIcon('Avg Respiration Rate')).toBe('pulmonology');
+    expect(component.getColumnHeaderIcon('Min Respiration Rate')).toBe('pulmonology');
+    expect(component.getColumnHeaderIcon('Max Respiration Rate')).toBe('pulmonology');
   });
 
   it('should provide icon mapping for anaerobic training effect', () => {

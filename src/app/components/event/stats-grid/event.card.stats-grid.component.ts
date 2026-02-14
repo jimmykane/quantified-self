@@ -17,6 +17,16 @@ import { buildSummaryMetricTabs, SummaryMetricTab } from '../../../helpers/summa
 import { expandStatsTypesForCompositeDiff } from '../../../helpers/header-stats-composite.helper';
 import { AppEventSummaryTabsLocalStorageService } from '../../../services/storage/app.event-summary-tabs.local.storage.service';
 
+const SUMMARY_TAB_ICONS: Record<EventSummaryMetricGroupId, string> = {
+  overall: 'leaderboard',
+  performance: 'monitoring',
+  altitude: 'terrain',
+  environment: 'landscape_2',
+  device: 'devices',
+  physiological: 'demography',
+  other: 'category',
+};
+
 @Component({
   selector: 'app-event-card-stats-grid',
   templateUrl: './event.card.stats-grid.component.html',
@@ -126,6 +136,10 @@ export class EventCardStatsGridComponent implements OnChanges {
     }
 
     return tab.singleValueTypes;
+  }
+
+  public getTabIcon(tabId: EventSummaryMetricGroupId): string {
+    return SUMMARY_TAB_ICONS[tabId] || SUMMARY_TAB_ICONS.other;
   }
 
   private updateDiffMap() {

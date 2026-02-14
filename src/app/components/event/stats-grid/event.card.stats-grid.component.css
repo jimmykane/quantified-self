@@ -5,3 +5,48 @@
 .summary-metric-tabs {
   width: 100%;
 }
+
+.summary-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.summary-tab-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+}
+
+@media (max-width: 599px) {
+  .summary-tab-label {
+    justify-content: center;
+  }
+
+  .summary-tab-text {
+    display: none;
+  }
+
+  :host ::ng-deep .summary-metric-tabs .mat-mdc-tab-header {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  :host ::ng-deep .summary-metric-tabs .mat-mdc-tab-header::-webkit-scrollbar {
+    display: none;
+  }
+
+  :host ::ng-deep .summary-metric-tabs .mat-mdc-tab-label-container {
+    min-width: max-content;
+  }
+
+  :host ::ng-deep .summary-metric-tabs .mat-mdc-tab {
+    min-width: 44px;
+    padding-inline: 8px;
+  }
+
+  :host ::ng-deep .summary-metric-tabs .mat-mdc-tab-header-pagination {
+    display: none;
+  }
+}
