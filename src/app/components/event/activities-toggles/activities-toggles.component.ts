@@ -1,17 +1,20 @@
 import {
+  ChangeDetectorRef,
   ChangeDetectionStrategy,
   Component,
   computed,
-  DestroyRef,
   inject,
   input,
   OnInit
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { debounceTime } from 'rxjs/operators';
-import { EventInterface, ActivityInterface, User } from '@sports-alliance/sports-lib';
+import { MatDialog } from '@angular/material/dialog';
+import { MatSnackBar } from '@angular/material/snack-bar';
+import { DataDeviceNames, EventInterface, ActivityInterface, User } from '@sports-alliance/sports-lib';
 import { AppActivitySelectionService } from '../../../services/activity-selection-service/app-activity-selection.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { AppEventService } from '../../../services/app.event.service';
+import { DeviceNameEditDialogComponent } from './device-name-edit-dialog/device-name-edit-dialog.component';
+import { firstValueFrom } from 'rxjs';
 
 @Component({
   selector: 'app-activities-toggles',
@@ -28,7 +31,10 @@ export class ActivitiesTogglesComponent implements OnInit {
   user = input<User>();
 
   // Injected services
-  private destroyRef = inject(DestroyRef);
+  private changeDetectorRef = inject(ChangeDetectorRef);
+  private dialog = inject(MatDialog);
+  private snackBar = inject(MatSnackBar);
+  private eventService = inject(AppEventService);
   public activitySelectionService = inject(AppActivitySelectionService);
   public eventColorService = inject(AppEventColorService);
 
@@ -72,6 +78,44 @@ export class ActivitiesTogglesComponent implements OnInit {
       this.activitySelectionService.selectedActivities.deselect(activity);
     } else {
       this.activitySelectionService.selectedActivities.select(activity);
+    }
+  }
+
+  async renameDevice(activity: ActivityInterface): Promise<void> {
+    const user = this.user();
+    const event = this.event();
+    if (!user || !event) {
+      return;
+    }
+
+    const currentName = `${activity.creator?.name ?? ''}`.trim();
+    const dialogRef = this.dialog.open(DeviceNameEditDialogComponent, {
+      width: '420px',
+      data: {
+        activityID: activity.getID(),
+        currentName,
+        swInfo: activity.creator?.swInfo || '',
+      },
+    });
+
+    const newName = await firstValueFrom(dialogRef.afterClosed());
+    if (!newName) {
+      return;
+    }
+
+    const previousName = activity.creator.name;
+    activity.creator.name = newName;
+
+    try {
+      event.addStat(new DataDeviceNames(event.getActivities().map((eventActivity) => eventActivity.creator?.name || '')));
+      await this.eventService.setActivity(user, event, activity);
+      await this.eventService.setEvent(user, event);
+      this.snackBar.open('Device name updated', undefined, { duration: 2000 });
+    } catch (error) {
+      activity.creator.name = previousName;
+      this.snackBar.open('Could not update device name', undefined, { duration: 3000 });
+    } finally {
+      this.changeDetectorRef.markForCheck();
     }
   }
 

@@ -49,6 +49,15 @@
 
 ::ng-deep .activity-chip .mat-mdc-chip-action-label {
   padding-left: 0 !important;
+  width: 100%;
+  display: flex;
+}
+
+::ng-deep .activity-chip .mat-mdc-chip-action,
+::ng-deep .activity-chip .mdc-evolution-chip__action,
+::ng-deep .activity-chip .mdc-evolution-chip__action--primary,
+::ng-deep .activity-chip .mdc-evolution-chip__cell {
+  width: 100%;
 }
 
 /* Force transparent chip background across MDC internal elements */
@@ -78,8 +87,10 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  align-self: stretch;
   gap: 2px;
   padding: 4px 0;
+  width: 100%;
 }
 
 .chip-type {
@@ -101,6 +112,29 @@
   opacity: 0.8;
   font-style: italic;
   margin-top: 2px;
+}
+
+.chip-device-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 2px;
+}
+
+.chip-device-edit-button {
+  margin-left: auto;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  padding: 0;
+  line-height: 20px;
+  color: var(--mat-app-on-surface-variant);
+}
+
+.chip-device-edit-button mat-icon {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
 }
 
 /* Responsive: on handheld widths, let each chip stretch across the row */

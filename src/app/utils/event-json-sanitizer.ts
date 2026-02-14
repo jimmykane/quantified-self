@@ -116,6 +116,7 @@ export class EventJSONSanitizer {
 
         if (Array.isArray(streams)) {
             // It's an array of StreamJSONInterface
+            const seenTypes = new Set<string>();
             return streams.filter((stream, streamIndex) => {
                 const type = stream.type;
                 let dataClass;
@@ -136,6 +137,19 @@ export class EventJSONSanitizer {
                     });
                     return false; // Remove this stream
                 }
+
+                if (seenTypes.has(type)) {
+                    issues.push({
+                        kind: 'malformed_event_payload',
+                        location: 'streams',
+                        path: `${pathPrefix}[${streamIndex}]`,
+                        type,
+                        reason: 'Removed duplicate stream data type from array payload'
+                    });
+                    return false;
+                }
+
+                seenTypes.add(type);
                 return true;
             });
         } else if (typeof streams === 'object' && streams !== null) {

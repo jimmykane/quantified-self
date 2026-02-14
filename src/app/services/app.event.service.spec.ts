@@ -447,6 +447,32 @@ describe('AppEventService', () => {
         expect(result).toBe(true);
     });
 
+    it('should strip streams before writing activity in setActivity', async () => {
+        const user = { uid: 'user1' } as any;
+        const event = { getID: () => 'event1', startDate: new Date('2026-01-01T00:00:00.000Z') } as any;
+        const activity = {
+            getID: () => 'activity1',
+            toJSON: () => ({
+                stats: {},
+                streams: [
+                    { type: 'Pace', values: [1, 2, 3] }
+                ]
+            })
+        } as any;
+
+        (doc as Mock).mockReturnValue({});
+        (setDoc as Mock).mockResolvedValue(undefined);
+
+        await service.setActivity(user, event, activity);
+
+        expect(setDoc).toHaveBeenCalledTimes(1);
+        const writtenPayload = (setDoc as Mock).mock.calls[0][1];
+        expect(writtenPayload).not.toHaveProperty('streams');
+        expect(writtenPayload.eventID).toBe('event1');
+        expect(writtenPayload.userID).toBe('user1');
+        expect(writtenPayload.eventStartDate).toEqual(event.startDate);
+    });
+
     it('should call EventWriter in writeAllEventData', async () => {
         const mockEvent = {
             getID: () => '1',

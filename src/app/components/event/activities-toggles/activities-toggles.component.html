@@ -11,7 +11,19 @@
         activity.getDistance().getDisplayUnit() }}
       </span>
       @if (shouldShowDeviceNames()) {
-      <span class="chip-device">{{ getDeviceName(activity) }}</span>
+      <span class="chip-device-row">
+        <span class="chip-device">{{ getDeviceName(activity) }}</span>
+        @if (isOwner()) {
+        <button
+          mat-icon-button
+          class="chip-device-edit-button"
+          aria-label="Rename device"
+          matTooltip="Rename this activity device"
+          (click)="$event.stopPropagation(); renameDevice(activity)">
+          <mat-icon>edit</mat-icon>
+        </button>
+        }
+      </span>
       }
     </div>
   </mat-chip-option>

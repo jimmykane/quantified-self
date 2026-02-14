@@ -584,6 +584,8 @@ export class AppEventService implements OnDestroy {
 
   public async setActivity(user: User, event: EventInterface, activity: ActivityInterface) {
     const data = activity.toJSON() as any;
+    // Streams are persisted via original files; storing them here can create duplicate stream payloads.
+    delete data.streams;
     data.eventID = event.getID();
     data.userID = user.uid;
     if (event.startDate) {
