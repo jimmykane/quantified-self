@@ -70,6 +70,7 @@ export class BenchmarkBottomSheetComponent {
       event?: EventInterface;
       unitSettings?: UserUnitSettingsInterface;
       summariesSettings?: UserSummariesSettingsInterface;
+      brandText?: string | null;
     },
     private bottomSheetRef: MatBottomSheetRef<BenchmarkBottomSheetComponent>,
     private eventColorService: AppEventColorService,
@@ -179,12 +180,17 @@ export class BenchmarkBottomSheetComponent {
     }
   }
 
+  private getAppLogoUrl(): string {
+    return new URL('assets/logos/app/logo-100x100.png', document.baseURI).toString();
+  }
+
   private async buildSharePayload(): Promise<{ imageBlob: Blob; filename: string } | null> {
     this.shareTimestamp = new Date();
     const isMobile = window.matchMedia('(max-width: 600px)').matches;
     const appUrl = environment.appUrl || window.location.origin;
     const displayUrl = this.getDisplayUrl(appUrl);
     const filename = `benchmark-${this.shareTimestamp.getTime()}.png`;
+    const customBrandText = (this.data.brandText || '').trim();
 
     const dataUrl = await this.shareService.shareBenchmarkAsImage(this.shareFrame!.nativeElement, {
       scale: isMobile ? 1.5 : 2,
@@ -193,10 +199,10 @@ export class BenchmarkBottomSheetComponent {
       fast: isMobile,
       renderTimeoutMs: isMobile ? 10000 : 15000,
       watermark: {
-        brand: 'Quantified Self',
+        brand: customBrandText,
         timestamp: this.formatShareDate(this.shareTimestamp),
         url: displayUrl,
-        logoUrl: 'assets/logos/app/logo-100x100.png',
+        logoUrl: this.getAppLogoUrl(),
       }
     });
 

@@ -44,7 +44,8 @@ export class AppBenchmarkFlowService {
         result: config.result,
         event: config.event,
         unitSettings: config.user?.settings?.unitSettings ?? AppUserUtilities.getDefaultUserUnitSettings(),
-        summariesSettings: config.user?.settings?.summariesSettings
+        summariesSettings: config.user?.settings?.summariesSettings,
+        brandText: (config.user as any)?.brandText ?? null,
       },
       autoFocus: 'dialog'
     });

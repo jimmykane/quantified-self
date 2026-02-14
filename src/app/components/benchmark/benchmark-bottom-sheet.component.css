@@ -58,7 +58,12 @@
     pointer-events: none;
 }
 
-.benchmark-watermark .watermark-row {
+.benchmark-watermark .watermark-brand-line {
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
+}
+
+.benchmark-watermark .watermark-app-line {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -73,11 +78,6 @@
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-}
-
-.benchmark-watermark .watermark-url {
-    font-size: 0.6rem;
-    letter-spacing: 0.04em;
 }
 
 @media (max-width: 600px) {

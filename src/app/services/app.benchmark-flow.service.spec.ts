@@ -95,6 +95,18 @@ describe('AppBenchmarkFlowService', () => {
     expect(analyticsService.logEvent).not.toHaveBeenCalled();
   });
 
+  it('passes user brandText to benchmark bottom sheet data', () => {
+    const event = createEvent();
+    const result = createResult();
+    const user = { uid: 'user-1', brandText: 'My Brand' } as User;
+
+    service.openBenchmarkReport({ event, result, user });
+
+    const openCallArgs = bottomSheet.open.mock.calls[0];
+    expect(openCallArgs).toBeTruthy();
+    expect(openCallArgs[1]?.data?.brandText).toBe('My Brand');
+  });
+
   it('opens selection dialog and runs benchmark when two activities returned', async () => {
     const event = createEvent();
     const result = createResult();
