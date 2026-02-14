@@ -31,7 +31,7 @@
 
     <!-- Center: Hero Metrics -->
     <div class="hero-metrics">
-      @for (stat of getHeroStats(); track stat) {
+      @for (stat of heroStats; track stat) {
       <div class="metric-item">
         <span class="value">{{ getStatValue(stat) }}</span>
         <span class="unit">{{ getStatUnit(stat) }}</span>
@@ -45,7 +45,7 @@
       <button mat-icon-button (click)="openEditDetails()" matTooltip="Edit details">
         <mat-icon>edit</mat-icon>
       </button>
-      @if (event.isMerge && event.getActivities().length >= 2) {
+      @if (event.isMerge && eventActivitiesCount >= 2) {
       <button mat-icon-button (click)="openBenchmark()" matTooltip="Benchmark Analysis" class="benchmark-btn"
         [matBadge]="benchmarkCount > 1 ? benchmarkCount : null" matBadgeColor="accent" matBadgeSize="small">
         <mat-icon [class.has-result]="benchmarkCount > 0">
@@ -59,7 +59,7 @@
   </div>
 
   <!-- Activities Toggles Section -->
-  @if (event.getActivities().length > 1) {
+  @if (eventActivitiesCount > 1) {
   <div class="summary-activities-toggles">
     <app-activities-toggles [event]="event" [user]="user" [isOwner]="isOwner" [selectedActivities]="selectedActivities">
     </app-activities-toggles>

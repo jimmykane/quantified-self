@@ -1,7 +1,6 @@
-import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges, ChangeDetectorRef, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, OnChanges, SimpleChanges, ChangeDetectorRef } from '@angular/core';
 import { AppEventInterface, BenchmarkOptions, getBenchmarkPairKey } from '../../../../functions/src/shared/app-event.interface';
 import {
-  EventInterface,
   User,
   ActivityInterface,
   UserUnitSettingsInterface,
@@ -17,7 +16,6 @@ import {
   ActivityTypes,
   ActivityTypesHelper,
   ActivityTypeGroups,
-  ServiceNames,
 } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
@@ -47,6 +45,21 @@ export class EventSummaryComponent implements OnChanges {
   // Local state for on-demand generated benchmark
   benchmarkResult: import('../../../../functions/src/shared/app-event.interface').BenchmarkResult | null = null;
 
+  private heroStatLookup = new Map<string, { value: string; unit: string }>();
+  private hasDevicesValue = false;
+  private heroStatsValue: string[] = [];
+  private eventActivitiesCountValue = 0;
+  private mainActivityTypeValue = 'Other';
+  private benchmarkCountValue = 0;
+  private feelingValue: Feelings | null = null;
+  private feelingLabelValue = '';
+  private rpeValue: RPEBorgCR10SCale | null = null;
+  private rpeLabelValue = '';
+  private feelingEmojiValue = '';
+  private cachedEventRef: AppEventInterface | null = null;
+  private cachedSelectedActivitiesRef: ActivityInterface[] | null = null;
+  private templateStateInitialized = false;
+
   constructor(
     private eventService: AppEventService,
     private cd: ChangeDetectorRef,
@@ -56,6 +69,9 @@ export class EventSummaryComponent implements OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes['event'] || changes['selectedActivities']) {
+      this.rebuildTemplateState();
+    }
   }
 
   async toggleEventPrivacy() {
@@ -87,9 +103,18 @@ export class EventSummaryComponent implements OnChanges {
   }
 
   get hasDevices(): boolean {
-    return this.selectedActivities?.some(a =>
-      a.creator?.devices?.some(d => d.name || d.manufacturer)
-    ) ?? false;
+    this.ensureTemplateState();
+    return this.hasDevicesValue;
+  }
+
+  get heroStats(): string[] {
+    this.ensureTemplateState();
+    return this.heroStatsValue;
+  }
+
+  get eventActivitiesCount(): number {
+    this.ensureTemplateState();
+    return this.eventActivitiesCountValue;
   }
 
   openDevices() {
@@ -129,6 +154,7 @@ export class EventSummaryComponent implements OnChanges {
       initialSelection: this.selectedActivities,
       onResult: (result) => {
         this.benchmarkResult = result;
+        this.rebuildTemplateState();
         this.cd.detectChanges();
       }
     });
@@ -144,6 +170,7 @@ export class EventSummaryComponent implements OnChanges {
       initialSelection: this.selectedActivities,
       onResult: (result) => {
         this.benchmarkResult = result;
+        this.rebuildTemplateState();
         this.cd.detectChanges();
       }
     });
@@ -158,22 +185,96 @@ export class EventSummaryComponent implements OnChanges {
       initialSelection: this.selectedActivities,
       onResult: (result) => {
         this.benchmarkResult = result;
+        this.rebuildTemplateState();
         this.cd.detectChanges();
       }
     });
   }
 
   get mainActivityType(): string {
-    return this.event?.getActivities()[0]?.type || 'Other';
+    this.ensureTemplateState();
+    return this.mainActivityTypeValue;
   }
 
   get benchmarkCount(): number {
-    if (!this.event?.benchmarkResults) return 0;
-    return Object.keys(this.event.benchmarkResults).length;
+    this.ensureTemplateState();
+    return this.benchmarkCountValue;
   }
 
   getHeroStats(): string[] {
-    const type = this.mainActivityType;
+    return this.heroStats;
+  }
+
+  getStatValue(statType: string): string {
+    this.ensureTemplateState();
+    const cachedStat = this.heroStatLookup.get(statType);
+    if (cachedStat) {
+      return cachedStat.value;
+    }
+    const stat = this.event?.getStat(statType);
+    return stat ? String(stat.getDisplayValue()) : '--';
+  }
+
+  getStatUnit(statType: string): string {
+    this.ensureTemplateState();
+    const cachedStat = this.heroStatLookup.get(statType);
+    if (cachedStat) {
+      return cachedStat.unit;
+    }
+    const stat = this.event?.getStat(statType);
+    return stat ? stat.getDisplayUnit() : '';
+  }
+
+  get feeling(): Feelings | null {
+    this.ensureTemplateState();
+    return this.feelingValue;
+  }
+
+  get feelingLabel(): string {
+    this.ensureTemplateState();
+    return this.feelingLabelValue;
+  }
+
+  get rpe(): RPEBorgCR10SCale | null {
+    this.ensureTemplateState();
+    return this.rpeValue;
+  }
+
+  get rpeLabel(): string {
+    this.ensureTemplateState();
+    return this.rpeLabelValue;
+  }
+
+  get feelingEmoji(): string {
+    this.ensureTemplateState();
+    return this.feelingEmojiValue;
+  }
+
+  private rebuildTemplateState(): void {
+    const activities = this.event?.getActivities?.() ?? [];
+    this.eventActivitiesCountValue = activities.length;
+    this.mainActivityTypeValue = activities[0]?.type || 'Other';
+    this.heroStatsValue = this.resolveHeroStats(this.mainActivityTypeValue);
+    this.heroStatLookup = this.buildHeroStatLookup();
+    this.hasDevicesValue = this.selectedActivities?.some(a =>
+      a.creator?.devices?.some(d => d.name || d.manufacturer)
+    ) ?? false;
+    this.benchmarkCountValue = this.event?.benchmarkResults ? Object.keys(this.event.benchmarkResults).length : 0;
+
+    const feelingStat = this.event?.getStat(DataFeeling.type) as DataFeeling;
+    this.feelingValue = feelingStat ? feelingStat.getValue() as Feelings : null;
+    this.feelingLabelValue = this.feelingValue === null ? '' : (Feelings[this.feelingValue] || '');
+    this.feelingEmojiValue = this.resolveFeelingEmoji(this.feelingValue);
+
+    const rpeStat = this.event?.getStat(DataRPE.type) as DataRPE;
+    this.rpeValue = rpeStat ? rpeStat.getValue() as RPEBorgCR10SCale : null;
+    this.rpeLabelValue = this.rpeValue === null ? '' : (RPEBorgCR10SCale[this.rpeValue] || '');
+    this.cachedEventRef = this.event;
+    this.cachedSelectedActivitiesRef = this.selectedActivities;
+    this.templateStateInitialized = true;
+  }
+
+  private resolveHeroStats(type: string): string[] {
     if (type === 'Virtual Cycling' || type === 'VirtualRide') {
       return [DataDuration.type, DataPowerAvg.type];
     }
@@ -196,41 +297,20 @@ export class EventSummaryComponent implements OnChanges {
     }
   }
 
-  getStatValue(statType: string): string {
-    const stat = this.event?.getStat(statType);
-    return stat ? String(stat.getDisplayValue()) : '--';
+  private buildHeroStatLookup(): Map<string, { value: string; unit: string }> {
+    const lookup = new Map<string, { value: string; unit: string }>();
+    this.heroStatsValue.forEach((statType) => {
+      const stat = this.event?.getStat(statType);
+      lookup.set(statType, {
+        value: stat ? String(stat.getDisplayValue()) : '--',
+        unit: stat ? stat.getDisplayUnit() : '',
+      });
+    });
+    return lookup;
   }
 
-  getStatUnit(statType: string): string {
-    const stat = this.event?.getStat(statType);
-    return stat ? stat.getDisplayUnit() : '';
-  }
-
-  get feeling(): Feelings | null {
-    const stat = this.event?.getStat(DataFeeling.type) as DataFeeling;
-    return stat ? stat.getValue() as Feelings : null;
-  }
-
-  get feelingLabel(): string {
-    const f = this.feeling;
-    if (f === null) return '';
-    return Feelings[f] || '';
-  }
-
-  get rpe(): RPEBorgCR10SCale | null {
-    const stat = this.event?.getStat(DataRPE.type) as DataRPE;
-    return stat ? stat.getValue() as RPEBorgCR10SCale : null;
-  }
-
-  get rpeLabel(): string {
-    const r = this.rpe;
-    if (r === null) return '';
-    return RPEBorgCR10SCale[r] || '';
-  }
-
-  get feelingEmoji(): string {
-    const f = this.feeling;
-    if (f === null) return '';
+  private resolveFeelingEmoji(feeling: Feelings | null): string {
+    if (feeling === null) return '';
     const emojiMap: { [key: number]: string } = {
       [Feelings.Excellent]: '🤩',
       [Feelings['Very Good']]: '😊',
@@ -238,10 +318,12 @@ export class EventSummaryComponent implements OnChanges {
       [Feelings.Average]: '😐',
       [Feelings.Poor]: '😕',
     };
-    return emojiMap[f] || '';
+    return emojiMap[feeling] || '';
   }
 
-
-
-
+  private ensureTemplateState(): void {
+    if (!this.templateStateInitialized || this.cachedEventRef !== this.event || this.cachedSelectedActivitiesRef !== this.selectedActivities) {
+      this.rebuildTemplateState();
+    }
+  }
 }

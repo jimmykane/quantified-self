@@ -3,7 +3,7 @@
   @for (activity of activities(); track trackByActivityId($index, activity)) {
   <mat-chip-option [selected]="isSelected(activity)"
     [disabled]="isOnlySelectedActivity(activity)"
-    [style.--chip-accent-color]="activityColors().get(activity.getID())" (click)="toggleActivity(activity)"
+    [style.--chip-accent-color]="getActivityColor(activity)" (click)="toggleActivity(activity)"
     class="activity-chip">
     <div class="chip-content">
       <span class="chip-type">{{ activity.type }}</span>

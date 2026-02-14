@@ -22,43 +22,32 @@ export class HeaderStatsComponent implements OnChanges {
   @Input() diffByType?: Map<string, { display: string; percent: number; color: string }>;
   public displayedStats: DataInterface[] = [];
   public displayedStatCards: HeaderStatCard[] = [];
+  private compositeUnitByCardId = new Map<string, string>();
+  private hasCompositeDiffByCardId = new Map<string, boolean>();
 
   ngOnChanges(changes: SimpleChanges): void {
     if (!this.statsToShow || !this.stats) {
       this.displayedStats = [];
       this.displayedStatCards = [];
+      this.compositeUnitByCardId.clear();
+      this.hasCompositeDiffByCardId.clear();
       return;
     }
 
-    // Create a map for O(1) lookups
-    const statsMap = new Map<string, DataInterface>();
-    this.stats.forEach(stat => statsMap.set(stat.getType(), stat));
+    const shouldRebuildStats =
+      !this.displayedStats.length
+      || !!changes['statsToShow']
+      || !!changes['stats']
+      || !!changes['unitSettings']
+      || !!changes['singleValueTypes'];
 
-    // Expand all available stats once so tab-local families can pull avg/min/max siblings.
-    const expandedStatsMap = new Map<string, DataInterface>();
-    this.stats.forEach((stat) => {
-      const expanded = DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, this.unitSettings);
-      expanded.forEach((expandedStat) => expandedStatsMap.set(expandedStat.getType(), expandedStat));
-    });
+    if (shouldRebuildStats) {
+      this.rebuildDisplayedStatsAndCards();
+    }
 
-    const enrichedStats: DataInterface[] = [];
-    this.statsToShow.forEach(statType => {
-      const stat = statsMap.get(statType);
-      if (stat) {
-        // This expands the stat into unit-based versions (e.g. Speed -> Speed and Pace)
-        const unitBasedStats = DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, this.unitSettings);
-        enrichedStats.push(...unitBasedStats);
-      }
-    });
-
-    this.displayedStats = enrichedStats;
-
-    this.displayedStatCards = buildHeaderStatCards(this.displayedStats, expandedStatsMap, this.singleValueTypes)
-      .map((card) => ({
-        ...card,
-        valueItems: card.valueItems.filter((valueItem) => !this.isInvalidDisplayToken(valueItem.displayValue)),
-      }))
-      .filter((card) => card.valueItems.length > 0);
+    if (shouldRebuildStats || !!changes['showDiff'] || !!changes['diffByType']) {
+      this.rebuildCompositeCardCaches();
+    }
   }
 
   getDiffForStat(stat: DataInterface) {
@@ -87,27 +76,23 @@ export class HeaderStatsComponent implements OnChanges {
   }
 
   getCompositeUnit(card: HeaderStatCard): string {
-    if (!card.isComposite || !card.valueItems.length) {
-      return '';
+    const cached = this.compositeUnitByCardId.get(card.id);
+    if (cached !== undefined) {
+      return cached;
     }
-
-    const nonEmptyUnits = card.valueItems
-      .map((item) => item.displayUnit?.trim())
-      .filter((unit): unit is string => !!unit);
-
-    if (!nonEmptyUnits.length) {
-      return '';
-    }
-
-    const uniqueUnits = [...new Set(nonEmptyUnits).values()];
-    return uniqueUnits[0];
+    const resolved = this.resolveCompositeUnit(card);
+    this.compositeUnitByCardId.set(card.id, resolved);
+    return resolved;
   }
 
   hasCompositeDiff(card: HeaderStatCard): boolean {
-    if (!this.showDiff || !this.diffByType || !card?.isComposite) {
-      return false;
+    const cached = this.hasCompositeDiffByCardId.get(card.id);
+    if (cached !== undefined) {
+      return cached;
     }
-    return card.valueItems.some((item) => !!this.getDiffForType(item.type));
+    const resolved = this.computeHasCompositeDiff(card);
+    this.hasCompositeDiffByCardId.set(card.id, resolved);
+    return resolved;
   }
 
   getCompositeDeltaDisplay(display: string, unit: string): string {
@@ -144,6 +129,72 @@ export class HeaderStatsComponent implements OnChanges {
       return false;
     }
     return /\bnan\b/i.test(normalized);
+  }
+
+  private rebuildDisplayedStatsAndCards(): void {
+    // Create a map for O(1) lookups.
+    const statsMap = new Map<string, DataInterface>();
+    this.stats.forEach((stat) => statsMap.set(stat.getType(), stat));
+
+    // Expand all available stats once so tab-local families can pull avg/min/max siblings.
+    const expandedStatsMap = new Map<string, DataInterface>();
+    this.stats.forEach((stat) => {
+      const expanded = DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, this.unitSettings);
+      expanded.forEach((expandedStat) => expandedStatsMap.set(expandedStat.getType(), expandedStat));
+    });
+
+    const enrichedStats: DataInterface[] = [];
+    this.statsToShow.forEach((statType) => {
+      const stat = statsMap.get(statType);
+      if (!stat) {
+        return;
+      }
+      // Expand each requested stat into unit-aware variants (for example speed and pace).
+      const unitBasedStats = DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, this.unitSettings);
+      enrichedStats.push(...unitBasedStats);
+    });
+
+    this.displayedStats = enrichedStats;
+
+    this.displayedStatCards = buildHeaderStatCards(this.displayedStats, expandedStatsMap, this.singleValueTypes)
+      .map((card) => ({
+        ...card,
+        valueItems: card.valueItems.filter((valueItem) => !this.isInvalidDisplayToken(valueItem.displayValue)),
+      }))
+      .filter((card) => card.valueItems.length > 0);
+  }
+
+  private rebuildCompositeCardCaches(): void {
+    this.compositeUnitByCardId.clear();
+    this.hasCompositeDiffByCardId.clear();
+    this.displayedStatCards.forEach((card) => {
+      this.compositeUnitByCardId.set(card.id, this.resolveCompositeUnit(card));
+      this.hasCompositeDiffByCardId.set(card.id, this.computeHasCompositeDiff(card));
+    });
+  }
+
+  private resolveCompositeUnit(card: HeaderStatCard): string {
+    if (!card.isComposite || !card.valueItems.length) {
+      return '';
+    }
+
+    const nonEmptyUnits = card.valueItems
+      .map((item) => item.displayUnit?.trim())
+      .filter((unit): unit is string => !!unit);
+
+    if (!nonEmptyUnits.length) {
+      return '';
+    }
+
+    const uniqueUnits = [...new Set(nonEmptyUnits).values()];
+    return uniqueUnits[0];
+  }
+
+  private computeHasCompositeDiff(card: HeaderStatCard): boolean {
+    if (!this.showDiff || !this.diffByType || !card?.isComposite) {
+      return false;
+    }
+    return card.valueItems.some((item) => !!this.getDiffForType(item.type));
   }
 
 }

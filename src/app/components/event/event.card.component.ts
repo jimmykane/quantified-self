@@ -162,14 +162,8 @@ export class EventCardComponent implements OnInit {
           this.event.set(resolvedData);
         }
 
-
-
-        this.activitySelectionService.selectedActivities.clear();
         const activities = this.event()?.getActivities() ?? [];
-        this.activitySelectionService.selectedActivities.select(...activities);
-        // Initial set for both
-        this.selectedActivitiesInstant.set(activities);
-        this.selectedActivitiesDebounced.set(activities);
+        this.syncSelectedActivities(activities);
 
         this.targetUserID.set(this.route.snapshot.paramMap.get('userID') ?? '');
         if (!this.liveSyncStarted) {
@@ -268,13 +262,49 @@ export class EventCardComponent implements OnInit {
     const activities = this.event()?.getActivities() ?? [];
     const selectedActivities = activities.filter((activity) => selectedSet.has(activity.getID()));
 
-    this.activitySelectionService.selectedActivities.clear();
-    if (selectedActivities.length > 0) {
-      this.activitySelectionService.selectedActivities.select(...selectedActivities);
+    if (this.hasSameSelectedActivities(selectedActivities)) {
+      return;
     }
 
-    this.selectedActivitiesInstant.set([...selectedActivities]);
-    this.selectedActivitiesDebounced.set([...selectedActivities]);
+    this.syncSelectedActivities(selectedActivities);
+  }
+
+  private syncSelectedActivities(selectedActivities: ActivityInterface[]): void {
+    const nextSelection = [...selectedActivities];
+    this.activitySelectionService.selectedActivities.clear(false);
+    if (nextSelection.length > 0) {
+      this.activitySelectionService.selectedActivities.select(...nextSelection);
+    }
+
+    this.selectedActivitiesInstant.set(nextSelection);
+    this.selectedActivitiesDebounced.set(nextSelection);
+  }
+
+  private hasSameSelectedActivities(nextActivities: ActivityInterface[]): boolean {
+    const currentActivities = this.selectedActivitiesInstant();
+    if (currentActivities.length !== nextActivities.length) {
+      return false;
+    }
+
+    for (let index = 0; index < currentActivities.length; index++) {
+      const current = currentActivities[index];
+      const next = nextActivities[index];
+      const currentID = current?.getID?.();
+      const nextID = next?.getID?.();
+
+      if (currentID && nextID) {
+        if (currentID !== nextID) {
+          return false;
+        }
+        continue;
+      }
+
+      if (current !== next) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   private getLiveStreamTypes(): string[] {

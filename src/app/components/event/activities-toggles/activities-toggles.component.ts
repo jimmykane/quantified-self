@@ -5,7 +5,6 @@ import {
   computed,
   inject,
   input,
-  OnInit
 } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -23,7 +22,7 @@ import { firstValueFrom } from 'rxjs';
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })
-export class ActivitiesTogglesComponent implements OnInit {
+export class ActivitiesTogglesComponent {
   // Signal inputs
   event = input.required<EventInterface>();
   selectedActivities = input.required<ActivityInterface[]>();
@@ -60,22 +59,48 @@ export class ActivitiesTogglesComponent implements OnInit {
     return new Set(ids).size > 1;
   });
 
-  ngOnInit() {
-  }
+  // Computed: normalize current selection into fast lookup sets.
+  selectedState = computed(() => {
+    const selectedActivities = this.selectedActivities() ?? [];
+    const selectedIDs = new Set<string>();
+    const selectedRefs = new Set<ActivityInterface>();
+
+    selectedActivities.forEach((selectedActivity) => {
+      selectedRefs.add(selectedActivity);
+      const selectedID = selectedActivity?.getID?.();
+      if (selectedID) {
+        selectedIDs.add(selectedID);
+      }
+    });
+
+    return {
+      selectedIDs,
+      selectedRefs,
+      selectedCount: selectedActivities.length,
+    };
+  });
 
   /**
    * Check if an activity is selected.
    */
   isSelected(activity: ActivityInterface): boolean {
-    return this.selectedActivities().some(selected => this.isSameActivity(selected, activity));
+    const state = this.selectedState();
+    const activityID = activity?.getID?.();
+    if (activityID) {
+      return state.selectedIDs.has(activityID);
+    }
+    return state.selectedRefs.has(activity);
   }
 
   /**
    * Toggle activity selection.
    */
   toggleActivity(activity: ActivityInterface): void {
-    if (this.isSelected(activity)) {
-      if (!this.canDeselectActivity(activity)) {
+    const isSelected = this.isSelected(activity);
+    const selectedCount = this.selectedState().selectedCount;
+
+    if (isSelected) {
+      if (selectedCount <= 1) {
         return;
       }
       this.activitySelectionService.selectedActivities.deselect(activity);
@@ -85,11 +110,11 @@ export class ActivitiesTogglesComponent implements OnInit {
   }
 
   canDeselectActivity(activity: ActivityInterface): boolean {
-    return !this.isSelected(activity) || this.selectedActivities().length > 1;
+    return !this.isSelected(activity) || this.selectedState().selectedCount > 1;
   }
 
   isOnlySelectedActivity(activity: ActivityInterface): boolean {
-    return this.selectedActivities().length === 1 && this.isSelected(activity);
+    return this.selectedState().selectedCount === 1 && this.isSelected(activity);
   }
 
   async renameDevice(activity: ActivityInterface): Promise<void> {
@@ -149,17 +174,6 @@ export class ActivitiesTogglesComponent implements OnInit {
    * Track activities by ID for better rendering performance.
    */
   trackByActivityId(index: number, activity: ActivityInterface): string {
-    return activity.getID();
-  }
-
-  private isSameActivity(a: ActivityInterface, b: ActivityInterface): boolean {
-    if (a === b) {
-      return true;
-    }
-
-    const aId = a?.getID?.();
-    const bId = b?.getID?.();
-
-    return !!aId && !!bId && aId === bId;
+    return activity.getID() || `idx-${index}`;
   }
 }
