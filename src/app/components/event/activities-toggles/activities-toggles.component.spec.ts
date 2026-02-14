@@ -117,6 +117,60 @@ describe('ActivitiesTogglesComponent', () => {
     expect(toggleSpy).not.toHaveBeenCalled();
   });
 
+  it('does not deselect when only one activity is selected', () => {
+    const { a1 } = setupInputs(true);
+    fixture.componentRef.setInput('selectedActivities', [a1]);
+    fixture.detectChanges();
+
+    component.toggleActivity(a1);
+
+    expect(mockSelectionService.selectedActivities.deselect).not.toHaveBeenCalled();
+    expect(mockSelectionService.selectedActivities.select).not.toHaveBeenCalled();
+  });
+
+  it('deselects when more than one activity is selected', () => {
+    const { a1 } = setupInputs(true);
+
+    component.toggleActivity(a1);
+
+    expect(mockSelectionService.selectedActivities.deselect).toHaveBeenCalledWith(a1);
+  });
+
+  it('selects activity when it is not selected', () => {
+    const { a1, a2 } = setupInputs(true);
+    fixture.componentRef.setInput('selectedActivities', [a1]);
+    fixture.detectChanges();
+
+    component.toggleActivity(a2);
+
+    expect(mockSelectionService.selectedActivities.select).toHaveBeenCalledWith(a2);
+  });
+
+  it('uses reference equality when activity IDs are missing', () => {
+    const noIdA = createActivity('', 'Garmin', '111');
+    const noIdB = createActivity('', 'Wahoo', '222');
+    noIdA.getID = () => undefined;
+    noIdB.getID = () => undefined;
+
+    const event = {
+      getID: () => 'event-1',
+      isMerge: true,
+      getActivities: () => [noIdA, noIdB],
+      addStat: vi.fn(),
+    } as any;
+
+    fixture.componentRef.setInput('event', event);
+    fixture.componentRef.setInput('selectedActivities', [noIdA]);
+    fixture.componentRef.setInput('isOwner', true);
+    fixture.componentRef.setInput('user', user);
+    fixture.detectChanges();
+
+    expect(component.isSelected(noIdA)).toBe(true);
+    expect(component.isSelected(noIdB)).toBe(false);
+    expect(component.isOnlySelectedActivity(noIdA)).toBe(true);
+    expect(component.isOnlySelectedActivity(noIdB)).toBe(false);
+  });
+
   it('renameDevice updates only clicked activity and persists event + activity', async () => {
     const { event, a1 } = setupInputs(true);
     mockDialog.open.mockReturnValue({ afterClosed: () => of('Renamed Device') });

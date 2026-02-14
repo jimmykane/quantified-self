@@ -80,7 +80,16 @@
 
 .activity-chip:not(.mat-mdc-chip-selected) {
   border: 1px solid var(--mat-app-outline-variant) !important;
-  opacity: 0.7;
+  opacity: 1;
+}
+
+.activity-chip:not(.mat-mdc-chip-disabled) {
+  cursor: pointer;
+}
+
+.activity-chip.mat-mdc-chip-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .chip-content {
@@ -119,6 +128,7 @@
   align-items: center;
   width: 100%;
   gap: 2px;
+  overflow: visible;
 }
 
 .chip-device-edit-button {
@@ -128,6 +138,10 @@
   min-width: 20px;
   padding: 0 !important;
   line-height: 20px;
+  --mdc-icon-button-state-layer-size: 20px !important;
+  --mat-icon-button-state-layer-size: 20px !important;
+  --mat-icon-button-touch-target-display: none;
+  overflow: visible;
   color: var(--mat-app-on-surface-variant);
 }
 

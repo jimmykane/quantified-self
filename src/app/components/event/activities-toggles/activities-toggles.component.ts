@@ -67,7 +67,7 @@ export class ActivitiesTogglesComponent implements OnInit {
    * Check if an activity is selected.
    */
   isSelected(activity: ActivityInterface): boolean {
-    return this.selectedActivities().some(a => a.getID() === activity.getID());
+    return this.selectedActivities().some(selected => this.isSameActivity(selected, activity));
   }
 
   /**
@@ -75,10 +75,21 @@ export class ActivitiesTogglesComponent implements OnInit {
    */
   toggleActivity(activity: ActivityInterface): void {
     if (this.isSelected(activity)) {
+      if (!this.canDeselectActivity(activity)) {
+        return;
+      }
       this.activitySelectionService.selectedActivities.deselect(activity);
     } else {
       this.activitySelectionService.selectedActivities.select(activity);
     }
+  }
+
+  canDeselectActivity(activity: ActivityInterface): boolean {
+    return !this.isSelected(activity) || this.selectedActivities().length > 1;
+  }
+
+  isOnlySelectedActivity(activity: ActivityInterface): boolean {
+    return this.selectedActivities().length === 1 && this.isSelected(activity);
   }
 
   async renameDevice(activity: ActivityInterface): Promise<void> {
@@ -139,5 +150,16 @@ export class ActivitiesTogglesComponent implements OnInit {
    */
   trackByActivityId(index: number, activity: ActivityInterface): string {
     return activity.getID();
+  }
+
+  private isSameActivity(a: ActivityInterface, b: ActivityInterface): boolean {
+    if (a === b) {
+      return true;
+    }
+
+    const aId = a?.getID?.();
+    const bId = b?.getID?.();
+
+    return !!aId && !!bId && aId === bId;
   }
 }
