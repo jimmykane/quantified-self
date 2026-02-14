@@ -596,11 +596,6 @@ export class AppEventService implements OnDestroy {
   public async writeActivityAndEventData(user: User, event: EventInterface, activity: ActivityInterface): Promise<void> {
     const { activityData, eventData } = buildActivityEditWritePayload(user.uid, event, activity);
     return runInInjectionContext(this.injector, async () => {
-      this.logger.log('[AppEventService] writeActivityAndEventData begin', {
-        userID: user.uid,
-        eventID: event.getID(),
-        activityID: activity.getID(),
-      });
       const batch = writeBatch(this.firestore);
       const activityRef = doc(this.firestore, 'users', user.uid, 'activities', activity.getID());
       const eventRef = doc(this.firestore, 'users', user.uid, 'events', event.getID());
@@ -608,11 +603,6 @@ export class AppEventService implements OnDestroy {
       batch.set(activityRef, activityData, { merge: true });
       batch.set(eventRef, eventData, { merge: true });
       await batch.commit();
-      this.logger.log('[AppEventService] writeActivityAndEventData committed', {
-        userID: user.uid,
-        eventID: event.getID(),
-        activityID: activity.getID(),
-      });
     });
   }
 
@@ -853,13 +843,6 @@ export class AppEventService implements OnDestroy {
 
     const existingCreatorName = `${existingActivity.creator?.name ?? ''}`.trim();
     if (existingCreatorName && parsedActivity.creator) {
-      if (parsedActivity.creator.name !== existingCreatorName) {
-        this.logger.log('[AppEventService] Applying creator name override from Firestore activity', {
-          activityID: existingActivity.getID?.(),
-          from: parsedActivity.creator.name,
-          to: existingCreatorName,
-        });
-      }
       parsedActivity.creator.name = existingCreatorName;
     }
   }
