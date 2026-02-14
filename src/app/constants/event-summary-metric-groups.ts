@@ -325,11 +325,13 @@ export const EVENT_SUMMARY_METRIC_GROUPS: EventSummaryMetricGroupConfig[] = [
       DataSwimPaceAvg.type,
       DataHeartRateAvg.type,
       DataPowerAvg.type,
+      DataPowerNormalized.type,
       DataRecoveryTime.type,
       DataVO2Max.type,
       DataAscent.type,
       DataDescent.type,
       DataCadenceAvg.type,
+      DataFTP.type,
     ],
     singleValueTypes: [
       DataHeartRateAvg.type,
