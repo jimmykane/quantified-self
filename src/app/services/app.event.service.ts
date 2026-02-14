@@ -137,45 +137,146 @@ export class AppEventService implements OnDestroy {
     return ['activity-sanitizer', eventID, activityID, ...kinds];
   }
 
+  private buildSnapshotFingerprint(snapshot: any): string {
+    try {
+      return JSON.stringify(snapshot ?? null);
+    } catch {
+      return `${snapshot}`;
+    }
+  }
+
+  private buildEventFromSnapshot(eventSnapshot: any, eventID: string): AppEventInterface | null {
+    if (!eventSnapshot) return null;
+    const { sanitizedJson } = EventJSONSanitizer.sanitize(eventSnapshot);
+    const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventID) as AppEventInterface;
+
+    // Hydrate with original file(s) info if present
+    const rawData = eventSnapshot as any;
+
+    if (rawData.originalFiles) {
+      event.originalFiles = rawData.originalFiles.map((file: any) => {
+        if (file.startDate) {
+          // Convert Firestore Timestamp to Date
+          if (file.startDate.toDate && typeof file.startDate.toDate === 'function') {
+            file.startDate = file.startDate.toDate();
+          } else if (file.startDate.seconds !== undefined) {
+            file.startDate = new Date(file.startDate.seconds * 1000 + (file.startDate.nanoseconds || 0) / 1000000);
+          } else if (typeof file.startDate === 'string') {
+            file.startDate = new Date(file.startDate);
+          }
+        } else {
+          throw new Error('Event Metadata Error: Missing startDate for file ' + file.path);
+        }
+        return file;
+      });
+    }
+    if (rawData.originalFile) {
+      event.originalFile = rawData.originalFile;
+    }
+
+    this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(event, rawData);
+
+    return event;
+  }
+
+  private parseActivitiesFromSnapshots(eventID: string, activitySnapshots: any[]): ActivityInterface[] {
+    return (activitySnapshots || []).reduce((activitiesArray: ActivityInterface[], activitySnapshot: any) => {
+      try {
+        // Ensure required properties exist for sports-lib 6.x compatibility
+        const safeActivityData = {
+          ...activitySnapshot,
+          stats: activitySnapshot.stats || {},
+          laps: activitySnapshot.laps || [],
+          streams: activitySnapshot.streams || [],
+          intensityZones: activitySnapshot.intensityZones || [],
+          events: activitySnapshot.events || []
+        };
+        const { sanitizedJson, unknownTypes, issues } = EventJSONSanitizer.sanitize(safeActivityData);
+        if (unknownTypes.length > 0) {
+          const newUnknownTypes = unknownTypes.filter(type => AppEventService.shouldReportKey(
+            AppEventService.reportedUnknownTypes,
+            type,
+            AppEventService.DEDUPE_TTL_MS,
+            AppEventService.DEDUPE_UNKNOWN_TYPES_MAX
+          ));
+          if (newUnknownTypes.length > 0) {
+            this.logger.captureMessage('Unknown Data Types in getActivities', { extra: { types: newUnknownTypes, eventID, activityID: activitySnapshot.id } });
+          }
+        }
+        const actionableIssues = (issues || []).filter(issue => issue.kind !== 'unknown_data_type');
+        if (actionableIssues.length > 0) {
+          const newIssues = actionableIssues.filter(issue => {
+            const issueKey = AppEventService.getSanitizerIssueKey(activitySnapshot.id, issue);
+            return AppEventService.shouldReportKey(
+              AppEventService.reportedSanitizerIssues,
+              issueKey,
+              AppEventService.DEDUPE_TTL_MS,
+              AppEventService.DEDUPE_SANITIZER_ISSUES_MAX
+            );
+          });
+
+          if (newIssues.length > 0) {
+            const issueSummary = AppEventService.summarizeIssues(newIssues);
+            const cappedIssues = newIssues.slice(0, AppEventService.MAX_ISSUES_PER_REPORT);
+            const issuesTruncated = Math.max(0, newIssues.length - cappedIssues.length);
+            this.logger.warn('[AppEventService] Sanitized malformed activity data', {
+              eventID,
+              activityID: activitySnapshot.id,
+              issueCount: newIssues.length,
+              issueSummary,
+              issuesTruncated,
+              issues: cappedIssues
+            });
+
+            const sentryEventKey = `${eventID}|${activitySnapshot.id}|${Object.keys(issueSummary).sort().join(',')}`;
+            const shouldReportSanitizerEvent = AppEventService.shouldReportKey(
+              AppEventService.reportedSanitizerEvents,
+              sentryEventKey,
+              AppEventService.SANITIZER_EVENT_TTL_MS,
+              AppEventService.DEDUPE_SANITIZER_EVENTS_MAX
+            );
+
+            if (shouldReportSanitizerEvent) {
+              this.logger.captureException(new Error('Sanitized malformed activity data in getActivities'), {
+                fingerprint: AppEventService.buildSanitizerFingerprint(eventID, activitySnapshot.id, newIssues),
+                extra: {
+                  eventID,
+                  activityID: activitySnapshot.id,
+                  issueCount: newIssues.length,
+                  issueSummary,
+                  issuesTruncated,
+                  issues: cappedIssues
+                }
+              });
+            }
+          }
+        }
+        activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>sanitizedJson).setID(activitySnapshot.id));
+      } catch (e) {
+        this.logger.error('Failed to parse activity:', activitySnapshot.id, 'Error:', e);
+      }
+      return activitiesArray;
+    }, []);
+  }
+
+  private getActivitiesForEventDetailsLive(user: User, eventID: string): Observable<ActivityInterface[]> {
+    const activitiesCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'activities'));
+    const q = runInInjectionContext(this.injector, () => query(activitiesCollection, where('eventID', '==', eventID)));
+    return (runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })) as Observable<any[]>).pipe(
+      distinctUntilChanged((previousSnapshots, currentSnapshots) =>
+        this.buildSnapshotFingerprint(previousSnapshots) === this.buildSnapshotFingerprint(currentSnapshots)
+      ),
+      map((activitySnapshots: any[]) => this.parseActivitiesFromSnapshots(eventID, activitySnapshots)),
+    );
+  }
+
   public getEventAndActivities(user: User, eventID: string): Observable<AppEventInterface> {
     // See
     // https://stackoverflow.com/questions/42939978/avoiding-nested-subscribes-with-combine-latest-when-one-observable-depends-on-th
     const eventDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID));
     return combineLatest([
       runInInjectionContext(this.injector, () => docData(eventDoc)).pipe(
-        map(eventSnapshot => {
-          if (!eventSnapshot) return null;
-          const { sanitizedJson } = EventJSONSanitizer.sanitize(eventSnapshot);
-          const event = EventImporterJSON.getEventFromJSON(<EventJSONInterface>sanitizedJson).setID(eventID) as AppEventInterface;
-
-          // Hydrate with original file(s) info if present
-          const rawData = eventSnapshot as any;
-
-          if (rawData.originalFiles) {
-            event.originalFiles = rawData.originalFiles.map((file: any) => {
-              if (file.startDate) {
-                // Convert Firestore Timestamp to Date
-                if (file.startDate.toDate && typeof file.startDate.toDate === 'function') {
-                  file.startDate = file.startDate.toDate();
-                } else if (file.startDate.seconds !== undefined) {
-                  file.startDate = new Date(file.startDate.seconds * 1000 + (file.startDate.nanoseconds || 0) / 1000000);
-                } else if (typeof file.startDate === 'string') {
-                  file.startDate = new Date(file.startDate);
-                }
-              } else {
-                throw new Error('Event Metadata Error: Missing startDate for file ' + file.path);
-              }
-              return file;
-            });
-          }
-          if (rawData.originalFile) {
-            event.originalFile = rawData.originalFile;
-          }
-
-          this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(event, rawData);
-
-          return event;
-        })),
+        map(eventSnapshot => this.buildEventFromSnapshot(eventSnapshot, eventID))),
       this.getActivities(user, eventID),
     ]).pipe(
       distinctUntilChanged((prev, curr) => {
@@ -226,6 +327,37 @@ export class AppEventService implements OnDestroy {
 
         return of(null); // @todo is this the best we can do?
       }))
+  }
+
+  /**
+   * Event details specific live stream. Keeps dashboard/event-list listeners untouched.
+   * Emits on event metadata changes and activity metadata changes.
+   */
+  public getEventDetailsLive(user: User, eventID: string): Observable<AppEventInterface | null> {
+    const eventDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID));
+    return combineLatest([
+      runInInjectionContext(this.injector, () => docData(eventDoc)).pipe(
+        distinctUntilChanged((previousSnapshot, currentSnapshot) =>
+          this.buildSnapshotFingerprint(previousSnapshot) === this.buildSnapshotFingerprint(currentSnapshot)
+        ),
+        map((eventSnapshot) => this.buildEventFromSnapshot(eventSnapshot, eventID))
+      ),
+      this.getActivitiesForEventDetailsLive(user, eventID),
+    ]).pipe(
+      map(([event, activities]: [AppEventInterface, ActivityInterface[]]) => {
+        if (!event) return null;
+        event.clearActivities();
+        event.addActivities(activities);
+        return event;
+      }),
+      catchError((error) => {
+        if (error?.code === 'permission-denied') {
+          return of(null);
+        }
+        this.logger.error('Error fetching live event details:', error);
+        return of(null);
+      }),
+    );
   }
 
   public getEventsBy(user: User, where: { fieldPath: string | any, opStr: any, value: any }[] = [], orderBy: string = 'startDate', asc: boolean = false, limit: number = 10, startAfter?: EventInterface, endBefore?: EventInterface): Observable<EventInterface[]> {
@@ -317,83 +449,7 @@ export class AppEventService implements OnDestroy {
     return (runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })) as Observable<any[]>).pipe(
       map((activitySnapshots: any[]) => {
         this.logger.log(`[AppEventService] getActivities emitted ${activitySnapshots?.length || 0} activity snapshots for event: ${eventID}`);
-        return activitySnapshots.reduce((activitiesArray: ActivityInterface[], activitySnapshot: any) => {
-          try {
-            // Ensure required properties exist for sports-lib 6.x compatibility
-            const safeActivityData = {
-              ...activitySnapshot,
-              stats: activitySnapshot.stats || {},
-              laps: activitySnapshot.laps || [],
-              streams: activitySnapshot.streams || [],
-              intensityZones: activitySnapshot.intensityZones || [],
-              events: activitySnapshot.events || []
-            };
-            const { sanitizedJson, unknownTypes, issues } = EventJSONSanitizer.sanitize(safeActivityData);
-            if (unknownTypes.length > 0) {
-              const newUnknownTypes = unknownTypes.filter(type => AppEventService.shouldReportKey(
-                AppEventService.reportedUnknownTypes,
-                type,
-                AppEventService.DEDUPE_TTL_MS,
-                AppEventService.DEDUPE_UNKNOWN_TYPES_MAX
-              ));
-              if (newUnknownTypes.length > 0) {
-                this.logger.captureMessage('Unknown Data Types in getActivities', { extra: { types: newUnknownTypes, eventID, activityID: activitySnapshot.id } });
-              }
-            }
-            const actionableIssues = (issues || []).filter(issue => issue.kind !== 'unknown_data_type');
-            if (actionableIssues.length > 0) {
-              const newIssues = actionableIssues.filter(issue => {
-                const issueKey = AppEventService.getSanitizerIssueKey(activitySnapshot.id, issue);
-                return AppEventService.shouldReportKey(
-                  AppEventService.reportedSanitizerIssues,
-                  issueKey,
-                  AppEventService.DEDUPE_TTL_MS,
-                  AppEventService.DEDUPE_SANITIZER_ISSUES_MAX
-                );
-              });
-
-              if (newIssues.length > 0) {
-                const issueSummary = AppEventService.summarizeIssues(newIssues);
-                const cappedIssues = newIssues.slice(0, AppEventService.MAX_ISSUES_PER_REPORT);
-                const issuesTruncated = Math.max(0, newIssues.length - cappedIssues.length);
-                this.logger.warn('[AppEventService] Sanitized malformed activity data', {
-                  eventID,
-                  activityID: activitySnapshot.id,
-                  issueCount: newIssues.length,
-                  issueSummary,
-                  issuesTruncated,
-                  issues: cappedIssues
-                });
-
-                const sentryEventKey = `${eventID}|${activitySnapshot.id}|${Object.keys(issueSummary).sort().join(',')}`;
-                const shouldReportSanitizerEvent = AppEventService.shouldReportKey(
-                  AppEventService.reportedSanitizerEvents,
-                  sentryEventKey,
-                  AppEventService.SANITIZER_EVENT_TTL_MS,
-                  AppEventService.DEDUPE_SANITIZER_EVENTS_MAX
-                );
-
-                if (shouldReportSanitizerEvent) {
-                  this.logger.captureException(new Error('Sanitized malformed activity data in getActivities'), {
-                    fingerprint: AppEventService.buildSanitizerFingerprint(eventID, activitySnapshot.id, newIssues),
-                    extra: {
-                      eventID,
-                      activityID: activitySnapshot.id,
-                      issueCount: newIssues.length,
-                      issueSummary,
-                      issuesTruncated,
-                      issues: cappedIssues
-                    }
-                  });
-                }
-              }
-            }
-            activitiesArray.push(EventImporterJSON.getActivityFromJSON(<ActivityJSONInterface>sanitizedJson).setID(activitySnapshot.id));
-          } catch (e) {
-            this.logger.error('Failed to parse activity:', activitySnapshot.id, 'Error:', e);
-          }
-          return activitiesArray;
-        }, []);
+        return this.parseActivitiesFromSnapshots(eventID, activitySnapshots);
       }),
     )
   }

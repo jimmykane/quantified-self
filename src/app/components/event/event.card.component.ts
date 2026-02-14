@@ -10,6 +10,7 @@ import {
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { debounceTime } from 'rxjs/operators';
+import { firstValueFrom } from 'rxjs';
 
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { AppEventInterface } from '../../../../functions/src/shared/app-event.interface';
@@ -22,6 +23,14 @@ import {
   ChartThemes,
   XAxisTypes
 } from '@sports-alliance/sports-lib';
+import {
+  DataDistance,
+  DataGradeAdjustedSpeed,
+  DataLatitudeDegrees,
+  DataLongitudeDegrees,
+  DataSpeed,
+  DynamicDataLoader
+} from '@sports-alliance/sports-lib';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../services/app.user.service';
@@ -30,8 +39,10 @@ import { AppUserSettingsQueryService } from '../../services/app.user-settings-qu
 import { LapTypes } from '@sports-alliance/sports-lib';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { LoggerService } from '../../services/logger.service';
+import { AppEventService } from '../../services/app.event.service';
 import { shouldRenderIntensityZonesChart } from '../../helpers/intensity-zones-chart-data-helper';
 import { shouldRenderPowerCurveChart } from '../../helpers/power-curve-chart-data-helper';
+import { reconcileEventDetailsLiveUpdate } from '../../utils/event-live-reconcile';
 @Component({
   selector: 'app-event-card',
   templateUrl: './event.card.component.html',
@@ -52,6 +63,7 @@ export class EventCardComponent implements OnInit {
   private themeService = inject(AppThemeService);
   private bottomSheet = inject(MatBottomSheet);
   private logger = inject(LoggerService);
+  private eventService = inject(AppEventService);
 
   // Signal-based state
   public event = signal<AppEventInterface | null>(null);
@@ -60,6 +72,8 @@ export class EventCardComponent implements OnInit {
   public selectedActivitiesDebounced = signal<ActivityInterface[]>([]);
   public isDownloading = signal<boolean>(false);
   public targetUserID = signal<string>('');
+  private liveSyncStarted = false;
+  private liveReloadInProgress = false;
 
   // Computed signals for template - replaces method calls
   public hasLapsFlag = computed(() =>
@@ -158,6 +172,10 @@ export class EventCardComponent implements OnInit {
         this.selectedActivitiesDebounced.set(activities);
 
         this.targetUserID.set(this.route.snapshot.paramMap.get('userID') ?? '');
+        if (!this.liveSyncStarted) {
+          this.liveSyncStarted = true;
+          this.startEventDetailsLiveSync();
+        }
       });
 
     // User auth subscription
@@ -166,6 +184,123 @@ export class EventCardComponent implements OnInit {
       .subscribe((user: User | null) => {
         this.currentUser.set(user);
       });
+  }
+
+  private startEventDetailsLiveSync(): void {
+    const eventID = this.route.snapshot.paramMap.get('eventID');
+    const targetUserID = this.route.snapshot.paramMap.get('userID');
+    if (!eventID || !targetUserID) {
+      return;
+    }
+
+    this.eventService.getEventDetailsLive(new User(targetUserID), eventID)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (liveEvent) => this.applyLiveEventUpdate(liveEvent),
+        error: (error) => {
+          this.logger.error('Live event details sync failed', error);
+          this.snackBar.open('Could not live-sync event details', undefined, { duration: 3000 });
+          this.router.navigate(['/dashboard']);
+        },
+      });
+  }
+
+  private applyLiveEventUpdate(liveEvent: AppEventInterface | null): void {
+    if (!liveEvent) {
+      return;
+    }
+    const selectedIDs = this.selectedActivitiesInstant().map((activity) => activity.getID());
+    const reconcileResult = reconcileEventDetailsLiveUpdate(this.event(), liveEvent, selectedIDs);
+
+    if (reconcileResult.needsFullReload) {
+      this.reloadEventDetailsWithStreams();
+      return;
+    }
+
+    this.event.set(reconcileResult.reconciledEvent);
+    this.applySelectedActivityIDs(reconcileResult.selectedActivityIDs);
+  }
+
+  private async reloadEventDetailsWithStreams(): Promise<void> {
+    if (this.liveReloadInProgress) {
+      return;
+    }
+    const eventID = this.route.snapshot.paramMap.get('eventID');
+    const targetUserID = this.route.snapshot.paramMap.get('userID');
+    if (!eventID || !targetUserID) {
+      return;
+    }
+
+    const previousSelectedIDs = this.selectedActivitiesInstant().map((activity) => activity.getID());
+    this.liveReloadInProgress = true;
+    try {
+      const refreshedEvent = await firstValueFrom(
+        this.eventService.getEventActivitiesAndSomeStreams(
+          new User(targetUserID),
+          eventID,
+          this.getLiveStreamTypes(),
+        ),
+      );
+      if (!refreshedEvent) {
+        return;
+      }
+
+      this.event.set(refreshedEvent as AppEventInterface);
+      const refreshedActivityIDs = (refreshedEvent.getActivities() || []).map((activity) => activity.getID());
+      const refreshedIDSet = new Set(refreshedActivityIDs);
+      const preservedIDs = previousSelectedIDs.filter((activityID) => refreshedIDSet.has(activityID));
+      const nextSelectedIDs = preservedIDs.length || previousSelectedIDs.length === 0
+        ? preservedIDs
+        : refreshedActivityIDs;
+
+      this.applySelectedActivityIDs(nextSelectedIDs);
+    } catch (error) {
+      this.logger.error('Could not refresh event details after live reconcile mismatch', error);
+      this.snackBar.open('Could not refresh event details', undefined, { duration: 3000 });
+      this.router.navigate(['/dashboard']);
+    } finally {
+      this.liveReloadInProgress = false;
+    }
+  }
+
+  private applySelectedActivityIDs(selectedActivityIDs: string[]): void {
+    const selectedSet = new Set(selectedActivityIDs);
+    const activities = this.event()?.getActivities() ?? [];
+    const selectedActivities = activities.filter((activity) => selectedSet.has(activity.getID()));
+
+    this.activitySelectionService.selectedActivities.clear();
+    if (selectedActivities.length > 0) {
+      this.activitySelectionService.selectedActivities.select(...selectedActivities);
+    }
+
+    this.selectedActivitiesInstant.set([...selectedActivities]);
+    this.selectedActivitiesDebounced.set([...selectedActivities]);
+  }
+
+  private getLiveStreamTypes(): string[] {
+    const streamTypes = [
+      DataLatitudeDegrees.type,
+      DataLongitudeDegrees.type,
+      DataSpeed.type,
+      DataGradeAdjustedSpeed.type,
+      DataDistance.type,
+    ];
+
+    const user = this.currentUser();
+    if (user) {
+      const userChartDataTypes = this.userService.getUserChartDataTypesToUse(user);
+      const nonUnitBasedDataTypes = DynamicDataLoader.getNonUnitBasedDataTypes(
+        user.settings.chartSettings.showAllData,
+        userChartDataTypes,
+      );
+      nonUnitBasedDataTypes.forEach((type) => {
+        if (!streamTypes.includes(type)) {
+          streamTypes.push(type);
+        }
+      });
+    }
+
+    return streamTypes;
   }
 
 }

@@ -10,7 +10,7 @@ import { AppFileService } from './app.file.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
-import { of, firstValueFrom, throwError } from 'rxjs';
+import { of, firstValueFrom, throwError, Subject } from 'rxjs';
 import { AppCacheService } from './app.cache.service';
 import { getMetadata } from '@angular/fire/storage';
 import { webcrypto } from 'node:crypto';
@@ -238,6 +238,96 @@ describe('AppEventService', () => {
         expect(mockLogger.error).not.toHaveBeenCalled();
         expect(result).toBeTruthy();
         expect(result!.getID()).toBe('event1');
+    });
+
+    it('should emit live event details updates when event metadata changes', async () => {
+        const userId = 'user1';
+        const eventId = 'event1';
+        const user = { uid: userId } as any;
+
+        const firstSnapshot = { id: eventId, name: 'Initial Name' };
+        const secondSnapshot = { id: eventId, name: 'Updated Name' };
+        const mockActivityData = { id: 'act1', eventID: eventId, type: 'Run' };
+        const eventSnapshots$ = new Subject<any>();
+        const emissions: any[] = [];
+
+        (doc as Mock).mockReturnValue({});
+        (collection as Mock).mockReturnValue({});
+        (docData as Mock).mockReturnValue(eventSnapshots$.asObservable());
+        (collectionData as Mock).mockReturnValue(of([mockActivityData]));
+        mocks.sanitize.mockImplementation((json: any) => ({ sanitizedJson: json, unknownTypes: [], issues: [] }));
+        mocks.getEventFromJSON.mockImplementation((json: any) => {
+            const event: any = {
+                name: json.name,
+                activities: [],
+                setID: vi.fn().mockReturnThis(),
+                clearActivities: vi.fn(() => {
+                    event.activities = [];
+                }),
+                addActivities: vi.fn((activities: any[]) => {
+                    event.activities = activities;
+                }),
+                getActivities: vi.fn(() => event.activities),
+                getID: vi.fn(() => eventId),
+            };
+            return event;
+        });
+
+        const subscription = service.getEventDetailsLive(user, eventId).subscribe((event) => {
+            emissions.push(event);
+        });
+        eventSnapshots$.next(firstSnapshot);
+        eventSnapshots$.next(secondSnapshot);
+        await Promise.resolve();
+        subscription.unsubscribe();
+
+        expect(emissions).toHaveLength(2);
+        expect((emissions[0] as any).name).toBe('Initial Name');
+        expect((emissions[1] as any).name).toBe('Updated Name');
+    });
+
+    it('should suppress duplicate live event-detail emissions for unchanged snapshots', async () => {
+        const userId = 'user1';
+        const eventId = 'event1';
+        const user = { uid: userId } as any;
+
+        const snapshot = { id: eventId, name: 'Same Name' };
+        const mockActivityData = { id: 'act1', eventID: eventId, type: 'Run' };
+        const eventSnapshots$ = new Subject<any>();
+        const emissions: any[] = [];
+
+        (doc as Mock).mockReturnValue({});
+        (collection as Mock).mockReturnValue({});
+        (docData as Mock).mockReturnValue(eventSnapshots$.asObservable());
+        (collectionData as Mock).mockReturnValue(of([mockActivityData]));
+        mocks.sanitize.mockImplementation((json: any) => ({ sanitizedJson: json, unknownTypes: [], issues: [] }));
+        mocks.getEventFromJSON.mockImplementation((json: any) => {
+            const event: any = {
+                name: json.name,
+                activities: [],
+                setID: vi.fn().mockReturnThis(),
+                clearActivities: vi.fn(() => {
+                    event.activities = [];
+                }),
+                addActivities: vi.fn((activities: any[]) => {
+                    event.activities = activities;
+                }),
+                getActivities: vi.fn(() => event.activities),
+                getID: vi.fn(() => eventId),
+            };
+            return event;
+        });
+
+        const subscription = service.getEventDetailsLive(user, eventId).subscribe((event) => {
+            emissions.push(event);
+        });
+        eventSnapshots$.next(snapshot);
+        eventSnapshots$.next(snapshot);
+        await Promise.resolve();
+        subscription.unsubscribe();
+
+        expect(emissions).toHaveLength(1);
+        expect((emissions[0] as any).name).toBe('Same Name');
     });
 
     it('should warn and send to Sentry when sanitizer reports malformed activity issues', async () => {
