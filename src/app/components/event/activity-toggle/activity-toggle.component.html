@@ -6,7 +6,7 @@
   </div>
   }
 
-  <mat-card-title (click)="onActivityClick($event, activity())"
+  <mat-card-title (click)="onActivityClick(activity())"
     [ngStyle]="event().isMerge && isSelected() && {color: activityColor()}">
     <span><b>{{activity().type}}</b></span>
     @if (event().isMerge) {
