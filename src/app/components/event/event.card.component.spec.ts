@@ -2,7 +2,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { EventCardComponent } from './event.card.component';
 import { ActivatedRoute, Router } from '@angular/router';
-import { of, Subject } from 'rxjs';
+import { BehaviorSubject, of, Subject } from 'rxjs';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppActivitySelectionService } from '../../services/activity-selection-service/app-activity-selection.service';
@@ -37,7 +37,10 @@ describe('EventCardComponent', () => {
     let mockLoggerService: any;
     let mockBottomSheet: any;
     let mockEventService: any;
-    let liveEventDetails$: Subject<EventInterface | null>;
+    let routeData$: BehaviorSubject<{ event: EventInterface }>;
+    let routeUserID: string;
+    let routeEventID: string;
+    let liveEventDetailsByRouteKey: Map<string, Subject<EventInterface | null>>;
     const mockedShouldRenderIntensityZonesChart = vi.mocked(shouldRenderIntensityZonesChart);
     const mockedShouldRenderPowerCurveChart = vi.mocked(shouldRenderPowerCurveChart);
 
@@ -98,15 +101,18 @@ describe('EventCardComponent', () => {
     beforeEach(async () => {
         mockedShouldRenderIntensityZonesChart.mockReturnValue(false);
         mockedShouldRenderPowerCurveChart.mockReturnValue(false);
-        liveEventDetails$ = new Subject<EventInterface | null>();
+        routeData$ = new BehaviorSubject({ event: mockEvent });
+        routeUserID = 'testUser';
+        routeEventID = 'evt1';
+        liveEventDetailsByRouteKey = new Map();
 
         mockActivatedRoute = {
-            data: of({ event: mockEvent }),
+            data: routeData$,
             snapshot: {
                 paramMap: {
                     get: (key: string) => {
-                        if (key === 'userID') return 'testUser';
-                        if (key === 'eventID') return 'evt1';
+                        if (key === 'userID') return routeUserID;
+                        if (key === 'eventID') return routeEventID;
                         return null;
                     }
                 }
@@ -137,7 +143,13 @@ describe('EventCardComponent', () => {
         mockSnackBar = { open: vi.fn() };
         mockBottomSheet = { open: vi.fn() };
         mockEventService = {
-            getEventDetailsLive: vi.fn(() => liveEventDetails$.asObservable()),
+            getEventDetailsLive: vi.fn((_user: User, eventID: string) => {
+                const routeKey = `${_user.uid}:${eventID}`;
+                if (!liveEventDetailsByRouteKey.has(routeKey)) {
+                    liveEventDetailsByRouteKey.set(routeKey, new Subject<EventInterface | null>());
+                }
+                return liveEventDetailsByRouteKey.get(routeKey)!.asObservable();
+            }),
             getEventActivitiesAndSomeStreams: vi.fn(() => of(mockEvent)),
         };
 
@@ -191,7 +203,7 @@ describe('EventCardComponent', () => {
     it('should apply live event updates for matching activity IDs', () => {
         const liveUpdatedEvent = createEvent('evt1', [createActivity('act1')], 'Live Updated Event');
 
-        liveEventDetails$.next(liveUpdatedEvent);
+        liveEventDetailsByRouteKey.get('testUser:evt1')?.next(liveUpdatedEvent);
 
         expect(component.event()).toBe(liveUpdatedEvent);
         expect(component.event()?.name).toBe('Live Updated Event');
@@ -202,7 +214,7 @@ describe('EventCardComponent', () => {
         const refreshedEvent = createEvent('evt1', [createActivity('act1')], 'Refreshed Event');
         mockEventService.getEventActivitiesAndSomeStreams.mockReturnValue(of(refreshedEvent));
 
-        liveEventDetails$.next(liveMismatchedEvent);
+        liveEventDetailsByRouteKey.get('testUser:evt1')?.next(liveMismatchedEvent);
         await Promise.resolve();
         await Promise.resolve();
 
@@ -219,9 +231,50 @@ describe('EventCardComponent', () => {
         component.selectedActivitiesDebounced.set([activityB]);
 
         const liveUpdatedEvent = createEvent('evt1', [createActivity('act-a'), createActivity('act-b')], 'Live Multi Event');
-        liveEventDetails$.next(liveUpdatedEvent);
+        liveEventDetailsByRouteKey.get('testUser:evt1')?.next(liveUpdatedEvent);
 
         expect(component.selectedActivitiesInstant().map((activity) => activity.getID())).toEqual(['act-b']);
+    });
+
+    it('should restart live sync when route eventID changes', () => {
+        const secondRouteEvent = createEvent('evt2', [createActivity('act-2')], 'Second Event');
+        routeEventID = 'evt2';
+        routeData$.next({ event: secondRouteEvent });
+
+        expect(mockEventService.getEventDetailsLive).toHaveBeenCalledTimes(2);
+        expect(mockEventService.getEventDetailsLive).toHaveBeenNthCalledWith(2, expect.any(User), 'evt2');
+
+        const staleEventUpdate = createEvent('evt1', [createActivity('act-1')], 'Stale Event Update');
+        liveEventDetailsByRouteKey.get('testUser:evt1')?.next(staleEventUpdate);
+        expect(component.event()?.getID()).toBe('evt2');
+
+        const liveUpdatedSecondEvent = createEvent('evt2', [createActivity('act-2')], 'Live Updated Event 2');
+        liveEventDetailsByRouteKey.get('testUser:evt2')?.next(liveUpdatedSecondEvent);
+        expect(component.event()).toBe(liveUpdatedSecondEvent);
+    });
+
+    it('should restart live sync when route userID changes for the same eventID', () => {
+        const sameEventDifferentUser = createEvent('evt1', [createActivity('act-shared')], 'Shared Event');
+        routeUserID = 'otherUser';
+        routeData$.next({ event: sameEventDifferentUser });
+
+        expect(mockEventService.getEventDetailsLive).toHaveBeenCalledTimes(2);
+        expect(mockEventService.getEventDetailsLive).toHaveBeenNthCalledWith(2, expect.any(User), 'evt1');
+
+        const staleOldUserUpdate = createEvent('evt1', [createActivity('act-legacy')], 'Old User Live Update');
+        liveEventDetailsByRouteKey.get('testUser:evt1')?.next(staleOldUserUpdate);
+        expect(component.event()?.name).toBe('Shared Event');
+
+        const activeUserLiveUpdate = createEvent('evt1', [createActivity('act-shared')], 'New User Live Update');
+        liveEventDetailsByRouteKey.get('otherUser:evt1')?.next(activeUserLiveUpdate);
+        expect(component.event()).toBe(activeUserLiveUpdate);
+    });
+
+    it('should not restart live sync when route data re-emits for the same userID and eventID', () => {
+        const duplicateEmissionEvent = createEvent('evt1', [createActivity('act1')], 'Duplicate Emission Event');
+        routeData$.next({ event: duplicateEmissionEvent });
+
+        expect(mockEventService.getEventDetailsLive).toHaveBeenCalledTimes(1);
     });
 
     it('should set targetUserID signal from route', () => {
@@ -288,8 +341,8 @@ describe('EventCardComponent', () => {
         beforeEach(() => {
             mockedShouldRenderIntensityZonesChart.mockReturnValue(true);
             mockedShouldRenderPowerCurveChart.mockReturnValue(true);
-            // Update the route data mock
-            mockActivatedRoute.data = of({ event: eventWithData });
+            routeEventID = 'evt2';
+            routeData$.next({ event: eventWithData });
 
             // Recreate fixture with new data
             fixture = TestBed.createComponent(EventCardComponent);
