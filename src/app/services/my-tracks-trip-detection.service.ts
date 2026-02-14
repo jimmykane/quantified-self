@@ -122,7 +122,7 @@ export class MyTracksTripDetectionService {
     }
 
     const destinationClusters = this.clusterDestinations(normalized);
-    const visitWindows = this.buildVisitWindows(destinationClusters);
+    const visitWindows = this.buildVisitWindows(destinationClusters, normalized);
     const homeDestinationId = this.identifyHomeDestination(destinationClusters);
     const qualificationResult = this.qualifyVisitWindows(visitWindows, homeDestinationId);
     const rejoinResult = this.mergeNearbyVisitWindowsWithoutInterleavingDestinations(qualificationResult.qualifiedVisitWindows);
@@ -299,35 +299,59 @@ export class MyTracksTripDetectionService {
     return neighbors;
   }
 
-  private buildVisitWindows(destinationClusters: DestinationCluster[]): VisitWindow[] {
-    const visitWindows: VisitWindow[] = [];
+  private buildVisitWindows(
+    destinationClusters: DestinationCluster[],
+    timelinePoints: NormalizedActivityStart[],
+  ): VisitWindow[] {
+    if (timelinePoints.length === 0) {
+      return [];
+    }
 
+    const destinationByPoint = new Map<NormalizedActivityStart, string>();
     destinationClusters.forEach((cluster) => {
-      const sortedPoints = [...cluster.points]
-        .sort((a, b) => a.timestamp - b.timestamp || a.eventId.localeCompare(b.eventId));
+      cluster.points.forEach((point) => {
+        destinationByPoint.set(point, cluster.destinationId);
+      });
+    });
 
-      if (sortedPoints.length === 0) {
+    const visitWindows: VisitWindow[] = [];
+    let currentDestinationId: string | null = null;
+    let currentWindowPoints: NormalizedActivityStart[] = [];
+
+    timelinePoints.forEach((point) => {
+      const destinationId = destinationByPoint.get(point);
+      if (!destinationId) {
+        this.logger.warn('[MyTracksTripDetectionService] Missing destination assignment for timeline point.', {
+          eventId: point.eventId,
+          timestamp: point.timestamp,
+        });
         return;
       }
 
-      let currentWindow: NormalizedActivityStart[] = [sortedPoints[0]];
-
-      for (let index = 1; index < sortedPoints.length; index++) {
-        const currentPoint = sortedPoints[index];
-        const previousPoint = sortedPoints[index - 1];
-        const gapMs = currentPoint.timestamp - previousPoint.timestamp;
-
-        if (gapMs > MyTracksTripDetectionService.VISIT_SPLIT_GAP_MS) {
-          visitWindows.push(this.createVisitWindow(cluster.destinationId, currentWindow));
-          currentWindow = [currentPoint];
-          continue;
-        }
-
-        currentWindow.push(currentPoint);
+      if (!currentDestinationId) {
+        currentDestinationId = destinationId;
+        currentWindowPoints = [point];
+        return;
       }
 
-      visitWindows.push(this.createVisitWindow(cluster.destinationId, currentWindow));
+      const previousPoint = currentWindowPoints[currentWindowPoints.length - 1];
+      const gapMs = point.timestamp - previousPoint.timestamp;
+      const hasDestinationChanged = destinationId !== currentDestinationId;
+      const hasLargeGap = gapMs > MyTracksTripDetectionService.VISIT_SPLIT_GAP_MS;
+
+      if (hasDestinationChanged || hasLargeGap) {
+        visitWindows.push(this.createVisitWindow(currentDestinationId, currentWindowPoints));
+        currentDestinationId = destinationId;
+        currentWindowPoints = [point];
+        return;
+      }
+
+      currentWindowPoints.push(point);
     });
+
+    if (currentDestinationId && currentWindowPoints.length > 0) {
+      visitWindows.push(this.createVisitWindow(currentDestinationId, currentWindowPoints));
+    }
 
     return visitWindows
       .sort((a, b) => a.startTimestamp - b.startTimestamp || a.destinationId.localeCompare(b.destinationId));

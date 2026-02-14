@@ -75,7 +75,7 @@ describe('MyTracksTripDetectionService', () => {
     expect(new Set(detectedTrips.map((trip) => trip.destinationId)).size).toBe(3);
   });
 
-  it('does not rejoin same-destination visits when another destination is in between', () => {
+  it('does not rejoin same-destination visits when another destination is in between and same-destination gap is short', () => {
     const detectedTrips = service.detectTrips([
       input('a-1', '2025-04-01T08:00:00Z', 37.9800, 23.7200),
       input('a-2', '2025-04-02T08:00:00Z', 37.9810, 23.7210),
@@ -83,10 +83,10 @@ describe('MyTracksTripDetectionService', () => {
       input('a-4', '2025-04-04T08:00:00Z', 37.9830, 23.7230),
       input('b-1', '2025-04-05T08:00:00Z', 28.2200, 83.9900),
       input('b-2', '2025-04-06T10:00:00Z', 28.2300, 84.0000),
-      input('a-5', '2025-04-07T10:00:00Z', 37.9840, 23.7240),
-      input('a-6', '2025-04-08T10:00:00Z', 37.9850, 23.7250),
-      input('a-7', '2025-04-09T10:00:00Z', 37.9860, 23.7260),
-      input('a-8', '2025-04-10T10:00:00Z', 37.9870, 23.7270),
+      input('a-5', '2025-04-06T20:00:00Z', 37.9840, 23.7240),
+      input('a-6', '2025-04-07T20:00:00Z', 37.9850, 23.7250),
+      input('a-7', '2025-04-08T20:00:00Z', 37.9860, 23.7260),
+      input('a-8', '2025-04-09T20:00:00Z', 37.9870, 23.7270),
     ]);
 
     const athensTrips = detectedTrips
