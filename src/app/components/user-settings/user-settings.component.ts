@@ -9,7 +9,7 @@ import { AppUserUtilities } from '../../utils/app.user.utilities';
 import { MatDialog } from '@angular/material/dialog';
 import { DeleteAccountDialogComponent } from '../delete-account-dialog/delete-account-dialog.component';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
+import { AbstractControl, UntypedFormControl, UntypedFormGroup, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 import { LoggerService } from '../../services/logger.service';
 import { Privacy, UserSettingsInterface } from '@sports-alliance/sports-lib';
 import {
@@ -67,6 +67,7 @@ export class UserSettingsComponent implements OnChanges {
   public readonly tabsStickyHeader = true;
   public readonly tabsTopOffset = '0px';
   public readonly tabsLazyContent = false;
+  public readonly brandTextMaxLength = 30;
 
   public xAxisTypes = XAxisTypes;
 
@@ -110,6 +111,10 @@ export class UserSettingsComponent implements OnChanges {
 
   get isBasicUser(): boolean {
     return AppUserUtilities.isBasicUser(this.user);
+  }
+
+  get canEditBrandText(): boolean {
+    return this.isProUser || this.isBasicUser;
   }
 
   get userAvatarUrl(): string {
@@ -157,6 +162,13 @@ export class UserSettingsComponent implements OnChanges {
       ]),
       acceptedTrackingPolicy: new UntypedFormControl(this.user.acceptedTrackingPolicy, []),
       acceptedMarketingPolicy: new UntypedFormControl(this.user.acceptedMarketingPolicy || false, []),
+      brandText: new UntypedFormControl(
+        {
+          value: (this.user as any).brandText || '',
+          disabled: !this.canEditBrandText,
+        },
+        [this.maxTrimmedLength(this.brandTextMaxLength)]
+      ),
       chartTheme: new UntypedFormControl(this.user.settings.chartSettings.theme, [
         Validators.required,
       ]),
@@ -299,7 +311,7 @@ export class UserSettingsComponent implements OnChanges {
         downSamplingLevel: this.userSettingsFormGroup.get('chartDownSamplingLevel').value,
       };
 
-      await this.userService.updateUserProperties(this.user, {
+      const propertiesToUpdate: any = {
         displayName: this.userSettingsFormGroup.get('displayName').value,
         privacy: this.userSettingsFormGroup.get('privacy').value,
         description: this.userSettingsFormGroup.get('description').value,
@@ -344,7 +356,15 @@ export class UserSettingsComponent implements OnChanges {
           },
           exportToCSVSettings: this.user.settings.exportToCSVSettings
         }
-      });
+      };
+
+      if (this.canEditBrandText) {
+        const rawBrandText = this.userSettingsFormGroup.get('brandText')?.value ?? '';
+        const trimmedBrandText = typeof rawBrandText === 'string' ? rawBrandText.trim() : '';
+        propertiesToUpdate.brandText = trimmedBrandText.length > 0 ? trimmedBrandText : null;
+      }
+
+      await this.userService.updateUserProperties(this.user, propertiesToUpdate);
       this.snackBar.open('User updated', undefined, {
         duration: 2000,
       });
@@ -368,6 +388,24 @@ export class UserSettingsComponent implements OnChanges {
         this.validateAllFormFields(control);
       }
     });
+  }
+
+  private maxTrimmedLength(maxLength: number): ValidatorFn {
+    return (control: AbstractControl): ValidationErrors | null => {
+      if (typeof control.value !== 'string') {
+        return null;
+      }
+      const trimmedLength = control.value.trim().length;
+      if (trimmedLength <= maxLength) {
+        return null;
+      }
+      return {
+        maxTrimmedLength: {
+          requiredLength: maxLength,
+          actualLength: trimmedLength,
+        },
+      };
+    };
   }
 
   public deleteUser(event: Event) {

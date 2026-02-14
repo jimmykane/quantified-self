@@ -161,6 +161,39 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('acceptedMarketingPolicy').value).toBe(false);
     });
 
+    it('should initialize brandText from user data', () => {
+        (component.user as any).stripeRole = 'basic';
+        (component.user as any).brandText = 'My Team';
+        component.ngOnChanges();
+
+        expect(component.userSettingsFormGroup.get('brandText').value).toBe('My Team');
+    });
+
+    it('should initialize brandText as empty string when user has no value', () => {
+        (component.user as any).stripeRole = 'basic';
+        delete (component.user as any).brandText;
+        component.ngOnChanges();
+
+        expect(component.userSettingsFormGroup.get('brandText').value).toBe('');
+    });
+
+    it('should allow brandText editing for basic and pro users and disable for free users', () => {
+        (component.user as any).stripeRole = 'basic';
+        component.ngOnChanges();
+        expect(component.canEditBrandText).toBe(true);
+        expect(component.userSettingsFormGroup.get('brandText').disabled).toBe(false);
+
+        (component.user as any).stripeRole = 'pro';
+        component.ngOnChanges();
+        expect(component.canEditBrandText).toBe(true);
+        expect(component.userSettingsFormGroup.get('brandText').disabled).toBe(false);
+
+        (component.user as any).stripeRole = 'free';
+        component.ngOnChanges();
+        expect(component.canEditBrandText).toBe(false);
+        expect(component.userSettingsFormGroup.get('brandText').disabled).toBe(true);
+    });
+
     it('should save acceptedTrackingPolicy when form is submitted', async () => {
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
@@ -203,6 +236,63 @@ describe('UserSettingsComponent', () => {
                 acceptedMarketingPolicy: true
             })
         );
+    });
+
+    it('should save trimmed brandText for paid users', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+
+        (component.user as any).stripeRole = 'basic';
+        component.ngOnChanges();
+        component.userSettingsFormGroup.get('brandText').setValue('  My Brand  ');
+
+        await component.onSubmit(new Event('submit'));
+
+        const payload = updateUserPropertiesSpy.mock.calls[0][1];
+        expect(payload.brandText).toBe('My Brand');
+    });
+
+    it('should save null brandText when paid user submits only whitespace', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+
+        (component.user as any).stripeRole = 'pro';
+        component.ngOnChanges();
+        component.userSettingsFormGroup.get('brandText').setValue('   ');
+
+        await component.onSubmit(new Event('submit'));
+
+        const payload = updateUserPropertiesSpy.mock.calls[0][1];
+        expect(payload.brandText).toBeNull();
+    });
+
+    it('should not include brandText in payload for free users', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+
+        (component.user as any).stripeRole = 'free';
+        component.ngOnChanges();
+        component.userSettingsFormGroup.get('brandText').setValue('Should Not Save');
+
+        await component.onSubmit(new Event('submit'));
+
+        const payload = updateUserPropertiesSpy.mock.calls[0][1];
+        expect(payload.brandText).toBeUndefined();
+    });
+
+    it('should reject brandText values longer than 30 chars after trim', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+
+        (component.user as any).stripeRole = 'basic';
+        component.ngOnChanges();
+        component.userSettingsFormGroup.get('brandText').setValue('A'.repeat(31));
+
+        expect(component.userSettingsFormGroup.get('brandText').hasError('maxTrimmedLength')).toBe(true);
+        expect(component.userSettingsFormGroup.valid).toBe(false);
+
+        await component.onSubmit(new Event('submit'));
+        expect(updateUserPropertiesSpy).not.toHaveBeenCalled();
     });
 
     it('should correctly save chart settings including visible metrics', async () => {

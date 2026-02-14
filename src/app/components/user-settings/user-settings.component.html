@@ -80,6 +80,28 @@
             <mat-hint>A brief description for your public profile.</mat-hint>
           </mat-form-field>
 
+          <mat-form-field appearance="outline">
+            <mat-label>Watermark Brand Text</mat-label>
+            <input
+              matInput
+              formControlName="brandText"
+              [maxlength]="brandTextMaxLength"
+              placeholder="Your brand on chart watermark">
+            <mat-hint>Shown on chart watermark. Leave empty to use default text.</mat-hint>
+            <mat-hint align="end">{{ ((userSettingsFormGroup.get('brandText')?.value || '').trim().length) }}/{{ brandTextMaxLength }}</mat-hint>
+            @if (userSettingsFormGroup.get('brandText')?.hasError('maxTrimmedLength')) {
+            <mat-error>Use at most {{ brandTextMaxLength }} characters.</mat-error>
+            }
+          </mat-form-field>
+
+          @if (!canEditBrandText) {
+          <div class="brand-text-upgrade">
+            <mat-icon>lock</mat-icon>
+            <span>Custom watermark text is available on Basic and Pro plans.</span>
+            <a mat-stroked-button color="primary" routerLink="/subscriptions">Upgrade Plan</a>
+          </div>
+          }
+
         </div>
       </mat-card>
 
