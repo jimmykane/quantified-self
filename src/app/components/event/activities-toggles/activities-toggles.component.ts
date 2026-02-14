@@ -15,6 +15,7 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { AppEventService } from '../../../services/app.event.service';
 import { DeviceNameEditDialogComponent } from './device-name-edit-dialog/device-name-edit-dialog.component';
 import { firstValueFrom } from 'rxjs';
+import { LoggerService } from '../../../services/logger.service';
 
 @Component({
   selector: 'app-activities-toggles',
@@ -35,6 +36,7 @@ export class ActivitiesTogglesComponent implements OnInit {
   private dialog = inject(MatDialog);
   private snackBar = inject(MatSnackBar);
   private eventService = inject(AppEventService);
+  private logger = inject(LoggerService);
   public activitySelectionService = inject(AppActivitySelectionService);
   public eventColorService = inject(AppEventColorService);
 
@@ -85,10 +87,20 @@ export class ActivitiesTogglesComponent implements OnInit {
     const user = this.user();
     const event = this.event();
     if (!user || !event) {
+      this.logger.warn('[ActivitiesToggles] Rename aborted: missing user or event', {
+        hasUser: !!user,
+        hasEvent: !!event,
+      });
       return;
     }
 
     const currentName = `${activity.creator?.name ?? ''}`.trim();
+    this.logger.log('[ActivitiesToggles] Opening rename dialog', {
+      eventID: event.getID(),
+      activityID: activity.getID(),
+      currentName,
+      swInfo: activity.creator?.swInfo || '',
+    });
     const dialogRef = this.dialog.open(DeviceNameEditDialogComponent, {
       width: '420px',
       data: {
@@ -100,6 +112,10 @@ export class ActivitiesTogglesComponent implements OnInit {
 
     const newName = await firstValueFrom(dialogRef.afterClosed());
     if (!newName) {
+      this.logger.log('[ActivitiesToggles] Rename canceled or empty result', {
+        eventID: event.getID(),
+        activityID: activity.getID(),
+      });
       return;
     }
 
@@ -107,13 +123,23 @@ export class ActivitiesTogglesComponent implements OnInit {
     activity.creator.name = newName;
 
     try {
+      this.logger.log('[ActivitiesToggles] Persisting rename', {
+        eventID: event.getID(),
+        activityID: activity.getID(),
+        previousName,
+        newName,
+      });
       event.addStat(new DataDeviceNames(event.getActivities().map((eventActivity) => eventActivity.creator?.name || '')));
-      await this.eventService.setActivity(user, event, activity);
-      await this.eventService.setEvent(user, event);
-      this.snackBar.open('Device name updated', undefined, { duration: 2000 });
-    } catch (error) {
+      await this.eventService.writeActivityAndEventData(user, event, activity);
+      this.snackBar.open('Device name updated', undefined, { duration: 2500 });
+      this.logger.log('[ActivitiesToggles] Rename persisted successfully', {
+        eventID: event.getID(),
+        activityID: activity.getID(),
+      });
+    } catch (activityWriteError) {
       activity.creator.name = previousName;
-      this.snackBar.open('Could not update device name', undefined, { duration: 3000 });
+      this.logger.error('[ActivitiesToggles] Could not update device name', activityWriteError);
+      this.snackBar.open('Could not update device name', undefined, { duration: 3500 });
     } finally {
       this.changeDetectorRef.markForCheck();
     }

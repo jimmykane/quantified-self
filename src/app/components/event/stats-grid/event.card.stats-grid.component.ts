@@ -39,7 +39,6 @@ export class EventCardStatsGridComponent implements OnChanges {
   public selectedTabIndex = 0;
   public showDiff = false;
   public diffByType = new Map<string, { display: string; percent: number; color: string }>();
-  private readonly verticalSpeedRegex = /vertical speed/i;
 
   private userSettingsQuery = inject(AppUserSettingsQueryService);
   private eventColorService = inject(AppEventColorService);
@@ -87,7 +86,6 @@ export class EventCardStatsGridComponent implements OnChanges {
       this.displayedStatsToShow = this.statsToShow;
       this.updateTabs();
       this.updateDiffMap();
-      this.logVerticalSpeedDebug('stats_override');
       this.logPerf('ng_on_changes_total', ngChangesStart, { usedStatsOverride: true });
       return;
     }
@@ -103,7 +101,6 @@ export class EventCardStatsGridComponent implements OnChanges {
 
     this.updateTabs();
     this.updateDiffMap();
-    this.logVerticalSpeedDebug('default_summary_types');
     this.logPerf('ng_on_changes_total', ngChangesStart, { usedStatsOverride: false });
   }
 
@@ -208,41 +205,6 @@ export class EventCardStatsGridComponent implements OnChanges {
     });
   }
 
-  private logVerticalSpeedDebug(source: 'default_summary_types' | 'stats_override') {
-    const eventActivities = this.event?.getActivities?.() || [];
-    const statsSource = this.getStatsSourceLabel(eventActivities.length);
-    const eventVerticalSpeedStats = statsSource === 'event_stats'
-      ? this.extractVerticalSpeedStats(this.getEventStats())
-      : [];
-    const selectedActivitiesVerticalSpeed = this.selectedActivities.map((activity, index) => ({
-      index,
-      activityType: activity?.type || '',
-      verticalSpeedStats: this.extractVerticalSpeedStats(this.getStatsForActivity(activity)),
-    }));
-
-    const payload = {
-      source,
-      eventId: this.event?.getID?.(),
-      isMerge: !!this.event?.isMerge,
-      selectedActivitiesCount: this.selectedActivities.length,
-      eventActivitiesCount: eventActivities.length,
-      statsSource,
-      requestedVerticalSpeedTypes: this.displayedStatsToShow.filter((type) => this.isVerticalSpeedType(type)),
-      mergedVerticalSpeedStats: this.extractVerticalSpeedStats(this.stats),
-      eventVerticalSpeedStats,
-      selectedActivitiesVerticalSpeed,
-      tabsVerticalSpeed: this.metricTabs
-        .map((tab) => ({
-          tabId: tab.id,
-          tabLabel: tab.label,
-          verticalMetricTypes: tab.metricTypes.filter((metricType) => this.isVerticalSpeedType(metricType)),
-        }))
-        .filter((tab) => tab.verticalMetricTypes.length > 0),
-    };
-
-    this.logger.info('[debug] event_summary_vertical_speed', payload);
-  }
-
   private getStatsSourceLabel(eventActivitiesCount: number): 'single_activity' | 'event_stats' | 'selected_activities_summary' {
     if (this.selectedActivities.length === 1) {
       return 'single_activity';
@@ -265,21 +227,6 @@ export class EventCardStatsGridComponent implements OnChanges {
       return [...eventStats.values()] as DataInterface[];
     }
     return [];
-  }
-
-  private extractVerticalSpeedStats(stats: DataInterface[]): Array<{ type: string; displayType: string; displayValue: string; displayUnit: string }> {
-    return (stats || [])
-      .filter((stat) => this.isVerticalSpeedType(this.getStatType(stat)))
-      .map((stat) => ({
-        type: this.getStatType(stat),
-        displayType: this.getSafeDisplayType(stat),
-        displayValue: this.getSafeDisplayValue(stat),
-        displayUnit: this.getSafeDisplayUnit(stat),
-      }));
-  }
-
-  private isVerticalSpeedType(type: string): boolean {
-    return !!type && this.verticalSpeedRegex.test(type);
   }
 
   private getStatType(stat: DataInterface): string {

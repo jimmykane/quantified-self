@@ -214,8 +214,7 @@ export class ActivityFormComponent implements OnInit {
         this.event.addStat(new DataActivityTypes(this.event.getActivities().map(activity => activity.type)));
       }
 
-      await this.eventService.setActivity(this.user, this.event, this.activity);
-      await this.eventService.setEvent(this.user, this.event);
+      await this.eventService.writeActivityAndEventData(this.user, this.event, this.activity);
 
       this.snackBar.open('Activity saved', undefined, {
         duration: 2000,

@@ -50,12 +50,11 @@ export class AppShareService {
         const watermark = document.createElement('div');
         watermark.className = 'benchmark-watermark';
         watermark.innerHTML = `
-          <div class="watermark-row">
-            ${logoUrl ? `<img class="watermark-logo" src="${logoUrl}" alt="${options.watermark.brand} logo">` : ''}
-            <span class="watermark-brand">${options.watermark.brand}</span>
+          ${options.watermark.brand ? `<div class="watermark-brand-line">${options.watermark.brand}</div>` : ''}
+          <div class="watermark-app-line">
+            ${logoUrl ? `<img class="watermark-logo" src="${logoUrl}" alt="Quantified Self logo">` : ''}
+            <span class="watermark-brand">Quantified Self</span>
           </div>
-          ${options.watermark.url ? `<span class="watermark-url">${options.watermark.url}</span>` : ''}
-          <span class="watermark-date">${options.watermark.timestamp}</span>
         `;
         this.applyAngularContentAttr(clone, watermark);
         clone.appendChild(watermark);
@@ -228,13 +227,9 @@ export class AppShareService {
         if (typeof img.decode === 'function') {
           try {
             await img.decode();
-            window.clearTimeout(timeoutId);
-            finish(true);
-            return;
           } catch {
-            window.clearTimeout(timeoutId);
-            finish(false);
-            return;
+            // Some browsers may reject decode() for otherwise renderable images.
+            // Since onload fired, keep the logo and let render fallback handle failures.
           }
         }
         window.clearTimeout(timeoutId);

@@ -46,6 +46,7 @@ import { getMetadata } from '@angular/fire/storage';
 import { AppCacheService } from './app.cache.service';
 import { BenchmarkEventAdapter } from './benchmark-event.adapter';
 import { SPORTS_LIB_VERSION } from '../constants/sports-lib-version.browser';
+import { buildActivityEditWritePayload, buildActivityWriteData, buildEventWriteData } from '../utils/activity-edit.persistence';
 
 export interface GetEventsOnceOptions {
   preferCache?: boolean;
@@ -579,19 +580,40 @@ export class AppEventService implements OnDestroy {
   }
 
   public async setEvent(user: User, event: EventInterface) {
-    return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, 'users', user.uid, 'events', event.getID()), event.toJSON()));
+    const eventData = buildEventWriteData(event);
+    return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, 'users', user.uid, 'events', event.getID()), eventData, { merge: true }));
   }
 
   public async setActivity(user: User, event: EventInterface, activity: ActivityInterface) {
-    const data = activity.toJSON() as any;
-    // Streams are persisted via original files; storing them here can create duplicate stream payloads.
-    delete data.streams;
-    data.eventID = event.getID();
-    data.userID = user.uid;
-    if (event.startDate) {
-      data.eventStartDate = event.startDate;
-    }
+    const data = buildActivityWriteData(user.uid, event, activity);
     return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, 'users', user.uid, 'activities', activity.getID()), data));
+  }
+
+  /**
+   * Atomic activity+event write for edit flows.
+   * This prevents partial success when updating both entities.
+   */
+  public async writeActivityAndEventData(user: User, event: EventInterface, activity: ActivityInterface): Promise<void> {
+    const { activityData, eventData } = buildActivityEditWritePayload(user.uid, event, activity);
+    return runInInjectionContext(this.injector, async () => {
+      this.logger.log('[AppEventService] writeActivityAndEventData begin', {
+        userID: user.uid,
+        eventID: event.getID(),
+        activityID: activity.getID(),
+      });
+      const batch = writeBatch(this.firestore);
+      const activityRef = doc(this.firestore, 'users', user.uid, 'activities', activity.getID());
+      const eventRef = doc(this.firestore, 'users', user.uid, 'events', event.getID());
+
+      batch.set(activityRef, activityData, { merge: true });
+      batch.set(eventRef, eventData, { merge: true });
+      await batch.commit();
+      this.logger.log('[AppEventService] writeActivityAndEventData committed', {
+        userID: user.uid,
+        eventID: event.getID(),
+        activityID: activity.getID(),
+      });
+    });
   }
 
   public async updateEventProperties(user: User, eventID: string, propertiesToUpdate: any) {
@@ -758,9 +780,22 @@ export class AppEventService implements OnDestroy {
             // Return what we actually want to return not the streams
             return event;
           }));
-      })).pipe(map(([newEvent]) => {
-        return newEvent;
-      }));
+      })).pipe(
+        map(([newEvent]) => {
+          return newEvent;
+        }),
+        catchError((error) => {
+          if (error?.code === 'permission-denied' || error?.message?.includes('Missing or insufficient permissions')) {
+            this.logger.warn('[attachStreamsLegacy] Legacy streams access denied; returning event without legacy streams', {
+              eventID: event.getID(),
+              error,
+            });
+            return of(event);
+          }
+          this.logger.error('[attachStreamsLegacy] Failed to attach streams; returning event as-is', error);
+          return of(event);
+        })
+      );
   }
 
   private async calculateStreamsFromWithOrchestration(event: AppEventInterface, skipEnrichment: boolean = false): Promise<EventInterface> {
@@ -783,6 +818,7 @@ export class AppEventService implements OnDestroy {
       finalEvent.getActivities().forEach((activity, index) => {
         if (existingActivities[index]) {
           activity.setID(existingActivities[index].getID());
+          this.applyUserActivityOverrides(existingActivities[index], activity);
         }
       });
 
@@ -801,10 +837,31 @@ export class AppEventService implements OnDestroy {
       res.getActivities().forEach((activity, index) => {
         if (existingActivities[index]) {
           activity.setID(existingActivities[index].getID());
+          this.applyUserActivityOverrides(existingActivities[index], activity);
         }
       });
     }
     return res;
+  }
+
+  /**
+   * Preserve user-edited fields from Firestore activity docs when source-file parsing rebuilds activities.
+   * Currently used for device rename persistence across reload.
+   */
+  private applyUserActivityOverrides(existingActivity: ActivityInterface, parsedActivity: ActivityInterface): void {
+    if (!existingActivity || !parsedActivity) return;
+
+    const existingCreatorName = `${existingActivity.creator?.name ?? ''}`.trim();
+    if (existingCreatorName && parsedActivity.creator) {
+      if (parsedActivity.creator.name !== existingCreatorName) {
+        this.logger.log('[AppEventService] Applying creator name override from Firestore activity', {
+          activityID: existingActivity.getID?.(),
+          from: parsedActivity.creator.name,
+          to: existingCreatorName,
+        });
+      }
+      parsedActivity.creator.name = existingCreatorName;
+    }
   }
 
   private cacheService = inject(AppCacheService);

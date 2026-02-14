@@ -15,6 +15,7 @@ section.grid {
 }
 
 .stat-item {
+  --stat-side-prefix-left: -24px;
   display: flex;
   flex-direction: row;
   align-items: flex-start;
@@ -172,7 +173,7 @@ section.grid {
 
 .stat-values-unit-prefix {
   position: absolute;
-  left: -24px;
+  left: var(--stat-side-prefix-left);
   top: 50%;
   transform: translate(-50%, -50%);
   font-size: 0.5rem;
@@ -219,7 +220,7 @@ section.grid {
 
 .stat-delta-prefix {
   position: absolute;
-  left: -24px;
+  left: var(--stat-side-prefix-left);
   top: 50%;
   transform: translate(-50%, -50%);
   font-size: 0.5rem;
@@ -288,6 +289,7 @@ section.condensed {
   }
 
   .stat-item {
+    --stat-side-prefix-left: -19px;
     padding: 8px 10px;
     gap: 11px;
     border-radius: 8px;

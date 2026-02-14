@@ -1,6 +1,7 @@
 import { Component, Inject, inject } from '@angular/core';
 import { FormBuilder, Validators } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
+import { LoggerService } from '../../../../services/logger.service';
 
 export interface DeviceNameEditDialogData {
   activityID: string;
@@ -18,6 +19,7 @@ export class DeviceNameEditDialogComponent {
   readonly minLength = 3;
   readonly maxLength = 20;
   private formBuilder = inject(FormBuilder);
+  private logger = inject(LoggerService);
 
   readonly form;
 
@@ -39,16 +41,32 @@ export class DeviceNameEditDialogComponent {
   }
 
   save(): void {
+    this.logger.log('[DeviceNameEditDialog] Save requested', {
+      activityID: this.data.activityID,
+      currentName: this.data.currentName,
+      swInfo: this.data.swInfo,
+      formValid: this.form.valid,
+    });
     if (!this.form.valid) {
+      this.logger.warn('[DeviceNameEditDialog] Form invalid, blocking save', {
+        errors: this.form.controls.deviceName.errors,
+      });
       this.form.markAllAsTouched();
       return;
     }
 
     const trimmedName = `${this.form.value.deviceName ?? ''}`.trim();
     if (!trimmedName || trimmedName === this.data.currentName) {
+      this.logger.warn('[DeviceNameEditDialog] Name unchanged or empty, blocking save', {
+        trimmedName,
+      });
       return;
     }
 
+    this.logger.log('[DeviceNameEditDialog] Closing dialog with new name', {
+      activityID: this.data.activityID,
+      newName: trimmedName,
+    });
     this.dialogRef.close(trimmedName);
   }
 

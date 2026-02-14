@@ -27,7 +27,7 @@ describe('ActivitiesTogglesComponent', () => {
   let fixture: ComponentFixture<ActivitiesTogglesComponent>;
 
   let mockDialog: { open: ReturnType<typeof vi.fn> };
-  let mockEventService: { setActivity: ReturnType<typeof vi.fn>; setEvent: ReturnType<typeof vi.fn> };
+  let mockEventService: { writeActivityAndEventData: ReturnType<typeof vi.fn> };
   let mockSnackBar: { open: ReturnType<typeof vi.fn> };
 
   const mockSelectionService = {
@@ -46,8 +46,7 @@ describe('ActivitiesTogglesComponent', () => {
   beforeEach(async () => {
     mockDialog = { open: vi.fn(() => ({ afterClosed: () => of(undefined) })) };
     mockEventService = {
-      setActivity: vi.fn().mockResolvedValue(undefined),
-      setEvent: vi.fn().mockResolvedValue(undefined),
+      writeActivityAndEventData: vi.fn().mockResolvedValue(undefined),
     };
     mockSnackBar = { open: vi.fn() };
 
@@ -72,6 +71,7 @@ describe('ActivitiesTogglesComponent', () => {
     const a2 = createActivity('a2', 'Wahoo', '222', '3.1');
 
     const event = {
+      getID: () => 'event-1',
       isMerge: true,
       getActivities: () => [a1, a2],
       addStat: vi.fn(),
@@ -95,7 +95,7 @@ describe('ActivitiesTogglesComponent', () => {
     const c2 = fixture2.componentInstance;
     const a1 = createActivity('a1', 'Garmin', '111');
     const a2 = createActivity('a2', 'Wahoo', '222');
-    const event = { isMerge: true, getActivities: () => [a1, a2], addStat: vi.fn() } as any;
+    const event = { getID: () => 'event-2', isMerge: true, getActivities: () => [a1, a2], addStat: vi.fn() } as any;
     fixture2.componentRef.setInput('event', event);
     fixture2.componentRef.setInput('selectedActivities', [a1, a2]);
     fixture2.componentRef.setInput('isOwner', false);
@@ -124,9 +124,20 @@ describe('ActivitiesTogglesComponent', () => {
     await component.renameDevice(a1);
 
     expect(a1.creator.name).toBe('Renamed Device');
-    expect(mockEventService.setActivity).toHaveBeenCalledWith(user, event, a1);
-    expect(mockEventService.setEvent).toHaveBeenCalledWith(user, event);
+    expect(mockEventService.writeActivityAndEventData).toHaveBeenCalledWith(user, event, a1);
     expect(event.addStat).toHaveBeenCalledTimes(1);
+  });
+
+  it('rolls back renamed device name when transactional write fails', async () => {
+    const { a1 } = setupInputs(true);
+    mockDialog.open.mockReturnValue({ afterClosed: () => of('Renamed Device') });
+    mockEventService.writeActivityAndEventData.mockRejectedValueOnce(new Error('transaction write failed'));
+
+    await component.renameDevice(a1);
+
+    expect(a1.creator.name).toBe('Garmin');
+    expect(mockEventService.writeActivityAndEventData).toHaveBeenCalledTimes(1);
+    expect(mockSnackBar.open).toHaveBeenCalledWith('Could not update device name', undefined, { duration: 3500 });
   });
 
   it('renameDevice does nothing when dialog returns cancel/invalid value', async () => {
@@ -138,8 +149,7 @@ describe('ActivitiesTogglesComponent', () => {
     mockDialog.open.mockReturnValueOnce({ afterClosed: () => of('') });
     await component.renameDevice(a1);
 
-    expect(mockEventService.setActivity).not.toHaveBeenCalled();
-    expect(mockEventService.setEvent).not.toHaveBeenCalled();
+    expect(mockEventService.writeActivityAndEventData).not.toHaveBeenCalled();
     expect(event.addStat).not.toHaveBeenCalled();
   });
 });

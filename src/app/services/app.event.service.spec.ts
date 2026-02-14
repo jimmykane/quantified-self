@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { Firestore, doc, docData, collection, collectionData, deleteDoc, setDoc } from '@angular/fire/firestore';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc, setDoc, writeBatch } from '@angular/fire/firestore';
 import { Storage } from '@angular/fire/storage';
 import { Auth } from '@angular/fire/auth';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -10,7 +10,7 @@ import { AppFileService } from './app.file.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
-import { of, firstValueFrom } from 'rxjs';
+import { of, firstValueFrom, throwError } from 'rxjs';
 import { AppCacheService } from './app.cache.service';
 import { getMetadata } from '@angular/fire/storage';
 import { webcrypto } from 'node:crypto';
@@ -34,6 +34,8 @@ const mocks = vi.hoisted(() => {
         sanitize: vi.fn(),
         getCountFromServer: vi.fn(),
         getBytes: vi.fn(),
+        batchSet: vi.fn(),
+        batchCommit: vi.fn(),
     };
 });
 
@@ -50,6 +52,10 @@ vi.mock('@angular/fire/firestore', async (importOriginal) => {
         where: vi.fn(),
         deleteDoc: vi.fn(),
         setDoc: vi.fn(),
+        writeBatch: vi.fn(() => ({
+            set: mocks.batchSet,
+            commit: mocks.batchCommit,
+        })),
         getCountFromServer: mocks.getCountFromServer,
         runInInjectionContext: vi.fn((injector, fn) => fn()),
     };
@@ -163,6 +169,7 @@ describe('AppEventService', () => {
             toJSON: vi.fn().mockReturnValue({})
         });
         mocks.getCountFromServer.mockResolvedValue({ data: () => ({ count: 0 }) });
+        mocks.batchCommit.mockResolvedValue(undefined);
         mocks.writeAllEventData.mockResolvedValue(true);
 
         // Polyfills
@@ -473,6 +480,103 @@ describe('AppEventService', () => {
         expect(writtenPayload.eventStartDate).toEqual(event.startDate);
     });
 
+    it('should preserve original file metadata and merge on setEvent', async () => {
+        const user = { uid: 'user1' } as any;
+        const event = {
+            getID: () => 'event1',
+            toJSON: () => ({ name: 'My Event' }),
+            originalFiles: [{ path: 'users/user1/events/event1/original.fit', startDate: new Date('2026-01-01T00:00:00.000Z') }],
+            originalFile: { path: 'users/user1/events/event1/original.fit', startDate: new Date('2026-01-01T00:00:00.000Z') },
+        } as any;
+
+        (doc as Mock).mockReturnValue({});
+        (setDoc as Mock).mockResolvedValue(undefined);
+
+        await service.setEvent(user, event);
+
+        expect(setDoc).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({
+                name: 'My Event',
+                originalFiles: event.originalFiles,
+                originalFile: event.originalFile,
+            }),
+            { merge: true }
+        );
+    });
+
+    it('should atomically write activity and event in writeActivityAndEventData', async () => {
+        const user = { uid: 'user1' } as any;
+        const event = {
+            getID: () => 'event1',
+            startDate: new Date('2026-01-01T00:00:00.000Z'),
+            toJSON: () => ({ name: 'My Event' }),
+            originalFile: { path: 'users/user1/events/event1/original.fit', startDate: new Date('2026-01-01T00:00:00.000Z') },
+        } as any;
+        const activity = {
+            getID: () => 'activity1',
+            toJSON: () => ({
+                creator: { name: 'Device A' },
+                streams: [{ type: 'Pace', values: [1, 2, 3] }]
+            }),
+        } as any;
+
+        (doc as Mock).mockReturnValue({});
+
+        await service.writeActivityAndEventData(user, event, activity);
+
+        expect(writeBatch).toHaveBeenCalledTimes(1);
+        expect(mocks.batchSet).toHaveBeenCalledTimes(2);
+        expect(mocks.batchSet).toHaveBeenNthCalledWith(
+            1,
+            expect.anything(),
+            expect.objectContaining({
+                creator: { name: 'Device A' },
+                userID: 'user1',
+                eventID: 'event1',
+                eventStartDate: event.startDate,
+            }),
+            { merge: true }
+        );
+        const firstPayload = mocks.batchSet.mock.calls[0][1];
+        expect(firstPayload.streams).toBeUndefined();
+
+        expect(mocks.batchSet).toHaveBeenNthCalledWith(
+            2,
+            expect.anything(),
+            expect.objectContaining({
+                name: 'My Event',
+                originalFile: event.originalFile,
+            }),
+            { merge: true }
+        );
+        expect(mocks.batchCommit).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return event as-is when legacy stream access is denied', async () => {
+        const user = { uid: 'user1' } as any;
+        const activity = {
+            getID: () => 'activity1',
+            clearStreams: vi.fn(),
+            addStreams: vi.fn(),
+        } as any;
+        const event = {
+            getID: () => 'event1',
+            getActivities: () => [activity],
+        } as any;
+
+        vi.spyOn(service, 'getAllStreams').mockReturnValue(
+            throwError(() => ({ code: 'permission-denied', message: 'Missing or insufficient permissions' })) as any
+        );
+
+        const result = await firstValueFrom((service as any).attachStreamsLegacy(user, event));
+        expect(result).toBe(event);
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+            '[attachStreamsLegacy] Legacy streams access denied; returning event without legacy streams',
+            expect.objectContaining({ eventID: 'event1' })
+        );
+    });
+
     it('should call EventWriter in writeAllEventData', async () => {
         const mockEvent = {
             getID: () => '1',
@@ -740,6 +844,38 @@ describe('AppEventService', () => {
 
             expect(result).toBe(parsedEvent);
             expect(parsedActivity.setID).toHaveBeenCalledWith(activityId);
+        });
+
+        it('should preserve renamed creator name from existing activity during client-side parsing', async () => {
+            const activityId = 'act1';
+
+            const existingActivity = {
+                getID: vi.fn().mockReturnValue(activityId),
+                creator: { name: 'Renamed Device' },
+            } as any;
+
+            const mockEvent = {
+                getActivities: vi.fn().mockReturnValue([existingActivity]),
+                originalFile: { path: 'path/to/file.fit' },
+                getID: vi.fn().mockReturnValue('event1')
+            } as any;
+
+            const parsedActivity = {
+                getID: vi.fn().mockReturnValue(null),
+                setID: vi.fn().mockReturnThis(),
+                creator: { name: 'Original Parsed Name' },
+            } as any;
+            const parsedEvent = {
+                getActivities: vi.fn().mockReturnValue([parsedActivity]),
+            } as any;
+
+            vi.spyOn(service as any, 'fetchAndParseOneFile').mockResolvedValue(parsedEvent);
+
+            const result = await (service as any).calculateStreamsFromWithOrchestration(mockEvent);
+
+            expect(result).toBe(parsedEvent);
+            expect(parsedActivity.setID).toHaveBeenCalledWith(activityId);
+            expect(parsedActivity.creator.name).toBe('Renamed Device');
         });
 
         it('should transfer activity IDs in merged events scenario (Multiple Files)', async () => {

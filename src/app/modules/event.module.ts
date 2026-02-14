@@ -31,6 +31,7 @@ import { BenchmarkSelectionDialogComponent } from '../components/benchmark/bench
 import { BenchmarkReportComponent } from '../components/benchmark/benchmark-report.component';
 import { BenchmarkBottomSheetComponent } from '../components/benchmark/benchmark-bottom-sheet.component';
 import { EventSectionHeaderComponent } from '../components/event/section-header/event.section-header.component';
+import { DeviceNameEditDialogComponent } from '../components/event/activities-toggles/device-name-edit-dialog/device-name-edit-dialog.component';
 
 @NgModule({
     imports: [
@@ -69,7 +70,8 @@ import { EventSectionHeaderComponent } from '../components/event/section-header/
         BenchmarkSelectionDialogComponent,
         BenchmarkReportComponent,
         BenchmarkBottomSheetComponent,
-        EventSectionHeaderComponent
+        EventSectionHeaderComponent,
+        DeviceNameEditDialogComponent,
     ]
 })
 
