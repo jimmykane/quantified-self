@@ -326,17 +326,18 @@ export class DataTypeIconComponent {
       case 'Maximum EHPE':
         return 'monitor_heart';
       case 'Flow':
-      case 'Average Flow':
       case 'Avg Flow':
       case 'Total Flow':
         return 'water';
+      case 'Average Flow':
+        return 'automation';
       case 'Grit':
       case 'Average Grit':
       case 'Avg Grit':
       case 'Total Grit':
-        return 'terrain';
+        return 'cheer';
       case DataJumpCount.type:
-        return 'format_list_numbered';
+        return '123';
       case DataJumpDistance.type:
       case DataJumpDistanceAvg.type:
       case DataJumpDistanceMin.type:
@@ -345,7 +346,7 @@ export class DataTypeIconComponent {
       case DataJumpHangTimeAvg.type:
       case DataJumpHangTimeMin.type:
       case DataJumpHangTimeMax.type:
-        return 'schedule';
+        return 'timer_arrow_up';
       case DataJumpHeightAvg.type:
       case DataJumpHeightMin.type:
       case DataJumpHeightMax.type:

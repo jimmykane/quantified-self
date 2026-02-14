@@ -150,11 +150,12 @@ describe('DataTypeIconComponent', () => {
     const component = new DataTypeIconComponent();
 
     expect(component.getColumnHeaderIcon('Flow')).toBe('water');
+    expect(component.getColumnHeaderIcon('Average Flow')).toBe('automation');
     expect(component.getColumnHeaderIcon('Avg Flow')).toBe('water');
     expect(component.getColumnHeaderIcon('Total Flow')).toBe('water');
-    expect(component.getColumnHeaderIcon('Grit')).toBe('terrain');
-    expect(component.getColumnHeaderIcon('Avg Grit')).toBe('terrain');
-    expect(component.getColumnHeaderIcon('Total Grit')).toBe('terrain');
+    expect(component.getColumnHeaderIcon('Grit')).toBe('cheer');
+    expect(component.getColumnHeaderIcon('Avg Grit')).toBe('cheer');
+    expect(component.getColumnHeaderIcon('Total Grit')).toBe('cheer');
   });
 
   it('should provide icon mappings for FTP', () => {
@@ -168,7 +169,7 @@ describe('DataTypeIconComponent', () => {
   it('should provide icon mapping for Jump Count', () => {
     const component = new DataTypeIconComponent();
 
-    expect(component.getColumnHeaderIcon(DataJumpCount.type)).toBe('format_list_numbered');
+    expect(component.getColumnHeaderIcon(DataJumpCount.type)).toBe('123');
   });
 
   it('should provide icon mappings for jump stat families', () => {
@@ -178,9 +179,9 @@ describe('DataTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon(DataJumpDistanceAvg.type)).toBe('straighten');
     expect(component.getColumnHeaderIcon(DataJumpDistanceMin.type)).toBe('straighten');
     expect(component.getColumnHeaderIcon(DataJumpDistanceMax.type)).toBe('straighten');
-    expect(component.getColumnHeaderIcon(DataJumpHangTimeAvg.type)).toBe('schedule');
-    expect(component.getColumnHeaderIcon(DataJumpHangTimeMin.type)).toBe('schedule');
-    expect(component.getColumnHeaderIcon(DataJumpHangTimeMax.type)).toBe('schedule');
+    expect(component.getColumnHeaderIcon(DataJumpHangTimeAvg.type)).toBe('timer_arrow_up');
+    expect(component.getColumnHeaderIcon(DataJumpHangTimeMin.type)).toBe('timer_arrow_up');
+    expect(component.getColumnHeaderIcon(DataJumpHangTimeMax.type)).toBe('timer_arrow_up');
     expect(component.getColumnHeaderIcon(DataJumpHeightAvg.type)).toBe('height');
     expect(component.getColumnHeaderIcon(DataJumpHeightMin.type)).toBe('height');
     expect(component.getColumnHeaderIcon(DataJumpHeightMax.type)).toBe('height');
