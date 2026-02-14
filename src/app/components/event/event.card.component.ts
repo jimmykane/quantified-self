@@ -10,7 +10,7 @@ import {
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { debounceTime } from 'rxjs/operators';
-import { firstValueFrom, Subscription } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { AppEventInterface } from '../../../../functions/src/shared/app-event.interface';
@@ -72,8 +72,7 @@ export class EventCardComponent implements OnInit {
   public selectedActivitiesDebounced = signal<ActivityInterface[]>([]);
   public isDownloading = signal<boolean>(false);
   public targetUserID = signal<string>('');
-  private liveSyncSubscription: Subscription | null = null;
-  private liveSyncRouteKey: string | null = null;
+  private liveSyncStarted = false;
   private liveReloadInProgress = false;
 
   // Computed signals for template - replaces method calls
@@ -167,7 +166,10 @@ export class EventCardComponent implements OnInit {
         this.syncSelectedActivities(activities);
 
         this.targetUserID.set(this.route.snapshot.paramMap.get('userID') ?? '');
-        this.startEventDetailsLiveSync();
+        if (!this.liveSyncStarted) {
+          this.liveSyncStarted = true;
+          this.startEventDetailsLiveSync();
+        }
       });
 
     // User auth subscription
@@ -182,24 +184,10 @@ export class EventCardComponent implements OnInit {
     const eventID = this.route.snapshot.paramMap.get('eventID');
     const targetUserID = this.route.snapshot.paramMap.get('userID');
     if (!eventID || !targetUserID) {
-      this.liveSyncSubscription?.unsubscribe();
-      this.liveSyncSubscription = null;
-      this.liveSyncRouteKey = null;
       return;
     }
 
-    const liveSyncRouteKey = `${targetUserID}:${eventID}`;
-    if (
-      this.liveSyncRouteKey === liveSyncRouteKey
-      && this.liveSyncSubscription
-      && !this.liveSyncSubscription.closed
-    ) {
-      return;
-    }
-
-    this.liveSyncSubscription?.unsubscribe();
-    this.liveSyncRouteKey = liveSyncRouteKey;
-    this.liveSyncSubscription = this.eventService.getEventDetailsLive(new User(targetUserID), eventID)
+    this.eventService.getEventDetailsLive(new User(targetUserID), eventID)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (liveEvent) => this.applyLiveEventUpdate(liveEvent),
