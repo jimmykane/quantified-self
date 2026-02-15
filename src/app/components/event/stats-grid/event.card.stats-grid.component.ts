@@ -20,6 +20,7 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { buildDiffMapForStats } from '../../../helpers/stats-diff.helper';
 import { getDefaultSummaryStatTypes } from '../../../helpers/summary-stats.helper';
 import { LoggerService } from '../../../services/logger.service';
+import { AppBreakpoints } from '../../../constants/breakpoints';
 import {
   EVENT_SUMMARY_DEFAULT_GROUP_ID,
   EventSummaryMetricGroupId,
@@ -48,8 +49,6 @@ const SUMMARY_TAB_ICONS: Record<EventSummaryMetricGroupId, string> = {
 })
 
 export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, OnDestroy {
-  private static readonly MOBILE_BREAKPOINT_MEDIA_QUERY = '(max-width: 599px)';
-
   @ViewChild('summaryTabGroup', { read: ElementRef }) summaryTabGroupRef?: ElementRef<HTMLElement>;
   @Input() event!: EventInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
@@ -345,7 +344,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       return null;
     }
 
-    return window.matchMedia(EventCardStatsGridComponent.MOBILE_BREAKPOINT_MEDIA_QUERY);
+    return window.matchMedia(AppBreakpoints.XSmall);
   }
 
   private isMobileViewport(): boolean {

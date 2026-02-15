@@ -32,7 +32,7 @@
   min-height: var(--summary-tabs-body-min-height, 0px);
 }
 
-@media (max-width: 599px) {
+@media (max-width: 599.98px) {
   .summary-tab-label {
     justify-content: center;
   }
