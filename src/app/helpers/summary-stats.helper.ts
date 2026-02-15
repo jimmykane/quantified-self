@@ -57,6 +57,11 @@ const normalizeActivityType = (activityType: ActivityTypes): ActivityTypes => {
     || activityType;
 };
 
+const toNormalizedActivityTypeLookupKey = (activityType: string): string => {
+  const normalizedType = normalizeActivityType(activityType as ActivityTypes);
+  return typeof normalizedType === 'string' ? normalizedType.trim().toLowerCase() : '';
+};
+
 const resolvePreferredSpeedDerivedAverageTypesForActivity = (activityType: ActivityTypes): string[] => {
   const metrics = ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(activityType) || [];
   const hasPaceMetric = metrics.includes(DataPaceAvg.type);
@@ -80,6 +85,27 @@ export const getDefaultSummaryStatTypes = (
 ): string[] => {
   const normalizedActivityTypes = activityTypes
     .map((activityType) => normalizeActivityType(activityType));
+  const normalizedActivityTypeLookupKeys = new Set(
+    normalizedActivityTypes
+      .map((activityType) => toNormalizedActivityTypeLookupKey(activityType))
+      .filter((activityType) => !!activityType)
+  );
+  const configuredAscentExclusionKeys = new Set(
+    (summariesSettings?.removeAscentForEventTypes || [])
+      .map((activityType) => toNormalizedActivityTypeLookupKey(activityType))
+      .filter((activityType) => !!activityType)
+  );
+  const configuredDescentExclusionKeys = new Set(
+    (summariesSettings?.removeDescentForEventTypes || [])
+      .map((activityType) => toNormalizedActivityTypeLookupKey(activityType))
+      .filter((activityType) => !!activityType)
+  );
+  const shouldExcludeAscentFromSettings = Array
+    .from(configuredAscentExclusionKeys)
+    .some((activityType) => normalizedActivityTypeLookupKeys.has(activityType));
+  const shouldExcludeDescentFromSettings = Array
+    .from(configuredDescentExclusionKeys)
+    .some((activityType) => normalizedActivityTypeLookupKeys.has(activityType));
 
   const speedDerivedAverageTypes = normalizedActivityTypes.reduce((speedMetricsAccu: string[], activityType: ActivityTypes) => {
     const metrics = resolvePreferredSpeedDerivedAverageTypesForActivity(activityType);
@@ -97,7 +123,7 @@ export const getDefaultSummaryStatTypes = (
     if (statType === DataAscent.type) {
       if (
         AppEventUtilities.shouldExcludeAscent(normalizedActivityTypes)
-        || (summariesSettings?.removeAscentForEventTypes || []).some((type: string) => (normalizedActivityTypes as string[]).includes(type))
+        || shouldExcludeAscentFromSettings
       ) {
         return statsAccu;
       }
@@ -105,7 +131,7 @@ export const getDefaultSummaryStatTypes = (
     if (statType === DataDescent.type) {
       if (
         AppEventUtilities.shouldExcludeDescent(normalizedActivityTypes)
-        || (summariesSettings?.removeDescentForEventTypes || []).some((type: string) => (normalizedActivityTypes as string[]).includes(type))
+        || shouldExcludeDescentFromSettings
       ) {
         return statsAccu;
       }

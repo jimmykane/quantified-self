@@ -133,4 +133,14 @@ describe('getDefaultSummaryStatTypes', () => {
     expect(stats).not.toContain(DataAscent.type);
     expect(stats).not.toContain(DataDescent.type);
   });
+
+  it('should exclude ascent and descent for non-canonical configured activity types', () => {
+    const stats = getDefaultSummaryStatTypes([ActivityTypes.Cycling], {
+      removeAscentForEventTypes: [' cycling '],
+      removeDescentForEventTypes: ['CYCLING'],
+    });
+
+    expect(stats).not.toContain(DataAscent.type);
+    expect(stats).not.toContain(DataDescent.type);
+  });
 });
