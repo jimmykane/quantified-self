@@ -1,6 +1,5 @@
 import { inject, Injectable, Injector, OnDestroy, runInInjectionContext } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib';
-import { ActivityParsingOptions } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, of, throwError, zip } from 'rxjs';
 import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, CollectionReference, Query, QuerySnapshot, DocumentData, getCountFromServer } from '@angular/fire/firestore';
@@ -21,6 +20,7 @@ import { EventExporterGPX } from '@sports-alliance/sports-lib';
 
 import { EventWriter, FirestoreAdapter, StorageAdapter, OriginalFile } from '../../../functions/src/shared/event-writer';
 import { generateActivityID, generateEventID } from '../../../functions/src/shared/id-generator';
+import { createParsingOptions } from '../../../functions/src/shared/parsing-options';
 import { Bytes, serverTimestamp } from 'firebase/firestore';
 import { Storage, ref, uploadBytes, getBytes } from '@angular/fire/storage';
 import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
@@ -1017,9 +1017,7 @@ export class AppEventService implements OnDestroy {
 
       let newEvent: EventInterface;
 
-      const options = new ActivityParsingOptions({
-        generateUnitStreams: false
-      });
+      const options = createParsingOptions();
 
       if (extension === 'fit') {
         newEvent = await EventImporterFIT.getFromArrayBuffer(arrayBuffer, options);

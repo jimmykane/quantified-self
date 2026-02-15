@@ -5,7 +5,7 @@ import { AppFileService } from '../../../services/app.file.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { EventInterface, ActivityParsingOptions } from '@sports-alliance/sports-lib';
+import { EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
@@ -18,6 +18,7 @@ import { AppProcessingService } from '../../../services/app.processing.service';
 import { Overlay } from '@angular/cdk/overlay';
 import { USAGE_LIMITS } from '../../../../../functions/src/shared/limits';
 import { LoggerService } from '../../../services/logger.service';
+import { createParsingOptions } from '../../../../../functions/src/shared/parsing-options';
 
 
 import { EventJSONSanitizer } from '../../../utils/event-json-sanitizer';
@@ -82,9 +83,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
         if (fileReaderResult instanceof ArrayBuffer) {
           fileReaderResult = await this.fileService.decompressIfNeeded(fileReaderResult as ArrayBuffer);
         }
-        const options = new ActivityParsingOptions({
-          generateUnitStreams: false
-        });
+        const options = createParsingOptions();
         try {
           if ((fileReaderResult instanceof ArrayBuffer) && file.extension === 'fit') {
             newEvent = await EventImporterFIT.getFromArrayBuffer(fileReaderResult, options);

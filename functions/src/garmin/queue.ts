@@ -18,9 +18,9 @@ import { EventImporterTCX } from '@sports-alliance/sports-lib';
 import * as xmldom from 'xmldom';
 import {
   GarminAPIEventMetaData,
-  ActivityParsingOptions,
 } from '@sports-alliance/sports-lib';
 import { uploadDebugFile } from '../debug-utils';
+import { createParsingOptions } from '../shared/parsing-options';
 
 interface RequestError extends Error {
   statusCode?: number;
@@ -165,11 +165,11 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
     let event;
     switch (queueItem.activityFileType) {
       case 'FIT':
-        event = await EventImporterFIT.getFromArrayBuffer(result, new ActivityParsingOptions({ generateUnitStreams: false }));
+        event = await EventImporterFIT.getFromArrayBuffer(result, createParsingOptions());
         break;
       case 'GPX':
         try {
-          event = await EventImporterGPX.getFromString(result, xmldom.DOMParser, new ActivityParsingOptions({ generateUnitStreams: false }));
+          event = await EventImporterGPX.getFromString(result, xmldom.DOMParser, createParsingOptions());
         } catch {
           logger.error('Could not decode as GPX trying as FIT');
         }
@@ -186,11 +186,14 @@ export async function processGarminAPIActivityQueueItem(queueItem: GarminAPIActi
           });
           logger.info('Ending timer: DownloadFileRetry');
           logger.info(`Downloaded ${queueItem.activityFileType} (retry as FIT) for ${queueItem.id}`);
-          event = await EventImporterFIT.getFromArrayBuffer(result, new ActivityParsingOptions({ generateUnitStreams: false }));
+          event = await EventImporterFIT.getFromArrayBuffer(result, createParsingOptions());
         }
         break;
       case 'TCX':
-        event = await EventImporterTCX.getFromXML(new xmldom.DOMParser().parseFromString(result, 'application/xml'), new ActivityParsingOptions({ generateUnitStreams: false }));
+        event = await EventImporterTCX.getFromXML(
+          new xmldom.DOMParser().parseFromString(result, 'application/xml'),
+          createParsingOptions(),
+        );
         break;
     }
     event.name = event.startDate.toJSON(); // @todo improve

@@ -175,6 +175,7 @@ export class AppOriginalFileHydrationService {
       const extension = this.getNormalizedExtensionFromPath(fileMeta.path);
       const options = new ActivityParsingOptions({
         generateUnitStreams: false,
+        deviceInfoMode: 'changes',
       });
       let newEvent: EventInterface;
 
