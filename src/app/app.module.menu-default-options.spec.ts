@@ -6,7 +6,7 @@ describe('AppModule menu defaults', () => {
   it('exports the expected default menu options', () => {
     expect(QS_MENU_DEFAULT_OPTIONS).toEqual({
       overlayPanelClass: 'qs-menu-panel',
-      hasBackdrop: false,
+      hasBackdrop: true,
       overlapTrigger: false,
       xPosition: 'after',
       yPosition: 'below',

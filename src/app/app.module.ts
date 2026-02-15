@@ -45,7 +45,7 @@ import { APP_STORAGE } from './services/storage/app.storage.token';
 
 export const QS_MENU_DEFAULT_OPTIONS: MatMenuDefaultOptions = {
   overlayPanelClass: 'qs-menu-panel',
-  hasBackdrop: false,
+  hasBackdrop: true,
   overlapTrigger: false,
   xPosition: 'after',
   yPosition: 'below',

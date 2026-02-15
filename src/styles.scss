@@ -886,6 +886,7 @@ tr.mat-row:focus,
 }
 
 .mat-mdc-menu-panel.qs-menu-panel .mat-mdc-menu-content {
+  @extend .qs-scrollbar;
   padding: 6px 0;
 }
 
