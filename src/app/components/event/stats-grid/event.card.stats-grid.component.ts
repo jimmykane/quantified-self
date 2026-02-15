@@ -186,7 +186,6 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       this.eventSummaryTabsLocalStorageService.setLastSelectedStatsTabId(selectedTabId);
     }
     this.applyGrowOnlyHeightFromSelectedTab(index);
-    this.logSecondTabSizeDiagnostics('tab_index_change', 'only_grow', this.summaryTabGroupRef?.nativeElement);
     this.scheduleTabBodyHeightSyncAfterTabSwitch();
   }
 
@@ -465,7 +464,6 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     const maxHeight = Array.from(tabBodyContents).reduce((currentMax, tabBodyContent) => {
       return Math.max(currentMax, this.getIntrinsicTabBodyContentHeight(tabBodyContent));
     }, 0);
-    this.logSecondTabSizeDiagnostics('sync_tab_body_height', mode, tabGroupElement, maxHeight);
 
     const heightDelta = Math.abs(maxHeight - this.lastAppliedMinHeightPx);
     if (heightDelta === 0) {
@@ -537,74 +535,6 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
 
     this.lastAppliedMinHeightPx = selectedTabHeight;
     tabGroupElement.style.setProperty('--summary-tabs-body-min-height', `${selectedTabHeight}px`);
-  }
-
-  private logSecondTabSizeDiagnostics(
-    context: string,
-    mode: TabBodyHeightSyncMode,
-    tabGroupElement?: HTMLElement,
-    computedMaxHeight?: number
-  ) {
-    if (!tabGroupElement) {
-      this.logger.info('[debug] event_card_stats_grid_second_tab_sizes', {
-        context,
-        mode,
-        hasTabGroup: false,
-        selectedTabIndex: this.selectedTabIndex,
-      });
-      return;
-    }
-
-    const tabBodyContents = tabGroupElement.querySelectorAll<HTMLElement>('.mat-mdc-tab-body-content');
-    const secondTabBody = tabBodyContents[1];
-    const wrapper = tabGroupElement.querySelector<HTMLElement>('.mat-mdc-tab-body-wrapper');
-    const activeTabBodyContent = tabGroupElement.querySelector<HTMLElement>('.mat-mdc-tab-body-active .mat-mdc-tab-body-content');
-    const activeTabIndex = activeTabBodyContent ? Array.from(tabBodyContents).indexOf(activeTabBodyContent) : -1;
-
-    if (!secondTabBody) {
-      this.logger.info('[debug] event_card_stats_grid_second_tab_sizes', {
-        context,
-        mode,
-        hasTabGroup: true,
-        tabCount: tabBodyContents.length,
-        selectedTabIndex: this.selectedTabIndex,
-        activeTabIndex,
-        hasSecondTab: false,
-        computedMaxHeight: computedMaxHeight ?? null,
-        lastAppliedMinHeightPx: this.lastAppliedMinHeightPx,
-        cssVarMinHeight: tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height') || null,
-      });
-      return;
-    }
-
-    const secondContentRoot = secondTabBody.firstElementChild as HTMLElement | null;
-    const secondRect = secondTabBody.getBoundingClientRect();
-    const secondContentRect = secondContentRoot?.getBoundingClientRect();
-    const secondIntrinsicHeight = this.getIntrinsicTabBodyContentHeight(secondTabBody);
-
-    this.logger.info('[debug] event_card_stats_grid_second_tab_sizes', {
-      context,
-      mode,
-      selectedTabIndex: this.selectedTabIndex,
-      activeTabIndex,
-      tabCount: tabBodyContents.length,
-      computedMaxHeight: computedMaxHeight ?? null,
-      lastAppliedMinHeightPx: this.lastAppliedMinHeightPx,
-      cssVarMinHeight: tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height') || null,
-      wrapperClientHeight: wrapper?.clientHeight ?? null,
-      wrapperOffsetHeight: wrapper?.offsetHeight ?? null,
-      secondTab: {
-        scrollHeight: secondTabBody.scrollHeight,
-        intrinsicScrollHeight: secondIntrinsicHeight,
-        offsetHeight: secondTabBody.offsetHeight,
-        clientHeight: secondTabBody.clientHeight,
-        rectHeight: Number(secondRect.height.toFixed(2)),
-        contentScrollHeight: secondContentRoot?.scrollHeight ?? null,
-        contentOffsetHeight: secondContentRoot?.offsetHeight ?? null,
-        contentClientHeight: secondContentRoot?.clientHeight ?? null,
-        contentRectHeight: secondContentRect ? Number(secondContentRect.height.toFixed(2)) : null,
-      },
-    });
   }
 
   private setupTabBodyResizeObserver() {
