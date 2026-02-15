@@ -114,7 +114,7 @@ export class UserSettingsComponent implements OnChanges {
   }
 
   get canEditBrandText(): boolean {
-    return this.isProUser || this.isBasicUser;
+    return AppUserUtilities.hasPaidAccessUser(this.user, this.isAdminUser);
   }
 
   get userAvatarUrl(): string {
@@ -139,7 +139,10 @@ export class UserSettingsComponent implements OnChanges {
 
   ngOnChanges(): void {
     if (this.user) {
-      this.userService.isAdmin().then(isAdmin => this.isAdminUser = isAdmin);
+      this.userService.isAdmin().then(isAdmin => {
+        this.isAdminUser = isAdmin;
+        this.syncBrandTextControlState();
+      });
     }
     // Initialize the user settings and get the enabled ones
     const dataTypesToUse = Object.keys(this.user.settings.chartSettings.dataTypeSettings).filter((dataTypeSettingKey) => {
@@ -232,6 +235,8 @@ export class UserSettingsComponent implements OnChanges {
         Validators.required,
       ]),
     });
+
+    this.syncBrandTextControlState();
   }
 
   hasError(field?: string) {
@@ -388,6 +393,22 @@ export class UserSettingsComponent implements OnChanges {
         this.validateAllFormFields(control);
       }
     });
+  }
+
+  private syncBrandTextControlState(): void {
+    const brandTextControl = this.userSettingsFormGroup?.get('brandText');
+    if (!brandTextControl) return;
+
+    if (this.canEditBrandText) {
+      if (brandTextControl.disabled) {
+        brandTextControl.enable({ emitEvent: false });
+      }
+      return;
+    }
+
+    if (brandTextControl.enabled) {
+      brandTextControl.disable({ emitEvent: false });
+    }
   }
 
   private maxTrimmedLength(maxLength: number): ValidatorFn {

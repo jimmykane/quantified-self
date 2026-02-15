@@ -194,6 +194,15 @@ describe('UserSettingsComponent', () => {
         expect(component.userSettingsFormGroup.get('brandText').disabled).toBe(true);
     });
 
+    it('should allow brandText editing during active grace period', () => {
+        (component.user as any).stripeRole = 'free';
+        (component.user as any).gracePeriodUntil = Date.now() + 60_000;
+        component.ngOnChanges();
+
+        expect(component.canEditBrandText).toBe(true);
+        expect(component.userSettingsFormGroup.get('brandText').disabled).toBe(false);
+    });
+
     it('should save acceptedTrackingPolicy when form is submitted', async () => {
         const userService = TestBed.inject(AppUserService);
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
@@ -271,6 +280,7 @@ describe('UserSettingsComponent', () => {
         const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
 
         (component.user as any).stripeRole = 'free';
+        delete (component.user as any).gracePeriodUntil;
         component.ngOnChanges();
         component.userSettingsFormGroup.get('brandText').setValue('Should Not Save');
 
@@ -278,6 +288,21 @@ describe('UserSettingsComponent', () => {
 
         const payload = updateUserPropertiesSpy.mock.calls[0][1];
         expect(payload.brandText).toBeUndefined();
+    });
+
+    it('should save trimmed brandText during active grace period', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const updateUserPropertiesSpy = vi.spyOn(userService, 'updateUserProperties').mockResolvedValue(true as any);
+
+        (component.user as any).stripeRole = 'free';
+        (component.user as any).gracePeriodUntil = Date.now() + 60_000;
+        component.ngOnChanges();
+        component.userSettingsFormGroup.get('brandText').setValue('  Grace Brand  ');
+
+        await component.onSubmit(new Event('submit'));
+
+        const payload = updateUserPropertiesSpy.mock.calls[0][1];
+        expect(payload.brandText).toBe('Grace Brand');
     });
 
     it('should reject brandText values longer than 30 chars after trim', async () => {
