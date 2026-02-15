@@ -183,10 +183,33 @@
 /* Actions */
 .summary-actions {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
   flex: 0 0 auto;
   margin-left: auto;
+}
+
+.summary-actions-primary,
+.summary-actions-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+.summary-actions ::ng-deep .mat-mdc-icon-button {
+  --mdc-icon-button-state-layer-size: 36px;
+  width: 36px;
+  height: 36px;
+  padding: 6px;
+}
+
+.summary-actions ::ng-deep .mat-mdc-icon-button .mat-icon {
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
+  line-height: 20px;
 }
 
 .summary-stats-area {
@@ -200,10 +223,7 @@
 }
 
 .summary-stats-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 10px;
+  display: block;
   width: 100%;
 }
 
@@ -254,8 +274,8 @@
 
   .identity-section {
     gap: 12px;
-    padding-right: 48px;
-    /* Room for absolute actions */
+    padding-right: 116px;
+    /* Room for two action rows */
   }
 
   .activity-icon-container {
@@ -295,15 +315,26 @@
 
   .summary-actions {
     position: absolute;
-    top: 16px;
-    right: 16px;
-    flex-direction: row;
-    gap: 4px;
+    top: 12px;
+    right: 12px;
+    gap: 1px;
     margin: 0;
   }
 
-  .summary-actions ::ng-deep .mat-mdc-icon-button {
-    --mdc-icon-button-state-layer-size: 40px;
+  .summary-actions-primary ::ng-deep .mat-mdc-icon-button,
+  .summary-actions-secondary ::ng-deep .mat-mdc-icon-button {
+    --mdc-icon-button-state-layer-size: 32px;
+    width: 32px;
+    height: 32px;
+    padding: 4px;
+  }
+
+  .summary-actions-primary ::ng-deep .mat-mdc-icon-button .mat-icon,
+  .summary-actions-secondary ::ng-deep .mat-mdc-icon-button .mat-icon {
+    width: 18px;
+    height: 18px;
+    font-size: 18px;
+    line-height: 18px;
   }
 }
 
@@ -311,6 +342,10 @@
   .summary-primary-info {
     padding: 12px;
     gap: 12px;
+  }
+
+  .identity-section {
+    padding-right: 104px;
   }
 
   .hero-metrics {
@@ -327,44 +362,10 @@
   }
 }
 
-
-/* Stats Grid Action Buttons */
-.summary-stats-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 12px;
-  width: max-content;
-  justify-self: end;
-  position: sticky;
-  top: 16px;
-  z-index: 1;
-}
-
 .summary-stats-action-button {
   color: var(--mat-app-on-surface-variant);
 }
 
 .summary-stats-action-button:hover {
   color: var(--mat-app-primary);
-}
-
-@include bp.max-1024 {
-  .summary-stats-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .summary-stats-actions {
-    position: static;
-    width: auto;
-    flex-direction: row;
-    justify-content: flex-end;
-  }
-}
-
-@include bp.xsmall {
-  .summary-stats-actions {
-    width: 100%;
-    justify-content: flex-start;
-  }
 }

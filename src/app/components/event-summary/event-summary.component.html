@@ -42,19 +42,34 @@
     <!-- Right: Actions -->
     <div class="summary-actions">
       @if (isOwner) {
-      <button mat-icon-button (click)="openEditDetails()" matTooltip="Edit details">
-        <mat-icon>edit</mat-icon>
-      </button>
-      @if (event.isMerge && eventActivitiesCount >= 2) {
-      <button mat-icon-button (click)="openBenchmark()" matTooltip="Benchmark Analysis" class="benchmark-btn"
-        [matBadge]="benchmarkCount > 1 ? benchmarkCount : null" matBadgeColor="accent" matBadgeSize="small">
-        <mat-icon [class.has-result]="benchmarkCount > 0">
-          analytics
-        </mat-icon>
-      </button>
+      <div class="summary-actions-primary">
+        <button mat-icon-button (click)="openEditDetails()" matTooltip="Edit details">
+          <mat-icon>edit</mat-icon>
+        </button>
+        @if (event.isMerge && eventActivitiesCount >= 2) {
+        <button mat-icon-button (click)="openBenchmark()" matTooltip="Benchmark Analysis" class="benchmark-btn"
+          [matBadge]="benchmarkCount > 1 ? benchmarkCount : null" matBadgeColor="accent" matBadgeSize="small">
+          <mat-icon [class.has-result]="benchmarkCount > 0">
+            analytics
+          </mat-icon>
+        </button>
+        }
+        <app-event-actions [user]="user" [event]="event" [showDownloadOriginal]="true" align="end"></app-event-actions>
+      </div>
       }
-      <app-event-actions [user]="user" [event]="event" [showDownloadOriginal]="true" align="end"></app-event-actions>
-      }
+
+      <div class="summary-actions-secondary">
+        @if (hasDevices) {
+        <button mat-icon-button class="summary-stats-action-button devices-button" (click)="openDevices()"
+          matTooltip="View sensors & devices" aria-label="View sensors and devices">
+          <mat-icon>sensors</mat-icon>
+        </button>
+        }
+        <button mat-icon-button class="summary-stats-action-button show-more-button" (click)="openDetailedStats()"
+          matTooltip="Show more statistics" aria-label="Show more statistics">
+          <mat-icon>keyboard_double_arrow_down</mat-icon>
+        </button>
+      </div>
     </div>
   </div>
 
@@ -71,19 +86,6 @@
     <div class="summary-stats-layout">
       <div class="stats-container">
         <app-event-card-stats-grid [event]="event" [selectedActivities]="selectedActivities"></app-event-card-stats-grid>
-      </div>
-
-      <div class="summary-stats-actions">
-        @if (hasDevices) {
-        <button mat-icon-button class="summary-stats-action-button devices-button" (click)="openDevices()"
-          matTooltip="View sensors & devices" aria-label="View sensors and devices">
-          <mat-icon>sensors</mat-icon>
-        </button>
-        }
-        <button mat-icon-button class="summary-stats-action-button show-more-button" (click)="openDetailedStats()"
-          matTooltip="Show more statistics" aria-label="Show more statistics">
-          <mat-icon>keyboard_double_arrow_down</mat-icon>
-        </button>
       </div>
     </div>
 
