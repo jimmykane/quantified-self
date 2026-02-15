@@ -315,28 +315,42 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   // }
 
   async downloadJSON() {
-    const blob = await this.eventService.getEventAsJSONBloB(this.user, this.event as any);
-    this.fileService.downloadFile(
-      blob,
-      this.getFileName(this.event),
-      new EventExporterJSON().fileExtension,
-    );
-    this.snackBar.open('JSON file served', undefined, {
-      duration: 2000,
-    });
+    try {
+      const blob = await this.eventService.getEventAsJSONBloB(this.user, this.event as any);
+      this.fileService.downloadFile(
+        blob,
+        this.getFileName(this.event),
+        new EventExporterJSON().fileExtension,
+      );
+      this.snackBar.open('JSON file served', undefined, {
+        duration: 2000,
+      });
+    } catch (error) {
+      this.logger.error('[EventActionsComponent] Failed to download JSON from original files', error);
+      this.snackBar.open('Could not download JSON file', undefined, {
+        duration: 3000,
+      });
+    }
   }
 
   async downloadGPX() {
-    const blob = await this.eventService.getEventAsGPXBloB(this.user, this.event as any);
-    this.fileService.downloadFile(
-      blob,
-      this.getFileName(this.event),
-      new EventExporterGPX().fileExtension,
-    );
-    this.analyticsService.logEvent('downloaded_gpx_file');
-    this.snackBar.open('GPX file served', undefined, {
-      duration: 2000,
-    });
+    try {
+      const blob = await this.eventService.getEventAsGPXBloB(this.user, this.event as any);
+      this.fileService.downloadFile(
+        blob,
+        this.getFileName(this.event),
+        new EventExporterGPX().fileExtension,
+      );
+      this.analyticsService.logEvent('downloaded_gpx_file');
+      this.snackBar.open('GPX file served', undefined, {
+        duration: 2000,
+      });
+    } catch (error) {
+      this.logger.error('[EventActionsComponent] Failed to download GPX from original files', error);
+      this.snackBar.open('Could not download GPX file', undefined, {
+        duration: 3000,
+      });
+    }
   }
 
 

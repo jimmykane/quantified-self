@@ -203,6 +203,19 @@ describe('EventActionsComponent', () => {
             expect(args[0]).toBe(mockBlob);
             expect(args[2]).toBe('json');
         });
+
+        it('should show snackbar and avoid file download when JSON generation fails', async () => {
+            mockEventService.getEventAsJSONBloB.mockRejectedValue(new Error('hydrate failed'));
+
+            await component.downloadJSON();
+
+            expect(mockFileService.downloadFile).not.toHaveBeenCalled();
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Could not download JSON file',
+                undefined,
+                { duration: 3000 },
+            );
+        });
     });
 
     describe('downloadGPX', () => {
@@ -217,6 +230,19 @@ describe('EventActionsComponent', () => {
             const args = mockFileService.downloadFile.mock.calls[0];
             expect(args[0]).toBe(mockBlob);
             expect(args[2]).toBe('gpx');
+        });
+
+        it('should show snackbar and avoid file download when GPX generation fails', async () => {
+            mockEventService.getEventAsGPXBloB.mockRejectedValue(new Error('hydrate failed'));
+
+            await component.downloadGPX();
+
+            expect(mockFileService.downloadFile).not.toHaveBeenCalled();
+            expect(mockSnackBar.open).toHaveBeenCalledWith(
+                'Could not download GPX file',
+                undefined,
+                { duration: 3000 },
+            );
         });
     });
 

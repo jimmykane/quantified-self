@@ -8,7 +8,6 @@ import { catchError, map, switchMap, take, distinctUntilChanged, tap } from 'rxj
 import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
-import { StreamInterface } from '@sports-alliance/sports-lib';
 import { EventExporterJSON } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
 import { Privacy } from '@sports-alliance/sports-lib';
@@ -565,54 +564,6 @@ export class AppEventService implements OnDestroy {
     );
   }
 
-  /**
-   * @deprecated Streams are no longer stored in Firestore. Use attachStreamsToEventWithActivities instead.
-   */
-  public getAllStreams(user: User, eventID: string, activityID: string): Observable<StreamInterface[]> {
-    this.logger.warn('[AppEventService] getAllStreams is deprecated and will likely return empty results.');
-    const streamsCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'activities', activityID, 'streams'));
-    return from(runInInjectionContext(this.injector, () => getDocs(streamsCollection))) // @todo replace with snapshot changes I suppose when @https://github.com/angular/angularfire2/issues/1552 is fixed
-      .pipe(map((querySnapshot) => {
-        return querySnapshot.docs.map(queryDocumentSnapshot => this.processStreamQueryDocumentSnapshot(queryDocumentSnapshot))
-      }))
-  }
-
-  /**
-   * @deprecated Streams are no longer stored in Firestore. Use attachStreamsToEventWithActivities instead.
-   */
-  public getStream(user: User, eventID: string, activityID: string, streamType: string): Observable<StreamInterface> {
-    this.logger.warn('[AppEventService] getStream is deprecated and will likely return empty results.');
-    return from(runInInjectionContext(this.injector, () => getDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID, 'streams', streamType))))
-      .pipe(map((queryDocumentSnapshot) => {
-        // getDoc returns DocumentSnapshot, ensure data exists
-        if (!queryDocumentSnapshot.exists()) return null; // Handle missing stream
-        return this.processStreamDocumentSnapshot(queryDocumentSnapshot) // DocumentSnapshot is a DocumentData
-      }))
-  }
-
-  public getStreamsByTypes(userID: string, eventID: string, activityID: string, types: string[]): Observable<StreamInterface[]> {
-    types = [...new Set(types)]
-    // if >10 to be split into x batches of work and use merge due to firestore not taking only up to 10 in in operator
-    const batchSize = 10 // Firstore limitation
-    const x = types.reduce((all, one, i) => {
-      const ch = Math.floor(i / batchSize);
-      all[ch] = [].concat((all[ch] || []), one);
-      return all
-    }, []).map((typesBatch) => {
-      const streamsCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', userID, 'activities', activityID, 'streams'));
-      const q = runInInjectionContext(this.injector, () => query(streamsCollection, where('type', 'in', typesBatch)));
-      return from(runInInjectionContext(this.injector, () => getDocs(q)))
-        .pipe(map((documentSnapshots) => {
-          return documentSnapshots.docs.reduce((streamArray: StreamInterface[], documentSnapshot) => {
-            streamArray.push(this.processStreamDocumentSnapshot(documentSnapshot));
-            return streamArray;
-          }, []);
-        }))
-    })
-
-    return combineLatest(x).pipe(map(arrayOfArrays => arrayOfArrays.reduce((a, b) => a.concat(b), [])));
-  }
-
   public async writeAllEventData(user: User, event: AppEventInterface, originalFiles?: OriginalFile[] | OriginalFile) {
     // 0. Ensure deterministic IDs to prevent duplicates
     // Frontend uploads use thresholdMs=0 for exact timestamps (no bucketing)
@@ -843,13 +794,15 @@ export class AppEventService implements OnDestroy {
       || (event.originalFile && event.originalFile.path);
 
     if (!hasOriginalFiles) {
-      this.logger.log('[AppEventService] Fallback to legacy streams for', event.getID());
-      return this.attachStreamsLegacy(user, event, streamTypes);
+      this.logger.error('[AppEventService] Failed to hydrate event due to missing original source file metadata', {
+        eventID: event.getID(),
+      });
+      return throwError(() => new Error('No original source file metadata found for event hydration.'));
     }
 
     return from(this.originalFileHydrationService.parseEventFromOriginalFiles(event, {
       skipEnrichment,
-      strictAllFilesRequired: hydrationMode === 'replace_activities',
+      strictAllFilesRequired: true,
       preserveActivityIdsFromEvent: true,
       mergeMultipleFiles: true,
     })).pipe(
@@ -874,12 +827,12 @@ export class AppEventService implements OnDestroy {
         return event;
       }),
       catchError((error) => {
-        if (hydrationMode === 'replace_activities') {
-          this.logger.error('[AppEventService] Failed to hydrate activities from original files', error);
-          return throwError(() => error);
-        }
-        this.logger.error('[AppEventService] Failed to attach streams from original files, falling back to legacy streams', error);
-        return this.attachStreamsLegacy(user, event, streamTypes);
+        this.logger.error('[AppEventService] Failed to hydrate streams from original files', {
+          eventID: event.getID(),
+          hydrationMode,
+          error,
+        });
+        return throwError(() => error);
       }),
     );
   }
@@ -950,46 +903,6 @@ export class AppEventService implements OnDestroy {
         streamTypeFilter: streamTypes && streamTypes.length > 0 ? streamTypes : 'all',
       });
     }
-  }
-
-  private attachStreamsLegacy(user: User, event: EventInterface, streamTypes?: string[]): Observable<EventInterface> {
-    // Get all the streams for all activities and subscribe to them with latest emition for all streams
-    return combineLatest(
-      event.getActivities().map((activity) => {
-        return (streamTypes ? this.getStreamsByTypes(user.uid, event.getID(), activity.getID(), streamTypes) : this.getAllStreams(user, event.getID(), activity.getID()))
-          .pipe(map((streams) => {
-            streams = streams || [];
-            // debugger;
-            // This time we dont want to just get the streams but we want to attach them to the parent obj
-            activity.clearStreams();
-            try {
-              activity.addStreams(streams);
-            } catch (e) {
-              if (e.message && e.message.indexOf('Duplicate type of stream') > -1) {
-                this.logger.warn('[attachStreamsLegacy] Duplicate stream warning:', e);
-              } else {
-                throw e;
-              }
-            }
-            // Return what we actually want to return not the streams
-            return event;
-          }));
-      })).pipe(
-        map(([newEvent]) => {
-          return newEvent;
-        }),
-        catchError((error) => {
-          if (error?.code === 'permission-denied' || error?.message?.includes('Missing or insufficient permissions')) {
-            this.logger.warn('[attachStreamsLegacy] Legacy streams access denied; returning event without legacy streams', {
-              eventID: event.getID(),
-              error,
-            });
-            return of(event);
-          }
-          this.logger.error('[attachStreamsLegacy] Failed to attach streams; returning event as-is', error);
-          return of(event);
-        })
-      );
   }
 
   private async calculateStreamsFromWithOrchestration(event: AppEventInterface, skipEnrichment: boolean = false): Promise<EventInterface> {
@@ -1503,14 +1416,6 @@ export class AppEventService implements OnDestroy {
     return this.getEventQueryForUser(user, where, orderBy, asc, limit, startAfter, endBefore);
   }
   */
-
-  private processStreamDocumentSnapshot(streamSnapshot: DocumentSnapshot): StreamInterface {
-    return EventImporterJSON.getStreamFromJSON(<any>streamSnapshot.data());
-  }
-
-  private processStreamQueryDocumentSnapshot(queryDocumentSnapshot: QueryDocumentSnapshot): StreamInterface {
-    return EventImporterJSON.getStreamFromJSON(<any>queryDocumentSnapshot.data());
-  }
 
   // From https://github.com/angular/angularfire2/issues/1400
   private async deleteAllDocsFromCollections(collections: CollectionReference[]) {

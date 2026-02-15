@@ -28,6 +28,7 @@ import { AppEventService } from '../../services/app.event.service';
 import { AppUserService } from '../../services/app.user.service';
 import { GoogleMapsLoaderService } from '../../services/google-maps-loader.service';
 import { MarkerFactoryService } from '../../services/map/marker-factory.service';
+import { MatSnackBar } from '@angular/material/snack-bar';
 
 import { take } from 'rxjs/operators';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
@@ -114,6 +115,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     private eventService: AppEventService,
     private mapsLoader: GoogleMapsLoaderService,
     private markerFactory: MarkerFactoryService,
+    private snackBar: MatSnackBar,
     protected logger: LoggerService) {
     super(changeDetectorRef, logger);
   }
@@ -487,46 +489,53 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       this.loading();
       this.selectedEventPositionsByActivity = [];
 
-      // Use attachStreamsToEventWithActivities to get event with activities + streams
-      // This handles original file parsing on the fly if needed
-      const types = [DataLatitudeDegrees.type, DataLongitudeDegrees.type];
+      try {
+        // Use attachStreamsToEventWithActivities to get event with activities + streams
+        // This handles original file parsing on the fly if needed
+        const types = [DataLatitudeDegrees.type, DataLongitudeDegrees.type];
 
-      // We only need one emission
-      const populatedEvent = await this.eventService.attachStreamsToEventWithActivities(
-        this.user,
-        event,
-        types
-      ).pipe(take(1)).toPromise();
+        // We only need one emission
+        const populatedEvent = await this.eventService.attachStreamsToEventWithActivities(
+          this.user,
+          event,
+          types
+        ).pipe(take(1)).toPromise();
 
-      if (!populatedEvent) {
-        this.loaded();
-        return;
-      }
+        if (!populatedEvent) {
+          return;
+        }
 
-      const activities = populatedEvent.getActivities();
-      if (!activities || activities.length === 0) {
-        this.loaded();
-        return;
-      }
+        const activities = populatedEvent.getActivities();
+        if (!activities || activities.length === 0) {
+          return;
+        }
 
-      for (const activity of activities) {
-        this.selectedEventPositionsByActivity.push({
-          activity: activity,
-          color: this.eventColorService.getActivityColor(activities, activity),
-          positions: activity.getSquashedPositionData()
+        for (const activity of activities) {
+          this.selectedEventPositionsByActivity.push({
+            activity: activity,
+            color: this.eventColorService.getActivityColor(activities, activity),
+            positions: activity.getSquashedPositionData()
+          });
+        }
+
+        const allPositions = this.selectedEventPositionsByActivity.reduce((accu, positionByActivity) => {
+          return accu.concat(positionByActivity.positions);
+        }, []);
+
+        if (allPositions.length > 0) {
+          this.nativeMap.fitBounds(this.getBounds(allPositions), 100);
+        }
+
+        this.selectedEvent = populatedEvent;
+      } catch (error) {
+        this.logger.error('[EventsMapComponent] Failed to hydrate event tracks from original files', {
+          eventID: event.getID?.(),
+          error,
         });
+        this.snackBar.open('Could not load event track data', undefined, { duration: 3000 });
+      } finally {
+        this.loaded();
       }
-
-      const allPositions = this.selectedEventPositionsByActivity.reduce((accu, positionByActivity) => {
-        return accu.concat(positionByActivity.positions);
-      }, []);
-
-      if (allPositions.length > 0) {
-        this.nativeMap.fitBounds(this.getBounds(allPositions), 100);
-      }
-
-      this.selectedEvent = populatedEvent;
-      this.loaded();
     });
   }
 

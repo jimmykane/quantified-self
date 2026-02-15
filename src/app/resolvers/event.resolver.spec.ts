@@ -123,7 +123,7 @@ describe('eventResolver', () => {
             complete: () => {
                 expect(routerSpy.navigate).toHaveBeenCalledWith(['/dashboard']);
                 expect(snackBarSpy.open).toHaveBeenCalledWith(
-                    'Event data unavailable: Original file missing and legacy access denied.',
+                    'Event data unavailable: original source files are missing or invalid.',
                     'Close',
                     { duration: 5000 }
                 );

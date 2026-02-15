@@ -10,7 +10,7 @@ import { AppFileService } from './app.file.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
-import { of, firstValueFrom, throwError, Subject } from 'rxjs';
+import { of, firstValueFrom, Subject } from 'rxjs';
 import { AppCacheService } from './app.cache.service';
 import { getMetadata } from '@angular/fire/storage';
 import { webcrypto } from 'node:crypto';
@@ -643,30 +643,6 @@ describe('AppEventService', () => {
         expect(mocks.batchCommit).toHaveBeenCalledTimes(1);
     });
 
-    it('should return event as-is when legacy stream access is denied', async () => {
-        const user = { uid: 'user1' } as any;
-        const activity = {
-            getID: () => 'activity1',
-            clearStreams: vi.fn(),
-            addStreams: vi.fn(),
-        } as any;
-        const event = {
-            getID: () => 'event1',
-            getActivities: () => [activity],
-        } as any;
-
-        vi.spyOn(service, 'getAllStreams').mockReturnValue(
-            throwError(() => ({ code: 'permission-denied', message: 'Missing or insufficient permissions' })) as any
-        );
-
-        const result = await firstValueFrom((service as any).attachStreamsLegacy(user, event));
-        expect(result).toBe(event);
-        expect(mockLogger.warn).toHaveBeenCalledWith(
-            '[attachStreamsLegacy] Legacy streams access denied; returning event without legacy streams',
-            expect.objectContaining({ eventID: 'event1' })
-        );
-    });
-
     it('should call EventWriter in writeAllEventData', async () => {
         const mockEvent = {
             getID: () => '1',
@@ -1079,9 +1055,7 @@ describe('AppEventService', () => {
     });
 
     describe('delegation', () => {
-        it('should fallback to attachStreamsLegacy when event has no original file metadata', async () => {
-            const legacyResultEvent = { getID: () => 'event-legacy' } as any;
-            vi.spyOn(service as any, 'attachStreamsLegacy').mockReturnValue(of(legacyResultEvent));
+        it('should throw when event has no original file metadata', async () => {
             const event = {
                 getID: () => 'event-1',
                 originalFile: undefined,
@@ -1089,10 +1063,9 @@ describe('AppEventService', () => {
                 getActivities: vi.fn().mockReturnValue([]),
             } as any;
 
-            const result = await firstValueFrom(service.attachStreamsToEventWithActivities({ uid: 'u1' } as any, event));
-
-            expect((service as any).attachStreamsLegacy).toHaveBeenCalled();
-            expect(result).toBe(legacyResultEvent);
+            await expect(firstValueFrom(
+                service.attachStreamsToEventWithActivities({ uid: 'u1' } as any, event),
+            )).rejects.toThrow('No original source file metadata found for event hydration.');
         });
 
         it('should delegate downloadFile to AppOriginalFileHydrationService', async () => {
@@ -1145,7 +1118,7 @@ describe('AppEventService', () => {
             expect(hydrationService.parseEventFromOriginalFiles).toHaveBeenCalledWith(
                 event,
                 expect.objectContaining({
-                    strictAllFilesRequired: false,
+                    strictAllFilesRequired: true,
                     preserveActivityIdsFromEvent: true,
                     mergeMultipleFiles: true,
                 }),
@@ -1317,13 +1290,17 @@ describe('AppEventService', () => {
             expect(parsedEvent.setID).toHaveBeenCalledWith('event-1');
             expect(result).toBe(parsedEvent);
             expect(event.clearActivities).not.toHaveBeenCalled();
+            expect(hydrationService.parseEventFromOriginalFiles).toHaveBeenCalledWith(
+                event,
+                expect.objectContaining({
+                    strictAllFilesRequired: true,
+                }),
+            );
         });
 
-        it('should fallback to attachStreamsLegacy when parser throws', async () => {
+        it('should rethrow when parser throws in stream-only mode', async () => {
             const hydrationService = (service as any).originalFileHydrationService;
             vi.spyOn(hydrationService, 'parseEventFromOriginalFiles').mockRejectedValue(new Error('parse blew up'));
-            const legacyResultEvent = { getID: () => 'event-1' } as any;
-            vi.spyOn(service as any, 'attachStreamsLegacy').mockReturnValue(of(legacyResultEvent));
             const event = {
                 getID: () => 'event-1',
                 originalFile: { path: 'users/u1/events/e1/original.fit' },
@@ -1332,16 +1309,14 @@ describe('AppEventService', () => {
                 getActivities: vi.fn().mockReturnValue([]),
             } as any;
 
-            const result = await firstValueFrom(service.attachStreamsToEventWithActivities({ uid: 'u1' } as any, event));
-
-            expect((service as any).attachStreamsLegacy).toHaveBeenCalled();
-            expect(result).toBe(legacyResultEvent);
+            await expect(firstValueFrom(
+                service.attachStreamsToEventWithActivities({ uid: 'u1' } as any, event),
+            )).rejects.toThrow('parse blew up');
         });
 
         it('should rethrow when parser throws in replace_activities mode', async () => {
             const hydrationService = (service as any).originalFileHydrationService;
             vi.spyOn(hydrationService, 'parseEventFromOriginalFiles').mockRejectedValue(new Error('parse blew up'));
-            vi.spyOn(service as any, 'attachStreamsLegacy').mockReturnValue(of({} as any));
             const event = {
                 getID: () => 'event-1',
                 originalFile: { path: 'users/u1/events/e1/original.fit' },
@@ -1360,10 +1335,9 @@ describe('AppEventService', () => {
                     'replace_activities',
                 ),
             )).rejects.toThrow('parse blew up');
-            expect((service as any).attachStreamsLegacy).not.toHaveBeenCalled();
         });
 
-        it('should fallback to attachStreamsLegacy when parser returns no finalEvent', async () => {
+        it('should rethrow when parser returns no finalEvent in stream-only mode', async () => {
             const hydrationService = (service as any).originalFileHydrationService;
             vi.spyOn(hydrationService, 'parseEventFromOriginalFiles').mockResolvedValue({
                 finalEvent: null,
@@ -1371,8 +1345,6 @@ describe('AppEventService', () => {
                 sourceFilesCount: 1,
                 failedFiles: [{ path: 'users/u1/events/e1/original.fit', reason: 'fail' }],
             });
-            const legacyResultEvent = { getID: () => 'event-1' } as any;
-            vi.spyOn(service as any, 'attachStreamsLegacy').mockReturnValue(of(legacyResultEvent));
             const event = {
                 getID: () => 'event-1',
                 originalFile: { path: 'users/u1/events/e1/original.fit' },
@@ -1381,10 +1353,9 @@ describe('AppEventService', () => {
                 getActivities: vi.fn().mockReturnValue([]),
             } as any;
 
-            const result = await firstValueFrom(service.attachStreamsToEventWithActivities({ uid: 'u1' } as any, event));
-
-            expect((service as any).attachStreamsLegacy).toHaveBeenCalled();
-            expect(result).toBe(legacyResultEvent);
+            await expect(firstValueFrom(
+                service.attachStreamsToEventWithActivities({ uid: 'u1' } as any, event),
+            )).rejects.toThrow('Could not build event from original source files');
         });
 
         it('should rethrow when parser returns no finalEvent in replace_activities mode', async () => {
@@ -1395,7 +1366,6 @@ describe('AppEventService', () => {
                 sourceFilesCount: 1,
                 failedFiles: [{ path: 'users/u1/events/e1/original.fit', reason: 'fail' }],
             });
-            vi.spyOn(service as any, 'attachStreamsLegacy').mockReturnValue(of({} as any));
             const event = {
                 getID: () => 'event-1',
                 originalFile: { path: 'users/u1/events/e1/original.fit' },
@@ -1414,7 +1384,6 @@ describe('AppEventService', () => {
                     'replace_activities',
                 ),
             )).rejects.toThrow('Could not build event from original source files');
-            expect((service as any).attachStreamsLegacy).not.toHaveBeenCalled();
         });
     });
 });
