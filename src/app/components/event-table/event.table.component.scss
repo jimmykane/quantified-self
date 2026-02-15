@@ -34,16 +34,35 @@
 }
 
 /* Responsive width for the Start Date column */
-.mat-column-Start-Date {
-  min-width: 90px;
+.mat-column-Start-Date,
+.cdk-column-Start-Date,
+.mat-column-start-date,
+.cdk-column-start-date {
+  min-width: 120px;
   width: auto;
   white-space: nowrap;
 }
 
+@include bp.handset-or-tablet-portrait {
+
+  .mat-column-Start-Date,
+  .cdk-column-Start-Date,
+  .mat-column-start-date,
+  .cdk-column-start-date {
+    min-width: 60px !important;
+    width: 84px !important;
+    max-width: 84px !important;
+  }
+}
+
 @include bp.medium-and-up {
-  .mat-column-Start-Date {
-    min-width: 200px;
-    width: 220px;
+
+  .mat-column-Start-Date,
+  .cdk-column-Start-Date,
+  .mat-column-start-date,
+  .cdk-column-start-date {
+    min-width: 200px !important;
+    width: 220px !important;
   }
 }
 
@@ -101,13 +120,35 @@
   opacity: 1;
 }
 
-/* Specific column adjustments */
-.mat-column-Start-Date {
-  min-width: 120px;
-}
-
 .mat-column-Activity-Types {
   min-width: 140px;
+}
+
+/* Truncate only row activity type values (not header) */
+.mat-mdc-cell.mat-column-Activity-Types,
+.mat-mdc-cell.cdk-column-Activity-Types,
+.mat-mdc-cell.mat-column-activity-types,
+.mat-mdc-cell.cdk-column-activity-types {
+  width: 120px;
+  max-width: 140px;
+}
+
+/* Truncate only row description values (not header) */
+.mat-mdc-cell.mat-column-Description,
+.mat-mdc-cell.cdk-column-Description,
+.mat-mdc-cell.mat-column-description,
+.mat-mdc-cell.cdk-column-description {
+  width: 120px;
+  max-width: 140px;
+}
+
+/* Truncate only row device names values (not header) */
+.mat-mdc-cell.mat-column-Device-Names,
+.mat-mdc-cell.cdk-column-Device-Names,
+.mat-mdc-cell.mat-column-device-names,
+.mat-mdc-cell.cdk-column-device-names {
+  width: 160px;
+  max-width: 160px;
 }
 
 /* Icons alignment in headers */
@@ -117,12 +158,15 @@
 }
 
 /* Mobile Adjustments for Overall Table Compactness */
-@include bp.xsmall {
+@include bp.handset-or-tablet-portrait {
 
   .mat-mdc-header-cell,
   .mat-mdc-cell {
-    padding: 0 10px !important;
+    padding: 0 4px !important;
   }
+}
+
+@include bp.xsmall {
 
   .mat-column-Checkbox,
   .mat-column-Privacy,
@@ -197,6 +241,34 @@ mat-paginator {
   gap: 4px;
 }
 
+.description-cell {
+  max-width: 140px;
+  min-width: 0;
+}
+
+.description-text {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-names-cell {
+  max-width: 160px;
+  min-width: 0;
+}
+
+.device-names-text {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .excluded-icon {
   font-size: 14px;
   width: 14px;
@@ -209,6 +281,22 @@ mat-paginator {
   display: flex;
   align-items: center;
   gap: 8px;
+  max-width: 140px;
+  min-width: 0;
+}
+
+.activity-type-text {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-type-cell app-activity-type-icon,
+.activity-type-cell .benchmark-icon {
+  flex: 0 0 auto;
 }
 
 .benchmark-icon {

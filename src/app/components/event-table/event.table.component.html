@@ -94,12 +94,20 @@
               @if (!row['Merged Event'] && row[column]) {
               <app-activity-type-icon [activityType]="row[column]" size="18px" vAlign="middle"></app-activity-type-icon>
               }
-              {{ row[column] }}
+              <span class="activity-type-text">{{ row[column] }}</span>
             </span>
             }
             @if (column !== 'Checkbox' && column !== 'Actions' && column !== 'Activity Types' && column!=='Privacy') {
-            <span class="data-cell">
+            <span class="data-cell" [class.description-cell]="column === 'Description'" [class.device-names-cell]="column === 'Device Names'">
+              @if (column === 'Description') {
+              <span class="description-text">{{ row[column] }}</span>
+              }
+              @if (column === 'Device Names') {
+              <span class="device-names-text" [matTooltip]="row[column]" [matTooltipDisabled]="!row[column]">{{ row[column] }}</span>
+              }
+              @if (column !== 'Description' && column !== 'Device Names') {
               {{ row[column] }}
+              }
               @if (column === 'Ascent' && row.isAscentExcluded) {
               <mat-icon class="excluded-icon" matTooltip="Ascent excluded by settings">info</mat-icon>
               }
