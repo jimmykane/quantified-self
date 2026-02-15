@@ -123,8 +123,8 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
       endDate = (endDate as any).toDate();
     }
 
-    this.selectedStartDate = startDate ? new Date(new Date(startDate).setHours(0, 0, 0)) : (null as any);
-    this.selectedEndDate = endDate ? new Date(new Date(endDate).setHours(23, 59, 59)) : (null as any);
+    this.selectedStartDate = startDate ? new Date(new Date(startDate).setHours(0, 0, 0, 0)) : (null as any);
+    this.selectedEndDate = endDate ? new Date(new Date(endDate).setHours(23, 59, 59, 999)) : (null as any);
 
     this.searchChange.emit({
       searchTerm: this.searchFormGroup.get('search')?.value,
@@ -144,8 +144,10 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
   }
 
   dateToggleChange(event: MatButtonToggleChange) {
-    this.startDateControl?.setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).startDate);
-    this.endDateControl?.setValue(getDatesForDateRange(event.source.value, this.startOfTheWeek).endDate);
+    const nextRange = event.source.value;
+    const computedRange = getDatesForDateRange(nextRange, this.startOfTheWeek);
+    this.startDateControl?.setValue(computedRange.startDate);
+    this.endDateControl?.setValue(computedRange.endDate);
     this.selectedDateRange = event.source.value;
     return this.search();
   }

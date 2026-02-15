@@ -1102,18 +1102,6 @@ export class AppEventService implements OnDestroy {
     const queryStart = performance.now();
 
     return this.listenToEventQueryData(q, user.uid, queryStart).pipe(
-      distinctUntilChanged((p, c) => {
-        const compareStart = performance.now();
-        const isEqual = JSON.stringify(p) === JSON.stringify(c);
-        this.logger.log('[perf] app_event_service_get_events_distinct_compare', {
-          durationMs: Number((performance.now() - compareStart).toFixed(2)),
-          previousSnapshots: p?.length || 0,
-          currentSnapshots: c?.length || 0,
-          isEqual,
-          userID: user.uid,
-        });
-        return isEqual;
-      }),
       map((eventSnapshots: any[]) => {
         const deserializeStart = performance.now();
         this.logger.log(`[AppEventService] _getEvents emitted ${eventSnapshots?.length || 0} event snapshots for user: ${user.uid}`);

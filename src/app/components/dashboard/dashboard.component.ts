@@ -1,6 +1,6 @@
 import { Component, OnChanges, OnDestroy, OnInit, inject } from '@angular/core';
 import { AppEventService } from '../../services/app.event.service';
-import { of, Subscription } from 'rxjs';
+import { merge, of, Subject, Subscription } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -41,6 +41,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public hasMergedEvents = false;
 
   private shouldSearch: boolean;
+  private manualSearchTrigger$ = new Subject<AppUserInterface | null>();
   private initialLiveReconcilePending = false;
   private initialResolvedEventsForReconcile: EventInterface[] = [];
   private initialResolvedUserIDForReconcile: string | null = null;
@@ -102,7 +103,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         });
       }
     }
-    this.dataSubscription = this.authService.user$.pipe(switchMap((user: AppUserInterface | null) => {
+    this.dataSubscription = merge(this.authService.user$, this.manualSearchTrigger$).pipe(switchMap((user: AppUserInterface | null) => {
       const userEmissionStart = performance.now();
 
       if (this.shouldSearch || !this.isInitialized) {
@@ -252,18 +253,52 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   async search(search: Search) {
+    if (!this.user?.settings?.dashboardSettings) {
+      return;
+    }
+
+    const previousSearchState = {
+      searchTerm: this.searchTerm,
+      searchStartDate: this.searchStartDate,
+      searchEndDate: this.searchEndDate,
+    };
+    const previousDashboardSettings = {
+      includeMergedEvents: this.user.settings.dashboardSettings.includeMergedEvents,
+      dateRange: this.user.settings.dashboardSettings.dateRange,
+      startDate: this.user.settings.dashboardSettings.startDate,
+      endDate: this.user.settings.dashboardSettings.endDate,
+      activityTypes: this.user.settings.dashboardSettings.activityTypes,
+    };
+
     this.isLoading = true;
     this.shouldSearch = true;
     this.searchTerm = search.searchTerm;
     this.searchStartDate = search.startDate;
     this.searchEndDate = search.endDate;
-    this.user.settings.dashboardSettings.includeMergedEvents = search.includeMergedEvents !== false;
-    this.user.settings.dashboardSettings.dateRange = search.dateRange;
-    this.user.settings.dashboardSettings.startDate = search.startDate && search.startDate.getTime();
-    this.user.settings.dashboardSettings.endDate = search.endDate && search.endDate.getTime();
-    this.user.settings.dashboardSettings.activityTypes = search.activityTypes;
-    this.analyticsService.logEvent('dashboard_search', { method: DateRanges[search.dateRange] });
-    await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
+
+    try {
+      this.user.settings.dashboardSettings.includeMergedEvents = search.includeMergedEvents !== false;
+      this.user.settings.dashboardSettings.dateRange = search.dateRange;
+      this.user.settings.dashboardSettings.startDate = search.startDate && search.startDate.getTime();
+      this.user.settings.dashboardSettings.endDate = search.endDate && search.endDate.getTime();
+      this.user.settings.dashboardSettings.activityTypes = search.activityTypes;
+      this.manualSearchTrigger$.next(this.user);
+      this.analyticsService.logEvent('dashboard_search', { method: DateRanges[search.dateRange] });
+      await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
+    } catch (error) {
+      this.searchTerm = previousSearchState.searchTerm;
+      this.searchStartDate = previousSearchState.searchStartDate;
+      this.searchEndDate = previousSearchState.searchEndDate;
+      this.user.settings.dashboardSettings.includeMergedEvents = previousDashboardSettings.includeMergedEvents;
+      this.user.settings.dashboardSettings.dateRange = previousDashboardSettings.dateRange;
+      this.user.settings.dashboardSettings.startDate = previousDashboardSettings.startDate;
+      this.user.settings.dashboardSettings.endDate = previousDashboardSettings.endDate;
+      this.user.settings.dashboardSettings.activityTypes = previousDashboardSettings.activityTypes;
+      this.shouldSearch = false;
+      this.isLoading = false;
+      this.snackBar.open('Could not update dashboard filters');
+      this.logger.error('[DashboardComponent] Failed to persist dashboard search filters', error);
+    }
   }
 
   ngOnChanges() {
@@ -276,6 +311,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     if (this.dataSubscription) {
       this.dataSubscription.unsubscribe();
     }
+    this.manualSearchTrigger$.complete();
   }
 
   private logPerf(step: string, start: number, meta?: Record<string, unknown>) {

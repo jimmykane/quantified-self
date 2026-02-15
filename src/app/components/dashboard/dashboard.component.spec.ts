@@ -9,6 +9,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib';
+import { DateRanges } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { Analytics } from '@angular/fire/analytics';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
@@ -258,5 +259,53 @@ describe('DashboardComponent', () => {
         eventsSubject.next([event1NewDate]);
         fixture.detectChanges();
         expect(component.events[0].startDate.getTime()).toBe(date2.getTime());
+    });
+
+    it('should restore previous state when persisting dashboard search fails', async () => {
+        const previousStartDate = new Date('2025-01-01T00:00:00.000Z');
+        const previousEndDate = new Date('2025-01-31T23:59:59.000Z');
+        const previousActivityTypes = ['running'] as any;
+        const userForSearch = {
+            ...mockUser,
+            settings: {
+                ...mockUser.settings,
+                dashboardSettings: {
+                    ...mockUser.settings.dashboardSettings,
+                    includeMergedEvents: true,
+                    dateRange: DateRanges.thisMonth,
+                    startDate: previousStartDate.getTime(),
+                    endDate: previousEndDate.getTime(),
+                    activityTypes: previousActivityTypes
+                }
+            }
+        } as any;
+
+        component.user = userForSearch;
+        component.searchTerm = 'previous term';
+        component.searchStartDate = previousStartDate;
+        component.searchEndDate = previousEndDate;
+
+        mockUserService.updateUserProperties.mockRejectedValueOnce(new Error('write failed'));
+
+        await component.search({
+            searchTerm: 'new term',
+            startDate: new Date('2025-02-01T00:00:00.000Z'),
+            endDate: new Date('2025-02-10T23:59:59.000Z'),
+            dateRange: DateRanges.lastThirtyDays,
+            activityTypes: ['cycling'] as any,
+            includeMergedEvents: false
+        });
+
+        expect(component.isLoading).toBe(false);
+        expect((component as any).shouldSearch).toBe(false);
+        expect(component.searchTerm).toBe('previous term');
+        expect(component.searchStartDate).toEqual(previousStartDate);
+        expect(component.searchEndDate).toEqual(previousEndDate);
+        expect(component.user.settings.dashboardSettings.includeMergedEvents).toBe(true);
+        expect(component.user.settings.dashboardSettings.dateRange).toBe(DateRanges.thisMonth);
+        expect(component.user.settings.dashboardSettings.startDate).toBe(previousStartDate.getTime());
+        expect(component.user.settings.dashboardSettings.endDate).toBe(previousEndDate.getTime());
+        expect(component.user.settings.dashboardSettings.activityTypes).toEqual(previousActivityTypes);
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Could not update dashboard filters');
     });
 });

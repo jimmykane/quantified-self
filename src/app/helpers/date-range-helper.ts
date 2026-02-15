@@ -14,16 +14,16 @@ export function getDatesForDateRange(dateRange: DateRanges, startOfTheWeek: Days
   // First day of this week
 
   const fistDayOfTheWeekDate = new Date(new Date().setDate(firstDayOfTheWeek - daysBack));
-  fistDayOfTheWeekDate.setHours(0, 0, 0);
+  fistDayOfTheWeekDate.setHours(0, 0, 0, 0);
 
 
   // Last day if this week
   const lastDayOfTheWeekDate = new Date(new Date().setDate(lastDayOfTheWeek - daysBack));
-  lastDayOfTheWeekDate.setHours(23, 59, 59);
+  lastDayOfTheWeekDate.setHours(23, 59, 59, 999);
 
   // Take the first day of this week and go back 7 days
   const firstDayOfLastWeekDate = new Date(new Date(fistDayOfTheWeekDate).setDate(fistDayOfTheWeekDate.getDate() - 7)); // Needs to base on fistDayOfTheWeekDate for new Date()
-  firstDayOfLastWeekDate.setHours(0, 0, 0);
+  firstDayOfLastWeekDate.setHours(0, 0, 0, 0);
 
   // Take the first day of this week and go back 1second
   const lastDayOfLastWeekDate = new Date(new Date(fistDayOfTheWeekDate.getTime()).setHours(0, 0, -1));
@@ -62,7 +62,7 @@ export function getDatesForDateRange(dateRange: DateRanges, startOfTheWeek: Days
     case DateRanges.lastMonth: {
       return {
         startDate: new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1),
-        endDate: new Date(new Date(new Date().getFullYear(), new Date().getMonth(), 0).setHours(23, 59, 59))
+        endDate: new Date(new Date(new Date().getFullYear(), new Date().getMonth(), 0).setHours(23, 59, 59, 999))
       }
     }
     case DateRanges.thisYear: {
@@ -74,7 +74,7 @@ export function getDatesForDateRange(dateRange: DateRanges, startOfTheWeek: Days
     case DateRanges.lastYear: {
       return {
         startDate: new Date(new Date().getFullYear() - 1, 0, 1),
-        endDate: new Date(new Date(new Date().getFullYear(), 0, 0).setHours(23, 59, 59))
+        endDate: new Date(new Date(new Date().getFullYear(), 0, 0).setHours(23, 59, 59, 999))
       }
     }
     default: {
