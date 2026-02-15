@@ -24,7 +24,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Legal Basis:</strong> We process your data based on: (a) your consent for optional features like analytics, (b) contractual necessity to provide the service you subscribed to, and (c) our legitimate interest in maintaining service security.',
             '<strong>Third-Party Processors:</strong> Your data is processed by: Google Cloud (hosting, EU region), Stripe (payments), and the fitness service providers you connect (Garmin, Suunto, COROS, Polar) solely to sync your activity data.'
         ],
-        checkboxLabel: 'I accept the Privacy Policy and acknowledge my data ownership rights.',
+        checkboxLabel: 'I have read and agree to the Privacy Policy and acknowledge my data ownership rights.',
         formControlName: 'acceptPrivacyPolicy'
     },
     {
@@ -38,7 +38,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Portability:</strong> You have the right to request an export of your personal data stored on our platform.',
             '<strong>Retention:</strong> We retain your data while your account is active and has a valid subscription. For expired subscriptions, data may be permanently removed after a grace period of 30 days of inactivity.'
         ],
-        checkboxLabel: 'I acknowledge the Data Availability Policy.',
+        checkboxLabel: 'I have read and agree to the Data Availability Policy.',
         formControlName: 'acceptDataPolicy'
     },
     {
@@ -49,8 +49,8 @@ export const POLICY_CONTENT: PolicyItem[] = [
         content: [
             'Under the General Data Protection Regulation (GDPR), you have the following rights:',
             '<ul><li><strong>Right of Access:</strong> You can request a copy of your personal data.</li><li><strong>Right to Rectification:</strong> You can correct inaccurate personal data in your profile settings.</li><li><strong>Right to Erasure:</strong> You can request deletion of your account and all associated data ("Right to be Forgotten").</li><li><strong>Right to Restrict Processing:</strong> You can ask us to limit how we use your data.</li><li><strong>Right to Data Portability:</strong> You can request your data in a structured, machine-readable format.</li><li><strong>Right to Object:</strong> You can object to data processing based on legitimate interests.</li><li><strong>Right to Withdraw Consent:</strong> You can withdraw consent at any time for optional processing (e.g., analytics).</li></ul>',
-            '<p style="margin-top: 1em; font-size: 0.9em; opacity: 0.8;"><strong>Data Controller:</strong> Quantified Self<br><strong>Contact:</strong> privacy@quantified-self.io<br><strong>Data Location:</strong> European Union (Google Cloud EU region)<br>For privacy inquiries or to exercise your rights, contact us at the email above.</p>',
-            '<p style="margin-top: 0.5em; font-size: 0.85em; opacity: 0.7;"><strong>Supervisory Authority:</strong> If you believe your data protection rights have been violated, you have the right to lodge a complaint with your local Data Protection Authority. For users in Greece, this is the Hellenic Data Protection Authority (HDPA) at <a href="https://www.dpa.gr" target="_blank" rel="noopener">www.dpa.gr</a>.</p>'
+            '<p><strong>Data Controller:</strong> Quantified Self<br><strong>Contact:</strong> privacy@quantified-self.io<br><strong>Data Location:</strong> European Union (Google Cloud EU region)<br>For privacy inquiries or to exercise your rights, contact us at the email above.</p>',
+            '<p><strong>Supervisory Authority:</strong> If you believe your data protection rights have been violated, you have the right to lodge a complaint with your local Data Protection Authority. For users in Greece, this is the Hellenic Data Protection Authority (HDPA) at <a href="https://www.dpa.gr" target="_blank" rel="noopener">www.dpa.gr</a>.</p>'
         ],
         isGdpr: true
     },
@@ -66,7 +66,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Essential Cookies:</strong> Session cookies used to keep you logged in are strictly necessary for the service to function and do not require consent.',
             '<strong>Withdraw Consent:</strong> You can withdraw your analytics consent at any time in your account settings.'
         ],
-        checkboxLabel: 'I consent to the collection of anonymized usage data for analytics.',
+        checkboxLabel: 'I have read and consent to the collection of anonymized usage data for analytics.',
         formControlName: 'acceptTrackingPolicy',
         isOptional: true
     },
@@ -82,7 +82,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Changes to Pricing:</strong> We reserve the right to change our pricing. Any price changes will be communicated to you in advance and will take effect at the start of the next billing cycle.',
             '<strong>Data Deletion:</strong> Upon expiration or cancellation of a subscription, we may delete your stored data (including activities and tracks) after a grace period of 30 days of inactivity. It is your responsibility to export your data if you wish to keep it.'
         ],
-        checkboxLabel: 'I accept the Terms of Service and Subscription Policy.',
+        checkboxLabel: 'I have read and agree to the Terms of Service and Subscription Policy.',
         formControlName: 'acceptTos'
     },
     {
@@ -95,7 +95,7 @@ export const POLICY_CONTENT: PolicyItem[] = [
             '<strong>Unsubscribe Anytime:</strong> You can unsubscribe at any time from your account settings.',
             '<strong>No Spam:</strong> We respect your inbox and only send relevant updates about the service.'
         ],
-        checkboxLabel: 'I would like to receive marketing emails and updates (optional).',
+        checkboxLabel: 'I have read and agree to receive marketing emails and updates.',
         formControlName: 'acceptMarketingPolicy',
         isOptional: true
     }

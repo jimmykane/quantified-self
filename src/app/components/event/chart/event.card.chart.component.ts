@@ -98,6 +98,7 @@ import { AppEventInterface } from '../../../../../functions/src/shared/app-event
 import { AppColors } from '../../../services/color/app.colors';
 import { ActivityUtilities } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../../services/logger.service';
+import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 8;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 1.5;
@@ -138,13 +139,29 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   public get showGrid() { return this.userSettingsQuery.chartSettings()?.showGrid ?? true; }
   public get disableGrouping() { return this.userSettingsQuery.chartSettings()?.disableGrouping ?? false; }
   public get hideAllSeriesOnInit() { return this.userSettingsQuery.chartSettings()?.hideAllSeriesOnInit ?? false; }
-  public get lapTypes() { return this.userSettingsQuery.chartSettings()?.lapTypes ?? AppUserUtilities.getDefaultChartLapTypes(); }
+  public get lapTypes() {
+    const configuredLapTypes = this.userSettingsQuery.chartSettings()?.lapTypes;
+    return Array.isArray(configuredLapTypes) && configuredLapTypes.length > 0
+      ? configuredLapTypes
+      : AppUserUtilities.getDefaultChartLapTypes();
+  }
 
-  public get xAxisType() { return this.userSettingsQuery.chartSettings()?.xAxisType ?? XAxisTypes.Duration; }
+  public get xAxisType() { return this.xAxisTypeOverride ?? this.userSettingsQuery.chartSettings()?.xAxisType ?? XAxisTypes.Duration; }
   public set xAxisType(value: XAxisTypes) {
-    if (value !== this.xAxisType) {
-      this.userSettingsQuery.updateChartSettings({ xAxisType: value });
+    if (value === this.xAxisType) {
+      return;
     }
+    this.xAxisTypeOverride = value;
+    void this.checkForUpdates('xAxisType-setter');
+    void this.userSettingsQuery.updateChartSettings({ xAxisType: value })
+      .then(() => {
+        this.xAxisTypeOverride = null;
+      })
+      .catch((error) => {
+        this.logger.error('[EventCardChart] Failed to persist xAxisType setting', error);
+        this.xAxisTypeOverride = null;
+        void this.checkForUpdates('xAxisType-revert');
+      });
   }
 
   public get downSamplingLevel() { return this.userSettingsQuery.chartSettings()?.downSamplingLevel ?? AppUserUtilities.getDefaultDownSamplingLevel(); }
@@ -184,6 +201,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   // Track previous state for change detection
   private previousState: any = {};
+  private xAxisTypeOverride: XAxisTypes | null = null;
 
 
   public distanceAxesForActivitiesMap = new Map<string, StreamInterface>();
@@ -320,6 +338,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
     return {
       ...settings,
+      xAxisType: this.xAxisType,
       chartTheme: theme,
       unitSettings: units,
       dataTypesToUse: (this.dataTypesToUse || []).sort(),
@@ -584,41 +603,54 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           }
 
           // Here we have all the data we need
+          const streamType = series.dummyData.stream.type;
+          const streamDataClass = DynamicDataLoader.getDataClassFromDataType(streamType);
+          const averageDisplay = this.getDisplayFromDataType(streamType, ActivityUtilities.getAverage(data));
+          const maxDisplay = this.getDisplayFromDataType(streamType, ActivityUtilities.getMax(data));
+          const minDisplay = this.getDisplayFromDataType(streamType, ActivityUtilities.getMin(data));
+          const minToMaxDiffDisplay = this.getDisplayFromDataType(streamType, ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data));
           const labelData = <LabelData>{
-            name: DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(series.dummyData.stream.type).type,
+            name: normalizeUnitDerivedTypeLabel(streamType, streamDataClass.displayType || streamDataClass.type),
             average: {
-              value: data.length ? `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getAverage(data)).getDisplayValue()}` : '--',
-              unit: `${<string>DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getAverage(data)).getDisplayUnit()}`
+              value: averageDisplay.value,
+              unit: averageDisplay.unit
             },
             max: {
-              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data)).getDisplayValue()}` : '--',
-              unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data)).getDisplayUnit()}`
+              value: maxDisplay.value,
+              unit: maxDisplay.unit
             },
             min: {
-              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMin(data)).getDisplayValue()}` : '--',
-              unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMin(data)).getDisplayUnit()}`
+              value: minDisplay.value,
+              unit: minDisplay.unit
             },
             minToMaxDiff: {
-              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)).getDisplayValue()}` : '--',
-              unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)).getDisplayUnit()}`
+              value: minToMaxDiffDisplay.value,
+              unit: minToMaxDiffDisplay.unit
             }
           };
 
           if (this.doesDataTypeSupportGainOrLoss(series.dummyData.stream.type)) {
+            const gainDisplay = this.getDisplayFromDataType(streamType, ActivityUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold));
+            const lossDisplay = this.getDisplayFromDataType(streamType, ActivityUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold));
             labelData.gain = {
-              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
-              unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, true, this.gainAndLossThreshold)).getDisplayUnit()}`
+              value: gainDisplay.value,
+              unit: gainDisplay.unit
             };
             labelData.loss = {
-              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayValue()}` : '--',
-              unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, ActivityUtilities.getGainOrLoss(data, false, this.gainAndLossThreshold)).getDisplayUnit()}`
+              value: lossDisplay.value,
+              unit: lossDisplay.unit
             };
           }
 
-          if (this.doesDataTypeSupportSlope(series.dummyData.stream.type) && seriesXAxisType === XAxisTypes.Distance) {
+          if (this.doesDataTypeSupportSlope(streamType) && seriesXAxisType === XAxisTypes.Distance) {
+            const distanceRange = ((end as number) - (start as number));
+            const slopeValue = distanceRange !== 0
+              ? (ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)) / distanceRange * 100
+              : null;
+            const slopeDisplay = this.getDisplayFromDataType(streamType, slopeValue);
             labelData.slopePercentage = {
-              value: data.length ? `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)) / ((end as number) - (start as number)) * 100).getDisplayValue()}` : '--',
-              unit: `${DynamicDataLoader.getDataInstanceFromDataType(series.dummyData.stream.type, (ActivityUtilities.getMax(data) - ActivityUtilities.getMin(data)) / ((end as number) - (start as number)) * 100).getDisplayUnit()}`
+              value: slopeDisplay.value,
+              unit: slopeDisplay.unit
             };
           }
 
@@ -1291,16 +1323,23 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     series.dummyData = {
       activity: activity,
       stream: stream,
-      displayName: DynamicDataLoader.getDataClassFromDataType(stream.type).displayType
+      displayName: normalizeUnitDerivedTypeLabel(
+        stream.type,
+        DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type
+      )
     };
 
     this.attachSeriesEventListeners(series);
 
-    series.tooltipText = ([DataPace.type, DataSwimPace.type, DataSwimPaceMinutesPer100Yard.type, DataPaceMinutesPerMile.type, DataGradeAdjustedPace.type, DataGradeAdjustedPaceMinutesPerMile.type].indexOf(stream.type) !== -1) ?
-      `${this.event.getActivities().length === 1 || this.event.isMultiSport() ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY.formatDuration()} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`
-      : `${this.event.getActivities().length === 1 || this.event.isMultiSport() ? '' : activity.creator.name} ${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} {valueY} ${DynamicDataLoader.getDataClassFromDataType(stream.type).unit}`;
+    const streamDataClass = DynamicDataLoader.getDataClassFromDataType(stream.type);
+    const normalizedLabel = normalizeUnitDerivedTypeLabel(stream.type, streamDataClass.displayType || streamDataClass.type);
+    const activityPrefix = this.event.getActivities().length === 1 || this.event.isMultiSport() ? '' : `${activity.creator.name} `;
 
-    series.legendSettings.labelText = `${DynamicDataLoader.getDataClassFromDataType(stream.type).displayType || DynamicDataLoader.getDataClassFromDataType(stream.type).type} ` + (DynamicDataLoader.getDataClassFromDataType(stream.type).unit ? ` (${DynamicDataLoader.getDataClassFromDataType(stream.type).unit})` : '') + ` [${this.core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity)).toString()}]${this.event.getActivities().length === 1 || this.event.isMultiSport() ? '' : activity.creator.name}[/]`;
+    series.tooltipText = ([DataPace.type, DataSwimPace.type, DataSwimPaceMinutesPer100Yard.type, DataPaceMinutesPerMile.type, DataGradeAdjustedPace.type, DataGradeAdjustedPaceMinutesPerMile.type].indexOf(stream.type) !== -1) ?
+      `${activityPrefix}${normalizedLabel} {valueY.formatDuration()} ${streamDataClass.unit}`
+      : `${activityPrefix}${normalizedLabel} {valueY} ${streamDataClass.unit}`;
+
+    series.legendSettings.labelText = `${normalizedLabel} ` + (streamDataClass.unit ? ` (${streamDataClass.unit})` : '') + ` [${this.core.color(this.eventColorService.getActivityColor(this.event.getActivities(), activity)).toString()}]${this.event.getActivities().length === 1 || this.event.isMultiSport() ? '' : activity.creator.name}[/]`;
 
     series.adapter.add('fill', (fill, target) => {
       return this.getSeriesColor(target);
@@ -1444,14 +1483,24 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           if (axisSeries.hidden) {
             return;
           }
-          if (DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]) {
-            map.min += `${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}`
+          const activity = axisSeries?.dummyData?.activity;
+          const streamType = axisSeries?.dummyData?.stream?.type;
+          if (!activity || !streamType) {
+            return;
           }
-          if (DynamicDataLoader.dataTypeAvgDataType[axisSeries.dummyData.stream.type]) {
-            map.avg += `${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeAvgDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeAvgDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}`
+
+          const minDataType = DynamicDataLoader.dataTypeMinDataType[streamType];
+          const avgDataType = DynamicDataLoader.dataTypeAvgDataType[streamType];
+          const maxDataType = DynamicDataLoader.dataTypeMaxDataType[streamType];
+
+          if (minDataType) {
+            map.min += this.getActivityStatDisplay(activity, minDataType);
           }
-          if (DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]) {
-            map.max += `${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMaxDataType[axisSeries.dummyData.stream.type]).getDisplayValue()}${axisSeries.dummyData.activity.getStat(DynamicDataLoader.dataTypeMinDataType[axisSeries.dummyData.stream.type]).getDisplayUnit()}`
+          if (avgDataType) {
+            map.avg += this.getActivityStatDisplay(activity, avgDataType);
+          }
+          if (maxDataType) {
+            map.max += this.getActivityStatDisplay(activity, maxDataType);
           }
           if (index + 1 !== (<AxisRendererY>target.parent).axis.series.length) {
             map.min += `, `
@@ -1964,90 +2013,181 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     return `rangeLabelContainer${series.id}`;
   }
 
+  private normalizeLapType(type: string): LapTypes {
+    return ((LapTypes as Record<string, LapTypes>)[type] || type) as LapTypes;
+  }
+
+  private toMilliseconds(value: unknown): number | null {
+    if (value instanceof Date) {
+      const ts = value.getTime();
+      return Number.isFinite(ts) ? ts : null;
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : null;
+    }
+    if (typeof value === 'string') {
+      const ts = Date.parse(value);
+      return Number.isFinite(ts) ? ts : null;
+    }
+    if (value && typeof value === 'object') {
+      const maybeTimestamp = value as { toMillis?: () => number; toDate?: () => Date; seconds?: number; nanoseconds?: number };
+      if (typeof maybeTimestamp.toMillis === 'function') {
+        const ts = maybeTimestamp.toMillis();
+        return Number.isFinite(ts) ? ts : null;
+      }
+      if (typeof maybeTimestamp.toDate === 'function') {
+        return this.toMilliseconds(maybeTimestamp.toDate());
+      }
+      if (typeof maybeTimestamp.seconds === 'number') {
+        const nanos = typeof maybeTimestamp.nanoseconds === 'number' ? maybeTimestamp.nanoseconds : 0;
+        const ts = (maybeTimestamp.seconds * 1000) + Math.floor(nanos / 1_000_000);
+        return Number.isFinite(ts) ? ts : null;
+      }
+    }
+    return null;
+  }
+
+  private getLapDurationMillis(lap: any): number | null {
+    try {
+      if (lap && typeof lap.getDuration === 'function') {
+        const lapDuration = lap.getDuration();
+        const secondsValue = typeof lapDuration?.getValue === 'function'
+          ? lapDuration.getValue()
+          : null;
+        if (typeof secondsValue === 'number' && Number.isFinite(secondsValue) && secondsValue > 0) {
+          return secondsValue * 1000;
+        }
+      }
+    } catch {
+      // Ignore and fall through
+    }
+    return null;
+  }
+
   private addLapGuides(chart: am4charts.XYChart, selectedActivities: ActivityInterface[], xAxisType: XAxisTypes, lapTypes: LapTypes[]) {
     const xAxis = <am4charts.ValueAxis | am4charts.DateAxis>chart.xAxes.getIndex(0);
+    if (!xAxis) {
+      return;
+    }
     xAxis.axisRanges.template.grid.disabled = false;
+    const selectedLapTypes = new Set((lapTypes || []).map(type => this.normalizeLapType(type)));
+
+    if (selectedLapTypes.size === 0) {
+      return;
+    }
+
     selectedActivities
-      .forEach((activity, activityIndex) => {
+      .forEach((activity) => {
         this.logger.info(`EventCardChartComponent: Rendering laps for activity ID: "${activity.getID() || ''}"`);
-        // Filter on lapTypes
-        lapTypes
-          .forEach(lapType => {
-            activity
-              .getLaps()
-              .filter(lap => lap.type === lapType)
-              .forEach((lap, lapIndex) => {
-                if (lapIndex === activity.getLaps().length - 1) {
-                  this.logger.info(`EventCardChartComponent: Skipping last lap for activity ${activity.getID()} (lap ${lapIndex + 1})`);
-                  return;
-                }
-                if (this.lapTypes.indexOf(lap.type) === -1) {
-                  this.logger.info(`EventCardChartComponent: Skipping lap type ${lap.type} for activity ${activity.getID()} (not in lapTypes filter)`);
-                  return;
-                }
-                this.logger.info(`EventCardChartComponent: Adding lap guide for activity ${activity.getID()}, lap type ${lap.type}, lap index ${lapIndex + 1}`);
-                let range
-                if (xAxisType === XAxisTypes.Time) {
-                  range = xAxis.axisRanges.create();
-                  range.value = lap.endDate.getTime();
-                } else if (xAxisType === XAxisTypes.Duration) {
-                  range = xAxis.axisRanges.create();
-                  range.value = +lap.endDate - +activity.startDate;
-                } else if (xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID() || '')) {
-                  const data = this.distanceAxesForActivitiesMap
-                    .get(activity.getID() || '')
-                    .getStreamDataByTime(activity.startDate, true)
-                    .filter(streamData => streamData && (streamData.time >= lap.endDate.getTime()));
-                  // There can be a case that the distance stream does not have data for this?
-                  // So if there is a lap, done and the watch did not update the distance example: last 2s lap
-                  if (!data[0]) {
-                    this.logger.warn(`EventCardChartComponent: No distance data found for lap ${lapIndex + 1} of activity ${activity.getID()}`);
-                    return;
-                  }
-                  range = xAxis.axisRanges.create();
-                  range.value = data[0].value || 0;
-                }
-                if (range) {
-                  const defaultColor = (this.chartTheme === 'dark' || this.chartTheme === 'amchartsdark') ? '#ffffff' : '#000000';
-                  const activityColor = this.eventColorService.getActivityColor(this.event.getActivities(), activity);
-                  const strokeColor = activityColor ? this.core.color(activityColor) : this.core.color(defaultColor);
-                  range.grid.stroke = strokeColor;
+        const activityLaps = activity.getLaps();
+        const activityStartMillis = this.toMilliseconds(activity.startDate);
 
-                  range.grid.strokeWidth = 1.1;
-                  range.grid.strokeOpacity = 1;
-                  range.grid.strokeDasharray = '2,5';
+        let cumulativeLapDurationMillis = 0;
 
-                  range.grid.above = true;
-                  range.grid.zIndex = 1;
-                  range.grid.tooltipText = `[${strokeColor.toString()} bold font-size: 1.2em]${activity.creator.name}[/]\n[bold font-size: 1.0em]Lap #${lapIndex + 1}[/]\n[bold font-size: 1.0em]Type:[/] [font-size: 0.8em]${lapType}[/]`;
-                  range.grid.tooltipPosition = 'pointer';
+        activityLaps.forEach((lap, lapIndex) => {
+          const lapEndMillis = this.toMilliseconds(lap.endDate);
+          const lapDurationMillis = this.getLapDurationMillis(lap);
+          if (lapIndex === activityLaps.length - 1) {
+            this.logger.info(`EventCardChartComponent: Skipping last lap for activity ${activity.getID()} (lap ${lapIndex + 1})`);
+            return;
+          }
 
-                  range.label.tooltipText = range.grid.tooltipText;
-                  range.label.inside = true;
-                  range.label.adapter.add('text', () => {
-                    return `${lapIndex + 1}`;
-                  });
-                  range.label.paddingTop = 2;
-                  range.label.paddingBottom = 2;
-                  range.label.zIndex = 11;
-                  range.label.fontSize = '1em';
-                  range.label.background.fillOpacity = 1;
-                  range.label.background.stroke = range.grid.stroke;
-                  range.label.background.strokeWidth = 1;
-                  range.label.tooltipText = range.grid.tooltipText;
+          const normalizedLapType = this.normalizeLapType(lap.type);
+          if (!selectedLapTypes.has(normalizedLapType)) {
+            return;
+          }
 
-                  // range.label.interactionsEnabled = true;
+          this.logger.info(`EventCardChartComponent: Adding lap guide for activity ${activity.getID()}, lap type ${lap.type}, lap index ${lapIndex + 1}`);
+          let range;
+          if (xAxisType === XAxisTypes.Time) {
+            if (lapEndMillis === null) {
+              this.logger.warn(`EventCardChartComponent: Invalid lap end time for activity ${activity.getID()} (lap ${lapIndex + 1})`);
+              return;
+            }
+            range = (<am4charts.DateAxis>xAxis).axisRanges.create();
+            (<am4charts.DateAxisDataItem>range).date = new Date(lapEndMillis);
+          } else if (xAxisType === XAxisTypes.Duration) {
+            const rawDurationMillis = (lapEndMillis !== null && activityStartMillis !== null)
+              ? Math.max(0, lapEndMillis - activityStartMillis)
+              : null;
 
-                  range.label.background.width = 1;
-                  range.label.fill = range.grid.stroke;
-                  range.label.horizontalCenter = 'middle';
-                  range.label.valign = 'bottom';
-                  range.label.textAlign = 'middle';
-                  range.label.dy = 6;
-                }
+            let durationMillis = rawDurationMillis;
+
+            // Some indoor files provide broken lap timestamps (all equal to activity start).
+            // In that case, fall back to cumulative lap-duration stats to place guides.
+            if (durationMillis === null || durationMillis <= cumulativeLapDurationMillis) {
+              if (lapDurationMillis !== null) {
+                cumulativeLapDurationMillis += lapDurationMillis;
+                durationMillis = cumulativeLapDurationMillis;
+              } else if (durationMillis !== null) {
+                durationMillis = Math.max(durationMillis, cumulativeLapDurationMillis);
+              } else {
+                this.logger.warn(`EventCardChartComponent: Invalid lap/activity time for duration guide on activity ${activity.getID()} (lap ${lapIndex + 1})`);
+                return;
               }
-              )
-          });
+            } else {
+              cumulativeLapDurationMillis = durationMillis;
+            }
+
+            range = (<am4charts.DateAxis>xAxis).axisRanges.create();
+            (<am4charts.DateAxisDataItem>range).date = new Date(durationMillis);
+          } else if (xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID() || '')) {
+            if (lapEndMillis === null) {
+              this.logger.warn(`EventCardChartComponent: Invalid lap end time for distance guide on activity ${activity.getID()} (lap ${lapIndex + 1})`);
+              return;
+            }
+            const data = this.distanceAxesForActivitiesMap
+              .get(activity.getID() || '')
+              .getStreamDataByTime(activity.startDate, true)
+              .filter(streamData => streamData && (streamData.time >= lapEndMillis));
+            // There can be a case that the distance stream does not have data for this?
+            // So if there is a lap, done and the watch did not update the distance example: last 2s lap
+            if (!data[0]) {
+              this.logger.warn(`EventCardChartComponent: No distance data found for lap ${lapIndex + 1} of activity ${activity.getID()}`);
+              return;
+            }
+            range = xAxis.axisRanges.create();
+            range.value = data[0].value || 0;
+          }
+
+          if (range) {
+            const defaultColor = (this.chartTheme === 'dark' || this.chartTheme === 'amchartsdark') ? '#ffffff' : '#000000';
+            const activityColor = this.eventColorService.getActivityColor(this.event.getActivities(), activity);
+            const strokeColor = activityColor ? this.core.color(activityColor) : this.core.color(defaultColor);
+            range.grid.disabled = false;
+            range.grid.stroke = strokeColor;
+
+            range.grid.strokeWidth = 1.1;
+            range.grid.strokeOpacity = 1;
+            range.grid.strokeDasharray = '2,5';
+
+            range.grid.above = true;
+            range.grid.zIndex = 1;
+            range.grid.tooltipText = `[${strokeColor.toString()} bold font-size: 1.2em]${activity.creator.name}[/]\n[bold font-size: 1.0em]Lap #${lapIndex + 1}[/]\n[bold font-size: 1.0em]Type:[/] [font-size: 0.8em]${normalizedLapType}[/]`;
+            range.grid.tooltipPosition = 'pointer';
+
+            range.label.tooltipText = range.grid.tooltipText;
+            range.label.inside = true;
+            range.label.text = `${lapIndex + 1}`;
+            range.label.paddingTop = 2;
+            range.label.paddingBottom = 2;
+            range.label.zIndex = 11;
+            range.label.fontSize = '1em';
+            range.label.background.fillOpacity = 1;
+            range.label.background.stroke = range.grid.stroke;
+            range.label.background.strokeWidth = 1;
+            range.label.tooltipText = range.grid.tooltipText;
+
+            // range.label.interactionsEnabled = true;
+
+            range.label.background.width = 1;
+            range.label.fill = range.grid.stroke;
+            range.label.horizontalCenter = 'middle';
+            range.label.valign = 'bottom';
+            range.label.textAlign = 'middle';
+            range.label.dy = 6;
+          }
+        });
       })
   }
 
@@ -2168,6 +2308,42 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     this.getSubscriptions().forEach(subscription => subscription.unsubscribe());
   }
 
+  private getDisplayFromDataType(dataType: string, value: unknown): { value: string; unit: string } {
+    const numericValue = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(numericValue)) {
+      return { value: '--', unit: '' };
+    }
+
+    try {
+      const data = DynamicDataLoader.getDataInstanceFromDataType(dataType, numericValue);
+      if (!data) {
+        return { value: '--', unit: '' };
+      }
+      return {
+        value: `${data.getDisplayValue()}`,
+        unit: `${data.getDisplayUnit()}`
+      };
+    } catch (error) {
+      this.logger.warn('[EventCardChartComponent] Could not format chart value', {
+        dataType,
+        numericValue,
+        error
+      });
+      return { value: '--', unit: '' };
+    }
+  }
+
+  private getActivityStatDisplay(activity: ActivityInterface, dataType: string): string {
+    if (!dataType) {
+      return '--';
+    }
+    const stat = activity.getStat(dataType);
+    if (!stat) {
+      return '--';
+    }
+    return `${stat.getDisplayValue()}${stat.getDisplayUnit()}`;
+  }
+
   private addXAxis(chart: am4charts.XYChart, xAxisType: XAxisTypes): am4charts.ValueAxis | am4charts.DateAxis {
     let xAxis;
     switch (xAxisType) {
@@ -2186,13 +2362,19 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
           if (!(target.dataItem as am4charts.ValueAxisDataItem).value) {
             return '';
           }
-          const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, (target.dataItem as am4charts.ValueAxisDataItem).value);
-          return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
+          const display = this.getDisplayFromDataType(DataDistance.type, (target.dataItem as am4charts.ValueAxisDataItem).value);
+          if (display.value === '--') {
+            return '';
+          }
+          return `[bold font-size: 1.0em]${display.value}[/]${display.unit}[/]`
         });
         // xAxis.tooltipText = '{valueX}'
         xAxis.adapter.add('getTooltipText', (text, target) => {
-          const data = DynamicDataLoader.getDataInstanceFromDataType(DataDistance.type, Number(text));
-          return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
+          const display = this.getDisplayFromDataType(DataDistance.type, text);
+          if (display.value === '--') {
+            return '';
+          }
+          return `[bold font-size: 1.0em]${display.value}[/]${display.unit}[/]`
         });
         // xAxis.renderer.labels.template.marginRight = 10;
         xAxis.min = 0;

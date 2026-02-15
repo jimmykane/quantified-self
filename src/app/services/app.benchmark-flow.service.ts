@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import { Overlay } from '@angular/cdk/overlay';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -7,6 +8,7 @@ import { AppEventInterface, BenchmarkOptions, BenchmarkResult, getBenchmarkPairK
 import { AppBenchmarkService } from './app.benchmark.service';
 import { AppEventService } from './app.event.service';
 import { LoggerService } from './logger.service';
+import { AppAnalyticsService } from './app.analytics.service';
 import { BenchmarkBottomSheetComponent } from '../components/benchmark/benchmark-bottom-sheet.component';
 import { BenchmarkSelectionDialogComponent } from '../components/benchmark/benchmark-selection-dialog.component';
 import { firstValueFrom } from 'rxjs';
@@ -27,11 +29,13 @@ interface BenchmarkFlowConfig {
 export class AppBenchmarkFlowService {
   constructor(
     private bottomSheet: MatBottomSheet,
+    private overlay: Overlay,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
     private benchmarkService: AppBenchmarkService,
     private eventService: AppEventService,
-    private logger: LoggerService
+    private logger: LoggerService,
+    private analyticsService: AppAnalyticsService
   ) { }
 
   openBenchmarkReport(config: BenchmarkFlowConfig): void {
@@ -42,9 +46,11 @@ export class AppBenchmarkFlowService {
         result: config.result,
         event: config.event,
         unitSettings: config.user?.settings?.unitSettings ?? AppUserUtilities.getDefaultUserUnitSettings(),
-        summariesSettings: config.user?.settings?.summariesSettings
+        summariesSettings: config.user?.settings?.summariesSettings,
+        brandText: (config.user as any)?.brandText ?? null,
       },
-      autoFocus: 'dialog'
+      autoFocus: 'dialog',
+      scrollStrategy: this.overlay.scrollStrategies.noop()
     });
 
     sheetRef.afterDismissed().subscribe((res: { rerun?: boolean } | undefined) => {
@@ -88,6 +94,7 @@ export class AppBenchmarkFlowService {
           test: result.activities[1],
           options: result.options
         });
+        return;
       }
     });
 
@@ -112,6 +119,7 @@ export class AppBenchmarkFlowService {
     this.snackBar.open('Generating Benchmark...', undefined, { duration: 2000 });
 
     try {
+      this.analyticsService.logEvent('benchmark_generate_start');
       const benchmarkResult = await this.benchmarkService.generateBenchmark(config.ref, config.test, config.options);
       const key = getBenchmarkPairKey(config.ref.getID()!, config.test.getID()!);
 
@@ -144,10 +152,12 @@ export class AppBenchmarkFlowService {
         });
       }
 
+      this.analyticsService.logEvent('benchmark_generate_success');
       config.onResult?.(benchmarkResult);
       this.openBenchmarkReport({ ...config, result: benchmarkResult });
       this.snackBar.open('Benchmark Generated & Saved!', undefined, { duration: 2000 });
     } catch (error) {
+      this.analyticsService.logEvent('benchmark_generate_failure');
       this.snackBar.open('Benchmark failed: ' + error, 'Close');
       this.logger.error('Benchmark flow failed', error);
     }

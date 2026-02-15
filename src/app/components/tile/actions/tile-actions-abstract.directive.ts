@@ -65,14 +65,16 @@ export class TileActionsAbstractDirective extends TileAbstractDirective {
    * see https://github.com/angular/components/issues/11677
    */
   fixDisappearIOSBug() {
+    document.getElementById('panel-fix')?.remove();
     const styleNode = document.createElement('style');
     styleNode.type = 'text/css';
     styleNode.id = 'panel-fix';
-    styleNode.appendChild(document.createTextNode('.mat-menu-panel{overflow: initial !important;}'));
+    styleNode.appendChild(
+      document.createTextNode('.mat-mdc-menu-panel,.mat-menu-panel{overflow: visible !important;}')
+    );
     document.getElementsByTagName('head')[0].appendChild(styleNode);
     setTimeout(() => {
       styleNode.remove();
     }, 500);
   }
 }
-

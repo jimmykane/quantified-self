@@ -1,6 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { of } from 'rxjs';
+import { Overlay } from '@angular/cdk/overlay';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -10,10 +11,12 @@ import { AppBenchmarkFlowService } from './app.benchmark-flow.service';
 import { AppBenchmarkService } from './app.benchmark.service';
 import { AppEventService } from './app.event.service';
 import { LoggerService } from './logger.service';
+import { AppAnalyticsService } from './app.analytics.service';
 
 describe('AppBenchmarkFlowService', () => {
   let service: AppBenchmarkFlowService;
   let bottomSheet: { open: ReturnType<typeof vi.fn> };
+  let overlay: { scrollStrategies: { noop: ReturnType<typeof vi.fn> } };
   let dialog: { open: ReturnType<typeof vi.fn> };
   let snackBar: { open: ReturnType<typeof vi.fn> };
   let benchmarkService: { generateBenchmark: ReturnType<typeof vi.fn> };
@@ -22,6 +25,7 @@ describe('AppBenchmarkFlowService', () => {
     getEventActivitiesAndAllStreams: ReturnType<typeof vi.fn>;
   };
   let logger: { error: ReturnType<typeof vi.fn> };
+  let analyticsService: { logEvent: ReturnType<typeof vi.fn> };
 
   const activityA = { getID: () => 'a1' } as ActivityInterface;
   const activityB = { getID: () => 'b1' } as ActivityInterface;
@@ -46,6 +50,7 @@ describe('AppBenchmarkFlowService', () => {
 
   beforeEach(() => {
     bottomSheet = { open: vi.fn().mockReturnValue({ afterDismissed: () => of(undefined) }) };
+    overlay = { scrollStrategies: { noop: vi.fn().mockReturnValue({}) } };
     dialog = { open: vi.fn().mockReturnValue({ afterClosed: () => of(undefined), componentInstance: { setActivities: vi.fn() } }) };
     snackBar = { open: vi.fn() };
     benchmarkService = { generateBenchmark: vi.fn() };
@@ -54,16 +59,19 @@ describe('AppBenchmarkFlowService', () => {
       getEventActivitiesAndAllStreams: vi.fn(),
     };
     logger = { error: vi.fn() };
+    analyticsService = { logEvent: vi.fn() };
 
     TestBed.configureTestingModule({
       providers: [
         AppBenchmarkFlowService,
         { provide: MatBottomSheet, useValue: bottomSheet },
+        { provide: Overlay, useValue: overlay },
         { provide: MatDialog, useValue: dialog },
         { provide: MatSnackBar, useValue: snackBar },
         { provide: AppBenchmarkService, useValue: benchmarkService },
         { provide: AppEventService, useValue: eventService },
         { provide: LoggerService, useValue: logger },
+        { provide: AppAnalyticsService, useValue: analyticsService },
       ]
     });
 
@@ -88,6 +96,19 @@ describe('AppBenchmarkFlowService', () => {
 
     expect(bottomSheet.open).toHaveBeenCalledTimes(1);
     expect(dialog.open).toHaveBeenCalledTimes(1);
+    expect(analyticsService.logEvent).not.toHaveBeenCalled();
+  });
+
+  it('passes user brandText to benchmark bottom sheet data', () => {
+    const event = createEvent();
+    const result = createResult();
+    const user = { uid: 'user-1', brandText: 'My Brand' } as User;
+
+    service.openBenchmarkReport({ event, result, user });
+
+    const openCallArgs = bottomSheet.open.mock.calls[0];
+    expect(openCallArgs).toBeTruthy();
+    expect(openCallArgs[1]?.data?.brandText).toBe('My Brand');
   });
 
   it('opens selection dialog and runs benchmark when two activities returned', async () => {
@@ -107,6 +128,7 @@ describe('AppBenchmarkFlowService', () => {
       test: activityB,
       options
     }));
+    expect(analyticsService.logEvent).not.toHaveBeenCalled();
   });
 
   it('loads activities when missing and user provided', async () => {
@@ -127,6 +149,7 @@ describe('AppBenchmarkFlowService', () => {
 
     expect(eventService.getEventActivitiesAndAllStreams).toHaveBeenCalledWith(user, emptyEvent.getID());
     expect(dialog.open).toHaveBeenCalledTimes(1);
+    expect(analyticsService.logEvent).not.toHaveBeenCalled();
   });
 
   it('generates, persists, and reopens report', async () => {
@@ -160,6 +183,8 @@ describe('AppBenchmarkFlowService', () => {
     );
     expect(onResult).toHaveBeenCalledWith(result);
     expect(bottomSheet.open).toHaveBeenCalled();
+    expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_start');
+    expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_success');
   });
 
   it('skips persistence when no user is provided', async () => {
@@ -177,5 +202,24 @@ describe('AppBenchmarkFlowService', () => {
     });
 
     expect(eventService.updateEventProperties).not.toHaveBeenCalled();
+    expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_start');
+    expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_success');
+  });
+
+  it('logs failure analytics when benchmark generation fails', async () => {
+    const event = createEvent();
+    const options: BenchmarkOptions = { autoAlignTime: true };
+
+    benchmarkService.generateBenchmark.mockRejectedValueOnce(new Error('boom'));
+
+    await service.generateAndOpenReport({
+      event,
+      ref: activityA,
+      test: activityB,
+      options
+    });
+
+    expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_start');
+    expect(analyticsService.logEvent).toHaveBeenCalledWith('benchmark_generate_failure');
   });
 });

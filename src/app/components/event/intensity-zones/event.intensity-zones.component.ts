@@ -1,37 +1,37 @@
 import {
   AfterViewInit,
   ChangeDetectionStrategy,
-  ChangeDetectorRef,
   Component,
+  ElementRef,
   Input,
   NgZone,
   OnChanges,
   OnDestroy,
   SimpleChanges,
+  ViewChild,
 } from '@angular/core';
-
 import { BreakpointObserver } from '@angular/cdk/layout';
-import { AmChartsService } from '../../../services/am-charts.service';
-import type * as am4core from '@amcharts/amcharts4/core';
-import type * as am4charts from '@amcharts/amcharts4/charts';
-import { firstValueFrom } from 'rxjs';
-
-
-import { ActivityInterface } from '@sports-alliance/sports-lib';
-import { ChartAbstractDirective } from '../../charts/chart-abstract.directive';
-import { DataHeartRate } from '@sports-alliance/sports-lib';
-import { DataPower } from '@sports-alliance/sports-lib';
-import { DataSpeed } from '@sports-alliance/sports-lib';
-import { AppColors } from '../../../services/color/app.colors';
-import { DynamicDataLoader } from '@sports-alliance/sports-lib';
-import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { convertIntensityZonesStatsToChartData, getActiveDataTypes } from '../../../helpers/intensity-zones-chart-data-helper';
-import { AppDataColors } from '../../../services/color/app.data.colors';
-import { DataDuration } from '@sports-alliance/sports-lib';
-import { LoggerService } from '../../../services/logger.service';
-import { AppBreakpoints } from '../../../constants/breakpoints';
 import { Subscription } from 'rxjs';
+import type { EChartsType } from 'echarts/core';
 
+import {
+  ActivityInterface,
+  ChartThemes,
+  DataDuration,
+  DataHeartRate,
+} from '@sports-alliance/sports-lib';
+import { AppBreakpoints } from '../../../constants/breakpoints';
+import { AppDataColors } from '../../../services/color/app.data.colors';
+import { AppColors } from '../../../services/color/app.colors';
+import { AppEventColorService } from '../../../services/color/app.event.color.service';
+import { EChartsLoaderService } from '../../../services/echarts-loader.service';
+import { LoggerService } from '../../../services/logger.service';
+import {
+  convertIntensityZonesStatsToEchartsData,
+  IntensityZonesEChartsData,
+} from '../../../helpers/intensity-zones-chart-data-helper';
+
+type ChartOption = Parameters<EChartsType['setOption']>[0];
 
 @Component({
   selector: 'app-event-intensity-zones',
@@ -40,224 +40,407 @@ import { Subscription } from 'rxjs';
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })
-export class EventIntensityZonesComponent extends ChartAbstractDirective implements AfterViewInit, OnChanges, OnDestroy {
-  @Input() activities!: ActivityInterface[];
+export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, OnDestroy {
+  @Input() activities: ActivityInterface[] = [];
+  @Input() chartTheme: ChartThemes = ChartThemes.Material;
+  @Input() useAnimations = false;
 
-  protected declare chart: am4charts.XYChart;
-  private core!: typeof am4core;
-  private charts!: typeof am4charts;
+  @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
+
+  private chart: EChartsType | null = null;
   private isMobile = false;
   private breakpointSubscription: Subscription;
+  private resizeObserver: ResizeObserver | null = null;
+  private resizeFrameId: number | null = null;
 
-  private getData(): any[] {
-    return convertIntensityZonesStatsToChartData(this.activities, this.isMobile);
-  }
-
-
-  constructor(protected zone: NgZone,
-    changeDetector: ChangeDetectorRef,
+  constructor(
+    private breakpointObserver: BreakpointObserver,
+    private eChartsLoader: EChartsLoaderService,
     private eventColorService: AppEventColorService,
-    protected amChartsService: AmChartsService,
-    protected logger: LoggerService,
-    private breakpointObserver: BreakpointObserver) {
-    super(zone, changeDetector, amChartsService, logger);
-
-    // Subscribe to mobile breakpoint
+    private logger: LoggerService,
+    private zone: NgZone
+  ) {
     this.breakpointSubscription = this.breakpointObserver
       .observe([AppBreakpoints.XSmall])
       .subscribe(result => {
         const wasMobile = this.isMobile;
         this.isMobile = result.matches;
-        // Refresh chart data if breakpoint changed and chart exists
         if (this.chart && wasMobile !== this.isMobile) {
-          this.updateChart(this.getData());
+          this.refreshChart();
         }
       });
   }
 
-  async ngOnChanges(changes: SimpleChanges): Promise<void> {
-    if (this.chart) {
-      if (changes.chartTheme || changes.useAnimations) {
-        this.destroyChart();
-        this.chart = await this.createChart();
-      }
-      this.updateChart(this.getData());
+  async ngAfterViewInit(): Promise<void> {
+    await this.initializeChart();
+    this.refreshChart();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!this.chart) {
+      return;
+    }
+    if (changes.activities || changes.chartTheme || changes.useAnimations) {
+      this.refreshChart();
     }
   }
 
-  override ngOnDestroy(): void {
-    super.ngOnDestroy();
+  ngOnDestroy(): void {
     if (this.breakpointSubscription) {
       this.breakpointSubscription.unsubscribe();
     }
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
+    if (this.resizeFrameId !== null && typeof cancelAnimationFrame !== 'undefined') {
+      cancelAnimationFrame(this.resizeFrameId);
+      this.resizeFrameId = null;
+    }
+    this.eChartsLoader.dispose(this.chart);
+    this.chart = null;
   }
 
+  private async initializeChart(): Promise<void> {
+    if (!this.chartDiv?.nativeElement) {
+      return;
+    }
 
-  async ngAfterViewInit(): Promise<void> {
-    this.chart = await this.createChart();
-    this.updateChart(this.getData());
+    try {
+      this.chart = await this.eChartsLoader.init(this.chartDiv.nativeElement);
+      this.setupResizeObserver();
+    } catch (error) {
+      this.logger.error('[EventIntensityZonesComponent] Failed to initialize ECharts', error);
+    }
   }
 
+  private setupResizeObserver(): void {
+    if (typeof ResizeObserver === 'undefined' || !this.chartDiv?.nativeElement) {
+      return;
+    }
 
-  protected async createChart(): Promise<am4charts.XYChart> {
-    const modules = await this.amChartsService.load();
-    this.core = modules.core;
-    this.charts = modules.charts;
+    this.zone.runOutsideAngular(() => {
+      this.resizeObserver = new ResizeObserver(() => {
+        this.scheduleResize();
+      });
+      this.resizeObserver.observe(this.chartDiv.nativeElement);
+    });
+  }
 
-    const chart = await super.createChart(this.charts.XYChart) as am4charts.XYChart;
+  private refreshChart(): void {
+    if (!this.chart) {
+      return;
+    }
 
-    // chart.exporting.menu = this.getExportingMenu();
-    chart.hiddenState.properties.opacity = 0;
-    chart.padding(12, 0, 0, 0);
+    const data = convertIntensityZonesStatsToEchartsData(this.activities, this.isMobile);
+    const option = this.buildChartOption(data);
+    this.eChartsLoader.setOption(this.chart, option, { notMerge: true, lazyUpdate: true });
+    this.scheduleResize();
+  }
 
-    // Legend
-    const legend = new this.charts.Legend();
-    chart.legend = legend;
-    legend.parent = chart.plotContainer;
-    legend.background.fill = this.core.color('#000');
-
-    legend.background.fillOpacity = 0.00;
-    legend.width = 100;
-    legend.align = 'right';
-    legend.valign = 'bottom';
-
-    // X Axis
-    const valueAxis = chart.xAxes.push(new this.charts.DurationAxis());
-
-    valueAxis.renderer.grid.template.disabled = true;
-    valueAxis.cursorTooltipEnabled = false;
-    valueAxis.renderer.labels.template.disabled = true;
-    valueAxis.extraMax = 0;
-
-    // Y Axis
-    const categoryAxis = chart.yAxes.push(new this.charts.CategoryAxis());
-
-    // categoryAxis.renderer.grid.template.disabled = true;
-    categoryAxis.renderer.grid.template.location = 0;
-    categoryAxis.renderer.minGridDistance = 1;
-    // categoryAxis.renderer.grid.template.strokeWidth = 2;
-    // categoryAxis.renderer.grid.template.strokeOpacity = ;
-    categoryAxis.cursorTooltipEnabled = false;
-    categoryAxis.dataFields.category = 'zone';
-    categoryAxis.renderer.labels.template.align = 'left';
-    // categoryAxis.renderer.labels.template.fontWeight = 'bold';
-    categoryAxis.renderer.cellStartLocation = 0.05;
-    categoryAxis.renderer.cellEndLocation = 0.95;
-    categoryAxis.renderer.grid.template.disabled = true
-
-    // categoryAxis.renderer.grid.template.fillOpacity = 1;
-    // categoryAxis.renderer.grid.template.fill = am4core.color('FFFFFF');
-
-    categoryAxis.renderer.axisFills.template.disabled = false;
-    categoryAxis.renderer.axisFills.template.fillOpacity = 0.1;
-    categoryAxis.fillRule = (dataItem) => {
-      if (dataItem.axisFill) {
-        dataItem.axisFill.visible = true;
-      }
-    };
-    categoryAxis.renderer.axisFills.template.adapter.add('fill', (fill, target) => {
-      const dataContext = target.dataItem?.dataContext as any;
-      return dataContext ? (this.eventColorService.getColorForZone(dataContext['zone']) as am4core.Color) : (fill as am4core.Color);
+  private buildChartOption(data: IntensityZonesEChartsData): ChartOption {
+    const darkTheme = this.isDarkThemeActive();
+    const textColor = darkTheme ? '#ffffff' : '#2a2a2a';
+    const gridLineColor = darkTheme ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)';
+    const zoneBackgroundOpacity = darkTheme ? 0.18 : 0.12;
+    const rightInset = this.isMobile ? 16 : 0;
+    const zoneAxisRichStyles = this.createZoneAxisRichStyles(data.zones);
+    const zoneBulletRichStyles = this.createZoneBulletRichStyles(data.zones);
+    const zoneBackgroundColors = data.zones.map(zone =>
+      this.toTransparentColor(this.eventColorService.getColorForZoneHex(zone), zoneBackgroundOpacity)
+    );
+    const series = data.series.map((seriesEntry, seriesIndex) => {
+      const displayName = this.getLegendLabel(seriesEntry.type);
+      return {
+        type: 'bar',
+        name: displayName,
+        data: seriesEntry.values,
+        barMaxWidth: 18,
+        clip: false,
+        itemStyle: {
+          color: this.getSeriesColor(seriesEntry.type),
+          borderRadius: [0, 8, 8, 0]
+        },
+        label: {
+          show: true,
+          position: 'right',
+          distance: 4,
+          align: 'left',
+          color: textColor,
+          padding: [0, 2, 0, 2],
+          formatter: (params: { dataIndex: number }) => {
+            const dataIndex = params.dataIndex;
+            const value = seriesEntry.values[dataIndex] ?? 0;
+            if (value <= 0.1) {
+              return '';
+            }
+            const percent = this.formatPercentage(seriesEntry.percentages[dataIndex] ?? 0);
+            return `{zone_${dataIndex}|${percent}%}`;
+          },
+          rich: zoneBulletRichStyles
+        },
+        emphasis: {
+          focus: 'none'
+        },
+        tooltip: {
+          valueFormatter: (value: number) => new DataDuration(value).getDisplayValue()
+        },
+        z: seriesIndex + 1
+      };
     });
 
+    const option: ChartOption = {
+      animation: this.useAnimations === true,
+      textStyle: {
+        color: textColor,
+        fontFamily: "'Barlow Condensed', sans-serif"
+      },
+      grid: {
+        left: 0,
+        right: rightInset,
+        top: 0,
+        bottom: 0,
+        containLabel: true
+      },
+      legend: {
+        show: false,
+        selectedMode: true,
+        left: 'center',
+        bottom: 0,
+        orient: 'horizontal',
+        textStyle: {
+          color: textColor,
+          fontFamily: "'Barlow Condensed', sans-serif",
+        }
+      },
+      tooltip: {
+        trigger: 'item',
+        backgroundColor: darkTheme ? '#303030' : '#ffffff',
+        borderColor: darkTheme ? '#6b6b6b' : '#d6d6d6',
+        textStyle: {
+          color: darkTheme ? '#ffffff' : '#2a2a2a',
+          fontFamily: "'Barlow Condensed', sans-serif",
+        },
+        formatter: (params: { dataIndex: number; seriesIndex: number; marker: string }) => {
+          const dataIndex = params.dataIndex;
+          const seriesIndex = params.seriesIndex;
+          const zone = data.zones[dataIndex];
+          const currentSeries = data.series[seriesIndex];
+          if (!zone || !currentSeries) {
+            return '';
+          }
 
+          const value = currentSeries.values[dataIndex] ?? 0;
+          const percent = this.formatPercentage(currentSeries.percentages[dataIndex] ?? 0);
+          const duration = new DataDuration(value).getDisplayValue();
+          return `${params.marker}<b>${zone}</b><br/>${currentSeries.type}: <b>${percent}%</b><br/>Time: <b>${duration}</b>`;
+        }
+      },
+      xAxis: {
+        type: 'value',
+        axisLabel: { show: false },
+        axisTick: { show: false },
+        splitLine: { show: false },
+        axisLine: { show: false }
+      },
+      yAxis: {
+        type: 'category',
+        data: data.zones,
+        axisTick: { show: false },
+        axisLine: { show: false },
+        splitArea: {
+          show: true,
+          areaStyle: {
+            color: zoneBackgroundColors
+          }
+        },
+        splitLine: {
+          show: true,
+          lineStyle: {
+            color: gridLineColor
+          }
+        },
+        axisLabel: {
+          color: textColor,
+          fontFamily: "'Barlow Condensed', sans-serif",
+          formatter: (value: string) => {
+            const zoneIndex = data.zones.indexOf(value);
+            if (zoneIndex === -1) {
+              return value;
+            }
+            return `{zone_${zoneIndex}|${value}}`;
+          },
+          rich: zoneAxisRichStyles
+        }
+      },
+      series
+    };
 
-    return chart;
+    return option;
   }
 
-  private updateChart(data: any) {
-    this.chart.series.clear();
-    this.createChartSeries(getActiveDataTypes(data));
-    this.chart.data = data
+  private createZoneAxisRichStyles(zones: string[]): Record<string, {
+    backgroundColor: string;
+    borderRadius: number;
+    color: string;
+    fontWeight: number;
+    width: number;
+    align: 'center';
+    verticalAlign: 'middle';
+    lineHeight: number;
+    padding: number[];
+  }> {
+    const badgeWidth = this.isMobile ? 28 : 56;
+    const badgeLineHeight = this.isMobile ? 16 : 18;
+
+    return zones.reduce((styles, zone, zoneIndex) => {
+      styles[`zone_${zoneIndex}`] = {
+        backgroundColor: this.eventColorService.getColorForZoneHex(zone),
+        borderRadius: 6,
+        color: '#ffffff',
+        fontWeight: 600,
+        width: badgeWidth,
+        align: 'center',
+        verticalAlign: 'middle',
+        lineHeight: badgeLineHeight,
+        padding: [1, 4, 1, 4],
+      };
+      return styles;
+    }, {} as Record<string, {
+      backgroundColor: string;
+      borderRadius: number;
+      color: string;
+      fontWeight: number;
+      width: number;
+      align: 'center';
+      verticalAlign: 'middle';
+      lineHeight: number;
+      padding: number[];
+    }>);
   }
 
-  private createChartSeries(activeTypes: Set<string>) {
-    DynamicDataLoader.zoneStatsTypeMap.forEach(statsTypeMap => {
-      if (!activeTypes.has(statsTypeMap.type)) {
+  private createZoneBulletRichStyles(zones: string[]): Record<string, {
+    backgroundColor: string;
+    borderRadius: number;
+    color: string;
+    fontWeight: number;
+    width: number;
+    align: 'center';
+    verticalAlign: 'middle';
+    lineHeight: number;
+    padding: number[];
+  }> {
+    const bulletWidth = this.isMobile ? 18 : 22;
+    const bulletLineHeight = this.isMobile ? 14 : 16;
+
+    return zones.reduce((styles, zone, zoneIndex) => {
+      styles[`zone_${zoneIndex}`] = {
+        backgroundColor: this.eventColorService.getColorForZoneHex(zone),
+        borderRadius: 6,
+        color: '#ffffff',
+        fontWeight: 600,
+        width: bulletWidth,
+        align: 'center',
+        verticalAlign: 'middle',
+        lineHeight: bulletLineHeight,
+        padding: [0, 1, 0, 1],
+      };
+      return styles;
+    }, {} as Record<string, {
+      backgroundColor: string;
+      borderRadius: number;
+      color: string;
+      fontWeight: number;
+      width: number;
+      align: 'center';
+      verticalAlign: 'middle';
+      lineHeight: number;
+      padding: number[];
+    }>);
+  }
+
+  private scheduleResize(): void {
+    if (!this.chart) {
+      return;
+    }
+
+    if (typeof requestAnimationFrame === 'undefined') {
+      this.eChartsLoader.resize(this.chart);
+      return;
+    }
+
+    if (this.resizeFrameId !== null) {
+      return;
+    }
+
+    this.resizeFrameId = requestAnimationFrame(() => {
+      this.resizeFrameId = null;
+      if (!this.chart) {
         return;
       }
-      const series = this.chart.series.push(new this.charts.ColumnSeries());
-
-      // series.clustered = false;
-      series.dataFields.valueX = statsTypeMap.type;
-      series.dataFields.categoryY = 'zone';
-      series.calculatePercent = true;
-      series.legendSettings.labelText = statsTypeMap.type === DataHeartRate.type ? 'HR' : `${statsTypeMap.type}`;
-      series.columns.template.tooltipText = `[bold font-size: 1.05em]{categoryY}[/]\n ${statsTypeMap.type}: [bold]{valueX.percent.formatNumber('#.')}%[/]\n Time: [bold]{valueX.formatDuration()}[/]`;
-
-      series.adapter.add('tooltipText', (text, target) => {
-        const dataItem = target.tooltipDataItem;
-        if (!dataItem || !dataItem.values.valueX) {
-          return text;
-        }
-        const value = dataItem.values.valueX.value;
-        const percent = dataItem.values.valueX.percent;
-        const duration = new DataDuration(value).getDisplayValue();
-        return `[bold font-size: 1.05em]{categoryY}[/]\n ${statsTypeMap.type}: [bold]${Math.round(percent)}%[/]\n Time: [bold]${duration}[/]`;
-      });
-      series.columns.template.strokeWidth = 0;
-      series.columns.template.height = this.core.percent(80);
-
-      series.columns.template.column.cornerRadiusBottomRight = 8;
-      series.columns.template.column.cornerRadiusTopRight = 8;
-
-      const categoryLabel = series.bullets.push(new this.charts.LabelBullet());
-
-      categoryLabel.label.adapter.add('text', (text, target) => {
-        if (!target.dataItem || !target.dataItem.values || !target.dataItem.values.valueX) {
-          return text;
-        }
-        const value = target.dataItem.values.valueX.value;
-        if (value < 0.1) {
-          return '';
-        }
-        const duration = new DataDuration(value).getDisplayValue();
-        const percent = Math.round(target.dataItem.values.valueX.percent);
-        return `[bold]${duration}[/] (${percent}%)`;
-      });
-      // Hide bullet if value is near 0
-      categoryLabel.adapter.add('visible', (visible, target) => {
-        const value = target.dataItem?.values?.valueX?.value;
-        return (value !== undefined && value > 0.1);
-      });
-      categoryLabel.adapter.add('opacity', (opacity, target) => {
-        const value = target.dataItem?.values?.valueX?.value;
-        return (value !== undefined && value > 0.1) ? 1 : 0;
-      });
-      // Also ensure the label itself is hidden
-      categoryLabel.label.adapter.add('visible', (visible, target) => {
-        const value = target.dataItem?.values?.valueX?.value;
-        return (value !== undefined && value > 0.1);
-      });
-      categoryLabel.locationX = 0;
-      categoryLabel.label.horizontalCenter = 'left';
-      categoryLabel.label.verticalCenter = 'middle';
-      categoryLabel.label.textAlign = 'middle';
-      categoryLabel.label.truncate = false;
-      categoryLabel.label.hideOversized = false;
-      categoryLabel.label.fontSize = '0.75em';
-      categoryLabel.label.dx = 6;
-      categoryLabel.label.fill = this.core.color('#ffffff');
-      categoryLabel.label.padding(0, 4, 0, 4);
-
-      categoryLabel.label.background = new this.core.RoundedRectangle();
-      categoryLabel.label.background.fillOpacity = 1;
-      categoryLabel.label.background.strokeOpacity = 1;
-
-      categoryLabel.label.background.adapter.add('fill', (fill, target) => {
-        const dataContext = target.dataItem?.dataContext as any;
-        return dataContext ? (this.eventColorService.getColorForZone(dataContext['zone']) as am4core.Color) : (fill as am4core.Color);
-      });
-      categoryLabel.label.background.adapter.add('stroke', (stroke, target) => {
-        const dataContext = target.dataItem?.dataContext as any;
-        return dataContext ? (this.eventColorService.getColorForZone(dataContext['zone']) as am4core.Color) : (stroke as am4core.Color);
-      });
-      // (<am4core.RoundedRectangle>(categoryLabel.label.background)).cornerRadius(2, 2, 2, 2);
-
-      // (<am4core.RoundedRectangle>(categoryLabel.label.background)).cornerRadius(2, 2, 2, 2);
-
-      series.fill = this.core.color((AppDataColors as any)[statsTypeMap.type] || AppColors.Blue);
-
+      this.eChartsLoader.resize(this.chart);
     });
+  }
+
+  private formatPercentage(value: number): number {
+    if (!Number.isFinite(value)) {
+      return 0;
+    }
+    return Math.round(Math.max(0, value));
+  }
+
+  private toTransparentColor(hex: string, alpha: number): string {
+    const normalized = `${hex}`.trim();
+    const clampedAlpha = Math.max(0, Math.min(1, alpha));
+
+    const sixDigit = normalized.match(/^#([a-fA-F0-9]{6})$/);
+    if (sixDigit) {
+      const value = sixDigit[1];
+      const red = parseInt(value.substring(0, 2), 16);
+      const green = parseInt(value.substring(2, 4), 16);
+      const blue = parseInt(value.substring(4, 6), 16);
+      return `rgba(${red}, ${green}, ${blue}, ${clampedAlpha})`;
+    }
+
+    const threeDigit = normalized.match(/^#([a-fA-F0-9]{3})$/);
+    if (threeDigit) {
+      const value = threeDigit[1];
+      const red = parseInt(`${value[0]}${value[0]}`, 16);
+      const green = parseInt(`${value[1]}${value[1]}`, 16);
+      const blue = parseInt(`${value[2]}${value[2]}`, 16);
+      return `rgba(${red}, ${green}, ${blue}, ${clampedAlpha})`;
+    }
+
+    return normalized;
+  }
+
+  private getLegendLabel(type: string): string {
+    const normalizedType = `${type}`.trim().toLowerCase();
+    if (type === DataHeartRate.type || normalizedType === 'heart rate') {
+      return 'HR';
+    }
+    if (normalizedType === 'power') {
+      return 'PWR';
+    }
+    if (normalizedType === 'speed') {
+      return 'SPD';
+    }
+    return type;
+  }
+
+  private getSeriesColor(type: string): string {
+    const colorMap = AppDataColors as unknown as Record<string, string>;
+    return colorMap[type] ?? AppColors.Blue;
+  }
+
+  private isDarkThemeActive(): boolean {
+    const chartTheme = `${this.chartTheme}`.toLowerCase();
+    if (chartTheme === 'dark' || chartTheme === 'amchartsdark') {
+      return true;
+    }
+    if (typeof document === 'undefined') {
+      return false;
+    }
+    return document.body.classList.contains('dark-theme');
   }
 }

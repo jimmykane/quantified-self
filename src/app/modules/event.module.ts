@@ -18,6 +18,8 @@ import { EventCardStatsGridComponent } from '../components/event/stats-grid/even
 import { EventCardChartComponent } from '../components/event/chart/event.card.chart.component';
 import { ActivityToggleComponent } from '../components/event/activity-toggle/activity-toggle.component';
 import { EventIntensityZonesComponent } from '../components/event/intensity-zones/event.intensity-zones.component';
+import { EventPowerCurveComponent } from '../components/event/power-curve/event.power-curve.component';
+import { EventPerformanceChartsComponent } from '../components/event/performance-charts/event.performance-charts.component';
 import { LapTypeIconComponent } from '../components/lap-type-icon/lap-type-icon.component';
 import { GoogleMapsModule } from '@angular/google-maps';
 import { EventDetailsSummaryBottomSheetComponent } from '../components/event-summary/event-details-summary-bottom-sheet/event-details-summary-bottom-sheet.component';
@@ -28,6 +30,8 @@ import { JumpMarkerPopupComponent } from '../components/event/map/popups/jump-ma
 import { BenchmarkSelectionDialogComponent } from '../components/benchmark/benchmark-selection-dialog.component';
 import { BenchmarkReportComponent } from '../components/benchmark/benchmark-report.component';
 import { BenchmarkBottomSheetComponent } from '../components/benchmark/benchmark-bottom-sheet.component';
+import { EventSectionHeaderComponent } from '../components/event/section-header/event.section-header.component';
+import { DeviceNameEditDialogComponent } from '../components/event/activities-toggles/device-name-edit-dialog/device-name-edit-dialog.component';
 
 @NgModule({
     imports: [
@@ -59,11 +63,15 @@ import { BenchmarkBottomSheetComponent } from '../components/benchmark/benchmark
         ActivityToggleComponent,
         MapActionsComponent,
         EventIntensityZonesComponent,
+        EventPowerCurveComponent,
+        EventPerformanceChartsComponent,
         LapTypeIconComponent,
         JumpMarkerPopupComponent,
         BenchmarkSelectionDialogComponent,
         BenchmarkReportComponent,
-        BenchmarkBottomSheetComponent
+        BenchmarkBottomSheetComponent,
+        EventSectionHeaderComponent,
+        DeviceNameEditDialogComponent,
     ]
 })
 

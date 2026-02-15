@@ -1,16 +1,17 @@
 ---
 trigger: always_on
+description: Require test verification for code changes before task completion.
 ---
 
 # Test Verification Enforcement
 
-Whenever you modify code (refactor, feature, fix), you **MUST** verify your changes by running relevant tests.
+Whenever code is modified (feature, fix, refactor), run relevant tests.
 
 ## Requirements
-1. **Identify Tests**: Find existing tests related to the modified files.
-2. **Run Tests**: Execute the tests using `ng test` (or `npm run test`).
-3. **Verify Results**: Ensure tests pass. If they fail, you MUST fix them before considering the task complete.
-4. **No Tests?**: If no tests exist for the modified code, you should create a basic test to verify your changes, or explicitly state why testing is not possible/skipped.
+1. Identify tests related to changed files.
+2. Execute the relevant test command(s).
+3. Report pass/fail clearly.
+4. If no tests exist, add a basic test when practical or state why testing was skipped.
 
 ## Context7 Usage
-- **Test Runner Docs**: Use `context7` tools (`mcp_resolve-library-id`, `mcp_get-library-docs`) to look up command-line arguments for `ng test` or `vitest` if you need to run specific suites.
+- Use `context7` docs for runner-specific flags (`ng test`, `vitest`) when needed.

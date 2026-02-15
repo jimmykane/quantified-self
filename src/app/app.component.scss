@@ -1,7 +1,13 @@
 /* Main App Layout */
 /* Note: margin-top is set dynamically via [style.margin-top.px] binding */
 mat-sidenav-container {
-  min-height: calc(100vh - 64px);
+  height: calc(100vh - var(--qs-layout-top-offset, 0px));
+}
+
+@supports (height: 100dvh) {
+  mat-sidenav-container {
+    height: calc(100dvh - var(--qs-layout-top-offset, 0px));
+  }
 }
 
 mat-sidenav {
@@ -86,10 +92,6 @@ mat-icon.header-logo {
 
 
 
-
-.no-margin-top {
-  margin-top: 0 !important;
-}
 
 /* Utilities */
 .fill-space {

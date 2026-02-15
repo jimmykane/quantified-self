@@ -31,6 +31,26 @@ export class EventCardChartActionsComponent implements OnChanges {
   constructor() {
   }
 
+  async onStackYAxesToggle(checked: boolean) {
+    this.stackYAxes = checked;
+    await this.somethingChanged('stackYAxes');
+  }
+
+  async onShowLapsToggle(checked: boolean) {
+    this.showLaps = checked;
+    await this.somethingChanged('showLaps');
+  }
+
+  async onShowAllDataToggle(checked: boolean) {
+    this.showAllData = checked;
+    await this.somethingChanged('showAllData');
+  }
+
+  async onXAxisTypeChange(value: XAxisTypes) {
+    this.xAxisType = value;
+    await this.somethingChanged('xAxisType');
+  }
+
   async somethingChanged(prop?: string) {
     if (prop === 'xAxisType') {
       this.xAxisTypeChange.emit(this.xAxisType);

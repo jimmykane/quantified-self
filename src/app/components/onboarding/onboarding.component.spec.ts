@@ -69,7 +69,8 @@ describe('OnboardingComponent', () => {
 
         mockPaymentService = {
             getProducts: vi.fn().mockReturnValue(of([])),
-            getUserSubscriptions: vi.fn().mockReturnValue(of([]))
+            getUserSubscriptions: vi.fn().mockReturnValue(of([])),
+            hasPaidSubscriptionHistory: vi.fn().mockResolvedValue(false)
         };
 
         mockDialog = {
@@ -112,6 +113,14 @@ describe('OnboardingComponent', () => {
         expect(component.termsFormGroup.get('acceptTrackingPolicy')).toBeTruthy();
         expect(component.termsFormGroup.get('acceptTos')).toBeTruthy();
         expect(component.termsFormGroup.get('acceptMarketingPolicy')).toBeTruthy();
+    });
+
+    it('should keep consent controls unchecked by default', () => {
+        expect(component.termsFormGroup.get('acceptPrivacyPolicy')?.value).toBe(false);
+        expect(component.termsFormGroup.get('acceptDataPolicy')?.value).toBe(false);
+        expect(component.termsFormGroup.get('acceptTos')?.value).toBe(false);
+        expect(component.termsFormGroup.get('acceptTrackingPolicy')?.value).toBe(false);
+        expect(component.termsFormGroup.get('acceptMarketingPolicy')?.value).toBe(false);
     });
 
     it('should mark acceptMarketingPolicy as optional (no validators)', () => {
@@ -252,5 +261,29 @@ describe('OnboardingComponent', () => {
         // Should remain TRUE because it was dirty
         expect(privacyControl!.value).toBe(true);
     });
-});
 
+    it('should toggle policy details panel on read more', () => {
+        component.togglePolicyDetails('privacy');
+        expect(component.expandedPolicyId).toBe('privacy');
+
+        component.togglePolicyDetails('privacy');
+        expect(component.expandedPolicyId).toBeNull();
+    });
+
+    it('should auto-close expanded details when policy is checked', () => {
+        component.expandedPolicyId = 'privacy';
+
+        component.onPolicyCheckboxChange('privacy', true);
+
+        expect(component.expandedPolicyId).toBeNull();
+    });
+
+    it('should keep expanded details when policy is unchecked', () => {
+        component.expandedPolicyId = 'privacy';
+
+        component.onPolicyCheckboxChange('privacy', false);
+
+        expect(component.expandedPolicyId).toBe('privacy');
+    });
+
+});

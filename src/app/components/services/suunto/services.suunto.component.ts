@@ -11,11 +11,12 @@ import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
-import { EventImporterFIT, ActivityParsingOptions } from '@sports-alliance/sports-lib';
+import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { environment } from '../../../../environments/environment';
 import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface, UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
 import { AppFunctionsService } from '../../../services/app.functions.service';
+import { createParsingOptions } from '../../../../../functions/src/shared/parsing-options';
 
 
 @Component({
@@ -127,9 +128,7 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
         });
         this.analyticsService.logEvent('downloaded_fit_file', { method: ServiceNames.SuuntoApp });
       } else {
-        const newEvent = await EventImporterFIT.getFromArrayBuffer(result, new ActivityParsingOptions({
-          generateUnitStreams: false
-        }));
+        const newEvent = await EventImporterFIT.getFromArrayBuffer(result, createParsingOptions());
         await this.eventService.writeAllEventData(this.user, newEvent, {
           data: result,
           extension: 'fit',

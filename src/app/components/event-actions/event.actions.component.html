@@ -1,7 +1,7 @@
 <button mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.stopPropagation();" (menuOpened)="menuOpen($event)">
   <mat-icon>more_vert</mat-icon>
 </button>
-<mat-menu #menu="matMenu">
+<mat-menu #menu="matMenu" class="qs-menu-panel">
   <button mat-menu-item (click)="share()">
     <mat-icon>share</mat-icon>
     <span>Share</span>
@@ -13,24 +13,24 @@
   @if (event.getActivities().length === 1) {
   <button mat-menu-item (click)="editEventActivity()" disabled="true">
     <mat-icon>edit</mat-icon>
-    <span>Edit activity</span>
+    <span>Coming soon</span>
   </button>
   }
-
-
-  <button mat-menu-item disabled="true">
-    <mat-icon [color]="isHydrated() ? 'accent' : 'warn'">
-      {{ isHydrated() ? 'cloud_done' : 'cloud_off' }}
-    </mat-icon>
-    <span>Streams {{ isHydrated() ? 'loaded' : 'not loaded' }}</span>
-  </button>
   <mat-divider></mat-divider>
-  <button mat-menu-item (click)="reGenerateStatistics()">
+  <button mat-menu-item class="regenerate-stat-item" (click)="reGenerateStatistics()">
     <mat-icon>autorenew</mat-icon>
-    <span>Refresh activity statistics <mat-icon class="toolTip"
+    <span class="menu-item-with-tooltip">Regenerate activity statistics using Sports-Lib <mat-icon class="toolTip"
         matTooltip="This will re-calculate statistics like distance, ascent, descent etc...">info</mat-icon>
     </span>
   </button>
+  <div class="menu-item-tooltip-wrapper" [matTooltip]="getReimportDisabledReason()"
+    [matTooltipDisabled]="canReimportFromOriginalFile()">
+    <button mat-menu-item class="reimport-stat-item" (click)="reImportActivityFromFile()"
+      [disabled]="!canReimportFromOriginalFile()">
+      <mat-icon>upload_file</mat-icon>
+      <span>Reimport activity from file</span>
+    </button>
+  </div>
   <button mat-menu-item (click)="downloadJSON()">
     <mat-icon>file_download</mat-icon>
     <span>Download as JSON</span>

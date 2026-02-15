@@ -1,0 +1,50 @@
+@use '../../../../styles/breakpoints' as *;
+
+:host {
+  display: block;
+  width: 100%;
+}
+
+section.event-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  gap: 16px;
+}
+
+.event-section-header-leading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.event-section-header-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.event-section-header-title {
+  font: var(--mat-sys-title-medium);
+  color: var(--mat-sys-on-surface);
+}
+
+.event-section-header-actions {
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.event-section-header-actions:empty {
+  display: none;
+}
+
+@include xsmall {
+  section.event-section-header {
+    padding: 8px;
+    gap: 8px;
+  }
+}

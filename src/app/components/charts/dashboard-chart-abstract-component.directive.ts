@@ -141,30 +141,52 @@ export abstract class DashboardChartAbstractDirective extends ChartAbstractDirec
     }
   }
 
-  protected getAggregateData(data: any[], chartDataValueType: ChartDataValueTypes): DataInterface {
+  protected getDataInstanceOrNull(value: unknown): DataInterface | null {
+    if (!this.chartDataType) {
+      return null;
+    }
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+    const numericValue = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(numericValue)) {
+      return null;
+    }
+    try {
+      return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, numericValue) || null;
+    } catch (error) {
+      this.logger.warn('[DashboardChartAbstractDirective] Failed to create chart data instance', {
+        chartDataType: this.chartDataType,
+        numericValue,
+        error
+      });
+      return null;
+    }
+  }
+
+  protected getAggregateData(data: any[], chartDataValueType: ChartDataValueTypes): DataInterface | null {
+    if (!Array.isArray(data) || !data.length || !chartDataValueType) {
+      return null;
+    }
+    const numericValues = data
+      .map(dataItem => Number(dataItem?.[chartDataValueType]))
+      .filter(value => Number.isFinite(value));
+
+    if (!numericValues.length) {
+      return null;
+    }
+
     switch (chartDataValueType) {
       case ChartDataValueTypes.Average:
-        let count = 0;
-        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
-          count++;
-          sum += dataItem[chartDataValueType];
-          return sum;
-        }, 0) / count);
+        return this.getDataInstanceOrNull(numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length);
       case ChartDataValueTypes.Maximum:
-        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
-          min = min <= dataItem[chartDataValueType] ? dataItem[chartDataValueType] : min;
-          return min;
-        }, -Infinity));
+        return this.getDataInstanceOrNull(Math.max(...numericValues));
       case ChartDataValueTypes.Minimum:
-        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((min, dataItem) => {
-          min = min > dataItem[chartDataValueType] ? dataItem[chartDataValueType] : min;
-          return min;
-        }, Infinity));
+        return this.getDataInstanceOrNull(Math.min(...numericValues));
       case ChartDataValueTypes.Total:
-        return DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, data.reduce((sum, dataItem) => {
-          sum += dataItem[chartDataValueType];
-          return sum;
-        }, 0));
+        return this.getDataInstanceOrNull(numericValues.reduce((sum, value) => sum + value, 0));
+      default:
+        return null;
     }
   }
 

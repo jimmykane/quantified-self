@@ -8,18 +8,22 @@
 /* Grid Container */
 section.grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 12px;
   padding: 8px 0;
+  align-items: stretch;
 }
 
 .stat-item {
+  --stat-side-prefix-left: -24px;
   display: flex;
   flex-direction: row;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-start;
   padding: 10px 12px;
   min-width: 0;
+  box-sizing: border-box;
+  align-self: stretch;
   border: 1px solid var(--mat-app-outline-variant);
   border-radius: 12px;
   background-color: var(--mat-app-surface-container-low);
@@ -55,20 +59,24 @@ section.grid {
 .stat-avatar {
   flex-shrink: 0;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  align-self: flex-start;
+  gap: 2px;
 }
 
 .stat-content {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  justify-content: center;
+  justify-content: flex-start;
   min-width: 0;
+  width: 100%;
 }
 
 .stat-label {
-  font-size: 0.65rem;
+  font-size: 0.68rem;
   font-weight: 400;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -82,7 +90,7 @@ section.grid {
 }
 
 .stat-value-grid {
-  font-size: 1.1rem;
+  font-size: 1.14rem;
   font-weight: 400;
   color: var(--mat-app-on-surface);
   line-height: 1.2;
@@ -115,6 +123,140 @@ section.grid {
   text-align: right;
 }
 
+.stat-values-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.stat-value-key {
+  font-size: 0.52rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--mat-app-on-surface-variant);
+  opacity: 0.9;
+  text-align: left;
+}
+
+.stat-values-compact {
+  display: grid;
+  grid-template-rows: auto auto;
+  row-gap: 2px;
+  width: 100%;
+}
+
+.stat-keys-row,
+.stat-values-row,
+.stat-delta-row,
+.stat-percent-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  column-gap: 8px;
+}
+
+.stat-values-row {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1rem;
+  line-height: 1.12;
+  color: var(--mat-app-on-surface);
+  position: relative;
+}
+
+.stat-value-cell {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stat-values-unit-prefix {
+  position: absolute;
+  left: var(--stat-side-prefix-left);
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.5rem;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mat-app-on-surface-variant);
+  opacity: 0.85;
+}
+
+/* Composite cards need wider value rendering to avoid desktop truncation. */
+.stat-item--composite .stat-values-row {
+  font-size: 0.94rem;
+}
+
+.stat-item--composite .stat-values-unit-prefix {
+  font-size: 0.58rem;
+  font-weight: 600;
+  color: var(--mat-app-on-surface);
+  opacity: 1;
+}
+
+.stat-item--composite .stat-value-cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.15;
+  word-break: normal;
+}
+
+.stat-value-diff {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.62rem;
+  line-height: 1.05;
+  width: 100%;
+  font-family: 'Barlow Condensed', sans-serif;
+  opacity: 0.8;
+}
+
+.stat-delta-row,
+.stat-percent-row {
+  margin-top: 2px;
+}
+
+.stat-delta-row {
+  position: relative;
+}
+
+.stat-delta-prefix {
+  position: absolute;
+  left: var(--stat-side-prefix-left);
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.5rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--mat-app-on-surface-variant);
+  opacity: 0.9;
+}
+
+.stat-delta-cell,
+.stat-percent-cell {
+  min-width: 0;
+  font-size: 0.58rem;
+  line-height: 1.05;
+  font-family: 'Barlow Condensed', sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stat-percent-cell {
+  font-weight: 600;
+}
+
+.stat-delta-cell-empty,
+.stat-percent-cell-empty {
+  visibility: hidden;
+}
+
 /* Condensed (Chips) Container */
 section.condensed {
   display: flex;
@@ -139,6 +281,7 @@ section.condensed {
 /* Desktop Styles (Medium and up) */
 @include bp.medium-and-up {
   section.grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     column-gap: 2rem;
     /* More breathing room on desktop */
   }
@@ -153,15 +296,17 @@ section.condensed {
   }
 
   .stat-item {
+    --stat-side-prefix-left: -19px;
     padding: 8px 10px;
-    gap: 8px;
+    gap: 11px;
     border-radius: 8px;
 
   }
 
   .stat-avatar {
     width: 16px;
-    height: 16px;
+    min-height: 16px;
+    height: auto;
   }
 
   .stat-label {
@@ -170,5 +315,27 @@ section.condensed {
 
   .stat-value-grid {
     font-size: 0.8rem;
+  }
+
+  .stat-value-main {
+    font-size: 0.72rem;
+  }
+
+  .stat-value-key {
+    font-size: 0.47rem;
+  }
+
+  .stat-values-row {
+    font-size: 0.74rem;
+  }
+
+  .stat-diff-cell {
+    font-size: 0.5rem;
+  }
+
+  // Temporary: keep composite cards same width behavior as desktop on mobile.
+  .stat-item--composite {
+    grid-column: auto;
+    min-width: 0;
   }
 }

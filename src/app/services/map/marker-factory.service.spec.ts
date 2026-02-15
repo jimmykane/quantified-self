@@ -65,6 +65,22 @@ describe('MarkerFactoryService', () => {
         expect(marker.innerHTML).toContain('fill="#aaaaaa"');
     });
 
+    it('should create jump marker with default size', () => {
+        const marker = service.createJumpMarker('#123123');
+        expect(marker.innerHTML).toContain('<svg');
+        expect(marker.innerHTML).toContain('width="28"');
+        expect(marker.innerHTML).toContain('height="28"');
+        expect(marker.innerHTML).toContain('fill="#123123"');
+    });
+
+    it('should create jump marker with provided size', () => {
+        const marker = service.createJumpMarker('#321321', 34);
+        expect(marker.innerHTML).toContain('<svg');
+        expect(marker.innerHTML).toContain('width="34"');
+        expect(marker.innerHTML).toContain('height="34"');
+        expect(marker.innerHTML).toContain('fill="#321321"');
+    });
+
     const testCases = [
         { count: 2, bg: 'rgb(255, 145, 0)' },   // #FF9100
         { count: 7, bg: 'rgb(255, 109, 0)' },   // #FF6D00

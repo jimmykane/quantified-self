@@ -1,17 +1,25 @@
+@use '../../../styles/breakpoints' as bp;
+
 .login-container {
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: calc(100vh - 105px);
+    min-height: calc(100vh - var(--qs-effective-top-offset, 0px));
     /* Adjust based on navbar height if any */
     padding: 20px;
     // background-color: #f5f5f5; /* REMOVED: Managed by global theme */
 
-    @media (max-width: 600px) {
+    @include bp.xsmall {
         padding: 16px;
         align-items: flex-start;
         /* Move to top on mobile */
         padding-top: 40px;
+    }
+}
+
+@supports (height: 100dvh) {
+    .login-container {
+        min-height: calc(100dvh - var(--qs-effective-top-offset, 0px));
     }
 }
 
@@ -31,7 +39,7 @@
     flex-direction: column;
     gap: 20px;
 
-    @media (max-width: 600px) {
+    @include bp.xsmall {
         padding: 24px;
         gap: 16px;
     }
@@ -51,7 +59,7 @@
     font-weight: 400;
     // color: #333; /* REMOVED: Managed by global theme */
 
-    @media (max-width: 600px) {
+    @include bp.xsmall {
         font-size: 24px;
     }
 }

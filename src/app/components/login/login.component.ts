@@ -28,6 +28,8 @@ export class LoginComponent implements OnInit, OnDestroy {
   signInProviders = SignInProviders;
   email: string = '';
   private userSubscription: Subscription | undefined;
+  private dashboardNavigationInFlight = false;
+  private hasNavigatedToDashboard = false;
   // private auth = inject(Auth); // Removed as we use authService
 
 
@@ -107,7 +109,7 @@ export class LoginComponent implements OnInit, OnDestroy {
 
     this.userSubscription = this.authService.user$.subscribe((user) => {
       if (user) {
-        this.router.navigate(['/dashboard']);
+        void this.navigateToDashboardOnce();
       }
     });
 
@@ -308,7 +310,7 @@ export class LoginComponent implements OnInit, OnDestroy {
       // `linkWithPopup` will open the provider popup and link it to the 'user'.
       await this.authService.linkWithPopup(user, provider as any);
       this.snackBar.open('Accounts successfully linked!', 'Close', { duration: 5000 });
-      this.router.navigate(['/dashboard']);
+      await this.navigateToDashboardOnce();
     } catch (e: any) {
       this.logger.error('Link pending provider failed', e);
       this.showErrorDialog('Account Linking Failed', e);
@@ -328,10 +330,27 @@ export class LoginComponent implements OnInit, OnDestroy {
         ).toPromise();
 
       this.analyticsService.logEvent('login', { method: loginServiceUser.credential ? loginServiceUser.credential.signInMethod : 'Guest' });
-      await this.router.navigate(['/dashboard']);
+      await this.navigateToDashboardOnce();
     } catch (e) {
       this.logger.error(e);
       this.isLoading = false;
+    }
+  }
+
+  private async navigateToDashboardOnce() {
+    if (this.hasNavigatedToDashboard || this.dashboardNavigationInFlight) {
+      return;
+    }
+
+    this.dashboardNavigationInFlight = true;
+    try {
+      const didNavigate = await this.router.navigate(['/dashboard']);
+      this.hasNavigatedToDashboard = didNavigate === true;
+    } catch (error) {
+      this.hasNavigatedToDashboard = false;
+      this.logger.error('Dashboard navigation failed', error);
+    } finally {
+      this.dashboardNavigationInFlight = false;
     }
   }
 

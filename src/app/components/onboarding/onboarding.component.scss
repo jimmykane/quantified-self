@@ -1,9 +1,18 @@
+@use '../../../styles/breakpoints' as bp;
+
 .onboarding-container {
     display: flex;
     justify-content: center;
     padding: 2rem 1rem;
-    min-height: calc(100vh - 64px);
+    min-height: calc(100vh - var(--qs-effective-top-offset, 0px));
+    padding-bottom: 0;
     /* Inherits background from body/theme */
+}
+
+@supports (height: 100dvh) {
+    .onboarding-container {
+        min-height: calc(100dvh - var(--qs-effective-top-offset, 0px));
+    }
 }
 
 .onboarding-card {
@@ -14,18 +23,57 @@
 
 .step-content {
     padding: 1rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }
 
-h2 {
-    margin-bottom: 0.5rem;
-    font-weight: 300;
+.step-intro {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.step-title {
+    margin: 0;
+    font: var(--mat-sys-headline-small);
+    color: var(--mat-sys-on-surface);
+}
+
+.step-subtitle {
+    margin: 0;
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface-variant);
+}
+
+.policy-summary {
+    border: 1px solid var(--mat-sys-outline-variant);
+    border-radius: 12px;
+    padding: 1rem;
+    background: var(--mat-sys-surface-container-low);
+}
+
+.policy-summary h3 {
+    margin: 0 0 0.5rem;
+    font: var(--mat-sys-title-medium);
+    color: var(--mat-sys-on-surface);
+}
+
+.policy-summary ul {
+    margin: 0;
+    padding-left: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font: var(--mat-sys-body-medium);
+    color: var(--mat-sys-on-surface-variant);
 }
 
 .checkbox-group {
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
-    margin: 2rem 0;
+    gap: 1rem;
+    margin-top: 0.5rem;
 }
 
 .policy-item {
@@ -34,23 +82,46 @@ h2 {
     gap: 0.5rem;
 }
 
-.policy-item h3 {
-    margin: 0;
-    font-size: 1.1rem;
-    font-weight: 500;
+.policy-item-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
 }
 
-.policy-text {
-    font-size: 0.95rem;
-    opacity: 0.8;
-    line-height: 1.5;
+.policy-item h3 {
+    margin: 0;
+    font: var(--mat-sys-title-medium);
+    color: var(--mat-sys-on-surface);
+}
+
+.policy-item-copy p {
+    margin: 0;
+    font: var(--mat-sys-body-small);
+    color: var(--mat-sys-on-surface-variant);
+}
+
+.policy-read-more {
+    width: fit-content;
+    min-width: 0;
+    padding: 0;
+    height: auto;
+    line-height: inherit;
+    justify-content: flex-start;
+    color: var(--mat-sys-primary);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.policy-details-panel {
+    margin-top: 0.25rem;
+    box-shadow: none !important;
 }
 
 .qs-form-actions {
     display: flex;
     justify-content: flex-end;
     gap: 1rem;
-    margin-top: 2rem;
+    margin-top: 1rem;
 }
 
 .pricing-step {
@@ -66,16 +137,14 @@ h2 {
 }
 
 .policy-required-label {
-    font-size: 0.85em;
+    font: var(--mat-sys-label-medium);
     color: var(--mat-sys-error);
     margin-left: 0.5em;
-    font-weight: 500;
 }
 
 .policy-optional-label {
-    font-size: 0.85em;
-    opacity: 0.6;
-    font-style: italic;
+    font: var(--mat-sys-label-medium);
+    color: var(--mat-sys-on-surface-variant);
     margin-left: 0.5em;
 }
 
@@ -83,4 +152,16 @@ h2 {
 
 :host ::ng-deep .mat-step-header {
     pointer-events: none !important;
+}
+
+@include bp.handset-or-tablet-portrait {
+    .onboarding-container {
+        padding: 1rem 0.75rem;
+        padding-bottom: 0;
+    }
+
+    .qs-form-actions {
+        flex-direction: column-reverse;
+        align-items: stretch;
+    }
 }

@@ -1,7 +1,7 @@
 <button mat-icon-button [matMenuTriggerFor]="menu" (click)="$event.preventDefault(); $event.stopPropagation();">
   <mat-icon>more_vert</mat-icon>
 </button>
-<mat-menu #menu="matMenu">
+<mat-menu #menu="matMenu" class="qs-menu-panel">
   <button mat-menu-item (click)="editActivity()">
     <mat-icon>edit</mat-icon>
     <span>Edit</span>
@@ -19,9 +19,9 @@
     <span>Streams {{ isHydrated() ? 'loaded' : 'not loaded' }}</span>
   </button>
   <mat-divider></mat-divider>
-  <button mat-menu-item (click)="reGenerateStatistics()">
+  <button mat-menu-item class="regenerate-stat-item" (click)="reGenerateStatistics()">
     <mat-icon>autorenew</mat-icon>
-    <span>Refresh activity statistics <mat-icon class="toolTip"
+    <span class="menu-item-with-tooltip">Regenerate activity statistics using Sports-Lib <mat-icon class="toolTip"
         matTooltip="This will re-calculate statistics like distance, ascent, descent etc...">info</mat-icon>
     </span>
   </button>

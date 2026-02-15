@@ -19,8 +19,10 @@
         </div>
         <div class="chips-row">
           <span class="chip activity-chip">{{ mainActivityType }}</span>
-          @if (feelingEmoji) {
-          <span class="chip feeling-chip" [matTooltip]="'Feeling: ' + feelingLabel">{{ feelingEmoji }}</span>
+          @if (feelingIcon) {
+          <span class="chip feeling-chip" [matTooltip]="'Feeling: ' + feelingLabel" [attr.aria-label]="'Feeling: ' + feelingLabel">
+            <mat-icon aria-hidden="true">{{ feelingIcon }}</mat-icon>
+          </span>
           }
           @if (rpe) {
           <span class="chip rpe-chip" [matTooltip]="'RPE: ' + rpeLabel">RPE {{ rpe }}</span>
@@ -31,7 +33,7 @@
 
     <!-- Center: Hero Metrics -->
     <div class="hero-metrics">
-      @for (stat of getHeroStats(); track stat) {
+      @for (stat of heroStats; track stat) {
       <div class="metric-item">
         <span class="value">{{ getStatValue(stat) }}</span>
         <span class="unit">{{ getStatUnit(stat) }}</span>
@@ -42,24 +44,39 @@
     <!-- Right: Actions -->
     <div class="summary-actions">
       @if (isOwner) {
-      <button mat-icon-button (click)="openEditDetails()" matTooltip="Edit details">
-        <mat-icon>edit</mat-icon>
-      </button>
-      @if (event.isMerge && event.getActivities().length >= 2) {
-      <button mat-icon-button (click)="openBenchmark()" matTooltip="Benchmark Analysis" class="benchmark-btn"
-        [matBadge]="benchmarkCount > 1 ? benchmarkCount : null" matBadgeColor="accent" matBadgeSize="small">
-        <mat-icon [class.has-result]="benchmarkCount > 0">
-          analytics
-        </mat-icon>
-      </button>
+      <div class="summary-actions-primary">
+        <button mat-icon-button (click)="openEditDetails()" matTooltip="Edit details">
+          <mat-icon>edit</mat-icon>
+        </button>
+        @if (event.isMerge && eventActivitiesCount >= 2) {
+        <button mat-icon-button (click)="openBenchmark()" matTooltip="Benchmark Analysis" class="benchmark-btn"
+          [matBadge]="benchmarkCount > 1 ? benchmarkCount : null" matBadgeColor="accent" matBadgeSize="small">
+          <mat-icon [class.has-result]="benchmarkCount > 0">
+            analytics
+          </mat-icon>
+        </button>
+        }
+        <app-event-actions [user]="user" [event]="event" [showDownloadOriginal]="true" align="end"></app-event-actions>
+      </div>
       }
-      <app-event-actions [user]="user" [event]="event" [showDownloadOriginal]="true" align="end"></app-event-actions>
-      }
+
+      <div class="summary-actions-secondary">
+        @if (hasDevices) {
+        <button mat-icon-button class="summary-stats-action-button devices-button" (click)="openDevices()"
+          matTooltip="View sensors & devices" aria-label="View sensors and devices">
+          <mat-icon>sensors</mat-icon>
+        </button>
+        }
+        <button mat-icon-button class="summary-stats-action-button show-more-button" (click)="openDetailedStats()"
+          matTooltip="Show more statistics" aria-label="Show more statistics">
+          <mat-icon>keyboard_double_arrow_down</mat-icon>
+        </button>
+      </div>
     </div>
   </div>
 
   <!-- Activities Toggles Section -->
-  @if (event.getActivities().length > 1) {
+  @if (eventActivitiesCount > 1) {
   <div class="summary-activities-toggles">
     <app-activities-toggles [event]="event" [user]="user" [isOwner]="isOwner" [selectedActivities]="selectedActivities">
     </app-activities-toggles>
@@ -68,31 +85,10 @@
 
   <!-- Stats Grid Section -->
   <div class="summary-stats-area">
-    <div class="stats-container">
-      <app-event-card-stats-grid [event]="event" [selectedActivities]="selectedActivities">
-        @if (hasDevices) {
-        <div stats-suffix class="stat-item devices-item" (click)="openDevices()" matTooltip="View sensors & devices">
-          <div class="stat-avatar">
-            <mat-icon [style.width.px]="20" [style.height.px]="20" [style.font-size.px]="20">sensors</mat-icon>
-          </div>
-          <div class="stat-content">
-            <div class="stat-label">Sensors</div>
-            <div class="stat-value-grid">View</div>
-          </div>
-        </div>
-        }
-        <div stats-suffix class="stat-item show-more-item" (click)="openDetailedStats()"
-          matTooltip="Show more statistics">
-          <div class="stat-avatar">
-            <mat-icon [style.width.px]="20" [style.height.px]="20"
-              [style.font-size.px]="20">keyboard_double_arrow_down</mat-icon>
-          </div>
-          <div class="stat-content">
-            <div class="stat-label">Show</div>
-            <div class="stat-value-grid">More</div>
-          </div>
-        </div>
-      </app-event-card-stats-grid>
+    <div class="summary-stats-layout">
+      <div class="stats-container">
+        <app-event-card-stats-grid [event]="event" [selectedActivities]="selectedActivities"></app-event-card-stats-grid>
+      </div>
     </div>
 
     <ng-content select="[after-stats]"></ng-content>

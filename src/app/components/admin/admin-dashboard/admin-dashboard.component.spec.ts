@@ -14,7 +14,7 @@ import { FirebaseApp } from '@angular/fire/app';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { BehaviorSubject } from 'rxjs';
-import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
+import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 
 // Mock canvas for charts
 // Mock canvas for charts
@@ -58,11 +58,17 @@ global.ResizeObserver = class ResizeObserver {
     disconnect() { }
 };
 
+// Mock requestAnimationFrame for ECharts resize scheduling
+if (!(global as any).requestAnimationFrame) {
+    (global as any).requestAnimationFrame = (cb: FrameRequestCallback) => setTimeout(cb, 0);
+}
+
 describe('AdminDashboardComponent', () => {
     let component: AdminDashboardComponent;
     let fixture: ComponentFixture<AdminDashboardComponent>;
     let adminServiceSpy: any;
     let mockLogger: any;
+    let mockEchartsService: any;
 
     const mockQueueStats = {
         pending: 10,
@@ -80,14 +86,28 @@ describe('AdminDashboardComponent', () => {
 
     beforeEach(async () => {
         adminServiceSpy = {
-            getQueueStats: vi.fn().mockReturnValue(of(mockQueueStats)),
-            getFinancialStats: vi.fn().mockReturnValue(of(mockFinancialStats)),
-        };
+        getQueueStats: vi.fn().mockReturnValue(of(mockQueueStats)),
+        getFinancialStats: vi.fn().mockReturnValue(of(mockFinancialStats)),
+    };
 
-        mockLogger = {
-            error: vi.fn(),
-            log: vi.fn()
-        };
+    const chartMock = {
+        setOption: vi.fn(),
+        resize: vi.fn(),
+        dispose: vi.fn(),
+        isDisposed: vi.fn().mockReturnValue(false)
+    };
+
+    mockEchartsService = {
+        init: vi.fn().mockResolvedValue(chartMock),
+        setOption: vi.fn(),
+        resize: vi.fn(),
+        dispose: vi.fn()
+    };
+
+    mockLogger = {
+        error: vi.fn(),
+        log: vi.fn()
+    };
 
         await TestBed.configureTestingModule({
             imports: [
@@ -103,7 +123,7 @@ describe('AdminDashboardComponent', () => {
                 { provide: Auth, useValue: {} },
                 { provide: FirebaseApp, useValue: {} },
                 { provide: AppThemeService, useValue: { getAppTheme: () => new BehaviorSubject<AppThemes>(AppThemes.Dark).asObservable() } },
-                provideCharts(withDefaultRegisterables())
+                { provide: EChartsLoaderService, useValue: mockEchartsService }
             ],
             schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();

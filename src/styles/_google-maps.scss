@@ -9,6 +9,7 @@
     background-color: transparent !important;
     box-shadow: none !important;
     padding: 0 !important;
+    max-width: calc(100vw - 24px) !important;
 }
 
 /* Hide the little triangle pointer */
@@ -18,8 +19,10 @@
 
 /* Hide the scroll container background */
 .gm-style-iw-d {
-    overflow: hidden !important;
+    overflow: auto !important;
     background-color: transparent !important;
+    max-height: min(60vh, 420px) !important;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* Hide the default Google Maps close button (we implement our own) */

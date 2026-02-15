@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ServiceNames } from '@sports-alliance/sports-lib';
+import { ServiceNames, EventImporterFIT } from '@sports-alliance/sports-lib';
 import { UsageLimitExceededError } from './utils';
 
 // Mock dependencies using vi.hoisted
@@ -14,7 +14,8 @@ const {
     mockBatch,
     mockTimestamp,
     mockFirestore,
-    mockIncreaseRetryCountForQueueItem
+    mockIncreaseRetryCountForQueueItem,
+    mockCreateParsingOptions,
 } = vi.hoisted(() => {
     const mockIncreaseRetryCountForQueueItem = vi.fn(async (queueItem: any, error: any, incrementBy = 1) => {
         queueItem.retryCount = (queueItem.retryCount || 0) + incrementBy;
@@ -58,6 +59,7 @@ const {
         mockCollection,
         mockBatch,
         mockIncreaseRetryCountForQueueItem,
+        mockCreateParsingOptions: vi.fn(() => ({ generateUnitStreams: false, deviceInfoMode: 'changes' })),
     };
 });
 
@@ -115,6 +117,10 @@ vi.mock('./queue-utils', () => ({
         RetryIncremented: 'RETRY_INCREMENTED',
         Failed: 'FAILED',
     }
+}));
+
+vi.mock('./shared/parsing-options', () => ({
+    createParsingOptions: mockCreateParsingOptions,
 }));
 
 vi.mock('firebase-functions/logger', () => ({
@@ -187,6 +193,8 @@ describe('parseWorkoutQueueItemForServiceName', () => {
 
         // Verify
         expect(mockSetEvent).toHaveBeenCalled();
+        expect(mockCreateParsingOptions).toHaveBeenCalledTimes(1);
+        expect(EventImporterFIT.getFromArrayBuffer).toHaveBeenCalledWith(expect.anything(), expect.any(Object));
 
         // Verify side effects of increaseRetryCountForQueueItem
         // The retry count should have been incremented by 20 (0 + 20)
@@ -240,6 +248,7 @@ describe('parseWorkoutQueueItemForServiceName', () => {
             undefined,
             'NO_TOKEN_FOUND'
         );
+        expect(mockCreateParsingOptions).not.toHaveBeenCalled();
 
         // Verify retry count NOT increased
         expect(queueItem.retryCount).toBe(0);

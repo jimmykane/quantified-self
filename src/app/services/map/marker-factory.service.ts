@@ -131,14 +131,13 @@ export class MarkerFactoryService {
    * Creates a jump marker using the Material Design "flight" icon.
    * Used to display jump events on the map.
    */
-  createJumpMarker(color: string): HTMLDivElement {
+  createJumpMarker(color: string, size = 28): HTMLDivElement {
     // Solid colored circle with a white arrow icon on top
     return this.createSvgElement(`
-        <svg width="28" height="28" viewBox="0 0 24 24">
+        <svg width="${size}" height="${size}" viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="10" fill="${color}" stroke="#FFF" stroke-width="0.8" />
           <path d="M13.88 11.54L8.92 16.5l-1.41-1.41 4.96-4.96L10.34 8l5.65.01.01 5.65-2.12-2.12z" 
                 fill="#FFF" />
         </svg>`);
   }
 }
-

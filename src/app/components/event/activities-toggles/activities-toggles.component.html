@@ -2,7 +2,8 @@
   aria-label="Activity selection">
   @for (activity of activities(); track trackByActivityId($index, activity)) {
   <mat-chip-option [selected]="isSelected(activity)"
-    [style.--chip-accent-color]="activityColors().get(activity.getID())" (click)="toggleActivity(activity)"
+    [disabled]="isOnlySelectedActivity(activity)"
+    [style.--chip-accent-color]="getActivityColor(activity)" (click)="toggleActivity(activity)"
     class="activity-chip">
     <div class="chip-content">
       <span class="chip-type">{{ activity.type }}</span>
@@ -11,7 +12,19 @@
         activity.getDistance().getDisplayUnit() }}
       </span>
       @if (shouldShowDeviceNames()) {
-      <span class="chip-device">{{ getDeviceName(activity) }}</span>
+      <span class="chip-device-row">
+        <span class="chip-device">{{ getDeviceName(activity) }}</span>
+        @if (isOwner()) {
+        <button
+          mat-icon-button
+          class="chip-device-edit-button"
+          aria-label="Rename device"
+          matTooltip="Rename this activity device"
+          (click)="$event.stopPropagation(); renameDevice(activity)">
+          <mat-icon>edit</mat-icon>
+        </button>
+        }
+      </span>
       }
     </div>
   </mat-chip-option>

@@ -4,6 +4,7 @@ import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bott
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
+import { AppBreakpoints } from '../../constants/breakpoints';
 import { EventInterface, UserSummariesSettingsInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { AppShareService } from '../../services/app.share.service';
 import { environment } from '../../../environments/environment';
@@ -19,7 +20,7 @@ type NativeShareStatus = 'shared' | 'unsupported' | 'cancelled' | 'failed';
             <button mat-icon-button class="icon-button-square" matTooltip="Share options" [matMenuTriggerFor]="shareMenu" [disabled]="isSharing" aria-busy="{{isSharing}}">
                 <mat-icon>share</mat-icon>
             </button>
-            <mat-menu #shareMenu="matMenu" xPosition="before">
+            <mat-menu #shareMenu="matMenu" xPosition="before" class="qs-menu-panel">
               <button mat-menu-item (click)="shareBenchmark()" [disabled]="isSharing">
                 <mat-icon>share</mat-icon>
                 <span>Share</span>
@@ -39,7 +40,7 @@ type NativeShareStatus = 'shared' | 'unsupported' | 'cancelled' | 'failed';
         <mat-progress-bar *ngIf="isSharing" class="share-progress" mode="indeterminate" color="accent"></mat-progress-bar>
         <div class="bottom-sheet-content qs-scrollbar">
             <div #shareFrame class="benchmark-share-frame">
-              <app-benchmark-report 
+              <app-benchmark-report
                   [result]="data.result"
                   [event]="data.event"
                   [unitSettings]="data.unitSettings"
@@ -51,7 +52,7 @@ type NativeShareStatus = 'shared' | 'unsupported' | 'cancelled' | 'failed';
         </div>
     </div>
   `,
-  styleUrls: ['./benchmark-bottom-sheet.component.css'],
+  styleUrls: ['./benchmark-bottom-sheet.component.scss'],
   providers: [DatePipe],
   standalone: false
 })
@@ -70,6 +71,7 @@ export class BenchmarkBottomSheetComponent {
       event?: EventInterface;
       unitSettings?: UserUnitSettingsInterface;
       summariesSettings?: UserSummariesSettingsInterface;
+      brandText?: string | null;
     },
     private bottomSheetRef: MatBottomSheetRef<BenchmarkBottomSheetComponent>,
     private eventColorService: AppEventColorService,
@@ -179,12 +181,17 @@ export class BenchmarkBottomSheetComponent {
     }
   }
 
+  private getAppLogoUrl(): string {
+    return new URL('assets/logos/app/logo-100x100.png', document.baseURI).toString();
+  }
+
   private async buildSharePayload(): Promise<{ imageBlob: Blob; filename: string } | null> {
     this.shareTimestamp = new Date();
-    const isMobile = window.matchMedia('(max-width: 600px)').matches;
+    const isMobile = window.matchMedia(AppBreakpoints.XSmall).matches;
     const appUrl = environment.appUrl || window.location.origin;
     const displayUrl = this.getDisplayUrl(appUrl);
     const filename = `benchmark-${this.shareTimestamp.getTime()}.png`;
+    const customBrandText = (this.data.brandText || '').trim();
 
     const dataUrl = await this.shareService.shareBenchmarkAsImage(this.shareFrame!.nativeElement, {
       scale: isMobile ? 1.5 : 2,
@@ -193,10 +200,10 @@ export class BenchmarkBottomSheetComponent {
       fast: isMobile,
       renderTimeoutMs: isMobile ? 10000 : 15000,
       watermark: {
-        brand: 'Quantified Self',
+        brand: customBrandText,
         timestamp: this.formatShareDate(this.shareTimestamp),
         url: displayUrl,
-        logoUrl: 'assets/logos/app/logo-100x100.png',
+        logoUrl: this.getAppLogoUrl(),
       }
     });
 

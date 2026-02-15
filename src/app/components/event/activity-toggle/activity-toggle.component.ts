@@ -2,13 +2,9 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  DestroyRef,
   inject,
   input,
-  OnInit
 } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { debounceTime } from 'rxjs/operators';
 import { EventInterface, ActivityInterface, User } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { AppActivitySelectionService } from '../../../services/activity-selection-service/app-activity-selection.service';
@@ -21,7 +17,7 @@ import { MatSlideToggleChange } from '@angular/material/slide-toggle';
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })
-export class ActivityToggleComponent implements OnInit {
+export class ActivityToggleComponent {
   // Signal inputs
   event = input.required<EventInterface>();
   activity = input.required<ActivityInterface>();
@@ -34,28 +30,56 @@ export class ActivityToggleComponent implements OnInit {
   showStats = input<boolean>(true);
 
   // Injected services
-  private destroyRef = inject(DestroyRef);
   public eventColorService = inject(AppEventColorService);
   public activitySelectionService = inject(AppActivitySelectionService);
 
   // Computed: cache selection status
-  isSelected = computed(() => this.selectedActivities().some(a => a.getID() === this.activity().getID()));
+  isSelected = computed(() => this.isActivitySelected(this.activity()));
 
   // Computed: cache activity color
   activityColor = computed(() => this.eventColorService.getActivityColor(this.event().getActivities(), this.activity()));
 
-  ngOnInit() {
-  }
-
   onActivitySelect(event: MatSlideToggleChange, activity: ActivityInterface) {
-    event.checked
-      ? this.activitySelectionService.selectedActivities.select(activity)
-      : this.activitySelectionService.selectedActivities.deselect(activity);
+    if (event.checked) {
+      this.selectActivity(activity);
+      return;
+    }
+    this.deselectActivity(activity);
   }
 
-  onActivityClick(event: Event, activity: ActivityInterface) {
-    this.activitySelectionService.selectedActivities.isSelected(activity)
-      ? this.activitySelectionService.selectedActivities.deselect(activity)
-      : this.activitySelectionService.selectedActivities.select(activity);
+  onActivityClick(activity: ActivityInterface): void {
+    this.isActivitySelected(activity)
+      ? this.deselectActivity(activity)
+      : this.selectActivity(activity);
+  }
+
+  private selectActivity(activity: ActivityInterface): void {
+    if (this.isActivitySelected(activity)) {
+      return;
+    }
+    this.activitySelectionService.selectedActivities.select(activity);
+  }
+
+  private deselectActivity(activity: ActivityInterface): void {
+    const selectedActivityRef = this.findSelectedActivity(activity);
+    if (!selectedActivityRef) {
+      return;
+    }
+    this.activitySelectionService.selectedActivities.deselect(selectedActivityRef);
+  }
+
+  private isActivitySelected(activity: ActivityInterface): boolean {
+    return !!this.findSelectedActivity(activity);
+  }
+
+  private findSelectedActivity(activity: ActivityInterface): ActivityInterface | undefined {
+    const selectedActivities = this.selectedActivities() ?? [];
+    const activityID = activity?.getID?.();
+
+    if (activityID) {
+      return selectedActivities.find((selectedActivity) => selectedActivity?.getID?.() === activityID);
+    }
+
+    return selectedActivities.find((selectedActivity) => selectedActivity === activity);
   }
 }

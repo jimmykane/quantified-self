@@ -74,7 +74,7 @@ describe('AppShareService', () => {
     await service.shareBenchmarkAsImage(source, {
       width: 960,
       watermark: {
-        brand: 'Quantified Self',
+        brand: 'My Brand',
         timestamp: 'Jan 1, 2025',
         url: 'quantified-self.io',
       },
@@ -88,8 +88,10 @@ describe('AppShareService', () => {
 
     const watermark = capturedElement?.querySelector('.benchmark-watermark');
     expect(watermark).toBeTruthy();
+    expect(watermark?.querySelector('.watermark-brand-line')?.textContent).toContain('My Brand');
+    expect(watermark?.querySelector('.watermark-app-line')?.textContent).toContain('Quantified Self');
     expect(watermark?.textContent).toContain('Quantified Self');
-    expect(watermark?.textContent).toContain('quantified-self.io');
+    expect(watermark?.textContent).not.toContain('quantified-self.io');
   });
 
   it('retries with lightweight options when source decode fails', async () => {

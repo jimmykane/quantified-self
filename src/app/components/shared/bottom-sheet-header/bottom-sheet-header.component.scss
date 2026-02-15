@@ -1,0 +1,64 @@
+@use '../../../../styles/breakpoints' as bp;
+
+.bottom-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--mat-app-outline-variant);
+}
+
+.bottom-sheet-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.bottom-sheet-title mat-icon {
+  width: 24px;
+  height: 24px;
+  font-size: 24px;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.bottom-sheet-title h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 400;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bottom-sheet-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.bottom-sheet-actions:empty {
+  display: none;
+}
+
+:host ::ng-deep .bottom-sheet-actions .mat-icon-button {
+  width: 36px;
+  height: 36px;
+  padding: 6px;
+}
+
+@include bp.xsmall {
+  .bottom-sheet-header {
+    padding: 0.75rem;
+  }
+
+  .bottom-sheet-title h2 {
+    font-size: 1.1rem;
+  }
+}

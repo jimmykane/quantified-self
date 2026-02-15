@@ -1,0 +1,24 @@
+<mat-tab-group
+  class="material-pill-tabs"
+  [class.compact]="density === 'compact'"
+  [class.sticky-header]="stickyHeader"
+  [selectedIndex]="selectedIndex"
+  [animationDuration]="animationDuration"
+  [dynamicHeight]="dynamicHeight"
+  [disablePagination]="disablePagination"
+  [style.--pill-tabs-sticky-top]="topOffset"
+  [attr.aria-label]="ariaLabel"
+  (selectedIndexChange)="onSelectedIndexChange($event)"
+>
+  @for (tab of tabs; track trackByIndex($index)) {
+    <mat-tab [label]="tab.label" [disabled]="tab.tabDisabled">
+      @if (lazyContent) {
+        <ng-template matTabContent>
+          <ng-container *ngTemplateOutlet="tab.templateRef"></ng-container>
+        </ng-template>
+      } @else {
+        <ng-container *ngTemplateOutlet="tab.templateRef"></ng-container>
+      }
+    </mat-tab>
+  }
+</mat-tab-group>

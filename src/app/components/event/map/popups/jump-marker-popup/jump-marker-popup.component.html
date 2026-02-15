@@ -1,4 +1,4 @@
-<div class="popup-container glass-card">
+<div class="popup-container qs-glass-card-panel glass-card">
     <div class="popup-header">
         <h3 class="card-title">Jump Stats</h3>
         <button mat-icon-button class="close-btn" (click)="onClose()">
@@ -8,15 +8,13 @@
     <div class="stats-grid">
         <div class="stat-row">
             <span class="label">Distance:</span>
-            <span class="value">{{jump?.jumpData?.distance?.getDisplayValue()}}
-                {{jump?.jumpData?.distance?.getDisplayUnit()}}</span>
+            <span class="value">{{getFormattedDistance()}}</span>
         </div>
 
         @if (jump?.jumpData?.height) {
         <div class="stat-row">
             <span class="label">Height:</span>
-            <span class="value">{{jump?.jumpData?.height?.getDisplayValue()}}
-                {{jump?.jumpData?.height?.getDisplayUnit()}}</span>
+            <span class="value">{{getFormattedHeight()}}</span>
         </div>
         }
 
@@ -28,23 +26,21 @@
         @if (jump?.jumpData?.hang_time) {
         <div class="stat-row">
             <span class="label">Hang Time:</span>
-            <span class="value">{{jump?.jumpData?.hang_time?.getDisplayValue()}}
-                {{jump?.jumpData?.hang_time?.getDisplayUnit()}}</span>
+            <span class="value">{{getFormattedHangTime()}}</span>
         </div>
         }
 
         @if (jump?.jumpData?.speed) {
         <div class="stat-row">
             <span class="label">Speed:</span>
-            <span class="value">{{jump?.jumpData?.speed?.getDisplayValue()}}
-                {{jump?.jumpData?.speed?.getDisplayUnit()}}</span>
+            <span class="value">{{getFormattedSpeed()}}</span>
         </div>
         }
 
         @if (jump?.jumpData?.rotations) {
         <div class="stat-row">
             <span class="label">Rotations:</span>
-            <span class="value">{{jump?.jumpData?.rotations?.getDisplayValue()}}</span>
+            <span class="value">{{getFormattedRotations()}}</span>
         </div>
         }
     </div>

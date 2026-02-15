@@ -19,7 +19,7 @@ import {
 import { GoogleMap, MapInfoWindow, MapAdvancedMarker } from '@angular/google-maps';
 import { throttleTime } from 'rxjs/operators';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { EventInterface, ActivityInterface, LapInterface, User, LapTypes, GeoLibAdapter, DataLatitudeDegrees, DataLongitudeDegrees, DataJumpEvent, DataEvent } from '@sports-alliance/sports-lib';
+import { EventInterface, ActivityInterface, LapInterface, User, LapTypes, GeoLibAdapter, DataLatitudeDegrees, DataLongitudeDegrees, DataJumpEvent, DataEvent, DynamicDataLoader, DataInterface } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../../services/app.event.service';
 import { Subject, Subscription, asyncScheduler } from 'rxjs';
 import { AppUserService } from '../../../services/app.user.service';
@@ -40,6 +40,7 @@ import { MarkerFactoryService } from '../../../services/map/marker-factory.servi
   standalone: false
 })
 export class EventCardMapComponent extends MapAbstractDirective implements OnChanges, OnInit, OnDestroy, AfterViewInit {
+  public static readonly JUMP_MARKER_SIZE_BUCKETS = [18, 22, 26, 30, 34] as const;
   @ViewChild(GoogleMap) googleMap!: GoogleMap;
   @Input() event!: EventInterface;
   @Input() targetUserID!: string;
@@ -90,6 +91,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     controlSize: 32,
     disableDefaultUI: true,
     backgroundColor: 'transparent',
+    gestureHandling: 'cooperative',
     fullscreenControl: true,
     scaleControl: true,
     rotateControl: true,
@@ -114,6 +116,8 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   private processSequence = 0;
   private previousState: any = {};
   private pendingFitBoundsTimeout: ReturnType<typeof setTimeout> | null = null;
+  private jumpHangTimeMin: number | null = null;
+  private jumpHangTimeMax: number | null = null;
 
   public mapInstance = signal<google.maps.Map | undefined>(undefined);
   public isMapVisible = signal(true);
@@ -358,18 +362,23 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
   getJumpMarkerOptions(jump: DataJumpEvent, color: string): google.maps.marker.AdvancedMarkerElementOptions {
     const data = jump.jumpData;
-    const format = (v: number | undefined) => v !== undefined ? Math.round(v * 10) / 10 : '-';
+    const hangTimeDisplay = data.hang_time ? data.hang_time.getDisplayValue(false, true, true) : '-';
+    const distanceDisplay = this.getJumpStatDisplay(data.distance);
+    const heightDisplay = this.getJumpStatDisplay(data.height);
+    const scoreDisplay = this.getJumpStatDisplay(data.score);
+    const speedDisplay = this.getJumpStatDisplay(data.speed);
+    const rotationsDisplay = this.getJumpStatDisplay(data.rotations);
     const stats = [
-      `Distance: ${format(data.distance.getValue())} ${data.distance.getDisplayUnit()}`,
-      `Height: ${data.height ? `${format(data.height.getValue())} ${data.height.getDisplayUnit()}` : '-'}`,
-      `Score: ${format(data.score.getValue())}`,
-      `Hang Time: ${data.hang_time ? `${format(data.hang_time.getValue())}` : '-'}`,
-      `Speed: ${data.speed ? `${format(data.speed.getValue())} ${data.speed.getDisplayUnit()}` : '-'}`,
-      `Rotations: ${data.rotations ? `${format(data.rotations.getValue())}` : '-'}`
+      `Distance: ${distanceDisplay}`,
+      `Height: ${heightDisplay}`,
+      `Score: ${scoreDisplay}`,
+      `Hang Time: ${hangTimeDisplay}`,
+      `Speed: ${speedDisplay}`,
+      `Rotations: ${rotationsDisplay}`
     ].join('\n');
 
     const options = {
-      content: this.markerFactory.createJumpMarker(color),
+      content: this.markerFactory.createJumpMarker(color, this.getJumpMarkerSize(jump)),
       title: `Jump Stats:\n${stats}`,
       zIndex: 150,
       gmpClickable: true
@@ -470,6 +479,8 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     this.loading();
     this.noMapData = false;
     this.activitiesMapData = [];
+    this.jumpHangTimeMin = null;
+    this.jumpHangTimeMax = null;
 
     if (!this.selectedActivities?.length) {
       this.noMapData = true;
@@ -526,6 +537,16 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         }, [])
       });
     });
+
+    // Treat "activities without any usable position samples" as no map data.
+    const hasRenderableMapData = this.activitiesMapData.some((data) => data.positions.length > 0);
+    if (!hasRenderableMapData) {
+      this.noMapData = true;
+      this.loaded();
+      return;
+    }
+
+    this.updateJumpHangTimeRange();
     this.loaded();
 
     if (shouldFitBounds) {
@@ -547,6 +568,73 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         this.fitBoundsToActivities();
       }, 500);
     }
+  }
+
+  private updateJumpHangTimeRange() {
+    const hangTimes = this.activitiesMapData
+      .flatMap(data => data.jumps)
+      .map(jump => this.getJumpHangTime(jump.event))
+      .filter((value): value is number => value !== null);
+
+    if (!hangTimes.length) {
+      this.jumpHangTimeMin = null;
+      this.jumpHangTimeMax = null;
+      return;
+    }
+
+    this.jumpHangTimeMin = Math.min(...hangTimes);
+    this.jumpHangTimeMax = Math.max(...hangTimes);
+  }
+
+  private getJumpHangTime(jump: DataJumpEvent): number | null {
+    const raw = jump?.jumpData?.hang_time?.getValue();
+    return typeof raw === 'number' && Number.isFinite(raw) ? raw : null;
+  }
+
+  private getPreferredUnitStat(stat: DataInterface | null | undefined): DataInterface | null {
+    if (!stat) {
+      return null;
+    }
+
+    try {
+      const convertedStats = DynamicDataLoader.getUnitBasedDataFromDataInstance(
+        stat,
+        this.userSettingsQuery.unitSettings()
+      );
+      return convertedStats?.[0] ?? stat;
+    } catch {
+      return stat;
+    }
+  }
+
+  private getJumpStatDisplay(stat: DataInterface | null | undefined): string {
+    const preferredStat = this.getPreferredUnitStat(stat);
+    if (!preferredStat) {
+      return '-';
+    }
+
+    return `${preferredStat.getDisplayValue()} ${preferredStat.getDisplayUnit()}`.trim();
+  }
+
+  private getJumpMarkerSize(jump: DataJumpEvent): number {
+    const buckets = EventCardMapComponent.JUMP_MARKER_SIZE_BUCKETS;
+    const hangTime = this.getJumpHangTime(jump);
+
+    if (hangTime === null || this.jumpHangTimeMin === null || this.jumpHangTimeMax === null) {
+      return buckets[0];
+    }
+
+    if (this.jumpHangTimeMin === this.jumpHangTimeMax) {
+      return buckets[Math.floor(buckets.length / 2)];
+    }
+
+    const normalized = (hangTime - this.jumpHangTimeMin) / (this.jumpHangTimeMax - this.jumpHangTimeMin);
+    const bucketIndex = Math.min(
+      buckets.length - 1,
+      Math.max(0, Math.floor(normalized * buckets.length))
+    );
+
+    return buckets[bucketIndex];
   }
 
   private fitBoundsToActivities() {

@@ -5,7 +5,17 @@ import { MatTableModule } from '@angular/material/table';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
-import { ActivityInterface, EventInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
+import {
+    ActivityInterface,
+    DataPace,
+    DataPaceAvg,
+    DataPaceMax,
+    DataPaceMin,
+    DataSpeedAvgKilometersPerHour,
+    DataSpeedAvgMilesPerHour,
+    EventInterface,
+    UserUnitSettingsInterface
+} from '@sports-alliance/sports-lib';
 import { DataExportService } from '../../../services/data-export.service';
 
 describe('EventCardStatsTableComponent', () => {
@@ -266,5 +276,123 @@ describe('EventCardStatsTableComponent', () => {
 
         const powerCurveRow = component.data.data.find(row => row.Name === 'Power Curve');
         expect(powerCurveRow).toBeUndefined();
+    });
+
+    it('should normalize unit-derived labels and still attach diff per type', () => {
+        const typeA = DataSpeedAvgKilometersPerHour.type;
+        const typeB = DataSpeedAvgMilesPerHour.type;
+
+        const statA1 = {
+            getType: () => typeA,
+            getDisplayType: () => 'Average speed in kilometers per hour',
+            getDisplayValue: () => 30,
+            getDisplayUnit: () => 'km/h',
+            getValue: () => 30
+        };
+        const statA2 = {
+            getType: () => typeB,
+            getDisplayType: () => 'Average speed in miles per hour',
+            getDisplayValue: () => 18,
+            getDisplayUnit: () => 'mph',
+            getValue: () => 18
+        };
+
+        const statB1 = {
+            getType: () => typeA,
+            getDisplayType: () => 'Average speed in kilometers per hour',
+            getDisplayValue: () => 28,
+            getDisplayUnit: () => 'km/h',
+            getValue: () => 28
+        };
+        const statB2 = {
+            getType: () => typeB,
+            getDisplayType: () => 'Average speed in miles per hour',
+            getDisplayValue: () => 17,
+            getDisplayUnit: () => 'mph',
+            getValue: () => 17
+        };
+
+        const activity1 = {
+            ...mockActivity,
+            creator: { name: 'Device A' },
+            getStatsAsArray: () => [statA1, statA2],
+            getStat: (type: string) => {
+                if (type === typeA) return statA1;
+                if (type === typeB) return statA2;
+                return null;
+            },
+            getID: () => 'act1'
+        } as unknown as ActivityInterface;
+
+        const activity2 = {
+            ...mockActivity,
+            creator: { name: 'Device B' },
+            getStatsAsArray: () => [statB1, statB2],
+            getStat: (type: string) => {
+                if (type === typeA) return statB1;
+                if (type === typeB) return statB2;
+                return null;
+            },
+            getID: () => 'act2'
+        } as unknown as ActivityInterface;
+
+        component.event = { ...mockEvent, isMerge: true } as EventInterface;
+        component.selectedActivities = [activity1, activity2];
+        component.ngOnChanges({});
+
+        const speedRows = component.data.data.filter(row => row.Name === 'Average Speed');
+        expect(speedRows.length).toBe(2);
+        speedRows.forEach((row) => expect(row['Difference']).toBeDefined());
+    });
+
+    it('should include pace avg/min/max when base pace unit is selected', () => {
+        component.userUnitSettings = {
+            ...mockUserUnitSettings,
+            paceUnits: [DataPace.type],
+        } as unknown as UserUnitSettingsInterface;
+
+        const avgStat = {
+            getType: () => DataPaceAvg.type,
+            getDisplayType: () => 'Average Pace',
+            getDisplayValue: () => '5:00',
+            getDisplayUnit: () => '/km',
+            getValue: () => 300
+        };
+        const minStat = {
+            getType: () => DataPaceMin.type,
+            getDisplayType: () => 'Minimum Pace',
+            getDisplayValue: () => '3:40',
+            getDisplayUnit: () => '/km',
+            getValue: () => 220
+        };
+        const maxStat = {
+            getType: () => DataPaceMax.type,
+            getDisplayType: () => 'Maximum Pace',
+            getDisplayValue: () => '6:20',
+            getDisplayUnit: () => '/km',
+            getValue: () => 380
+        };
+
+        const activity = {
+            ...mockActivity,
+            creator: { name: 'Device A' },
+            getStatsAsArray: () => [avgStat, minStat, maxStat],
+            getStat: (type: string) => {
+                if (type === DataPaceAvg.type) return avgStat;
+                if (type === DataPaceMin.type) return minStat;
+                if (type === DataPaceMax.type) return maxStat;
+                return null;
+            },
+            getID: () => 'act1'
+        } as unknown as ActivityInterface;
+
+        component.event = { ...mockEvent, isMerge: false } as EventInterface;
+        component.selectedActivities = [activity];
+        component.ngOnChanges({});
+
+        const rowTypes = component.data.data.map((row: any) => row['__statType']);
+        expect(rowTypes).toContain(DataPaceAvg.type);
+        expect(rowTypes).toContain(DataPaceMin.type);
+        expect(rowTypes).toContain(DataPaceMax.type);
     });
 });

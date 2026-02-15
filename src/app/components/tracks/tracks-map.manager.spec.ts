@@ -109,7 +109,7 @@ describe('TracksMapManager', () => {
                 'track-source-123',
                 expect.objectContaining({ type: 'geojson' })
             );
-            expect(mockMap.addLayer).toHaveBeenCalledTimes(2); // Glow + Line
+            expect(mockMap.addLayer).toHaveBeenCalledTimes(3); // Glow + Casing + Line
             expect(mockEventColorService.getColorForActivityTypeByActivityTypeGroup).toHaveBeenCalledWith('running');
             expect(mockMapStyleService.adjustColorForTheme).toHaveBeenCalledWith('#ff0000', AppThemes.Normal);
         });
@@ -157,12 +157,12 @@ describe('TracksMapManager', () => {
 
             manager.addTrackFromActivity(mockActivity, coordinates);
             expect(mockMap.addSource).toHaveBeenCalledTimes(1);
-            expect(mockMap.addLayer).toHaveBeenCalledTimes(2);
+            expect(mockMap.addLayer).toHaveBeenCalledTimes(3);
 
             emitMapEvent('style.load');
 
             expect(mockMap.addSource).toHaveBeenCalledTimes(2);
-            expect(mockMap.addLayer).toHaveBeenCalledTimes(4);
+            expect(mockMap.addLayer).toHaveBeenCalledTimes(6);
         });
     });
 
@@ -183,8 +183,47 @@ describe('TracksMapManager', () => {
             manager.clearAllTracks();
 
             expect(mockMap.removeLayer).toHaveBeenCalledWith('track-layer-123');
+            expect(mockMap.removeLayer).toHaveBeenCalledWith('track-layer-casing-123');
             expect(mockMap.removeLayer).toHaveBeenCalledWith('track-layer-glow-123');
             expect(mockMap.removeSource).toHaveBeenCalledWith('track-source-123');
+        });
+    });
+
+    describe('track styling modes', () => {
+        it('should use casing instead of glow on satellite even in dark theme', () => {
+            const mockActivity = {
+                getID: () => '123',
+                type: 'running'
+            };
+            const coordinates = [[0, 0], [1, 1]];
+
+            manager.setIsDarkTheme(true);
+            manager.setMapStyle('satellite' as any);
+            manager.addTrackFromActivity(mockActivity, coordinates);
+
+            const glowCall = mockMap.addLayer.mock.calls.find(call => call[0]?.id === 'track-layer-glow-123');
+            const casingCall = mockMap.addLayer.mock.calls.find(call => call[0]?.id === 'track-layer-casing-123');
+
+            expect(glowCall?.[0]?.paint?.['line-opacity']).toBe(0);
+            expect(casingCall?.[0]?.paint?.['line-opacity']).toBeGreaterThan(0);
+        });
+
+        it('should keep glow and hide casing for dark default theme', () => {
+            const mockActivity = {
+                getID: () => '123',
+                type: 'running'
+            };
+            const coordinates = [[0, 0], [1, 1]];
+
+            manager.setIsDarkTheme(true);
+            manager.setMapStyle('default' as any);
+            manager.addTrackFromActivity(mockActivity, coordinates);
+
+            const glowCall = mockMap.addLayer.mock.calls.find(call => call[0]?.id === 'track-layer-glow-123');
+            const casingCall = mockMap.addLayer.mock.calls.find(call => call[0]?.id === 'track-layer-casing-123');
+
+            expect(glowCall?.[0]?.paint?.['line-opacity']).toBeGreaterThan(0);
+            expect(casingCall?.[0]?.paint?.['line-opacity']).toBe(0);
         });
     });
 

@@ -7,7 +7,7 @@ export type MergeOption = 'benchmark' | 'multi';
 @Component({
   selector: 'app-merge-options-dialog',
   templateUrl: './merge-options-dialog.component.html',
-  styleUrls: ['./merge-options-dialog.component.css'],
+  styleUrls: ['./merge-options-dialog.component.scss'],
   standalone: false
 })
 export class MergeOptionsDialogComponent {

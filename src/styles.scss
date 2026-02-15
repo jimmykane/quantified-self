@@ -6,7 +6,8 @@
 @use 'styles/search';
 @use 'styles/segmented-buttons';
 @use 'styles/google-maps';
-@use 'styles/glass';
+@use 'styles/panels';
+@use 'styles/icons';
 
 // Include the common styles for Angular Material. We include this here so that you only
 // have to load a single css file for Angular Material in your app.
@@ -452,7 +453,7 @@ mat-table {
 }
 
 /* Mobile Responsive */
-@media (max-width: 600px) {
+@media (max-width: 599.98px) {
   .app-header-card {
     flex-direction: column;
     align-items: flex-start;
@@ -625,11 +626,15 @@ mat-table {
 }
 
 /* Reusable Custom Scrollbar */
-.qs-scrollbar {
+@mixin qs-scrollbar-skin {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--mat-sys-on-surface) 36%, transparent) transparent;
+
   &::-webkit-scrollbar {
-    height: 8px;
+    height: 10px;
     /* Horizontal scrollbar height */
-    width: 8px;
+    width: 10px;
     /* Vertical scrollbar width */
   }
 
@@ -638,23 +643,62 @@ mat-table {
   }
 
   &::-webkit-scrollbar-thumb {
-    background-color: rgba(0, 0, 0, 0.2);
-    border-radius: 4px;
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 30%, transparent);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
   }
 
   &::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(0, 0, 0, 0.3);
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 46%, transparent);
   }
+
+  &::-webkit-scrollbar-thumb:active {
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 56%, transparent);
+  }
+}
+
+.qs-scrollbar {
+  @include qs-scrollbar-skin;
+}
+
+/* Also style shell-level scroll containers (their scrollbar is often the visible one) */
+.app-sidenav-container .mat-drawer-content,
+.app-sidenav-container .mat-drawer-inner-container {
+  @include qs-scrollbar-skin;
 }
 
 /* Dark theme support for global scrollbar */
 .dark-theme .qs-scrollbar {
+  scrollbar-color: color-mix(in srgb, var(--mat-sys-on-surface) 44%, transparent) transparent;
+
   &::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 40%, transparent);
   }
 
   &::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(255, 255, 255, 0.3);
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 56%, transparent);
+  }
+
+  &::-webkit-scrollbar-thumb:active {
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 66%, transparent);
+  }
+}
+
+.dark-theme .app-sidenav-container .mat-drawer-content,
+.dark-theme .app-sidenav-container .mat-drawer-inner-container {
+  scrollbar-color: color-mix(in srgb, var(--mat-sys-on-surface) 44%, transparent) transparent;
+
+  &::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 40%, transparent);
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 56%, transparent);
+  }
+
+  &::-webkit-scrollbar-thumb:active {
+    background-color: color-mix(in srgb, var(--mat-sys-on-surface) 66%, transparent);
   }
 }
 
@@ -662,7 +706,7 @@ mat-table {
    Style the sheet once via the Material host class to avoid double-stacking when a panelClass is also present.
 */
 .mat-bottom-sheet-container {
-  @extend .glass-card;
+  @extend .qs-glass-card-panel;
   @extend .qs-scrollbar;
   --mat-bottom-sheet-container-background-color: transparent;
   --mat-bottom-sheet-container-shape: 20px;
@@ -697,7 +741,7 @@ mat-table {
   }
 }
 
-@media (max-width: 599px) {
+@media (max-width: 599.98px) {
   .cdk-overlay-pane.qs-bottom-sheet-container .mat-bottom-sheet-container {
     min-width: 100%;
     width: 100%;
@@ -718,9 +762,9 @@ mat-table {
 
   .mat-mdc-dialog-container,
   .mat-mdc-dialog-surface {
+    @extend .qs-glass-card-panel;
+    --qs-glass-panel-blur: 16px;
     background: var(--mat-sys-surface) !important;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 16px !important;
     box-shadow:
@@ -747,7 +791,7 @@ mat-table {
   }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 599.98px) {
   .qs-dialog-container {
     .mat-mdc-dialog-title {
       padding: 20px 16px 6px !important;
@@ -822,17 +866,32 @@ tr.mat-row:focus,
 }
 
 /* ==========================================================================
-   Global Menu Form Layouts
-   Ensures configuration forms inside mat-menu look properly spaced.
+   Global Menu Panel Styles
+   Shared panel classes for action menus and config menus.
    ========================================================================== */
 
-/* Panel Overrides */
+/* Base menu panel style applied globally via MAT_MENU_DEFAULT_OPTIONS */
+.mat-mdc-menu-panel.qs-menu-panel {
+  @extend .qs-glass-card-panel;
+  background: var(--mat-sys-surface) !important;
+  min-width: 180px !important;
+  max-width: min(360px, calc(100vw - 24px)) !important;
+}
+
+/* Form-heavy menu panels */
+.mat-mdc-menu-panel.qs-menu-panel-form,
 .mat-mdc-menu-panel.qs-config-menu {
-  max-width: none !important;
-  min-width: 300px !important;
+  min-width: 280px !important;
+  max-width: min(380px, calc(100vw - 24px)) !important;
+}
+
+.mat-mdc-menu-panel.qs-menu-panel .mat-mdc-menu-content {
+  @extend .qs-scrollbar;
+  padding: 6px 0;
 }
 
 /* Section/Item Layout for menus used for settings */
+.qs-menu-panel-form,
 .qs-config-menu {
   section[mat-menu-item] {
     height: auto !important;
@@ -855,4 +914,49 @@ tr.mat-row:focus,
     width: 100%;
     display: block;
   }
+}
+
+.mat-mdc-select-panel.qs-config-submenu {
+  @extend .qs-glass-card-panel;
+  background: var(--mat-sys-surface) !important;
+  border-radius: 12px !important;
+  padding: 4px 0 !important;
+  max-width: min(320px, calc(100vw - 24px)) !important;
+}
+
+.mat-mdc-select-panel.qs-config-submenu-compact {
+  min-width: 104px !important;
+  width: 104px !important;
+  max-width: 104px !important;
+}
+
+.mat-mdc-select-panel.qs-config-submenu-compact .mat-mdc-option {
+  justify-content: center;
+  text-align: center;
+}
+
+.mat-mdc-select-panel.qs-config-submenu-compact .mdc-list-item__primary-text {
+  width: 100%;
+  text-align: center;
+}
+
+/* ==========================================================================
+   Global Button Ripple Shape
+   Ensure ripple/state layers follow the effective button radius even when
+   components override button border-radius locally.
+   ========================================================================== */
+.mdc-button .mdc-button__ripple,
+.mdc-button .mat-mdc-button-persistent-ripple,
+.mdc-button .mat-mdc-button-persistent-ripple::before,
+.mdc-button .mat-ripple-element,
+.mdc-icon-button .mat-mdc-button-persistent-ripple,
+.mdc-icon-button .mat-mdc-button-persistent-ripple::before,
+.mdc-icon-button .mat-ripple-element {
+  border-radius: inherit !important;
+}
+
+/* Clip animated ripple to the button's rounded corners. */
+.mdc-button .mat-mdc-button-persistent-ripple,
+.mdc-icon-button .mat-mdc-button-persistent-ripple {
+  overflow: hidden;
 }

@@ -1,3 +1,5 @@
+@use '../../../styles/breakpoints' as bp;
+
 :host {
     // Removed local vars that override global theme
     --section-spacing: 24px;
@@ -84,7 +86,7 @@
     }
 }
 
-@media (max-width: 600px) {
+@include bp.xsmall {
     .user-profile-header {
         .header-content {
             flex-direction: column;
@@ -107,112 +109,29 @@
 
 .settings-container {
     display: block;
-    min-height: calc(100vh - 64px);
+    min-height: calc(100vh - var(--qs-effective-top-offset, 0px));
     // background-color: #f4f7f6; /* REMOVED: Managed by global theme */
 
     position: relative;
 }
 
+@supports (height: 100dvh) {
+    .settings-container {
+        min-height: calc(100dvh - var(--qs-effective-top-offset, 0px));
+    }
+}
+
 /* Horizontal Chip Navigation */
 .settings-nav {
-    position: sticky;
-    top: 0;
-    z-index: 100;
-    // background-color: rgba(244, 247, 246, 0.95); /* REMOVED */
-    background: inherit;
-    /* Allow clear background or global surface */
-    backdrop-filter: blur(10px);
-    padding: 16px 0;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-    /* Consider theme var for border? */
     margin-bottom: 0;
-}
-
-// Dark theme adjustment for nav border
-:host-context(.dark-theme) .settings-nav {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.nav-list {
-    display: flex;
-    gap: 12px;
-    list-style: none;
-    padding: 12px 40px;
-    /* Aligns with content padding */
-    margin: 0 auto;
-    margin: 0 auto;
-    overflow-x: auto;
-    scrollbar-width: none;
-    /* Firefox */
-    -ms-overflow-style: none;
-    /* IE/Edge */
-}
-
-.nav-list::-webkit-scrollbar {
-    display: none;
-    /* Chrome/Safari */
-}
-
-.nav-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    border-radius: 20px;
-    font-weight: 400;
-    font-size: 0.95rem;
-    // color: var(--text-secondary); /* REMOVED */
-    opacity: 0.7;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    // background-color: white; /* REMOVED */
-    background-color: rgba(0, 0, 0, 0.05);
-    /* Safe mild grey */
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    /* REMOVED or adapted */
-    white-space: nowrap;
-}
-
-:host-context(.dark-theme) .nav-item {
-    background-color: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.nav-item mat-icon {
-    font-size: 18px;
-    width: 18px;
-    height: 18px;
-    margin-right: 4px;
-}
-
-.nav-item:hover {
-    // background-color: #f0f0f0;
-    background-color: rgba(0, 0, 0, 0.1);
-    // color: var(--text-primary);
-    opacity: 1;
-    transform: translateY(-1px);
-}
-
-:host-context(.dark-theme) .nav-item:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-}
-
-.nav-item.active {
-    // background-color: var(--accent-color);
-    background-color: var(--mat-sys-primary, #3f51b5); // Use material primary
-    color: var(--mat-sys-on-primary, white);
-    border-color: transparent;
-    // box-shadow: 0 4px 12px rgba(63, 81, 181, 0.2);
-    opacity: 1;
-}
-
-.nav-item.active mat-icon {
-    color: var(--mat-sys-on-primary, white);
+    display: block;
+    padding: 0 40px 12px;
+    border-radius: 0;
 }
 
 /* Mobile Responsive Adjustments */
-@media (max-width: 600px) {
-    .nav-list {
+@include bp.xsmall {
+    .settings-nav {
         padding: 0 16px;
     }
 
@@ -267,6 +186,18 @@
     gap: 20px;
 }
 
+.brand-text-upgrade {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    color: var(--mat-sys-on-surface-variant);
+
+    mat-icon {
+        color: var(--mat-sys-primary);
+    }
+}
+
 .danger-card {
     // border: 1px solid #ffccd2; /* Red-ish border */
     border: 1px solid rgba(255, 0, 0, 0.2);
@@ -286,7 +217,7 @@
 }
 
 /* Responsive */
-@media (max-width: 768px) {
+@include bp.max-768 {
     .settings-container {
         flex-direction: column;
     }
@@ -304,21 +235,8 @@
         border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     }
 
-    .nav-list {
-        display: flex;
-        overflow-x: auto;
+    .settings-nav {
         padding: 0 16px;
-    }
-
-    .nav-item {
-        padding: 12px 16px;
-        white-space: nowrap;
-        border-right: none;
-    }
-
-    .nav-item.active {
-        border-right: none;
-        border-bottom: 3px solid var(--mat-sys-primary, #3f51b5);
     }
 
     .settings-content {
@@ -357,7 +275,7 @@
     width: 100%;
 }
 
-@media (max-width: 768px) {
+@include bp.max-768 {
     .qs-form-actions-floating {
         display: none;
     }

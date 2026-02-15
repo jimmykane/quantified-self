@@ -21,6 +21,24 @@ export const AppBreakpoints = {
     /** Extra large desktop (1920px+) */
     XLarge: '(min-width: 1920px)',
 
+    /** Legacy parity breakpoint: 480px and below */
+    Max480: '(max-width: 480px)',
+
+    /** Legacy parity breakpoint: 640px and below */
+    Max640: '(max-width: 640px)',
+
+    /** Legacy parity breakpoint: 768px and below */
+    Max768: '(max-width: 768px)',
+
+    /** Legacy parity breakpoint: 900px and below */
+    Max900: '(max-width: 900px)',
+
+    /** Legacy parity breakpoint: 1024px and below */
+    Max1024: '(max-width: 1024px)',
+
+    /** Legacy parity breakpoint: 768px and above */
+    Min768: '(min-width: 768px)',
+
     /** Handset (portrait or landscape) */
     Handset: '(max-width: 599.98px), (min-width: 600px) and (max-width: 959.98px) and (orientation: portrait)',
 

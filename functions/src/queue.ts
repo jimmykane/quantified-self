@@ -24,8 +24,9 @@ import * as requestPromise from './request-helper';
 import { config } from './config';
 import { getTokenData } from './tokens';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
-import { COROSAPIEventMetaData, SuuntoAppEventMetaData, ActivityParsingOptions } from '@sports-alliance/sports-lib';
+import { COROSAPIEventMetaData, SuuntoAppEventMetaData } from '@sports-alliance/sports-lib';
 import { uploadDebugFile } from './debug-utils';
+import { createParsingOptions } from './shared/parsing-options';
 
 
 
@@ -323,7 +324,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
     logger.info(`File size: ${result.byteLength || result.length} bytes for queue item ${queueItem.id}`);
     try {
       logger.info('Starting timer: CreateEvent');
-      const event = await EventImporterFIT.getFromArrayBuffer(result, new ActivityParsingOptions({ generateUnitStreams: false }));
+      const event = await EventImporterFIT.getFromArrayBuffer(result, createParsingOptions());
       logger.info('Ending timer: CreateEvent');
       event.name = event.startDate.toJSON(); // @todo improve
       logger.info(`Created Event from FIT file of ${queueItem.id}`);
@@ -385,7 +386,7 @@ export async function parseWorkoutQueueItemForServiceName(serviceName: ServiceNa
   }
 
   // If we finished the loop without returning, it means every token attempt failed.
-  logger.error(new Error(`Could not process ANY tokens for ${queueItem.id} after checking all ${tokenQuerySnapshots.size} tokens. Increasing retry count.`));
+  logger.error(new Error(`Could not process ANY tokens for ${queueItem.id} after checking all ${tokenQuerySnapshots.size} tokens. Last error: ${lastError.message}. Increasing retry count.`));
   return increaseRetryCountForQueueItem(queueItem, lastError, retryIncrement, bulkWriter);
 }
 

@@ -1,6 +1,11 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ActivityUtilities } from '@sports-alliance/sports-lib';
-import { convertIntensityZonesStatsToChartData, getActiveDataTypes } from './intensity-zones-chart-data-helper';
+import {
+    convertIntensityZonesStatsToChartData,
+    convertIntensityZonesStatsToEchartsData,
+    getActiveDataTypes,
+    shouldRenderIntensityZonesChart
+} from './intensity-zones-chart-data-helper';
 
 // Mock the sports-lib dependencies
 vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
@@ -13,6 +18,10 @@ vi.mock('@sports-alliance/sports-lib', async (importOriginal) => {
                 {
                     type: 'Heart Rate',
                     stats: ['Zone1HR', 'Zone2HR', 'Zone3HR', 'Zone4HR', 'Zone5HR', 'Zone6HR', 'Zone7HR']
+                },
+                {
+                    type: 'Power',
+                    stats: ['Zone1Power', 'Zone2Power', 'Zone3Power', 'Zone4Power', 'Zone5Power', 'Zone6Power', 'Zone7Power']
                 }
             ]
         },
@@ -35,6 +44,13 @@ describe('convertIntensityZonesStatsToChartData', () => {
             { getType: () => 'Zone5HR', getValue: () => 5000 },
             { getType: () => 'Zone6HR', getValue: () => 0 },
             { getType: () => 'Zone7HR', getValue: () => 0 },
+            { getType: () => 'Zone1Power', getValue: () => 0 },
+            { getType: () => 'Zone2Power', getValue: () => 0 },
+            { getType: () => 'Zone3Power', getValue: () => 0 },
+            { getType: () => 'Zone4Power', getValue: () => 0 },
+            { getType: () => 'Zone5Power', getValue: () => 0 },
+            { getType: () => 'Zone6Power', getValue: () => 0 },
+            { getType: () => 'Zone7Power', getValue: () => 0 },
         ] as any);
     });
 
@@ -102,6 +118,68 @@ describe('convertIntensityZonesStatsToChartData', () => {
     });
 });
 
+describe('convertIntensityZonesStatsToEchartsData', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('should keep deterministic zone ordering and include only active zones', () => {
+        vi.mocked(ActivityUtilities.getIntensityZonesStatsAggregated).mockReturnValue([
+            { getType: () => 'Zone1HR', getValue: () => 10 },
+            { getType: () => 'Zone2HR', getValue: () => 0 },
+            { getType: () => 'Zone3HR', getValue: () => 20 },
+            { getType: () => 'Zone1Power', getValue: () => 0 },
+            { getType: () => 'Zone2Power', getValue: () => 5 },
+            { getType: () => 'Zone3Power', getValue: () => 15 },
+        ] as any);
+
+        const result = convertIntensityZonesStatsToEchartsData([]);
+
+        expect(result.zones).toEqual(['Zone 1', 'Zone 2', 'Zone 3']);
+        expect(result.series.map(series => series.type)).toEqual(['Heart Rate', 'Power']);
+        expect(result.series[0].values).toEqual([10, 0, 20]);
+        expect(result.series[1].values).toEqual([0, 5, 15]);
+    });
+
+    it('should support short labels for mobile mode', () => {
+        vi.mocked(ActivityUtilities.getIntensityZonesStatsAggregated).mockReturnValue([
+            { getType: () => 'Zone1HR', getValue: () => 10 },
+            { getType: () => 'Zone2HR', getValue: () => 20 },
+        ] as any);
+
+        const result = convertIntensityZonesStatsToEchartsData([], true);
+
+        expect(result.zones).toEqual(['Z1', 'Z2']);
+    });
+
+    it('should compute percentages per active type exactly', () => {
+        vi.mocked(ActivityUtilities.getIntensityZonesStatsAggregated).mockReturnValue([
+            { getType: () => 'Zone1HR', getValue: () => 10 },
+            { getType: () => 'Zone2HR', getValue: () => 20 },
+            { getType: () => 'Zone1Power', getValue: () => 2 },
+            { getType: () => 'Zone2Power', getValue: () => 6 },
+        ] as any);
+
+        const result = convertIntensityZonesStatsToEchartsData([]);
+
+        expect(result.series[0].percentages).toEqual([33.33333333333333, 66.66666666666666]);
+        expect(result.series[1].percentages).toEqual([25, 75]);
+    });
+
+    it('should exclude inactive data types', () => {
+        vi.mocked(ActivityUtilities.getIntensityZonesStatsAggregated).mockReturnValue([
+            { getType: () => 'Zone1HR', getValue: () => 10 },
+            { getType: () => 'Zone2HR', getValue: () => 0 },
+            { getType: () => 'Zone1Power', getValue: () => 0 },
+            { getType: () => 'Zone2Power', getValue: () => 0 },
+        ] as any);
+
+        const result = convertIntensityZonesStatsToEchartsData([]);
+
+        expect(result.series.map(series => series.type)).toEqual(['Heart Rate']);
+    });
+});
+
 describe('getActiveDataTypes', () => {
     it('should return empty set for empty data', () => {
         expect(getActiveDataTypes([]).size).toBe(0);
@@ -126,5 +204,44 @@ describe('getActiveDataTypes', () => {
         ];
         const result = getActiveDataTypes(data);
         expect(result.size).toBe(0);
+    });
+});
+
+describe('shouldRenderIntensityZonesChart', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('should return false when there is no active series', () => {
+        vi.mocked(ActivityUtilities.getIntensityZonesStatsAggregated).mockReturnValue([
+            { getType: () => 'Zone1HR', getValue: () => 0 },
+            { getType: () => 'Zone2HR', getValue: () => 0 },
+            { getType: () => 'Zone1Power', getValue: () => 0 },
+            { getType: () => 'Zone2Power', getValue: () => 0 },
+        ] as any);
+
+        expect(shouldRenderIntensityZonesChart([])).toBe(false);
+    });
+
+    it('should return false when all active data is in one zone only', () => {
+        vi.mocked(ActivityUtilities.getIntensityZonesStatsAggregated).mockReturnValue([
+            { getType: () => 'Zone1HR', getValue: () => 10 },
+            { getType: () => 'Zone2HR', getValue: () => 0 },
+            { getType: () => 'Zone1Power', getValue: () => 20 },
+            { getType: () => 'Zone2Power', getValue: () => 0 },
+        ] as any);
+
+        expect(shouldRenderIntensityZonesChart([])).toBe(false);
+    });
+
+    it('should return true when data spans multiple zones', () => {
+        vi.mocked(ActivityUtilities.getIntensityZonesStatsAggregated).mockReturnValue([
+            { getType: () => 'Zone1HR', getValue: () => 10 },
+            { getType: () => 'Zone2HR', getValue: () => 5 },
+            { getType: () => 'Zone1Power', getValue: () => 0 },
+            { getType: () => 'Zone2Power', getValue: () => 12 },
+        ] as any);
+
+        expect(shouldRenderIntensityZonesChart([])).toBe(true);
     });
 });

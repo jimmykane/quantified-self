@@ -14,7 +14,6 @@ import type * as am4core from '@amcharts/amcharts4/core';
 import type * as am4charts from '@amcharts/amcharts4/charts';
 import type * as am4plugins_sliceGrouper from '@amcharts/amcharts4/plugins/sliceGrouper';
 
-import { DynamicDataLoader } from '@sports-alliance/sports-lib';
 import {
   ChartDataCategoryTypes,
   ChartDataValueTypes
@@ -23,6 +22,7 @@ import { DashboardChartAbstractDirective } from '../dashboard-chart-abstract-com
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../../services/logger.service';
+import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
 
 
 @Component({
@@ -68,7 +68,10 @@ export class ChartsPieComponent extends DashboardChartAbstractDirective implemen
       if (!target.dataItem || !target.dataItem.values || !target.dataItem.dataContext) {
         return '';
       }
-      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[this.chartDataValueType]);
+      const data = this.getDataInstanceOrNull(target.dataItem.dataContext[this.chartDataValueType]);
+      if (!data) {
+        return '';
+      }
       return `{category${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? `` : `.formatDate("${this.getChartDateFormat(this.chartDataTimeInterval)}")`}}\n${target.dataItem.values.value.percent.toFixed(1)}%\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `${target.dataItem.dataContext['count']} Activities` : ``}`
     });
 
@@ -84,7 +87,10 @@ export class ChartsPieComponent extends DashboardChartAbstractDirective implemen
         return '';
       }
       try {
-        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[this.chartDataValueType]);
+        const data = this.getDataInstanceOrNull(target.dataItem.dataContext[this.chartDataValueType]);
+        if (!data) {
+          return '';
+        }
         return `[font-size: 1.1em]${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? target.dataItem.dataContext.type.slice(0, 40) : `{category.formatDate("${this.getChartDateFormat(this.chartDataTimeInterval)}")}`}[/]\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
         // return `[bold font-size: 1.2em]{value.percent.formatNumber('#.')}%[/] [font-size: 1.1em]${this.chartDataCategoryType === ChartDataCategoryTypes.ActivityType ? target.dataItem.dataContext.type.slice(0, 40) : `{category.formatDate('${this.getChartDateFormat(this.chartDataDateRange)}')}` || 'other'}[/]\n[bold]${data.getDisplayValue()}${data.getDisplayUnit()}[/b]`
       } catch (e) {
@@ -112,8 +118,13 @@ export class ChartsPieComponent extends DashboardChartAbstractDirective implemen
       label.text = `{values.value.average.formatNumber('#')}`;
     }
     label.adapter.add('textOutput', (text, target, key) => {
-      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(text));
-      return `[font-size: 1.2em]${data.getDisplayType()}[/]
+      const data = this.getDataInstanceOrNull(text);
+      if (!data) {
+        return `[font-size: 1.2em]${this.chartDataValueType || 'Value'}[/]
+              [font-size: 1.3em]--[/]`;
+      }
+      const normalizedLabel = normalizeUnitDerivedTypeLabel(data.getType(), data.getDisplayType());
+      return `[font-size: 1.2em]${normalizedLabel}[/]
               [font-size: 1.3em]${data.getDisplayValue()}${data.getDisplayUnit()}[/]
               [font-size: 0.9em]${this.chartDataValueType}[/]`
     });

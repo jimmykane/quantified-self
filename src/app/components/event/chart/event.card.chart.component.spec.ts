@@ -13,9 +13,10 @@ import { AppChartSettingsLocalStorageService } from '../../../services/storage/a
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import { LoggerService } from '../../../services/logger.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { ChangeDetectorRef, NgZone, signal } from '@angular/core';
+import { ChangeDetectorRef, CUSTOM_ELEMENTS_SCHEMA, NgZone, signal } from '@angular/core';
 import { of } from 'rxjs';
-import { ActivityTypes, DataAltitude } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataAltitude, DataPowerAvg, DataSpeedAvgKilometersPerHour, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
+import { AppUserUtilities } from '../../../utils/app.user.utilities';
 
 describe('EventCardChartComponent', () => {
     let component: EventCardChartComponent;
@@ -54,7 +55,9 @@ describe('EventCardChartComponent', () => {
             getChartTheme: vi.fn().mockReturnValue({}),
             load: vi.fn().mockResolvedValue({ core: {}, charts: {} })
         };
-        mockEventColorService = {};
+        mockEventColorService = {
+            getActivityColor: vi.fn().mockReturnValue('#ff0000')
+        };
         mockUserService = {
             getUser: vi.fn().mockReturnValue(of({})),
             getUserChartDataTypesToUse: vi.fn().mockReturnValue([])
@@ -93,7 +96,8 @@ describe('EventCardChartComponent', () => {
                 { provide: AppActivityCursorService, useValue: mockActivityCursorService },
                 { provide: MatSnackBar, useValue: mockSnackBar },
                 { provide: LoggerService, useValue: { error: vi.fn(), warn: vi.fn(), log: vi.fn(), info: vi.fn() } },
-            ]
+            ],
+            schemas: [CUSTOM_ELEMENTS_SCHEMA]
         }).compileComponents();
 
         fixture = TestBed.createComponent(EventCardChartComponent);
@@ -136,6 +140,15 @@ describe('EventCardChartComponent', () => {
 
     it('should create', () => {
         expect(component).toBeTruthy();
+    });
+
+    it('should fallback to default chart lap types when settings lapTypes is empty', () => {
+        mockUserSettingsQuery.chartSettings.set({
+            ...mockUserSettingsQuery.chartSettings(),
+            lapTypes: []
+        });
+
+        expect(component.lapTypes).toEqual(AppUserUtilities.getDefaultChartLapTypes());
     });
 
     describe('createLabel', () => {
@@ -183,6 +196,402 @@ describe('EventCardChartComponent', () => {
             const label = (component as any).createLabel(mockContainer, series, labelDataMock);
 
             expect(label).toBeDefined();
+        });
+    });
+
+    describe('createOrUpdateChartSeries labels', () => {
+        it('should normalize unit-derived speed label in tooltip, legend, and dummyData displayName', () => {
+            const activity = {
+                creator: { name: 'Garmin' },
+                getID: () => 'a1'
+            } as any;
+            const stream = { type: DataSpeedAvgKilometersPerHour.type } as any;
+
+            component.event = {
+                getActivities: () => [activity, { creator: { name: 'Coros' }, getID: () => 'a2' }],
+                isMultiSport: () => false,
+                getActivityTypesAsArray: () => [ActivityTypes.Cycling],
+            } as any;
+
+            (component as any).chart = {
+                isDisposed: () => false,
+                series: {
+                    values: [],
+                    push: vi.fn((series: any) => series),
+                },
+                yAxes: {
+                    getIndex: vi.fn().mockReturnValue({}),
+                    push: vi.fn().mockReturnValue({}),
+                },
+            };
+            (component as any).charts = {
+                LineSeries: function () {
+                    return {
+                        adapter: { add: vi.fn() },
+                        events: { on: vi.fn() },
+                        dataFields: {},
+                        legendSettings: {},
+                    };
+                },
+            };
+
+            vi.spyOn(component as any, 'attachSeriesEventListeners').mockImplementation(() => { });
+            vi.spyOn(component as any, 'convertStreamDataToSeriesData').mockReturnValue([]);
+            vi.spyOn(component as any, 'getYAxisForSeries').mockReturnValue({});
+
+            const series = (component as any).createOrUpdateChartSeries(activity, stream);
+
+            expect(series).toBeTruthy();
+            expect(series.dummyData.displayName).toBe('Average Speed');
+            expect(series.tooltipText).toContain('Average Speed');
+            expect(series.legendSettings.labelText).toContain('Average Speed');
+        });
+
+        it('should keep non-unit-derived power labels unchanged', () => {
+            const activity = {
+                creator: { name: 'Garmin' },
+                getID: () => 'a1'
+            } as any;
+            const stream = { type: DataPowerAvg.type } as any;
+
+            component.event = {
+                getActivities: () => [activity, { creator: { name: 'Coros' }, getID: () => 'a2' }],
+                isMultiSport: () => false,
+                getActivityTypesAsArray: () => [ActivityTypes.Cycling],
+            } as any;
+
+            (component as any).chart = {
+                isDisposed: () => false,
+                series: {
+                    values: [],
+                    push: vi.fn((series: any) => series),
+                },
+                yAxes: {
+                    getIndex: vi.fn().mockReturnValue({}),
+                    push: vi.fn().mockReturnValue({}),
+                },
+            };
+            (component as any).charts = {
+                LineSeries: function () {
+                    return {
+                        adapter: { add: vi.fn() },
+                        events: { on: vi.fn() },
+                        dataFields: {},
+                        legendSettings: {},
+                    };
+                },
+            };
+
+            vi.spyOn(component as any, 'attachSeriesEventListeners').mockImplementation(() => { });
+            vi.spyOn(component as any, 'convertStreamDataToSeriesData').mockReturnValue([]);
+            vi.spyOn(component as any, 'getYAxisForSeries').mockReturnValue({});
+
+            const series = (component as any).createOrUpdateChartSeries(activity, stream);
+
+            expect(series).toBeTruthy();
+            expect(series.dummyData.displayName).toBe('Average Power');
+            expect(series.tooltipText).toContain('Average Power');
+            expect(series.legendSettings.labelText).toContain('Average Power');
+        });
+    });
+
+    describe('addLapGuides', () => {
+        it('should normalize lap types from source data when rendering guides', () => {
+            const createdRanges: any[] = [];
+            const xAxis = {
+                axisRanges: {
+                    template: { grid: { disabled: true } },
+                    create: vi.fn(() => {
+                        const range = {
+                            value: 0,
+                            grid: {
+                                disabled: false,
+                                stroke: null,
+                                strokeWidth: 0,
+                                strokeOpacity: 0,
+                                strokeDasharray: '',
+                                above: false,
+                                zIndex: 0,
+                                tooltipText: '',
+                                tooltipPosition: ''
+                            },
+                            label: {
+                                text: '',
+                                tooltipText: '',
+                                inside: false,
+                                paddingTop: 0,
+                                paddingBottom: 0,
+                                zIndex: 0,
+                                fontSize: '',
+                                background: {
+                                    fillOpacity: 0,
+                                    stroke: null,
+                                    strokeWidth: 0,
+                                    width: 0
+                                },
+                                fill: null,
+                                horizontalCenter: '',
+                                valign: '',
+                                textAlign: '',
+                                dy: 0
+                            }
+                        };
+                        createdRanges.push(range);
+                        return range;
+                    })
+                }
+            };
+            const chart = {
+                xAxes: {
+                    getIndex: vi.fn(() => xAxis)
+                }
+            } as any;
+
+            const activity = {
+                creator: { name: 'Runner' },
+                getID: () => 'activity-1',
+                startDate: new Date('2026-01-01T00:00:00.000Z'),
+                getLaps: () => [
+                    { type: 'manual', endDate: new Date('2026-01-01T00:01:00.000Z') },
+                    { type: 'session_end', endDate: new Date('2026-01-01T00:02:00.000Z') }
+                ]
+            } as any;
+
+            (component as any).addLapGuides(chart, [activity], XAxisTypes.Duration, [LapTypes.Manual]);
+
+            expect(createdRanges).toHaveLength(1);
+            expect(createdRanges[0].label.text).toBe('1');
+            expect(createdRanges[0].date.getTime()).toBe(60_000);
+        });
+
+        it('should assign each lap guide its own label text', () => {
+            const createdRanges: any[] = [];
+            const xAxis = {
+                axisRanges: {
+                    template: { grid: { disabled: true } },
+                    create: vi.fn(() => {
+                        const range = {
+                            value: 0,
+                            grid: {
+                                disabled: false,
+                                stroke: null,
+                                strokeWidth: 0,
+                                strokeOpacity: 0,
+                                strokeDasharray: '',
+                                above: false,
+                                zIndex: 0,
+                                tooltipText: '',
+                                tooltipPosition: ''
+                            },
+                            label: {
+                                text: '',
+                                tooltipText: '',
+                                inside: false,
+                                paddingTop: 0,
+                                paddingBottom: 0,
+                                zIndex: 0,
+                                fontSize: '',
+                                background: {
+                                    fillOpacity: 0,
+                                    stroke: null,
+                                    strokeWidth: 0,
+                                    width: 0
+                                },
+                                fill: null,
+                                horizontalCenter: '',
+                                valign: '',
+                                textAlign: '',
+                                dy: 0
+                            }
+                        };
+                        createdRanges.push(range);
+                        return range;
+                    })
+                }
+            };
+
+            const chart = {
+                xAxes: {
+                    getIndex: vi.fn(() => xAxis)
+                }
+            } as any;
+
+            const activity = {
+                creator: { name: 'Runner' },
+                getID: () => 'activity-1',
+                startDate: new Date('2026-01-01T00:00:00.000Z'),
+                getLaps: () => [
+                    { type: LapTypes.Manual, endDate: new Date('2026-01-01T00:01:00.000Z') },
+                    { type: LapTypes.Manual, endDate: new Date('2026-01-01T00:02:00.000Z') },
+                    { type: LapTypes.Start, endDate: new Date('2026-01-01T00:03:00.000Z') }
+                ]
+            } as any;
+
+            (component as any).addLapGuides(chart, [activity], XAxisTypes.Duration, [LapTypes.Manual]);
+
+            expect(createdRanges).toHaveLength(2);
+            expect(createdRanges[0].label.text).toBe('1');
+            expect(createdRanges[1].label.text).toBe('2');
+            expect(createdRanges[0].date.getTime()).toBe(60_000);
+            expect(createdRanges[1].date.getTime()).toBe(120_000);
+        });
+
+        it('should place time-axis guides at absolute lap end time', () => {
+            const createdRanges: any[] = [];
+            const xAxis = {
+                axisRanges: {
+                    template: { grid: { disabled: true } },
+                    create: vi.fn(() => {
+                        const range = {
+                            date: null,
+                            grid: {
+                                disabled: false,
+                                stroke: null,
+                                strokeWidth: 0,
+                                strokeOpacity: 0,
+                                strokeDasharray: '',
+                                above: false,
+                                zIndex: 0,
+                                tooltipText: '',
+                                tooltipPosition: ''
+                            },
+                            label: {
+                                text: '',
+                                tooltipText: '',
+                                inside: false,
+                                paddingTop: 0,
+                                paddingBottom: 0,
+                                zIndex: 0,
+                                fontSize: '',
+                                background: {
+                                    fillOpacity: 0,
+                                    stroke: null,
+                                    strokeWidth: 0,
+                                    width: 0
+                                },
+                                fill: null,
+                                horizontalCenter: '',
+                                valign: '',
+                                textAlign: '',
+                                dy: 0
+                            }
+                        };
+                        createdRanges.push(range);
+                        return range;
+                    })
+                }
+            };
+
+            const chart = {
+                xAxes: {
+                    getIndex: vi.fn(() => xAxis)
+                }
+            } as any;
+
+            const lapEnd = new Date('2026-01-01T00:01:00.000Z');
+            const activity = {
+                creator: { name: 'Runner' },
+                getID: () => 'activity-1',
+                startDate: new Date('2026-01-01T00:00:00.000Z'),
+                getLaps: () => [
+                    { type: LapTypes.Manual, endDate: lapEnd },
+                    { type: LapTypes.Start, endDate: new Date('2026-01-01T00:03:00.000Z') }
+                ]
+            } as any;
+
+            (component as any).addLapGuides(chart, [activity], XAxisTypes.Time, [LapTypes.Manual]);
+
+            expect(createdRanges).toHaveLength(1);
+            expect(createdRanges[0].date.getTime()).toBe(lapEnd.getTime());
+        });
+
+        it('should fallback to cumulative lap duration when indoor lap timestamps collapse to start time', () => {
+            const createdRanges: any[] = [];
+            const xAxis = {
+                axisRanges: {
+                    template: { grid: { disabled: true } },
+                    create: vi.fn(() => {
+                        const range = {
+                            date: null,
+                            value: 0,
+                            grid: {
+                                disabled: false,
+                                stroke: null,
+                                strokeWidth: 0,
+                                strokeOpacity: 0,
+                                strokeDasharray: '',
+                                above: false,
+                                zIndex: 0,
+                                tooltipText: '',
+                                tooltipPosition: ''
+                            },
+                            label: {
+                                text: '',
+                                tooltipText: '',
+                                inside: false,
+                                paddingTop: 0,
+                                paddingBottom: 0,
+                                zIndex: 0,
+                                fontSize: '',
+                                background: {
+                                    fillOpacity: 0,
+                                    stroke: null,
+                                    strokeWidth: 0,
+                                    width: 0
+                                },
+                                fill: null,
+                                horizontalCenter: '',
+                                valign: '',
+                                textAlign: '',
+                                dy: 0
+                            }
+                        };
+                        createdRanges.push(range);
+                        return range;
+                    })
+                }
+            };
+
+            const chart = {
+                xAxes: {
+                    getIndex: vi.fn(() => xAxis)
+                }
+            } as any;
+
+            const start = new Date('2026-01-01T00:00:00.000Z');
+            const activity = {
+                creator: { name: 'Trainer Ride' },
+                type: 'Indoor Cycling',
+                isTrainer: () => true,
+                getID: () => 'activity-indoor',
+                startDate: start,
+                getLaps: () => [
+                    {
+                        type: LapTypes.Manual,
+                        startDate: start,
+                        endDate: start,
+                        getDuration: () => ({ getValue: () => 60 })
+                    },
+                    {
+                        type: LapTypes.Manual,
+                        startDate: start,
+                        endDate: start,
+                        getDuration: () => ({ getValue: () => 75 })
+                    },
+                    {
+                        type: LapTypes.Start,
+                        startDate: start,
+                        endDate: start,
+                        getDuration: () => ({ getValue: () => 10 })
+                    }
+                ]
+            } as any;
+
+            (component as any).addLapGuides(chart, [activity], XAxisTypes.Duration, [LapTypes.Manual]);
+
+            expect(createdRanges).toHaveLength(2);
+            expect(createdRanges[0].date.getTime()).toBe(60_000);
+            expect(createdRanges[1].date.getTime()).toBe(135_000);
         });
     });
 });

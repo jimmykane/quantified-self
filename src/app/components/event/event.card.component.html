@@ -8,13 +8,14 @@
     [selectedActivities]="selectedActivitiesInstant()" [unitSettings]="userUnitSettings()"
     [statsToShow]="basicStatsTypes">
 
-    <!-- Projecting Intensity Zones after Stats Grid -->
-    @if (hasIntensityZonesFlag()) {
-    <div after-stats class="intensity-zones-summary-wrapper">
+    <!-- Projecting Performance Charts after Stats Grid -->
+    @if (hasPerformanceChartsFlag()) {
+    <div after-stats class="performance-charts-summary-wrapper">
       <mat-divider></mat-divider>
-      <app-event-intensity-zones [activities]="selectedActivitiesInstant()" [useAnimations]="useChartAnimations()"
-        [chartTheme]="chartTheme()">
-      </app-event-intensity-zones>
+      <app-event-performance-charts [activities]="selectedActivitiesInstant()" [useAnimations]="useChartAnimations()"
+        [chartTheme]="chartTheme()" [isMerge]="event()!.isMerge" [hasIntensity]="hasIntensityZonesFlag()"
+        [hasPowerCurve]="hasPowerCurveFlag()">
+      </app-event-performance-charts>
     </div>
     }
 

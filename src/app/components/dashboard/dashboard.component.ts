@@ -1,6 +1,6 @@
 import { Component, OnChanges, OnDestroy, OnInit, inject } from '@angular/core';
 import { AppEventService } from '../../services/app.event.service';
-import { asyncScheduler, of, Subscription } from 'rxjs';
+import { merge, of, Subject, Subscription } from 'rxjs';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -10,9 +10,10 @@ import { DateRanges } from '@sports-alliance/sports-lib';
 import { Search } from '../event-search/event-search.component';
 import { AppUserService } from '../../services/app.user.service';
 import { DaysOfTheWeek } from '@sports-alliance/sports-lib';
-import { distinctUntilChanged, map, switchMap, take, tap, throttleTime } from 'rxjs/operators';
+import { distinctUntilChanged, filter, map, switchMap, take, tap } from 'rxjs/operators';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
+import { LoggerService } from '../../services/logger.service';
 
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { WhereFilterOp } from 'firebase/firestore';
@@ -40,7 +41,12 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   public hasMergedEvents = false;
 
   private shouldSearch: boolean;
+  private manualSearchTrigger$ = new Subject<AppUserInterface | null>();
+  private initialLiveReconcilePending = false;
+  private initialResolvedEventsForReconcile: EventInterface[] = [];
+  private initialResolvedUserIDForReconcile: string | null = null;
   private analyticsService = inject(AppAnalyticsService);
+  private logger = inject(LoggerService);
 
 
   constructor(public authService: AppAuthService,
@@ -52,11 +58,16 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   async ngOnInit() {
+    const initStart = performance.now();
 
     const resolvedData = this.route.snapshot.data['dashboardData'];
     if (resolvedData) {
+      const resolvedDataStart = performance.now();
       this.events = resolvedData.events || [];
       this.user = resolvedData.user;
+      this.initialLiveReconcilePending = !!resolvedData.user;
+      this.initialResolvedEventsForReconcile = this.events || [];
+      this.initialResolvedUserIDForReconcile = resolvedData.user?.uid || null;
       this.targetUser = resolvedData.targetUser;
       this.hasMergedEvents = resolvedData.hasMergedEvents ?? this.events?.some(event => event.isMerge) ?? false;
       this.isLoading = false;
@@ -74,6 +85,7 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         }
         this.startOfTheWeek = this.user.settings.unitSettings?.startOfTheWeek;
       }
+      this.logPerf('resolved_dashboard_data', resolvedDataStart, { events: this.events?.length || 0 });
     }
 
     this.shouldSearch = false;
@@ -81,15 +93,18 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     // @todo make this an obsrvbl
     const userID = this.route.snapshot.paramMap.get('userID');
     if (userID && !this.targetUser) { // Only fetch if not resolved
+      const targetUserFetchStart = performance.now();
       try {
         this.targetUser = await this.userService.getUserByID(userID).pipe(take(1)).toPromise();
+        this.logPerf('target_user_fetch', targetUserFetchStart, { userID });
       } catch (e) {
         return this.router.navigate(['dashboard']).then(() => {
           this.snackBar.open('Page not found');
         });
       }
     }
-    this.dataSubscription = this.authService.user$.pipe(switchMap((user: AppUserInterface | null) => {
+    this.dataSubscription = merge(this.authService.user$, this.manualSearchTrigger$).pipe(switchMap((user: AppUserInterface | null) => {
+      const userEmissionStart = performance.now();
 
       if (this.shouldSearch || !this.isInitialized) {
         this.isLoading = true;
@@ -102,7 +117,6 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
         });
         return of({ user: null, events: null });
       }
-
 
 
       if (this.user && (
@@ -162,38 +176,69 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       return this.eventService
         .getEventsBy(this.targetUser ? this.targetUser : user, where, 'startDate', false, limit)
         .pipe(
-          distinctUntilChanged((p: EventInterface[], c: EventInterface[]) => {
-            if (p?.length !== c?.length) return false;
-            return p.every((event, index) => {
-              const prev = p[index];
-              const curr = c[index];
-              return prev.getID() === curr.getID() &&
-                prev.name === curr.name &&
-                prev.startDate?.getTime() === curr.startDate?.getTime();
-            });
+          distinctUntilChanged((p: EventInterface[], c: EventInterface[]) => this.areEventsEquivalentByIdentity(p, c)),
+          map((eventsArray: EventInterface[]) => {
+            if (this.initialLiveReconcilePending && this.initialResolvedUserIDForReconcile !== user.uid) {
+              this.initialLiveReconcilePending = false;
+            }
+
+            const shouldAttemptInitialReconcile = this.initialLiveReconcilePending
+              && this.initialResolvedUserIDForReconcile === user.uid
+              && !this.shouldSearch;
+
+            if (shouldAttemptInitialReconcile) {
+              this.initialLiveReconcilePending = false;
+              const isDuplicateOfResolvedData = this.areEventsEquivalentByIdentity(this.initialResolvedEventsForReconcile, eventsArray);
+              if (isDuplicateOfResolvedData) {
+                this.logger.info('[perf] dashboard_skip_initial_live_duplicate', {
+                  events: eventsArray?.length || 0,
+                  userID: user.uid,
+                });
+                return { eventsArray, skipInitialStateUpdate: true };
+              }
+            }
+
+            return { eventsArray, skipInitialStateUpdate: false };
           }),
-          tap((eventsArray: EventInterface[]) => {
+          tap(({ eventsArray, skipInitialStateUpdate }) => {
+            if (skipInitialStateUpdate) {
+              return;
+            }
+            this.logPerf('events_listener_emit', userEmissionStart, { incomingEvents: eventsArray?.length || 0 });
             this.hasMergedEvents = eventsArray.some(event => event.isMerge);
           }),
-          map((eventsArray: EventInterface[]) => {
-            const t0 = performance.now();
+          map(({ eventsArray, skipInitialStateUpdate }) => {
+            if (skipInitialStateUpdate) {
+              return null;
+            }
+            const filterStart = performance.now();
             let filteredEvents = eventsArray;
             if (!includeMergedEvents) {
               filteredEvents = filteredEvents.filter(event => !event.isMerge);
             }
             if (!user.settings.dashboardSettings.activityTypes || !user.settings.dashboardSettings.activityTypes.length) {
+              this.logPerf('events_filtering', filterStart, {
+                includeMergedEvents,
+                activityTypeFilters: 0,
+                resultCount: filteredEvents.length,
+              });
               return filteredEvents;
             }
             const result = filteredEvents.filter(event => {
               const hasType = event.getActivityTypesAsArray().some(activityType => user.settings.dashboardSettings.activityTypes.indexOf(ActivityTypes[activityType]) >= 0);
               return hasType;
             });
-
+            this.logPerf('events_filtering', filterStart, {
+              includeMergedEvents,
+              activityTypeFilters: user.settings.dashboardSettings.activityTypes.length,
+              resultCount: result.length,
+            });
             return result;
+          }),
+          filter((eventsArray: EventInterface[] | null): eventsArray is EventInterface[] => eventsArray !== null),
+          map((events) => {
+            return { events: events, user: user }
           }))
-        .pipe(map((events) => {
-          return { events: events, user: user }
-        }))
     })).subscribe((eventsAndUser) => {
 
       this.shouldSearch = false;
@@ -201,23 +246,59 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
       this.user = eventsAndUser.user;
       this.isLoading = false;
       this.isInitialized = true;
+      this.logger.info('[perf] dashboard_state_update', { events: this.events.length });
 
     });
+    this.logPerf('dashboard_init', initStart);
   }
 
   async search(search: Search) {
+    if (!this.user?.settings?.dashboardSettings) {
+      return;
+    }
+
+    const previousSearchState = {
+      searchTerm: this.searchTerm,
+      searchStartDate: this.searchStartDate,
+      searchEndDate: this.searchEndDate,
+    };
+    const previousDashboardSettings = {
+      includeMergedEvents: this.user.settings.dashboardSettings.includeMergedEvents,
+      dateRange: this.user.settings.dashboardSettings.dateRange,
+      startDate: this.user.settings.dashboardSettings.startDate,
+      endDate: this.user.settings.dashboardSettings.endDate,
+      activityTypes: this.user.settings.dashboardSettings.activityTypes,
+    };
+
     this.isLoading = true;
     this.shouldSearch = true;
     this.searchTerm = search.searchTerm;
     this.searchStartDate = search.startDate;
     this.searchEndDate = search.endDate;
-    this.user.settings.dashboardSettings.includeMergedEvents = search.includeMergedEvents !== false;
-    this.user.settings.dashboardSettings.dateRange = search.dateRange;
-    this.user.settings.dashboardSettings.startDate = search.startDate && search.startDate.getTime();
-    this.user.settings.dashboardSettings.endDate = search.endDate && search.endDate.getTime();
-    this.user.settings.dashboardSettings.activityTypes = search.activityTypes;
-    this.analyticsService.logEvent('dashboard_search', { method: DateRanges[search.dateRange] });
-    await this.userService.updateUserProperties(this.user, { settings: this.user.settings })
+
+    try {
+      this.user.settings.dashboardSettings.includeMergedEvents = search.includeMergedEvents !== false;
+      this.user.settings.dashboardSettings.dateRange = search.dateRange;
+      this.user.settings.dashboardSettings.startDate = search.startDate && search.startDate.getTime();
+      this.user.settings.dashboardSettings.endDate = search.endDate && search.endDate.getTime();
+      this.user.settings.dashboardSettings.activityTypes = search.activityTypes;
+      this.manualSearchTrigger$.next(this.user);
+      this.analyticsService.logEvent('dashboard_search', { method: DateRanges[search.dateRange] });
+      await this.userService.updateUserProperties(this.user, { settings: this.user.settings });
+    } catch (error) {
+      this.searchTerm = previousSearchState.searchTerm;
+      this.searchStartDate = previousSearchState.searchStartDate;
+      this.searchEndDate = previousSearchState.searchEndDate;
+      this.user.settings.dashboardSettings.includeMergedEvents = previousDashboardSettings.includeMergedEvents;
+      this.user.settings.dashboardSettings.dateRange = previousDashboardSettings.dateRange;
+      this.user.settings.dashboardSettings.startDate = previousDashboardSettings.startDate;
+      this.user.settings.dashboardSettings.endDate = previousDashboardSettings.endDate;
+      this.user.settings.dashboardSettings.activityTypes = previousDashboardSettings.activityTypes;
+      this.shouldSearch = false;
+      this.isLoading = false;
+      this.snackBar.open('Could not update dashboard filters');
+      this.logger.error('[DashboardComponent] Failed to persist dashboard search filters', error);
+    }
   }
 
   ngOnChanges() {
@@ -230,5 +311,53 @@ export class DashboardComponent implements OnInit, OnDestroy, OnChanges {
     if (this.dataSubscription) {
       this.dataSubscription.unsubscribe();
     }
+    this.manualSearchTrigger$.complete();
+  }
+
+  private logPerf(step: string, start: number, meta?: Record<string, unknown>) {
+    this.logger.info(`[perf] dashboard_${step}`, {
+      durationMs: Number((performance.now() - start).toFixed(2)),
+      ...(meta || {}),
+    });
+  }
+
+  private areEventsEquivalentByIdentity(previousEvents: EventInterface[] = [], currentEvents: EventInterface[] = []): boolean {
+    if (previousEvents?.length !== currentEvents?.length) {
+      return false;
+    }
+    return previousEvents.every((previousEvent, index) => {
+      const currentEvent = currentEvents[index];
+      return this.getEventStableID(previousEvent) === this.getEventStableID(currentEvent)
+        && previousEvent?.name === currentEvent?.name
+        && this.getEventStableStartDate(previousEvent) === this.getEventStableStartDate(currentEvent);
+    });
+  }
+
+  private getEventStableID(event: EventInterface | undefined): string | null {
+    if (!event) {
+      return null;
+    }
+    const eventAny = event as any;
+    if (typeof eventAny.getID === 'function') {
+      return eventAny.getID();
+    }
+    return eventAny.id || null;
+  }
+
+  private getEventStableStartDate(event: EventInterface | undefined): number | null {
+    if (!event) {
+      return null;
+    }
+    const startDate = (event as any).startDate;
+    if (startDate instanceof Date) {
+      return startDate.getTime();
+    }
+    if (startDate && typeof startDate.getTime === 'function') {
+      return startDate.getTime();
+    }
+    if (typeof startDate === 'number') {
+      return startDate;
+    }
+    return null;
   }
 }

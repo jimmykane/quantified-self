@@ -268,6 +268,28 @@ describe('EventJSONSanitizer', () => {
         expect(unknownTypes).toContain(mockUnknownType);
     });
 
+    it('should remove duplicate stream types from top-level stream arrays', () => {
+        setupMock();
+        const json = {
+            streams: [
+                { type: mockKnownType, values: [1, 2] },
+                { type: mockKnownType, values: [3, 4] }
+            ]
+        };
+
+        const { sanitizedJson, issues } = EventJSONSanitizer.sanitize(json);
+
+        expect(sanitizedJson.streams).toEqual([{ type: mockKnownType, values: [1, 2] }]);
+        expect(issues).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                kind: 'malformed_event_payload',
+                location: 'streams',
+                path: 'streams[1]',
+                type: mockKnownType
+            })
+        ]));
+    });
+
     it('should drop known event types with malformed payloads', () => {
         setupMock([], (type, payload) => type === mockKnownType && payload === undefined);
         const json = {

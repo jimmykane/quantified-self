@@ -3,10 +3,10 @@ import { EventSummaryComponent } from './event-summary.component';
 import { AppEventService } from '../../services/app.event.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { ChangeDetectorRef, Component, NO_ERRORS_SCHEMA } from '@angular/core';
-import { EventInterface, User, Privacy, ActivityTypes } from '@sports-alliance/sports-lib';
-import { of } from 'rxjs';
+import { ChangeDetectorRef, NO_ERRORS_SCHEMA } from '@angular/core';
+import { EventInterface, User, Privacy, ActivityTypes, DataFeeling, Feelings } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 
 
 
@@ -15,6 +15,7 @@ describe('EventSummaryComponent', () => {
     let fixture: ComponentFixture<EventSummaryComponent>;
     let mockEventService: any;
     let mockBottomSheet: any;
+    let mockBenchmarkFlowService: any;
 
     const mockUser: User = {
         uid: 'test-user-id',
@@ -37,6 +38,12 @@ describe('EventSummaryComponent', () => {
             open: vi.fn(),
         };
 
+        mockBenchmarkFlowService = {
+            openBenchmarkSelectionDialog: vi.fn(),
+            generateAndOpenReport: vi.fn().mockResolvedValue(undefined),
+            openBenchmarkReport: vi.fn(),
+        };
+
         await TestBed.configureTestingModule({
             declarations: [
                 EventSummaryComponent
@@ -46,6 +53,7 @@ describe('EventSummaryComponent', () => {
                 { provide: MatBottomSheet, useValue: mockBottomSheet },
                 { provide: MatSnackBar, useValue: { open: vi.fn() } },
                 { provide: ChangeDetectorRef, useValue: { markForCheck: vi.fn() } },
+                { provide: AppBenchmarkFlowService, useValue: mockBenchmarkFlowService },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         }).compileComponents();
@@ -112,5 +120,53 @@ describe('EventSummaryComponent', () => {
             expect(stats.length).toBe(2);
         });
     });
-});
 
+    describe('summary actions placement', () => {
+        it('should render show more action in summary actions area outside the stats grid component', () => {
+            const outsideAction = fixture.nativeElement.querySelector('.summary-actions .show-more-button');
+            const insideGridAction = fixture.nativeElement.querySelector('app-event-card-stats-grid .show-more-button');
+
+            expect(outsideAction).toBeTruthy();
+            expect(insideGridAction).toBeFalsy();
+        });
+
+        it('should render sensors action in summary actions area when devices exist', () => {
+            const devicesFixture = TestBed.createComponent(EventSummaryComponent);
+            const devicesComponent = devicesFixture.componentInstance;
+
+            devicesComponent.event = mockEvent;
+            devicesComponent.user = mockUser;
+            devicesComponent.selectedActivities = [
+                {
+                    creator: {
+                        devices: [{ name: 'HRM' }]
+                    }
+                } as any
+            ];
+
+            devicesFixture.detectChanges();
+
+            const sensorsAction = devicesFixture.nativeElement.querySelector('.summary-actions .devices-button');
+            expect(devicesComponent.hasDevices).toBe(true);
+            expect(sensorsAction).toBeTruthy();
+        });
+    });
+
+    describe('feeling icon', () => {
+        it('should render material symbol for feeling when present', () => {
+            component.event = {
+                ...mockEvent,
+                getStat: (type: string) => {
+                    if (type === DataFeeling.type) {
+                        return { getValue: () => Feelings.Excellent } as any;
+                    }
+                    return null;
+                }
+            } as any;
+
+            fixture.detectChanges();
+
+            expect(component.feelingIcon).toBe('sentiment_very_satisfied');
+        });
+    });
+});

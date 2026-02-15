@@ -7,7 +7,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatBadgeModule } from '@angular/material/badge';
 import { MatListModule } from '@angular/material/list';
-import { AppPaymentService, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
+import { AppPaymentService, StripeProduct, StripeSubscription, StripePrice } from '../../services/app.payment.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -45,6 +45,7 @@ export class PricingComponent implements OnInit, OnDestroy {
     loadingPriceId: string | null = null;
     activeSubscriptions$: Observable<StripeSubscription[]> | null = null;
     subscriptionSummary$: Observable<SubscriptionSummary | null> | null = null;
+    hasPaidSubscriptionHistory: boolean | null = null;
 
     private platformId = inject(PLATFORM_ID);
     private authService = inject(AppAuthService);
@@ -90,8 +91,12 @@ export class PricingComponent implements OnInit, OnDestroy {
         );
 
         // Initial load
-        const role = await this.userService.getSubscriptionRole();
+        const [role, hasPaidSubscriptionHistory] = await Promise.all([
+            this.userService.getSubscriptionRole(),
+            this.paymentService.hasPaidSubscriptionHistory()
+        ]);
         this.currentRole = role;
+        this.hasPaidSubscriptionHistory = hasPaidSubscriptionHistory;
         this.isLoadingRole = false;
 
         // Reactive update: specific to subscription changes
@@ -132,6 +137,23 @@ export class PricingComponent implements OnInit, OnDestroy {
             this.loadingPriceId = null;
         }
     };
+
+    shouldShowFirstMonthFreeCopy(product: StripeProduct, price: StripePrice): boolean {
+        if (this.hasPaidSubscriptionHistory !== false) {
+            return false;
+        }
+
+        const role = product.metadata?.['role'];
+        if (role !== 'basic' && role !== 'pro') {
+            return false;
+        }
+
+        if (!price.recurring) {
+            return false;
+        }
+
+        return !this.currentRole || this.currentRole === 'free';
+    }
 
     async subscribe(price: any) {
         if (!this.authService.currentUser) {

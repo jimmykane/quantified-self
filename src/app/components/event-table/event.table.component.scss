@@ -1,0 +1,315 @@
+@use '../../../styles/breakpoints' as bp;
+
+/* Consolidated and cleaned up styles for event table */
+
+/* Keep basic layout but remove fighting against Material */
+.container {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 10px 8px 4px 4px;
+  /* Extra top padding for badges */
+  white-space: nowrap;
+  overflow: visible;
+}
+
+/* Allow columns to size naturally or use flex */
+.mat-column-Privacy,
+.mat-column-Actions {
+  width: 50px;
+  /* Minimal constraint */
+}
+
+.mat-column-Checkbox {
+  width: 50px;
+}
+
+/* Responsive width for the Start Date column */
+.mat-column-Start-Date,
+.cdk-column-Start-Date,
+.mat-column-start-date,
+.cdk-column-start-date {
+  min-width: 120px;
+  width: auto;
+  white-space: nowrap;
+}
+
+@include bp.handset-or-tablet-portrait {
+
+  .mat-column-Start-Date,
+  .cdk-column-Start-Date,
+  .mat-column-start-date,
+  .cdk-column-start-date {
+    min-width: 60px !important;
+    width: 84px !important;
+    max-width: 84px !important;
+  }
+}
+
+@include bp.medium-and-up {
+
+  .mat-column-Start-Date,
+  .cdk-column-Start-Date,
+  .mat-column-start-date,
+  .cdk-column-start-date {
+    min-width: 120px !important;
+    width: 120px !important;
+  }
+}
+
+/* Standardize cell behavior */
+.mat-mdc-header-cell,
+.mat-mdc-cell {
+  white-space: nowrap !important;
+  padding: 0 16px !important;
+  border-bottom-color: var(--mat-app-outline-variant) !important;
+}
+
+.mat-mdc-header-cell {
+  color: var(--mat-sys-on-surface-variant) !important;
+  font-weight: 500 !important;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+.mat-mdc-cell {
+  font-family: 'Barlow Condensed', sans-serif;
+}
+
+.mat-mdc-row {
+  transition: background-color 0.2s;
+}
+
+.mat-mdc-row:hover {
+  background-color: var(--mat-app-surface-container-low) !important;
+}
+
+
+
+/* Gradient strip on the left of the first cell */
+.activity-row td:first-child {
+  position: relative;
+}
+
+.activity-row td:first-child::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--row-gradient);
+  opacity: 0.8;
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+  transition: width 0.2s ease;
+}
+
+.activity-row:hover td:first-child::before {
+  width: 6px;
+  opacity: 1;
+}
+
+.mat-column-Activity-Types {
+  min-width: 140px;
+}
+
+/* Truncate only row activity type values (not header) */
+.mat-mdc-cell.mat-column-Activity-Types,
+.mat-mdc-cell.cdk-column-Activity-Types,
+.mat-mdc-cell.mat-column-activity-types,
+.mat-mdc-cell.cdk-column-activity-types {
+  width: 120px;
+  max-width: 140px;
+}
+
+/* Truncate only row description values (not header) */
+.mat-mdc-cell.mat-column-Description,
+.mat-mdc-cell.cdk-column-Description,
+.mat-mdc-cell.mat-column-description,
+.mat-mdc-cell.cdk-column-description {
+  width: 120px;
+  max-width: 140px;
+}
+
+/* Truncate only row device names values (not header) */
+.mat-mdc-cell.mat-column-Device-Names,
+.mat-mdc-cell.cdk-column-Device-Names,
+.mat-mdc-cell.mat-column-device-names,
+.mat-mdc-cell.cdk-column-device-names {
+  width: 160px;
+  max-width: 160px;
+}
+
+/* Icons alignment in headers */
+::ng-deep .mat-sort-header-container {
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* Mobile Adjustments for Overall Table Compactness */
+@include bp.handset-or-tablet-portrait {
+
+  .mat-mdc-header-cell,
+  .mat-mdc-cell {
+    padding: 0 4px !important;
+  }
+}
+
+@include bp.xsmall {
+
+  .mat-column-Checkbox,
+  .mat-column-Privacy,
+  .mat-column-Actions {
+    width: 44px !important;
+    min-width: 44px !important;
+  }
+}
+
+mat-icon {
+  vertical-align: middle;
+}
+
+
+/* Removed mat-card specific margins/padding since we use glass-card now */
+
+.merged {
+  opacity: 0.7;
+}
+
+/* Table Container and Glass Card Styles (matching Admin Dashboard) */
+.table-container {
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  background: var(--mat-app-surface-container-low);
+  border: 1px solid var(--mat-app-outline-variant);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  overflow: hidden;
+  width: 100%;
+  max-width: 100%;
+}
+
+.table-wrapper {
+  overflow: auto;
+  width: 100%;
+}
+
+/* Paginator styling to match glass theme */
+mat-paginator {
+  background: transparent !important;
+  color: var(--mat-sys-on-surface-variant) !important;
+}
+
+
+/* Compact icon buttons for table actions */
+.buttons button[mat-icon-button] {
+  width: 32px !important;
+  height: 32px !important;
+  padding: 0 !important;
+  line-height: 32px !important;
+}
+
+.buttons button[mat-icon-button] mat-icon {
+  font-size: 20px !important;
+  width: 20px !important;
+  height: 20px !important;
+}
+
+/* Force smaller badges for table actions */
+.buttons ::ng-deep .mat-badge-content {
+  width: 14px !important;
+  height: 14px !important;
+  line-height: 14px !important;
+  font-size: 9px !important;
+  font-weight: 500 !important;
+}
+
+/* Align activity type icon and text */
+.data-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.description-cell {
+  max-width: 140px;
+  min-width: 0;
+}
+
+.description-text {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-names-cell {
+  max-width: 160px;
+  min-width: 0;
+}
+
+.device-names-text {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.excluded-icon {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+  opacity: 0.6;
+  cursor: help;
+}
+
+.activity-type-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 140px;
+  min-width: 0;
+}
+
+.activity-type-text {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-type-cell app-activity-type-icon,
+.activity-type-cell .benchmark-icon {
+  flex: 0 0 auto;
+}
+
+.benchmark-icon {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.benchmark-icon.is-muted mat-icon {
+  color: var(--mat-sys-on-surface-variant);
+  opacity: 0.4;
+}
+
+.benchmark-icon:hover mat-icon {
+  opacity: 0.85;
+}

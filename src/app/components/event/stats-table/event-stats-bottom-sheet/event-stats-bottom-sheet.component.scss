@@ -1,0 +1,19 @@
+:host {
+    display: block;
+    height: 100%;
+}
+
+.bottom-sheet-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    max-height: calc(100dvh - 32px);
+    min-height: 0;
+}
+
+.bottom-sheet-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    padding: 0 1rem 1rem 1rem;
+}

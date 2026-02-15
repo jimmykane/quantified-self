@@ -31,11 +31,12 @@ import { LoggerService } from '../../services/logger.service';
 import { TracksMapManager } from './tracks-map.manager'; // Imported Manager
 import { MapStyleService } from '../../services/map-style.service';
 import { MapboxStyleSynchronizer } from '../../services/map/mapbox-style-synchronizer';
+import { MapStyleName } from '../../services/map/map-style.types';
 import { Search } from '../event-search/event-search.component';
 import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-detection.service';
 import { TripDetectionInput } from '../../services/my-tracks-trip-detection.service';
 import { DetectedTrip } from '../../services/my-tracks-trip-detection.service';
-import { TripLocationLabelService } from '../../services/trip-location-label.service';
+import { ResolvedTripLocationLabel, TripLocationLabelService } from '../../services/trip-location-label.service';
 
 interface DetectedTripViewModel extends DetectedTrip {
   locationLabel: string | null;
@@ -44,7 +45,7 @@ interface DetectedTripViewModel extends DetectedTrip {
 @Component({
   selector: 'app-tracks',
   templateUrl: './tracks.component.html',
-  styleUrls: ['./tracks.component.css'],
+  styleUrls: ['./tracks.component.scss'],
   standalone: false
 })
 export class TracksComponent implements OnInit, OnDestroy {
@@ -58,6 +59,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     DateRanges.lastMonth,
     DateRanges.lastThirtyDays,
     DateRanges.thisYear,
+    DateRanges.lastYear,
     DateRanges.all
   ]
   bufferProgress = new Subject<number>();
@@ -88,7 +90,8 @@ export class TracksComponent implements OnInit, OnDestroy {
   public isLoading: WritableSignal<boolean> = signal(false);
   public detectedTrips: WritableSignal<DetectedTripViewModel[]> = signal([]);
   public hasEvaluatedTripDetection: WritableSignal<boolean> = signal(false);
-  public detectedTripsPanelExpanded: WritableSignal<boolean> = signal(true);
+  public detectedTripsPanelExpanded: WritableSignal<boolean> = signal(false);
+  public searchPeekDefaultExpanded: WritableSignal<boolean> = signal(true);
   // Removed legacy state tracking
 
   constructor(
@@ -112,6 +115,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
     const platformId = inject(PLATFORM_ID);
     this.platformId = platformId;
+    this.searchPeekDefaultExpanded.set(this.resolveDesktopViewportDefault());
 
     // Track last settings to prevent redundant data fetching
     let lastLoadedDataSettings: { dateRange: DateRanges, activityTypes?: ActivityTypes[], mapStyle?: string } | null = null;
@@ -136,6 +140,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
       // 1. Update Map Style via Synchronizer
       const mapStyle = settings.mapStyle || 'default';
+      this.tracksMapManager.setMapStyle(mapStyle as MapStyleName);
       const resolved = this.mapStyleService.resolve(mapStyle, theme);
       synchronizer.update(resolved);
 
@@ -345,6 +350,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.promiseTime = promiseTime
     this.hasEvaluatedTripDetection.set(false);
     this.detectedTrips.set([]);
+    this.detectedTripsPanelExpanded.set(false);
     this.clearProgressAndOpenBottomSheet();
     const dates = getDatesForDateRange(dateRange, user.settings?.unitSettings?.startOfTheWeek || 1);
     const where = []
@@ -559,12 +565,18 @@ export class TracksComponent implements OnInit, OnDestroy {
       currentPromiseTime: this.promiseTime
     });
     const detectedTrips = this.tripDetectionService.detectTrips(candidates);
+    const locationLabelPromisesByDestination = new Map<string, Promise<ResolvedTripLocationLabel | null>>();
     const viewModels = await Promise.all(detectedTrips.map(async (trip) => {
-      const locationLabel = await this.tripLocationLabelService.resolveCountryName(trip.centroidLat, trip.centroidLng);
+      let locationLabelPromise = locationLabelPromisesByDestination.get(trip.destinationId);
+      if (!locationLabelPromise) {
+        locationLabelPromise = this.tripLocationLabelService.resolveTripLocation(trip.centroidLat, trip.centroidLng);
+        locationLabelPromisesByDestination.set(trip.destinationId, locationLabelPromise);
+      }
+      const location = await locationLabelPromise;
 
       return {
         ...trip,
-        locationLabel,
+        locationLabel: location?.label || null,
       } satisfies DetectedTripViewModel;
     }));
 
@@ -578,6 +590,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
 
     this.detectedTrips.set(viewModels);
+    this.detectedTripsPanelExpanded.set(viewModels.length > 0);
     this.hasEvaluatedTripDetection.set(true);
     this.logger.log('[TracksComponent] Detected trips committed to UI state.', {
       detectedTripCount: viewModels.length,
@@ -611,6 +624,19 @@ export class TracksComponent implements OnInit, OnDestroy {
   // Refactored helpers
   private isStyleLoaded(): boolean {
     return this.mapSignal() && this.mapSignal().isStyleLoaded();
+  }
+
+  private resolveDesktopViewportDefault(): boolean {
+    if (!isPlatformBrowser(this.platformId)) {
+      return true;
+    }
+
+    const mediaQuery = window.matchMedia?.('(min-width: 641px)');
+    if (mediaQuery) {
+      return mediaQuery.matches;
+    }
+
+    return window.innerWidth >= 641;
   }
 }
 

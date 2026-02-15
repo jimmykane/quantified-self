@@ -2,30 +2,68 @@
   <!-- Grid Layout -->
   @if (layout === 'grid') {
   <section class="grid">
-    @for (stat of displayedStats; track stat) {
-    <div class="stat-item">
+    @for (card of displayedStatCards; track card.id) {
+    <div class="stat-item" [class.stat-item--composite]="card.isComposite">
       <div class="stat-avatar">
-        <app-data-type-icon [size]="'24px'" [vAlign]="'middle'" [dataType]="stat.getType()"></app-data-type-icon>
+        <app-data-type-icon [size]="'24px'" [vAlign]="'middle'" [dataType]="card.iconType"></app-data-type-icon>
       </div>
       <div class="stat-content">
         <div class="stat-label">
-          {{stat.getDisplayType()}}
+          {{card.label}}
         </div>
+        @if (card.isComposite) {
+        <div class="stat-values-compact">
+          <div class="stat-keys-row">
+            @for (valueItem of card.valueItems; track valueItem.type) {
+            <span class="stat-value-key">{{ valueItem.key }}</span>
+            }
+          </div>
+          <div class="stat-values-row">
+            @if (card.isComposite && getCompositeUnit(card); as unit) {
+            <span class="stat-values-unit-prefix">{{ unit }}</span>
+            }
+            @for (valueItem of card.valueItems; track valueItem.type) {
+            <span class="stat-value-cell">{{valueItem.displayValue}}</span>
+            }
+          </div>
+          @if (showDiff) {
+          <div class="stat-delta-row">
+            @if (hasCompositeDiff(card)) {
+            <span class="stat-delta-prefix">Δ</span>
+            }
+            @for (valueItem of card.valueItems; track valueItem.type) {
+            @if (getDiffForType(valueItem.type); as diff) {
+            <span class="stat-delta-cell">{{ getCompositeDeltaDisplay(diff.display, valueItem.displayUnit) }}</span>
+            } @else {
+            <span class="stat-delta-cell stat-delta-cell-empty"></span>
+            }
+            }
+          </div>
+          <div class="stat-percent-row">
+            @for (valueItem of card.valueItems; track valueItem.type) {
+            @if (getDiffForType(valueItem.type); as diff) {
+            <span class="stat-percent-cell" [style.color]="diff.color">{{ diff.percent.toFixed(1) }}%</span>
+            } @else {
+            <span class="stat-percent-cell stat-percent-cell-empty"></span>
+            }
+            }
+          </div>
+          }
+        </div>
+        } @else {
+        @if (card.valueItems[0]; as valueItem) {
         <div class="stat-value-grid">
-          {{stat.getDisplayValue()}} {{stat.getDisplayUnit()}}
+          {{valueItem.displayValue}} {{valueItem.displayUnit}}
         </div>
-        @if (getDiffForStat(stat); as diff) {
+        @if (getDiffForType(valueItem.type); as diff) {
         <div class="stat-diff">
-          <span class="stat-diff-value">
-            Δ {{ diff.display }}
-          </span>
-          <span class="stat-diff-percent" [style.color]="diff.color">
-            {{ diff.percent.toFixed(1) }}%
-          </span>
+          <span class="stat-diff-value">Δ {{ diff.display }}</span>
+          <span class="stat-diff-percent" [style.color]="diff.color">{{ diff.percent.toFixed(1) }}%</span>
         </div>
         }
+        }
+        }
       </div>
-
     </div>
     }
     <ng-content select="[grid-suffix]"></ng-content>
@@ -37,7 +75,7 @@
   <section class="condensed">
     <mat-chip-set role="list">
       @for (stat of displayedStats; track stat) {
-      <mat-chip role="listitem" [matTooltip]="stat.getDisplayType()" class="stat-chip" [highlighted]="false"
+      <mat-chip role="listitem" [matTooltip]="getNormalizedStatLabel(stat)" class="stat-chip" [highlighted]="false"
         [disableRipple]="true">
         <app-data-type-icon matChipAvatar [size]="'18px'" [vAlign]="'middle'"
           [dataType]="stat.getType()"></app-data-type-icon>

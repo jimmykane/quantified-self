@@ -15,6 +15,7 @@ const {
     mockUpdateToProcessed,
     mockGetTokenData,
     mockUploadDebugFile,
+    mockCreateParsingOptions,
 } = vi.hoisted(() => {
     return {
         mockSetEvent: vi.fn(),
@@ -28,6 +29,7 @@ const {
         mockUpdateToProcessed: vi.fn(),
         mockGetTokenData: vi.fn(),
         mockUploadDebugFile: vi.fn(),
+        mockCreateParsingOptions: vi.fn(() => ({ generateUnitStreams: false, deviceInfoMode: 'changes' })),
     };
 });
 
@@ -82,6 +84,10 @@ vi.mock('./auth/auth', () => ({
 
 vi.mock('../debug-utils', () => ({
     uploadDebugFile: mockUploadDebugFile,
+}));
+
+vi.mock('../shared/parsing-options', () => ({
+    createParsingOptions: mockCreateParsingOptions,
 }));
 
 // Mock queue utilities
@@ -279,6 +285,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             const result = await processGarminAPIActivityQueueItem(queueItem);
 
             expect(result).toBe('PROCESSED');
+            expect(mockCreateParsingOptions).toHaveBeenCalledTimes(1);
             expect(mockRequestGet).toHaveBeenCalledWith(expect.objectContaining({
                 headers: { 'Authorization': 'Bearer fresh-token' },
                 url: queueItem.callbackURL
@@ -309,6 +316,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
 
             expect(result).toBe('PROCESSED');
             expect(EventImporterGPX.getFromString).toHaveBeenCalled();
+            expect(mockCreateParsingOptions).toHaveBeenCalledTimes(1);
         });
 
         it('should fallback to FIT if GPX parsing fails', async () => {
@@ -322,6 +330,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
             expect(EventImporterFIT.getFromArrayBuffer).toHaveBeenCalled();
             // Second download attempt
             expect(mockRequestGet).toHaveBeenCalledTimes(2);
+            expect(mockCreateParsingOptions).toHaveBeenCalledTimes(2);
         });
 
         it('should successfully process a TCX file', async () => {
@@ -337,6 +346,7 @@ describe('Garmin Queue', () => { // Grouping for cleaner output
 
             expect(result).toBe('PROCESSED');
             expect(EventImporterTCX.getFromXML).toHaveBeenCalled();
+            expect(mockCreateParsingOptions).toHaveBeenCalledTimes(1);
         });
 
         it('should move to DLQ if no token is found', async () => {

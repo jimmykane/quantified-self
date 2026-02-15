@@ -1,7 +1,9 @@
 <mat-card class="mat-elevation-z0">
   @if (user) {
-  <app-peek-panel class="tracks-search-peek" position="top" topAnchor="center" [defaultExpanded]="true"
-    [expandedSizePx]="360" [collapsedSizePx]="36" ariaLabelExpand="Expand filters" ariaLabelCollapse="Collapse filters">
+  <app-peek-panel class="tracks-search-peek" position="top" topAnchor="center"
+    [defaultExpanded]="searchPeekDefaultExpanded()"
+    borderMode="none" [expandedSizePx]="332" [collapsedSizePx]="28" ariaLabelExpand="Expand filters"
+    ariaLabelCollapse="Collapse filters">
     <app-event-search [startOfTheWeek]="user.settings.unitSettings.startOfTheWeek" [showDatePicker]="false"
       [showActivityTypePicker]="false" [dateRangesToShow]="dateRangesToShow"
       [selectedActivityTypes]="user.settings.myTracksSettings?.activityTypes"
@@ -24,31 +26,33 @@
     }
   </div>
 
-  @if (hasEvaluatedTripDetection()) {
-  <app-peek-panel class="tracks-trips-peek" position="left" [expanded]="detectedTripsPanelExpanded()"
-    (expandedChange)="detectedTripsPanelExpanded.set($event)" [expandedSizePx]="340" [collapsedSizePx]="44"
-    ariaLabelExpand="Expand detected trips" ariaLabelCollapse="Collapse detected trips">
-    <div peek-header>
-      <div class="detected-trips-summary-row">
-        <span class="detected-trips-title">Detected trips</span>
-        <span class="detected-trips-badge">{{ detectedTrips().length }}</span>
+  @if (hasEvaluatedTripDetection() && detectedTrips().length > 0) {
+  <div class="tracks-trips-peek-anchor">
+    <app-peek-panel class="tracks-trips-peek" position="left" toggleLengthSize="small"
+      [expanded]="detectedTripsPanelExpanded()"
+      (expandedChange)="detectedTripsPanelExpanded.set($event)" [expandedSizePx]="300" [collapsedSizePx]="28"
+      ariaLabelExpand="Expand detected trips" ariaLabelCollapse="Collapse detected trips" title="Detected trips"
+      icon="route">
+      <div peek-header-actions class="detected-trips-summary-row">
+        <span class="detected-trips-badge">
+          <span class="detected-trips-badge-count">{{ detectedTrips().length }}</span>
+          <span class="detected-trips-badge-label">{{ detectedTrips().length === 1 ? 'trip' : 'trips' }}</span>
+        </span>
       </div>
-    </div>
-    @if (detectedTrips().length === 0) {
-    <p class="detected-trips-empty">No trips detected for this period</p>
-    } @else {
-    <ul class="detected-trips-list qs-scrollbar">
-      @for (trip of detectedTrips(); track trip.tripId) {
-      <li>
-        <button type="button" class="detected-trip-button" (click)="onDetectedTripSelected(trip)">
-          <span class="trip-location">{{ trip.locationLabel || 'Trip' }}</span>
-          <span class="trip-dates">{{ trip.startDate | date:'mediumDate' }} - {{ trip.endDate | date:'mediumDate' }}</span>
-          <span class="trip-count">{{ trip.activityCount }} activities</span>
-        </button>
-      </li>
-      }
-    </ul>
-    }
-  </app-peek-panel>
+
+      <ul class="detected-trips-list qs-scrollbar">
+        @for (trip of detectedTrips(); track trip.tripId) {
+        <li>
+          <button type="button" class="detected-trip-button" (click)="onDetectedTripSelected(trip)">
+            <span class="trip-location">{{ trip.locationLabel || 'Trip' }}</span>
+            <span class="trip-dates">{{ trip.startDate | date:'mediumDate' }} - {{ trip.endDate | date:'mediumDate'
+              }}</span>
+            <span class="trip-count">{{ trip.activityCount }} activities</span>
+          </button>
+        </li>
+        }
+      </ul>
+    </app-peek-panel>
+  </div>
   }
 </mat-card>

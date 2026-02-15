@@ -104,4 +104,21 @@ describe('ServicesComponent', () => {
             queryParamsHandling: 'merge',
         });
     });
+
+    it('should map active section to selected tab index', () => {
+        component.activeSection = 'coros';
+        expect(component.selectedSectionIndex).toBe(2);
+    });
+
+    it('should enable sticky tabs config for shared tabs wrapper', () => {
+        expect(component.tabsStickyHeader).toBe(true);
+        expect(component.tabsTopOffset).toBe('0px');
+        expect(component.tabsLazyContent).toBe(false);
+    });
+
+    it('should navigate when selected tab index changes', async () => {
+        const selectSpy = vi.spyOn(component, 'selectService').mockResolvedValue(undefined);
+        await component.onSelectedSectionIndexChange(1);
+        expect(selectSpy).toHaveBeenCalledWith('garmin');
+    });
 });

@@ -12,6 +12,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { GoogleMapsLoaderService } from '../../services/google-maps-loader.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { MarkerFactoryService } from '../../services/map/marker-factory.service';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { NgZone, ChangeDetectorRef, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 import {
@@ -46,6 +47,7 @@ describe('EventsMapComponent', () => {
     let mockUser: User;
     let mockEvent: any; // Use any to allow easy mocking of methods
     let mockThemeService: any;
+    let mockSnackBar: any;
 
     beforeEach(async () => {
         mockEventService = {
@@ -58,12 +60,17 @@ describe('EventsMapComponent', () => {
         };
         mockLogger = {
             error: vi.fn(),
-            log: vi.fn()
+            log: vi.fn(),
+            info: vi.fn(),
+            warn: vi.fn()
         };
         mockThemeService = {
             appTheme: signal(AppThemes.Normal),
             getAppTheme: vi.fn().mockReturnValue(of(AppThemes.Normal)),
             getChartTheme: vi.fn().mockReturnValue(of(AppThemes.Normal)),
+        };
+        mockSnackBar = {
+            open: vi.fn(),
         };
 
         await TestBed.configureTestingModule({
@@ -111,6 +118,7 @@ describe('EventsMapComponent', () => {
                         createJumpMarker: vi.fn()
                     }
                 },
+                { provide: MatSnackBar, useValue: mockSnackBar },
                 ChangeDetectorRef
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA],
@@ -208,6 +216,34 @@ describe('EventsMapComponent', () => {
     });
 
     describe('initMapData (called via onMapReady)', () => {
+        it('should set noMapData when there are no events', () => {
+            component.events = [];
+            component.apiLoaded.set(true);
+
+            const mockMap = new (window as any).google.maps.Map();
+            component['nativeMap'] = mockMap;
+
+            component['initMapData']();
+
+            expect(component.noMapData).toBe(true);
+            expect(component.markers.length).toBe(0);
+        });
+
+        it('should set noMapData when events have no start positions', () => {
+            mockEvent.getStat.mockReturnValue(null);
+            mockEvent.getID.mockReturnValue('evt-no-start');
+            component.events = [mockEvent];
+            component.apiLoaded.set(true);
+
+            const mockMap = new (window as any).google.maps.Map();
+            component['nativeMap'] = mockMap;
+
+            component['initMapData']();
+
+            expect(component.noMapData).toBe(true);
+            expect(component.markers.length).toBe(0);
+        });
+
         it('should create markers for events', () => {
             // Mock Stat for position
             const mockStat = { getValue: () => ({ latitudeDegrees: 10, longitudeDegrees: 20 }) } as DataStartPosition;
@@ -231,6 +267,7 @@ describe('EventsMapComponent', () => {
             component['initMapData'](); // Call private method directly
 
             expect(component.markers.length).toBe(1);
+            expect(component.noMapData).toBe(false);
             expect((window as any).google.maps.marker.AdvancedMarkerElement).toHaveBeenCalledWith(expect.objectContaining({
                 // map: mockMap, // Map is not passed to constructor, it's set via setMap later
                 title: 'Running for 1h and 10km'
@@ -345,6 +382,39 @@ describe('EventsMapComponent', () => {
                 expect(component.selectedEventPositionsByActivity[0].color).toBe('red');
                 expect(mockMap.fitBounds).toHaveBeenCalled();
                 expect(component.selectedEvent).toBe(mockPopulatedEvent);
+            });
+
+            it('should show snackbar and call loaded when hydration fails on click', async () => {
+                const mockMap = new (window as any).google.maps.Map();
+                const mockStat = { getValue: () => ({ latitudeDegrees: 10, longitudeDegrees: 20 }) } as DataStartPosition;
+                mockEvent.getStat.mockReturnValue(mockStat);
+                mockEvent.getDuration.mockReturnValue({ getDisplayValue: () => '1h' });
+                mockEvent.getDistance.mockReturnValue({ getDisplayValue: () => '10km' });
+                mockEvent.getActivityTypesAsArray.mockReturnValue([ActivityTypes.Running]);
+                mockEvent.getID.mockReturnValue('evt1');
+
+                component.events = [mockEvent];
+                component.apiLoaded.set(true);
+                component.onMapReady(mockMap);
+                mockEventService.attachStreamsToEventWithActivities.mockReturnValue({
+                    pipe: () => ({
+                        toPromise: () => Promise.reject(new Error('hydrate failed')),
+                    }),
+                } as any);
+                const loadedSpy = vi.spyOn(component, 'loaded');
+
+                const marker = component.markers[0];
+                const addListenerSpy = marker.addListener as unknown as Mock;
+                const handler = addListenerSpy.mock.calls[0][1];
+
+                await handler();
+
+                expect(mockSnackBar.open).toHaveBeenCalledWith(
+                    'Could not load event track data',
+                    undefined,
+                    { duration: 3000 },
+                );
+                expect(loadedSpy).toHaveBeenCalled();
             });
         });
 

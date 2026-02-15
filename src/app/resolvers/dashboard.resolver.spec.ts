@@ -9,6 +9,7 @@ import { AppUserService } from '../services/app.user.service';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { dashboardResolver, DashboardResolverData } from './dashboard.resolver';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { LoggerService } from '../services/logger.service';
 
 describe('dashboardResolver', () => {
     const executeResolver: ResolveFn<DashboardResolverData> = (...resolverParameters) =>
@@ -19,6 +20,7 @@ describe('dashboardResolver', () => {
     let authServiceSpy: any;
     let routerSpy: any;
     let snackBarSpy: any;
+    let loggerSpy: any;
 
     const mockUser = new User('testUser') as AppUserInterface;
     mockUser.settings = {
@@ -33,11 +35,12 @@ describe('dashboardResolver', () => {
     } as any;
 
     beforeEach(() => {
-        eventServiceSpy = { getEventsBy: vi.fn(), getEventsOnceBy: vi.fn() };
+        eventServiceSpy = { getEventsBy: vi.fn(), getEventsOnceByWithMeta: vi.fn() };
         userServiceSpy = { getUserByID: vi.fn() };
         authServiceSpy = { user$: of(mockUser) };
         routerSpy = { navigate: vi.fn() };
         snackBarSpy = { open: vi.fn() };
+        loggerSpy = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), log: vi.fn() };
 
         TestBed.configureTestingModule({
             providers: [
@@ -45,7 +48,8 @@ describe('dashboardResolver', () => {
                 { provide: AppUserService, useValue: userServiceSpy },
                 { provide: AppAuthService, useValue: authServiceSpy },
                 { provide: Router, useValue: routerSpy },
-                { provide: MatSnackBar, useValue: snackBarSpy }
+                { provide: MatSnackBar, useValue: snackBarSpy },
+                { provide: LoggerService, useValue: loggerSpy }
             ]
         });
     });
@@ -55,7 +59,7 @@ describe('dashboardResolver', () => {
     });
 
     it('should resolve with user and empty events when date range is all and no events returned', () => new Promise<void>(done => {
-        eventServiceSpy.getEventsOnceBy.mockReturnValue(of([]));
+        eventServiceSpy.getEventsOnceByWithMeta.mockReturnValue(of({ events: [], source: 'cache' }));
 
         const route = new ActivatedRouteSnapshot();
         vi.spyOn(route.paramMap, 'get').mockReturnValue(null);
@@ -65,8 +69,19 @@ describe('dashboardResolver', () => {
         (executeResolver(route, state) as any).subscribe((result: DashboardResolverData) => {
             expect(result.user).toEqual(mockUser);
             expect(result.events).toEqual([]);
+            expect(result.eventsSource).toBe('cache');
             expect(result.targetUser).toBeUndefined(); // or null depending on impl
-            expect(eventServiceSpy.getEventsOnceBy).toHaveBeenCalled();
+            expect(eventServiceSpy.getEventsOnceByWithMeta).toHaveBeenCalledWith(
+                mockUser,
+                [],
+                'startDate',
+                false,
+                0,
+                {
+                    preferCache: true,
+                    warmServer: false
+                }
+            );
             done();
         });
     }));
@@ -74,7 +89,7 @@ describe('dashboardResolver', () => {
     it('should resolve with targetUser when userID is present', () => new Promise<void>(done => {
         const mockTargetUser = new User('targetUser');
         userServiceSpy.getUserByID.mockReturnValue(of(mockTargetUser));
-        eventServiceSpy.getEventsOnceBy.mockReturnValue(of([]));
+        eventServiceSpy.getEventsOnceByWithMeta.mockReturnValue(of({ events: [], source: 'server' }));
 
         const route = new ActivatedRouteSnapshot();
         vi.spyOn(route.paramMap, 'get').mockImplementation((key) => {
@@ -87,6 +102,7 @@ describe('dashboardResolver', () => {
         (executeResolver(route, state) as any).subscribe((result: DashboardResolverData) => {
             expect(result.user).toEqual(mockUser);
             expect(result.targetUser).toEqual(mockTargetUser);
+            expect(result.eventsSource).toBe('server');
             expect(userServiceSpy.getUserByID).toHaveBeenCalledWith('targetUser');
             done();
         });
@@ -97,7 +113,10 @@ describe('dashboardResolver', () => {
         mockUser.settings.dashboardSettings.activityTypes = [];
         const mergedEvent = { isMerge: true, getActivityTypesAsArray: () => [] } as any;
         const normalEvent = { isMerge: false, getActivityTypesAsArray: () => [] } as any;
-        eventServiceSpy.getEventsOnceBy.mockReturnValue(of([mergedEvent, normalEvent]));
+        eventServiceSpy.getEventsOnceByWithMeta.mockReturnValue(of({
+            events: [mergedEvent, normalEvent],
+            source: 'cache'
+        }));
 
         const route = new ActivatedRouteSnapshot();
         vi.spyOn(route.paramMap, 'get').mockReturnValue(null);
@@ -106,13 +125,14 @@ describe('dashboardResolver', () => {
 
         (executeResolver(route, state) as any).subscribe((result: DashboardResolverData) => {
             expect(result.events).toEqual([normalEvent]);
+            expect(result.eventsSource).toBe('cache');
             done();
         });
     }));
 
     it('should handle error when fetching targetUser and navigate', () => new Promise<void>(done => {
         userServiceSpy.getUserByID.mockReturnValue(throwError(() => new Error('User not found')));
-        eventServiceSpy.getEventsOnceBy.mockReturnValue(of([]));
+        eventServiceSpy.getEventsOnceByWithMeta.mockReturnValue(of({ events: [], source: 'cache' }));
 
         const route = new ActivatedRouteSnapshot();
         vi.spyOn(route.paramMap, 'get').mockReturnValue('targetUser');

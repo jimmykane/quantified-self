@@ -9,6 +9,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 import { User } from '@sports-alliance/sports-lib';
+import { DateRanges } from '@sports-alliance/sports-lib';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { Analytics } from '@angular/fire/analytics';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
@@ -110,6 +111,58 @@ describe('DashboardComponent', () => {
         expect(component.isLoading).toBe(false);
     });
 
+    it('should attach initial live query when resolver already returned user data', async () => {
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.events = [{ id: 'event1' }];
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(mockEventService.getEventsBy).toHaveBeenCalled();
+        expect(component.events.length).toBe(1);
+    });
+
+    it('should skip only the first identical live emission and then update on subsequent changes', async () => {
+        const resolvedEvents = [{ id: 'event1' }] as any;
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.events = resolvedEvents;
+
+        const eventsSubject = new BehaviorSubject([{ id: 'event1' }] as any);
+        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.events).toBe(resolvedEvents);
+
+        const updatedEvents = [{ id: 'event1' }, { id: 'event2' }] as any;
+        eventsSubject.next(updatedEvents);
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.events).toEqual(updatedEvents);
+        expect(component.events).not.toBe(resolvedEvents);
+    });
+
+    it('should stay live-reactive after cache-backed resolver data', async () => {
+        mockActivatedRoute.snapshot.data.dashboardData.user = mockUser;
+        mockActivatedRoute.snapshot.data.dashboardData.events = [{ id: 'event1' }];
+        mockActivatedRoute.snapshot.data.dashboardData.eventsSource = 'cache';
+
+        const eventsSubject = new BehaviorSubject([{ id: 'event1' }] as any);
+        mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
+
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        eventsSubject.next([{ id: 'event1' }, { id: 'event2' }] as any);
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(component.events.length).toBe(2);
+        expect((component.events[1] as any).id).toBe('event2');
+    });
+
     it('should update events when service emits new data', async () => {
         const eventsSubject = new BehaviorSubject([{ id: 'event1' }]);
         mockEventService.getEventsBy.mockReturnValue(eventsSubject.asObservable());
@@ -206,5 +259,53 @@ describe('DashboardComponent', () => {
         eventsSubject.next([event1NewDate]);
         fixture.detectChanges();
         expect(component.events[0].startDate.getTime()).toBe(date2.getTime());
+    });
+
+    it('should restore previous state when persisting dashboard search fails', async () => {
+        const previousStartDate = new Date('2025-01-01T00:00:00.000Z');
+        const previousEndDate = new Date('2025-01-31T23:59:59.000Z');
+        const previousActivityTypes = ['running'] as any;
+        const userForSearch = {
+            ...mockUser,
+            settings: {
+                ...mockUser.settings,
+                dashboardSettings: {
+                    ...mockUser.settings.dashboardSettings,
+                    includeMergedEvents: true,
+                    dateRange: DateRanges.thisMonth,
+                    startDate: previousStartDate.getTime(),
+                    endDate: previousEndDate.getTime(),
+                    activityTypes: previousActivityTypes
+                }
+            }
+        } as any;
+
+        component.user = userForSearch;
+        component.searchTerm = 'previous term';
+        component.searchStartDate = previousStartDate;
+        component.searchEndDate = previousEndDate;
+
+        mockUserService.updateUserProperties.mockRejectedValueOnce(new Error('write failed'));
+
+        await component.search({
+            searchTerm: 'new term',
+            startDate: new Date('2025-02-01T00:00:00.000Z'),
+            endDate: new Date('2025-02-10T23:59:59.000Z'),
+            dateRange: DateRanges.lastThirtyDays,
+            activityTypes: ['cycling'] as any,
+            includeMergedEvents: false
+        });
+
+        expect(component.isLoading).toBe(false);
+        expect((component as any).shouldSearch).toBe(false);
+        expect(component.searchTerm).toBe('previous term');
+        expect(component.searchStartDate).toEqual(previousStartDate);
+        expect(component.searchEndDate).toEqual(previousEndDate);
+        expect(component.user.settings.dashboardSettings.includeMergedEvents).toBe(true);
+        expect(component.user.settings.dashboardSettings.dateRange).toBe(DateRanges.thisMonth);
+        expect(component.user.settings.dashboardSettings.startDate).toBe(previousStartDate.getTime());
+        expect(component.user.settings.dashboardSettings.endDate).toBe(previousEndDate.getTime());
+        expect(component.user.settings.dashboardSettings.activityTypes).toEqual(previousActivityTypes);
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Could not update dashboard filters');
     });
 });

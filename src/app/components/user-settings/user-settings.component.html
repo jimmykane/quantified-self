@@ -36,36 +36,19 @@
     </div>
   </div>
 
-  <!-- Horizontal Navigation -->
-  <nav class="settings-nav">
-    <ul class="nav-list">
-      <li class="nav-item" [class.active]="activeSection === 'profile'" (click)="activeSection = 'profile'">
-        <mat-icon>person</mat-icon> Profile
-      </li>
-      <li class="nav-item" [class.active]="activeSection === 'app'" (click)="activeSection = 'app'">
-        <mat-icon>settings</mat-icon> General
-      </li>
-      <li class="nav-item" [class.active]="activeSection === 'dashboard'" (click)="activeSection = 'dashboard'">
-        <mat-icon>dashboard</mat-icon> Dashboard
-      </li>
-      <li class="nav-item" [class.active]="activeSection === 'map'" (click)="activeSection = 'map'">
-        <mat-icon>map</mat-icon> Maps
-      </li>
-      <li class="nav-item" [class.active]="activeSection === 'charts'" (click)="activeSection = 'charts'">
-        <mat-icon>show_chart</mat-icon> Charts
-      </li>
-      <li class="nav-item" [class.active]="activeSection === 'units'" (click)="activeSection = 'units'">
-        <mat-icon>straighten</mat-icon> Units
-      </li>
-    </ul>
-  </nav>
-
   <!-- Main Content Area -->
   <main class="settings-content">
-    <form [formGroup]="userSettingsFormGroup" (submit)="onSubmit($event)" class="qs-form">
+    <app-loading-overlay [isLoading]="isSaving || isDeleting" [hasError]="errorSaving || errorDeleting"
+      [errorMessage]="errorSaving || errorDeleting" [showSkeleton]="false" height="auto">
+      <form [formGroup]="userSettingsFormGroup" (submit)="onSubmit($event)" class="qs-form">
+      <app-material-pill-tabs class="settings-nav" [selectedIndex]="selectedSectionIndex"
+        (selectedIndexChange)="onSelectedSectionIndexChange($event)" [dynamicHeight]="true"
+        [lazyContent]="tabsLazyContent"
+        [stickyHeader]="tabsStickyHeader" [topOffset]="tabsTopOffset"
+        ariaLabel="Settings sections">
 
       <!-- Profile Section -->
-      @if (activeSection === 'profile') {
+      <ng-template appMaterialPillTab="Profile">
       <mat-card class="settings-card glass-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Profile Settings</h1>
@@ -97,6 +80,28 @@
             <mat-hint>A brief description for your public profile.</mat-hint>
           </mat-form-field>
 
+          <mat-form-field appearance="outline">
+            <mat-label>Watermark Brand Text</mat-label>
+            <input
+              matInput
+              formControlName="brandText"
+              [maxlength]="brandTextMaxLength"
+              placeholder="Your brand on chart watermark">
+            <mat-hint>Shown on chart watermark. Leave empty to use default text.</mat-hint>
+            <mat-hint align="end">{{ ((userSettingsFormGroup.get('brandText')?.value || '').trim().length) }}/{{ brandTextMaxLength }}</mat-hint>
+            @if (userSettingsFormGroup.get('brandText')?.hasError('maxTrimmedLength')) {
+            <mat-error>Use at most {{ brandTextMaxLength }} characters.</mat-error>
+            }
+          </mat-form-field>
+
+          @if (!canEditBrandText) {
+          <div class="brand-text-upgrade">
+            <mat-icon>lock</mat-icon>
+            <span>Custom watermark text is available on Basic and Pro plans.</span>
+            <a mat-stroked-button color="primary" routerLink="/subscriptions">Upgrade Plan</a>
+          </div>
+          }
+
         </div>
       </mat-card>
 
@@ -121,10 +126,11 @@
           </div>
         </div>
       </mat-card>
-      }
+        </ng-template>
+      
 
       <!-- General App Settings -->
-      @if (activeSection === 'app') {
+      <ng-template appMaterialPillTab="General">
       <mat-card class="settings-card glass-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">General Settings</h1>
@@ -163,10 +169,10 @@
           </div>
         </div>
       </mat-card>
-      }
+        </ng-template>
 
       <!-- Dashboard Settings -->
-      @if (activeSection === 'dashboard') {
+      <ng-template appMaterialPillTab="Dashboard">
       <mat-card class="settings-card glass-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Dashboard Settings</h1>
@@ -218,10 +224,10 @@
           </mat-form-field>
         </div>
       </mat-card>
-      }
+        </ng-template>
 
       <!-- Map Settings -->
-      @if (activeSection === 'map') {
+      <ng-template appMaterialPillTab="Maps">
       <mat-card class="settings-card glass-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Map Settings</h1>
@@ -263,10 +269,10 @@
           </div>
         </div>
       </mat-card>
-      }
+        </ng-template>
 
       <!-- Chart Settings -->
-      @if (activeSection === 'charts') {
+      <ng-template appMaterialPillTab="Charts">
       <mat-card class="settings-card glass-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Chart Settings</h1>
@@ -332,10 +338,10 @@
           </div>
         </div>
       </mat-card>
-      }
+        </ng-template>
 
       <!-- Unit Settings -->
-      @if (activeSection === 'units') {
+      <ng-template appMaterialPillTab="Units">
       <mat-card class="settings-card glass-card">
         <div style="padding: 24px; padding-bottom: 0;">
           <h1 style="margin: 0 0 8px 0; font-size: 1.8rem; font-weight: 800;">Measurement Units</h1>
@@ -383,7 +389,8 @@
           </mat-form-field>
         </div>
       </mat-card>
-      }
+        </ng-template>
+      </app-material-pill-tabs>
 
       <!-- Floating Action Button for Save (Desktop Only) -->
       @if (!hasError()) {
@@ -405,9 +412,7 @@
       </div>
       }
 
-    </form>
-
-    <app-shade [isActive]="isSaving || isDeleting" [hasError]="errorSaving || errorDeleting"
-      [errorMessage]="errorSaving || errorDeleting"></app-shade>
+      </form>
+    </app-loading-overlay>
   </main>
 </div>

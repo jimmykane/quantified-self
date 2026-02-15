@@ -27,6 +27,10 @@ export class ServicesComponent implements OnInit, OnDestroy {
 
   public suuntoAppTokens: Auth2ServiceTokenInterface[] = [];
   public activeSection: 'suunto' | 'garmin' | 'coros' = 'suunto';
+  public readonly sectionOrder: Array<'suunto' | 'garmin' | 'coros'> = ['suunto', 'garmin', 'coros'];
+  public readonly tabsStickyHeader = true;
+  public readonly tabsTopOffset = '0px';
+  public readonly tabsLazyContent = false;
   public serviceNames = ServiceNames;
   public hasProAccess = false;
   public isAdmin = false;
@@ -105,6 +109,22 @@ export class ServicesComponent implements OnInit, OnDestroy {
       queryParams: { serviceName: serviceName },
       queryParamsHandling: 'merge',
     });
+  }
+
+  get selectedSectionIndex(): number {
+    const index = this.sectionOrder.indexOf(this.activeSection);
+    return index >= 0 ? index : 0;
+  }
+
+  async onSelectedSectionIndexChange(index: number) {
+    const nextSection = this.indexToSectionId(index);
+    if (nextSection !== this.activeSection) {
+      await this.selectService(nextSection);
+    }
+  }
+
+  private indexToSectionId(index: number): 'suunto' | 'garmin' | 'coros' {
+    return this.sectionOrder[index] || 'suunto';
   }
 
   processUser(user: User | null, isPro: boolean) {

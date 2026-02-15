@@ -1,45 +1,27 @@
 ---
 trigger: model_decision
+description: Use for date/time display changes, localization, and formatting consistency in Angular templates/services.
 ---
 
-# Date Formatting Standards
+Use this rule when working with dates and localization.
 
-Use this rule when working with dates and localization in the Angular application.
+## Apply This Rule
+- New date/time displays in components
+- Date format refactors
+- Localization-related date behavior
 
-## Core Principles
+## Do Not Apply This Rule
+- Tasks without date/time formatting
 
-1.  **Always Use Angular DatePipe**:
-    *   **NEVER** use JavaScript's `toLocaleDateString()` or `toLocaleTimeString()` with hardcoded locales.
-    *   **ALWAYS** use Angular's `DatePipe` in templates: `{{ date | date:'format' }}`
-    *   For programmatic formatting, inject `DatePipe` and use it with the application's locale.
+## Standards
+- Use Angular `DatePipe`; avoid direct `toLocaleDateString()` or `toLocaleTimeString()` in app code.
+- Do not hardcode locale strings in components.
+- Use project locale configuration from app setup.
+- Prefer Angular predefined formats (`shortDate`, `mediumDate`, `longDate`) unless UI requires a specific tokenized format.
 
-2.  **Locale Configuration**:
-    *   The application uses dynamic `LOCALE_ID` from `navigator.language` with Greek (`el-GR`) as fallback.
-    *   **DO NOT** hardcode locale strings in components.
-    *   The locale is configured in `app.config.ts`:
-      ```typescript
-      { provide: LOCALE_ID, useFactory: () => navigator.language || 'el-GR' }
-      ```
+## Examples
+- `{{ startDate | date:'mediumDate' }}`
+- `{{ startDate | date:'mediumDate' }} - {{ endDate | date:'mediumDate' }}`
 
-3.  **Preferred Date Formats**:
-    *   Use Angular's predefined formats for consistency:
-        *   `'shortDate'` - e.g., "8/12/25" (locale-dependent)
-        *   `'mediumDate'` - e.g., "Dec 8, 2025" (locale-dependent)
-        *   `'longDate'` - e.g., "December 8, 2025" (locale-dependent)
-        *   `'EEEE, MMM d'` - e.g., "Sunday, Dec 8" for schedules
-    *   For timeline markers, use individual components: `'d'`, `'MMM'`, `'yyyy'`
-
-4.  **Adding New Date Display**:
-    *   When adding date display to a component, always use `DatePipe`:
-      ```html
-      {{ race.startDate | date:'mediumDate' }}
-      ```
-    *   For date ranges:
-      ```html
-      {{ startDate | date:'mediumDate' }} - {{ endDate | date:'mediumDate' }}
-      ```
-
-## Checklist for Date-Related Changes
-- [ ] Am I using Angular's DatePipe (not native JS methods)?
-- [ ] Am I avoiding hardcoded locale strings?
-- [ ] Does the date format match existing patterns in the app?
+## Validation
+- Verify date displays in at least one non-default locale scenario when possible.

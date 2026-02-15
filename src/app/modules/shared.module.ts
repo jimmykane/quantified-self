@@ -9,7 +9,7 @@ import { PrivacyIconComponent } from '../components/privacy-icon/privacy-icon.co
 import { EventActionsComponent } from '../components/event-actions/event.actions.component';
 import { EventFormComponent } from '../components/event-form/event.form.component';
 import { ActivityFormComponent } from '../components/activity-form/activity.form.component';
-import { DeleteConfirmationComponent } from '../components/delete-confirmation/delete-confirmation.component';
+import { ConfirmationDialogComponent } from '../components/confirmation-dialog/confirmation-dialog.component';
 import { DataTypeIconComponent } from '../components/data-type-icon/data-type-icon.component';
 
 import { RouterModule } from '@angular/router';
@@ -23,6 +23,8 @@ import { ServiceSourceIconComponent } from '../components/event-summary/service-
 import { StatusInfoComponent } from '../components/shared/status-info/status-info.component';
 import { BottomSheetHeaderComponent } from '../components/shared/bottom-sheet-header/bottom-sheet-header.component';
 import { PeekPanelComponent } from '../components/shared/peek-panel/peek-panel.component';
+import { MaterialPillTabsComponent } from '../components/shared/material-pill-tabs/material-pill-tabs.component';
+import { MaterialPillTabDirective } from '../components/shared/material-pill-tabs/material-pill-tab.directive';
 
 @NgModule({
     imports: [
@@ -38,7 +40,7 @@ import { PeekPanelComponent } from '../components/shared/peek-panel/peek-panel.c
         EventActionsComponent,
         EventFormComponent,
         ActivityFormComponent,
-        DeleteConfirmationComponent,
+        ConfirmationDialogComponent,
         DataTypeIconComponent,
         EventSearchComponent,
         ActivityTypesMultiSelectComponent,
@@ -50,6 +52,8 @@ import { PeekPanelComponent } from '../components/shared/peek-panel/peek-panel.c
         StatusInfoComponent,
         BottomSheetHeaderComponent,
         PeekPanelComponent,
+        MaterialPillTabsComponent,
+        MaterialPillTabDirective,
     ],
     providers: [],
     exports: [
@@ -63,7 +67,7 @@ import { PeekPanelComponent } from '../components/shared/peek-panel/peek-panel.c
         EventActionsComponent,
         EventFormComponent,
         ActivityFormComponent,
-        DeleteConfirmationComponent,
+        ConfirmationDialogComponent,
         DataTypeIconComponent,
         ReactiveFormsModule,
         FormsModule,
@@ -75,6 +79,8 @@ import { PeekPanelComponent } from '../components/shared/peek-panel/peek-panel.c
         StatusInfoComponent,
         BottomSheetHeaderComponent,
         PeekPanelComponent,
+        MaterialPillTabsComponent,
+        MaterialPillTabDirective,
     ]
 })
 

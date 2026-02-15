@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { PricingComponent } from './pricing.component';
 import { AppUserService } from '../../services/app.user.service';
-import { AppPaymentService, StripeSubscription } from '../../services/app.payment.service';
+import { AppPaymentService, StripePrice, StripeProduct, StripeSubscription } from '../../services/app.payment.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { of } from 'rxjs';
 import { Auth } from '@angular/fire/auth';
@@ -25,6 +25,9 @@ class MockAppPaymentService {
     }
     appendCheckoutSession() {
         return Promise.resolve();
+    }
+    hasPaidSubscriptionHistory() {
+        return Promise.resolve(false);
     }
 }
 
@@ -260,6 +263,123 @@ describe('PricingComponent', () => {
 
         expect(logSpy).toHaveBeenCalledWith('initiated');
         expect(logSpy).toHaveBeenCalledWith('success', 'pro');
+    });
+
+    it('should show first-month-free copy for recurring paid plans when user is free', () => {
+        component.hasPaidSubscriptionHistory = false;
+        component.currentRole = 'free';
+        const product = {
+            metadata: { role: 'basic' }
+        } as StripeProduct;
+        const price = {
+            recurring: { interval: 'month' }
+        } as StripePrice;
+
+        expect(component.shouldShowFirstMonthFreeCopy(product, price)).toBe(true);
+    });
+
+    it('should not show first-month-free copy for one-time prices or paid users', () => {
+        component.hasPaidSubscriptionHistory = false;
+        const product = {
+            metadata: { role: 'pro' }
+        } as StripeProduct;
+        const oneTimePrice = {
+            recurring: null
+        } as StripePrice;
+        const recurringPrice = {
+            recurring: { interval: 'month' }
+        } as StripePrice;
+
+        component.currentRole = 'free';
+        expect(component.shouldShowFirstMonthFreeCopy(product, oneTimePrice)).toBe(false);
+
+        component.currentRole = 'basic';
+        expect(component.shouldShowFirstMonthFreeCopy(product, recurringPrice)).toBe(false);
+    });
+
+    it('should not show first-month-free copy when user has paid subscription history', () => {
+        component.hasPaidSubscriptionHistory = true;
+        component.currentRole = 'free';
+        const product = {
+            metadata: { role: 'pro' }
+        } as StripeProduct;
+        const recurringPrice = {
+            recurring: { interval: 'month' }
+        } as StripePrice;
+
+        expect(component.shouldShowFirstMonthFreeCopy(product, recurringPrice)).toBe(false);
+    });
+
+    it('should render first-month-free copy on paid plans for eligible users', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        const recurringPaidProduct: StripeProduct = {
+            id: 'prod_basic',
+            active: true,
+            name: 'Basic',
+            description: 'Basic plan',
+            role: 'basic',
+            images: [],
+            metadata: { role: 'basic' },
+            prices: [{
+                id: 'price_basic',
+                active: true,
+                currency: 'usd',
+                unit_amount: 1000,
+                description: 'Monthly basic',
+                type: 'recurring',
+                interval: 'month',
+                interval_count: 1,
+                trial_period_days: null,
+                recurring: { interval: 'month' }
+            }]
+        };
+
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('free');
+        vi.spyOn(paymentService, 'getProducts').mockReturnValue(of([recurringPaidProduct]));
+        vi.spyOn(paymentService, 'hasPaidSubscriptionHistory').mockResolvedValue(false);
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent as string;
+        expect(content).toContain('your first month is free for new members');
+    });
+
+    it('should not render first-month-free copy for returning users with paid history', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const userService = TestBed.inject(AppUserService);
+        const recurringPaidProduct: StripeProduct = {
+            id: 'prod_pro',
+            active: true,
+            name: 'Pro',
+            description: 'Pro plan',
+            role: 'pro',
+            images: [],
+            metadata: { role: 'pro' },
+            prices: [{
+                id: 'price_pro',
+                active: true,
+                currency: 'usd',
+                unit_amount: 2000,
+                description: 'Monthly pro',
+                type: 'recurring',
+                interval: 'month',
+                interval_count: 1,
+                trial_period_days: null,
+                recurring: { interval: 'month' }
+            }]
+        };
+
+        vi.spyOn(userService, 'getSubscriptionRole').mockResolvedValue('free');
+        vi.spyOn(paymentService, 'getProducts').mockReturnValue(of([recurringPaidProduct]));
+        vi.spyOn(paymentService, 'hasPaidSubscriptionHistory').mockResolvedValue(true);
+
+        await component.ngOnInit();
+        fixture.detectChanges();
+
+        const content = fixture.nativeElement.textContent as string;
+        expect(content).not.toContain('your first month is free for new members');
     });
 
     it('should render pro subscription details inside manage container', async () => {

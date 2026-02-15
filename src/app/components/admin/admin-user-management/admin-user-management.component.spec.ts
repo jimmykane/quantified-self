@@ -17,10 +17,10 @@ import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 import { FormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { provideCharts, withDefaultRegisterables } from 'ng2-charts';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { ActivatedRoute, Router } from '@angular/router';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 
 // Mock canvas for charts
 Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
@@ -69,6 +69,11 @@ global.ResizeObserver = class ResizeObserver {
     disconnect() { }
 };
 
+// Mock requestAnimationFrame for ECharts usage
+if (!(global as any).requestAnimationFrame) {
+    (global as any).requestAnimationFrame = (cb: FrameRequestCallback) => setTimeout(cb, 0);
+}
+
 describe('AdminUserManagementComponent', () => {
     let component: AdminUserManagementComponent;
     let fixture: ComponentFixture<AdminUserManagementComponent>;
@@ -79,6 +84,7 @@ describe('AdminUserManagementComponent', () => {
     let appThemeServiceMock: any;
     let themeSubject: BehaviorSubject<AppThemes>;
     let mockLogger: any;
+    let mockEchartsService: any;
 
     const mockUsers: AdminUser[] = [
         {
@@ -139,6 +145,20 @@ describe('AdminUserManagementComponent', () => {
             log: vi.fn()
         };
 
+        const chartMock = {
+            setOption: vi.fn(),
+            resize: vi.fn(),
+            dispose: vi.fn(),
+            isDisposed: vi.fn().mockReturnValue(false)
+        };
+
+        mockEchartsService = {
+            init: vi.fn().mockResolvedValue(chartMock),
+            setOption: vi.fn(),
+            resize: vi.fn(),
+            dispose: vi.fn()
+        };
+
         await TestBed.configureTestingModule({
             imports: [
                 AdminUserManagementComponent,
@@ -160,7 +180,7 @@ describe('AdminUserManagementComponent', () => {
                 { provide: Router, useValue: routerSpy },
                 { provide: MatDialog, useValue: matDialogSpy },
                 { provide: MatSnackBar, useValue: { open: vi.fn() } },
-                provideCharts(withDefaultRegisterables()),
+                { provide: EChartsLoaderService, useValue: mockEchartsService },
                 {
                     provide: ActivatedRoute,
                     useValue: {

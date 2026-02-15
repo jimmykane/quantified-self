@@ -10,6 +10,9 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { WhatsNewFeedComponent } from './whats-new-feed.component';
 import { Router } from '@angular/router';
 import { computed } from '@angular/core';
+import { AppBreakpoints } from '../../constants/breakpoints';
+
+const WHATS_NEW_DIALOG_MOBILE_QUERY = AppBreakpoints.XSmall;
 
 @Component({
   selector: 'app-whats-new-dialog',
@@ -120,7 +123,7 @@ import { computed } from '@angular/core';
         }
     }
 
-    @media (max-width: 600px) {
+    @media ${WHATS_NEW_DIALOG_MOBILE_QUERY} {
       .dialog-content {
         min-width: unset;
         width: 100%;

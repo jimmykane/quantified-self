@@ -1,7 +1,14 @@
 .intensity-zones-container {
+  display: flex;
+  flex-direction: column;
   padding-top: 0;
   padding-bottom: 0;
   margin: 0;
-  height: 26vh;
+  height: var(--performance-chart-height, 30vh);
+  min-height: var(--performance-chart-min-height, 128px);
   background: transparent;
+}
+
+.intensity-zones-chart {
+  flex: 1 1 auto;
 }

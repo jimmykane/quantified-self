@@ -1,9 +1,19 @@
-<app-header-stats [statsToShow]="displayedStatsToShow" [layout]="layout" [stats]="stats" [unitSettings]="unitSettings"
-    [showDiff]="showDiff" [diffByType]="diffByType">
-    <div grid-suffix>
-        <ng-content select="[stats-suffix]"></ng-content>
-    </div>
-    <div chip-suffix>
-        <ng-content select="[stats-suffix]"></ng-content>
-    </div>
-</app-header-stats>
+@if (metricTabs.length > 0) {
+<mat-tab-group #summaryTabGroup class="summary-metric-tabs" [selectedIndex]="selectedTabIndex" [disablePagination]="true"
+    [dynamicHeight]="false" [preserveContent]="true" [animationDuration]="'0ms'"
+    (selectedIndexChange)="onSelectedTabIndexChange($event)">
+    @for (tab of metricTabs; track tab.id) {
+    <mat-tab [aria-label]="tab.label">
+        <ng-template mat-tab-label>
+            <span class="summary-tab-label">
+                <mat-icon aria-hidden="true" class="summary-tab-icon">{{ getTabIcon(tab.id) }}</mat-icon>
+                <span class="summary-tab-text">{{ tab.label }}</span>
+            </span>
+        </ng-template>
+        <app-header-stats [statsToShow]="tab.metricTypes" [layout]="layout" [stats]="stats" [unitSettings]="unitSettings"
+            [showDiff]="showDiff" [diffByType]="diffByType" [singleValueTypes]="getSingleValueTypesForTab(tab)">
+        </app-header-stats>
+    </mat-tab>
+    }
+</mat-tab-group>
+}

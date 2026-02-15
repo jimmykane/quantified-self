@@ -1,4 +1,4 @@
-<div class="bottom-sheet-container">
+<div class="bottom-sheet-container" #sheetContainer [style.height.px]="lockedSheetHeightPx">
     <app-bottom-sheet-header title="Detailed Statistics" icon="query_stats">
         <button mat-icon-button (click)="close()">
             <mat-icon>close</mat-icon>

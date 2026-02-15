@@ -77,9 +77,8 @@
                 Auth Provider Breakdown
             </h3>
 
-            <div class="chart-wrapper" style="height: 220px; padding: 16px;">
-                <canvas baseChart [data]="authPieChartData" [options]="authPieChartOptions" [type]="'pie'">
-                </canvas>
+            <div class="chart-wrapper" style="padding: 16px;">
+                <div #authChart class="echart-surface"></div>
             </div>
 
             <div *ngIf="!userStats?.providers" class="empty-state" style="padding: 0 24px 24px;">

@@ -24,6 +24,7 @@ import { LoggerService } from '../../../services/logger.service';
 import { AppColors } from '../../../services/color/app.colors';
 import { ActivityTypes } from '@sports-alliance/sports-lib';
 import { ChartDataCategoryTypes, TimeIntervals } from '@sports-alliance/sports-lib';
+import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
 
 
 @Component({
@@ -67,7 +68,11 @@ export class ChartsColumnsComponent extends DashboardChartAbstractDirective impl
     chartTitle.adapter.add('text', (text, target, key) => {
       const data = target.parent.parent.parent.parent['data'];
       const value = this.getAggregateData(data, this.chartDataValueType);
-      return `[font-size: 1.4em]${value.getDisplayType()}[/] [bold font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType}${this.chartDataCategoryType === ChartDataCategoryTypes.DateType ? ` @ ${TimeIntervals[this.chartDataTimeInterval]}` : ``})`;
+      if (!value) {
+        return `[font-size: 1.4em]${this.chartDataValueType || 'Value'}[/] [bold font-size: 1.3em]--[/]`;
+      }
+      const normalizedLabel = normalizeUnitDerivedTypeLabel(value.getType(), value.getDisplayType());
+      return `[font-size: 1.4em]${normalizedLabel}[/] [bold font-size: 1.3em]${value.getDisplayValue()}${value.getDisplayUnit()}[/] (${this.chartDataValueType}${this.chartDataCategoryType === ChartDataCategoryTypes.DateType ? ` @ ${TimeIntervals[this.chartDataTimeInterval]}` : ``})`;
     });
     chartTitle.marginTop = core.percent(20);
     const categoryAxis = this.vertical ? chart.xAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval, charts)) : chart.yAxes.push(this.getCategoryAxis(this.chartDataCategoryType, this.chartDataTimeInterval, charts));
@@ -99,7 +104,10 @@ export class ChartsColumnsComponent extends DashboardChartAbstractDirective impl
     valueAxis.numberFormatter.numberFormat = `#`;
     // valueAxis.numberFormatter.numberFormat = `#${DynamicDataLoader.getDataClassFromDataType(this.chartDataType).unit}`;
     valueAxis.renderer.labels.template.adapter.add('text', (text, target) => {
-      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(text));
+      const data = this.getDataInstanceOrNull(text);
+      if (!data) {
+        return '';
+      }
       return `[bold font-size: 1.0em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
     });
     valueAxis.renderer.labels.template.adapter.add('dx', (text, target) => {
@@ -125,7 +133,10 @@ export class ChartsColumnsComponent extends DashboardChartAbstractDirective impl
       if (!target.dataItem || !target.dataItem.dataContext) {
         return '';
       }
-      const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, target.dataItem.dataContext[this.chartDataValueType]);
+      const data = this.getDataInstanceOrNull(target.dataItem.dataContext[this.chartDataValueType]);
+      if (!data) {
+        return '';
+      }
       return `${this.vertical ? `{dateX}{categoryX}` : '{dateY}{categoryY}'}\n[bold]${this.chartDataValueType}: ${data.getDisplayValue()}${data.getDisplayUnit()}[/b]\n${target.dataItem.dataContext['count'] ? `[bold]${target.dataItem.dataContext['count']}[/b] Activities` : ``}`
     });
 
@@ -172,7 +183,10 @@ export class ChartsColumnsComponent extends DashboardChartAbstractDirective impl
         if (!target.dataItem || !target.dataItem.dataContext) {
           return '';
         }
-        const data = DynamicDataLoader.getDataInstanceFromDataType(this.chartDataType, Number(target.dataItem.dataContext[this.chartDataValueType]));
+        const data = this.getDataInstanceOrNull(target.dataItem.dataContext[this.chartDataValueType]);
+        if (!data) {
+          return '';
+        }
         return `[bold font-size: 1.1em]${data.getDisplayValue()}[/]${data.getDisplayUnit()}[/]`
       });
       categoryLabel.label.background.fillOpacity = 1;

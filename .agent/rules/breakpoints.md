@@ -1,11 +1,20 @@
 ---
 trigger: model_decision
-description: Use this rule when working with responsive design and media queries.
+description: Use for responsive design decisions and media-query standardization.
 ---
+
+Use this rule when changing responsive layout behavior.
+
+## Apply This Rule
+- CSS/SCSS media queries
+- Responsive TypeScript logic (`BreakpointObserver` or constants)
+
+## Do Not Apply This Rule
+- Non-responsive UI changes
 
 ## Standard Breakpoints
 
-Use these Angular Material-aligned breakpoint values ONLY:
+Use these project breakpoint values only:
 
 | Name | Max-Width | Min-Width | Use Case |
 |------|-----------|-----------|----------|
@@ -15,35 +24,10 @@ Use these Angular Material-aligned breakpoint values ONLY:
 | Large | 1919px | 1280px | Desktops |
 
 ## Rules
+1. Do not introduce arbitrary breakpoints.
+2. Import constants from `@shared/constants/breakpoints` in TypeScript.
+3. Keep CSS media queries aligned to the same values.
 
-1. **Use Standard Values Only**:
-   - **DO NOT** use arbitrary values like 480px, 650px, 768px, 900px
-   - **ALWAYS** use the values from the table above
-
-2. **Import Constants for TypeScript**:
-   ```typescript
-   import { Breakpoints, MediaQueries } from '@shared/constants/breakpoints';
-   ```
-
-3. **CSS Media Query Patterns**:
-   ```css
-   /* Phone only */
-   @media (max-width: 599px) { }
-   
-   /* Tablet and below */
-   @media (max-width: 959px) { }
-   
-   /* Tablet and above */
-   @media (min-width: 600px) { }
-   
-   /* Desktop and above */
-   @media (min-width: 960px) { }
-   ```
-
-4. **Reference**:
-   - TypeScript constants: `src/app/constants/breakpoints.ts`
-   - CSS documentation: `:root` block in `src/styles.css`
-
-## Checklist
-- [ ] Am I using standard breakpoint values?
-- [ ] Does the breakpoint match the device target?
+## Source of Truth
+- `src/app/constants/breakpoints.ts`
+- `src/styles/_breakpoints.scss`

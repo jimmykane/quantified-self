@@ -1,0 +1,9 @@
+.full-width {
+  width: 100%;
+}
+
+.hint {
+  margin: 0 0 8px;
+  color: var(--mat-app-on-surface-variant);
+  font-size: 0.85rem;
+}

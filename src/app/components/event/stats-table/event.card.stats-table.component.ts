@@ -17,6 +17,7 @@ import { SelectionModel } from '@angular/cdk/collections';
 import { DataExportService } from '../../../services/data-export.service';
 import { expandCollapse } from '../../../animations/animations';
 import { computeStatDiff } from '../../../helpers/stats-diff.helper';
+import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
 
 @Component({
   selector: 'app-event-stats-table',
@@ -36,6 +37,8 @@ export class EventCardStatsTableComponent implements OnChanges {
   columns!: string[];
   appColors = AppColors;
   selection = new SelectionModel<any>(true, []);
+  private readonly rowTypeKey = '__statType';
+  private readonly verticalSpeedRegex = /vertical speed/i;
 
   constructor(
     private eventColorService: AppEventColorService,
@@ -83,13 +86,16 @@ export class EventCardStatsTableComponent implements OnChanges {
         const isSwimming = [ActivityTypes.Swimming, ActivityTypes['Open water swimming']].includes(activity.type as any);
 
         // Define unit preferences and their base types
-        const unitPreferences: { baseType: string, units: string[], onlyIfSwimming?: boolean }[] = [
+        const unitPreferences: { baseType: string, units: string[], derivedTypes: Set<string>, onlyIfSwimming?: boolean }[] = [
           { baseType: DataSwimPace.type, units: this.userUnitSettings.swimPaceUnits, onlyIfSwimming: true },
           { baseType: DataPace.type, units: this.userUnitSettings.paceUnits },
           { baseType: DataGradeAdjustedPace.type, units: this.userUnitSettings.gradeAdjustedPaceUnits },
           { baseType: DataSpeed.type, units: this.userUnitSettings.speedUnits },
           { baseType: DataVerticalSpeed.type, units: this.userUnitSettings.verticalSpeedUnits },
-        ];
+        ].map((preference) => ({
+          ...preference,
+          derivedTypes: this.getPreferredDerivedTypes(preference.units),
+        }));
 
         // Check each preference
         for (const pref of unitPreferences) {
@@ -97,7 +103,7 @@ export class EventCardStatsTableComponent implements OnChanges {
             if (pref.onlyIfSwimming && !isSwimming) {
               return;
             }
-            if (pref.units.includes(statType)) {
+            if (pref.derivedTypes.has(statType)) {
               statsMap.set(statType, stat);
             }
             return;
@@ -115,6 +121,7 @@ export class EventCardStatsTableComponent implements OnChanges {
     // Create the data as rows
     const data = Array.from(stats.values()).reduce((array, stat) => {
       let isComplexObject = false;
+      const rowLabel = normalizeUnitDerivedTypeLabel(stat.getType(), stat.getDisplayType());
       const row = this.selectedActivities.reduce((rowObj: any, activity, index) => {
         const activityStat = activity.getStat(stat.getType());
         if (!activityStat) {
@@ -133,7 +140,7 @@ export class EventCardStatsTableComponent implements OnChanges {
           ' ' +
           (displayUnit || '');
         return rowObj;
-      }, { Name: `${stat.getDisplayType()}` } as any);
+      }, { Name: rowLabel, [this.rowTypeKey]: stat.getType() } as any);
 
       if (!isComplexObject) {
         array.push(row);
@@ -146,7 +153,7 @@ export class EventCardStatsTableComponent implements OnChanges {
     if (this.event?.isMerge && this.selectedActivities.length === 2) {
       this.columns = this.columns.concat(['Difference']);
       Array.from(stats.values()).forEach((stat: DataInterface) => {
-        const row = data.find(r => r.Name === stat.getDisplayType());
+        const row = data.find(r => r[this.rowTypeKey] === stat.getType());
         if (!row) {
           return;
         }
@@ -288,5 +295,63 @@ export class EventCardStatsTableComponent implements OnChanges {
       return ActivityTypes[activityType] || String(activityType);
     }
     return String(activityType);
+  }
+
+  private getSafeType(stat: DataInterface): string {
+    try {
+      return String(stat?.getType?.() || '');
+    } catch {
+      return '';
+    }
+  }
+
+  private getSafeDisplayType(stat: DataInterface): string {
+    try {
+      return String(stat?.getDisplayType?.() || '');
+    } catch {
+      return '';
+    }
+  }
+
+  private getSafeDisplayValue(stat: DataInterface): string {
+    try {
+      return String(stat?.getDisplayValue?.() ?? '');
+    } catch {
+      return '';
+    }
+  }
+
+  private getSafeDisplayUnit(stat: DataInterface): string {
+    try {
+      return String(stat?.getDisplayUnit?.() ?? '');
+    } catch {
+      return '';
+    }
+  }
+
+  private getPreferredDerivedTypes(unitTypes: string[] = []): Set<string> {
+    const preferredTypes = new Set<string>();
+
+    unitTypes.forEach((unitType) => {
+      if (!unitType) {
+        return;
+      }
+
+      preferredTypes.add(unitType);
+      const avgType = DynamicDataLoader.dataTypeAvgDataType[unitType];
+      const minType = DynamicDataLoader.dataTypeMinDataType[unitType];
+      const maxType = DynamicDataLoader.dataTypeMaxDataType[unitType];
+      if (avgType) {
+        preferredTypes.add(avgType);
+      }
+      if (minType) {
+        preferredTypes.add(minType);
+      }
+      if (maxType) {
+        preferredTypes.add(maxType);
+      }
+    });
+
+    return preferredTypes;
   }
 }

@@ -1,0 +1,73 @@
+@use '../../../../styles/breakpoints' as bp;
+
+:host {
+  display: block;
+}
+
+.summary-metric-tabs {
+  width: 100%;
+}
+
+.summary-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 100%;
+}
+
+.summary-tab-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+}
+
+:host ::ng-deep .summary-metric-tabs .mat-mdc-tab {
+  height: 44px;
+}
+
+:host ::ng-deep .summary-metric-tabs .mat-mdc-tab .mdc-tab__content {
+  height: 100%;
+  align-items: center;
+}
+
+:host ::ng-deep .summary-metric-tabs .mat-mdc-tab-body-wrapper {
+  min-height: var(--summary-tabs-body-min-height, 0px);
+  transition: none !important;
+}
+
+:host ::ng-deep .summary-metric-tabs .mat-mdc-tab-body-content {
+  scrollbar-gutter: stable;
+}
+
+@include bp.xsmall {
+  .summary-tab-label {
+    justify-content: center;
+  }
+
+  .summary-tab-text {
+    display: none;
+  }
+
+  :host ::ng-deep .summary-metric-tabs .mat-mdc-tab-header {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  :host ::ng-deep .summary-metric-tabs .mat-mdc-tab-header::-webkit-scrollbar {
+    display: none;
+  }
+
+  :host ::ng-deep .summary-metric-tabs .mat-mdc-tab-label-container {
+    min-width: max-content;
+  }
+
+  :host ::ng-deep .summary-metric-tabs .mat-mdc-tab {
+    min-width: 44px;
+    padding-inline: 8px;
+  }
+
+  :host ::ng-deep .summary-metric-tabs .mat-mdc-tab-header-pagination {
+    display: none;
+  }
+}

@@ -1,15 +1,11 @@
 <div class="map-component-wrapper">
-  <div class="map-header">
-    <div class="map-header-avatar">
-      <mat-icon>map</mat-icon>
-    </div>
-    <div class="map-header-actions">
-      <app-map-actions [showLaps]="showLaps" [showArrows]="showArrows" [user]="user"
-        (showLapsChange)="onShowLapsChange($event)" (showArrowsChange)="onShowArrowsChange($event)">
-      </app-map-actions>
-    </div>
-  </div>
-  <app-loading-overlay [isLoading]="isLoading" height="60vh">
+  <app-event-section-header icon="map">
+    <app-map-actions [showLaps]="showLaps" [showArrows]="showArrows" [user]="user"
+      (showLapsChange)="onShowLapsChange($event)" (showArrowsChange)="onShowArrowsChange($event)">
+    </app-map-actions>
+  </app-event-section-header>
+  <app-loading-overlay [isLoading]="isLoading || !apiLoaded() || !isMapVisible()" [hasError]="noMapData"
+    errorMessage="No Map Data" [showSkeleton]="true" height="60vh">
     @if (googleMap && event.getActivities().length > 1) {
     <mat-card class="map-legend mat-elevation-z0">
       @for (activity of event.getActivities(); track activity.getID()) {
@@ -19,8 +15,6 @@
       }
     </mat-card>
     }
-    <app-shade [hasError]="noMapData" errorMessage="No Map Data"></app-shade>
-
     <!-- Placeholder when no data -->
     @if (activitiesMapData.length === 0) {
     <section class="placeholder"></section>
@@ -86,11 +80,7 @@
     </google-map>
     }
     } @placeholder {
-    <div style="position: relative; width: 100%; height: 60vh;">
-      <mat-progress-bar mode="indeterminate" class="map-progress-bar"></mat-progress-bar>
-      <app-skeleton width="100%" height="100%" borderRadius="4px"
-        style="position: absolute; top:0; left:0; z-index: 20;"></app-skeleton>
-    </div>
+    <section class="placeholder"></section>
     }
   </app-loading-overlay>
 </div>

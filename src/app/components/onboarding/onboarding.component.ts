@@ -4,17 +4,15 @@ import { CommonModule } from '@angular/common';
 import { MatStepperModule, MatStepper } from '@angular/material/stepper';
 import { MatButtonModule } from '@angular/material/button';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { ReactiveFormsModule, FormBuilder, Validators, FormGroup, FormControl } from '@angular/forms';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
+import { ReactiveFormsModule, FormBuilder, Validators, FormGroup } from '@angular/forms';
 import { MatCheckboxModule } from '@angular/material/checkbox';
-import { User, Privacy } from '@sports-alliance/sports-lib';
+import { User } from '@sports-alliance/sports-lib';
 import { AppUserService } from '../../services/app.user.service';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { PricingComponent } from '../pricing/pricing.component';
-import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatExpansionModule } from '@angular/material/expansion';
 import { POLICY_CONTENT, PolicyItem } from '../../shared/policies.content';
 import { LoggerService } from '../../services/logger.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
@@ -27,14 +25,11 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
         MatStepperModule,
         MatButtonModule,
         ReactiveFormsModule,
-        MatFormFieldModule,
-        MatInputModule,
         MatCheckboxModule,
         PricingComponent,
-        MatIconModule,
-        MatCardModule,
         MatCardModule,
         MatDividerModule,
+        MatExpansionModule,
         MatProgressSpinnerModule
     ],
     templateUrl: './onboarding.component.html',
@@ -81,11 +76,11 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
             const group: any = {};
             this.policies.forEach(policy => {
                 if (policy.formControlName) {
-                    const initialValue = this.getPolicyValue(policy, user);
+                    const initialValue = this.getPolicyValue(policy, user) === true;
                     if (policy.isOptional) {
-                        group[policy.formControlName] = [initialValue || false];
+                        group[policy.formControlName] = [initialValue];
                     } else {
-                        group[policy.formControlName] = [initialValue || false, Validators.requiredTrue];
+                        group[policy.formControlName] = [initialValue, Validators.requiredTrue];
                     }
                 }
             });
@@ -93,7 +88,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
         } else {
             this.policies.forEach(policy => {
                 if (policy.formControlName) {
-                    const newValue = this.getPolicyValue(policy, user);
+                    const newValue = this.getPolicyValue(policy, user) === true;
                     const control = this.termsFormGroup.get(policy.formControlName);
                     // Only update if value is different AND control is not dirty (user hasn't touched it)
                     // This prevents backend latency from reverting user selection
@@ -125,6 +120,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
     }
 
     canFinish = false;
+    expandedPolicyId: string | null = null;
 
     private async checkAndAdvance() {
         if (this.user) {
@@ -253,6 +249,23 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
             this.logger.error('Error completing onboarding:', error);
         } finally {
             this.isLoading = false;
+        }
+    }
+
+    togglePolicyDetails(policyId: string) {
+        if (this.expandedPolicyId === policyId) {
+            this.expandedPolicyId = null;
+            return;
+        }
+        this.expandedPolicyId = policyId;
+    }
+
+    onPolicyCheckboxChange(policyId: string, checked: boolean) {
+        if (!checked) {
+            return;
+        }
+        if (this.expandedPolicyId === policyId) {
+            this.expandedPolicyId = null;
         }
     }
 

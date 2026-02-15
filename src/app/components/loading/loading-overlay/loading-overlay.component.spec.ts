@@ -3,6 +3,7 @@ import { AppLoadingOverlayComponent } from './loading-overlay.component';
 import { AppSkeletonComponent } from '../skeleton/app.skeleton.component';
 import { ShadeComponent } from '../shade.component';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatIconModule } from '@angular/material/icon';
 import { By } from '@angular/platform-browser';
 
 describe('AppLoadingOverlayComponent', () => {
@@ -12,7 +13,7 @@ describe('AppLoadingOverlayComponent', () => {
     beforeEach(async () => {
         await TestBed.configureTestingModule({
             declarations: [AppLoadingOverlayComponent, AppSkeletonComponent, ShadeComponent],
-            imports: [MatProgressBarModule]
+            imports: [MatProgressBarModule, MatIconModule]
         }).compileComponents();
 
         fixture = TestBed.createComponent(AppLoadingOverlayComponent);
@@ -33,10 +34,19 @@ describe('AppLoadingOverlayComponent', () => {
         const shade = fixture.debugElement.query(By.directive(ShadeComponent));
 
         expect(progressBar).toBeTruthy();
-        expect(skeleton).toBeTruthy();
+        expect(skeleton).toBeFalsy();
         // Shade is always present in template but controlled by internal logic or separate inputs
         // The component has *ngIf="showShade" on the shade component
         expect(shade).toBeTruthy();
+    });
+
+    it('should show skeleton when showSkeleton is enabled', () => {
+        component.isLoading = true;
+        component.showSkeleton = true;
+        fixture.detectChanges();
+
+        const skeleton = fixture.debugElement.query(By.css('.overlay-skeleton'));
+        expect(skeleton).toBeTruthy();
     });
 
     it('should hide loading indicators when isLoading is false', () => {

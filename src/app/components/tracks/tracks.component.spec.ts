@@ -54,6 +54,27 @@ const createMockEvent = (eventId: string, startDateIso: string, latitudeDegrees:
   };
 };
 
+const createDetectedTrip = (overrides: Record<string, unknown> = {}) => ({
+  tripId: 'trip-id',
+  destinationId: 'destination-nepal',
+  destinationVisitIndex: 1,
+  destinationVisitCount: 1,
+  isRevisit: false,
+  locationLabel: 'Nepal',
+  startDate: new Date('2022-11-08T00:00:00Z'),
+  endDate: new Date('2022-11-16T00:00:00Z'),
+  activityCount: 7,
+  centroidLat: 27.7172,
+  centroidLng: 85.3240,
+  bounds: {
+    west: 84.9,
+    east: 85.6,
+    south: 27.5,
+    north: 28.0,
+  },
+  ...overrides
+});
+
 describe('TracksComponent', () => {
   let component: TracksComponent;
   let fixture: ComponentFixture<TracksComponent>;
@@ -158,7 +179,8 @@ describe('TracksComponent', () => {
     };
 
     mockTripLocationLabelService = {
-      resolveCountryName: vi.fn().mockResolvedValue(null)
+      resolveTripLocation: vi.fn().mockResolvedValue(null),
+      resolveCountryName: vi.fn().mockResolvedValue(null),
     };
 
     await TestBed.configureTestingModule({
@@ -272,8 +294,9 @@ describe('TracksComponent', () => {
   });
 
   describe('Trip detection suggestions', () => {
-    it('renders both peek panels when user and trip evaluation state are available', () => {
+    it('renders both peek panels when user has detected trips', () => {
       component.user = mockUser as any;
+      component.detectedTrips.set([createDetectedTrip() as any]);
       component.hasEvaluatedTripDetection.set(true);
       fixture.detectChanges();
 
@@ -283,8 +306,19 @@ describe('TracksComponent', () => {
       expect(tripsPanel).not.toBeNull();
     });
 
+    it('hides trips peek panel when no trips are detected', () => {
+      component.user = mockUser as any;
+      component.detectedTrips.set([]);
+      component.hasEvaluatedTripDetection.set(true);
+      fixture.detectChanges();
+
+      const tripsPanel = fixture.nativeElement.querySelector('app-peek-panel.tracks-trips-peek');
+      expect(tripsPanel).toBeNull();
+    });
+
     it('toggles detected-trips panel state without changing settings', () => {
       component.hasEvaluatedTripDetection.set(true);
+      component.detectedTrips.set([createDetectedTrip() as any]);
       component.detectedTripsPanelExpanded.set(true);
       fixture.detectChanges();
 
@@ -303,6 +337,10 @@ describe('TracksComponent', () => {
       mockTripDetectionService.detectTrips.mockReturnValue([
         {
           tripId: 'trip-nepal',
+          destinationId: 'destination-nepal',
+          destinationVisitIndex: 1,
+          destinationVisitCount: 1,
+          isRevisit: false,
           startDate: new Date('2024-11-08T08:00:00Z'),
           endDate: new Date('2024-11-16T08:00:00Z'),
           activityCount: 3,
@@ -316,7 +354,11 @@ describe('TracksComponent', () => {
           },
         }
       ]);
-      mockTripLocationLabelService.resolveCountryName.mockResolvedValue('Nepal');
+      mockTripLocationLabelService.resolveTripLocation.mockResolvedValue({
+        city: 'Kathmandu',
+        country: 'Nepal',
+        label: 'Kathmandu, Nepal',
+      });
 
       await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
       await waitForAsyncWork();
@@ -325,8 +367,72 @@ describe('TracksComponent', () => {
       expect(mockTripDetectionService.detectTrips.mock.calls[0][0]).toEqual([
         expect.objectContaining({ eventId: 'trip-nepal-1' })
       ]);
-      expect(component.detectedTrips()[0].locationLabel).toBe('Nepal');
+      expect(component.detectedTrips()[0].locationLabel).toBe('Kathmandu, Nepal');
       expect(component.hasEvaluatedTripDetection()).toBe(true);
+    });
+
+    it('memoizes location labels by destination id for revisits', async () => {
+      const firstVisitEvent = createMockEvent('trip-nepal-visit-1', '2024-11-08T08:00:00Z', 27.7172, 85.3240);
+      const secondVisitEvent = createMockEvent('trip-nepal-visit-2', '2024-11-16T08:00:00Z', 27.7201, 85.3301);
+      mockEventService.getEventsBy.mockReturnValue(of([firstVisitEvent, secondVisitEvent]));
+      mockTripDetectionService.detectTrips.mockReturnValue([
+        {
+          tripId: 'trip-nepal-1',
+          destinationId: 'destination-nepal',
+          destinationVisitIndex: 1,
+          destinationVisitCount: 2,
+          isRevisit: false,
+          startDate: new Date('2024-11-08T08:00:00Z'),
+          endDate: new Date('2024-11-09T10:00:00Z'),
+          activityCount: 2,
+          centroidLat: 27.7172,
+          centroidLng: 85.3240,
+          bounds: {
+            west: 85.20,
+            east: 85.40,
+            south: 27.60,
+            north: 27.80,
+          },
+        },
+        {
+          tripId: 'trip-nepal-2',
+          destinationId: 'destination-nepal',
+          destinationVisitIndex: 2,
+          destinationVisitCount: 2,
+          isRevisit: true,
+          startDate: new Date('2024-11-16T08:00:00Z'),
+          endDate: new Date('2024-11-17T10:00:00Z'),
+          activityCount: 2,
+          centroidLat: 27.7201,
+          centroidLng: 85.3301,
+          bounds: {
+            west: 85.22,
+            east: 85.45,
+            south: 27.61,
+            north: 27.82,
+          },
+        },
+      ]);
+      mockTripLocationLabelService.resolveTripLocation.mockResolvedValue({
+        city: 'Kathmandu',
+        country: 'Nepal',
+        label: 'Kathmandu, Nepal',
+      });
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(mockTripLocationLabelService.resolveTripLocation).toHaveBeenCalledTimes(1);
+      expect(component.detectedTrips().map((trip) => trip.locationLabel)).toEqual(['Kathmandu, Nepal', 'Kathmandu, Nepal']);
+    });
+
+    it('falls back to "Trip" when location label resolution returns null', () => {
+      component.detectedTrips.set([createDetectedTrip({ locationLabel: null }) as any]);
+      component.hasEvaluatedTripDetection.set(true);
+      fixture.detectChanges();
+
+      const locationLabel = fixture.nativeElement.querySelector('.trip-location') as HTMLElement | null;
+      expect(locationLabel?.textContent?.trim()).toBe('Trip');
     });
 
     it('should recompute suggestions when date range changes', async () => {
@@ -354,23 +460,7 @@ describe('TracksComponent', () => {
 
     it('should fit bounds when a detected trip is clicked without changing settings', () => {
       const fitBoundsSpy = vi.spyOn(component as any, 'fitBoundsToTracks');
-      component.detectedTrips.set([
-        {
-          tripId: 'trip-id',
-          locationLabel: 'Nepal',
-          startDate: new Date('2022-11-08T00:00:00Z'),
-          endDate: new Date('2022-11-16T00:00:00Z'),
-          activityCount: 7,
-          centroidLat: 27.7172,
-          centroidLng: 85.3240,
-          bounds: {
-            west: 84.9,
-            east: 85.6,
-            south: 27.5,
-            north: 28.0,
-          }
-        }
-      ]);
+      component.detectedTrips.set([createDetectedTrip() as any]);
       component.hasEvaluatedTripDetection.set(true);
       fixture.detectChanges();
 

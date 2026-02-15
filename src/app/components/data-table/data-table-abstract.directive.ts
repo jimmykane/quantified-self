@@ -55,22 +55,30 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
 
   getStatsRowElement(stats: DataInterface[], activityTypes: string[], unitSettings?: UserUnitSettingsInterface, isMerge: boolean = false): StatRowElement {
     const statRowElement: StatRowElement = <StatRowElement>{};
+    const statsByType = new Map<string, DataInterface>();
+    for (const stat of stats) {
+      const type = stat.getType();
+      if (!statsByType.has(type)) {
+        statsByType.set(type, stat);
+      }
+    }
+    const getStat = (type: string) => statsByType.get(type);
 
-    const distance = stats.find(stat => stat.getType() === DataDistance.type);
-    const duration = stats.find(stat => stat.getType() === DataDuration.type);
-    const ascent = stats.find(stat => stat.getType() === DataAscent.type);
-    const descent = stats.find(stat => stat.getType() === DataDescent.type);
-    const energy = stats.find(stat => stat.getType() === DataEnergy.type);
-    const avgPower = stats.find(stat => stat.getType() === DataPowerAvg.type);
-    const maxPower = stats.find(stat => stat.getType() === DataPowerMax.type);
-    const avgSpeed = stats.find(stat => stat.getType() === DataSpeedAvg.type);
-    const heartRateAverage = stats.find(stat => stat.getType() === DataHeartRateAvg.type);
-    const rpe = stats.find(stat => stat.getType() === DataRPE.type);
-    const feeling = stats.find(stat => stat.getType() === DataFeeling.type);
-    const vO2Max = stats.find(stat => stat.getType() === DataVO2Max.type);
-    const TTE = stats.find(stat => stat.getType() === DataAerobicTrainingEffect.type);
-    const EPOC = stats.find(stat => stat.getType() === DataPeakEPOC.type);
-    const recoveryTime = stats.find(stat => stat.getType() === DataRecoveryTime.type);
+    const distance = getStat(DataDistance.type);
+    const duration = getStat(DataDuration.type);
+    const ascent = getStat(DataAscent.type);
+    const descent = getStat(DataDescent.type);
+    const energy = getStat(DataEnergy.type);
+    const avgPower = getStat(DataPowerAvg.type);
+    const maxPower = getStat(DataPowerMax.type);
+    const avgSpeed = getStat(DataSpeedAvg.type);
+    const heartRateAverage = getStat(DataHeartRateAvg.type);
+    const rpe = getStat(DataRPE.type);
+    const feeling = getStat(DataFeeling.type);
+    const vO2Max = getStat(DataVO2Max.type);
+    const TTE = getStat(DataAerobicTrainingEffect.type);
+    const EPOC = getStat(DataPeakEPOC.type);
+    const recoveryTime = getStat(DataRecoveryTime.type);
 
     statRowElement[DataDuration.type] = duration ? `${duration.getDisplayValue()}` : '';
     statRowElement[DataDistance.type] = distance ? `${distance.getDisplayValue()} ${distance.getDisplayUnit()}` : '';
@@ -92,22 +100,27 @@ export abstract class DataTableAbstractDirective extends LoadingAbstractDirectiv
         .map(data => `${data.getDisplayValue()}${data.getDisplayUnit()}`)
         .join(', ');
     } else {
-      statRowElement[DataSpeedAvg.type] = activityTypes.reduce((accu, activityType) => {
-        return [...accu, ...ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(ActivityTypes[activityType])]
-      }, []).reduce((accu, dataType) => {
-
-        // Hide Grade Adjusted Pace from the dashboard event table
-        if ((typeof DataGradeAdjustedPace !== 'undefined' && dataType === DataGradeAdjustedPace.type) || dataType === 'GradeAdjustedPace' || dataType === 'Average Grade Adjusted Pace') {
-          return accu;
+      const speedValues: string[] = [];
+      for (const activityType of activityTypes) {
+        const derivedDataTypes = ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(
+          ActivityTypes[activityType as keyof typeof ActivityTypes]
+        );
+        for (const dataType of derivedDataTypes) {
+          // Hide Grade Adjusted Pace from the dashboard event table
+          if ((typeof DataGradeAdjustedPace !== 'undefined' && dataType === DataGradeAdjustedPace.type) || dataType === 'GradeAdjustedPace' || dataType === 'Average Grade Adjusted Pace') {
+            continue;
+          }
+          const stat = getStat(dataType);
+          if (!stat) {
+            continue;
+          }
+          const unitBasedData = DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, unitSettings);
+          for (const data of unitBasedData) {
+            speedValues.push(`${data.getDisplayValue()}${data.getDisplayUnit()}`);
+          }
         }
-        const stat = stats.find(iStat => iStat.getType() === dataType);
-        return stat ?
-          [...accu, ...DynamicDataLoader.getUnitBasedDataFromDataInstance(stat, unitSettings)]
-          : accu
-      }, []).reduce((avs, data) => {
-        avs.push(`${data.getDisplayValue()}${data.getDisplayUnit()}`);
-        return avs;
-      }, []).join(', ');
+      }
+      statRowElement[DataSpeedAvg.type] = speedValues.join(', ');
     }
 
     // Add the sorts

@@ -1,41 +1,28 @@
 ---
 trigger: always_on
+description: Enforce Angular Material-first UI patterns and theme consistency.
 ---
 
 # Material Design Strict Enforcement
 
-You are an expert in Angular Material Design 3. Your goal is to maintain a "Pure Material" aesthetic and codebase cleanliness.
+## Scope
+This always-on rule applies to frontend UI changes.
 
 ## Core Principles
+1. Avoid global utility class sprawl.
+2. Prefer native Angular Material components over custom structural markup.
+3. Use theme tokens (`--mat-sys-*`) for colors and typography.
+4. Refactor custom styles that replicate Material primitives.
 
-1.  **No Custom Utility Classes**:
-    *   **NEVER** create new global utility classes (e.g., `.admin-card`, `.page-title`).
-    *   **AVOID** component-specific classes for styling (colors, borders, shadows). Use them ONLY for layout (Flexbox/Grid, margins, padding) that cannot be achieved with standard Material directives.
+## Allowed Custom CSS
+- Component-level classes for semantic structure, layout, and documented states.
+- Avoid hardcoded colors, custom shadows, and one-off visual systems.
 
-2.  **Prioritize Native Components**:
-    *   Always use native Angular Material components (`<mat-card>`, `<mat-list>`, `<mat-table>`, `<mat-toolbar>`) instead of custom `<div>` structures.
-    *   Example: Use `<mat-card-header>` and `<mat-card-title>` instead of `<div class="header"><h3>Title</h3></div>`.
+## Dialogs and Overlays
+- Do not add custom `panelClass` unless there is a documented exception.
+- Prefer the global dialog container conventions.
 
-3.  **Strict Theme Usage**:
-    *   **ALWAYS** use the application's defined CSS variables (`--mat-sys-*`) for all colors.
-    *   **NEVER** hardcode hex codes, RGB values, or standard CSS colors (e.g., `white`, `#ccc`, `red`).
-    *   Use `var(--mat-sys-primary)`, `var(--mat-sys-surface)`, `var(--mat-sys-on-surface)`, etc.
-
-4.  **Typography**:
-    *   Use Material typography variables for all text styling.
-    *   Example: `font: var(--mat-sys-headline-medium)` instead of setting `font-size` and `font-weight` manually.
-
-5.  **Refactoring**:
-    *   If you encounter existing custom CSS that mimics Material Design, refactor it to use the actual Material component or theme variable.
-
-## Checklist for Every UI Change
-- [ ] Am I using a standard Material component?
-- [ ] Did I avoid adding a new CSS class?
-- [ ] Are all colors using `--mat-sys-*` variables?
-- [ ] Is typography using `var(--mat-sys-*)`?
-
-6.  **Dialogs & Overlays**:
-    *   **DO NOT** pass custom `panelClass` to `MatDialog.open()` unless there is a documented exception.
-    *   All dialogs automatically receive the `qs-dialog-container` class via `MAT_DIALOG_DEFAULT_OPTIONS` in `app.module.ts`.
-    *   Dialog styling is defined globally in `styles.scss` under the `.qs-dialog-container` rule.
-    *   If a dialog requires a unique style, document it in the component's README or inline comment, and use the global variables.
+## Checklist
+- Standard Material component used where available
+- No new global utility classes
+- Colors and text styles use Material tokens

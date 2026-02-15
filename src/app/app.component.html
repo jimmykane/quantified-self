@@ -5,7 +5,10 @@
 </div>
 }
 
-<div [class.has-banner]="hasBanner" class="app-layout-wrapper">
+<div [class.has-banner]="hasBanner" class="app-layout-wrapper"
+  [style.--qs-layout-top-offset]="layoutTopOffsetPx + 'px'"
+  [style.--qs-effective-top-offset]="layoutTopOffsetPx + 'px'"
+  [style.--qs-banner-height]="(showNavigation ? bannerHeight : 0) + 'px'">
   <app-grace-period-banner (heightChanged)="onBannerHeightChanged($event)"></app-grace-period-banner>
 
   <app-route-loader></app-route-loader>
@@ -78,10 +81,9 @@
   </nav>
   }
 
-  <mat-sidenav-container class="app-sidenav-container" [class.no-margin-top]="!onboardingCompleted"
-    [style.margin-top.px]="bannerHeight + 64">
+  <mat-sidenav-container class="app-sidenav-container" [style.margin-top.px]="layoutTopOffsetPx">
     @if (showNavigation) {
-    <mat-sidenav #sidenav [mode]="'over'" [fixedInViewport]="true" [fixedTopGap]="bannerHeight + 64"
+    <mat-sidenav #sidenav [mode]="'over'" [fixedInViewport]="true" [fixedTopGap]="layoutTopOffsetPx"
       [autoFocus]="false">
       <app-sidenav></app-sidenav>
     </mat-sidenav>

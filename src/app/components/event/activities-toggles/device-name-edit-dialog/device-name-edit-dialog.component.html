@@ -1,0 +1,32 @@
+<h2 mat-dialog-title>Rename device</h2>
+
+<mat-dialog-content>
+  <p class="hint">Rename only this activity's device label.</p>
+  @if (data.swInfo) {
+  <p class="hint">Software info: {{ data.swInfo }}</p>
+  }
+
+  <form [formGroup]="form">
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>Device name</mat-label>
+      <input matInput formControlName="deviceName" maxlength="20" />
+      <mat-hint align="end">{{ (form.value.deviceName || '').length }}/{{ maxLength }}</mat-hint>
+      @if (form.controls.deviceName.touched && form.controls.deviceName.hasError('required')) {
+      <mat-error>Device name is required.</mat-error>
+      }
+      @if (form.controls.deviceName.touched && form.controls.deviceName.hasError('minlength')) {
+      <mat-error>Minimum {{ minLength }} characters.</mat-error>
+      }
+      @if (form.controls.deviceName.touched && form.controls.deviceName.hasError('maxlength')) {
+      <mat-error>Maximum {{ maxLength }} characters.</mat-error>
+      }
+    </mat-form-field>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="close()">Cancel</button>
+  <button mat-flat-button color="primary" type="button" (click)="save()" [disabled]="form.invalid || isUnchanged">
+    Save
+  </button>
+</mat-dialog-actions>

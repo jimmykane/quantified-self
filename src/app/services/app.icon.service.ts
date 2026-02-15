@@ -24,7 +24,6 @@ export class AppIconService {
         { name: 'facebook_logo', path: 'assets/logos/facebook_logo.svg' },
         { name: 'twitter_logo', path: 'assets/logos/twitter_logo.svg' },
         { name: 'github_logo', path: 'assets/logos/github_logo.svg' },
-        { name: 'antigravity', path: 'assets/logos/antigravity.svg' },
 
         { name: 'epoc', path: 'assets/icons/epoc.svg' },
         { name: 'paypal', path: 'assets/icons/paypal.svg' },

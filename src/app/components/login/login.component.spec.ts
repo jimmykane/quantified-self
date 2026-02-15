@@ -52,6 +52,7 @@ describe('LoginComponent', () => {
 
     beforeEach(() => {
         vi.clearAllMocks(); // Clear spies to prevent accumulation
+        (mockRouter.navigate as any).mockResolvedValue(true);
 
         mockAuthService = {
             user$: new BehaviorSubject(null),
@@ -340,7 +341,65 @@ describe('LoginComponent', () => {
 
         expect(mockAuthService.getRedirectResult).toHaveBeenCalled();
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
+        expect(mockRouter.navigate).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not navigate to dashboard until user$ emits after redirect result (race regression)', async () => {
+        const mockRedirectResult = { user: { uid: 'redirect-user' }, credential: { signInMethod: 'google.com' } };
+        (mockAuthService.getRedirectResult as any).mockResolvedValue(mockRedirectResult);
+
+        // Keep auth user stream unresolved for one tick to simulate the race window.
+        (mockAuthService.user$ as BehaviorSubject<any>).next(null);
+
+        component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        // Before user$ emits, we should not have navigated yet.
+        expect(mockRouter.navigate).not.toHaveBeenCalledWith(['/dashboard']);
+        expect(mockRouter.navigate).not.toHaveBeenCalled();
+
+        // Once user$ is populated, navigation is allowed.
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'redirect-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
         expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
+        expect(mockRouter.navigate).toHaveBeenCalledTimes(1);
+    });
+
+    it('should avoid duplicate dashboard navigation when user subscription and redirect flow resolve together', async () => {
+        const mockRedirectResult = { user: { uid: 'redirect-user' }, credential: { signInMethod: 'google.com' } };
+        (mockAuthService.getRedirectResult as any).mockResolvedValue(mockRedirectResult);
+
+        component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        // Emit the user multiple times, similar to auth stream + claim refresh emissions.
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'redirect-user' });
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'redirect-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockRouter.navigate).toHaveBeenCalledTimes(1);
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
+    });
+
+    it('should retry dashboard navigation after a rejected navigation attempt', async () => {
+        const mockRedirectResult = { user: { uid: 'retry-user' }, credential: { signInMethod: 'google.com' } };
+        (mockAuthService.getRedirectResult as any).mockResolvedValue(mockRedirectResult);
+        (mockRouter.navigate as any)
+            .mockRejectedValueOnce(new Error('guard failure'))
+            .mockResolvedValueOnce(true);
+
+        component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'retry-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+        (mockAuthService.user$ as BehaviorSubject<any>).next({ uid: 'retry-user' });
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockRouter.navigate).toHaveBeenCalledTimes(2);
+        expect(mockRouter.navigate).toHaveBeenNthCalledWith(1, ['/dashboard']);
+        expect(mockRouter.navigate).toHaveBeenNthCalledWith(2, ['/dashboard']);
     });
 
     it('should handle failed redirect result on init', async () => {
@@ -356,6 +415,26 @@ describe('LoginComponent', () => {
             data: expect.objectContaining({
                 title: 'Login Failed',
                 message: expect.stringContaining('Network connection failed')
+            })
+        }));
+    });
+
+    it('should surface invalid-session-id from redirect result (repro path)', async () => {
+        const invalidSessionError = {
+            code: 'auth/invalid-session-id',
+            message: 'Firebase: verification failure: invalid session_id in request (auth/invalid-session-id).'
+        };
+        (mockAuthService.getRedirectResult as any).mockRejectedValue(invalidSessionError);
+        (mockDialog as any).open = vi.fn();
+
+        await component.ngOnInit();
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(mockAuthService.getRedirectResult).toHaveBeenCalled();
+        expect((mockDialog as any).open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            data: expect.objectContaining({
+                title: 'Login Failed',
+                message: expect.stringContaining('invalid session_id')
             })
         }));
     });

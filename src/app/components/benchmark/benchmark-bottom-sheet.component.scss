@@ -1,0 +1,98 @@
+@use '../../../styles/breakpoints' as bp;
+
+:host {
+    display: block;
+    height: 100%;
+}
+
+.bottom-sheet-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.bottom-sheet-content {
+    /* Flex content to fill space */
+    flex: 1;
+    padding: 0 1rem 1.5rem 1rem;
+}
+
+.share-progress {
+    height: 3px;
+    border-radius: 999px;
+}
+
+.icon-button-square {
+    width: 40px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon-button-square .mat-mdc-progress-spinner {
+    width: 18px !important;
+    height: 18px !important;
+    margin: 0;
+}
+
+.benchmark-share-frame {
+    position: relative;
+}
+
+.benchmark-share-export {
+    background: var(--mat-sys-surface);
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.benchmark-watermark {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 3px;
+    font-size: 0.65rem;
+    color: var(--mat-sys-on-surface-variant);
+    opacity: 0.8;
+    pointer-events: none;
+}
+
+.benchmark-watermark .watermark-brand-line {
+    font-size: 0.65rem;
+    letter-spacing: 0.04em;
+}
+
+.benchmark-watermark .watermark-app-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.benchmark-watermark .watermark-logo {
+    width: 16px;
+    height: 16px;
+}
+
+.benchmark-watermark .watermark-brand {
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+@include bp.xsmall {
+    .bottom-sheet-content {
+        padding: 0 0.75rem 1rem 0.75rem;
+    }
+
+    .benchmark-share-export {
+        padding: 12px;
+    }
+
+    .benchmark-watermark {
+        right: 12px;
+        bottom: 12px;
+    }
+}

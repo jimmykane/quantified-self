@@ -18,7 +18,7 @@ export interface BenchmarkSelectionData {
       <p class="dialog-subtitle">Choose two activities to generate a hardware benchmark.</p>
 
       <app-loading-overlay class="benchmark-selection-overlay" [isLoading]="isLoading" height="auto"
-        minHeight="var(--benchmark-overlay-min-height)" borderRadius="12px" [showShade]="false">
+        minHeight="var(--benchmark-overlay-min-height)" borderRadius="12px" [showShade]="false" [showSkeleton]="true">
         @if (activities.length > 0) {
         <mat-selection-list #list class="selection-list" (selectionChange)="onSelectionChange($event)">
           <mat-list-option *ngFor="let activity of activities" [value]="activity" [selected]="isSelected(activity)">
@@ -100,7 +100,7 @@ export interface BenchmarkSelectionData {
       </button>
     </mat-dialog-actions>
   `,
-  styleUrls: ['./benchmark-selection-dialog.component.css'],
+  styleUrls: ['./benchmark-selection-dialog.component.scss'],
   standalone: false
 })
 export class BenchmarkSelectionDialogComponent {
