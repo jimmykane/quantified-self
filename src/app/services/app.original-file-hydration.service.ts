@@ -1,6 +1,5 @@
 import { Injectable, Injector, inject, runInInjectionContext } from '@angular/core';
 import {
-  ActivityParsingOptions,
   EventImporterFIT,
   EventImporterGPX,
   EventImporterSuuntoJSON,
@@ -16,6 +15,7 @@ import { AppEventUtilities } from '../utils/app.event.utilities';
 import { AppCacheService } from './app.cache.service';
 import { EventJSONSanitizer } from '../utils/event-json-sanitizer';
 import { AppEventInterface, OriginalFileMetaData } from '../../../functions/src/shared/app-event.interface';
+import { createParsingOptions } from '../../../functions/src/shared/parsing-options';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 
 export interface ParseOptions {
@@ -173,10 +173,7 @@ export class AppOriginalFileHydrationService {
     try {
       const arrayBuffer = await this.downloadFile(fileMeta.path);
       const extension = this.getNormalizedExtensionFromPath(fileMeta.path);
-      const options = new ActivityParsingOptions({
-        generateUnitStreams: false,
-        deviceInfoMode: 'changes',
-      });
+      const options = createParsingOptions();
       let newEvent: EventInterface;
 
       if (extension === 'fit') {
