@@ -60,6 +60,14 @@ describe('AppEventReprocessService', () => {
 
     await service.regenerateEventStatistics({ uid: 'u1' } as any, event);
 
+    expect(eventServiceMock.attachStreamsToEventWithActivities).toHaveBeenCalledWith(
+      { uid: 'u1' },
+      event,
+      undefined,
+      true,
+      false,
+      'replace_activities',
+    );
     expect(ActivityUtilities.generateMissingStreamsAndStatsForActivity).toHaveBeenCalledWith(activity as any);
     expect(statsMap.get('old-only')).toBe(oldOnlyStat);
     expect(statsMap.get('to-regenerate')).toBe(generatedStat);
@@ -148,6 +156,7 @@ describe('AppEventReprocessService', () => {
       undefined,
       true,
       true,
+      'replace_activities',
     );
   });
 

@@ -1106,9 +1106,20 @@ describe('AppEventService', () => {
             expect(result).toBe(expectedBuffer);
         });
 
-        it('should delegate attachStreamsToEventWithActivities to AppOriginalFileHydrationService parsing', async () => {
+        it('should delegate attachStreamsToEventWithActivities to parsing and attach streams only by default', async () => {
             const hydrationService = (service as any).originalFileHydrationService;
-            const parsedActivity = { getID: () => 'a-1' } as any;
+            const oldAscentStat = { getValue: () => 280.8 };
+            const parsedStreams = [{ type: 'Speed' }, { type: 'Distance' }] as any[];
+            const existingActivity = {
+                getID: () => 'a-1',
+                clearStreams: vi.fn(),
+                addStreams: vi.fn(),
+                getStat: vi.fn().mockImplementation((type: string) => type === 'Ascent' ? oldAscentStat : undefined),
+            } as any;
+            const parsedActivity = {
+                getID: () => 'a-1',
+                getAllStreams: vi.fn().mockReturnValue(parsedStreams),
+            } as any;
             const parsedEvent = {
                 setID: vi.fn().mockReturnThis(),
                 getActivities: vi.fn().mockReturnValue([parsedActivity]),
@@ -1123,10 +1134,12 @@ describe('AppEventService', () => {
             const event = {
                 getID: () => 'event-1',
                 originalFile: { path: 'users/u1/events/e1/original.fit' },
+                getActivities: vi.fn().mockReturnValue([existingActivity]),
                 clearActivities: vi.fn(),
                 addActivities: vi.fn(),
             } as any;
 
+            const originalAscentStat = existingActivity.getStat('Ascent');
             const result = await firstValueFrom(service.attachStreamsToEventWithActivities({ uid: 'u1' } as any, event));
 
             expect(hydrationService.parseEventFromOriginalFiles).toHaveBeenCalledWith(
@@ -1137,7 +1150,139 @@ describe('AppEventService', () => {
                     mergeMultipleFiles: true,
                 }),
             );
-            expect(event.clearActivities).toHaveBeenCalled();
+            expect(existingActivity.clearStreams).toHaveBeenCalledTimes(1);
+            expect(existingActivity.addStreams).toHaveBeenCalledWith(parsedStreams);
+            expect(existingActivity.getStat('Ascent')).toBe(originalAscentStat);
+            expect(event.clearActivities).not.toHaveBeenCalled();
+            expect(event.addActivities).not.toHaveBeenCalled();
+            expect(result).toBe(event);
+        });
+
+        it('should respect streamTypes filter when attaching streams in stream-only mode', async () => {
+            const hydrationService = (service as any).originalFileHydrationService;
+            const parsedStreams = [{ type: 'Speed' }, { type: 'Distance' }, { type: 'Power' }] as any[];
+            const existingActivity = {
+                getID: () => 'a-1',
+                clearStreams: vi.fn(),
+                addStreams: vi.fn(),
+            } as any;
+            const parsedActivity = {
+                getID: () => 'a-1',
+                getAllStreams: vi.fn().mockReturnValue(parsedStreams),
+            } as any;
+            const parsedEvent = {
+                setID: vi.fn().mockReturnThis(),
+                getActivities: vi.fn().mockReturnValue([parsedActivity]),
+            } as any;
+            vi.spyOn(hydrationService, 'parseEventFromOriginalFiles').mockResolvedValue({
+                finalEvent: parsedEvent,
+                parsedEvents: [parsedEvent],
+                sourceFilesCount: 1,
+                failedFiles: [],
+            });
+            const event = {
+                getID: () => 'event-1',
+                originalFile: { path: 'users/u1/events/e1/original.fit' },
+                getActivities: vi.fn().mockReturnValue([existingActivity]),
+                clearActivities: vi.fn(),
+                addActivities: vi.fn(),
+            } as any;
+
+            await firstValueFrom(service.attachStreamsToEventWithActivities({ uid: 'u1' } as any, event, ['Distance', 'Power']));
+
+            expect(existingActivity.clearStreams).toHaveBeenCalledTimes(1);
+            expect(existingActivity.addStreams).toHaveBeenCalledWith([{ type: 'Distance' }, { type: 'Power' }]);
+            expect(event.clearActivities).not.toHaveBeenCalled();
+            expect(event.addActivities).not.toHaveBeenCalled();
+        });
+
+        it('should attach matched IDs only and warn on ID mismatch in stream-only mode', async () => {
+            const hydrationService = (service as any).originalFileHydrationService;
+            const existingActivityA = {
+                getID: () => 'a-1',
+                clearStreams: vi.fn(),
+                addStreams: vi.fn(),
+            } as any;
+            const existingActivityB = {
+                getID: () => 'a-2',
+                clearStreams: vi.fn(),
+                addStreams: vi.fn(),
+            } as any;
+            const parsedActivityA = {
+                getID: () => 'a-1',
+                getAllStreams: vi.fn().mockReturnValue([{ type: 'Speed' }]),
+            } as any;
+            const parsedActivityOther = {
+                getID: () => 'b-9',
+                getAllStreams: vi.fn().mockReturnValue([{ type: 'Power' }]),
+            } as any;
+            const parsedEvent = {
+                setID: vi.fn().mockReturnThis(),
+                getActivities: vi.fn().mockReturnValue([parsedActivityA, parsedActivityOther]),
+            } as any;
+            vi.spyOn(hydrationService, 'parseEventFromOriginalFiles').mockResolvedValue({
+                finalEvent: parsedEvent,
+                parsedEvents: [parsedEvent],
+                sourceFilesCount: 1,
+                failedFiles: [],
+            });
+            const event = {
+                getID: () => 'event-1',
+                originalFile: { path: 'users/u1/events/e1/original.fit' },
+                getActivities: vi.fn().mockReturnValue([existingActivityA, existingActivityB]),
+                clearActivities: vi.fn(),
+                addActivities: vi.fn(),
+            } as any;
+
+            await firstValueFrom(service.attachStreamsToEventWithActivities({ uid: 'u1' } as any, event));
+
+            expect(existingActivityA.clearStreams).toHaveBeenCalledTimes(1);
+            expect(existingActivityA.addStreams).toHaveBeenCalledWith([{ type: 'Speed' }]);
+            expect(existingActivityB.clearStreams).not.toHaveBeenCalled();
+            expect(existingActivityB.addStreams).not.toHaveBeenCalled();
+            expect(mockLogger.warn).toHaveBeenCalledWith(
+                '[AppEventService] Stream-only hydration attached matched activity IDs only',
+                expect.objectContaining({
+                    eventID: 'event-1',
+                    unmatchedExistingActivityIDs: ['a-2'],
+                    unmatchedParsedActivityIDs: ['b-9'],
+                }),
+            );
+        });
+
+        it('should replace activities when hydrationMode is replace_activities', async () => {
+            const hydrationService = (service as any).originalFileHydrationService;
+            const parsedActivity = { getID: () => 'a-1' } as any;
+            const parsedEvent = {
+                setID: vi.fn().mockReturnThis(),
+                getActivities: vi.fn().mockReturnValue([parsedActivity]),
+            } as any;
+            vi.spyOn(hydrationService, 'parseEventFromOriginalFiles').mockResolvedValue({
+                finalEvent: parsedEvent,
+                parsedEvents: [parsedEvent],
+                sourceFilesCount: 1,
+                failedFiles: [],
+            });
+            const event = {
+                getID: () => 'event-1',
+                originalFile: { path: 'users/u1/events/e1/original.fit' },
+                getActivities: vi.fn().mockReturnValue([]),
+                clearActivities: vi.fn(),
+                addActivities: vi.fn(),
+            } as any;
+
+            const result = await firstValueFrom(
+                service.attachStreamsToEventWithActivities(
+                    { uid: 'u1' } as any,
+                    event,
+                    undefined,
+                    true,
+                    false,
+                    'replace_activities',
+                ),
+            );
+
+            expect(event.clearActivities).toHaveBeenCalledTimes(1);
             expect(event.addActivities).toHaveBeenCalledWith([parsedActivity]);
             expect(result).toBe(event);
         });

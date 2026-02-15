@@ -72,7 +72,16 @@ export class AppEventReprocessService {
     try {
       this.notifyProgress(options, { phase: 'downloading', progress: 20, details: 'Loading source files' });
       this.notifyProgress(options, { phase: 'parsing', progress: 40, details: 'Parsing activities' });
-      await firstValueFrom(this.eventService.attachStreamsToEventWithActivities(user, event, undefined, true, options?.skipEnrichment === true));
+      await firstValueFrom(
+        this.eventService.attachStreamsToEventWithActivities(
+          user,
+          event,
+          undefined,
+          true,
+          options?.skipEnrichment === true,
+          'replace_activities',
+        ),
+      );
     } catch (e) {
       throw new ReprocessError('PARSE_FAILED', 'Could not parse original source file(s).', e);
     }
@@ -122,7 +131,16 @@ export class AppEventReprocessService {
     try {
       this.notifyProgress(options, { phase: 'downloading', progress: 20, details: 'Loading source files' });
       this.notifyProgress(options, { phase: 'parsing', progress: 40, details: 'Parsing activities' });
-      await firstValueFrom(this.eventService.attachStreamsToEventWithActivities(user, event, undefined, true, options?.skipEnrichment === true));
+      await firstValueFrom(
+        this.eventService.attachStreamsToEventWithActivities(
+          user,
+          event,
+          undefined,
+          true,
+          options?.skipEnrichment === true,
+          'replace_activities',
+        ),
+      );
     } catch (e) {
       throw new ReprocessError('PARSE_FAILED', 'Could not parse original source file(s).', e);
     }

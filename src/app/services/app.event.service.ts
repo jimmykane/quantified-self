@@ -61,6 +61,8 @@ export interface GetEventsOnceResult {
   source: EventsOnceSource;
 }
 
+export type StreamHydrationMode = 'attach_streams_only' | 'replace_activities';
+
 
 @Injectable({
   providedIn: 'root',
@@ -732,9 +734,19 @@ export class AppEventService implements OnDestroy {
    * @param user
    * @param event
    * @param streamTypes
+   * @param merge
+   * @param skipEnrichment
+   * @param hydrationMode
    * @private
    */
-  public attachStreamsToEventWithActivities(user: User, event: AppEventInterface, streamTypes?: string[], merge: boolean = true, skipEnrichment: boolean = false): Observable<EventInterface> {
+  public attachStreamsToEventWithActivities(
+    user: User,
+    event: AppEventInterface,
+    streamTypes?: string[],
+    merge: boolean = true,
+    skipEnrichment: boolean = false,
+    hydrationMode: StreamHydrationMode = 'attach_streams_only',
+  ): Observable<EventInterface> {
     this.logger.log(`[AppEventService] attachStreams for ${event.getID()}. originalFile: ${!!event.originalFile}, originalFiles: ${!!event.originalFiles}`);
     const hasOriginalFiles = (event.originalFiles && event.originalFiles.length > 0)
       || (event.originalFile && event.originalFile.path);
@@ -761,8 +773,13 @@ export class AppEventService implements OnDestroy {
           return fullEvent;
         }
 
-        event.clearActivities();
-        event.addActivities(fullEvent.getActivities());
+        if (hydrationMode === 'replace_activities') {
+          event.clearActivities();
+          event.addActivities(fullEvent.getActivities());
+          return event;
+        }
+
+        this.attachParsedStreamsToExistingActivities(event, fullEvent, streamTypes);
         return event;
       }),
       catchError((error) => {
@@ -770,6 +787,74 @@ export class AppEventService implements OnDestroy {
         return this.attachStreamsLegacy(user, event, streamTypes);
       }),
     );
+  }
+
+  private attachParsedStreamsToExistingActivities(
+    event: AppEventInterface,
+    parsedEvent: EventInterface,
+    streamTypes?: string[],
+  ): void {
+    const existingActivities = event.getActivities() || [];
+    const parsedActivities = parsedEvent.getActivities() || [];
+    const parsedActivitiesByID = new Map<string, ActivityInterface>();
+    const duplicateParsedIDs = new Set<string>();
+    let parsedActivitiesMissingID = 0;
+
+    parsedActivities.forEach((parsedActivity) => {
+      const parsedActivityID = parsedActivity.getID();
+      if (!parsedActivityID) {
+        parsedActivitiesMissingID += 1;
+        return;
+      }
+      if (parsedActivitiesByID.has(parsedActivityID)) {
+        duplicateParsedIDs.add(parsedActivityID);
+      }
+      parsedActivitiesByID.set(parsedActivityID, parsedActivity);
+    });
+
+    const unmatchedExistingActivityIDs: string[] = [];
+    let attachedCount = 0;
+    existingActivities.forEach((existingActivity) => {
+      const existingActivityID = existingActivity.getID();
+      if (!existingActivityID) {
+        unmatchedExistingActivityIDs.push('(missing-id)');
+        return;
+      }
+      const parsedActivity = parsedActivitiesByID.get(existingActivityID);
+      if (!parsedActivity) {
+        unmatchedExistingActivityIDs.push(existingActivityID);
+        return;
+      }
+
+      const parsedStreams = parsedActivity.getAllStreams();
+      const filteredStreams = streamTypes && streamTypes.length > 0
+        ? parsedStreams.filter((stream) => streamTypes.includes(stream.type))
+        : parsedStreams;
+      existingActivity.clearStreams();
+      existingActivity.addStreams(filteredStreams);
+      parsedActivitiesByID.delete(existingActivityID);
+      attachedCount += 1;
+    });
+
+    const unmatchedParsedActivityIDs = Array.from(parsedActivitiesByID.keys());
+    if (
+      unmatchedExistingActivityIDs.length > 0
+      || unmatchedParsedActivityIDs.length > 0
+      || parsedActivitiesMissingID > 0
+      || duplicateParsedIDs.size > 0
+    ) {
+      this.logger.warn('[AppEventService] Stream-only hydration attached matched activity IDs only', {
+        eventID: event.getID(),
+        attachedCount,
+        existingActivitiesCount: existingActivities.length,
+        parsedActivitiesCount: parsedActivities.length,
+        unmatchedExistingActivityIDs,
+        unmatchedParsedActivityIDs,
+        parsedActivitiesMissingID,
+        duplicateParsedActivityIDs: Array.from(duplicateParsedIDs),
+        streamTypeFilter: streamTypes && streamTypes.length > 0 ? streamTypes : 'all',
+      });
+    }
   }
 
   private attachStreamsLegacy(user: User, event: EventInterface, streamTypes?: string[]): Observable<EventInterface> {
