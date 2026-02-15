@@ -10,6 +10,8 @@ export class AppEventUtilities {
 
     constructor(private logger: LoggerService) { }
 
+    private static readonly GENERATED_MERGE_DESCRIPTION_PREFIX = 'a merge of 2 or more activit';
+
     /**
      * Merges multiple events into one with a guaranteed unique ID.
      * This prevents collision with source events when the deterministic ID generator
@@ -22,7 +24,28 @@ export class AppEventUtilities {
     mergeEventsWithId(events: EventInterface[], idGenerator: () => string): EventInterface {
         const merged = EventUtilities.mergeEvents(events);
         merged.setID(idGenerator());
+        this.clearGeneratedMergeDescription(merged);
         return merged;
+    }
+
+    private clearGeneratedMergeDescription(event: EventInterface): void {
+        const mergedEvent = event as any;
+        const description = mergedEvent?.description;
+        if (typeof description !== 'string') {
+            return;
+        }
+
+        const normalized = description.trim().toLowerCase();
+        if (!normalized.startsWith(AppEventUtilities.GENERATED_MERGE_DESCRIPTION_PREFIX)) {
+            return;
+        }
+
+        if (typeof mergedEvent.setDescription === 'function') {
+            mergedEvent.setDescription('');
+            return;
+        }
+
+        mergedEvent.description = '';
     }
 
     /**
