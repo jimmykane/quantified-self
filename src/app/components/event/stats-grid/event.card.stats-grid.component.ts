@@ -48,6 +48,8 @@ const SUMMARY_TAB_ICONS: Record<EventSummaryMetricGroupId, string> = {
 })
 
 export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, OnDestroy {
+  private static readonly MOBILE_BREAKPOINT_MEDIA_QUERY = '(max-width: 599px)';
+
   @ViewChild('summaryTabGroup', { read: ElementRef }) summaryTabGroupRef?: ElementRef<HTMLElement>;
   @Input() event!: EventInterface;
   @Input() selectedActivities: ActivityInterface[] = [];
@@ -64,6 +66,8 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   private resizeObserver: ResizeObserver | null = null;
   private measureRafId: number | null = null;
   private lastAppliedMinHeightPx = 0;
+  private mobileViewportMediaQueryList: MediaQueryList | null = this.getMobileMediaQueryList();
+  private readonly mobileViewportListener = () => this.onMobileViewportChange();
 
   private userSettingsQuery = inject(AppUserSettingsQueryService);
   private eventColorService = inject(AppEventColorService);
@@ -79,11 +83,13 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   }
 
   ngAfterViewInit() {
+    this.mobileViewportMediaQueryList?.addEventListener('change', this.mobileViewportListener);
     this.setupTabBodyResizeObserver();
     this.scheduleTabBodyHeightSync();
   }
 
   ngOnDestroy() {
+    this.mobileViewportMediaQueryList?.removeEventListener('change', this.mobileViewportListener);
     this.cancelScheduledTabBodyHeightSync();
     this.teardownTabBodyResizeObserver();
   }
@@ -212,6 +218,12 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   }
 
   private scheduleTabBodyHeightSync() {
+    if (this.isMobileViewport()) {
+      this.clearTabBodyMinHeight();
+      this.lastAppliedMinHeightPx = 0;
+      return;
+    }
+
     if (this.measureRafId !== null) {
       return;
     }
@@ -228,6 +240,12 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   }
 
   private syncTabBodyHeight() {
+    if (this.isMobileViewport()) {
+      this.clearTabBodyMinHeight();
+      this.lastAppliedMinHeightPx = 0;
+      return;
+    }
+
     const tabGroupElement = this.summaryTabGroupRef?.nativeElement;
     if (!tabGroupElement) {
       return;
@@ -257,6 +275,10 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
 
   private setupTabBodyResizeObserver() {
     this.teardownTabBodyResizeObserver();
+
+    if (this.isMobileViewport()) {
+      return;
+    }
 
     if (typeof ResizeObserver === 'undefined') {
       return;
@@ -302,6 +324,32 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   private clearTabBodyMinHeight() {
     const tabGroupElement = this.summaryTabGroupRef?.nativeElement;
     tabGroupElement?.style.removeProperty('--summary-tabs-body-min-height');
+  }
+
+  private onMobileViewportChange() {
+    this.cancelScheduledTabBodyHeightSync();
+    this.lastAppliedMinHeightPx = 0;
+
+    if (this.isMobileViewport()) {
+      this.teardownTabBodyResizeObserver();
+      this.clearTabBodyMinHeight();
+      return;
+    }
+
+    this.setupTabBodyResizeObserver();
+    this.scheduleTabBodyHeightSync();
+  }
+
+  private getMobileMediaQueryList(): MediaQueryList | null {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return null;
+    }
+
+    return window.matchMedia(EventCardStatsGridComponent.MOBILE_BREAKPOINT_MEDIA_QUERY);
+  }
+
+  private isMobileViewport(): boolean {
+    return this.mobileViewportMediaQueryList?.matches ?? false;
   }
 
   private resetSelectedTab() {

@@ -855,6 +855,18 @@ describe('EventCardStatsGridComponent', () => {
         expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('220px');
     });
 
+    it('should clear shared min-height and skip height sync on mobile viewport', () => {
+        const tabGroupElement = createTabGroupElement([120, 220, 190]);
+        component.summaryTabGroupRef = new ElementRef(tabGroupElement);
+        tabGroupElement.style.setProperty('--summary-tabs-body-min-height', '220px');
+        vi.spyOn(component as any, 'isMobileViewport').mockReturnValue(true);
+
+        (component as any).syncTabBodyHeight();
+
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('');
+        expect((component as any).lastAppliedMinHeightPx).toBe(0);
+    });
+
     it('should coalesce repeated height sync scheduling into one animation frame', () => {
         const tabGroupElement = createTabGroupElement([100, 140]);
         component.summaryTabGroupRef = new ElementRef(tabGroupElement);
@@ -874,6 +886,17 @@ describe('EventCardStatsGridComponent', () => {
 
         scheduledCallback?.(0);
         expect(syncSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should skip scheduling height sync animation frame on mobile viewport', () => {
+        component.summaryTabGroupRef = new ElementRef(createTabGroupElement([100, 140]));
+        vi.spyOn(component as any, 'isMobileViewport').mockReturnValue(true);
+        const rafSpy = vi.spyOn(globalThis, 'requestAnimationFrame');
+
+        (component as any).scheduleTabBodyHeightSync();
+
+        expect(rafSpy).not.toHaveBeenCalled();
+        expect((component as any).measureRafId).toBeNull();
     });
 
     it('should safely skip observer setup when ResizeObserver is unavailable', () => {
