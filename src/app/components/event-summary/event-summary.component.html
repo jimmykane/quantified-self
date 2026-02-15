@@ -19,8 +19,10 @@
         </div>
         <div class="chips-row">
           <span class="chip activity-chip">{{ mainActivityType }}</span>
-          @if (feelingEmoji) {
-          <span class="chip feeling-chip" [matTooltip]="'Feeling: ' + feelingLabel">{{ feelingEmoji }}</span>
+          @if (feelingIcon) {
+          <span class="chip feeling-chip" [matTooltip]="'Feeling: ' + feelingLabel" [attr.aria-label]="'Feeling: ' + feelingLabel">
+            <mat-icon aria-hidden="true">{{ feelingIcon }}</mat-icon>
+          </span>
           }
           @if (rpe) {
           <span class="chip rpe-chip" [matTooltip]="'RPE: ' + rpeLabel">RPE {{ rpe }}</span>

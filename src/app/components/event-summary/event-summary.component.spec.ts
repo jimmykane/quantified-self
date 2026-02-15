@@ -3,9 +3,8 @@ import { EventSummaryComponent } from './event-summary.component';
 import { AppEventService } from '../../services/app.event.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { ChangeDetectorRef, Component, NO_ERRORS_SCHEMA } from '@angular/core';
-import { EventInterface, User, Privacy, ActivityTypes } from '@sports-alliance/sports-lib';
-import { of } from 'rxjs';
+import { ChangeDetectorRef, NO_ERRORS_SCHEMA } from '@angular/core';
+import { EventInterface, User, Privacy, ActivityTypes, DataFeeling, Feelings } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 
@@ -150,6 +149,24 @@ describe('EventSummaryComponent', () => {
             const sensorsAction = devicesFixture.nativeElement.querySelector('.summary-actions .devices-button');
             expect(devicesComponent.hasDevices).toBe(true);
             expect(sensorsAction).toBeTruthy();
+        });
+    });
+
+    describe('feeling icon', () => {
+        it('should render material symbol for feeling when present', () => {
+            component.event = {
+                ...mockEvent,
+                getStat: (type: string) => {
+                    if (type === DataFeeling.type) {
+                        return { getValue: () => Feelings.Excellent } as any;
+                    }
+                    return null;
+                }
+            } as any;
+
+            fixture.detectChanges();
+
+            expect(component.feelingIcon).toBe('sentiment_very_satisfied');
         });
     });
 });

@@ -1,5 +1,6 @@
 import {
   AfterViewInit,
+  ChangeDetectorRef,
   ChangeDetectionStrategy,
   Component,
   ElementRef,
@@ -38,6 +39,8 @@ const SUMMARY_TAB_ICONS: Record<EventSummaryMetricGroupId, string> = {
   physiological: 'demography',
   other: 'category',
 };
+const SUMMARY_TAB_HEIGHT_WOBBLE_TOLERANCE_PX = 2;
+type TabBodyHeightSyncMode = 'allow_shrink' | 'only_grow';
 
 @Component({
   selector: 'app-event-card-stats-grid',
@@ -64,9 +67,21 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   public diffByType = new Map<string, { display: string; percent: number; color: string }>();
   private resizeObserver: ResizeObserver | null = null;
   private measureRafId: number | null = null;
+  private tabSwitchMeasureRafId: number | null = null;
+  private tabPrewarmRafId: number | null = null;
+  private initialSettleTimeoutId: number | null = null;
   private lastAppliedMinHeightPx = 0;
+  private pendingTabBodyHeightSyncMode: TabBodyHeightSyncMode = 'allow_shrink';
+  private didPrewarmTabs = false;
+  private isPrewarmingTabs = false;
+  private tabPrewarmFrames = 0;
+  private tabPrewarmQueue: number[] = [];
+  private isDestroyed = false;
   private mobileViewportMediaQueryList: MediaQueryList | null = this.getMobileMediaQueryList();
   private readonly mobileViewportListener = () => this.onMobileViewportChange();
+  private readonly windowResizeListener = () => this.scheduleTabBodyHeightSync('allow_shrink');
+  private readonly windowLoadListener = () => this.scheduleTabBodyHeightSync('allow_shrink');
+  private cdr = inject(ChangeDetectorRef);
 
   private userSettingsQuery = inject(AppUserSettingsQueryService);
   private eventColorService = inject(AppEventColorService);
@@ -82,13 +97,26 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   }
 
   ngAfterViewInit() {
+    this.isDestroyed = false;
     this.mobileViewportMediaQueryList?.addEventListener('change', this.mobileViewportListener);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', this.windowResizeListener);
+      if (document.readyState !== 'complete') {
+        window.addEventListener('load', this.windowLoadListener, { once: true });
+      }
+    }
     this.setupTabBodyResizeObserver();
-    this.scheduleTabBodyHeightSync();
+    this.scheduleInitialTabBodyHeightStabilization();
+    this.scheduleInitialTabsPrewarm();
   }
 
   ngOnDestroy() {
+    this.isDestroyed = true;
     this.mobileViewportMediaQueryList?.removeEventListener('change', this.mobileViewportListener);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('resize', this.windowResizeListener);
+      window.removeEventListener('load', this.windowLoadListener);
+    }
     this.cancelScheduledTabBodyHeightSync();
     this.teardownTabBodyResizeObserver();
   }
@@ -150,11 +178,16 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
 
   public onSelectedTabIndexChange(index: number) {
     this.selectedTabIndex = index;
+    if (this.isPrewarmingTabs) {
+      return;
+    }
     const selectedTabId = this.metricTabs[index]?.id;
     if (selectedTabId) {
       this.eventSummaryTabsLocalStorageService.setLastSelectedStatsTabId(selectedTabId);
     }
-    this.scheduleTabBodyHeightSync();
+    this.applyGrowOnlyHeightFromSelectedTab(index);
+    this.logSecondTabSizeDiagnostics('tab_index_change', 'only_grow', this.summaryTabGroupRef?.nativeElement);
+    this.scheduleTabBodyHeightSyncAfterTabSwitch();
   }
 
   public getSingleValueTypesForTab(tab: SummaryMetricTab): string[] {
@@ -214,13 +247,25 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     this.resetSelectedTab();
     this.setupTabBodyResizeObserver();
     this.scheduleTabBodyHeightSync();
+    this.scheduleInitialTabsPrewarm();
   }
 
-  private scheduleTabBodyHeightSync() {
+  private scheduleTabBodyHeightSync(mode: TabBodyHeightSyncMode = 'allow_shrink') {
+    if (this.isDestroyed) {
+      return;
+    }
+
     if (this.isMobileViewport()) {
       this.clearTabBodyMinHeight();
       this.lastAppliedMinHeightPx = 0;
+      this.pendingTabBodyHeightSyncMode = 'allow_shrink';
       return;
+    }
+
+    if (mode === 'allow_shrink') {
+      this.pendingTabBodyHeightSyncMode = 'allow_shrink';
+    } else if (this.measureRafId === null) {
+      this.pendingTabBodyHeightSyncMode = 'only_grow';
     }
 
     if (this.measureRafId !== null) {
@@ -228,17 +273,174 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     }
 
     if (typeof requestAnimationFrame === 'undefined') {
-      this.syncTabBodyHeight();
+      this.syncTabBodyHeight(this.pendingTabBodyHeightSyncMode);
       return;
     }
 
     this.measureRafId = requestAnimationFrame(() => {
       this.measureRafId = null;
-      this.syncTabBodyHeight();
+      const syncMode = this.pendingTabBodyHeightSyncMode;
+      this.pendingTabBodyHeightSyncMode = 'allow_shrink';
+      this.syncTabBodyHeight(syncMode);
     });
   }
 
-  private syncTabBodyHeight() {
+  private scheduleTabBodyHeightSyncAfterTabSwitch() {
+    if (this.isDestroyed) {
+      return;
+    }
+
+    if (typeof requestAnimationFrame === 'undefined') {
+      this.scheduleTabBodyHeightSync('only_grow');
+      return;
+    }
+
+    if (this.tabSwitchMeasureRafId !== null) {
+      return;
+    }
+
+    this.tabSwitchMeasureRafId = requestAnimationFrame(() => {
+      this.tabSwitchMeasureRafId = null;
+      if (this.isDestroyed) {
+        return;
+      }
+      if (typeof requestAnimationFrame === 'undefined') {
+        this.scheduleTabBodyHeightSync('only_grow');
+        return;
+      }
+      this.tabSwitchMeasureRafId = requestAnimationFrame(() => {
+        this.tabSwitchMeasureRafId = null;
+        if (this.isDestroyed) {
+          return;
+        }
+        this.scheduleTabBodyHeightSync('only_grow');
+      });
+    });
+  }
+
+  private scheduleInitialTabBodyHeightStabilization() {
+    this.scheduleTabBodyHeightSync('allow_shrink');
+
+    if (typeof requestAnimationFrame !== 'undefined') {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          this.scheduleTabBodyHeightSync('allow_shrink');
+        });
+      });
+    }
+
+    this.scheduleDelayedInitialHeightSync(220);
+    this.scheduleHeightSyncWhenFontsAreReady();
+  }
+
+  private scheduleInitialTabsPrewarm() {
+    if (
+      this.isDestroyed
+      || this.didPrewarmTabs
+      || this.isPrewarmingTabs
+      || this.isMobileViewport()
+      || this.metricTabs.length < 2
+      || this.selectedTabIndex !== 0
+      || !this.summaryTabGroupRef?.nativeElement
+      || typeof requestAnimationFrame === 'undefined'
+    ) {
+      return;
+    }
+
+    this.didPrewarmTabs = true;
+    this.isPrewarmingTabs = true;
+    this.tabPrewarmQueue = Array.from({ length: this.metricTabs.length - 1 }, (_, idx) => idx + 1);
+
+    this.tabPrewarmRafId = requestAnimationFrame(() => {
+      if (this.isDestroyed) {
+        this.finishTabsPrewarm();
+        return;
+      }
+      this.prewarmNextTabInQueue();
+    });
+  }
+
+  private prewarmNextTabInQueue() {
+    const nextTabIndex = this.tabPrewarmQueue.shift();
+    if (nextTabIndex === undefined) {
+      this.finishTabsPrewarm();
+      return;
+    }
+
+    this.tabPrewarmFrames = 0;
+    this.selectedTabIndex = nextTabIndex;
+    // OnPush does not guarantee this async assignment gets rendered before measurement.
+    this.cdr.detectChanges();
+    this.waitForTabIntrinsicHeightThenContinue(nextTabIndex);
+  }
+
+  private waitForTabIntrinsicHeightThenContinue(tabIndex: number) {
+    if (this.isDestroyed || typeof requestAnimationFrame === 'undefined') {
+      this.finishTabsPrewarm();
+      return;
+    }
+
+    this.tabPrewarmRafId = requestAnimationFrame(() => {
+      this.tabPrewarmRafId = null;
+      if (this.isDestroyed) {
+        this.finishTabsPrewarm();
+        return;
+      }
+
+      this.tabPrewarmFrames += 1;
+      const tabIntrinsicHeight = this.getTabIntrinsicHeightByIndex(tabIndex);
+      const hasMeasuredTab = tabIntrinsicHeight > 0;
+      const reachedFrameBudget = this.tabPrewarmFrames >= 8;
+
+      if (hasMeasuredTab || reachedFrameBudget) {
+        this.prewarmNextTabInQueue();
+        return;
+      }
+
+      this.waitForTabIntrinsicHeightThenContinue(tabIndex);
+    });
+  }
+
+  private finishTabsPrewarm() {
+    this.selectedTabIndex = 0;
+    this.cdr.detectChanges();
+    this.isPrewarmingTabs = false;
+    this.tabPrewarmFrames = 0;
+    this.tabPrewarmQueue = [];
+    this.scheduleTabBodyHeightSync('allow_shrink');
+  }
+
+  private scheduleDelayedInitialHeightSync(delayMs: number) {
+    if (this.isDestroyed || typeof window === 'undefined') {
+      return;
+    }
+
+    if (this.initialSettleTimeoutId !== null) {
+      window.clearTimeout(this.initialSettleTimeoutId);
+    }
+
+    this.initialSettleTimeoutId = window.setTimeout(() => {
+      this.initialSettleTimeoutId = null;
+      this.scheduleTabBodyHeightSync('allow_shrink');
+    }, delayMs);
+  }
+
+  private scheduleHeightSyncWhenFontsAreReady() {
+    if (this.isDestroyed || typeof document === 'undefined') {
+      return;
+    }
+
+    const fontsApi = (document as any).fonts;
+    if (!fontsApi?.ready || typeof fontsApi.ready.then !== 'function') {
+      return;
+    }
+
+    fontsApi.ready.then(() => {
+      this.scheduleTabBodyHeightSync('allow_shrink');
+    });
+  }
+
+  private syncTabBodyHeight(mode: TabBodyHeightSyncMode = 'allow_shrink') {
     if (this.isMobileViewport()) {
       this.clearTabBodyMinHeight();
       this.lastAppliedMinHeightPx = 0;
@@ -261,15 +463,148 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     }
 
     const maxHeight = Array.from(tabBodyContents).reduce((currentMax, tabBodyContent) => {
-      return Math.max(currentMax, Math.ceil(tabBodyContent.scrollHeight));
+      return Math.max(currentMax, this.getIntrinsicTabBodyContentHeight(tabBodyContent));
     }, 0);
+    this.logSecondTabSizeDiagnostics('sync_tab_body_height', mode, tabGroupElement, maxHeight);
 
-    if (maxHeight === this.lastAppliedMinHeightPx) {
+    const heightDelta = Math.abs(maxHeight - this.lastAppliedMinHeightPx);
+    if (heightDelta === 0) {
+      return;
+    }
+
+    if (this.lastAppliedMinHeightPx > 0 && heightDelta <= SUMMARY_TAB_HEIGHT_WOBBLE_TOLERANCE_PX) {
+      return;
+    }
+
+    if (mode === 'only_grow' && maxHeight < this.lastAppliedMinHeightPx) {
       return;
     }
 
     this.lastAppliedMinHeightPx = maxHeight;
     tabGroupElement.style.setProperty('--summary-tabs-body-min-height', `${maxHeight}px`);
+  }
+
+  private getIntrinsicTabBodyContentHeight(tabBodyContent: HTMLElement): number {
+    const previousInlineHeight = tabBodyContent.style.height;
+    tabBodyContent.style.height = 'auto';
+    const intrinsicHeight = Math.ceil(tabBodyContent.scrollHeight);
+    tabBodyContent.style.height = previousInlineHeight;
+    return intrinsicHeight;
+  }
+
+  private getTabIntrinsicHeightByIndex(tabIndex: number): number {
+    const tabGroupElement = this.summaryTabGroupRef?.nativeElement;
+    if (!tabGroupElement || tabIndex < 0) {
+      return 0;
+    }
+
+    const tabBodyContents = tabGroupElement.querySelectorAll<HTMLElement>('.mat-mdc-tab-body-content');
+    const tabBody = tabBodyContents[tabIndex];
+    if (!tabBody) {
+      return 0;
+    }
+
+    return this.getIntrinsicTabBodyContentHeight(tabBody);
+  }
+
+  private applyGrowOnlyHeightFromSelectedTab(selectedIndex: number) {
+    const tabGroupElement = this.summaryTabGroupRef?.nativeElement;
+    if (!tabGroupElement || selectedIndex < 0) {
+      return;
+    }
+
+    const tabBodyContents = tabGroupElement.querySelectorAll<HTMLElement>('.mat-mdc-tab-body-content');
+    const selectedTabBody = tabBodyContents[selectedIndex];
+    if (!selectedTabBody) {
+      return;
+    }
+
+    const selectedTabHeight = Math.max(
+      this.getIntrinsicTabBodyContentHeight(selectedTabBody),
+      Math.ceil(selectedTabBody.scrollHeight || 0),
+      Math.ceil(selectedTabBody.offsetHeight || 0),
+      Math.ceil(selectedTabBody.clientHeight || 0),
+    );
+
+    if (selectedTabHeight <= this.lastAppliedMinHeightPx) {
+      return;
+    }
+
+    const heightDelta = Math.abs(selectedTabHeight - this.lastAppliedMinHeightPx);
+    if (this.lastAppliedMinHeightPx > 0 && heightDelta <= SUMMARY_TAB_HEIGHT_WOBBLE_TOLERANCE_PX) {
+      return;
+    }
+
+    this.lastAppliedMinHeightPx = selectedTabHeight;
+    tabGroupElement.style.setProperty('--summary-tabs-body-min-height', `${selectedTabHeight}px`);
+  }
+
+  private logSecondTabSizeDiagnostics(
+    context: string,
+    mode: TabBodyHeightSyncMode,
+    tabGroupElement?: HTMLElement,
+    computedMaxHeight?: number
+  ) {
+    if (!tabGroupElement) {
+      this.logger.info('[debug] event_card_stats_grid_second_tab_sizes', {
+        context,
+        mode,
+        hasTabGroup: false,
+        selectedTabIndex: this.selectedTabIndex,
+      });
+      return;
+    }
+
+    const tabBodyContents = tabGroupElement.querySelectorAll<HTMLElement>('.mat-mdc-tab-body-content');
+    const secondTabBody = tabBodyContents[1];
+    const wrapper = tabGroupElement.querySelector<HTMLElement>('.mat-mdc-tab-body-wrapper');
+    const activeTabBodyContent = tabGroupElement.querySelector<HTMLElement>('.mat-mdc-tab-body-active .mat-mdc-tab-body-content');
+    const activeTabIndex = activeTabBodyContent ? Array.from(tabBodyContents).indexOf(activeTabBodyContent) : -1;
+
+    if (!secondTabBody) {
+      this.logger.info('[debug] event_card_stats_grid_second_tab_sizes', {
+        context,
+        mode,
+        hasTabGroup: true,
+        tabCount: tabBodyContents.length,
+        selectedTabIndex: this.selectedTabIndex,
+        activeTabIndex,
+        hasSecondTab: false,
+        computedMaxHeight: computedMaxHeight ?? null,
+        lastAppliedMinHeightPx: this.lastAppliedMinHeightPx,
+        cssVarMinHeight: tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height') || null,
+      });
+      return;
+    }
+
+    const secondContentRoot = secondTabBody.firstElementChild as HTMLElement | null;
+    const secondRect = secondTabBody.getBoundingClientRect();
+    const secondContentRect = secondContentRoot?.getBoundingClientRect();
+    const secondIntrinsicHeight = this.getIntrinsicTabBodyContentHeight(secondTabBody);
+
+    this.logger.info('[debug] event_card_stats_grid_second_tab_sizes', {
+      context,
+      mode,
+      selectedTabIndex: this.selectedTabIndex,
+      activeTabIndex,
+      tabCount: tabBodyContents.length,
+      computedMaxHeight: computedMaxHeight ?? null,
+      lastAppliedMinHeightPx: this.lastAppliedMinHeightPx,
+      cssVarMinHeight: tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height') || null,
+      wrapperClientHeight: wrapper?.clientHeight ?? null,
+      wrapperOffsetHeight: wrapper?.offsetHeight ?? null,
+      secondTab: {
+        scrollHeight: secondTabBody.scrollHeight,
+        intrinsicScrollHeight: secondIntrinsicHeight,
+        offsetHeight: secondTabBody.offsetHeight,
+        clientHeight: secondTabBody.clientHeight,
+        rectHeight: Number(secondRect.height.toFixed(2)),
+        contentScrollHeight: secondContentRoot?.scrollHeight ?? null,
+        contentOffsetHeight: secondContentRoot?.offsetHeight ?? null,
+        contentClientHeight: secondContentRoot?.clientHeight ?? null,
+        contentRectHeight: secondContentRect ? Number(secondContentRect.height.toFixed(2)) : null,
+      },
+    });
   }
 
   private setupTabBodyResizeObserver() {
@@ -294,8 +629,9 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     }
 
     this.resizeObserver = new ResizeObserver(() => {
-      this.scheduleTabBodyHeightSync();
+      this.scheduleTabBodyHeightSync('allow_shrink');
     });
+    this.resizeObserver.observe(tabGroupElement);
     tabBodyContents.forEach((tabBodyContent) => {
       this.resizeObserver?.observe(tabBodyContent);
     });
@@ -313,11 +649,32 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   private cancelScheduledTabBodyHeightSync() {
     if (this.measureRafId === null || typeof cancelAnimationFrame === 'undefined') {
       this.measureRafId = null;
-      return;
+    } else {
+      cancelAnimationFrame(this.measureRafId);
+      this.measureRafId = null;
     }
 
-    cancelAnimationFrame(this.measureRafId);
-    this.measureRafId = null;
+    if (this.tabSwitchMeasureRafId === null || typeof cancelAnimationFrame === 'undefined') {
+      this.tabSwitchMeasureRafId = null;
+    } else {
+      cancelAnimationFrame(this.tabSwitchMeasureRafId);
+      this.tabSwitchMeasureRafId = null;
+    }
+
+    if (this.tabPrewarmRafId === null || typeof cancelAnimationFrame === 'undefined') {
+      this.tabPrewarmRafId = null;
+    } else {
+      cancelAnimationFrame(this.tabPrewarmRafId);
+      this.tabPrewarmRafId = null;
+    }
+    this.isPrewarmingTabs = false;
+    this.tabPrewarmFrames = 0;
+    this.tabPrewarmQueue = [];
+
+    if (this.initialSettleTimeoutId !== null && typeof window !== 'undefined') {
+      window.clearTimeout(this.initialSettleTimeoutId);
+      this.initialSettleTimeoutId = null;
+    }
   }
 
   private clearTabBodyMinHeight() {
@@ -328,6 +685,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   private onMobileViewportChange() {
     this.cancelScheduledTabBodyHeightSync();
     this.lastAppliedMinHeightPx = 0;
+    this.pendingTabBodyHeightSyncMode = 'allow_shrink';
 
     if (this.isMobileViewport()) {
       this.teardownTabBodyResizeObserver();

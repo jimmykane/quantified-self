@@ -23,12 +23,41 @@ const createTabGroupElement = (heights: number[]): HTMLElement => {
     tabBodyWrapper.className = 'mat-mdc-tab-body-wrapper';
     tabGroupElement.appendChild(tabBodyWrapper);
 
-    heights.forEach((height) => {
+    heights.forEach((height, index) => {
         const tabBodyContent = document.createElement('div');
         tabBodyContent.className = 'mat-mdc-tab-body-content';
         Object.defineProperty(tabBodyContent, 'scrollHeight', {
             configurable: true,
-            get: () => height,
+            get: () => heights[index],
+        });
+        tabBodyWrapper.appendChild(tabBodyContent);
+    });
+
+    return tabGroupElement;
+};
+
+const createTabGroupElementWithResizableIntrinsicHeights = (intrinsicHeights: number[]): HTMLElement => {
+    const tabGroupElement = document.createElement('div');
+    const tabBodyWrapper = document.createElement('div');
+    tabBodyWrapper.className = 'mat-mdc-tab-body-wrapper';
+    tabGroupElement.appendChild(tabBodyWrapper);
+
+    intrinsicHeights.forEach((intrinsicHeight, index) => {
+        const tabBodyContent = document.createElement('div');
+        tabBodyContent.className = 'mat-mdc-tab-body-content';
+        Object.defineProperty(tabBodyContent, 'scrollHeight', {
+            configurable: true,
+            get: () => {
+                // When measured with height:auto, return intrinsic content height.
+                if (tabBodyContent.style.height === 'auto') {
+                    return intrinsicHeights[index];
+                }
+
+                // Otherwise simulate the "stuck tall" path caused by shared wrapper min-height.
+                const raw = tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height');
+                const appliedMin = Number.parseInt(raw, 10) || 0;
+                return Math.max(intrinsicHeights[index], appliedMin);
+            },
         });
         tabBodyWrapper.appendChild(tabBodyContent);
     });
@@ -867,6 +896,73 @@ describe('EventCardStatsGridComponent', () => {
         expect((component as any).lastAppliedMinHeightPx).toBe(0);
     });
 
+    it('should reduce shared min-height when intrinsic content gets shorter on wider resize', () => {
+        const intrinsicHeights = [220, 180];
+        const tabGroupElement = createTabGroupElementWithResizableIntrinsicHeights(intrinsicHeights);
+        component.summaryTabGroupRef = new ElementRef(tabGroupElement);
+
+        (component as any).syncTabBodyHeight();
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('220px');
+
+        intrinsicHeights[0] = 120;
+        intrinsicHeights[1] = 100;
+
+        (component as any).syncTabBodyHeight();
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('120px');
+    });
+
+    it('should ignore tiny height deltas to prevent pixel-level wobble', () => {
+        const heights = [220, 180];
+        const tabGroupElement = createTabGroupElement(heights);
+        component.summaryTabGroupRef = new ElementRef(tabGroupElement);
+
+        (component as any).syncTabBodyHeight();
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('220px');
+
+        heights[0] = 219; // 1px delta should be ignored
+        (component as any).syncTabBodyHeight();
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('220px');
+
+        heights[0] = 216; // larger delta should be applied
+        (component as any).syncTabBodyHeight();
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('216px');
+    });
+
+    it('should not shrink shared min-height during tab-switch grow-only sync', () => {
+        const heights = [220, 180];
+        const tabGroupElement = createTabGroupElement(heights);
+        component.summaryTabGroupRef = new ElementRef(tabGroupElement);
+
+        (component as any).syncTabBodyHeight('allow_shrink');
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('220px');
+
+        heights[0] = 180;
+        heights[1] = 170;
+        (component as any).syncTabBodyHeight('only_grow');
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('220px');
+    });
+
+    it('should grow shared min-height immediately when switching to a taller tab', () => {
+        const heights = [220, 292, 180, 170];
+        const tabGroupElement = createTabGroupElement(heights);
+        component.summaryTabGroupRef = new ElementRef(tabGroupElement);
+        component.metricTabs = [
+            { id: 'overall', label: 'Overall', metricTypes: [] },
+            { id: 'performance', label: 'Performance', metricTypes: [] },
+            { id: 'altitude', label: 'Altitude', metricTypes: [] },
+            { id: 'environment', label: 'Environment', metricTypes: [] },
+        ] as any;
+
+        (component as any).syncTabBodyHeight('allow_shrink');
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('292px');
+
+        tabGroupElement.style.setProperty('--summary-tabs-body-min-height', '220px');
+        (component as any).lastAppliedMinHeightPx = 220;
+        component.onSelectedTabIndexChange(1);
+
+        expect(tabGroupElement.style.getPropertyValue('--summary-tabs-body-min-height')).toBe('292px');
+    });
+
     it('should coalesce repeated height sync scheduling into one animation frame', () => {
         const tabGroupElement = createTabGroupElement([100, 140]);
         component.summaryTabGroupRef = new ElementRef(tabGroupElement);
@@ -905,6 +1001,55 @@ describe('EventCardStatsGridComponent', () => {
 
         expect(() => (component as any).setupTabBodyResizeObserver()).not.toThrow();
         expect((component as any).resizeObserver).toBeNull();
+    });
+
+    it('should observe tab group container to react to width-only resize changes', () => {
+        const tabGroupElement = createTabGroupElement([120, 180]);
+        component.summaryTabGroupRef = new ElementRef(tabGroupElement);
+
+        const observeSpy = vi.fn();
+        (globalThis as any).ResizeObserver = vi.fn().mockImplementation(() => ({
+            observe: observeSpy,
+            disconnect: vi.fn(),
+        }));
+
+        (component as any).setupTabBodyResizeObserver();
+
+        expect(observeSpy).toHaveBeenCalledWith(tabGroupElement);
+    });
+
+    it('should register and cleanup window resize listener', () => {
+        const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
+        const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
+        (globalThis as any).ResizeObserver = vi.fn().mockImplementation(() => ({
+            observe: vi.fn(),
+            disconnect: vi.fn(),
+        }));
+        component.summaryTabGroupRef = new ElementRef(createTabGroupElement([120, 180]));
+
+        component.ngAfterViewInit();
+        component.ngOnDestroy();
+
+        expect(addEventListenerSpy).toHaveBeenCalledWith('resize', (component as any).windowResizeListener);
+        expect(removeEventListenerSpy).toHaveBeenCalledWith('resize', (component as any).windowResizeListener);
+    });
+
+    it('should register and cleanup window load listener when page is not fully loaded yet', () => {
+        const readyStateSpy = vi.spyOn(document, 'readyState', 'get').mockReturnValue('loading');
+        const addEventListenerSpy = vi.spyOn(window, 'addEventListener');
+        const removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
+        (globalThis as any).ResizeObserver = vi.fn().mockImplementation(() => ({
+            observe: vi.fn(),
+            disconnect: vi.fn(),
+        }));
+        component.summaryTabGroupRef = new ElementRef(createTabGroupElement([120, 180]));
+
+        component.ngAfterViewInit();
+        component.ngOnDestroy();
+
+        expect(addEventListenerSpy).toHaveBeenCalledWith('load', (component as any).windowLoadListener, { once: true });
+        expect(removeEventListenerSpy).toHaveBeenCalledWith('load', (component as any).windowLoadListener);
+        readyStateSpy.mockRestore();
     });
 
     it('should disconnect observer and cancel pending frame on destroy', () => {

@@ -55,7 +55,7 @@ export class EventSummaryComponent implements OnChanges {
   private feelingLabelValue = '';
   private rpeValue: RPEBorgCR10SCale | null = null;
   private rpeLabelValue = '';
-  private feelingEmojiValue = '';
+  private feelingIconValue = '';
   private cachedEventRef: AppEventInterface | null = null;
   private cachedSelectedActivitiesRef: ActivityInterface[] | null = null;
   private templateStateInitialized = false;
@@ -245,9 +245,9 @@ export class EventSummaryComponent implements OnChanges {
     return this.rpeLabelValue;
   }
 
-  get feelingEmoji(): string {
+  get feelingIcon(): string {
     this.ensureTemplateState();
-    return this.feelingEmojiValue;
+    return this.feelingIconValue;
   }
 
   private rebuildTemplateState(): void {
@@ -264,7 +264,7 @@ export class EventSummaryComponent implements OnChanges {
     const feelingStat = this.event?.getStat(DataFeeling.type) as DataFeeling;
     this.feelingValue = feelingStat ? feelingStat.getValue() as Feelings : null;
     this.feelingLabelValue = this.feelingValue === null ? '' : (Feelings[this.feelingValue] || '');
-    this.feelingEmojiValue = this.resolveFeelingEmoji(this.feelingValue);
+    this.feelingIconValue = this.resolveFeelingIcon(this.feelingValue);
 
     const rpeStat = this.event?.getStat(DataRPE.type) as DataRPE;
     this.rpeValue = rpeStat ? rpeStat.getValue() as RPEBorgCR10SCale : null;
@@ -309,16 +309,16 @@ export class EventSummaryComponent implements OnChanges {
     return lookup;
   }
 
-  private resolveFeelingEmoji(feeling: Feelings | null): string {
+  private resolveFeelingIcon(feeling: Feelings | null): string {
     if (feeling === null) return '';
-    const emojiMap: { [key: number]: string } = {
-      [Feelings.Excellent]: '🤩',
-      [Feelings['Very Good']]: '😊',
-      [Feelings.Good]: '😌',
-      [Feelings.Average]: '😐',
-      [Feelings.Poor]: '😕',
+    const iconMap: { [key: number]: string } = {
+      [Feelings.Excellent]: 'sentiment_very_satisfied',
+      [Feelings['Very Good']]: 'sentiment_satisfied',
+      [Feelings.Good]: 'mood',
+      [Feelings.Average]: 'sentiment_neutral',
+      [Feelings.Poor]: 'sentiment_dissatisfied',
     };
-    return emojiMap[feeling] || '';
+    return iconMap[feeling] || '';
   }
 
   private ensureTemplateState(): void {
