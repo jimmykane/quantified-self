@@ -1,3 +1,5 @@
+@use '../../../styles/breakpoints' as bp;
+
 :host {
     display: block;
     height: 100%;
@@ -80,7 +82,7 @@
     text-transform: uppercase;
 }
 
-@media (max-width: 600px) {
+@include bp.xsmall {
     .bottom-sheet-content {
         padding: 0 0.75rem 1rem 0.75rem;
     }

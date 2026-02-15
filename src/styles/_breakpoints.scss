@@ -14,6 +14,12 @@ $bp-medium-max: 1279.98px; // Matches AppBreakpoints.Medium
 $bp-large-min: 1280px;
 $bp-large-max: 1919.98px; // Matches AppBreakpoints.Large
 $bp-xlarge-min: 1920px; // Matches AppBreakpoints.XLarge
+$bp-max-480: 480px; // Matches AppBreakpoints.Max480
+$bp-max-640: 640px; // Matches AppBreakpoints.Max640
+$bp-max-768: 768px; // Matches AppBreakpoints.Max768
+$bp-max-900: 900px; // Matches AppBreakpoints.Max900
+$bp-max-1024: 1024px; // Matches AppBreakpoints.Max1024
+$bp-min-768: 768px; // Matches AppBreakpoints.Min768
 
 // Convenience mixins
 @mixin xsmall {
@@ -60,6 +66,42 @@ $bp-xlarge-min: 1920px; // Matches AppBreakpoints.XLarge
 
 @mixin xlarge {
     @media only screen and (min-width: $bp-xlarge-min) {
+        @content;
+    }
+}
+
+@mixin max-480 {
+    @media only screen and (max-width: $bp-max-480) {
+        @content;
+    }
+}
+
+@mixin max-640 {
+    @media only screen and (max-width: $bp-max-640) {
+        @content;
+    }
+}
+
+@mixin max-768 {
+    @media only screen and (max-width: $bp-max-768) {
+        @content;
+    }
+}
+
+@mixin max-900 {
+    @media only screen and (max-width: $bp-max-900) {
+        @content;
+    }
+}
+
+@mixin max-1024 {
+    @media only screen and (max-width: $bp-max-1024) {
+        @content;
+    }
+}
+
+@mixin min-768 {
+    @media only screen and (min-width: $bp-min-768) {
         @content;
     }
 }

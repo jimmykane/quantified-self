@@ -45,7 +45,7 @@ interface DetectedTripViewModel extends DetectedTrip {
 @Component({
   selector: 'app-tracks',
   templateUrl: './tracks.component.html',
-  styleUrls: ['./tracks.component.css'],
+  styleUrls: ['./tracks.component.scss'],
   standalone: false
 })
 export class TracksComponent implements OnInit, OnDestroy {

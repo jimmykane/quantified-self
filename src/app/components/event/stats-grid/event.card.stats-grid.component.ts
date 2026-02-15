@@ -42,7 +42,7 @@ const SUMMARY_TAB_ICONS: Record<EventSummaryMetricGroupId, string> = {
 @Component({
   selector: 'app-event-card-stats-grid',
   templateUrl: './event.card.stats-grid.component.html',
-  styleUrls: ['./event.card.stats-grid.component.css'],
+  styleUrls: ['./event.card.stats-grid.component.scss'],
   providers: [],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false

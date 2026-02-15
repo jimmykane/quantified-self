@@ -1,3 +1,5 @@
+@use '../../../../styles/breakpoints' as bp;
+
 :host {
   display: block;
 }
@@ -32,7 +34,7 @@
   min-height: var(--summary-tabs-body-min-height, 0px);
 }
 
-@media (max-width: 599.98px) {
+@include bp.xsmall {
   .summary-tab-label {
     justify-content: center;
   }

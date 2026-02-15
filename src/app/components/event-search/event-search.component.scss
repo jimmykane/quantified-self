@@ -1,3 +1,5 @@
+@use '../../../styles/breakpoints' as bp;
+
 mat-icon {
   vertical-align: middle;
 }
@@ -133,7 +135,7 @@ mat-button-toggle:active {
 }
 
 /* Tablet: Reduce gap and padding to prevent overflow */
-@media (max-width: 959px) {
+@include bp.handset-or-tablet-portrait {
   .button-groups {
     gap: 12px;
   }
@@ -145,7 +147,7 @@ mat-button-toggle:active {
 }
 
 /* Mobile: Ensure filters stay on one row or wrap gracefully */
-@media (max-width: 599.98px) {
+@include bp.xsmall {
   .filters-row {
     flex-direction: column;
     align-items: stretch;

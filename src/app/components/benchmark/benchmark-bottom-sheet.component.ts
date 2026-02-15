@@ -4,6 +4,7 @@ import { MAT_BOTTOM_SHEET_DATA, MatBottomSheetRef } from '@angular/material/bott
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { BenchmarkResult } from '../../../../functions/src/shared/app-event.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
+import { AppBreakpoints } from '../../constants/breakpoints';
 import { EventInterface, UserSummariesSettingsInterface, UserUnitSettingsInterface } from '@sports-alliance/sports-lib';
 import { AppShareService } from '../../services/app.share.service';
 import { environment } from '../../../environments/environment';
@@ -51,7 +52,7 @@ type NativeShareStatus = 'shared' | 'unsupported' | 'cancelled' | 'failed';
         </div>
     </div>
   `,
-  styleUrls: ['./benchmark-bottom-sheet.component.css'],
+  styleUrls: ['./benchmark-bottom-sheet.component.scss'],
   providers: [DatePipe],
   standalone: false
 })
@@ -186,7 +187,7 @@ export class BenchmarkBottomSheetComponent {
 
   private async buildSharePayload(): Promise<{ imageBlob: Blob; filename: string } | null> {
     this.shareTimestamp = new Date();
-    const isMobile = window.matchMedia('(max-width: 600px)').matches;
+    const isMobile = window.matchMedia(AppBreakpoints.XSmall).matches;
     const appUrl = environment.appUrl || window.location.origin;
     const displayUrl = this.getDisplayUrl(appUrl);
     const filename = `benchmark-${this.shareTimestamp.getTime()}.png`;

@@ -1,3 +1,5 @@
+@use '../../../styles/breakpoints' as bp;
+
 .pricing-container {
   padding: 28px 20px;
   min-height: 80vh;
@@ -446,7 +448,7 @@
     flex-grow: 1;
   }
 
-  @media (max-width: 959px) {
+  @include bp.handset-or-tablet-portrait {
     padding: 20px 16px;
 
     h1 {
@@ -490,7 +492,7 @@
     }
   }
 
-  @media (max-width: 599px) {
+  @include bp.xsmall {
     padding: 16px 12px;
 
     h1 {

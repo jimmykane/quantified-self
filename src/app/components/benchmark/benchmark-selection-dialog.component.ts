@@ -100,7 +100,7 @@ export interface BenchmarkSelectionData {
       </button>
     </mat-dialog-actions>
   `,
-  styleUrls: ['./benchmark-selection-dialog.component.css'],
+  styleUrls: ['./benchmark-selection-dialog.component.scss'],
   standalone: false
 })
 export class BenchmarkSelectionDialogComponent {

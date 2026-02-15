@@ -3,7 +3,7 @@ import { Component, Input } from '@angular/core';
 @Component({
   selector: 'app-bottom-sheet-header',
   templateUrl: './bottom-sheet-header.component.html',
-  styleUrls: ['./bottom-sheet-header.component.css'],
+  styleUrls: ['./bottom-sheet-header.component.scss'],
   standalone: false
 })
 export class BottomSheetHeaderComponent {

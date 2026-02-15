@@ -1,3 +1,5 @@
+@use '../../../styles/breakpoints' as bp;
+
 mat-card {
   padding: 0;
   position: relative;
@@ -162,7 +164,7 @@ app-peek-panel.tracks-trips-peek .detected-trips-empty {
   color: var(--mat-sys-on-surface-variant);
 }
 
-@media (max-width: 640px) {
+@include bp.max-640 {
   app-peek-panel.tracks-search-peek {
     width: 100%;
   }

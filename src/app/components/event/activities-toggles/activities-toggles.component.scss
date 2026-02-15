@@ -1,3 +1,5 @@
+@use '../../../../styles/breakpoints' as bp;
+
 .activity-chips {
   display: flex;
   flex-wrap: wrap;
@@ -152,7 +154,7 @@
 }
 
 /* Responsive: on handheld widths, let each chip stretch across the row */
-@media (max-width: 600px) {
+@include bp.xsmall {
   .activity-chips {
     gap: 10px;
   }

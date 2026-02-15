@@ -5,7 +5,7 @@ import { EventInterface, ActivityInterface, UserUnitSettingsInterface } from '@s
 @Component({
     selector: 'app-event-stats-bottom-sheet',
     templateUrl: './event-stats-bottom-sheet.component.html',
-    styleUrls: ['./event-stats-bottom-sheet.component.css'],
+    styleUrls: ['./event-stats-bottom-sheet.component.scss'],
     standalone: false
 })
 export class EventStatsBottomSheetComponent implements AfterViewInit {

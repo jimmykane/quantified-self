@@ -1,3 +1,5 @@
+@use '../../../styles/breakpoints' as bp;
+
 .settings-container {
     display: block;
     min-height: calc(100vh - var(--qs-effective-top-offset, 0px));
@@ -78,7 +80,7 @@
 }
 
 /* Mobile Responsive Adjustments */
-@media (max-width: 600px) {
+@include bp.xsmall {
     .settings-nav {
         padding: 0 16px;
     }

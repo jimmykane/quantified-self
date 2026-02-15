@@ -1,3 +1,5 @@
+@use '../../../styles/breakpoints' as bp;
+
 .grace-period-banner {
     background-color: #fff3cd;
     color: #856404;
@@ -64,7 +66,7 @@
 }
 
 /* Mobile responsive adjustments - matches AppBreakpoints.XSmall (max-width: 599.98px) */
-@media (max-width: 599.98px) {
+@include bp.xsmall {
     .grace-period-banner {
         padding: 10px 12px;
         gap: 8px;

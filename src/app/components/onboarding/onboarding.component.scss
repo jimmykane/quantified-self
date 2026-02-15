@@ -1,3 +1,5 @@
+@use '../../../styles/breakpoints' as bp;
+
 .onboarding-container {
     display: flex;
     justify-content: center;
@@ -152,7 +154,7 @@
     pointer-events: none !important;
 }
 
-@media (max-width: 959px) {
+@include bp.handset-or-tablet-portrait {
     .onboarding-container {
         padding: 1rem 0.75rem;
         padding-bottom: 0;

@@ -27,7 +27,7 @@ import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.servi
 @Component({
   selector: 'app-event-summary',
   templateUrl: './event-summary.component.html',
-  styleUrls: ['./event-summary.component.css'],
+  styleUrls: ['./event-summary.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })

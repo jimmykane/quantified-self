@@ -18,7 +18,7 @@ import { firstValueFrom } from 'rxjs';
 @Component({
   selector: 'app-activities-toggles',
   templateUrl: './activities-toggles.component.html',
-  styleUrls: ['./activities-toggles.component.css'],
+  styleUrls: ['./activities-toggles.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })

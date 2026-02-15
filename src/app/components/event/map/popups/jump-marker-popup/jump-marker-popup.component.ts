@@ -5,7 +5,7 @@ import { AppUserSettingsQueryService } from '../../../../../services/app.user-se
 @Component({
     selector: 'app-jump-marker-popup',
     templateUrl: './jump-marker-popup.component.html',
-    styleUrls: ['./jump-marker-popup.component.css'],
+    styleUrls: ['./jump-marker-popup.component.scss'],
     standalone: false
 })
 export class JumpMarkerPopupComponent implements OnChanges {

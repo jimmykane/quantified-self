@@ -1,3 +1,5 @@
+@use '../../../../../../styles/breakpoints' as bp;
+
 :host {
     display: block;
 }
@@ -98,7 +100,7 @@
     word-break: break-word;
 }
 
-@media (max-width: 480px) {
+@include bp.max-480 {
     .popup-container {
         padding: 12px;
         width: min(300px, calc(100vw - 32px));

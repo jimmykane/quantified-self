@@ -52,7 +52,7 @@ import { MergeOptionsDialogComponent } from './merge-options-dialog/merge-option
 @Component({
   selector: 'app-event-table',
   templateUrl: './event.table.component.html',
-  styleUrls: ['./event.table.component.css'],
+  styleUrls: ['./event.table.component.scss'],
   animations: [
     rowsAnimation,
     expandCollapse

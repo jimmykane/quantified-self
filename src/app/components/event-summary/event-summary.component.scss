@@ -1,3 +1,5 @@
+@use '../../../styles/breakpoints' as bp;
+
 :host {
   display: block;
   margin-bottom: 24px;
@@ -221,7 +223,7 @@
   border-top: 1px solid var(--mat-app-outline-variant);
 }
 
-@media (max-width: 599px) {
+@include bp.xsmall {
   .summary-stats-area {
     padding-left: 12px;
     padding-right: 12px;
@@ -233,14 +235,14 @@
   }
 }
 
-@media (max-width: 900px) {
+@include bp.max-900 {
   .hero-metrics {
     gap: 16px;
     padding: 0 10px;
   }
 }
 
-@media (max-width: 768px) {
+@include bp.max-768 {
   .summary-primary-info {
     display: flex;
     flex-direction: column;
@@ -305,7 +307,7 @@
   }
 }
 
-@media (max-width: 480px) {
+@include bp.max-480 {
   .summary-primary-info {
     padding: 12px;
     gap: 12px;
@@ -347,7 +349,7 @@
   color: var(--mat-app-primary);
 }
 
-@media (max-width: 1024px) {
+@include bp.max-1024 {
   .summary-stats-layout {
     grid-template-columns: 1fr;
   }
@@ -360,7 +362,7 @@
   }
 }
 
-@media (max-width: 599px) {
+@include bp.xsmall {
   .summary-stats-actions {
     width: 100%;
     justify-content: flex-start;

@@ -453,7 +453,7 @@ mat-table {
 }
 
 /* Mobile Responsive */
-@media (max-width: 600px) {
+@media (max-width: 599.98px) {
   .app-header-card {
     flex-direction: column;
     align-items: flex-start;
@@ -741,7 +741,7 @@ mat-table {
   }
 }
 
-@media (max-width: 599px) {
+@media (max-width: 599.98px) {
   .cdk-overlay-pane.qs-bottom-sheet-container .mat-bottom-sheet-container {
     min-width: 100%;
     width: 100%;
@@ -791,7 +791,7 @@ mat-table {
   }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 599.98px) {
   .qs-dialog-container {
     .mat-mdc-dialog-title {
       padding: 20px 16px 6px !important;

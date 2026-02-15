@@ -1,3 +1,5 @@
+@use '../../../styles/breakpoints' as bp;
+
 :host {
     // Removed local vars that override global theme
     --section-spacing: 24px;
@@ -84,7 +86,7 @@
     }
 }
 
-@media (max-width: 600px) {
+@include bp.xsmall {
     .user-profile-header {
         .header-content {
             flex-direction: column;
@@ -128,7 +130,7 @@
 }
 
 /* Mobile Responsive Adjustments */
-@media (max-width: 600px) {
+@include bp.xsmall {
     .settings-nav {
         padding: 0 16px;
     }
@@ -215,7 +217,7 @@
 }
 
 /* Responsive */
-@media (max-width: 768px) {
+@include bp.max-768 {
     .settings-container {
         flex-direction: column;
     }
@@ -273,7 +275,7 @@
     width: 100%;
 }
 
-@media (max-width: 768px) {
+@include bp.max-768 {
     .qs-form-actions-floating {
         display: none;
     }

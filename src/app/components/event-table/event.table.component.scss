@@ -1,3 +1,5 @@
+@use '../../../styles/breakpoints' as bp;
+
 /* Consolidated and cleaned up styles for event table */
 
 /* Keep basic layout but remove fighting against Material */
@@ -38,7 +40,7 @@
   white-space: nowrap;
 }
 
-@media (min-width: 960px) {
+@include bp.medium-and-up {
   .mat-column-Start-Date {
     min-width: 200px;
     width: 220px;
@@ -115,7 +117,7 @@
 }
 
 /* Mobile Adjustments for Overall Table Compactness */
-@media (max-width: 599.98px) {
+@include bp.xsmall {
 
   .mat-mdc-header-cell,
   .mat-mdc-cell {

@@ -1,3 +1,5 @@
+@use '../../../../styles/breakpoints' as bp;
+
 .bottom-sheet-header {
   display: flex;
   align-items: center;
@@ -51,7 +53,7 @@
   padding: 6px;
 }
 
-@media (max-width: 600px) {
+@include bp.xsmall {
   .bottom-sheet-header {
     padding: 0.75rem;
   }

@@ -1,3 +1,5 @@
+@use '../../../styles/breakpoints' as bp;
+
 /* ==========================================================================
    Sidenav Component - Modern Styling
    ========================================================================== */
@@ -377,7 +379,7 @@ mat-divider {
    Responsive Adjustments
    ========================================================================== */
 
-@media (max-width: 600px) {
+@include bp.xsmall {
   .sidenav-profile {
     padding: 16px 12px;
     margin: 8px;

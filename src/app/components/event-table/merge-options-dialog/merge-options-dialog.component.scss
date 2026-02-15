@@ -1,3 +1,5 @@
+@use '../../../../styles/breakpoints' as bp;
+
 .merge-options {
   display: grid;
   gap: 16px;
@@ -45,7 +47,7 @@
   height: 18px;
 }
 
-@media (max-width: 599.98px) {
+@include bp.xsmall {
   .option-card {
     padding: 14px;
   }

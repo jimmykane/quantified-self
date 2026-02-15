@@ -1,3 +1,5 @@
+@use '../../../styles/breakpoints' as bp;
+
 .dialog-subtitle {
   color: var(--mat-sys-on-surface-variant);
   margin-bottom: 1rem;
@@ -199,7 +201,7 @@ mat-list-option {
   line-height: 1.2;
 }
 
-@media (max-width: 600px) {
+@include bp.xsmall {
   .benchmark-selection-overlay {
     --benchmark-overlay-min-height: 240px;
   }

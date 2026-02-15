@@ -245,7 +245,7 @@ interface InsightItem {
 
     </div>
   `,
-    styleUrls: ['./benchmark-report.component.css'],
+    styleUrls: ['./benchmark-report.component.scss'],
     standalone: false
 })
 export class BenchmarkReportComponent implements OnChanges {

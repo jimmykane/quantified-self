@@ -1,3 +1,5 @@
+@use 'breakpoints' as bp;
+
 // Global Form Styles
 // Usage: Wrap your form in a container with class .qs-form-container if you want centering on the page.
 // Add class .qs-form to the <form> element itself.
@@ -82,7 +84,7 @@
         margin-top: 1rem;
 
         // If we want buttons to be full width on mobile but auto on desktop
-        @media (max-width: 600px) {
+        @include bp.xsmall {
             flex-direction: column;
 
             button {

@@ -1,3 +1,5 @@
+@use '../../../styles/breakpoints' as bp;
+
 /* Dashboard Layout Styles */
 
 .event-dashboard-container {
@@ -81,7 +83,7 @@ mat-card-header mat-icon {
   width: 100%;
 }
 
-@media (max-width: 599px) {
+@include bp.xsmall {
   .secondary-details-container {
     padding-left: 12px;
     padding-right: 12px;

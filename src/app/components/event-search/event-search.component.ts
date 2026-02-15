@@ -22,7 +22,7 @@ import dayjs from 'dayjs';
 @Component({
   selector: 'app-event-search',
   templateUrl: './event-search.component.html',
-  styleUrls: ['./event-search.component.css'],
+  styleUrls: ['./event-search.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })

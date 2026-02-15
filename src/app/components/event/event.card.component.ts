@@ -46,7 +46,7 @@ import { reconcileEventDetailsLiveUpdate } from '../../utils/event-live-reconcil
 @Component({
   selector: 'app-event-card',
   templateUrl: './event.card.component.html',
-  styleUrls: ['./event.card.component.css'],
+  styleUrls: ['./event.card.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })
