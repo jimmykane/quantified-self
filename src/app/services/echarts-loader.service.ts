@@ -41,6 +41,7 @@ export class EChartsLoaderService {
           charts.BarChart,
           charts.PieChart,
           charts.LineChart,
+          components.GraphicComponent,
           components.GridComponent,
           components.TooltipComponent,
           components.LegendComponent,

@@ -13,6 +13,7 @@ const echartsModulesMock = vi.hoisted(() => ({
   barChart: { chart: 'bar' },
   pieChart: { chart: 'pie' },
   lineChart: { chart: 'line' },
+  graphicComponent: { component: 'graphic' },
   gridComponent: { component: 'grid' },
   tooltipComponent: { component: 'tooltip' },
   legendComponent: { component: 'legend' },
@@ -34,6 +35,7 @@ vi.mock('echarts/charts', () => ({
 
 vi.mock('echarts/components', () => ({
   GridComponent: echartsModulesMock.gridComponent,
+  GraphicComponent: echartsModulesMock.graphicComponent,
   TooltipComponent: echartsModulesMock.tooltipComponent,
   LegendComponent: echartsModulesMock.legendComponent,
   TitleComponent: echartsModulesMock.titleComponent,
@@ -74,6 +76,7 @@ describe('EChartsLoaderService', () => {
       echartsModulesMock.barChart,
       echartsModulesMock.pieChart,
       echartsModulesMock.lineChart,
+      echartsModulesMock.graphicComponent,
       echartsModulesMock.gridComponent,
       echartsModulesMock.tooltipComponent,
       echartsModulesMock.legendComponent,
