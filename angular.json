@@ -45,7 +45,8 @@
               "@amcharts/amcharts4/maps",
               "@amcharts/amcharts4/themes/animated",
               "@amcharts/amcharts4/themes/material",
-              "@amcharts/amcharts4/themes/dark"
+              "@amcharts/amcharts4/themes/dark",
+              "xmlbuilder"
             ]
           },
           "configurations": {
@@ -59,8 +60,8 @@
                 },
                 {
                   "type": "allScript",
-                  "maximumWarning": "11809kb",
-                  "maximumError": "11809kb"
+                  "maximumWarning": "12288kb",
+                  "maximumError": "12288kb"
                 },
                 {
                   "type": "anyComponentStyle",
@@ -94,8 +95,8 @@
                 },
                 {
                   "type": "allScript",
-                  "maximumWarning": "11809kb",
-                  "maximumError": "11809kb"
+                  "maximumWarning": "12288kb",
+                  "maximumError": "12288kb"
                 },
                 {
                   "type": "anyComponentStyle",
