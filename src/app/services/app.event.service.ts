@@ -149,6 +149,12 @@ export class AppEventService implements OnDestroy {
     }
   }
 
+  private getActivityIDsForDebug(activities: Array<Partial<ActivityInterface> | any> | null | undefined): string[] {
+    return (activities || []).map((activity: any, index: number) =>
+      typeof activity?.getID === 'function' ? activity.getID() : `idx-${index}-no-id`,
+    );
+  }
+
   private buildEventFromSnapshot(eventSnapshot: any, eventID: string): AppEventInterface | null {
     if (!eventSnapshot) return null;
     const { sanitizedJson } = EventJSONSanitizer.sanitize(eventSnapshot);
@@ -181,6 +187,52 @@ export class AppEventService implements OnDestroy {
     this.benchmarkAdapter.applyBenchmarkFieldsFromFirestore(event, rawData);
 
     return event;
+  }
+
+  private cloneEventWithActivities(event: AppEventInterface, activities: ActivityInterface[]): AppEventInterface {
+    const eventAny = event as any;
+    let clonedEvent: AppEventInterface;
+
+    if (typeof eventAny.toJSON === 'function') {
+      clonedEvent = EventImporterJSON.getEventFromJSON(event.toJSON() as EventJSONInterface)
+        .setID(event.getID()) as AppEventInterface;
+    } else {
+      const clonedFallbackEvent = Object.assign(
+        Object.create(Object.getPrototypeOf(eventAny) || Object.prototype),
+        eventAny,
+      ) as AppEventInterface;
+      clonedEvent = clonedFallbackEvent;
+      if (typeof (clonedEvent as any).setID === 'function') {
+        (clonedEvent as any).setID(event.getID());
+      }
+    }
+
+    // Preserve original source file metadata on cloned instances.
+    if (event.originalFiles) {
+      clonedEvent.originalFiles = [...event.originalFiles];
+    }
+    if (event.originalFile) {
+      clonedEvent.originalFile = event.originalFile;
+    }
+
+    // Preserve benchmark fields needed by event details UI.
+    if ((event as any).benchmarkResults) {
+      (clonedEvent as any).benchmarkResults = { ...(event as any).benchmarkResults };
+    }
+    if ((event as any).benchmarkResult) {
+      (clonedEvent as any).benchmarkResult = { ...(event as any).benchmarkResult };
+    }
+
+    if (typeof (clonedEvent as any).clearActivities === 'function' && typeof (clonedEvent as any).addActivities === 'function') {
+      clonedEvent.clearActivities();
+      clonedEvent.addActivities(activities);
+    } else {
+      (clonedEvent as any).activities = [...activities];
+      if (typeof (clonedEvent as any).getActivities !== 'function') {
+        (clonedEvent as any).getActivities = () => (clonedEvent as any).activities;
+      }
+    }
+    return clonedEvent;
   }
 
   private parseActivitiesFromSnapshots(eventID: string, activitySnapshots: any[]): ActivityInterface[] {
@@ -264,17 +316,32 @@ export class AppEventService implements OnDestroy {
   }
 
   private getActivitiesForEventDetailsLive(user: User, eventID: string): Observable<ActivityInterface[]> {
+    this.logger.log('[AppEventService] getActivitiesForEventDetailsLive subscribed', { userID: user.uid, eventID });
     const activitiesCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'activities'));
     const q = runInInjectionContext(this.injector, () => query(activitiesCollection, where('eventID', '==', eventID)));
     return (runInInjectionContext(this.injector, () => collectionData(q, { idField: 'id' })) as Observable<any[]>).pipe(
       distinctUntilChanged((previousSnapshots, currentSnapshots) =>
         this.buildSnapshotFingerprint(previousSnapshots) === this.buildSnapshotFingerprint(currentSnapshots)
       ),
-      map((activitySnapshots: any[]) => this.parseActivitiesFromSnapshots(eventID, activitySnapshots)),
+      map((activitySnapshots: any[]) => {
+        this.logger.log('[AppEventService] getActivitiesForEventDetailsLive Firestore emission', {
+          eventID,
+          snapshotCount: activitySnapshots?.length || 0,
+        });
+        return this.parseActivitiesFromSnapshots(eventID, activitySnapshots);
+      }),
+      tap((activities) => {
+        this.logger.log('[AppEventService] getActivitiesForEventDetailsLive parsed activities', {
+          eventID,
+          activityCount: activities?.length || 0,
+          activityIDs: this.getActivityIDsForDebug(activities),
+        });
+      }),
     );
   }
 
   public getEventAndActivities(user: User, eventID: string): Observable<AppEventInterface> {
+    this.logger.log('[AppEventService] getEventAndActivities subscribed', { userID: user.uid, eventID });
     // See
     // https://stackoverflow.com/questions/42939978/avoiding-nested-subscribes-with-combine-latest-when-one-observable-depends-on-th
     const eventDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID));
@@ -320,11 +387,16 @@ export class AppEventService implements OnDestroy {
         return of([null, null] as [AppEventInterface | null, ActivityInterface[] | null]); // @todo fix this
       })).pipe(map(([event, activities]: [AppEventInterface, ActivityInterface[]]) => {
         if (!event) {
+          this.logger.log('[AppEventService] getEventAndActivities emission with null event', { eventID });
           return null;
         }
-        event.clearActivities();
-        event.addActivities(activities);
-        return event;
+        const emittedEvent = this.cloneEventWithActivities(event, activities);
+        this.logger.log('[AppEventService] getEventAndActivities combined emission', {
+          eventID: emittedEvent.getID(),
+          activityCount: activities?.length || 0,
+          activityIDs: this.getActivityIDsForDebug(activities),
+        });
+        return emittedEvent;
       })).pipe(catchError((error) => {
         // debugger;
         this.logger.error('Error adding activities to event:', error);
@@ -338,21 +410,35 @@ export class AppEventService implements OnDestroy {
    * Emits on event metadata changes and activity metadata changes.
    */
   public getEventDetailsLive(user: User, eventID: string): Observable<AppEventInterface | null> {
+    this.logger.log('[AppEventService] getEventDetailsLive subscribed', { userID: user.uid, eventID });
     const eventDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID));
     return combineLatest([
       runInInjectionContext(this.injector, () => docData(eventDoc)).pipe(
         distinctUntilChanged((previousSnapshot, currentSnapshot) =>
           this.buildSnapshotFingerprint(previousSnapshot) === this.buildSnapshotFingerprint(currentSnapshot)
         ),
-        map((eventSnapshot) => this.buildEventFromSnapshot(eventSnapshot, eventID))
+        map((eventSnapshot) => {
+          this.logger.log('[AppEventService] getEventDetailsLive event doc emission', {
+            eventID,
+            hasEventSnapshot: !!eventSnapshot,
+          });
+          return this.buildEventFromSnapshot(eventSnapshot, eventID);
+        })
       ),
       this.getActivitiesForEventDetailsLive(user, eventID),
     ]).pipe(
       map(([event, activities]: [AppEventInterface, ActivityInterface[]]) => {
-        if (!event) return null;
-        event.clearActivities();
-        event.addActivities(activities);
-        return event;
+        if (!event) {
+          this.logger.log('[AppEventService] getEventDetailsLive combined emission with null event', { eventID });
+          return null;
+        }
+        const emittedEvent = this.cloneEventWithActivities(event, activities);
+        this.logger.log('[AppEventService] getEventDetailsLive combined emission', {
+          eventID: emittedEvent.getID(),
+          activityCount: activities?.length || 0,
+          activityIDs: this.getActivityIDsForDebug(activities),
+        });
+        return emittedEvent;
       }),
       catchError((error) => {
         if (error?.code === 'permission-denied') {
@@ -434,6 +520,11 @@ export class AppEventService implements OnDestroy {
    * @param streamTypes
    */
   public getEventActivitiesAndSomeStreams(user: User, eventID: string, streamTypes: string[]) {
+    this.logger.log('[AppEventService] getEventActivitiesAndSomeStreams called', {
+      userID: user.uid,
+      eventID,
+      streamTypes,
+    });
     return this._getEventActivitiesAndAllOrSomeStreams(user, eventID, streamTypes);
   }
 
@@ -1033,12 +1124,28 @@ export class AppEventService implements OnDestroy {
   }
 
   private _getEventActivitiesAndAllOrSomeStreams(user: User, eventID, streamTypes?: string[]) {
+    this.logger.log('[AppEventService] _getEventActivitiesAndAllOrSomeStreams started', {
+      userID: user.uid,
+      eventID,
+      streamTypes: streamTypes || 'all',
+    });
     return this.getEventAndActivities(user, eventID).pipe(switchMap((event) => { // Not sure about switch or merge
       if (!event) {
+        this.logger.log('[AppEventService] _getEventActivitiesAndAllOrSomeStreams received null event', { eventID });
         return of(null);
       }
+      this.logger.log('[AppEventService] _getEventActivitiesAndAllOrSomeStreams attaching streams', {
+        eventID: event.getID(),
+        activityCount: event.getActivities()?.length || 0,
+        streamTypes: streamTypes || 'all',
+      });
       // Get all the streams for all activities and subscribe to them with latest emition for all streams
       return this.attachStreamsToEventWithActivities(user, event, streamTypes)
+    }), tap((resultEvent) => {
+      this.logger.log('[AppEventService] _getEventActivitiesAndAllOrSomeStreams emission', {
+        eventID: resultEvent?.getID?.() ?? null,
+        activityCount: resultEvent?.getActivities?.()?.length || 0,
+      });
     }))
   }
 

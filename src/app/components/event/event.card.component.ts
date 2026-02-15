@@ -132,6 +132,8 @@ export class EventCardComponent implements OnInit {
   ];
 
   ngOnInit() {
+    this.logger.log('[EventCard] ngOnInit: initializing event details subscriptions');
+
     // Activity selection - debounced
     // Instant selection update
     this.activitySelectionService.selectedActivities.changed
@@ -155,18 +157,38 @@ export class EventCardComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((data: any) => {
         const resolvedData = data.event as any;
+        this.logger.log('[EventCard] route.data emission received', {
+          hasWrappedResolverData: !!(resolvedData && resolvedData.event),
+          hasResolvedData: !!resolvedData,
+        });
 
         if (resolvedData && resolvedData.event) {
           this.event.set(resolvedData.event);
           this.currentUser.set(resolvedData.user);
+          this.logger.log('[EventCard] route.data applied wrapped resolver payload', {
+            eventID: resolvedData.event?.getID?.(),
+            activityCount: resolvedData.event?.getActivities?.()?.length ?? 0,
+            userID: resolvedData.user?.uid ?? null,
+          });
         } else {
           this.event.set(resolvedData);
+          this.logger.log('[EventCard] route.data applied direct event payload', {
+            eventID: resolvedData?.getID?.(),
+            activityCount: resolvedData?.getActivities?.()?.length ?? 0,
+          });
         }
 
         const activities = this.event()?.getActivities() ?? [];
+        this.logger.log('[EventCard] syncing selected activities from route payload', {
+          eventID: this.event()?.getID?.() ?? null,
+          activityCount: activities.length,
+        });
         this.syncSelectedActivities(activities);
 
         this.targetUserID.set(this.route.snapshot.paramMap.get('userID') ?? '');
+        this.logger.log('[EventCard] target user set from route snapshot', {
+          targetUserID: this.targetUserID(),
+        });
         this.startEventDetailsLiveSync();
       });
 
@@ -181,10 +203,12 @@ export class EventCardComponent implements OnInit {
   private startEventDetailsLiveSync(): void {
     const eventID = this.route.snapshot.paramMap.get('eventID');
     const targetUserID = this.route.snapshot.paramMap.get('userID');
+    this.logger.log('[EventCard] startEventDetailsLiveSync called', { eventID, targetUserID });
     if (!eventID || !targetUserID) {
       this.liveSyncSubscription?.unsubscribe();
       this.liveSyncSubscription = null;
       this.liveSyncRouteKey = null;
+      this.logger.log('[EventCard] live sync not started due to missing route params');
       return;
     }
 
@@ -194,15 +218,23 @@ export class EventCardComponent implements OnInit {
       && this.liveSyncSubscription
       && !this.liveSyncSubscription.closed
     ) {
+      this.logger.log('[EventCard] live sync already active for route key', { liveSyncRouteKey });
       return;
     }
 
+    this.logger.log('[EventCard] starting live sync subscription', { liveSyncRouteKey });
     this.liveSyncSubscription?.unsubscribe();
     this.liveSyncRouteKey = liveSyncRouteKey;
     this.liveSyncSubscription = this.eventService.getEventDetailsLive(new User(targetUserID), eventID)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (liveEvent) => this.applyLiveEventUpdate(liveEvent),
+        next: (liveEvent) => {
+          this.logger.log('[EventCard] live sync emission received', {
+            eventID: liveEvent?.getID?.() ?? null,
+            activityCount: liveEvent?.getActivities?.()?.length ?? 0,
+          });
+          this.applyLiveEventUpdate(liveEvent);
+        },
         error: (error) => {
           this.logger.error('Live event details sync failed', error);
           this.snackBar.open('Could not live-sync event details', undefined, { duration: 3000 });
@@ -213,41 +245,60 @@ export class EventCardComponent implements OnInit {
 
   private applyLiveEventUpdate(liveEvent: AppEventInterface | null): void {
     if (!liveEvent) {
+      this.logger.log('[EventCard] applyLiveEventUpdate skipped because liveEvent is null');
       return;
     }
     const selectedIDs = this.selectedActivitiesInstant().map((activity) => activity.getID());
     const reconcileResult = reconcileEventDetailsLiveUpdate(this.event(), liveEvent, selectedIDs);
+    this.logger.log('[EventCard] reconcile result for live update', {
+      incomingEventID: liveEvent.getID(),
+      incomingActivityCount: liveEvent.getActivities().length,
+      selectedIDs,
+      nextSelectedIDs: reconcileResult.selectedActivityIDs,
+      needsFullReload: reconcileResult.needsFullReload,
+    });
 
     if (reconcileResult.needsFullReload) {
+      this.logger.log('[EventCard] full reload required after live reconcile');
       this.reloadEventDetailsWithStreams();
       return;
     }
 
     this.event.set(reconcileResult.reconciledEvent);
-    this.applySelectedActivityIDs(reconcileResult.selectedActivityIDs);
+    this.applySelectedActivityIDs(reconcileResult.selectedActivityIDs, true);
   }
 
   private async reloadEventDetailsWithStreams(): Promise<void> {
     if (this.liveReloadInProgress) {
+      this.logger.log('[EventCard] reloadEventDetailsWithStreams skipped (already in progress)');
       return;
     }
     const eventID = this.route.snapshot.paramMap.get('eventID');
     const targetUserID = this.route.snapshot.paramMap.get('userID');
     if (!eventID || !targetUserID) {
+      this.logger.log('[EventCard] reloadEventDetailsWithStreams skipped due to missing route params', { eventID, targetUserID });
       return;
     }
 
     const previousSelectedIDs = this.selectedActivitiesInstant().map((activity) => activity.getID());
+    const streamTypes = this.getLiveStreamTypes();
+    this.logger.log('[EventCard] reloadEventDetailsWithStreams started', {
+      eventID,
+      targetUserID,
+      previousSelectedIDs,
+      streamTypes,
+    });
     this.liveReloadInProgress = true;
     try {
       const refreshedEvent = await firstValueFrom(
         this.eventService.getEventActivitiesAndSomeStreams(
           new User(targetUserID),
           eventID,
-          this.getLiveStreamTypes(),
+          streamTypes,
         ),
       );
       if (!refreshedEvent) {
+        this.logger.log('[EventCard] reloadEventDetailsWithStreams completed with null refreshedEvent');
         return;
       }
 
@@ -258,8 +309,13 @@ export class EventCardComponent implements OnInit {
       const nextSelectedIDs = preservedIDs.length || previousSelectedIDs.length === 0
         ? preservedIDs
         : refreshedActivityIDs;
+      this.logger.log('[EventCard] reloadEventDetailsWithStreams refreshed event applied', {
+        refreshedEventID: refreshedEvent.getID(),
+        refreshedActivityIDs,
+        nextSelectedIDs,
+      });
 
-      this.applySelectedActivityIDs(nextSelectedIDs);
+      this.applySelectedActivityIDs(nextSelectedIDs, true);
     } catch (error) {
       this.logger.error('Could not refresh event details after live reconcile mismatch', error);
       this.snackBar.open('Could not refresh event details', undefined, { duration: 3000 });
@@ -269,12 +325,12 @@ export class EventCardComponent implements OnInit {
     }
   }
 
-  private applySelectedActivityIDs(selectedActivityIDs: string[]): void {
+  private applySelectedActivityIDs(selectedActivityIDs: string[], forceRebind: boolean = false): void {
     const selectedSet = new Set(selectedActivityIDs);
     const activities = this.event()?.getActivities() ?? [];
     const selectedActivities = activities.filter((activity) => selectedSet.has(activity.getID()));
 
-    if (this.hasSameSelectedActivities(selectedActivities)) {
+    if (!forceRebind && this.hasSameSelectedActivities(selectedActivities)) {
       return;
     }
 
@@ -282,6 +338,10 @@ export class EventCardComponent implements OnInit {
   }
 
   private syncSelectedActivities(selectedActivities: ActivityInterface[]): void {
+    this.logger.log('[EventCard] syncSelectedActivities called', {
+      incomingSelectionCount: selectedActivities.length,
+      incomingSelectionIDs: selectedActivities.map((activity) => activity.getID()),
+    });
     const nextSelection = [...selectedActivities];
     this.activitySelectionService.selectedActivities.clear(false);
     if (nextSelection.length > 0) {
@@ -342,6 +402,7 @@ export class EventCardComponent implements OnInit {
       });
     }
 
+    this.logger.log('[EventCard] computed live stream types', { streamTypes });
     return streamTypes;
   }
 
