@@ -24,7 +24,6 @@ import {
   XAxisTypes
 } from '@sports-alliance/sports-lib';
 import {
-  DataAscent,
   DataDistance,
   DataGradeAdjustedSpeed,
   DataLatitudeDegrees,
@@ -163,7 +162,6 @@ export class EventCardComponent implements OnInit {
         } else {
           this.event.set(resolvedData);
         }
-        this.logAscentStats(this.event());
 
         const activities = this.event()?.getActivities() ?? [];
         this.syncSelectedActivities(activities);
@@ -226,7 +224,6 @@ export class EventCardComponent implements OnInit {
     }
 
     this.event.set(reconcileResult.reconciledEvent);
-    this.logAscentStats(reconcileResult.reconciledEvent);
     this.applySelectedActivityIDs(reconcileResult.selectedActivityIDs);
   }
 
@@ -255,7 +252,6 @@ export class EventCardComponent implements OnInit {
       }
 
       this.event.set(refreshedEvent as AppEventInterface);
-      this.logAscentStats(refreshedEvent as AppEventInterface);
       const refreshedActivityIDs = (refreshedEvent.getActivities() || []).map((activity) => activity.getID());
       const refreshedIDSet = new Set(refreshedActivityIDs);
       const preservedIDs = previousSelectedIDs.filter((activityID) => refreshedIDSet.has(activityID));
@@ -347,29 +343,6 @@ export class EventCardComponent implements OnInit {
     }
 
     return streamTypes;
-  }
-
-  private logAscentStats(event: AppEventInterface | null): void {
-    if (!event) {
-      return;
-    }
-
-    const eventAny = event as any;
-    const eventAscent = typeof eventAny.getStat === 'function'
-      ? eventAny.getStat(DataAscent.type)?.getValue?.() ?? null
-      : null;
-    this.logger.log('[EventDetails] Event ascent stat:', eventAscent);
-
-    const activities = typeof eventAny.getActivities === 'function' ? eventAny.getActivities() : [];
-    this.logger.log(
-      '[EventDetails] Activity ascent stats:',
-      activities.map((activity: any) => ({
-        activityId: activity.getID(),
-        ascent: typeof activity.getStat === 'function'
-          ? activity.getStat(DataAscent.type)?.getValue?.() ?? null
-          : null,
-      })),
-    );
   }
 
 }
