@@ -16,7 +16,7 @@ function filterSelectedIDsByAvailableActivities(activities: ActivityInterface[],
 }
 
 function preserveActivityStreams(sourceActivity: ActivityInterface, targetActivity: ActivityInterface): void {
-  const sourceGetStreams = (sourceActivity as any)?.getStreams;
+  const sourceGetStreams = (sourceActivity as any)?.getAllStreams ?? (sourceActivity as any)?.getStreams;
   const targetClearStreams = (targetActivity as any)?.clearStreams;
   const targetAddStreams = (targetActivity as any)?.addStreams;
 

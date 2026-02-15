@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { reconcileEventDetailsLiveUpdate } from './event-live-reconcile';
 
-const createActivity = (id: string, streams: any[] = []): any => {
+const createActivity = (
+  id: string,
+  streams: any[] = [],
+  streamGetter: 'getStreams' | 'getAllStreams' = 'getStreams',
+): any => {
   let currentStreams = [...streams];
+  const getter = () => currentStreams;
   return {
     getID: () => id,
-    getStreams: () => currentStreams,
+    ...(streamGetter === 'getStreams' ? { getStreams: getter } : { getAllStreams: getter }),
     clearStreams: () => {
       currentStreams = [];
     },
@@ -51,5 +56,17 @@ describe('event-live-reconcile', () => {
     expect(result.reconciledEvent).toBe(incomingEvent);
     expect(result.needsFullReload).toBe(false);
     expect(result.selectedActivityIDs).toEqual(['a1']);
+  });
+
+  it('preserves streams when source activity exposes getAllStreams', () => {
+    const currentActivity = createActivity('a1', [{ type: 'LatitudeDegrees', values: [1] }], 'getAllStreams');
+    const incomingActivity = createActivity('a1');
+    const currentEvent = createEvent([currentActivity]);
+    const incomingEvent = createEvent([incomingActivity]);
+
+    const result = reconcileEventDetailsLiveUpdate(currentEvent, incomingEvent, ['a1']);
+
+    expect(result.needsFullReload).toBe(false);
+    expect(incomingActivity.getStreams()).toEqual([{ type: 'LatitudeDegrees', values: [1] }]);
   });
 });
