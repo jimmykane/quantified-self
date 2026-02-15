@@ -234,6 +234,31 @@ export class AppEventService implements OnDestroy {
     return clonedEvent;
   }
 
+  private buildEventDetailsFingerprint(event: AppEventInterface | null): string {
+    if (!event) {
+      return 'null';
+    }
+
+    const eventAny = event as any;
+    const eventSnapshot = typeof eventAny?.toJSON === 'function' ? eventAny.toJSON() : eventAny;
+    const activitySnapshots = (event.getActivities() || []).map((activity) => {
+      const activityAny = activity as any;
+      if (typeof activityAny?.toJSON === 'function') {
+        return activityAny.toJSON();
+      }
+      return {
+        id: typeof activityAny?.getID === 'function' ? activityAny.getID() : null,
+        ...activityAny,
+      };
+    });
+
+    return this.buildSnapshotFingerprint({
+      eventID: typeof eventAny?.getID === 'function' ? eventAny.getID() : null,
+      event: eventSnapshot,
+      activities: activitySnapshots,
+    });
+  }
+
   private parseActivitiesFromSnapshots(eventID: string, activitySnapshots: any[]): ActivityInterface[] {
     return (activitySnapshots || []).reduce((activitiesArray: ActivityInterface[], activitySnapshot: any) => {
       try {
@@ -439,6 +464,9 @@ export class AppEventService implements OnDestroy {
         });
         return emittedEvent;
       }),
+      distinctUntilChanged((previousEvent, currentEvent) =>
+        this.buildEventDetailsFingerprint(previousEvent) === this.buildEventDetailsFingerprint(currentEvent)
+      ),
       catchError((error) => {
         if (error?.code === 'permission-denied') {
           return of(null);
