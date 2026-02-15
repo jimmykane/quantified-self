@@ -69,7 +69,6 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   private resizeObserver: ResizeObserver | null = null;
   private measureRafId: number | null = null;
   private tabSwitchMeasureRafId: number | null = null;
-  private tabPrewarmRafId: number | null = null;
   private initialSettleTimeoutId: number | null = null;
   private lastAppliedMinHeightPx = 0;
   private lastMeasuredTabBodyLayoutSignature: string | null = null;
@@ -77,8 +76,6 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   private pendingTabBodyHeightSyncMode: TabBodyHeightSyncMode = 'allow_shrink';
   private didPrewarmTabs = false;
   private isPrewarmingTabs = false;
-  private tabPrewarmFrames = 0;
-  private tabPrewarmQueue: number[] = [];
   private isDestroyed = false;
   private mobileViewportMediaQueryList: MediaQueryList | null = this.getMobileMediaQueryList();
   private readonly mobileViewportListener = () => this.onMobileViewportChange();
@@ -378,65 +375,32 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
 
     this.didPrewarmTabs = true;
     this.isPrewarmingTabs = true;
-    this.tabPrewarmQueue = Array.from({ length: this.metricTabs.length - 1 }, (_, idx) => idx + 1);
-
-    this.tabPrewarmRafId = requestAnimationFrame(() => {
-      if (this.isDestroyed) {
-        this.finishTabsPrewarm();
-        return;
-      }
-      this.prewarmNextTabInQueue();
-    });
-  }
-
-  private prewarmNextTabInQueue() {
-    const nextTabIndex = this.tabPrewarmQueue.shift();
-    if (nextTabIndex === undefined) {
-      this.finishTabsPrewarm();
-      return;
-    }
-
-    this.tabPrewarmFrames = 0;
-    this.selectedTabIndex = nextTabIndex;
-    // OnPush does not guarantee this async assignment gets rendered before measurement.
-    this.cdr.detectChanges();
-    this.waitForTabIntrinsicHeightThenContinue(nextTabIndex);
-  }
-
-  private waitForTabIntrinsicHeightThenContinue(tabIndex: number) {
-    if (this.isDestroyed || typeof requestAnimationFrame === 'undefined') {
-      this.finishTabsPrewarm();
-      return;
-    }
-
-    this.tabPrewarmRafId = requestAnimationFrame(() => {
-      this.tabPrewarmRafId = null;
-      if (this.isDestroyed) {
-        this.finishTabsPrewarm();
-        return;
-      }
-
-      this.tabPrewarmFrames += 1;
-      const tabIntrinsicHeight = this.getTabIntrinsicHeightByIndex(tabIndex);
-      const hasMeasuredTab = tabIntrinsicHeight > 0;
-      const reachedFrameBudget = this.tabPrewarmFrames >= 8;
-
-      if (hasMeasuredTab || reachedFrameBudget) {
-        this.prewarmNextTabInQueue();
-        return;
-      }
-
-      this.waitForTabIntrinsicHeightThenContinue(tabIndex);
-    });
+    this.prewarmAllTabsSynchronously();
+    this.finishTabsPrewarm();
   }
 
   private finishTabsPrewarm() {
     this.selectedTabIndex = 0;
     this.cdr.detectChanges();
     this.isPrewarmingTabs = false;
-    this.tabPrewarmFrames = 0;
-    this.tabPrewarmQueue = [];
     this.scheduleTabBodyHeightSync('allow_shrink', true);
+  }
+
+  private prewarmAllTabsSynchronously() {
+    if (this.isDestroyed || !this.metricTabs.length) {
+      return;
+    }
+
+    const initialTabIndex = this.selectedTabIndex;
+    for (let tabIndex = 0; tabIndex < this.metricTabs.length; tabIndex += 1) {
+      if (tabIndex === initialTabIndex) {
+        continue;
+      }
+      this.selectedTabIndex = tabIndex;
+      // Force tab body instantiation without waiting for animation frames.
+      this.cdr.detectChanges();
+    }
+    this.selectedTabIndex = initialTabIndex;
   }
 
   private scheduleDelayedInitialHeightSync(delayMs: number) {
@@ -625,15 +589,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       this.tabSwitchMeasureRafId = null;
     }
 
-    if (this.tabPrewarmRafId === null || typeof cancelAnimationFrame === 'undefined') {
-      this.tabPrewarmRafId = null;
-    } else {
-      cancelAnimationFrame(this.tabPrewarmRafId);
-      this.tabPrewarmRafId = null;
-    }
     this.isPrewarmingTabs = false;
-    this.tabPrewarmFrames = 0;
-    this.tabPrewarmQueue = [];
 
     if (this.initialSettleTimeoutId !== null && typeof window !== 'undefined') {
       window.clearTimeout(this.initialSettleTimeoutId);
