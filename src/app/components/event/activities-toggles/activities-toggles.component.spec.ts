@@ -194,6 +194,18 @@ describe('ActivitiesTogglesComponent', () => {
     expect(mockSnackBar.open).toHaveBeenCalledWith('Could not update device name', undefined, { duration: 3500 });
   });
 
+  it('renameDevice exits safely when activity has no creator metadata', async () => {
+    const { event, a1 } = setupInputs(true);
+    a1.creator = undefined;
+    mockDialog.open.mockReturnValue({ afterClosed: () => of('Renamed Device') });
+
+    await component.renameDevice(a1);
+
+    expect(mockEventService.writeActivityAndEventData).not.toHaveBeenCalled();
+    expect(event.addStat).not.toHaveBeenCalled();
+    expect(mockSnackBar.open).toHaveBeenCalledWith('Could not update device name', undefined, { duration: 3500 });
+  });
+
   it('renameDevice does nothing when dialog returns cancel/invalid value', async () => {
     const { event, a1 } = setupInputs(true);
 

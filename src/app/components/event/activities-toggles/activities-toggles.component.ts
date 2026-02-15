@@ -139,15 +139,21 @@ export class ActivitiesTogglesComponent {
       return;
     }
 
-    const previousName = activity.creator.name;
-    activity.creator.name = newName;
+    const creator = activity.creator;
+    if (!creator) {
+      this.snackBar.open('Could not update device name', undefined, { duration: 3500 });
+      return;
+    }
+
+    const previousName = creator.name;
+    creator.name = newName;
 
     try {
       event.addStat(new DataDeviceNames(event.getActivities().map((eventActivity) => eventActivity.creator?.name || '')));
       await this.eventService.writeActivityAndEventData(user, event, activity);
       this.snackBar.open('Device name updated', undefined, { duration: 2500 });
     } catch {
-      activity.creator.name = previousName;
+      creator.name = previousName;
       this.snackBar.open('Could not update device name', undefined, { duration: 3500 });
     } finally {
       this.changeDetectorRef.markForCheck();
