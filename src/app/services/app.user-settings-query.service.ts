@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Observable } from 'rxjs';
-import { map, distinctUntilChanged, tap } from 'rxjs/operators';
+import { map, distinctUntilChanged } from 'rxjs/operators';
 import { AppAuthService } from '../authentication/app.auth.service';
 import { AppUserService } from './app.user.service';
 import {
@@ -72,8 +72,7 @@ export class AppUserSettingsQueryService {
     public readonly myTracksSettings = toSignal(
         this.user$.pipe(
             map(user => user?.settings?.myTracksSettings ?? {} as UserMyTracksSettingsInterface),
-            distinctUntilChanged((prev, curr) => equal(prev, curr)),
-            tap(settings => this.logger.info('[AppUserSettingsQueryService] Only Emitting My Tracks Settings Change:', settings))
+            distinctUntilChanged((prev, curr) => equal(prev, curr))
         ),
         { initialValue: {} as UserMyTracksSettingsInterface }
     );
