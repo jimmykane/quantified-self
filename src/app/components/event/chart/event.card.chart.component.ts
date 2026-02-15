@@ -139,7 +139,12 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
   public get showGrid() { return this.userSettingsQuery.chartSettings()?.showGrid ?? true; }
   public get disableGrouping() { return this.userSettingsQuery.chartSettings()?.disableGrouping ?? false; }
   public get hideAllSeriesOnInit() { return this.userSettingsQuery.chartSettings()?.hideAllSeriesOnInit ?? false; }
-  public get lapTypes() { return this.userSettingsQuery.chartSettings()?.lapTypes ?? AppUserUtilities.getDefaultChartLapTypes(); }
+  public get lapTypes() {
+    const configuredLapTypes = this.userSettingsQuery.chartSettings()?.lapTypes;
+    return Array.isArray(configuredLapTypes) && configuredLapTypes.length > 0
+      ? configuredLapTypes
+      : AppUserUtilities.getDefaultChartLapTypes();
+  }
 
   public get xAxisType() { return this.xAxisTypeOverride ?? this.userSettingsQuery.chartSettings()?.xAxisType ?? XAxisTypes.Duration; }
   public set xAxisType(value: XAxisTypes) {
@@ -2008,90 +2013,181 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     return `rangeLabelContainer${series.id}`;
   }
 
+  private normalizeLapType(type: string): LapTypes {
+    return ((LapTypes as Record<string, LapTypes>)[type] || type) as LapTypes;
+  }
+
+  private toMilliseconds(value: unknown): number | null {
+    if (value instanceof Date) {
+      const ts = value.getTime();
+      return Number.isFinite(ts) ? ts : null;
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : null;
+    }
+    if (typeof value === 'string') {
+      const ts = Date.parse(value);
+      return Number.isFinite(ts) ? ts : null;
+    }
+    if (value && typeof value === 'object') {
+      const maybeTimestamp = value as { toMillis?: () => number; toDate?: () => Date; seconds?: number; nanoseconds?: number };
+      if (typeof maybeTimestamp.toMillis === 'function') {
+        const ts = maybeTimestamp.toMillis();
+        return Number.isFinite(ts) ? ts : null;
+      }
+      if (typeof maybeTimestamp.toDate === 'function') {
+        return this.toMilliseconds(maybeTimestamp.toDate());
+      }
+      if (typeof maybeTimestamp.seconds === 'number') {
+        const nanos = typeof maybeTimestamp.nanoseconds === 'number' ? maybeTimestamp.nanoseconds : 0;
+        const ts = (maybeTimestamp.seconds * 1000) + Math.floor(nanos / 1_000_000);
+        return Number.isFinite(ts) ? ts : null;
+      }
+    }
+    return null;
+  }
+
+  private getLapDurationMillis(lap: any): number | null {
+    try {
+      if (lap && typeof lap.getDuration === 'function') {
+        const lapDuration = lap.getDuration();
+        const secondsValue = typeof lapDuration?.getValue === 'function'
+          ? lapDuration.getValue()
+          : null;
+        if (typeof secondsValue === 'number' && Number.isFinite(secondsValue) && secondsValue > 0) {
+          return secondsValue * 1000;
+        }
+      }
+    } catch {
+      // Ignore and fall through
+    }
+    return null;
+  }
+
   private addLapGuides(chart: am4charts.XYChart, selectedActivities: ActivityInterface[], xAxisType: XAxisTypes, lapTypes: LapTypes[]) {
     const xAxis = <am4charts.ValueAxis | am4charts.DateAxis>chart.xAxes.getIndex(0);
+    if (!xAxis) {
+      return;
+    }
     xAxis.axisRanges.template.grid.disabled = false;
+    const selectedLapTypes = new Set((lapTypes || []).map(type => this.normalizeLapType(type)));
+
+    if (selectedLapTypes.size === 0) {
+      return;
+    }
+
     selectedActivities
-      .forEach((activity, activityIndex) => {
+      .forEach((activity) => {
         this.logger.info(`EventCardChartComponent: Rendering laps for activity ID: "${activity.getID() || ''}"`);
-        // Filter on lapTypes
-        lapTypes
-          .forEach(lapType => {
-            activity
-              .getLaps()
-              .filter(lap => lap.type === lapType)
-              .forEach((lap, lapIndex) => {
-                if (lapIndex === activity.getLaps().length - 1) {
-                  this.logger.info(`EventCardChartComponent: Skipping last lap for activity ${activity.getID()} (lap ${lapIndex + 1})`);
-                  return;
-                }
-                if (this.lapTypes.indexOf(lap.type) === -1) {
-                  this.logger.info(`EventCardChartComponent: Skipping lap type ${lap.type} for activity ${activity.getID()} (not in lapTypes filter)`);
-                  return;
-                }
-                this.logger.info(`EventCardChartComponent: Adding lap guide for activity ${activity.getID()}, lap type ${lap.type}, lap index ${lapIndex + 1}`);
-                let range
-                if (xAxisType === XAxisTypes.Time) {
-                  range = xAxis.axisRanges.create();
-                  range.value = lap.endDate.getTime();
-                } else if (xAxisType === XAxisTypes.Duration) {
-                  range = xAxis.axisRanges.create();
-                  range.value = +lap.endDate - +activity.startDate;
-                } else if (xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID() || '')) {
-                  const data = this.distanceAxesForActivitiesMap
-                    .get(activity.getID() || '')
-                    .getStreamDataByTime(activity.startDate, true)
-                    .filter(streamData => streamData && (streamData.time >= lap.endDate.getTime()));
-                  // There can be a case that the distance stream does not have data for this?
-                  // So if there is a lap, done and the watch did not update the distance example: last 2s lap
-                  if (!data[0]) {
-                    this.logger.warn(`EventCardChartComponent: No distance data found for lap ${lapIndex + 1} of activity ${activity.getID()}`);
-                    return;
-                  }
-                  range = xAxis.axisRanges.create();
-                  range.value = data[0].value || 0;
-                }
-                if (range) {
-                  const defaultColor = (this.chartTheme === 'dark' || this.chartTheme === 'amchartsdark') ? '#ffffff' : '#000000';
-                  const activityColor = this.eventColorService.getActivityColor(this.event.getActivities(), activity);
-                  const strokeColor = activityColor ? this.core.color(activityColor) : this.core.color(defaultColor);
-                  range.grid.stroke = strokeColor;
+        const activityLaps = activity.getLaps();
+        const activityStartMillis = this.toMilliseconds(activity.startDate);
 
-                  range.grid.strokeWidth = 1.1;
-                  range.grid.strokeOpacity = 1;
-                  range.grid.strokeDasharray = '2,5';
+        let cumulativeLapDurationMillis = 0;
 
-                  range.grid.above = true;
-                  range.grid.zIndex = 1;
-                  range.grid.tooltipText = `[${strokeColor.toString()} bold font-size: 1.2em]${activity.creator.name}[/]\n[bold font-size: 1.0em]Lap #${lapIndex + 1}[/]\n[bold font-size: 1.0em]Type:[/] [font-size: 0.8em]${lapType}[/]`;
-                  range.grid.tooltipPosition = 'pointer';
+        activityLaps.forEach((lap, lapIndex) => {
+          const lapEndMillis = this.toMilliseconds(lap.endDate);
+          const lapDurationMillis = this.getLapDurationMillis(lap);
+          if (lapIndex === activityLaps.length - 1) {
+            this.logger.info(`EventCardChartComponent: Skipping last lap for activity ${activity.getID()} (lap ${lapIndex + 1})`);
+            return;
+          }
 
-                  range.label.tooltipText = range.grid.tooltipText;
-                  range.label.inside = true;
-                  range.label.adapter.add('text', () => {
-                    return `${lapIndex + 1}`;
-                  });
-                  range.label.paddingTop = 2;
-                  range.label.paddingBottom = 2;
-                  range.label.zIndex = 11;
-                  range.label.fontSize = '1em';
-                  range.label.background.fillOpacity = 1;
-                  range.label.background.stroke = range.grid.stroke;
-                  range.label.background.strokeWidth = 1;
-                  range.label.tooltipText = range.grid.tooltipText;
+          const normalizedLapType = this.normalizeLapType(lap.type);
+          if (!selectedLapTypes.has(normalizedLapType)) {
+            return;
+          }
 
-                  // range.label.interactionsEnabled = true;
+          this.logger.info(`EventCardChartComponent: Adding lap guide for activity ${activity.getID()}, lap type ${lap.type}, lap index ${lapIndex + 1}`);
+          let range;
+          if (xAxisType === XAxisTypes.Time) {
+            if (lapEndMillis === null) {
+              this.logger.warn(`EventCardChartComponent: Invalid lap end time for activity ${activity.getID()} (lap ${lapIndex + 1})`);
+              return;
+            }
+            range = (<am4charts.DateAxis>xAxis).axisRanges.create();
+            (<am4charts.DateAxisDataItem>range).date = new Date(lapEndMillis);
+          } else if (xAxisType === XAxisTypes.Duration) {
+            const rawDurationMillis = (lapEndMillis !== null && activityStartMillis !== null)
+              ? Math.max(0, lapEndMillis - activityStartMillis)
+              : null;
 
-                  range.label.background.width = 1;
-                  range.label.fill = range.grid.stroke;
-                  range.label.horizontalCenter = 'middle';
-                  range.label.valign = 'bottom';
-                  range.label.textAlign = 'middle';
-                  range.label.dy = 6;
-                }
+            let durationMillis = rawDurationMillis;
+
+            // Some indoor files provide broken lap timestamps (all equal to activity start).
+            // In that case, fall back to cumulative lap-duration stats to place guides.
+            if (durationMillis === null || durationMillis <= cumulativeLapDurationMillis) {
+              if (lapDurationMillis !== null) {
+                cumulativeLapDurationMillis += lapDurationMillis;
+                durationMillis = cumulativeLapDurationMillis;
+              } else if (durationMillis !== null) {
+                durationMillis = Math.max(durationMillis, cumulativeLapDurationMillis);
+              } else {
+                this.logger.warn(`EventCardChartComponent: Invalid lap/activity time for duration guide on activity ${activity.getID()} (lap ${lapIndex + 1})`);
+                return;
               }
-              )
-          });
+            } else {
+              cumulativeLapDurationMillis = durationMillis;
+            }
+
+            range = (<am4charts.DateAxis>xAxis).axisRanges.create();
+            (<am4charts.DateAxisDataItem>range).date = new Date(durationMillis);
+          } else if (xAxisType === XAxisTypes.Distance && this.distanceAxesForActivitiesMap.get(activity.getID() || '')) {
+            if (lapEndMillis === null) {
+              this.logger.warn(`EventCardChartComponent: Invalid lap end time for distance guide on activity ${activity.getID()} (lap ${lapIndex + 1})`);
+              return;
+            }
+            const data = this.distanceAxesForActivitiesMap
+              .get(activity.getID() || '')
+              .getStreamDataByTime(activity.startDate, true)
+              .filter(streamData => streamData && (streamData.time >= lapEndMillis));
+            // There can be a case that the distance stream does not have data for this?
+            // So if there is a lap, done and the watch did not update the distance example: last 2s lap
+            if (!data[0]) {
+              this.logger.warn(`EventCardChartComponent: No distance data found for lap ${lapIndex + 1} of activity ${activity.getID()}`);
+              return;
+            }
+            range = xAxis.axisRanges.create();
+            range.value = data[0].value || 0;
+          }
+
+          if (range) {
+            const defaultColor = (this.chartTheme === 'dark' || this.chartTheme === 'amchartsdark') ? '#ffffff' : '#000000';
+            const activityColor = this.eventColorService.getActivityColor(this.event.getActivities(), activity);
+            const strokeColor = activityColor ? this.core.color(activityColor) : this.core.color(defaultColor);
+            range.grid.disabled = false;
+            range.grid.stroke = strokeColor;
+
+            range.grid.strokeWidth = 1.1;
+            range.grid.strokeOpacity = 1;
+            range.grid.strokeDasharray = '2,5';
+
+            range.grid.above = true;
+            range.grid.zIndex = 1;
+            range.grid.tooltipText = `[${strokeColor.toString()} bold font-size: 1.2em]${activity.creator.name}[/]\n[bold font-size: 1.0em]Lap #${lapIndex + 1}[/]\n[bold font-size: 1.0em]Type:[/] [font-size: 0.8em]${normalizedLapType}[/]`;
+            range.grid.tooltipPosition = 'pointer';
+
+            range.label.tooltipText = range.grid.tooltipText;
+            range.label.inside = true;
+            range.label.text = `${lapIndex + 1}`;
+            range.label.paddingTop = 2;
+            range.label.paddingBottom = 2;
+            range.label.zIndex = 11;
+            range.label.fontSize = '1em';
+            range.label.background.fillOpacity = 1;
+            range.label.background.stroke = range.grid.stroke;
+            range.label.background.strokeWidth = 1;
+            range.label.tooltipText = range.grid.tooltipText;
+
+            // range.label.interactionsEnabled = true;
+
+            range.label.background.width = 1;
+            range.label.fill = range.grid.stroke;
+            range.label.horizontalCenter = 'middle';
+            range.label.valign = 'bottom';
+            range.label.textAlign = 'middle';
+            range.label.dy = 6;
+          }
+        });
       })
   }
 
