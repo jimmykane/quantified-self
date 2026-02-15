@@ -2,7 +2,7 @@ import { inject, Injectable, Injector, OnDestroy, runInInjectionContext } from '
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { ActivityParsingOptions } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
-import { combineLatest, from, Observable, of, zip } from 'rxjs';
+import { combineLatest, from, Observable, of, throwError, zip } from 'rxjs';
 import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, CollectionReference, Query, QuerySnapshot, DocumentData, getCountFromServer } from '@angular/fire/firestore';
 import { catchError, map, switchMap, take, distinctUntilChanged, tap } from 'rxjs/operators';
 import { EventJSONInterface } from '@sports-alliance/sports-lib';
@@ -849,7 +849,7 @@ export class AppEventService implements OnDestroy {
 
     return from(this.originalFileHydrationService.parseEventFromOriginalFiles(event, {
       skipEnrichment,
-      strictAllFilesRequired: false,
+      strictAllFilesRequired: hydrationMode === 'replace_activities',
       preserveActivityIdsFromEvent: true,
       mergeMultipleFiles: true,
     })).pipe(
@@ -874,6 +874,10 @@ export class AppEventService implements OnDestroy {
         return event;
       }),
       catchError((error) => {
+        if (hydrationMode === 'replace_activities') {
+          this.logger.error('[AppEventService] Failed to hydrate activities from original files', error);
+          return throwError(() => error);
+        }
         this.logger.error('[AppEventService] Failed to attach streams from original files, falling back to legacy streams', error);
         return this.attachStreamsLegacy(user, event, streamTypes);
       }),

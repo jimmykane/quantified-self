@@ -1285,6 +1285,12 @@ describe('AppEventService', () => {
             expect(event.clearActivities).toHaveBeenCalledTimes(1);
             expect(event.addActivities).toHaveBeenCalledWith([parsedActivity]);
             expect(result).toBe(event);
+            expect(hydrationService.parseEventFromOriginalFiles).toHaveBeenCalledWith(
+                event,
+                expect.objectContaining({
+                    strictAllFilesRequired: true,
+                }),
+            );
         });
 
         it('should return parsed event directly when merge=false', async () => {
@@ -1332,6 +1338,31 @@ describe('AppEventService', () => {
             expect(result).toBe(legacyResultEvent);
         });
 
+        it('should rethrow when parser throws in replace_activities mode', async () => {
+            const hydrationService = (service as any).originalFileHydrationService;
+            vi.spyOn(hydrationService, 'parseEventFromOriginalFiles').mockRejectedValue(new Error('parse blew up'));
+            vi.spyOn(service as any, 'attachStreamsLegacy').mockReturnValue(of({} as any));
+            const event = {
+                getID: () => 'event-1',
+                originalFile: { path: 'users/u1/events/e1/original.fit' },
+                clearActivities: vi.fn(),
+                addActivities: vi.fn(),
+                getActivities: vi.fn().mockReturnValue([]),
+            } as any;
+
+            await expect(firstValueFrom(
+                service.attachStreamsToEventWithActivities(
+                    { uid: 'u1' } as any,
+                    event,
+                    undefined,
+                    true,
+                    false,
+                    'replace_activities',
+                ),
+            )).rejects.toThrow('parse blew up');
+            expect((service as any).attachStreamsLegacy).not.toHaveBeenCalled();
+        });
+
         it('should fallback to attachStreamsLegacy when parser returns no finalEvent', async () => {
             const hydrationService = (service as any).originalFileHydrationService;
             vi.spyOn(hydrationService, 'parseEventFromOriginalFiles').mockResolvedValue({
@@ -1354,6 +1385,36 @@ describe('AppEventService', () => {
 
             expect((service as any).attachStreamsLegacy).toHaveBeenCalled();
             expect(result).toBe(legacyResultEvent);
+        });
+
+        it('should rethrow when parser returns no finalEvent in replace_activities mode', async () => {
+            const hydrationService = (service as any).originalFileHydrationService;
+            vi.spyOn(hydrationService, 'parseEventFromOriginalFiles').mockResolvedValue({
+                finalEvent: null,
+                parsedEvents: [],
+                sourceFilesCount: 1,
+                failedFiles: [{ path: 'users/u1/events/e1/original.fit', reason: 'fail' }],
+            });
+            vi.spyOn(service as any, 'attachStreamsLegacy').mockReturnValue(of({} as any));
+            const event = {
+                getID: () => 'event-1',
+                originalFile: { path: 'users/u1/events/e1/original.fit' },
+                clearActivities: vi.fn(),
+                addActivities: vi.fn(),
+                getActivities: vi.fn().mockReturnValue([]),
+            } as any;
+
+            await expect(firstValueFrom(
+                service.attachStreamsToEventWithActivities(
+                    { uid: 'u1' } as any,
+                    event,
+                    undefined,
+                    true,
+                    false,
+                    'replace_activities',
+                ),
+            )).rejects.toThrow('Could not build event from original source files');
+            expect((service as any).attachStreamsLegacy).not.toHaveBeenCalled();
         });
     });
 });
