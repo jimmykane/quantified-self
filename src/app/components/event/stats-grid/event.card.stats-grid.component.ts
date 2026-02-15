@@ -40,6 +40,7 @@ const SUMMARY_TAB_ICONS: Record<EventSummaryMetricGroupId, string> = {
   other: 'category',
 };
 const SUMMARY_TAB_HEIGHT_WOBBLE_TOLERANCE_PX = 2;
+const STATS_GRID_PERF_LOGS_ENABLED = false;
 type TabBodyHeightSyncMode = 'allow_shrink' | 'only_grow';
 
 @Component({
@@ -71,6 +72,8 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   private tabPrewarmRafId: number | null = null;
   private initialSettleTimeoutId: number | null = null;
   private lastAppliedMinHeightPx = 0;
+  private lastMeasuredTabBodyLayoutSignature: string | null = null;
+  private lastAllowShrinkSyncAtMs = 0;
   private pendingTabBodyHeightSyncMode: TabBodyHeightSyncMode = 'allow_shrink';
   private didPrewarmTabs = false;
   private isPrewarmingTabs = false;
@@ -80,7 +83,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   private mobileViewportMediaQueryList: MediaQueryList | null = this.getMobileMediaQueryList();
   private readonly mobileViewportListener = () => this.onMobileViewportChange();
   private readonly windowResizeListener = () => this.scheduleTabBodyHeightSync('allow_shrink');
-  private readonly windowLoadListener = () => this.scheduleTabBodyHeightSync('allow_shrink');
+  private readonly windowLoadListener = () => this.scheduleTabBodyHeightSync('allow_shrink', true);
   private cdr = inject(ChangeDetectorRef);
 
   private userSettingsQuery = inject(AppUserSettingsQueryService);
@@ -122,7 +125,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   }
 
   ngOnChanges(simpleChanges: SimpleChanges) {
-    const ngChangesStart = performance.now();
+    const ngChangesStart = this.getPerfStart();
     if (!this.selectedActivities.length) {
       this.displayedStatsToShow = [];
       this.stats = [];
@@ -132,13 +135,16 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       this.diffByType = new Map();
       this.lastAppliedMinHeightPx = 0;
       this.clearTabBodyMinHeight();
+      this.invalidateTabBodyLayoutSignature();
       this.cancelScheduledTabBodyHeightSync();
       this.teardownTabBodyResizeObserver();
-      this.logPerf('empty_selection', ngChangesStart);
+      if (STATS_GRID_PERF_LOGS_ENABLED) {
+        this.logPerf('empty_selection', ngChangesStart);
+      }
       return;
     }
 
-    const statsBuildStart = performance.now();
+    const statsBuildStart = this.getPerfStart();
     if (this.selectedActivities.length === 1) {
       this.stats = this.getStatsForActivity(this.selectedActivities[0]);
     } else if (this.selectedActivities.length === this.event.getActivities().length) {
@@ -146,11 +152,13 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     } else {
       this.stats = ActivityUtilities.getSummaryStatsForActivities(this.selectedActivities);
     }
-    this.logPerf('build_stats', statsBuildStart, {
-      selectedActivities: this.selectedActivities.length,
-      statsCount: this.stats.length,
-      eventId: this.event?.getID?.(),
-    });
+    if (STATS_GRID_PERF_LOGS_ENABLED) {
+      this.logPerf('build_stats', statsBuildStart, {
+        selectedActivities: this.selectedActivities.length,
+        statsCount: this.stats.length,
+        eventId: this.event?.getID?.(),
+      });
+    }
 
     const activityTypes = (this.selectedActivities || []).map((activity: ActivityInterface) => activity.type).filter(type => !!type) as ActivityTypes[];
 
@@ -158,22 +166,28 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       this.displayedStatsToShow = this.statsToShow;
       this.updateTabs();
       this.updateDiffMap();
-      this.logPerf('ng_on_changes_total', ngChangesStart, { usedStatsOverride: true });
+      if (STATS_GRID_PERF_LOGS_ENABLED) {
+        this.logPerf('ng_on_changes_total', ngChangesStart, { usedStatsOverride: true });
+      }
       return;
     }
 
     // the order here is important
-    const summaryTypesStart = performance.now();
+    const summaryTypesStart = this.getPerfStart();
     this.displayedStatsToShow = getDefaultSummaryStatTypes(activityTypes, this.summariesSettings);
-    this.logPerf('build_default_summary_stat_types', summaryTypesStart, {
-      activityTypes: activityTypes.length,
-      displayedStats: this.displayedStatsToShow.length,
-      eventId: this.event?.getID?.(),
-    });
+    if (STATS_GRID_PERF_LOGS_ENABLED) {
+      this.logPerf('build_default_summary_stat_types', summaryTypesStart, {
+        activityTypes: activityTypes.length,
+        displayedStats: this.displayedStatsToShow.length,
+        eventId: this.event?.getID?.(),
+      });
+    }
 
     this.updateTabs();
     this.updateDiffMap();
-    this.logPerf('ng_on_changes_total', ngChangesStart, { usedStatsOverride: false });
+    if (STATS_GRID_PERF_LOGS_ENABLED) {
+      this.logPerf('ng_on_changes_total', ngChangesStart, { usedStatsOverride: false });
+    }
   }
 
   public onSelectedTabIndexChange(index: number) {
@@ -185,6 +199,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     if (selectedTabId) {
       this.eventSummaryTabsLocalStorageService.setLastSelectedStatsTabId(selectedTabId);
     }
+    this.setupTabBodyResizeObserver();
     this.applyGrowOnlyHeightFromSelectedTab(index);
     this.scheduleTabBodyHeightSyncAfterTabSwitch();
   }
@@ -210,15 +225,19 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   }
 
   private updateDiffMap() {
-    const diffStart = performance.now();
+    const diffStart = this.getPerfStart();
     this.showDiff = !!this.event?.isMerge && this.selectedActivities.length === 2;
     if (!this.showDiff || !this.unitSettings) {
       this.diffByType = new Map();
-      this.logPerf('update_diff_map', diffStart, { showDiff: false });
+      if (STATS_GRID_PERF_LOGS_ENABLED) {
+        this.logPerf('update_diff_map', diffStart, { showDiff: false });
+      }
       return;
     }
     this.diffByType = this.buildDiffMap();
-    this.logPerf('update_diff_map', diffStart, { showDiff: true, diffCount: this.diffByType.size });
+    if (STATS_GRID_PERF_LOGS_ENABLED) {
+      this.logPerf('update_diff_map', diffStart, { showDiff: true, diffCount: this.diffByType.size });
+    }
   }
 
   private buildDiffMap(): Map<string, { display: string; percent: number; color: string }> {
@@ -244,12 +263,13 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       }))
       .filter((tab) => tab.metricTypes.length > 0);
     this.resetSelectedTab();
+    this.invalidateTabBodyLayoutSignature();
     this.setupTabBodyResizeObserver();
     this.scheduleTabBodyHeightSync();
     this.scheduleInitialTabsPrewarm();
   }
 
-  private scheduleTabBodyHeightSync(mode: TabBodyHeightSyncMode = 'allow_shrink') {
+  private scheduleTabBodyHeightSync(mode: TabBodyHeightSyncMode = 'allow_shrink', force = false) {
     if (this.isDestroyed) {
       return;
     }
@@ -257,7 +277,17 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     if (this.isMobileViewport()) {
       this.clearTabBodyMinHeight();
       this.lastAppliedMinHeightPx = 0;
+      this.lastMeasuredTabBodyLayoutSignature = null;
       this.pendingTabBodyHeightSyncMode = 'allow_shrink';
+      return;
+    }
+
+    if (
+      !force
+      && mode === 'allow_shrink'
+      && this.measureRafId === null
+      && this.shouldSkipRedundantAllowShrinkSync()
+    ) {
       return;
     }
 
@@ -406,7 +436,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     this.isPrewarmingTabs = false;
     this.tabPrewarmFrames = 0;
     this.tabPrewarmQueue = [];
-    this.scheduleTabBodyHeightSync('allow_shrink');
+    this.scheduleTabBodyHeightSync('allow_shrink', true);
   }
 
   private scheduleDelayedInitialHeightSync(delayMs: number) {
@@ -420,7 +450,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
 
     this.initialSettleTimeoutId = window.setTimeout(() => {
       this.initialSettleTimeoutId = null;
-      this.scheduleTabBodyHeightSync('allow_shrink');
+      this.scheduleTabBodyHeightSync('allow_shrink', true);
     }, delayMs);
   }
 
@@ -435,7 +465,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     }
 
     fontsApi.ready.then(() => {
-      this.scheduleTabBodyHeightSync('allow_shrink');
+      this.scheduleTabBodyHeightSync('allow_shrink', true);
     });
   }
 
@@ -443,6 +473,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
     if (this.isMobileViewport()) {
       this.clearTabBodyMinHeight();
       this.lastAppliedMinHeightPx = 0;
+      this.lastMeasuredTabBodyLayoutSignature = null;
       return;
     }
 
@@ -461,6 +492,9 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       return;
     }
 
+    const layoutSignature = this.buildTabBodyLayoutSignature(tabGroupElement, tabBodyContents.length);
+    this.lastMeasuredTabBodyLayoutSignature = layoutSignature;
+
     const maxHeight = Array.from(tabBodyContents).reduce((currentMax, tabBodyContent) => {
       return Math.max(currentMax, this.getIntrinsicTabBodyContentHeight(tabBodyContent));
     }, 0);
@@ -476,6 +510,10 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
 
     if (mode === 'only_grow' && maxHeight < this.lastAppliedMinHeightPx) {
       return;
+    }
+
+    if (mode === 'allow_shrink') {
+      this.lastAllowShrinkSyncAtMs = performance.now();
     }
 
     this.lastAppliedMinHeightPx = maxHeight;
@@ -553,18 +591,14 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
       return;
     }
 
-    const tabBodyContents = tabGroupElement.querySelectorAll<HTMLElement>('.mat-mdc-tab-body-content');
-    if (!tabBodyContents.length) {
-      return;
-    }
-
     this.resizeObserver = new ResizeObserver(() => {
-      this.scheduleTabBodyHeightSync('allow_shrink');
+      this.scheduleTabBodyHeightSync('allow_shrink', true);
     });
     this.resizeObserver.observe(tabGroupElement);
-    tabBodyContents.forEach((tabBodyContent) => {
-      this.resizeObserver?.observe(tabBodyContent);
-    });
+    const activeTabBodyContent = tabGroupElement.querySelector<HTMLElement>('.mat-mdc-tab-body-active .mat-mdc-tab-body-content');
+    if (activeTabBodyContent) {
+      this.resizeObserver.observe(activeTabBodyContent);
+    }
   }
 
   private teardownTabBodyResizeObserver() {
@@ -615,6 +649,7 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   private onMobileViewportChange() {
     this.cancelScheduledTabBodyHeightSync();
     this.lastAppliedMinHeightPx = 0;
+    this.invalidateTabBodyLayoutSignature();
     this.pendingTabBodyHeightSyncMode = 'allow_shrink';
 
     if (this.isMobileViewport()) {
@@ -673,10 +708,44 @@ export class EventCardStatsGridComponent implements OnChanges, AfterViewInit, On
   }
 
   private logPerf(step: string, start: number, meta?: Record<string, unknown>) {
+    if (!STATS_GRID_PERF_LOGS_ENABLED) {
+      return;
+    }
     this.logger.info(`[perf] event_card_stats_grid_${step}`, {
       durationMs: Number((performance.now() - start).toFixed(2)),
       ...(meta || {}),
     });
+  }
+
+  private getPerfStart(): number {
+    return STATS_GRID_PERF_LOGS_ENABLED ? performance.now() : 0;
+  }
+
+  private invalidateTabBodyLayoutSignature() {
+    this.lastMeasuredTabBodyLayoutSignature = null;
+  }
+
+  private buildTabBodyLayoutSignature(tabGroupElement: HTMLElement, tabCount: number): string {
+    return `${tabGroupElement.clientWidth}|${tabCount}|${this.selectedTabIndex}`;
+  }
+
+  private shouldSkipRedundantAllowShrinkSync(): boolean {
+    const tabGroupElement = this.summaryTabGroupRef?.nativeElement;
+    if (!tabGroupElement) {
+      return false;
+    }
+
+    const tabCount = tabGroupElement.querySelectorAll('.mat-mdc-tab-body-content').length;
+    if (!tabCount) {
+      return false;
+    }
+
+    const nextSignature = this.buildTabBodyLayoutSignature(tabGroupElement, tabCount);
+    if (this.lastMeasuredTabBodyLayoutSignature !== nextSignature) {
+      return false;
+    }
+
+    return performance.now() - this.lastAllowShrinkSyncAtMs < 80;
   }
 
   private getStatsSourceLabel(eventActivitiesCount: number): 'single_activity' | 'event_stats' | 'selected_activities_summary' {
