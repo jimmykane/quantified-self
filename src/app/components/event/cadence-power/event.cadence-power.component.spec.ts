@@ -86,7 +86,7 @@ describe('EventCadencePowerComponent', () => {
         },
         { provide: EChartsLoaderService, useValue: mockLoader },
         { provide: AppEventColorService, useValue: { getActivityColor: vi.fn().mockReturnValue('#16B4EA') } },
-        { provide: LoggerService, useValue: { error: vi.fn() } },
+        { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } },
         { provide: PerformanceCurveDataService, useValue: mockService },
       ],
     }).compileComponents();
@@ -123,6 +123,17 @@ describe('EventCadencePowerComponent', () => {
     expect(option.series).toHaveLength(1);
     expect(option.series[0].type).toBe('scatter');
     expect(option.visualMap).toBeDefined();
+  });
+
+  it('should use standardized cadence x-axis bounds and interval', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const option = getLastOption();
+
+    expect(option.xAxis.min % 5).toBe(0);
+    expect(option.xAxis.max % 5).toBe(0);
+    expect(option.xAxis.interval % 5).toBe(0);
   });
 
   it('should hide legend for single activity and show for multiple activities', async () => {

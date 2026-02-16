@@ -138,6 +138,8 @@ describe('EventDurabilityCurveComponent', () => {
     expect(mockService.buildBestEffortMarkers).toHaveBeenCalled();
     expect(option.series.length).toBeGreaterThanOrEqual(2);
     expect(option.xAxis.type).toBe('value');
+    expect(option.xAxis.interval).toBe(5);
+    expect(option.xAxis.max).toBe(20);
     expect(option.yAxis.type).toBe('value');
   });
 

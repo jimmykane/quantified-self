@@ -144,6 +144,22 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
       maxPointsPerSeries: this.isMobile ? 420 : 1500,
     });
 
+    const cadenceValues = cadencePowerSeries
+      .flatMap((seriesEntry) => seriesEntry.points)
+      .map((point) => point.cadence)
+      .filter((value) => Number.isFinite(value))
+      .sort((left, right) => left - right);
+    const uniqueCadenceValues = [...new Set(cadenceValues.map((value) => Math.round(value)))];
+
+    this.logger.log('[EventCadencePowerComponent] x-axis cadence debug', {
+      seriesCount: cadencePowerSeries.length,
+      pointCount: cadenceValues.length,
+      minCadence: cadenceValues.length ? cadenceValues[0] : null,
+      maxCadence: cadenceValues.length ? cadenceValues[cadenceValues.length - 1] : null,
+      uniqueCadenceCount: uniqueCadenceValues.length,
+      uniqueCadenceValuesSample: uniqueCadenceValues.slice(0, 60),
+    });
+
     const option = this.buildChartOption(cadencePowerSeries);
     this.eChartsLoader.setOption(this.chart, option, { notMerge: true, lazyUpdate: true });
     this.scheduleResize();
@@ -169,11 +185,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
     const cadencePoints = cadencePowerSeries.flatMap((seriesEntry) => seriesEntry.points);
     const cadenceValues = cadencePoints.map((point) => point.cadence);
     const powerValues = cadencePoints.map((point) => point.power);
-    const [cadenceMin, cadenceMax] = this.calculateAxisRange(cadenceValues, {
-      minFloor: 0,
-      fallbackMin: 60,
-      fallbackMax: 110,
-    });
+    const cadenceAxisConfig = this.buildCadenceAxisConfig(cadenceValues);
     const [powerMin, powerMax] = this.calculateAxisRange(powerValues, {
       minFloor: 0,
       fallbackMin: 100,
@@ -236,15 +248,16 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
       },
       grid: {
         left: 0,
-        right: 0,
+        right: this.isMobile ? 6 : 4,
         top: singleActivity ? 0 : 18,
         bottom: this.isMobile ? 8 : 4,
         containLabel: true,
       },
       xAxis: {
         type: 'value',
-        min: cadenceMin,
-        max: cadenceMax,
+        min: cadenceAxisConfig.min,
+        max: cadenceAxisConfig.max,
+        interval: cadenceAxisConfig.interval,
         name: 'Cadence',
         nameLocation: 'middle',
         nameGap: this.isMobile ? 26 : 30,
@@ -260,6 +273,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
         axisLabel: {
           color: textColor,
           fontSize: axisLabelFontSize,
+          hideOverlap: true,
           formatter: (value: number) => `${Math.round(value)}`,
         },
       },
@@ -434,6 +448,55 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
     }
 
     return [min, max];
+  }
+
+  private buildCadenceAxisConfig(values: number[]): { min: number; max: number; interval: number } {
+    const validValues = values.filter((value) => Number.isFinite(value));
+    if (!validValues.length) {
+      return { min: 60, max: 110, interval: 10 };
+    }
+
+    const minRaw = Math.min(...validValues);
+    const maxRaw = Math.max(...validValues);
+    const snappedMin = Math.max(0, Math.floor(minRaw / 5) * 5);
+    let snappedMax = Math.ceil(maxRaw / 5) * 5;
+
+    if (snappedMax <= snappedMin) {
+      snappedMax = snappedMin + 10;
+    }
+
+    const range = snappedMax - snappedMin;
+    const targetTicks = this.isMobile ? 6 : 10;
+    const baseInterval = Math.max(5, Math.ceil((range / targetTicks) / 5) * 5);
+    const interval = this.selectCadenceInterval(range, Math.min(20, baseInterval), targetTicks);
+
+    return {
+      min: snappedMin,
+      max: snappedMax,
+      interval,
+    };
+  }
+
+  private selectCadenceInterval(range: number, fallbackInterval: number, targetTicks: number): number {
+    const candidates = [5, 10, 15, 20];
+    const divisibleCandidates = candidates.filter((candidate) => candidate > 0 && range % candidate === 0);
+    if (!divisibleCandidates.length) {
+      return fallbackInterval;
+    }
+
+    let best = divisibleCandidates[0];
+    let bestDistance = Math.abs((range / best) - targetTicks);
+
+    for (let index = 1; index < divisibleCandidates.length; index += 1) {
+      const candidate = divisibleCandidates[index];
+      const distance = Math.abs((range / candidate) - targetTicks);
+      if (distance < bestDistance) {
+        best = candidate;
+        bestDistance = distance;
+      }
+    }
+
+    return best;
   }
 
   private toFiniteNumber(value: unknown): number | null {

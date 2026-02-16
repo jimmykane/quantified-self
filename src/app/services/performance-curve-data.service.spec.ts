@@ -256,6 +256,35 @@ describe('PerformanceCurveDataService', () => {
     expect(hasOutlier).toBe(false);
   });
 
+  it('should filter sparse cadence values in dense datasets', () => {
+    const power: number[] = [];
+    const cadence: number[] = [];
+
+    for (let index = 0; index < 620; index += 1) {
+      power.push(250 + (index % 6));
+      cadence.push(90 + (index % 2));
+    }
+
+    // Rare cadence bucket that should be filtered out by cadence-frequency rule.
+    for (let index = 0; index < 2; index += 1) {
+      power.push(280 + index);
+      cadence.push(41);
+    }
+
+    const activity = createActivity({
+      id: 'a1',
+      streams: {
+        [DataPower.type]: power,
+        [DataCadence.type]: cadence,
+      },
+    });
+
+    const result = service.buildCadencePowerSeries([activity]);
+    const hasRareCadence = result[0].points.some((point) => Math.round(point.cadence) === 41);
+
+    expect(hasRareCadence).toBe(false);
+  });
+
   it('should extract best-effort markers for supported windows only', () => {
     const activity = createActivity({
       id: 'a1',

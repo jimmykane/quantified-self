@@ -26,6 +26,7 @@ export interface BuildPerformanceCurveSeriesOptions {
   maxPointsPerSeries?: number;
   rollingWindowSeconds?: number;
   minCadencePowerBinCount?: number;
+  minCadenceValueCount?: number;
 }
 
 export interface BuildBestEffortMarkersOptions {
@@ -293,11 +294,15 @@ export class PerformanceCurveDataService {
       }
 
       const binCounts = new Map<string, number>();
+      const cadenceValueCounts = new Map<number, number>();
       pointsRaw.forEach((point) => {
         const cadenceBin = Math.floor(point.cadence / 5);
         const powerBin = Math.floor(point.power / 10);
         const key = `${cadenceBin}:${powerBin}`;
         binCounts.set(key, (binCounts.get(key) ?? 0) + 1);
+
+        const cadenceBucket = Math.round(point.cadence);
+        cadenceValueCounts.set(cadenceBucket, (cadenceValueCounts.get(cadenceBucket) ?? 0) + 1);
       });
 
       // In dense datasets, discard isolated singleton bins to reduce no-data-like visual noise.
@@ -311,6 +316,18 @@ export class PerformanceCurveDataService {
       const minBinCount = Number.isFinite(options.minCadencePowerBinCount)
         ? Math.max(1, options.minCadencePowerBinCount as number)
         : inferredMinBinCount;
+      const inferredMinCadenceCount = pointsRaw.length > 1500
+        ? 10
+        : pointsRaw.length > 900
+          ? 7
+          : pointsRaw.length > 500
+            ? 5
+            : pointsRaw.length > 300
+              ? 3
+              : 1;
+      const minCadenceCount = Number.isFinite(options.minCadenceValueCount)
+        ? Math.max(1, options.minCadenceValueCount as number)
+        : inferredMinCadenceCount;
 
       const maxBinCount = Math.max(1, ...binCounts.values());
 
@@ -321,6 +338,10 @@ export class PerformanceCurveDataService {
           const key = `${cadenceBin}:${powerBin}`;
           const binCount = binCounts.get(key) ?? 1;
           if (binCount < minBinCount) {
+            return null;
+          }
+          const cadenceCount = cadenceValueCounts.get(Math.round(point.cadence)) ?? 1;
+          if (cadenceCount < minCadenceCount) {
             return null;
           }
 

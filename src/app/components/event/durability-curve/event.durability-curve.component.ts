@@ -34,6 +34,7 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
 
 const DEFAULT_ROLLING_WINDOW_SECONDS = 180;
 const BEST_EFFORT_WINDOWS = [5, 30, 60, 300, 1200, 3600, 7200];
+const DURATION_TICK_CANDIDATES_SECONDS = [5, 10, 15, 30, 60, 120, 300, 600, 900, 1200, 1800, 3600, 7200];
 const EFFORT_MARKER_COLORS = ['#ff7043', '#ffa726', '#ffd54f', '#66bb6a', '#42a5f5', '#ab47bc'];
 const DURABILITY_FALLBACK_COLORS = ['#16B4EA', '#FF7043', '#66BB6A', '#AB47BC', '#FFA726', '#42A5F5', '#EC407A'];
 
@@ -195,6 +196,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     const durations = durabilityPoints.map((point) => point.duration);
     const efficiencyValues = durabilityPoints.map((point) => point.efficiency);
     const maxDuration = durations.length > 0 ? Math.max(...durations) : 1;
+    const durationAxis = this.buildDurationAxisConfig(maxDuration);
     const [efficiencyMin, efficiencyMax] = this.calculateAxisRange(efficiencyValues, {
       fallbackMin: 1,
       fallbackMax: 2.5,
@@ -300,13 +302,15 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       xAxis: {
         type: 'value',
         min: 0,
-        max: maxDuration,
+        max: durationAxis.max,
+        interval: durationAxis.interval,
         axisLine: {
           lineStyle: { color: axisColor },
         },
         axisTick: { show: false },
         splitLine: { show: false },
         axisLabel: {
+          hideOverlap: true,
           color: textColor,
           fontSize: axisLabelFontSize,
           formatter: (value: number) => this.formatDurationLabel(value),
@@ -473,6 +477,32 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     }
 
     return [min, max];
+  }
+
+  private buildDurationAxisConfig(maxDuration: number): { max: number; interval: number } {
+    if (!Number.isFinite(maxDuration) || maxDuration <= 0) {
+      return { max: 60, interval: 10 };
+    }
+
+    const targetTicks = this.isMobile ? 6 : 9;
+    let bestInterval = DURATION_TICK_CANDIDATES_SECONDS[0];
+    let bestScore = Number.POSITIVE_INFINITY;
+
+    DURATION_TICK_CANDIDATES_SECONDS.forEach((candidate) => {
+      const roundedMax = Math.ceil(maxDuration / candidate) * candidate;
+      const ticks = Math.floor(roundedMax / candidate) + 1;
+      const score = Math.abs(ticks - targetTicks);
+      if (score < bestScore) {
+        bestInterval = candidate;
+        bestScore = score;
+      }
+    });
+
+    const roundedMax = Math.ceil(maxDuration / bestInterval) * bestInterval;
+    return {
+      max: Math.max(bestInterval, roundedMax),
+      interval: bestInterval,
+    };
   }
 
   private toFiniteNumber(value: unknown): number | null {
