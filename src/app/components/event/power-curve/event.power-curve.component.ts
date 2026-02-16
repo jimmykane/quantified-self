@@ -312,6 +312,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
         axisLabel: {
           fontSize: axisLabelFontSize,
           color: textColor,
+          formatter: (value: number) => `${Math.round(value)}`,
         },
       },
       tooltip: {

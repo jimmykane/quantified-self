@@ -24,7 +24,7 @@
 
 :host ::ng-deep .performance-charts-tabs .mat-mdc-tab-labels {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 :host ::ng-deep .performance-charts-tabs .mat-mdc-tab {
@@ -36,6 +36,9 @@
 
 :host ::ng-deep .performance-charts-tabs .mdc-tab__text-label {
   font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 :host ::ng-deep .performance-charts-tabs .mat-mdc-tab-body-wrapper {

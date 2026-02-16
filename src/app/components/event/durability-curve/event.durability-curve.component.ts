@@ -35,6 +35,7 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
 const DEFAULT_ROLLING_WINDOW_SECONDS = 180;
 const BEST_EFFORT_WINDOWS = [5, 30, 60, 300, 1200, 3600, 7200];
 const DURATION_TICK_CANDIDATES_SECONDS = [5, 10, 15, 30, 60, 120, 300, 600, 900, 1200, 1800, 3600, 7200];
+const EFFICIENCY_TICK_CANDIDATES = [0.05, 0.1, 0.2, 0.25, 0.5];
 const EFFORT_MARKER_COLORS = ['#ff7043', '#ffa726', '#ffd54f', '#66bb6a', '#42a5f5', '#ab47bc'];
 const DURABILITY_FALLBACK_COLORS = ['#16B4EA', '#FF7043', '#66BB6A', '#AB47BC', '#FFA726', '#42A5F5', '#EC407A'];
 
@@ -201,6 +202,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       fallbackMin: 1,
       fallbackMax: 2.5,
     });
+    const efficiencyAxis = this.buildEfficiencyAxisConfig(efficiencyMin, efficiencyMax);
 
     const usedSeriesColors = new Set<string>();
     const series: Array<Record<string, unknown>> = durabilitySeries.map((seriesEntry, seriesIndex) => {
@@ -318,8 +320,9 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       },
       yAxis: {
         type: 'value',
-        min: efficiencyMin,
-        max: efficiencyMax,
+        min: efficiencyAxis.min,
+        max: efficiencyAxis.max,
+        interval: efficiencyAxis.interval,
         name: 'W/bpm',
         nameLocation: 'middle',
         nameGap: this.isMobile ? 36 : 42,
@@ -333,9 +336,10 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
         axisTick: { show: false },
         splitLine: { show: false },
         axisLabel: {
+          hideOverlap: true,
           color: textColor,
           fontSize: axisLabelFontSize,
-          formatter: (value: number) => value.toFixed(2),
+          formatter: (value: number) => this.formatEfficiencyAxisLabel(value),
         },
       },
       tooltip: {
@@ -505,6 +509,36 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     };
   }
 
+  private buildEfficiencyAxisConfig(minValue: number, maxValue: number): { min: number; max: number; interval: number } {
+    if (!Number.isFinite(minValue) || !Number.isFinite(maxValue) || maxValue <= minValue) {
+      return { min: 1, max: 2.5, interval: 0.25 };
+    }
+
+    const range = maxValue - minValue;
+    const targetTicks = this.isMobile ? 5 : 7;
+    let bestInterval = EFFICIENCY_TICK_CANDIDATES[0];
+    let bestScore = Number.POSITIVE_INFINITY;
+
+    EFFICIENCY_TICK_CANDIDATES.forEach((candidate) => {
+      const snappedMin = Math.floor(minValue / candidate) * candidate;
+      const snappedMax = Math.ceil(maxValue / candidate) * candidate;
+      const tickCount = Math.floor((snappedMax - snappedMin) / candidate) + 1;
+      const score = Math.abs(tickCount - targetTicks);
+      if (score < bestScore) {
+        bestScore = score;
+        bestInterval = candidate;
+      }
+    });
+
+    const snappedMin = Math.floor(minValue / bestInterval) * bestInterval;
+    const snappedMax = Math.ceil(maxValue / bestInterval) * bestInterval;
+    return {
+      min: snappedMin,
+      max: Math.max(snappedMin + bestInterval, snappedMax),
+      interval: bestInterval,
+    };
+  }
+
   private toFiniteNumber(value: unknown): number | null {
     if (typeof value === 'number' && Number.isFinite(value)) {
       return value;
@@ -524,6 +558,14 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     }
 
     return new DataDuration(seconds).getDisplayValue(false, false).trim();
+  }
+
+  private formatEfficiencyAxisLabel(value: number): string {
+    if (!Number.isFinite(value)) {
+      return '';
+    }
+
+    return value.toFixed(2).replace(/\.?0+$/, '');
   }
 
   private scheduleResize(): void {
