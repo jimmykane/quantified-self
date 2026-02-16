@@ -21,6 +21,7 @@ export interface DetectedTrip {
   destinationVisitIndex: number;
   destinationVisitCount: number;
   isRevisit: boolean;
+  eventIds: string[];
   startDate: Date;
   endDate: Date;
   activityCount: number;
@@ -67,6 +68,16 @@ interface QualificationResult {
     rejected_by_duration: number;
     rejected_as_home_noise: number;
   };
+  visitWindowEvaluations: Array<{
+    destinationId: string;
+    startDateIso: string;
+    endDateIso: string;
+    activityCount: number;
+    durationHours: number;
+    isHomeWindow: boolean;
+    status: 'qualified' | 'rejected';
+    rejectedReason: 'activity_count' | 'duration' | 'home_noise' | null;
+  }>;
 }
 
 interface RejoinResult {
@@ -79,11 +90,11 @@ interface RejoinResult {
 })
 export class MyTracksTripDetectionService {
   private static readonly DESTINATION_EPS_KM = 90;
-  private static readonly DESTINATION_MIN_POINTS = 2;
+  private static readonly DESTINATION_MIN_POINTS = 1;
   private static readonly VISIT_SPLIT_GAP_MS = 72 * 60 * 60 * 1000;
-  private static readonly MIN_VISIT_ACTIVITY_COUNT = 2;
-  private static readonly MIN_VISIT_DURATION_MS = 20 * 60 * 60 * 1000;
-  private static readonly HOME_CLUSTER_MIN_SHARE = 0.35;
+  private static readonly MIN_VISIT_ACTIVITY_COUNT = 1;
+  private static readonly MIN_VISIT_DURATION_MS = 0;
+  private static readonly HOME_CLUSTER_MIN_SHARE = 0.5;
   private static readonly HOME_MIN_ACTIVITY_COUNT = 4;
   private static readonly HOME_MIN_DURATION_MS = 72 * 60 * 60 * 1000;
   private static readonly SAME_DESTINATION_REJOIN_MAX_GAP_MS = 5 * 24 * 60 * 60 * 1000;
@@ -121,10 +132,23 @@ export class MyTracksTripDetectionService {
       return [];
     }
 
+    this.logger.log('[MyTracksTripDetectionService] Activities payload for trip detection.', {
+      activities: normalized.map((entry) => ({
+        eventId: entry.eventId,
+        timestamp: entry.timestamp,
+        startDateIso: new Date(entry.timestamp).toISOString(),
+        latitudeDegrees: entry.latitudeDegrees,
+        longitudeDegrees: entry.longitudeDegrees,
+      })),
+    });
+
     const destinationClusters = this.clusterDestinations(normalized);
     const visitWindows = this.buildVisitWindows(destinationClusters, normalized);
     const homeDestinationId = this.identifyHomeDestination(destinationClusters);
     const qualificationResult = this.qualifyVisitWindows(visitWindows, homeDestinationId);
+    this.logger.log('[MyTracksTripDetectionService] Visit window evaluations.', {
+      visitWindowEvaluations: qualificationResult.visitWindowEvaluations,
+    });
     const rejoinResult = this.mergeNearbyVisitWindowsWithoutInterleavingDestinations(qualificationResult.qualifiedVisitWindows);
     const detectedTrips = this.mapVisitWindowsToTrips(rejoinResult.visitWindows);
 
@@ -396,11 +420,18 @@ export class MyTracksTripDetectionService {
       rejected_as_home_noise: 0,
     };
     const qualifiedVisitWindows: VisitWindow[] = [];
+    const visitWindowEvaluations: QualificationResult['visitWindowEvaluations'] = [];
+    const visitWindowCountsByDestination = visitWindows.reduce((accumulator, window) => {
+      accumulator.set(window.destinationId, (accumulator.get(window.destinationId) || 0) + 1);
+      return accumulator;
+    }, new Map<string, number>());
 
     visitWindows.forEach((visitWindow) => {
       const activityCount = visitWindow.points.length;
       const durationMs = visitWindow.endTimestamp - visitWindow.startTimestamp;
+      const durationHours = Number((durationMs / (60 * 60 * 1000)).toFixed(2));
       const isHomeWindow = !!homeDestinationId && visitWindow.destinationId === homeDestinationId;
+      const destinationVisitCount = visitWindowCountsByDestination.get(visitWindow.destinationId) || 1;
 
       if (isHomeWindow) {
         const rejectedAsHomeNoise = activityCount < MyTracksTripDetectionService.HOME_MIN_ACTIVITY_COUNT
@@ -408,29 +439,96 @@ export class MyTracksTripDetectionService {
 
         if (rejectedAsHomeNoise) {
           rejectionCounters.rejected_as_home_noise += 1;
+          visitWindowEvaluations.push({
+            destinationId: visitWindow.destinationId,
+            startDateIso: new Date(visitWindow.startTimestamp).toISOString(),
+            endDateIso: new Date(visitWindow.endTimestamp).toISOString(),
+            activityCount,
+            durationHours,
+            isHomeWindow,
+            status: 'rejected',
+            rejectedReason: 'home_noise',
+          });
           return;
         }
 
         qualifiedVisitWindows.push(visitWindow);
+        visitWindowEvaluations.push({
+          destinationId: visitWindow.destinationId,
+          startDateIso: new Date(visitWindow.startTimestamp).toISOString(),
+          endDateIso: new Date(visitWindow.endTimestamp).toISOString(),
+          activityCount,
+          durationHours,
+          isHomeWindow,
+          status: 'qualified',
+          rejectedReason: null,
+        });
         return;
       }
 
       if (activityCount < MyTracksTripDetectionService.MIN_VISIT_ACTIVITY_COUNT) {
         rejectionCounters.rejected_by_activity_count += 1;
+        visitWindowEvaluations.push({
+          destinationId: visitWindow.destinationId,
+          startDateIso: new Date(visitWindow.startTimestamp).toISOString(),
+          endDateIso: new Date(visitWindow.endTimestamp).toISOString(),
+          activityCount,
+          durationHours,
+          isHomeWindow,
+          status: 'rejected',
+          rejectedReason: 'activity_count',
+        });
+        return;
+      }
+
+      // Avoid over-detecting one-off points when permissive thresholds are enabled.
+      if (activityCount === 1 && destinationVisitCount < 2) {
+        rejectionCounters.rejected_by_activity_count += 1;
+        visitWindowEvaluations.push({
+          destinationId: visitWindow.destinationId,
+          startDateIso: new Date(visitWindow.startTimestamp).toISOString(),
+          endDateIso: new Date(visitWindow.endTimestamp).toISOString(),
+          activityCount,
+          durationHours,
+          isHomeWindow,
+          status: 'rejected',
+          rejectedReason: 'activity_count',
+        });
         return;
       }
 
       if (durationMs < MyTracksTripDetectionService.MIN_VISIT_DURATION_MS) {
         rejectionCounters.rejected_by_duration += 1;
+        visitWindowEvaluations.push({
+          destinationId: visitWindow.destinationId,
+          startDateIso: new Date(visitWindow.startTimestamp).toISOString(),
+          endDateIso: new Date(visitWindow.endTimestamp).toISOString(),
+          activityCount,
+          durationHours,
+          isHomeWindow,
+          status: 'rejected',
+          rejectedReason: 'duration',
+        });
         return;
       }
 
       qualifiedVisitWindows.push(visitWindow);
+      visitWindowEvaluations.push({
+        destinationId: visitWindow.destinationId,
+        startDateIso: new Date(visitWindow.startTimestamp).toISOString(),
+        endDateIso: new Date(visitWindow.endTimestamp).toISOString(),
+        activityCount,
+        durationHours,
+        isHomeWindow,
+        status: 'qualified',
+        rejectedReason: null,
+      });
     });
 
     return {
       qualifiedVisitWindows,
       rejectionCounters,
+      visitWindowEvaluations,
     };
   }
 
@@ -515,6 +613,7 @@ export class MyTracksTripDetectionService {
       destinationVisitIndex,
       destinationVisitCount,
       isRevisit: destinationVisitIndex > 1,
+      eventIds: Array.from(new Set(visitWindow.points.map((point) => point.eventId))),
       startDate: new Date(startTimestamp),
       endDate: new Date(endTimestamp),
       activityCount,

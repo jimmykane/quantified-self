@@ -60,6 +60,7 @@ const createDetectedTrip = (overrides: Record<string, unknown> = {}) => ({
   destinationVisitIndex: 1,
   destinationVisitCount: 1,
   isRevisit: false,
+  eventIds: [],
   locationLabel: 'Nepal',
   startDate: new Date('2022-11-08T00:00:00Z'),
   endDate: new Date('2022-11-16T00:00:00Z'),
@@ -422,7 +423,7 @@ describe('TracksComponent', () => {
       await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
       await waitForAsyncWork();
 
-      expect(mockTripLocationLabelService.resolveTripLocation).toHaveBeenCalledTimes(1);
+      expect(mockTripLocationLabelService.resolveTripLocation).toHaveBeenCalledTimes(2);
       expect(component.detectedTrips().map((trip) => trip.locationLabel)).toEqual(['Kathmandu, Nepal', 'Kathmandu, Nepal']);
     });
 
@@ -470,6 +471,25 @@ describe('TracksComponent', () => {
 
       expect(fitBoundsSpy).toHaveBeenCalledWith([[84.9, 27.5], [85.6, 28]]);
       expect(mockUserSettingsQuery.updateMyTracksSettings.mock.calls.length).toBe(beforeCalls);
+    });
+
+    it('should fit bounds using trip event track coordinates when available', () => {
+      const fitBoundsSpy = vi.spyOn(component as any, 'fitBoundsToTracks');
+      (component as any).trackCoordinatesByEventId.set('event-1', [[85, 27.7], [85.2, 27.8]]);
+      (component as any).trackCoordinatesByEventId.set('event-2', [[85.3, 27.81], [85.5, 27.9]]);
+      component.detectedTrips.set([createDetectedTrip({ eventIds: ['event-1', 'event-2'] }) as any]);
+      component.hasEvaluatedTripDetection.set(true);
+      fixture.detectChanges();
+
+      const tripButton = fixture.nativeElement.querySelector('.detected-trip-button') as HTMLButtonElement | null;
+      tripButton?.click();
+
+      expect(fitBoundsSpy).toHaveBeenCalledWith([
+        [85, 27.7],
+        [85.2, 27.8],
+        [85.3, 27.81],
+        [85.5, 27.9],
+      ]);
     });
   });
 });

@@ -152,20 +152,21 @@ export class EventSearchComponent extends LoadingAbstractDirective implements On
     return this.search();
   }
 
-  async onDateChange(event: MatDatepickerInputEvent<any>, isStartDate: boolean) {
+  async onDateChange(event: MatDatepickerInputEvent<any>) {
     if (!event.value) {
       return;
     }
     if (!this.startDateControl?.value || !this.endDateControl?.value) {
       return;
     }
-    this.selectedDateRange = this.dateRanges.custom;
-    if (!isStartDate) {
-      return this.search();
+    if (this.startDateControl.hasError('matStartDateInvalid') || this.endDateControl.hasError('matStartDateInvalid')) {
+      return;
     }
+    this.selectedDateRange = this.dateRanges.custom;
+    return this.search();
   }
 
-  setCustomDateRange(event: any) {
+  setCustomDateRange() {
     this.selectedDateRange = this.dateRanges.custom;
   }
 

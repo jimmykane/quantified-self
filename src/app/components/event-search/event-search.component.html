@@ -7,11 +7,11 @@
       <mat-form-field [style.display]="showDatePicker ? null : 'none'" class="big qs-subscript-hidden">
         <mat-label>Select date range</mat-label>
         <mat-date-range-input [formGroup]="searchFormGroup" [rangePicker]="picker"
-          (click)="setCustomDateRange($event); picker.open()">
+          (click)="setCustomDateRange(); picker.open()">
           <input matStartDate [formControl]="startDateControl" placeholder="Start date"
-            (dateChange)="onDateChange($event, true)">
+            (dateChange)="onDateChange($event)">
           <input matEndDate [formControl]="endDateControl" placeholder="End date"
-            (dateChange)="onDateChange($event, false)">
+            (dateChange)="onDateChange($event)">
         </mat-date-range-input>
         <mat-datepicker-toggle [disabled]='false' matSuffix [for]="picker"></mat-datepicker-toggle>
         <mat-date-range-picker #picker></mat-date-range-picker>
@@ -86,17 +86,12 @@
         </mat-button-toggle>
         }
       </mat-button-toggle-group>
-      @if (dateRangesToShow.indexOf(dateRanges.all) !== -1 || dateRangesToShow.indexOf(dateRanges.custom) !== -1) {
+      @if (dateRangesToShow.indexOf(dateRanges.all) !== -1) {
       <mat-button-toggle-group appearance="standard" hideSingleSelectionIndicator [value]="selectedDateRange"
         (change)="dateToggleChange($event)">
         @if (dateRangesToShow.indexOf(dateRanges.all) !== -1) {
         <mat-button-toggle [value]="dateRanges.all" aria-label="All">
           All
-        </mat-button-toggle>
-        }
-        @if (dateRangesToShow.indexOf(dateRanges.custom) !== -1) {
-        <mat-button-toggle [value]="dateRanges.custom" aria-label="Custom">
-          Custom
         </mat-button-toggle>
         }
       </mat-button-toggle-group>

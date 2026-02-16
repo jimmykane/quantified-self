@@ -1,6 +1,6 @@
 {
   "name": "quantified-self",
-  "version": "7.3.0",
+  "version": "7.3.1",
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
@@ -43,7 +43,7 @@
     "@googlemaps/js-api-loader": "^2.0.2",
     "@googlemaps/markerclusterer": "^2.6.2",
     "@sentry/angular": "^10.34.0",
-    "@sports-alliance/sports-lib": "^9.0.17",
+    "@sports-alliance/sports-lib": "^9.0.18",
     "@types/file-saver": "^2.0.7",
     "@types/google.maps": "^3.58.1",
     "@zumer/snapdom": "^2.0.2",

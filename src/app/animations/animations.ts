@@ -31,7 +31,7 @@ export const slideInAnimation =
       group([
         query(':enter', [
           style({ opacity: 0 }),
-          animate('433ms ease-out', style({ opacity: 1 }))
+          animate('633ms ease-out', style({ opacity: 1 }))
         ], { optional: true }),
         query(':leave', [
           style({ opacity: 1 }),
