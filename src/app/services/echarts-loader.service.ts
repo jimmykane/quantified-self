@@ -41,12 +41,14 @@ export class EChartsLoaderService {
           charts.BarChart,
           charts.PieChart,
           charts.LineChart,
+          charts.ScatterChart,
           components.GraphicComponent,
           components.GridComponent,
           components.TooltipComponent,
           components.LegendComponent,
           components.TitleComponent,
           components.AxisPointerComponent,
+          components.VisualMapComponent,
           renderers.CanvasRenderer
         ]);
 

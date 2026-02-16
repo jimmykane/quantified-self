@@ -3,6 +3,7 @@ import { LoginComponent, SignInProviders } from './login.component';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { AppUserService } from '../../services/app.user.service';
 import { AppEventService } from '../../services/app.event.service';
+import { LoggerService } from '../../services/logger.service';
 import { Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
@@ -49,6 +50,16 @@ describe('LoginComponent', () => {
     const mockAnalytics = null;
 
     const mockDialog = {};
+    const mockLogger = {
+        log: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        captureException: vi.fn(),
+        captureMessage: vi.fn(),
+        setUser: vi.fn(),
+        setTag: vi.fn()
+    };
 
     beforeEach(() => {
         vi.clearAllMocks(); // Clear spies to prevent accumulation
@@ -83,6 +94,7 @@ describe('LoginComponent', () => {
                 { provide: Router, useValue: mockRouter },
                 { provide: MatSnackBar, useValue: mockSnackBar },
                 { provide: MatDialog, useValue: mockDialog },
+                { provide: LoggerService, useValue: mockLogger },
                 { provide: Auth, useValue: mockAuth },
                 { provide: Analytics, useValue: mockAnalytics }
             ],
@@ -419,7 +431,7 @@ describe('LoginComponent', () => {
         }));
     });
 
-    it('should surface invalid-session-id from redirect result (repro path)', async () => {
+    it('should treat invalid-session-id from redirect result as recoverable', async () => {
         const invalidSessionError = {
             code: 'auth/invalid-session-id',
             message: 'Firebase: verification failure: invalid session_id in request (auth/invalid-session-id).'
@@ -431,12 +443,14 @@ describe('LoginComponent', () => {
         await new Promise(resolve => setTimeout(resolve, 0));
 
         expect(mockAuthService.getRedirectResult).toHaveBeenCalled();
-        expect((mockDialog as any).open).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
-            data: expect.objectContaining({
-                title: 'Login Failed',
-                message: expect.stringContaining('invalid session_id')
-            })
-        }));
+        expect(mockLogger.error).not.toHaveBeenCalled();
+        expect(mockLogger.warn).toHaveBeenCalled();
+        expect((mockDialog as any).open).not.toHaveBeenCalled();
+        expect(mockSnackBar.open).toHaveBeenCalledWith(
+            'Session expired, please sign in again.',
+            'Close',
+            expect.objectContaining({ duration: 5000 })
+        );
     });
 
     it('should handle account collision from redirect result', async () => {

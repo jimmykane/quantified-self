@@ -7,8 +7,31 @@
   height: var(--performance-chart-height, 30vh);
   min-height: var(--performance-chart-min-height, 128px);
   background: transparent;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.chart-intro {
+  flex: 0 0 auto;
+  padding: 0 2px 2px 0;
+  text-align: right;
+}
+
+.chart-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.chart-description {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px;
+  line-height: 1.1;
+  opacity: 0.82;
 }
 
 .power-curve-chart {
   flex: 1 1 auto;
+  min-height: 0;
 }

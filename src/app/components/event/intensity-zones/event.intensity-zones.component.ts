@@ -215,6 +215,8 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       },
       tooltip: {
         trigger: 'item',
+        appendToBody: true,
+        confine: false,
         backgroundColor: darkTheme ? '#303030' : '#ffffff',
         borderColor: darkTheme ? '#6b6b6b' : '#d6d6d6',
         textStyle: {
