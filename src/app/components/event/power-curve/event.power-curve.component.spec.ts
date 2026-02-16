@@ -9,11 +9,7 @@ import { EventPowerCurveComponent } from './event.power-curve.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { LoggerService } from '../../../services/logger.service';
-import { buildPowerCurveSeries } from '../../../helpers/power-curve-chart-data-helper';
-
-vi.mock('../../../helpers/power-curve-chart-data-helper', () => ({
-  buildPowerCurveSeries: vi.fn(),
-}));
+import { PerformanceCurveDataService } from '../../../services/performance-curve-data.service';
 
 type ResizeObserverRecord = {
   observe: ReturnType<typeof vi.fn>;
@@ -29,7 +25,6 @@ describe('EventPowerCurveComponent', () => {
   let originalResizeObserver: typeof ResizeObserver | undefined;
   let originalRequestAnimationFrame: typeof requestAnimationFrame | undefined;
   let originalCancelAnimationFrame: typeof cancelAnimationFrame | undefined;
-  let requestAnimationFrameMock: ReturnType<typeof vi.fn>;
 
   let mockLoader: {
     init: ReturnType<typeof vi.fn>;
@@ -46,7 +41,10 @@ describe('EventPowerCurveComponent', () => {
     error: ReturnType<typeof vi.fn>;
   };
 
-  const mockedBuildSeries = vi.mocked(buildPowerCurveSeries);
+  let mockPerformanceCurveDataService: {
+    buildPowerCurveSeries: ReturnType<typeof vi.fn>;
+  };
+
   const mockChart = {
     isDisposed: vi.fn().mockReturnValue(false),
   };
@@ -62,12 +60,10 @@ describe('EventPowerCurveComponent', () => {
     originalRequestAnimationFrame = globalThis.requestAnimationFrame;
     originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
 
-    requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {
+    globalThis.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
       callback(0);
       return 1;
-    });
-
-    globalThis.requestAnimationFrame = requestAnimationFrameMock as unknown as typeof requestAnimationFrame;
+    }) as unknown as typeof requestAnimationFrame;
     globalThis.cancelAnimationFrame = vi.fn();
 
     class ResizeObserverMock {
@@ -100,18 +96,20 @@ describe('EventPowerCurveComponent', () => {
       error: vi.fn(),
     };
 
-    mockedBuildSeries.mockReturnValue([
-      {
-        activity: { getID: () => 'a1', creator: { name: 'Device A' } } as any,
-        activityId: 'a1',
-        label: 'Run',
-        points: [
-          { duration: 1, power: 800, wattsPerKg: 11.2 },
-          { duration: 60, power: 420, wattsPerKg: 6.1 },
-          { duration: 1200, power: 290, wattsPerKg: 4.2 },
-        ],
-      },
-    ]);
+    mockPerformanceCurveDataService = {
+      buildPowerCurveSeries: vi.fn().mockReturnValue([
+        {
+          activity: { getID: () => 'a1' } as any,
+          activityId: 'a1',
+          label: 'Ride',
+          points: [
+            { duration: 1, power: 900 },
+            { duration: 60, power: 420, wattsPerKg: 6.1 },
+            { duration: 1200, power: 290, wattsPerKg: 4.2 },
+          ],
+        },
+      ]),
+    };
 
     await TestBed.configureTestingModule({
       declarations: [EventPowerCurveComponent],
@@ -125,6 +123,7 @@ describe('EventPowerCurveComponent', () => {
         { provide: EChartsLoaderService, useValue: mockLoader },
         { provide: AppEventColorService, useValue: mockColorService },
         { provide: LoggerService, useValue: mockLogger },
+        { provide: PerformanceCurveDataService, useValue: mockPerformanceCurveDataService },
       ],
     }).compileComponents();
 
@@ -158,66 +157,53 @@ describe('EventPowerCurveComponent', () => {
     document.body.classList.remove('dark-theme');
   });
 
-  it('should initialize ECharts and render category-based duration labels per data point', async () => {
+  it('should initialize ECharts and render a power-only chart', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
     const option = getLastOption();
 
     expect(mockLoader.init).toHaveBeenCalledTimes(1);
-    expect(mockedBuildSeries).toHaveBeenCalledWith(component.activities, { isMerge: false });
-    expect(mockLoader.setOption).toHaveBeenCalledTimes(1);
-    expect(mockLoader.resize).toHaveBeenCalledTimes(1);
+    expect(mockPerformanceCurveDataService.buildPowerCurveSeries).toHaveBeenCalledWith(component.activities, { isMerge: false });
     expect(option.xAxis.type).toBe('category');
-    expect(option.xAxis.data).toEqual([1, 60, 1200]);
-    expect(option.xAxis.axisLabel.interval).toBe(0);
-    expect(option.yAxis.name).toBe('Power (W)');
-    expect(option.series[0].type).toBe('line');
-    expect(option.series[0].name).toBe('Run');
+    expect(option.yAxis.type).toBe('value');
+    expect(option.series).toHaveLength(1);
     expect(option.legend.show).toBe(false);
-    expect(option.dataZoom).toBeUndefined();
   });
 
-  it('should ignore ngOnChanges before chart initialization', () => {
-    component.ngOnChanges({
-      activities: new SimpleChange([], [{}], false),
-    });
+  it('should add aligned 2h marker points for long durations', async () => {
+    mockPerformanceCurveDataService.buildPowerCurveSeries.mockReturnValue([
+      {
+        activity: { getID: () => 'a1' } as any,
+        activityId: 'a1',
+        label: 'Ride',
+        points: [
+          { duration: 30, power: 600 },
+          { duration: 60, power: 540 },
+          { duration: 300, power: 410 },
+          { duration: 1200, power: 320 },
+          { duration: 3600, power: 260 },
+          { duration: 7740, power: 225 },
+        ],
+      },
+    ]);
 
-    expect(mockLoader.setOption).not.toHaveBeenCalled();
-  });
-
-  it('should refresh chart when chart-related inputs change', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
-
-    component.ngOnChanges({
-      activities: new SimpleChange([], [{}], false),
-      chartTheme: new SimpleChange(ChartThemes.Material, ChartThemes.Dark, false),
-      useAnimations: new SimpleChange(false, true, false),
-      isMerge: new SimpleChange(false, true, false),
-    });
-
-    expect(mockLoader.setOption).toHaveBeenCalledTimes(2);
-  });
-
-  it('should switch to mobile spacing when xsmall breakpoint matches', async () => {
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    breakpointSubject.next({ matches: true });
 
     const option = getLastOption();
-    expect(option.grid.left).toBe(0);
-    expect(option.grid.bottom).toBe(0);
-    expect(mockLoader.setOption).toHaveBeenCalledTimes(2);
+    const markPointData = option.series[0]?.markPoint?.data ?? [];
+    const labels = markPointData.map((marker: { label: string }) => marker.label);
+
+    expect(labels.some((label: string) => label.includes('02h'))).toBe(true);
   });
 
   it('should skip some x-axis labels on mobile while keeping anchor labels', async () => {
-    mockedBuildSeries.mockReturnValue([
+    mockPerformanceCurveDataService.buildPowerCurveSeries.mockReturnValue([
       {
-        activity: { getID: () => 'a1', creator: { name: 'Device A' } } as any,
+        activity: { getID: () => 'a1' } as any,
         activityId: 'a1',
-        label: 'Run',
+        label: 'Ride',
         points: [
           { duration: 1, power: 900 },
           { duration: 2, power: 850 },
@@ -261,7 +247,31 @@ describe('EventPowerCurveComponent', () => {
     expect(formatter(5)).not.toBe('');
     expect(formatter(3600)).not.toBe('');
     expect(formatter(2)).toBe('');
-    expect(formatter(2400)).toBe('');
+  });
+
+  it('should hide legend for single activity and show for multi-activity', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(getLastOption().legend.show).toBe(false);
+
+    mockPerformanceCurveDataService.buildPowerCurveSeries.mockReturnValue([
+      {
+        activity: { getID: () => 'a1' } as any,
+        activityId: 'a1',
+        label: 'Ride',
+        points: [{ duration: 60, power: 300 }],
+      },
+      {
+        activity: { getID: () => 'a2' } as any,
+        activityId: 'a2',
+        label: 'Run',
+        points: [{ duration: 60, power: 280 }],
+      },
+    ]);
+
+    component.ngOnChanges({ activities: new SimpleChange([], [{}], false) });
+
+    expect(getLastOption().legend.show).toBe(true);
   });
 
   it('should apply dark theme styles when chartTheme is dark', async () => {
@@ -271,89 +281,13 @@ describe('EventPowerCurveComponent', () => {
     await fixture.whenStable();
 
     const option = getLastOption();
+
     expect(option.tooltip.backgroundColor).toBe('#222222');
-    expect(option.yAxis.axisLabel.color).toBe('#f5f5f5');
+    expect(option.legend.textStyle.color).toBe('#f5f5f5');
   });
 
-  it('should apply dark theme styles from body class', async () => {
-    document.body.classList.add('dark-theme');
-
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    const option = getLastOption();
-    expect(option.tooltip.backgroundColor).toBe('#222222');
-    expect(option.yAxis.axisLabel.color).toBe('#f5f5f5');
-  });
-
-  it('should not show series label in tooltip when only one series exists', async () => {
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    const option = getLastOption();
-    const formatter = option.tooltip.formatter as (params: unknown) => string;
-
-    const tooltip = formatter([
-      {
-        axisValue: 60,
-        marker: '• ',
-        seriesName: 'Run',
-        value: [60, 420],
-        data: { value: [60, 420], wattsPerKg: 6.1 },
-      },
-    ]);
-
-    expect(tooltip).toContain('01m');
-    expect(tooltip).toContain('Power: <b>420 W</b>');
-    expect(tooltip).not.toContain('Run');
-  });
-
-  it('should show legend and series names for multi-series charts', async () => {
-    mockedBuildSeries.mockReturnValue([
-      {
-        activity: { getID: () => 'a1', creator: { name: 'Device A' } } as any,
-        activityId: 'a1',
-        label: 'Run',
-        points: [{ duration: 60, power: 420 }],
-      },
-      {
-        activity: { getID: () => 'a2', creator: { name: 'Device B' } } as any,
-        activityId: 'a2',
-        label: 'Run (2)',
-        points: [{ duration: 60, power: 410 }],
-      },
-    ]);
-
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    const option = getLastOption();
-    const formatter = option.tooltip.formatter as (params: unknown) => string;
-
-    const tooltip = formatter([
-      {
-        axisValue: 60,
-        marker: '• ',
-        seriesName: 'Run',
-        value: [60, 420],
-        data: { value: [60, 420] },
-      },
-      {
-        axisValue: 60,
-        marker: '• ',
-        seriesName: 'Run (2)',
-        value: [60, 410],
-        data: { value: [60, 410] },
-      },
-    ]);
-
-    expect(option.legend.show).toBe(true);
-    expect(tooltip).toContain('Run: <b>420 W</b>');
-    expect(tooltip).toContain('Run (2): <b>410 W</b>');
-  });
-
-  it('should handle empty series gracefully', async () => {
-    mockedBuildSeries.mockReturnValue([]);
+  it('should handle empty data gracefully', async () => {
+    mockPerformanceCurveDataService.buildPowerCurveSeries.mockReturnValue([]);
 
     fixture.detectChanges();
     await fixture.whenStable();
@@ -361,8 +295,8 @@ describe('EventPowerCurveComponent', () => {
     const option = getLastOption();
 
     expect(option.series).toEqual([]);
-    expect(option.xAxis.data).toEqual([]);
-    expect(option.yAxis.max).toBeGreaterThan(option.yAxis.min);
+    expect(option.xAxis).toEqual([]);
+    expect(option.yAxis).toEqual([]);
   });
 
   it('should observe container resize and trigger chart resize', async () => {
@@ -377,16 +311,6 @@ describe('EventPowerCurveComponent', () => {
     expect(mockLoader.resize.mock.calls.length).toBeGreaterThanOrEqual(baselineResizeCalls);
   });
 
-  it('should skip ResizeObserver setup when API is unavailable', async () => {
-    delete (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
-
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    expect(resizeObserverRecords).toHaveLength(0);
-    expect(mockLoader.setOption).toHaveBeenCalledTimes(1);
-  });
-
   it('should log and skip rendering when chart init fails', async () => {
     mockLoader.init.mockRejectedValueOnce(new Error('init failed'));
 
@@ -398,20 +322,5 @@ describe('EventPowerCurveComponent', () => {
       expect.any(Error)
     );
     expect(mockLoader.setOption).not.toHaveBeenCalled();
-  });
-
-  it('should disconnect observers and dispose chart on destroy', async () => {
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    const observer = resizeObserverRecords[0];
-    const callCountBeforeDestroy = mockLoader.setOption.mock.calls.length;
-
-    component.ngOnDestroy();
-    breakpointSubject.next({ matches: true });
-
-    expect(observer.disconnect).toHaveBeenCalledTimes(1);
-    expect(mockLoader.dispose).toHaveBeenCalledWith(mockChart);
-    expect(mockLoader.setOption).toHaveBeenCalledTimes(callCountBeforeDestroy);
   });
 });

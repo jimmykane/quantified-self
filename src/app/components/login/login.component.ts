@@ -136,6 +136,11 @@ export class LoginComponent implements OnInit, OnDestroy {
       })
       .catch((error) => {
         this.isLoading = false;
+        if (error?.code === 'auth/invalid-session-id') {
+          this.logger.warn('Login: OAuth redirect session expired/invalid. Prompting user to retry sign-in.');
+          this.snackBar.open('Session expired, please sign in again.', 'Close', { duration: 5000 });
+          return;
+        }
         if (error.code === 'auth/account-exists-with-different-credential' || error.code === 'auth/credential-already-in-use') {
           this.handleAccountCollision(error);
           return;

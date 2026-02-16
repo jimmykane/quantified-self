@@ -1,4 +1,4 @@
-.intensity-zones-container {
+.cadence-power-container {
   display: flex;
   flex-direction: column;
   padding-top: 0;
@@ -31,7 +31,7 @@
   opacity: 0.82;
 }
 
-.intensity-zones-chart {
+.cadence-power-chart {
   flex: 1 1 auto;
   min-height: 0;
 }

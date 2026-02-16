@@ -14,21 +14,25 @@ import { BreakpointObserver } from '@angular/cdk/layout';
 import { Subscription } from 'rxjs';
 import type { EChartsType } from 'echarts/core';
 
-import { ActivityInterface, ChartThemes, DataDuration } from '@sports-alliance/sports-lib';
+import {
+  ActivityInterface,
+  ChartThemes,
+  DataDuration,
+} from '@sports-alliance/sports-lib';
 import { AppBreakpoints } from '../../../constants/breakpoints';
 import { AppColors } from '../../../services/color/app.colors';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { LoggerService } from '../../../services/logger.service';
 import {
-  buildPowerCurveSeries,
+  PerformanceCurveDataService,
   PowerCurveChartPoint,
   PowerCurveChartSeries,
-} from '../../../helpers/power-curve-chart-data-helper';
+} from '../../../services/performance-curve-data.service';
 
 type ChartOption = Parameters<EChartsType['setOption']>[0];
 
-const KEY_DURATION_SECONDS = [5, 15, 30, 60, 300, 1200, 3600];
+const KEY_POWER_DURATION_MARKERS = [5, 15, 30, 60, 300, 1200, 3600, 7200];
 const MOBILE_MAX_LABEL_CONFIG = [
   { width: 360, count: 5 },
   { width: 430, count: 6 },
@@ -61,6 +65,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
     private eChartsLoader: EChartsLoaderService,
     private eventColorService: AppEventColorService,
     private logger: LoggerService,
+    private performanceCurveDataService: PerformanceCurveDataService,
     private zone: NgZone
   ) {
     this.breakpointSubscription = this.breakpointObserver
@@ -140,106 +145,86 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
       return;
     }
 
-    const seriesData = buildPowerCurveSeries(this.activities, { isMerge: this.isMerge });
-    const option = this.buildChartOption(seriesData);
+    const powerSeries = this.performanceCurveDataService.buildPowerCurveSeries(this.activities, {
+      isMerge: this.isMerge,
+    });
+
+    const option = this.buildChartOption(powerSeries);
     this.eChartsLoader.setOption(this.chart, option, { notMerge: true, lazyUpdate: true });
     this.scheduleResize();
   }
 
-  private buildChartOption(seriesData: PowerCurveChartSeries[]): ChartOption {
+  private buildChartOption(powerSeries: PowerCurveChartSeries[]): ChartOption {
     const darkTheme = this.isDarkThemeActive();
     const textColor = darkTheme ? '#f5f5f5' : '#1f1f1f';
-    const axisColor = darkTheme ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.22)';
-    const splitLineColor = darkTheme ? 'rgba(255,255,255,0.13)' : 'rgba(0,0,0,0.1)';
+    const axisColor = darkTheme ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.24)';
     const axisLabelFontSize = this.isMobile ? 11 : 12;
 
-    const points = seriesData.flatMap((entry) => entry.points);
-    const durations = points.map((point) => point.duration);
-    const powers = points.map((point) => point.power);
-
-    const hasData = points.length > 0;
-    const hasMultipleSeries = seriesData.length > 1;
-    const xDurations = hasData
-      ? [...new Set(durations)].sort((left, right) => left - right)
-      : [];
-    const visibleDurationLabels = this.buildVisibleDurationLabelSet(xDurations);
-
-    const minPowerRaw = hasData ? Math.min(...powers) : 0;
-    const maxPowerRaw = hasData ? Math.max(...powers) : 100;
-    const powerRange = Math.max(1, maxPowerRaw - minPowerRaw);
-    const yPadding = Math.max(8, powerRange * 0.1);
-
-    const yMin = Math.max(0, Math.floor((minPowerRaw - yPadding) / 5) * 5);
-    let yMax = Math.ceil((maxPowerRaw + yPadding) / 5) * 5;
-    if (yMax <= yMin) {
-      yMax = yMin + 10;
+    if (powerSeries.length === 0) {
+      return {
+        animation: this.useAnimations === true,
+        legend: { show: false },
+        xAxis: [],
+        yAxis: [],
+        series: [],
+      };
     }
 
-    const series = seriesData.map((seriesEntry, index) => {
+    const singleActivity = powerSeries.length <= 1;
+    const powerPoints = powerSeries.flatMap((seriesEntry) => seriesEntry.points);
+    const xDurations = [...new Set(powerPoints.map((point) => point.duration))]
+      .sort((left, right) => left - right);
+    const visibleDurationLabels = this.buildVisibleDurationLabelSet(xDurations);
+    const powerValues = powerPoints.map((point) => point.power);
+    const [powerMin, powerMax] = this.calculateAxisRange(powerValues, {
+      minFloor: 0,
+      fallbackMin: 0,
+      fallbackMax: 120,
+    });
+
+    const series = powerSeries.map((seriesEntry) => {
       const baseColor = this.eventColorService.getActivityColor(this.activities, seriesEntry.activity) || AppColors.Blue;
-      const pointsByDuration = new Map<number, PowerCurveChartPoint>(
-        seriesEntry.points.map((point) => [point.duration, point])
-      );
-      const chartData = xDurations.map((duration) => {
-        const point = pointsByDuration.get(duration);
-        if (!point) {
-          return null;
-        }
+      const pointsByDuration = new Map(seriesEntry.points.map((point) => [point.duration, point]));
+      const markerData = singleActivity ? this.buildPowerDurationMarkPoints(seriesEntry.points) : [];
 
-        return {
-          value: point.power,
-          duration: point.duration,
-          wattsPerKg: point.wattsPerKg,
-        };
-      });
-
-      const markPoints = !hasMultipleSeries
-        ? this.buildKeyDurationMarkPoints(seriesEntry.points)
-        : [];
-
-      const item: Record<string, unknown> = {
+      const lineSeries: Record<string, unknown> = {
         type: 'line',
+        id: `power:${seriesEntry.activityId}`,
         name: seriesEntry.label,
-        data: chartData,
+        data: xDurations.map((duration) => {
+          const point = pointsByDuration.get(duration);
+          if (!point) {
+            return null;
+          }
+
+          return {
+            value: point.power,
+            duration: point.duration,
+            wattsPerKg: point.wattsPerKg,
+          };
+        }),
         showSymbol: true,
         symbol: 'circle',
-        symbolSize: this.isMobile ? 6 : 7,
-        smooth: hasMultipleSeries ? 0.18 : 0.28,
+        symbolSize: this.isMobile ? 4.5 : 5.5,
+        smooth: powerSeries.length > 1 ? 0.16 : 0.24,
         clip: false,
         lineStyle: {
-          width: hasMultipleSeries ? 2.5 : 3,
+          width: powerSeries.length > 1 ? 2.2 : 2.8,
           color: baseColor,
         },
         itemStyle: {
           color: baseColor,
         },
         emphasis: {
-          focus: hasMultipleSeries ? 'series' : 'none',
+          focus: powerSeries.length > 1 ? 'series' : 'none',
           scale: true,
         },
-        z: 10 + index,
       };
 
-      if (!hasMultipleSeries) {
-        item['areaStyle'] = {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: this.toTransparentColor(baseColor, darkTheme ? 0.42 : 0.35) },
-              { offset: 1, color: this.toTransparentColor(baseColor, 0.03) },
-            ],
-          },
-        };
-      }
-
-      if (markPoints.length > 0) {
-        item['markPoint'] = {
+      if (markerData.length > 0) {
+        lineSeries['markPoint'] = {
           symbol: 'circle',
-          symbolSize: 10,
+          symbolSize: this.isMobile ? 8 : 10,
           itemStyle: {
             color: '#ffffff',
             borderColor: baseColor,
@@ -247,17 +232,17 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
           },
           label: {
             show: true,
-            formatter: (params: { data?: { label?: string } }) => params.data?.label ?? '',
+            formatter: (params: { data?: { label?: string } }) => `${params.data?.label ?? ''}`,
             color: textColor,
             fontSize: this.isMobile ? 10 : 11,
             fontWeight: 600,
-            offset: [0, -14],
+            offset: [0, -12],
           },
-          data: markPoints,
+          data: markerData,
         };
       }
 
-      return item;
+      return lineSeries;
     });
 
     return {
@@ -266,52 +251,37 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
         color: textColor,
         fontFamily: "'Barlow Condensed', sans-serif",
       },
-      grid: {
-        left: 0,
-        right: 0,
-        top: 0,
-        bottom: 0,
-        containLabel: true,
-      },
       legend: {
-        show: hasMultipleSeries,
-        type: seriesData.length > 3 ? 'scroll' : 'plain',
-        top: 6,
+        show: !singleActivity,
+        data: powerSeries.map((seriesEntry) => seriesEntry.label),
+        top: 2,
         left: 'center',
-        right: 'center',
         textStyle: {
           color: textColor,
           fontFamily: "'Barlow Condensed', sans-serif",
           fontSize: this.isMobile ? 12 : 13,
         },
       },
-      tooltip: {
-        trigger: 'axis',
-        backgroundColor: darkTheme ? '#222222' : '#ffffff',
-        borderColor: darkTheme ? '#555555' : '#d6d6d6',
-        borderWidth: 1,
-        textStyle: {
-          color: darkTheme ? '#ffffff' : '#2a2a2a',
-          fontFamily: "'Barlow Condensed', sans-serif",
-        },
-        axisPointer: {
-          type: 'line',
-          snap: true,
-          lineStyle: {
-            color: darkTheme ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.35)',
-            type: 'dashed',
-          },
-        },
-        formatter: (params: unknown) => this.formatTooltip(params, hasMultipleSeries),
+      grid: {
+        left: 0,
+        right: 0,
+        top: singleActivity ? 0 : 18,
+        bottom: this.isMobile ? 14 : 8,
+        containLabel: true,
       },
       xAxis: {
         type: 'category',
-        boundaryGap: true,
         data: xDurations,
+        boundaryGap: false,
+        axisLine: {
+          lineStyle: { color: axisColor },
+        },
+        axisTick: { show: false },
+        splitLine: { show: false },
         axisLabel: {
           interval: 0,
           hideOverlap: true,
-          rotate: this.isMobile ? 70 : 50,
+          rotate: this.isMobile ? 58 : 42,
           fontSize: axisLabelFontSize,
           color: textColor,
           formatter: (value: string | number) => {
@@ -322,145 +292,177 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
             return this.formatDurationLabel(duration);
           },
         },
-        axisLine: {
-          lineStyle: {
-            color: axisColor,
-          },
-        },
-        splitLine: {
-          show: false,
-          lineStyle: {
-            color: splitLineColor,
-            type: 'dashed',
-          },
-        },
       },
       yAxis: {
         type: 'value',
-        min: yMin,
-        max: yMax,
+        min: powerMin,
+        max: powerMax,
         name: 'Power (W)',
         nameLocation: 'middle',
-        nameGap: this.isMobile ? 44 : 50,
+        nameGap: this.isMobile ? 36 : 44,
         nameTextStyle: {
           color: textColor,
           fontFamily: "'Barlow Condensed', sans-serif",
         },
+        axisLine: {
+          lineStyle: { color: axisColor },
+        },
+        axisTick: { show: false },
+        splitLine: { show: false },
         axisLabel: {
           fontSize: axisLabelFontSize,
           color: textColor,
+          formatter: (value: number) => `${Math.round(value)}`,
         },
-        axisLine: {
-          lineStyle: {
-            color: axisColor,
-          },
+      },
+      tooltip: {
+        trigger: 'item',
+        appendToBody: true,
+        confine: false,
+        backgroundColor: darkTheme ? '#222222' : '#ffffff',
+        borderColor: darkTheme ? '#555555' : '#d6d6d6',
+        borderWidth: 1,
+        textStyle: {
+          color: darkTheme ? '#ffffff' : '#2a2a2a',
+          fontFamily: "'Barlow Condensed', sans-serif",
         },
-        splitLine: {
-          show: false,
-          lineStyle: {
-            color: splitLineColor,
-            type: 'dashed',
-          },
-        },
+        formatter: (params: unknown) => this.formatTooltip(params, !singleActivity),
       },
       series,
     };
   }
 
-  private buildKeyDurationMarkPoints(points: PowerCurveChartPoint[]): Array<{
-    coord: [number, number];
-    label: string;
-  }> {
+  private buildPowerDurationMarkPoints(points: PowerCurveChartPoint[]): Array<{ coord: [number, number]; label: string }> {
     if (!points.length) {
       return [];
     }
 
     const chartMin = points[0].duration;
     const chartMax = points[points.length - 1].duration;
-    const markedDurations = new Set<number>();
+    const targetDurations = KEY_POWER_DURATION_MARKERS
+      .filter((duration) => duration >= chartMin && duration <= chartMax);
 
-    return KEY_DURATION_SECONDS
-      .filter((targetDuration) => targetDuration >= chartMin && targetDuration <= chartMax)
-      .map((targetDuration) => {
-        const nearest = this.getNearestPoint(points, targetDuration);
-        if (!nearest) {
-          return null;
+    if (!targetDurations.includes(chartMax)) {
+      targetDurations.push(chartMax);
+    }
+
+    const selected = new Map<number, { coord: [number, number]; label: string }>();
+
+    targetDurations.forEach((targetDuration) => {
+      const nearest = this.getNearestPowerPoint(points, targetDuration);
+      if (!nearest) {
+        return;
+      }
+
+      const ratioDiff = Math.abs(nearest.duration - targetDuration) / Math.max(targetDuration, 1);
+      if (targetDuration !== chartMax && ratioDiff > 0.3) {
+        return;
+      }
+
+      if (selected.has(nearest.duration)) {
+        if (targetDuration === chartMax) {
+          const existing = selected.get(nearest.duration);
+          if (existing) {
+            const shouldUsePlusLabel = chartMax >= 7200 && existing.label.includes('02h');
+            existing.label = shouldUsePlusLabel
+              ? '02h+'
+              : this.formatDurationLabel(nearest.duration);
+            selected.set(nearest.duration, existing);
+          }
         }
+        return;
+      }
 
-        const ratioDiff = Math.abs(nearest.duration - targetDuration) / targetDuration;
-        if (ratioDiff > 0.35 || markedDurations.has(nearest.duration)) {
-          return null;
+      const labelDuration = targetDuration === chartMax ? nearest.duration : targetDuration;
+      selected.set(nearest.duration, {
+        coord: [nearest.duration, nearest.power],
+        label: this.formatDurationLabel(labelDuration),
+      });
+    });
+
+    if (chartMax >= 7200) {
+      const hasTwoHourLabel = [...selected.values()].some((entry) => entry.label.includes('02h'));
+      if (!hasTwoHourLabel) {
+        const nearestTwoHourPoint = this.getNearestPowerPoint(points, 7200);
+        if (nearestTwoHourPoint) {
+          selected.set(nearestTwoHourPoint.duration, {
+            coord: [nearestTwoHourPoint.duration, nearestTwoHourPoint.power],
+            label: this.formatDurationLabel(7200),
+          });
         }
+      }
+    }
 
-        markedDurations.add(nearest.duration);
-
-        return {
-          coord: [nearest.duration, nearest.power] as [number, number],
-          label: this.formatDurationLabel(targetDuration),
-        };
-      })
-      .filter((point): point is { coord: [number, number]; label: string } => !!point);
+    return [...selected.entries()]
+      .sort((left, right) => left[0] - right[0])
+      .map(([, marker]) => marker);
   }
 
-  private getNearestPoint(points: PowerCurveChartPoint[], targetDuration: number): PowerCurveChartPoint | null {
+  private getNearestPowerPoint(points: PowerCurveChartPoint[], targetDuration: number): PowerCurveChartPoint | null {
     if (!points.length) {
       return null;
     }
 
     return points.reduce((closest, candidate) => {
-      const currentDistance = Math.abs(candidate.duration - targetDuration);
-      const closestDistance = Math.abs(closest.duration - targetDuration);
-      return currentDistance < closestDistance ? candidate : closest;
+      const candidateDistance = Math.abs(Math.log10(Math.max(1, candidate.duration)) - Math.log10(Math.max(1, targetDuration)));
+      const closestDistance = Math.abs(Math.log10(Math.max(1, closest.duration)) - Math.log10(Math.max(1, targetDuration)));
+      return candidateDistance < closestDistance ? candidate : closest;
     }, points[0]);
   }
 
-  private formatTooltip(params: unknown, hasMultipleSeries: boolean): string {
-    const entries = Array.isArray(params) ? params : [params];
-    if (!entries.length) {
+  private formatTooltip(params: unknown, hasMultipleActivities: boolean): string {
+    const entry = params as {
+      seriesName?: string;
+      data?: {
+        duration?: unknown;
+        value?: unknown;
+        wattsPerKg?: unknown;
+      };
+      value?: unknown;
+    };
+
+    const duration = this.toFiniteNumber(entry?.data?.duration) ?? this.toFiniteNumber(entry?.value) ?? 0;
+    const power = this.toFiniteNumber(entry?.data?.value) ?? this.toFiniteNumber(entry?.value);
+    if (power === null) {
       return '';
     }
 
-    const duration = this.extractDurationFromTooltipEntry(entries[0]);
-    const durationLabel = this.formatDurationLabel(duration);
+    const wattsPerKg = this.toFiniteNumber(entry?.data?.wattsPerKg);
+    const activityPrefix = hasMultipleActivities ? `${entry.seriesName}: ` : '';
+    const wattsPerKgLabel = wattsPerKg && wattsPerKg > 0
+      ? ` (${wattsPerKg.toFixed(2)} W/kg)`
+      : '';
 
-    const lines = entries.map((entry: any) => {
-      const powerValue = this.toFiniteNumber(
-        entry?.value?.[1]
-        ?? entry?.data?.value?.[1]
-        ?? entry?.data?.[1]
-        ?? entry?.value
-        ?? entry?.data?.value
-      );
-
-      if (powerValue === null) {
-        return '';
-      }
-
-      const wattsPerKg = this.toFiniteNumber(entry?.data?.wattsPerKg);
-      const wattsPerKgLabel = wattsPerKg && wattsPerKg > 0
-        ? ` (${wattsPerKg.toFixed(2)} W/kg)`
-        : '';
-
-      if (!hasMultipleSeries) {
-        return `Power: <b>${Math.round(powerValue)} W</b>${wattsPerKgLabel}`;
-      }
-
-      return `${entry.marker}${entry.seriesName}: <b>${Math.round(powerValue)} W</b>${wattsPerKgLabel}`;
-    }).filter((line: string) => line.length > 0);
-
-    return [`<b>${durationLabel}</b>`, ...lines].join('<br/>');
+    return `<b>${this.formatDurationLabel(duration)}</b><br/>${activityPrefix}Power: <b>${Math.round(power)} W</b>${wattsPerKgLabel}`;
   }
 
-  private extractDurationFromTooltipEntry(entry: any): number {
-    const duration = this.toFiniteNumber(
-      entry?.axisValue
-      ?? entry?.value?.[0]
-      ?? entry?.data?.value?.[0]
-      ?? entry?.data?.[0]
-      ?? entry?.data?.duration
-    );
+  private calculateAxisRange(values: number[], options: {
+    minFloor?: number;
+    fallbackMin: number;
+    fallbackMax: number;
+  }): [number, number] {
+    const validValues = values.filter((value) => Number.isFinite(value));
+    if (!validValues.length) {
+      return [options.fallbackMin, options.fallbackMax];
+    }
 
-    return duration ?? 0;
+    const minRaw = Math.min(...validValues);
+    const maxRaw = Math.max(...validValues);
+    const range = Math.max(1, maxRaw - minRaw);
+    const padding = Math.max(0.05, range * 0.12);
+
+    let min = minRaw - padding;
+    let max = maxRaw + padding;
+
+    if (Number.isFinite(options.minFloor)) {
+      min = Math.max(options.minFloor as number, min);
+    }
+
+    if (max <= min) {
+      max = min + 1;
+    }
+
+    return [min, max];
   }
 
   private toFiniteNumber(value: unknown): number | null {
@@ -489,11 +491,17 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
     }
 
     const mandatoryIndexes = new Set<number>([0, durations.length - 1]);
-    const availableDurations = new Set(durations);
 
-    [1, ...KEY_DURATION_SECONDS].forEach((anchorDuration) => {
-      if (availableDurations.has(anchorDuration)) {
-        mandatoryIndexes.add(durations.indexOf(anchorDuration));
+    [1, 5, 15, 30, 60, 300, 1200, 3600, 7200].forEach((anchorDuration) => {
+      const directIndex = durations.indexOf(anchorDuration);
+      if (directIndex >= 0) {
+        mandatoryIndexes.add(directIndex);
+        return;
+      }
+
+      const nearestIndex = this.findNearestDurationIndex(durations, anchorDuration);
+      if (nearestIndex !== null) {
+        mandatoryIndexes.add(nearestIndex);
       }
     });
 
@@ -576,29 +584,30 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
     return midpointIndex;
   }
 
-  private toTransparentColor(hex: string, alpha: number): string {
-    const normalized = `${hex}`.trim();
-    const clampedAlpha = Math.max(0, Math.min(1, alpha));
-
-    const sixDigit = normalized.match(/^#([a-fA-F0-9]{6})$/);
-    if (sixDigit) {
-      const value = sixDigit[1];
-      const red = parseInt(value.substring(0, 2), 16);
-      const green = parseInt(value.substring(2, 4), 16);
-      const blue = parseInt(value.substring(4, 6), 16);
-      return `rgba(${red}, ${green}, ${blue}, ${clampedAlpha})`;
+  private findNearestDurationIndex(durations: number[], target: number): number | null {
+    if (!durations.length) {
+      return null;
     }
 
-    const threeDigit = normalized.match(/^#([a-fA-F0-9]{3})$/);
-    if (threeDigit) {
-      const value = threeDigit[1];
-      const red = parseInt(`${value[0]}${value[0]}`, 16);
-      const green = parseInt(`${value[1]}${value[1]}`, 16);
-      const blue = parseInt(`${value[2]}${value[2]}`, 16);
-      return `rgba(${red}, ${green}, ${blue}, ${clampedAlpha})`;
+    let nearestIndex = 0;
+    let nearestLogDistance = Number.POSITIVE_INFINITY;
+
+    for (let index = 0; index < durations.length; index += 1) {
+      const candidate = durations[index];
+      const logDistance = Math.abs(Math.log10(Math.max(1, candidate)) - Math.log10(Math.max(1, target)));
+      if (logDistance < nearestLogDistance) {
+        nearestLogDistance = logDistance;
+        nearestIndex = index;
+      }
     }
 
-    return normalized;
+    const nearestDuration = durations[nearestIndex];
+    const ratio = Math.abs(nearestDuration - target) / Math.max(target, 1);
+    if (ratio > 0.45) {
+      return null;
+    }
+
+    return nearestIndex;
   }
 
   private scheduleResize(): void {

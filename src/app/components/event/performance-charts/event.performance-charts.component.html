@@ -1,27 +1,55 @@
 <div class="performance-charts-container">
   @if (shouldShowTabs) {
   <mat-tab-group class="performance-charts-tabs">
-    <mat-tab label="Intensity">
+    @for (tab of availableTabs; track tab) {
+    <mat-tab [label]="getTabLabel(tab)">
       <ng-template matTabContent>
+        @switch (tab) {
+        @case ('intensity') {
         <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme">
         </app-event-intensity-zones>
-      </ng-template>
-    </mat-tab>
-
-    <mat-tab label="Power Curve">
-      <ng-template matTabContent>
+        }
+        @case ('powerCurve') {
         <app-event-power-curve [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme"
           [isMerge]="isMerge">
         </app-event-power-curve>
+        }
+        @case ('durability') {
+        <app-event-durability-curve [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme"
+          [isMerge]="isMerge">
+        </app-event-durability-curve>
+        }
+        @case ('cadencePower') {
+        <app-event-cadence-power [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme"
+          [isMerge]="isMerge">
+        </app-event-cadence-power>
+        }
+        }
       </ng-template>
     </mat-tab>
+    }
   </mat-tab-group>
-  } @else if (hasIntensity) {
+  } @else if (singleChartTab) {
+  @switch (singleChartTab) {
+  @case ('intensity') {
   <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme">
   </app-event-intensity-zones>
-  } @else if (hasPowerCurve) {
+  }
+  @case ('powerCurve') {
   <app-event-power-curve [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme"
     [isMerge]="isMerge">
   </app-event-power-curve>
+  }
+  @case ('durability') {
+  <app-event-durability-curve [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme"
+    [isMerge]="isMerge">
+  </app-event-durability-curve>
+  }
+  @case ('cadencePower') {
+  <app-event-cadence-power [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme"
+    [isMerge]="isMerge">
+  </app-event-cadence-power>
+  }
+  }
   }
 </div>
