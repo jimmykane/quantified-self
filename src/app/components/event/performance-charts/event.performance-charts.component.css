@@ -1,8 +1,8 @@
 :host {
   display: block;
   width: 100%;
-  --performance-chart-height: 25vh;
-  --performance-chart-min-height: 128px;
+  --performance-chart-height: 38vh;
+  --performance-chart-min-height: 320px;
 }
 
 .performance-charts-container {

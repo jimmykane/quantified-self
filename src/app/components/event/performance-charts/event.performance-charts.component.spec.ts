@@ -22,9 +22,9 @@ describe('EventPerformanceChartsComponent', () => {
     component.activities = [{ getID: () => 'a1' } as any];
   });
 
-  it('should render tabs when both intensity and power curve are available', async () => {
+  it('should render tabs when both intensity and performance curve are available', async () => {
     component.hasIntensity = true;
-    component.hasPowerCurve = true;
+    component.hasPerformanceCurve = true;
 
     fixture.detectChanges();
     await fixture.whenStable();
@@ -33,12 +33,12 @@ describe('EventPerformanceChartsComponent', () => {
 
     expect(nativeElement.querySelector('mat-tab-group')).not.toBeNull();
     expect(nativeElement.textContent).toContain('Intensity');
-    expect(nativeElement.textContent).toContain('Power Curve');
+    expect(nativeElement.textContent).toContain('Performance Curve');
   });
 
   it('should render intensity only without tabs when only intensity is available', () => {
     component.hasIntensity = true;
-    component.hasPowerCurve = false;
+    component.hasPerformanceCurve = false;
 
     fixture.detectChanges();
 
@@ -49,9 +49,9 @@ describe('EventPerformanceChartsComponent', () => {
     expect(nativeElement.querySelector('app-event-power-curve')).toBeNull();
   });
 
-  it('should render power curve only without tabs when only power curve is available', () => {
+  it('should render performance curve only without tabs when only performance curve is available', () => {
     component.hasIntensity = false;
-    component.hasPowerCurve = true;
+    component.hasPerformanceCurve = true;
 
     fixture.detectChanges();
 
@@ -64,7 +64,7 @@ describe('EventPerformanceChartsComponent', () => {
 
   it('should render nothing when neither chart is available', () => {
     component.hasIntensity = false;
-    component.hasPowerCurve = false;
+    component.hasPerformanceCurve = false;
 
     fixture.detectChanges();
 

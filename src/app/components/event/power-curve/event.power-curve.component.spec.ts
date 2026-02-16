@@ -9,10 +9,18 @@ import { EventPowerCurveComponent } from './event.power-curve.component';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { LoggerService } from '../../../services/logger.service';
-import { buildPowerCurveSeries } from '../../../helpers/power-curve-chart-data-helper';
+import {
+  buildBestEffortMarkers,
+  buildCadencePowerPaneSeries,
+  buildDecouplingPaneSeries,
+  buildPowerCurvePaneSeries,
+} from '../../../helpers/performance-curve-chart-data-helper';
 
-vi.mock('../../../helpers/power-curve-chart-data-helper', () => ({
-  buildPowerCurveSeries: vi.fn(),
+vi.mock('../../../helpers/performance-curve-chart-data-helper', () => ({
+  buildPowerCurvePaneSeries: vi.fn(),
+  buildDecouplingPaneSeries: vi.fn(),
+  buildCadencePowerPaneSeries: vi.fn(),
+  buildBestEffortMarkers: vi.fn(),
 }));
 
 type ResizeObserverRecord = {
@@ -29,7 +37,6 @@ describe('EventPowerCurveComponent', () => {
   let originalResizeObserver: typeof ResizeObserver | undefined;
   let originalRequestAnimationFrame: typeof requestAnimationFrame | undefined;
   let originalCancelAnimationFrame: typeof cancelAnimationFrame | undefined;
-  let requestAnimationFrameMock: ReturnType<typeof vi.fn>;
 
   let mockLoader: {
     init: ReturnType<typeof vi.fn>;
@@ -46,7 +53,11 @@ describe('EventPowerCurveComponent', () => {
     error: ReturnType<typeof vi.fn>;
   };
 
-  const mockedBuildSeries = vi.mocked(buildPowerCurveSeries);
+  const mockedBuildPowerCurvePaneSeries = vi.mocked(buildPowerCurvePaneSeries);
+  const mockedBuildDecouplingPaneSeries = vi.mocked(buildDecouplingPaneSeries);
+  const mockedBuildCadencePowerPaneSeries = vi.mocked(buildCadencePowerPaneSeries);
+  const mockedBuildBestEffortMarkers = vi.mocked(buildBestEffortMarkers);
+
   const mockChart = {
     isDisposed: vi.fn().mockReturnValue(false),
   };
@@ -62,12 +73,10 @@ describe('EventPowerCurveComponent', () => {
     originalRequestAnimationFrame = globalThis.requestAnimationFrame;
     originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
 
-    requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {
+    globalThis.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
       callback(0);
       return 1;
-    });
-
-    globalThis.requestAnimationFrame = requestAnimationFrameMock as unknown as typeof requestAnimationFrame;
+    }) as unknown as typeof requestAnimationFrame;
     globalThis.cancelAnimationFrame = vi.fn();
 
     class ResizeObserverMock {
@@ -100,9 +109,9 @@ describe('EventPowerCurveComponent', () => {
       error: vi.fn(),
     };
 
-    mockedBuildSeries.mockReturnValue([
+    mockedBuildPowerCurvePaneSeries.mockReturnValue([
       {
-        activity: { getID: () => 'a1', creator: { name: 'Device A' } } as any,
+        activity: { getID: () => 'a1' } as any,
         activityId: 'a1',
         label: 'Run',
         points: [
@@ -112,6 +121,9 @@ describe('EventPowerCurveComponent', () => {
         ],
       },
     ]);
+    mockedBuildDecouplingPaneSeries.mockReturnValue([]);
+    mockedBuildCadencePowerPaneSeries.mockReturnValue([]);
+    mockedBuildBestEffortMarkers.mockReturnValue([]);
 
     await TestBed.configureTestingModule({
       declarations: [EventPowerCurveComponent],
@@ -158,64 +170,140 @@ describe('EventPowerCurveComponent', () => {
     document.body.classList.remove('dark-theme');
   });
 
-  it('should initialize ECharts and render category-based duration labels per data point', async () => {
+  it('should initialize ECharts and render a power-only pane when only power curve data exists', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
     const option = getLastOption();
 
     expect(mockLoader.init).toHaveBeenCalledTimes(1);
-    expect(mockedBuildSeries).toHaveBeenCalledWith(component.activities, { isMerge: false });
-    expect(mockLoader.setOption).toHaveBeenCalledTimes(1);
-    expect(mockLoader.resize).toHaveBeenCalledTimes(1);
-    expect(option.xAxis.type).toBe('category');
-    expect(option.xAxis.data).toEqual([1, 60, 1200]);
-    expect(option.xAxis.axisLabel.interval).toBe(0);
-    expect(option.yAxis.name).toBe('Power (W)');
-    expect(option.series[0].type).toBe('line');
-    expect(option.series[0].name).toBe('Run');
+    expect(mockedBuildPowerCurvePaneSeries).toHaveBeenCalledWith(component.activities, { isMerge: false });
+    expect(mockedBuildDecouplingPaneSeries).toHaveBeenCalled();
+    expect(mockedBuildCadencePowerPaneSeries).toHaveBeenCalled();
+    expect(option.xAxis).toHaveLength(1);
+    expect(option.yAxis).toHaveLength(1);
+    expect(option.series).toHaveLength(1);
+    expect(option.xAxis[0].type).toBe('category');
     expect(option.legend.show).toBe(false);
-    expect(option.dataZoom).toBeUndefined();
   });
 
-  it('should ignore ngOnChanges before chart initialization', () => {
-    component.ngOnChanges({
-      activities: new SimpleChange([], [{}], false),
-    });
+  it('should add aligned 2h+ mark points for long power-curve durations', async () => {
+    mockedBuildPowerCurvePaneSeries.mockReturnValue([
+      {
+        activity: { getID: () => 'a1' } as any,
+        activityId: 'a1',
+        label: 'Ride',
+        points: [
+          { duration: 30, power: 600 },
+          { duration: 60, power: 540 },
+          { duration: 300, power: 410 },
+          { duration: 1200, power: 320 },
+          { duration: 3600, power: 260 },
+          { duration: 7740, power: 225 },
+        ],
+      },
+    ]);
 
-    expect(mockLoader.setOption).not.toHaveBeenCalled();
-  });
-
-  it('should refresh chart when chart-related inputs change', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
-
-    component.ngOnChanges({
-      activities: new SimpleChange([], [{}], false),
-      chartTheme: new SimpleChange(ChartThemes.Material, ChartThemes.Dark, false),
-      useAnimations: new SimpleChange(false, true, false),
-      isMerge: new SimpleChange(false, true, false),
-    });
-
-    expect(mockLoader.setOption).toHaveBeenCalledTimes(2);
-  });
-
-  it('should switch to mobile spacing when xsmall breakpoint matches', async () => {
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    breakpointSubject.next({ matches: true });
 
     const option = getLastOption();
-    expect(option.grid.left).toBe(0);
-    expect(option.grid.bottom).toBe(0);
-    expect(mockLoader.setOption).toHaveBeenCalledTimes(2);
+    const markPointData = option.series[0]?.markPoint?.data ?? [];
+    const labels = markPointData.map((marker: { label: string }) => marker.label);
+    const durations = markPointData.map((marker: { coord: [number, number] }) => marker.coord[0]);
+
+    expect(labels.some((label: string) => label.includes('02h'))).toBe(true);
+    expect(durations).toContain(7740);
   });
 
-  it('should skip some x-axis labels on mobile while keeping anchor labels', async () => {
-    mockedBuildSeries.mockReturnValue([
+  it('should render three panes when decoupling and cadence-power data are available', async () => {
+    mockedBuildDecouplingPaneSeries.mockReturnValue([
       {
-        activity: { getID: () => 'a1', creator: { name: 'Device A' } } as any,
+        activity: { getID: () => 'a1' } as any,
+        activityId: 'a1',
+        label: 'Run',
+        points: [
+          { duration: 30, efficiency: 2.6, power: 350, heartRate: 135, rawPower: 360, rawHeartRate: 136 },
+          { duration: 60, efficiency: 2.5, power: 340, heartRate: 136, rawPower: 345, rawHeartRate: 137 },
+        ],
+      },
+    ]);
+    mockedBuildCadencePowerPaneSeries.mockReturnValue([
+      {
+        activity: { getID: () => 'a1' } as any,
+        activityId: 'a1',
+        label: 'Run',
+        points: [
+          { duration: 60, cadence: 92, power: 340, density: 0.9 },
+          { duration: 61, cadence: 93, power: 338, density: 0.8 },
+        ],
+      },
+    ]);
+    mockedBuildBestEffortMarkers.mockReturnValue([
+      {
+        activity: { getID: () => 'a1' } as any,
+        activityId: 'a1',
+        activityLabel: 'Run',
+        windowSeconds: 5,
+        windowLabel: '5s',
+        duration: 60,
+        efficiency: 2.5,
+        power: 500,
+        startDuration: 58,
+        endDuration: 62,
+      },
+    ]);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const option = getLastOption();
+
+    expect(option.xAxis).toHaveLength(3);
+    expect(option.yAxis).toHaveLength(3);
+    expect(option.series.length).toBeGreaterThanOrEqual(4);
+    expect(option.visualMap).toBeDefined();
+    expect(option.legend.show).toBe(true);
+    expect(option.legend.data).toEqual(['5s']);
+    expect(option.graphic.length).toBe(3);
+    expect(option.graphic[0].children[0].style.text).toBe('Power Curve');
+    expect(option.graphic[1].children[0].style.text).toBe('Durability');
+    expect(option.graphic[2].children[0].style.text).toBe('Cadence vs Power');
+
+    const cadenceScatter = option.series.find((entry: { id?: string }) => `${entry.id ?? ''}`.startsWith('cadence:'));
+    const colorFormatter = cadenceScatter.itemStyle.color as (params: { value?: unknown[] }) => string;
+    expect(colorFormatter({ value: [90, 300, 0.2] })).not.toBe(colorFormatter({ value: [90, 300, 0.9] }));
+  });
+
+  it('should collapse missing panes and keep remaining panes visible', async () => {
+    mockedBuildPowerCurvePaneSeries.mockReturnValue([]);
+    mockedBuildDecouplingPaneSeries.mockReturnValue([
+      {
+        activity: { getID: () => 'a1' } as any,
+        activityId: 'a1',
+        label: 'Run',
+        points: [
+          { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
+          { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
+        ],
+      },
+    ]);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const option = getLastOption();
+
+    expect(option.xAxis).toHaveLength(1);
+    expect(option.yAxis).toHaveLength(1);
+    expect(option.series).toHaveLength(1);
+    expect(option.xAxis[0].type).toBe('value');
+  });
+
+  it('should skip some x-axis labels on mobile while keeping anchor labels for power pane', async () => {
+    mockedBuildPowerCurvePaneSeries.mockReturnValue([
+      {
+        activity: { getID: () => 'a1' } as any,
         activityId: 'a1',
         label: 'Run',
         points: [
@@ -255,13 +343,12 @@ describe('EventPowerCurveComponent', () => {
     breakpointSubject.next({ matches: true });
 
     const option = getLastOption();
-    const formatter = option.xAxis.axisLabel.formatter as (value: string | number) => string;
+    const formatter = option.xAxis[0].axisLabel.formatter as (value: string | number) => string;
 
     expect(formatter(1)).not.toBe('');
     expect(formatter(5)).not.toBe('');
     expect(formatter(3600)).not.toBe('');
     expect(formatter(2)).toBe('');
-    expect(formatter(2400)).toBe('');
   });
 
   it('should apply dark theme styles when chartTheme is dark', async () => {
@@ -271,89 +358,46 @@ describe('EventPowerCurveComponent', () => {
     await fixture.whenStable();
 
     const option = getLastOption();
+
     expect(option.tooltip.backgroundColor).toBe('#222222');
-    expect(option.yAxis.axisLabel.color).toBe('#f5f5f5');
+    expect(option.legend.textStyle.color).toBe('#f5f5f5');
   });
 
-  it('should apply dark theme styles from body class', async () => {
+  it('should apply dark theme styles when body has dark-theme class', async () => {
     document.body.classList.add('dark-theme');
 
     fixture.detectChanges();
     await fixture.whenStable();
 
     const option = getLastOption();
+
     expect(option.tooltip.backgroundColor).toBe('#222222');
-    expect(option.yAxis.axisLabel.color).toBe('#f5f5f5');
   });
 
-  it('should not show series label in tooltip when only one series exists', async () => {
+  it('should format single-activity power tooltip without series label', async () => {
     fixture.detectChanges();
     await fixture.whenStable();
 
     const option = getLastOption();
     const formatter = option.tooltip.formatter as (params: unknown) => string;
 
-    const tooltip = formatter([
-      {
-        axisValue: 60,
-        marker: '• ',
-        seriesName: 'Run',
-        value: [60, 420],
-        data: { value: [60, 420], wattsPerKg: 6.1 },
-      },
-    ]);
+    const tooltip = formatter({
+      seriesId: 'power:a1',
+      seriesName: 'Run',
+      data: { duration: 60, value: 420, wattsPerKg: 6.1 },
+      value: 420,
+    });
 
     expect(tooltip).toContain('01m');
     expect(tooltip).toContain('Power: <b>420 W</b>');
-    expect(tooltip).not.toContain('Run');
+    expect(tooltip).not.toContain('Run:');
   });
 
-  it('should show legend and series names for multi-series charts', async () => {
-    mockedBuildSeries.mockReturnValue([
-      {
-        activity: { getID: () => 'a1', creator: { name: 'Device A' } } as any,
-        activityId: 'a1',
-        label: 'Run',
-        points: [{ duration: 60, power: 420 }],
-      },
-      {
-        activity: { getID: () => 'a2', creator: { name: 'Device B' } } as any,
-        activityId: 'a2',
-        label: 'Run (2)',
-        points: [{ duration: 60, power: 410 }],
-      },
-    ]);
-
-    fixture.detectChanges();
-    await fixture.whenStable();
-
-    const option = getLastOption();
-    const formatter = option.tooltip.formatter as (params: unknown) => string;
-
-    const tooltip = formatter([
-      {
-        axisValue: 60,
-        marker: '• ',
-        seriesName: 'Run',
-        value: [60, 420],
-        data: { value: [60, 420] },
-      },
-      {
-        axisValue: 60,
-        marker: '• ',
-        seriesName: 'Run (2)',
-        value: [60, 410],
-        data: { value: [60, 410] },
-      },
-    ]);
-
-    expect(option.legend.show).toBe(true);
-    expect(tooltip).toContain('Run: <b>420 W</b>');
-    expect(tooltip).toContain('Run (2): <b>410 W</b>');
-  });
-
-  it('should handle empty series gracefully', async () => {
-    mockedBuildSeries.mockReturnValue([]);
+  it('should handle empty data gracefully', async () => {
+    mockedBuildPowerCurvePaneSeries.mockReturnValue([]);
+    mockedBuildDecouplingPaneSeries.mockReturnValue([]);
+    mockedBuildCadencePowerPaneSeries.mockReturnValue([]);
+    mockedBuildBestEffortMarkers.mockReturnValue([]);
 
     fixture.detectChanges();
     await fixture.whenStable();
@@ -361,8 +405,22 @@ describe('EventPowerCurveComponent', () => {
     const option = getLastOption();
 
     expect(option.series).toEqual([]);
-    expect(option.xAxis.data).toEqual([]);
-    expect(option.yAxis.max).toBeGreaterThan(option.yAxis.min);
+    expect(option.xAxis).toEqual([]);
+    expect(option.yAxis).toEqual([]);
+  });
+
+  it('should refresh chart when chart-related inputs change', async () => {
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    component.ngOnChanges({
+      activities: new SimpleChange([], [{}], false),
+      chartTheme: new SimpleChange(ChartThemes.Material, ChartThemes.Dark, false),
+      useAnimations: new SimpleChange(false, true, false),
+      isMerge: new SimpleChange(false, true, false),
+    });
+
+    expect(mockLoader.setOption).toHaveBeenCalledTimes(2);
   });
 
   it('should observe container resize and trigger chart resize', async () => {

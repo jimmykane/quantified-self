@@ -8,7 +8,7 @@
       </ng-template>
     </mat-tab>
 
-    <mat-tab label="Power Curve">
+    <mat-tab label="Performance Curve">
       <ng-template matTabContent>
         <app-event-power-curve [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme"
           [isMerge]="isMerge">
@@ -19,7 +19,7 @@
   } @else if (hasIntensity) {
   <app-event-intensity-zones [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme">
   </app-event-intensity-zones>
-  } @else if (hasPowerCurve) {
+  } @else if (hasPerformanceCurve) {
   <app-event-power-curve [activities]="activities" [useAnimations]="useAnimations" [chartTheme]="chartTheme"
     [isMerge]="isMerge">
   </app-event-power-curve>

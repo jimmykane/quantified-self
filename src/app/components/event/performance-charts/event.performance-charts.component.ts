@@ -16,9 +16,9 @@ export class EventPerformanceChartsComponent {
   @Input() isMerge = false;
 
   @Input() hasIntensity = false;
-  @Input() hasPowerCurve = false;
+  @Input() hasPerformanceCurve = false;
 
   get shouldShowTabs(): boolean {
-    return this.hasIntensity && this.hasPowerCurve;
+    return this.hasIntensity && this.hasPerformanceCurve;
   }
 }

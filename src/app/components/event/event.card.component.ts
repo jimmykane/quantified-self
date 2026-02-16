@@ -41,7 +41,7 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { LoggerService } from '../../services/logger.service';
 import { AppEventService } from '../../services/app.event.service';
 import { shouldRenderIntensityZonesChart } from '../../helpers/intensity-zones-chart-data-helper';
-import { shouldRenderPowerCurveChart } from '../../helpers/power-curve-chart-data-helper';
+import { shouldRenderPerformanceCurveChart } from '../../helpers/performance-curve-chart-data-helper';
 import { reconcileEventDetailsLiveUpdate } from '../../utils/event-live-reconcile';
 @Component({
   selector: 'app-event-card',
@@ -85,12 +85,12 @@ export class EventCardComponent implements OnInit {
     shouldRenderIntensityZonesChart(this.selectedActivitiesInstant())
   );
 
-  public hasPowerCurveFlag = computed(() =>
-    shouldRenderPowerCurveChart(this.selectedActivitiesInstant())
+  public hasPerformanceCurveFlag = computed(() =>
+    shouldRenderPerformanceCurveChart(this.selectedActivitiesInstant())
   );
 
   public hasPerformanceChartsFlag = computed(() =>
-    this.hasIntensityZonesFlag() || this.hasPowerCurveFlag()
+    this.hasIntensityZonesFlag() || this.hasPerformanceCurveFlag()
   );
 
   public hasDevicesFlag = computed(() =>
