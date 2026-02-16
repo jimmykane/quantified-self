@@ -35,6 +35,7 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
 const DEFAULT_ROLLING_WINDOW_SECONDS = 180;
 const BEST_EFFORT_WINDOWS = [5, 30, 60, 300, 1200, 3600, 7200];
 const EFFORT_MARKER_COLORS = ['#ff7043', '#ffa726', '#ffd54f', '#66bb6a', '#42a5f5', '#ab47bc'];
+const DURABILITY_FALLBACK_COLORS = ['#16B4EA', '#FF7043', '#66BB6A', '#AB47BC', '#FFA726', '#42A5F5', '#EC407A'];
 
 @Component({
   selector: 'app-event-durability-curve',
@@ -147,7 +148,13 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       rollingWindowSeconds: DEFAULT_ROLLING_WINDOW_SECONDS,
       maxPointsPerSeries: this.isMobile ? 220 : 640,
     });
-    const bestEffortMarkers = this.performanceCurveDataService.buildBestEffortMarkers(durabilitySeries, {
+    // Keep the rendered line downsampled for performance, but compute effort markers from
+    // full-resolution durability so long windows (e.g. 2h) are not lost by downsampling.
+    const markerSourceSeries = this.performanceCurveDataService.buildDurabilitySeries(this.activities, {
+      isMerge: this.isMerge,
+      rollingWindowSeconds: DEFAULT_ROLLING_WINDOW_SECONDS,
+    });
+    const bestEffortMarkers = this.performanceCurveDataService.buildBestEffortMarkers(markerSourceSeries, {
       windowDurations: BEST_EFFORT_WINDOWS,
       maxMarkersPerWindow: this.isMobile ? 3 : 6,
     });
@@ -193,8 +200,10 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       fallbackMax: 2.5,
     });
 
-    const series: Array<Record<string, unknown>> = durabilitySeries.map((seriesEntry) => {
+    const usedSeriesColors = new Set<string>();
+    const series: Array<Record<string, unknown>> = durabilitySeries.map((seriesEntry, seriesIndex) => {
       const baseColor = this.eventColorService.getActivityColor(this.activities, seriesEntry.activity) || AppColors.Blue;
+      const seriesColor = this.resolveUniqueColor(baseColor, usedSeriesColors, seriesIndex, DURABILITY_FALLBACK_COLORS);
       return {
         type: 'line',
         id: `durability:${seriesEntry.activityId}`,
@@ -210,10 +219,10 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
         smooth: 0.2,
         lineStyle: {
           width: 2,
-          color: baseColor,
+          color: seriesColor,
         },
         itemStyle: {
-          color: baseColor,
+          color: seriesColor,
         },
         emphasis: {
           focus: activityLabels.size > 1 ? 'series' : 'none',
@@ -231,6 +240,13 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     }, new Map<string, PerformanceCurveBestEffortMarker[]>());
 
     [...markersByWindow.entries()].forEach(([windowLabel, markerEntries], index) => {
+      const preferredMarkerColor = EFFORT_MARKER_COLORS[index % EFFORT_MARKER_COLORS.length];
+      const markerColor = this.resolveUniqueColor(
+        preferredMarkerColor,
+        usedSeriesColors,
+        index,
+        [...EFFORT_MARKER_COLORS, ...DURABILITY_FALLBACK_COLORS]
+      );
       series.push({
         type: 'scatter',
         id: `effort:${windowLabel}`,
@@ -238,7 +254,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
         symbol: 'diamond',
         symbolSize: this.isMobile ? 6 : 8,
         itemStyle: {
-          color: EFFORT_MARKER_COLORS[index % EFFORT_MARKER_COLORS.length],
+          color: markerColor,
           borderColor: darkTheme ? '#000000' : '#ffffff',
           borderWidth: 1,
         },
@@ -320,6 +336,8 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       },
       tooltip: {
         trigger: 'item',
+        appendToBody: true,
+        confine: false,
         backgroundColor: darkTheme ? '#222222' : '#ffffff',
         borderColor: darkTheme ? '#555555' : '#d6d6d6',
         borderWidth: 1,
@@ -408,6 +426,32 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     }
 
     return this.toFiniteNumber(value[index]);
+  }
+
+  private resolveUniqueColor(
+    preferredColor: string,
+    usedColors: Set<string>,
+    seriesIndex: number,
+    palette: string[]
+  ): string {
+    const normalizedPreferred = `${preferredColor}`.trim().toLowerCase();
+    if (normalizedPreferred.length > 0 && !usedColors.has(normalizedPreferred)) {
+      usedColors.add(normalizedPreferred);
+      return preferredColor;
+    }
+
+    for (let i = 0; i < palette.length; i += 1) {
+      const candidate = palette[(seriesIndex + i) % palette.length];
+      const normalizedCandidate = candidate.toLowerCase();
+      if (!usedColors.has(normalizedCandidate)) {
+        usedColors.add(normalizedCandidate);
+        return candidate;
+      }
+    }
+
+    const fallback = palette[seriesIndex % palette.length];
+    usedColors.add(fallback.toLowerCase());
+    return fallback;
   }
 
   private calculateAxisRange(values: number[], options: { fallbackMin: number; fallbackMax: number }): [number, number] {

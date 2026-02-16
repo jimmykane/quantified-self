@@ -374,6 +374,7 @@ export class PerformanceCurveDataService {
 
       const durations = series.points.map((point) => point.duration);
       const powers = series.points.map((point) => point.rawPower);
+      const totalDurationSpan = durations[durations.length - 1] - durations[0];
       const sampleInterval = this.getMedianDurationStep(durations);
       const powerPrefix = [0];
 
@@ -382,17 +383,27 @@ export class PerformanceCurveDataService {
       });
 
       windows.forEach((windowSeconds) => {
-        const windowSamples = Math.max(1, Math.round(windowSeconds / sampleInterval));
-        if (series.points.length < windowSamples) {
+        if (totalDurationSpan < windowSeconds) {
           return;
         }
 
         let bestPower = -1;
         let bestStart = 0;
-        let bestEnd = windowSamples - 1;
+        let bestEnd = 0;
+        let start = 0;
 
-        for (let end = windowSamples - 1; end < series.points.length; end += 1) {
-          const start = end - windowSamples + 1;
+        for (let end = 0; end < series.points.length; end += 1) {
+          while (start < end && (durations[end] - durations[start]) > windowSeconds) {
+            start += 1;
+          }
+
+          const span = durations[end] - durations[start];
+          // Keep labels semantically correct: "2h" should represent an actual ~2h span.
+          const minimumRequiredSpan = windowSeconds - Math.max(1, Math.round(sampleInterval * 1.5));
+          if (span < minimumRequiredSpan) {
+            continue;
+          }
+
           const count = end - start + 1;
           const avgPower = (powerPrefix[end + 1] - powerPrefix[start]) / count;
           if (avgPower > bestPower) {

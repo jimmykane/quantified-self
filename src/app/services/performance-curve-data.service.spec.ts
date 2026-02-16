@@ -291,4 +291,32 @@ describe('PerformanceCurveDataService', () => {
     expect(markers[0].power).toBeGreaterThan(0);
     expect(markers[0].endDuration).toBeGreaterThanOrEqual(markers[0].startDuration);
   });
+
+  it('should still extract a 2h marker when sparse gaps exist but duration span is sufficient', () => {
+    const power: number[] = [];
+    const hr: number[] = [];
+
+    // 2h20m duration, with frequent gaps (nulls) that reduce sample count.
+    for (let second = 0; second < 8400; second += 1) {
+      const hasGap = second % 11 === 0 || second % 17 === 0;
+      power.push(hasGap ? null as unknown as number : 240 + (second % 5));
+      hr.push(hasGap ? null as unknown as number : 145 + (second % 3));
+    }
+
+    const activity = createActivity({
+      id: 'a1',
+      type: 'Ride',
+      streams: {
+        [DataPower.type]: power as unknown as (number | null)[],
+        [DataHeartRate.type]: hr as unknown as (number | null)[],
+      },
+    });
+
+    const durabilitySeries = service.buildDurabilitySeries([activity]);
+    const markers = service.buildBestEffortMarkers(durabilitySeries, {
+      windowDurations: [7200],
+    });
+
+    expect(markers.some((marker) => marker.windowLabel === '2h')).toBe(true);
+  });
 });

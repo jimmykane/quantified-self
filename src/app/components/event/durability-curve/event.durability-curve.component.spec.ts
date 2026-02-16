@@ -151,6 +151,90 @@ describe('EventDurabilityCurveComponent', () => {
     expect(option.legend.show).toBe(false);
   });
 
+  it('should assign different colors when activity color service returns duplicates', async () => {
+    mockService.buildDurabilitySeries.mockReturnValue([
+      {
+        activity: { getID: () => 'a1' } as any,
+        activityId: 'a1',
+        label: 'Ride',
+        points: [
+          { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
+          { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
+        ],
+      },
+      {
+        activity: { getID: () => 'a2' } as any,
+        activityId: 'a2',
+        label: 'Run',
+        points: [
+          { duration: 10, efficiency: 2.0, power: 250, heartRate: 126, rawPower: 252, rawHeartRate: 127 },
+          { duration: 20, efficiency: 1.9, power: 245, heartRate: 129, rawPower: 246, rawHeartRate: 130 },
+        ],
+      },
+    ]);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const option = getLastOption();
+    const lineSeries = option.series.filter((entry: { type?: string }) => entry.type === 'line');
+    expect(lineSeries.length).toBe(2);
+    expect(lineSeries[0].lineStyle.color).not.toBe(lineSeries[1].lineStyle.color);
+  });
+
+  it('should avoid marker colors colliding with line colors in legend entries', async () => {
+    mockService.buildDurabilitySeries.mockReturnValue([
+      {
+        activity: { getID: () => 'a1' } as any,
+        activityId: 'a1',
+        label: 'Ride',
+        points: [
+          { duration: 10, efficiency: 2.2, power: 280, heartRate: 127, rawPower: 282, rawHeartRate: 128 },
+          { duration: 20, efficiency: 2.1, power: 275, heartRate: 131, rawPower: 276, rawHeartRate: 132 },
+        ],
+      },
+    ]);
+    mockService.buildBestEffortMarkers.mockReturnValue([
+      {
+        activity: { getID: () => 'a1' } as any,
+        activityId: 'a1',
+        activityLabel: 'Ride',
+        windowSeconds: 5,
+        windowLabel: '5s',
+        duration: 12,
+        efficiency: 2.2,
+        power: 500,
+        startDuration: 10,
+        endDuration: 14,
+      },
+      {
+        activity: { getID: () => 'a1' } as any,
+        activityId: 'a1',
+        activityLabel: 'Ride',
+        windowSeconds: 30,
+        windowLabel: '30s',
+        duration: 18,
+        efficiency: 2.1,
+        power: 440,
+        startDuration: 10,
+        endDuration: 20,
+      },
+    ]);
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const option = getLastOption();
+    const lineColor = option.series.find((entry: { type?: string }) => entry.type === 'line')?.lineStyle?.color;
+    const markerColors = option.series
+      .filter((entry: { type?: string }) => entry.type === 'scatter')
+      .map((entry: { itemStyle?: { color?: string } }) => entry.itemStyle?.color);
+
+    expect(markerColors.length).toBeGreaterThan(0);
+    expect(markerColors.every((color: string) => color !== lineColor)).toBe(true);
+    expect(new Set(markerColors).size).toBe(markerColors.length);
+  });
+
   it('should apply dark theme tooltip style', async () => {
     component.chartTheme = ChartThemes.Dark;
 

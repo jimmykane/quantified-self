@@ -316,6 +316,8 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
       },
       tooltip: {
         trigger: 'item',
+        appendToBody: true,
+        confine: false,
         backgroundColor: darkTheme ? '#222222' : '#ffffff',
         borderColor: darkTheme ? '#555555' : '#d6d6d6',
         borderWidth: 1,
