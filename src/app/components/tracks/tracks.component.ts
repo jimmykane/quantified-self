@@ -72,6 +72,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   private tracksMapManager: TracksMapManager;
   private scrolled = false;
   private hasTrackBoundsBeenApplied = false;
+  private trackCoordinatesByEventId = new Map<string, number[][]>();
 
   private eventsSubscription: Subscription = new Subscription();
   private trackLoadingSubscription: Subscription = new Subscription();
@@ -351,6 +352,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.hasEvaluatedTripDetection.set(false);
     this.detectedTrips.set([]);
     this.detectedTripsPanelExpanded.set(false);
+    this.trackCoordinatesByEventId.clear();
     this.clearProgressAndOpenBottomSheet();
     const dates = getDatesForDateRange(dateRange, user.settings?.unitSettings?.startOfTheWeek || 1);
     const where = []
@@ -426,7 +428,9 @@ export class TracksComponent implements OnInit, OnDestroy {
                   if (this.promiseTime !== promiseTime) {
                     return
                   }
+                  const eventId = fullEvent?.getID?.() || event.getID();
                   let hasVisibleTrackForEvent = false;
+                  const eventCoordinates: number[][] = [];
                   fullEvent.getActivities()
                     .filter((activity: any) => activity.hasPositionData())
                     .filter((activity: any) => !activityTypes || activityTypes.length === 0 || activityTypes.includes(activity.type))
@@ -453,11 +457,13 @@ export class TracksComponent implements OnInit, OnDestroy {
                         coordinates.forEach((coordinate: number[]) => {
                           chunkCoordinates.push(coordinate);
                           allCoordinates.push(coordinate);
+                          eventCoordinates.push(coordinate);
                         });
                       }
                     })
 
                   if (hasVisibleTrackForEvent) {
+                    this.trackCoordinatesByEventId.set(eventId, eventCoordinates);
                     const detectionInput = this.getTripDetectionInputFromEvent(fullEvent || event);
                     if (detectionInput) {
                       detectionCandidatesByEvent.set(detectionInput.eventId, detectionInput);
@@ -526,11 +532,18 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   public onDetectedTripSelected(trip: DetectedTripViewModel): void {
-    const coordinates: number[][] = [
+    const eventBasedCoordinates = (trip.eventIds || [])
+      .flatMap((eventId) => this.trackCoordinatesByEventId.get(eventId) || []);
+
+    if (eventBasedCoordinates.length > 0) {
+      this.fitBoundsToTracks(eventBasedCoordinates);
+      return;
+    }
+
+    this.fitBoundsToTracks([
       [trip.bounds.west, trip.bounds.south],
       [trip.bounds.east, trip.bounds.north],
-    ];
-    this.fitBoundsToTracks(coordinates);
+    ]);
   }
 
   private getTripDetectionInputFromEvent(event: any): TripDetectionInput | null {
@@ -565,14 +578,8 @@ export class TracksComponent implements OnInit, OnDestroy {
       currentPromiseTime: this.promiseTime
     });
     const detectedTrips = this.tripDetectionService.detectTrips(candidates);
-    const locationLabelPromisesByDestination = new Map<string, Promise<ResolvedTripLocationLabel | null>>();
     const viewModels = await Promise.all(detectedTrips.map(async (trip) => {
-      let locationLabelPromise = locationLabelPromisesByDestination.get(trip.destinationId);
-      if (!locationLabelPromise) {
-        locationLabelPromise = this.tripLocationLabelService.resolveTripLocation(trip.centroidLat, trip.centroidLng);
-        locationLabelPromisesByDestination.set(trip.destinationId, locationLabelPromise);
-      }
-      const location = await locationLabelPromise;
+      const location = await this.tripLocationLabelService.resolveTripLocation(trip.centroidLat, trip.centroidLng);
 
       return {
         ...trip,
