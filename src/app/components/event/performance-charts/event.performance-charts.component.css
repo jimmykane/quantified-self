@@ -1,8 +1,8 @@
 :host {
   display: block;
   width: 100%;
-  --performance-chart-height: 38vh;
-  --performance-chart-min-height: 320px;
+  --performance-chart-height: 22vh;
+  --performance-chart-min-height: 0px;
 }
 
 .performance-charts-container {
@@ -12,4 +12,37 @@
 
 .performance-charts-tabs {
   width: 100%;
+}
+
+:host ::ng-deep .performance-charts-tabs .mat-mdc-tab-header-pagination {
+  display: none !important;
+}
+
+:host ::ng-deep .performance-charts-tabs .mat-mdc-tab-label-container {
+  overflow: visible !important;
+}
+
+:host ::ng-deep .performance-charts-tabs .mat-mdc-tab-labels {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+:host ::ng-deep .performance-charts-tabs .mat-mdc-tab {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-right: 8px;
+  padding-left: 8px;
+}
+
+:host ::ng-deep .performance-charts-tabs .mdc-tab__text-label {
+  font-size: 12px;
+}
+
+:host ::ng-deep .performance-charts-tabs .mat-mdc-tab-body-wrapper {
+  overflow: hidden;
+}
+
+:host ::ng-deep .performance-charts-tabs .mat-mdc-tab-body,
+:host ::ng-deep .performance-charts-tabs .mat-mdc-tab-body-content {
+  overflow: hidden !important;
 }

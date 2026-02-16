@@ -1,4 +1,4 @@
-.power-curve-container {
+.durability-curve-container {
   display: flex;
   flex-direction: column;
   padding-top: 0;
@@ -31,7 +31,7 @@
   opacity: 0.82;
 }
 
-.power-curve-chart {
+.durability-curve-chart {
   flex: 1 1 auto;
   min-height: 0;
 }

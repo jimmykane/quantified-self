@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 
 import { ActivityInterface, ChartThemes } from '@sports-alliance/sports-lib';
 
+type PerformanceTabId = 'intensity' | 'powerCurve' | 'durability' | 'cadencePower';
+
 @Component({
   selector: 'app-event-performance-charts',
   templateUrl: './event.performance-charts.component.html',
@@ -16,9 +18,47 @@ export class EventPerformanceChartsComponent {
   @Input() isMerge = false;
 
   @Input() hasIntensity = false;
-  @Input() hasPerformanceCurve = false;
+  @Input() hasPowerCurve = false;
+  @Input() hasDurability = false;
+  @Input() hasCadencePower = false;
 
   get shouldShowTabs(): boolean {
-    return this.hasIntensity && this.hasPerformanceCurve;
+    return this.availableTabs.length > 1;
+  }
+
+  get singleChartTab(): PerformanceTabId | null {
+    return this.availableTabs.length === 1
+      ? this.availableTabs[0]
+      : null;
+  }
+
+  get availableTabs(): PerformanceTabId[] {
+    const tabs: PerformanceTabId[] = [];
+    if (this.hasIntensity) {
+      tabs.push('intensity');
+    }
+    if (this.hasPowerCurve) {
+      tabs.push('powerCurve');
+    }
+    if (this.hasDurability) {
+      tabs.push('durability');
+    }
+    if (this.hasCadencePower) {
+      tabs.push('cadencePower');
+    }
+    return tabs;
+  }
+
+  getTabLabel(tab: PerformanceTabId): string {
+    if (tab === 'intensity') {
+      return 'Intensity';
+    }
+    if (tab === 'powerCurve') {
+      return 'Power Curve';
+    }
+    if (tab === 'durability') {
+      return 'Durability';
+    }
+    return 'Cadence vs Power';
   }
 }

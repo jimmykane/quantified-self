@@ -13,14 +13,11 @@ import { EventInterface, User, ActivityInterface, ChartThemes, AppThemes, XAxisT
 import { LoggerService } from '../../services/logger.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { shouldRenderIntensityZonesChart } from '../../helpers/intensity-zones-chart-data-helper';
-import { shouldRenderPerformanceCurveChart } from '../../helpers/performance-curve-chart-data-helper';
 import { AppEventService } from '../../services/app.event.service';
+import { PerformanceCurveDataService } from '../../services/performance-curve-data.service';
 
 vi.mock('../../helpers/intensity-zones-chart-data-helper', () => ({
     shouldRenderIntensityZonesChart: vi.fn(),
-}));
-vi.mock('../../helpers/performance-curve-chart-data-helper', () => ({
-    shouldRenderPerformanceCurveChart: vi.fn(),
 }));
 
 describe('EventCardComponent', () => {
@@ -37,12 +34,12 @@ describe('EventCardComponent', () => {
     let mockLoggerService: any;
     let mockBottomSheet: any;
     let mockEventService: any;
+    let mockPerformanceCurveDataService: any;
     let routeData$: BehaviorSubject<{ event: EventInterface }>;
     let routeUserID: string;
     let routeEventID: string;
     let liveEventDetailsByRouteKey: Map<string, Subject<EventInterface | null>>;
     const mockedShouldRenderIntensityZonesChart = vi.mocked(shouldRenderIntensityZonesChart);
-    const mockedShouldRenderPerformanceCurveChart = vi.mocked(shouldRenderPerformanceCurveChart);
 
     const mockUser = new User('testUser');
     mockUser.settings = {
@@ -100,7 +97,6 @@ describe('EventCardComponent', () => {
 
     beforeEach(async () => {
         mockedShouldRenderIntensityZonesChart.mockReturnValue(false);
-        mockedShouldRenderPerformanceCurveChart.mockReturnValue(false);
         routeData$ = new BehaviorSubject({ event: mockEvent });
         routeUserID = 'testUser';
         routeEventID = 'evt1';
@@ -161,6 +157,14 @@ describe('EventCardComponent', () => {
 
         mockRouter = { navigate: vi.fn() };
         mockLoggerService = { log: vi.fn(), error: vi.fn() };
+        mockPerformanceCurveDataService = {
+            getAvailability: vi.fn().mockReturnValue({
+                hasPowerCurve: false,
+                hasDurability: false,
+                hasCadencePower: false,
+                hasAny: false,
+            }),
+        };
 
         await TestBed.configureTestingModule({
             declarations: [EventCardComponent],
@@ -175,6 +179,7 @@ describe('EventCardComponent', () => {
                 { provide: Router, useValue: mockRouter },
                 { provide: LoggerService, useValue: mockLoggerService },
                 { provide: AppEventService, useValue: mockEventService },
+                { provide: PerformanceCurveDataService, useValue: mockPerformanceCurveDataService },
             ],
             schemas: [NO_ERRORS_SCHEMA]
         })
@@ -197,7 +202,7 @@ describe('EventCardComponent', () => {
         expect(mockActivitySelectionService.selectedActivities.select).toHaveBeenCalled();
         expect(mockEventService.getEventDetailsLive).toHaveBeenCalledTimes(1);
         expect(mockedShouldRenderIntensityZonesChart).toHaveBeenCalled();
-        expect(mockedShouldRenderPerformanceCurveChart).toHaveBeenCalled();
+        expect(mockPerformanceCurveDataService.getAvailability).toHaveBeenCalled();
     });
 
     it('should apply live event updates for matching activity IDs', () => {
@@ -303,12 +308,20 @@ describe('EventCardComponent', () => {
         expect(component.hasIntensityZonesFlag()).toBe(false);
     });
 
-    it('should compute hasPerformanceCurveFlag as false when no performance curve data exists', () => {
-        expect(component.hasPerformanceCurveFlag()).toBe(false);
+    it('should compute hasPowerCurveFlag as false when no performance curve data exists', () => {
+        expect(component.hasPowerCurveFlag()).toBe(false);
     });
 
     it('should compute hasPerformanceChartsFlag as false when intensity and power curve are both unavailable', () => {
         expect(component.hasPerformanceChartsFlag()).toBe(false);
+    });
+
+    it('should compute hasDurabilityFlag as false when no durability data exists', () => {
+        expect(component.hasDurabilityFlag()).toBe(false);
+    });
+
+    it('should compute hasCadencePowerFlag as false when no cadence-power data exists', () => {
+        expect(component.hasCadencePowerFlag()).toBe(false);
     });
 
     it('should compute hasDevicesFlag as false when no devices', () => {
@@ -340,7 +353,12 @@ describe('EventCardComponent', () => {
 
         beforeEach(() => {
             mockedShouldRenderIntensityZonesChart.mockReturnValue(true);
-            mockedShouldRenderPerformanceCurveChart.mockReturnValue(true);
+            mockPerformanceCurveDataService.getAvailability.mockReturnValue({
+                hasPowerCurve: true,
+                hasDurability: true,
+                hasCadencePower: true,
+                hasAny: true,
+            });
             routeEventID = 'evt2';
             routeData$.next({ event: eventWithData });
 
@@ -366,8 +384,16 @@ describe('EventCardComponent', () => {
             expect(component.hasPositionsFlag()).toBe(true);
         });
 
-        it('should compute hasPerformanceCurveFlag as true when performance curve data exists', () => {
-            expect(component.hasPerformanceCurveFlag()).toBe(true);
+        it('should compute hasPowerCurveFlag as true when performance curve data exists', () => {
+            expect(component.hasPowerCurveFlag()).toBe(true);
+        });
+
+        it('should compute hasDurabilityFlag as true when durability data exists', () => {
+            expect(component.hasDurabilityFlag()).toBe(true);
+        });
+
+        it('should compute hasCadencePowerFlag as true when cadence-power data exists', () => {
+            expect(component.hasCadencePowerFlag()).toBe(true);
         });
 
         it('should compute hasPerformanceChartsFlag as true when either chart is available', () => {

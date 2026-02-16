@@ -41,7 +41,7 @@ import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { LoggerService } from '../../services/logger.service';
 import { AppEventService } from '../../services/app.event.service';
 import { shouldRenderIntensityZonesChart } from '../../helpers/intensity-zones-chart-data-helper';
-import { shouldRenderPerformanceCurveChart } from '../../helpers/performance-curve-chart-data-helper';
+import { PerformanceCurveDataService } from '../../services/performance-curve-data.service';
 import { reconcileEventDetailsLiveUpdate } from '../../utils/event-live-reconcile';
 @Component({
   selector: 'app-event-card',
@@ -64,6 +64,7 @@ export class EventCardComponent implements OnInit {
   private bottomSheet = inject(MatBottomSheet);
   private logger = inject(LoggerService);
   private eventService = inject(AppEventService);
+  private performanceCurveDataService = inject(PerformanceCurveDataService);
 
   // Signal-based state
   public event = signal<AppEventInterface | null>(null);
@@ -85,12 +86,26 @@ export class EventCardComponent implements OnInit {
     shouldRenderIntensityZonesChart(this.selectedActivitiesInstant())
   );
 
-  public hasPerformanceCurveFlag = computed(() =>
-    shouldRenderPerformanceCurveChart(this.selectedActivitiesInstant())
+  public performanceCurveAvailability = computed(() =>
+    this.performanceCurveDataService.getAvailability(this.selectedActivitiesInstant(), {
+      isMerge: this.event()?.isMerge === true,
+    })
+  );
+
+  public hasPowerCurveFlag = computed(() =>
+    this.performanceCurveAvailability().hasPowerCurve
+  );
+
+  public hasDurabilityFlag = computed(() =>
+    this.performanceCurveAvailability().hasDurability
+  );
+
+  public hasCadencePowerFlag = computed(() =>
+    this.performanceCurveAvailability().hasCadencePower
   );
 
   public hasPerformanceChartsFlag = computed(() =>
-    this.hasIntensityZonesFlag() || this.hasPerformanceCurveFlag()
+    this.hasIntensityZonesFlag() || this.performanceCurveAvailability().hasAny
   );
 
   public hasDevicesFlag = computed(() =>
