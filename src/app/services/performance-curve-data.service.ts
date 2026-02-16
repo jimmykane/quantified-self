@@ -4,6 +4,8 @@ import { ActivityInterface, DataCadence, DataHeartRate, DataPower } from '@sport
 const POWER_CURVE_TYPE = 'PowerCurve';
 const DEFAULT_ROLLING_WINDOW_SECONDS = 180;
 const DEFAULT_EFFORT_WINDOWS = [5, 30, 60, 300, 1200, 3600];
+const MIN_VALID_CADENCE = 35;
+const MIN_VALID_POWER = 20;
 
 interface ValueObject {
   getValue?: () => unknown;
@@ -275,7 +277,7 @@ export class PerformanceCurveDataService {
       for (let index = 0; index < length; index += 1) {
         const power = this.toFiniteNumber(powerData[index]);
         const cadence = this.toFiniteNumber(cadenceData[index]);
-        if (!power || !cadence || power <= 0 || cadence <= 0) {
+        if (!power || !cadence || power < MIN_VALID_POWER || cadence < MIN_VALID_CADENCE) {
           continue;
         }
 
@@ -299,7 +301,13 @@ export class PerformanceCurveDataService {
       });
 
       // In dense datasets, discard isolated singleton bins to reduce no-data-like visual noise.
-      const inferredMinBinCount = pointsRaw.length > 300 ? 2 : 1;
+      const inferredMinBinCount = pointsRaw.length > 900
+        ? 4
+        : pointsRaw.length > 500
+          ? 3
+          : pointsRaw.length > 300
+            ? 2
+            : 1;
       const minBinCount = Number.isFinite(options.minCadencePowerBinCount)
         ? Math.max(1, options.minCadencePowerBinCount as number)
         : inferredMinBinCount;

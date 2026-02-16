@@ -260,6 +260,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
         axisLabel: {
           color: textColor,
           fontSize: axisLabelFontSize,
+          formatter: (value: number) => `${Math.round(value)}`,
         },
       },
       yAxis: {
