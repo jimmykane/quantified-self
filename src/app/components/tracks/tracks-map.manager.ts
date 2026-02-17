@@ -40,8 +40,10 @@ export class TracksMapManager {
     private static readonly TRACK_START_SOURCE_ID = 'track-start-source';
     private static readonly TRACK_START_LAYER_ID = 'track-start-layer';
     private static readonly TRACK_START_HIT_LAYER_ID = 'track-start-hit-layer';
-    private static readonly TRACK_START_MIN_ZOOM = 12;
+    private static readonly TRACK_START_MIN_ZOOM = 10;
     private static readonly TRACK_START_MARKER_STROKE = '#f5f8ff';
+    private static readonly TRACK_START_MARKER_RADIUS_MIN = 5.6;
+    private static readonly TRACK_START_MARKER_RADIUS_MAX = 6.72;
 
     private map: any; // Mapbox GL map instance
     private activeLayerIds: string[] = []; // Store IDs of added layers/sources
@@ -573,7 +575,7 @@ export class TracksMapManager {
                     properties: {
                         pointId: point.pointId,
                         markerColor: this.resolveTrackColors(point.activityTypeValue ?? undefined).adjustedColor,
-                        markerSizeWeight: sizeWeightsByPointId.get(point.pointId) ?? 0
+                        markerRadius: this.resolveTrackStartMarkerRadius(sizeWeightsByPointId.get(point.pointId) ?? 0)
                     }
                 }))
             });
@@ -674,6 +676,12 @@ export class TracksMapManager {
         if (value === null || value === undefined || !Number.isFinite(value)) return null;
         if (min === max) return 1;
         return (value - min) / (max - min);
+    }
+
+    private resolveTrackStartMarkerRadius(weight: number): number {
+        const safeWeight = Number.isFinite(weight) ? Math.min(Math.max(weight, 0), 1) : 0;
+        const range = TracksMapManager.TRACK_START_MARKER_RADIUS_MAX - TracksMapManager.TRACK_START_MARKER_RADIUS_MIN;
+        return TracksMapManager.TRACK_START_MARKER_RADIUS_MIN + (range * safeWeight);
     }
 
     private buildTrackStartPointId(point: TrackStartPoint, duplicateCounter: Map<string, number>): string {
