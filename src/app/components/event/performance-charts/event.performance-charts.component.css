@@ -14,6 +14,19 @@
   width: 100%;
 }
 
+.performance-tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 100%;
+}
+
+.performance-tab-icon {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
+}
+
 :host ::ng-deep .performance-charts-tabs .mat-mdc-tab-header-pagination {
   display: none !important;
 }
@@ -48,4 +61,19 @@
 :host ::ng-deep .performance-charts-tabs .mat-mdc-tab-body,
 :host ::ng-deep .performance-charts-tabs .mat-mdc-tab-body-content {
   overflow: hidden !important;
+}
+
+@media (max-width: 599.98px) {
+  .performance-tab-label {
+    justify-content: center;
+  }
+
+  .performance-tab-text {
+    display: none;
+  }
+
+  :host ::ng-deep .performance-charts-tabs .mat-mdc-tab {
+    min-width: 44px;
+    padding-inline: 8px;
+  }
 }

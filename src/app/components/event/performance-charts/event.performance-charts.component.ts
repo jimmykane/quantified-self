@@ -61,4 +61,17 @@ export class EventPerformanceChartsComponent {
     }
     return 'Cadence vs Power';
   }
+
+  getTabIcon(tab: PerformanceTabId): string {
+    if (tab === 'intensity') {
+      return 'stacked_bar_chart';
+    }
+    if (tab === 'powerCurve') {
+      return 'line_curve';
+    }
+    if (tab === 'durability') {
+      return 'line_axis';
+    }
+    return 'key_visualizer';
+  }
 }

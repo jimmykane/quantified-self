@@ -45,6 +45,11 @@ describe('EventPerformanceChartsComponent', () => {
     expect(powerIndex).toBeGreaterThan(intensityIndex);
     expect(durabilityIndex).toBeGreaterThan(powerIndex);
     expect(cadenceIndex).toBeGreaterThan(durabilityIndex);
+
+    const icons = Array.from(nativeElement.querySelectorAll('.performance-tab-icon'))
+      .map((icon) => icon.textContent?.trim())
+      .filter((value): value is string => !!value);
+    expect(icons).toEqual(['stacked_bar_chart', 'line_curve', 'line_axis', 'key_visualizer']);
   });
 
   it('should render direct durability chart without tabs when only durability is available', () => {
