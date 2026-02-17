@@ -221,7 +221,7 @@ describe('EventIntensityZonesComponent', () => {
     expect(mockedConvert).toHaveBeenLastCalledWith(component.activities, true);
     expect(mockLoader.setOption).toHaveBeenCalledTimes(2);
     const option = getLastOption();
-    expect(option.grid.right).toBe(16);
+    expect(option.grid.right).toBe(0);
     expect(option.grid.bottom).toBe(0);
   });
 
