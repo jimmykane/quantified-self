@@ -18,6 +18,8 @@ import {
   ActivityInterface,
   ChartThemes,
   DataDuration,
+  DataHeartRate,
+  DataPower,
 } from '@sports-alliance/sports-lib';
 import { AppBreakpoints } from '../../../constants/breakpoints';
 import { AppColors } from '../../../services/color/app.colors';
@@ -394,7 +396,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
 
       lines.push(`Efficiency: <b>${efficiency.toFixed(2)} W/bpm</b>`);
       if (power !== null && heartRate !== null) {
-        lines.push(`Rolling: <b>${Math.round(power)} W</b> / <b>${Math.round(heartRate)} bpm</b>`);
+        lines.push(`Rolling: <b>${this.formatPowerLabel(power, true)}</b> / <b>${this.formatHeartRateLabel(heartRate, true)}</b>`);
       }
 
       return lines.join('<br/>');
@@ -420,7 +422,7 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
         lines.push(activityLabel);
       }
 
-      lines.push(`Power: <b>${Math.round(power)} W</b>`);
+      lines.push(`Power: <b>${this.formatPowerLabel(power, true)}</b>`);
       if (intervalLabel.length > 0) {
         lines.push(`Window: <b>${intervalLabel}</b>`);
       }
@@ -569,6 +571,40 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
     }
 
     return value.toFixed(2).replace(/\.?0+$/, '');
+  }
+
+  private formatPowerLabel(power: number, includeUnit = false): string {
+    if (!Number.isFinite(power)) {
+      return '';
+    }
+
+    const dataPower = new DataPower(power);
+    const value = `${dataPower.getDisplayValue()}`.trim();
+    if (!includeUnit) {
+      return value;
+    }
+
+    const unit = `${dataPower.getDisplayUnit()}`.trim();
+    return unit.length > 0
+      ? `${value} ${unit}`
+      : value;
+  }
+
+  private formatHeartRateLabel(heartRate: number, includeUnit = false): string {
+    if (!Number.isFinite(heartRate)) {
+      return '';
+    }
+
+    const dataHeartRate = new DataHeartRate(heartRate);
+    const value = `${dataHeartRate.getDisplayValue()}`.trim();
+    if (!includeUnit) {
+      return value;
+    }
+
+    const unit = `${dataHeartRate.getDisplayUnit()}`.trim();
+    return unit.length > 0
+      ? `${value} ${unit}`
+      : value;
   }
 
   private scheduleResize(): void {

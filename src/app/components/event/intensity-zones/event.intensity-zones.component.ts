@@ -143,7 +143,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     const textColor = darkTheme ? '#ffffff' : '#2a2a2a';
     const gridLineColor = darkTheme ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)';
     const zoneBackgroundOpacity = darkTheme ? 0.18 : 0.12;
-    const rightInset = this.isMobile ? 16 : 0;
+    const rightInset = 0;
     const zoneAxisRichStyles = this.createZoneAxisRichStyles(data.zones);
     const zoneBulletRichStyles = this.createZoneBulletRichStyles(data.zones);
     const zoneBackgroundColors = data.zones.map(zone =>

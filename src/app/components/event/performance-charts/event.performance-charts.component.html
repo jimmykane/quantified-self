@@ -2,7 +2,13 @@
   @if (shouldShowTabs) {
   <mat-tab-group class="performance-charts-tabs">
     @for (tab of availableTabs; track tab) {
-    <mat-tab [label]="getTabLabel(tab)">
+    <mat-tab [aria-label]="getTabLabel(tab)">
+      <ng-template mat-tab-label>
+        <span class="performance-tab-label">
+          <mat-icon aria-hidden="true" class="performance-tab-icon">{{ getTabIcon(tab) }}</mat-icon>
+          <span class="performance-tab-text">{{ getTabLabel(tab) }}</span>
+        </span>
+      </ng-template>
       <ng-template matTabContent>
         @switch (tab) {
         @case ('intensity') {

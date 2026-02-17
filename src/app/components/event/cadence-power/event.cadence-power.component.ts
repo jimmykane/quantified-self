@@ -17,7 +17,9 @@ import type { EChartsType } from 'echarts/core';
 import {
   ActivityInterface,
   ChartThemes,
+  DataCadence,
   DataDuration,
+  DataPower,
 } from '@sports-alliance/sports-lib';
 import { AppBreakpoints } from '../../../constants/breakpoints';
 import { AppColors } from '../../../services/color/app.colors';
@@ -274,7 +276,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
           color: textColor,
           fontSize: axisLabelFontSize,
           hideOverlap: true,
-          formatter: (value: number) => `${Math.round(value)}`,
+          formatter: (value: number) => this.formatCadenceLabel(value),
         },
       },
       yAxis: {
@@ -296,6 +298,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
         axisLabel: {
           color: textColor,
           fontSize: axisLabelFontSize,
+          formatter: (value: number) => this.formatPowerLabel(value),
         },
       },
       tooltip: {
@@ -349,8 +352,8 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
       lines.push(`<b>${entry.seriesName}</b>`);
     }
 
-    lines.push(`Cadence: <b>${Math.round(cadence)} rpm</b>`);
-    lines.push(`Power: <b>${Math.round(power)} W</b>`);
+    lines.push(`Cadence: <b>${this.formatCadenceLabel(cadence, true)}</b>`);
+    lines.push(`Power: <b>${this.formatPowerLabel(power, true)}</b>`);
 
     if (duration !== null && duration > 0) {
       lines.push(`At: <b>${new DataDuration(duration).getDisplayValue(false, false).trim()}</b>`);
@@ -510,6 +513,40 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
     }
 
     return null;
+  }
+
+  private formatCadenceLabel(cadence: number, includeUnit = false): string {
+    if (!Number.isFinite(cadence)) {
+      return '';
+    }
+
+    const dataCadence = new DataCadence(cadence);
+    const value = `${dataCadence.getDisplayValue()}`.trim();
+    if (!includeUnit) {
+      return value;
+    }
+
+    const unit = `${dataCadence.getDisplayUnit()}`.trim();
+    return unit.length > 0
+      ? `${value} ${unit}`
+      : value;
+  }
+
+  private formatPowerLabel(power: number, includeUnit = false): string {
+    if (!Number.isFinite(power)) {
+      return '';
+    }
+
+    const dataPower = new DataPower(power);
+    const value = `${dataPower.getDisplayValue()}`.trim();
+    if (!includeUnit) {
+      return value;
+    }
+
+    const unit = `${dataPower.getDisplayUnit()}`.trim();
+    return unit.length > 0
+      ? `${value} ${unit}`
+      : value;
   }
 
   private scheduleResize(): void {
