@@ -95,6 +95,7 @@ describe('TracksComponent', () => {
   let mockTripLocationLabelService: any;
 
   const mockUser = {
+    uid: 'user-1',
     settings: {
       myTracksSettings: {
         dateRange: DateRanges.thisWeek,
@@ -127,6 +128,9 @@ describe('TracksComponent', () => {
       remove: vi.fn(),
       off: vi.fn(),
       on: vi.fn(),
+      queryRenderedFeatures: vi.fn().mockReturnValue([]),
+      getCanvas: vi.fn().mockReturnValue({ style: { cursor: '' } }),
+      project: vi.fn().mockReturnValue({ x: 100, y: 120 }),
     };
 
     mockAuthService = {
@@ -356,12 +360,9 @@ describe('TracksComponent', () => {
       };
 
       const event = createMockEvent('jump-event-1', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [activity];
 
       mockEventService.getEventsBy.mockReturnValue(of([event]));
-      mockEventService.attachStreamsToEventWithActivities.mockImplementation((_user: unknown, hydratedEvent: any) => {
-        hydratedEvent.getActivities = () => [activity];
-        return of(hydratedEvent);
-      });
 
       await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
       await waitForAsyncWork();
@@ -373,6 +374,48 @@ describe('TracksComponent', () => {
           lat: 40.645,
           hangTime: 1.7,
           distance: 4.2
+        })
+      ]);
+    });
+
+    it('should collect activity start points from loaded activities', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setActivityStartPointsSpy = vi.spyOn(trackManager, 'setActivityStartPoints');
+
+      const activity = {
+        type: ActivityTypes.Running,
+        getID: () => 'activity-start-1',
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+        getDuration: () => ({
+          getDisplayValue: () => '01:00:00'
+        }),
+        getDistance: () => ({
+          getDisplayValue: () => '10.5',
+          getDisplayUnit: () => 'km'
+        }),
+        getAllEvents: () => []
+      };
+
+      const event = createMockEvent('start-event-1', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [activity];
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(setActivityStartPointsSpy).toHaveBeenCalledTimes(1);
+      expect(setActivityStartPointsSpy).toHaveBeenCalledWith([
+        expect.objectContaining({
+          eventId: 'start-event-1',
+          activityId: 'activity-start-1',
+          durationLabel: '01:00:00',
+          distanceLabel: '10.5 km',
+          lng: 22.94,
+          lat: 40.64
         })
       ]);
     });
@@ -399,18 +442,68 @@ describe('TracksComponent', () => {
       };
 
       const event = createMockEvent('jump-event-empty', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [activity];
 
       mockEventService.getEventsBy.mockReturnValue(of([event]));
-      mockEventService.attachStreamsToEventWithActivities.mockImplementation((_user: unknown, hydratedEvent: any) => {
-        hydratedEvent.getActivities = () => [activity];
-        return of(hydratedEvent);
-      });
 
       await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
       await waitForAsyncWork();
 
       expect(setJumpHeatPointsSpy).not.toHaveBeenCalled();
       expect(clearJumpHeatmapSpy).toHaveBeenCalled();
+    });
+
+    it('should update popup state from start marker selection handler', async () => {
+      await component.ngOnInit();
+      fixture.detectChanges();
+      await waitForAsyncWork();
+
+      const manager = (component as any).tracksMapManager as any;
+      const selectionHandler = manager.startSelectionHandler as ((selection: any) => void);
+      expect(typeof selectionHandler).toBe('function');
+
+      selectionHandler({
+        eventId: 'event-1',
+        activityId: 'activity-1',
+        activityType: 'Running',
+        startDate: 1731062400000,
+        durationLabel: '01:00:00',
+        distanceLabel: '10 km',
+        lng: 10,
+        lat: 20
+      });
+
+      expect(component.selectedStartPoint()).toEqual(expect.objectContaining({
+        eventId: 'event-1',
+        activityId: 'activity-1'
+      }));
+      expect(component.selectedStartPointScreen()).toEqual({ x: 100, y: 120 });
+
+      selectionHandler(null);
+      expect(component.selectedStartPoint()).toBeNull();
+      expect(component.selectedStartPointScreen()).toBeNull();
+    });
+
+    it('should navigate to event when opening selected start marker activity', async () => {
+      component.user = mockUser as any;
+      component.selectedStartPoint.set({
+        eventId: 'event-42',
+        activityId: 'activity-42',
+        activityType: 'Running',
+        startDate: 1731062400000,
+        durationLabel: '00:40:00',
+        distanceLabel: '7 km',
+        lng: 10,
+        lat: 20
+      });
+      component.selectedStartPointScreen.set({ x: 120, y: 140 });
+
+      component.openSelectedStartPointEvent();
+
+      const router = TestBed.inject(Router) as any;
+      expect(router.navigate).toHaveBeenCalledWith(['/user', 'user-1', 'event', 'event-42']);
+      expect(component.selectedStartPoint()).toBeNull();
+      expect(component.selectedStartPointScreen()).toBeNull();
     });
   });
 

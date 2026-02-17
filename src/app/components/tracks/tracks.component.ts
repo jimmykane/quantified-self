@@ -1,4 +1,4 @@
-import { Component, Inject, ViewChild, ElementRef, ChangeDetectorRef, NgZone, effect, signal, WritableSignal, computed, PLATFORM_ID, OnInit, OnDestroy, inject } from '@angular/core';
+import { Component, ViewChild, ElementRef, ChangeDetectorRef, NgZone, effect, signal, WritableSignal, computed, PLATFORM_ID, OnInit, OnDestroy, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
@@ -29,17 +29,18 @@ import { AppUserSettingsQueryService } from '../../services/app.user-settings-qu
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { AppMyTracksSettings } from '../../models/app-user.interface';
 import { LoggerService } from '../../services/logger.service';
-import { TracksMapManager } from './tracks-map.manager'; // Imported Manager
+import { TrackStartPoint, TrackStartSelection, TracksMapManager } from './tracks-map.manager'; // Imported Manager
 import { MapStyleService } from '../../services/map-style.service';
 import { MapboxStyleSynchronizer } from '../../services/map/mapbox-style-synchronizer';
 import { MapStyleName } from '../../services/map/map-style.types';
 import { MapboxHeatmapLayerService } from '../../services/map/mapbox-heatmap-layer.service';
 import { JumpHeatmapWeightingService } from '../../services/map/jump-heatmap-weighting.service';
+import { MapboxStartPointLayerService } from '../../services/map/mapbox-start-point-layer.service';
 import { Search } from '../event-search/event-search.component';
 import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-detection.service';
 import { TripDetectionInput } from '../../services/my-tracks-trip-detection.service';
 import { DetectedTrip } from '../../services/my-tracks-trip-detection.service';
-import { ResolvedTripLocationLabel, TripLocationLabelService } from '../../services/trip-location-label.service';
+import { TripLocationLabelService } from '../../services/trip-location-label.service';
 
 interface DetectedTripViewModel extends DetectedTrip {
   locationLabel: string | null;
@@ -95,6 +96,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   private mapSynchronizer = signal<MapboxStyleSynchronizer | undefined>(undefined);
   private terrainControl = signal<any>(null); // Using any to avoid forward reference issues if class is defined below
   private platformId!: object;
+  private startPointPopupRepositionHandler: (() => void) | null = null;
 
   private promiseTime!: number;
   private analyticsService = inject(AppAnalyticsService);
@@ -109,6 +111,8 @@ export class TracksComponent implements OnInit, OnDestroy {
   public detectedTripsPanelExpanded: WritableSignal<boolean> = signal(false);
   public searchPeekDefaultExpanded: WritableSignal<boolean> = signal(true);
   public hasDetectedJumps: WritableSignal<boolean> = signal(false);
+  public selectedStartPoint: WritableSignal<TrackStartSelection | null> = signal(null);
+  public selectedStartPointScreen: WritableSignal<{ x: number; y: number } | null> = signal(null);
   // Removed legacy state tracking
 
   constructor(
@@ -128,6 +132,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     private mapStyleService: MapStyleService,
     private mapboxHeatmapLayerService: MapboxHeatmapLayerService,
     private jumpHeatmapWeightingService: JumpHeatmapWeightingService,
+    private mapboxStartPointLayerService: MapboxStartPointLayerService,
   ) {
     this.tracksMapManager = new TracksMapManager(
       this.zone,
@@ -135,6 +140,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       this.mapStyleService,
       this.mapboxHeatmapLayerService,
       this.jumpHeatmapWeightingService,
+      this.mapboxStartPointLayerService,
       this.logger
     );
     this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
@@ -237,6 +243,17 @@ export class TracksComponent implements OnInit, OnDestroy {
         const mapboxgl = await this.mapboxLoader.loadMapbox();
         this.tracksMapManager.setMap(mapInstance, mapboxgl);
         this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
+        this.tracksMapManager.setStartMarkerSelectionHandler((selection) => {
+          this.zone.run(() => {
+            if (!selection) {
+              this.closeSelectedStartPointPopup();
+              return;
+            }
+            this.selectedStartPoint.set(selection);
+            this.updateSelectedStartPointScreenPosition();
+          });
+        });
+        this.bindStartPointPopupMapListeners(mapInstance);
 
         mapInstance.addControl(new mapboxgl.FullscreenControl(), 'bottom-right');
 
@@ -332,6 +349,8 @@ export class TracksComponent implements OnInit, OnDestroy {
   public ngOnDestroy() {
     this.unsubscribeFromAll()
     this.bottomSheet.dismiss();
+    this.tracksMapManager.setStartMarkerSelectionHandler(null);
+    this.unbindStartPointPopupMapListeners();
     if (this.mapSignal()) {
       this.mapSignal().remove();
     }
@@ -392,7 +411,9 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.detectedTripsPanelExpanded.set(false);
     this.hasDetectedJumps.set(false);
     this.trackCoordinatesByEventId.clear();
+    this.closeSelectedStartPointPopup();
     this.tracksMapManager.clearJumpHeatmap();
+    this.tracksMapManager.clearActivityStartPoints();
     this.clearProgressAndOpenBottomSheet();
     const dates = getDatesForDateRange(dateRange, user.settings?.unitSettings?.startOfTheWeek || 1);
     const where = []
@@ -449,6 +470,7 @@ export class TracksComponent implements OnInit, OnDestroy {
           let addedTrackCount = 0;
           const allCoordinates: number[][] = [];
           const jumpHeatPoints: JumpHeatPoint[] = [];
+          const trackStartPoints: TrackStartPoint[] = [];
           let jumpsWithCoordinates = 0;
           let jumpsWithWeightMetrics = 0;
           const detectionCandidatesByEvent = new Map<string, TripDetectionInput>();
@@ -461,67 +483,92 @@ export class TracksComponent implements OnInit, OnDestroy {
             const chunkCoordinates: number[][] = [];
 
             await Promise.all(eventsChunk.map(async (event: any) => {
-              this.logger.log(`[TracksComponent] Fetching activities and streams for event: ${event.getID()}, promiseTime: ${promiseTime}`);
-              event.addActivities(await this.eventService.getActivities(user, event.getID()).pipe(take(1)).toPromise())
-              return this.eventService.attachStreamsToEventWithActivities(user, event, [
-                DataLatitudeDegrees.type,
-                DataLongitudeDegrees.type,
-              ]).pipe(take(1)).toPromise()
-                .then((fullEvent: any) => {
-                  this.logger.log(`[TracksComponent] Attached streams for event: ${event.getID()}, promiseTime: ${promiseTime}`);
-                  if (this.promiseTime !== promiseTime) {
-                    return
-                  }
-                  const eventId = fullEvent?.getID?.() || event.getID();
-                  let hasVisibleTrackForEvent = false;
-                  const eventCoordinates: number[][] = [];
-                  fullEvent.getActivities()
-                    .filter((activity: any) => activity.hasPositionData())
-                    .filter((activity: any) => !activityTypes || activityTypes.length === 0 || activityTypes.includes(activity.type))
-                    .forEach((activity: any) => {
-                      const jumpStats = this.collectJumpHeatPointsFromActivity(activity, jumpHeatPoints);
-                      jumpsWithCoordinates += jumpStats.jumpsWithCoordinates;
-                      jumpsWithWeightMetrics += jumpStats.jumpsWithWeightMetrics;
+              this.logger.log(`[TracksComponent] Fetching activities for event: ${event.getID()}, promiseTime: ${promiseTime}`);
+              event.addActivities(await this.eventService.getActivities(user, event.getID()).pipe(take(1)).toPromise());
+              let fullEvent = event;
+              try {
+                // Hydrate lat/long streams from original files without replacing activity objects.
+                const hydratedEvent = await this.eventService.attachStreamsToEventWithActivities(
+                  user,
+                  event,
+                  [
+                    DataLatitudeDegrees.type,
+                    DataLongitudeDegrees.type,
+                  ],
+                  true,
+                  false,
+                  'attach_streams_only'
+                ).pipe(take(1)).toPromise();
+                fullEvent = hydratedEvent || event;
+              } catch (error) {
+                this.logger.warn('[TracksComponent] Failed to hydrate activity streams from original files. Falling back to existing activities.', {
+                  eventId: event.getID?.(),
+                  error
+                });
+              }
+              this.logger.log(`[TracksComponent] Activities and streams ready for event: ${event.getID()}, promiseTime: ${promiseTime}`);
+              if (this.promiseTime !== promiseTime) {
+                return;
+              }
 
-                      const coordinates = activity.getPositionData()
-                        .filter((position: any) => position)
-                        .map((position: any) => {
-                          // Mapbox uses [lng, lat]
-                          const lng = Math.round(position.longitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
-                          const lat = Math.round(position.latitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
-                          return [lng, lat];
-                        })
-                        .filter((coordinate: number[]) =>
-                          Number.isFinite(coordinate[0])
-                          && Number.isFinite(coordinate[1])
-                          && Math.abs(coordinate[0]) <= 180
-                          && Math.abs(coordinate[1]) <= 90
-                        );
+              const eventId = fullEvent?.getID?.() || event.getID();
+              let hasVisibleTrackForEvent = false;
+              const eventCoordinates: number[][] = [];
+              fullEvent.getActivities()
+                .filter((activity: any) => activity.hasPositionData())
+                .filter((activity: any) => !activityTypes || activityTypes.length === 0 || activityTypes.includes(activity.type))
+                .forEach((activity: any) => {
+                  const jumpStats = this.collectJumpHeatPointsFromActivity(activity, jumpHeatPoints);
+                  jumpsWithCoordinates += jumpStats.jumpsWithCoordinates;
+                  jumpsWithWeightMetrics += jumpStats.jumpsWithWeightMetrics;
 
-                      if (coordinates.length > 1) {
-                        this.tracksMapManager.addTrackFromActivity(activity, coordinates);
-                        addedTrackCount++;
-                        hasVisibleTrackForEvent = true;
-                        coordinates.forEach((coordinate: number[]) => {
-                          chunkCoordinates.push(coordinate);
-                          allCoordinates.push(coordinate);
-                          eventCoordinates.push(coordinate);
-                        });
-                      }
+                  const coordinates = activity.getPositionData()
+                    .filter((position: any) => position)
+                    .map((position: any) => {
+                      // Mapbox uses [lng, lat]
+                      const lng = Math.round(position.longitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
+                      const lat = Math.round(position.latitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
+                      return [lng, lat];
                     })
+                    .filter((coordinate: number[]) =>
+                      Number.isFinite(coordinate[0])
+                      && Number.isFinite(coordinate[1])
+                      && Math.abs(coordinate[0]) <= 180
+                      && Math.abs(coordinate[1]) <= 90
+                    );
 
-                  if (hasVisibleTrackForEvent) {
-                    this.trackCoordinatesByEventId.set(eventId, eventCoordinates);
-                    const detectionInput = this.getTripDetectionInputFromEvent(fullEvent || event);
-                    if (detectionInput) {
-                      detectionCandidatesByEvent.set(detectionInput.eventId, detectionInput);
+                  if (coordinates.length > 1) {
+                    this.tracksMapManager.addTrackFromActivity(activity, coordinates);
+                    const startPoint = this.buildTrackStartPoint(
+                      activity,
+                      eventId,
+                      coordinates[0],
+                      fullEvent?.startDate ?? event?.startDate
+                    );
+                    if (startPoint) {
+                      trackStartPoints.push(startPoint);
                     }
+                    addedTrackCount++;
+                    hasVisibleTrackForEvent = true;
+                    coordinates.forEach((coordinate: number[]) => {
+                      chunkCoordinates.push(coordinate);
+                      allCoordinates.push(coordinate);
+                      eventCoordinates.push(coordinate);
+                    });
                   }
+                });
 
-                  count++;
-                  this.updateTotalProgress(Math.ceil((count / events.length) * 100))
-                })
-            }))
+              if (hasVisibleTrackForEvent) {
+                this.trackCoordinatesByEventId.set(eventId, eventCoordinates);
+                const detectionInput = this.getTripDetectionInputFromEvent(fullEvent || event);
+                if (detectionInput) {
+                  detectionCandidatesByEvent.set(detectionInput.eventId, detectionInput);
+                }
+              }
+
+              count++;
+              this.updateTotalProgress(Math.ceil((count / events.length) * 100));
+            }));
 
             if (count < events.length && chunkCoordinates.length > 0) {
               this.fitBoundsToTracks(chunkCoordinates);
@@ -533,6 +580,11 @@ export class TracksComponent implements OnInit, OnDestroy {
           }
           if (addedTrackCount === 0) {
             this.tracksMapManager.clearAllTracks();
+          }
+          if (trackStartPoints.length > 0) {
+            this.tracksMapManager.setActivityStartPoints(trackStartPoints);
+          } else {
+            this.tracksMapManager.clearActivityStartPoints();
           }
           if (jumpHeatPoints.length > 0) {
             this.hasDetectedJumps.set(true);
@@ -605,6 +657,26 @@ export class TracksComponent implements OnInit, OnDestroy {
       [trip.bounds.west, trip.bounds.south],
       [trip.bounds.east, trip.bounds.north],
     ]);
+  }
+
+  public closeSelectedStartPointPopup(): void {
+    this.selectedStartPoint.set(null);
+    this.selectedStartPointScreen.set(null);
+  }
+
+  public openSelectedStartPointEvent(): void {
+    const selected = this.selectedStartPoint();
+    const userId = this.user?.uid;
+    if (!selected?.eventId || !userId) {
+      this.logger.warn('[TracksComponent] Unable to open selected start-point event.', {
+        hasEventId: !!selected?.eventId,
+        hasUserId: !!userId
+      });
+      return;
+    }
+
+    this.router.navigate(['/user', userId, 'event', selected.eventId]);
+    this.closeSelectedStartPointPopup();
   }
 
   private getTripDetectionInputFromEvent(event: any): TripDetectionInput | null {
@@ -730,6 +802,116 @@ export class TracksComponent implements OnInit, OnDestroy {
       return value;
     }
     return null;
+  }
+
+  private buildTrackStartPoint(
+    activity: any,
+    eventId: string,
+    startCoordinate: number[],
+    startDateInput: number | Date | null | undefined
+  ): TrackStartPoint | null {
+    if (!Array.isArray(startCoordinate) || startCoordinate.length < 2) return null;
+    const lng = Number(startCoordinate[0]);
+    const lat = Number(startCoordinate[1]);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+    if (Math.abs(lng) > 180 || Math.abs(lat) > 90) return null;
+
+    const activityId = activity?.getID?.();
+    if (!eventId || !activityId) return null;
+
+    let startDate: number | null = null;
+    if (typeof startDateInput === 'number' && Number.isFinite(startDateInput)) {
+      startDate = startDateInput;
+    } else if (startDateInput instanceof Date && Number.isFinite(startDateInput.getTime())) {
+      startDate = startDateInput.getTime();
+    }
+
+    return {
+      eventId: String(eventId),
+      activityId: String(activityId),
+      activityType: this.resolveActivityTypeLabel(activity),
+      startDate,
+      durationLabel: this.formatActivityDurationLabel(activity),
+      distanceLabel: this.formatActivityDistanceLabel(activity),
+      lng,
+      lat
+    };
+  }
+
+  private resolveActivityTypeLabel(activity: any): string {
+    const rawType = activity?.type;
+    if (typeof rawType === 'string' && rawType.length > 0) return rawType;
+    if (typeof rawType === 'number' && ActivityTypes[rawType]) return String(ActivityTypes[rawType]);
+    return 'Activity';
+  }
+
+  private formatActivityDurationLabel(activity: any): string {
+    const durationStat = activity?.getDuration?.();
+    if (!durationStat?.getDisplayValue) return '-';
+    try {
+      const value = durationStat.getDisplayValue(false, false);
+      if (value === undefined || value === null || value === '') return '-';
+      return String(value);
+    } catch {
+      try {
+        const value = durationStat.getDisplayValue();
+        if (value === undefined || value === null || value === '') return '-';
+        return String(value);
+      } catch {
+        return '-';
+      }
+    }
+  }
+
+  private formatActivityDistanceLabel(activity: any): string {
+    const distanceStat = activity?.getDistance?.();
+    if (!distanceStat?.getDisplayValue) return '-';
+    const value = distanceStat.getDisplayValue();
+    const unit = distanceStat.getDisplayUnit?.();
+    if (value === undefined || value === null || value === '') return '-';
+    return `${value}${unit ? ` ${unit}` : ''}`.trim();
+  }
+
+  private bindStartPointPopupMapListeners(map: any): void {
+    this.unbindStartPointPopupMapListeners();
+    if (!map?.on) return;
+    this.startPointPopupRepositionHandler = () => {
+      if (!this.selectedStartPoint()) return;
+      this.zone.run(() => this.updateSelectedStartPointScreenPosition());
+    };
+
+    ['move', 'zoom', 'rotate', 'pitch', 'resize'].forEach((eventName) => {
+      map.on(eventName, this.startPointPopupRepositionHandler);
+    });
+  }
+
+  private unbindStartPointPopupMapListeners(): void {
+    if (!this.startPointPopupRepositionHandler) return;
+    const map = this.tracksMapManager.getMap();
+    if (map?.off) {
+      ['move', 'zoom', 'rotate', 'pitch', 'resize'].forEach((eventName) => {
+        map.off(eventName, this.startPointPopupRepositionHandler);
+      });
+    }
+    this.startPointPopupRepositionHandler = null;
+  }
+
+  private updateSelectedStartPointScreenPosition(): void {
+    const selected = this.selectedStartPoint();
+    const map = this.tracksMapManager.getMap();
+    if (!selected || !map?.project) {
+      this.selectedStartPointScreen.set(null);
+      return;
+    }
+
+    const projected = map.project([selected.lng, selected.lat]);
+    const x = Number(projected?.x);
+    const y = Number(projected?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      this.selectedStartPointScreen.set(null);
+      return;
+    }
+    this.selectedStartPointScreen.set({ x, y });
   }
 
   // Refactored helpers

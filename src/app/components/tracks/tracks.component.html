@@ -1,4 +1,4 @@
-<mat-card class="mat-elevation-z0">
+<mat-card class="tracks-map-shell mat-elevation-z0">
   @if (user) {
   <app-peek-panel class="tracks-search-peek" position="top" topAnchor="center"
     [defaultExpanded]="searchPeekDefaultExpanded()"
@@ -14,6 +14,42 @@
   }
 
   <div #mapDiv id="map"></div>
+  @if (selectedStartPoint(); as startPoint) {
+  @if (selectedStartPointScreen(); as startPointScreen) {
+  <div class="track-start-popup-anchor" [style.left.px]="startPointScreen.x" [style.top.px]="startPointScreen.y">
+    <mat-card class="track-start-popup qs-glass-card-panel glass-card mat-elevation-z0">
+      <div class="track-start-popup-header">
+        <h3 class="track-start-popup-title">{{ startPoint.activityType || 'Activity' }}</h3>
+        <button mat-icon-button class="track-start-popup-close" (click)="closeSelectedStartPointPopup()"
+          aria-label="Close activity popup">
+          <mat-icon>close</mat-icon>
+        </button>
+      </div>
+
+      @if (startPoint.startDate) {
+      <p class="track-start-popup-date">{{ startPoint.startDate | date:'MMM d, y, HH:mm' }}</p>
+      }
+
+      <div class="track-start-popup-meta">
+        @if (startPoint.distanceLabel && startPoint.distanceLabel !== '-') {
+        <span class="track-start-popup-chip">Distance {{ startPoint.distanceLabel }}</span>
+        }
+        @if (startPoint.durationLabel && startPoint.durationLabel !== '-') {
+        <span class="track-start-popup-chip">Duration {{ startPoint.durationLabel }}</span>
+        }
+        @if ((!startPoint.distanceLabel || startPoint.distanceLabel === '-') && (!startPoint.durationLabel ||
+        startPoint.durationLabel === '-')) {
+        <span class="track-start-popup-fallback">Activity start point</span>
+        }
+      </div>
+
+      <div class="track-start-popup-actions">
+        <button mat-button color="primary" (click)="openSelectedStartPointEvent()">Open activity</button>
+      </div>
+    </mat-card>
+  </div>
+  }
+  }
   <div class="map-style-controls">
     @if (hasDetectedJumps()) {
     <mat-button-toggle-group class="jump-heat-toggle" appearance="legacy" name="jumpHeatmap" aria-label="Jump Heatmap"

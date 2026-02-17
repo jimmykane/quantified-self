@@ -1,19 +1,93 @@
 @use '../../../styles/breakpoints' as bp;
 
-mat-card {
+.tracks-map-shell {
   padding: 0;
   position: relative;
   height: calc(100vh - var(--qs-layout-top-offset, 64px));
 }
 
 @supports (height: 100dvh) {
-  mat-card {
+  .tracks-map-shell {
     height: calc(100dvh - var(--qs-layout-top-offset, 64px));
   }
 }
 
 #map {
   height: 100%;
+}
+
+.track-start-popup-anchor {
+  position: absolute;
+  z-index: 1080;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 10px));
+}
+
+.track-start-popup {
+  pointer-events: auto;
+  min-width: 200px;
+  max-width: min(300px, calc(100vw - 20px));
+  padding: 10px 10px 8px;
+}
+
+.track-start-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--mat-app-outline-variant);
+}
+
+.track-start-popup-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mat-sys-on-surface);
+}
+
+.track-start-popup-close {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  padding: 0 !important;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.track-start-popup-date {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.track-start-popup-meta {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.track-start-popup-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--mat-sys-on-primary-container);
+  background: color-mix(in srgb, var(--mat-sys-primary-container) 86%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mat-sys-primary) 26%, transparent);
+}
+
+.track-start-popup-fallback {
+  font-size: 11px;
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.track-start-popup-actions {
+  margin-top: 6px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 app-peek-panel.tracks-search-peek {
@@ -176,6 +250,12 @@ app-peek-panel.tracks-trips-peek .detected-trips-empty {
 }
 
 @include bp.max-640 {
+  .track-start-popup {
+    min-width: 190px;
+    max-width: min(260px, calc(100vw - 16px));
+    padding: 8px 8px 6px;
+  }
+
   app-peek-panel.tracks-search-peek {
     width: 100%;
   }

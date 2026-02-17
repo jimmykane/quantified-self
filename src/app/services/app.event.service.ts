@@ -22,7 +22,7 @@ import { EventWriter, FirestoreAdapter, StorageAdapter, OriginalFile } from '../
 import { generateActivityID, generateEventID } from '../../../functions/src/shared/id-generator';
 import { createParsingOptions } from '../../../functions/src/shared/parsing-options';
 import { Bytes, serverTimestamp } from 'firebase/firestore';
-import { Storage, ref, uploadBytes, getBytes } from '@angular/fire/storage';
+import { Storage, ref, uploadBytes } from '@angular/fire/storage';
 import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
@@ -41,7 +41,6 @@ import { AppEventUtilities } from '../utils/app.event.utilities';
 import { LoggerService } from './logger.service';
 import { AppFileService } from './app.file.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
-import { getMetadata } from '@angular/fire/storage';
 import { AppCacheService } from './app.cache.service';
 import { BenchmarkEventAdapter } from './benchmark-event.adapter';
 import { SPORTS_LIB_VERSION } from '../constants/sports-lib-version.browser';
@@ -60,6 +59,15 @@ export interface GetEventsOnceResult {
   source: EventsOnceSource;
 }
 
+/**
+ * Controls how parsed data from original files is applied to an existing event.
+ * - `attach_streams_only` keeps existing activities and updates their streams.
+ * - `replace_activities` clears existing activities and replaces them with parsed activities.
+ *
+ * Use `replace_activities` only in regeneration/rebuild flows where callers explicitly
+ * require full activity replacement from source files. For normal read/load flows,
+ * use `attach_streams_only`.
+ */
 export type StreamHydrationMode = 'attach_streams_only' | 'replace_activities';
 
 
@@ -806,7 +814,7 @@ export class AppEventService implements OnDestroy {
    * @param streamTypes
    * @param merge
    * @param skipEnrichment
-   * @param hydrationMode
+   * @param hydrationMode `replace_activities` is intended for regeneration callers only.
    * @private
    */
   public attachStreamsToEventWithActivities(
@@ -845,6 +853,7 @@ export class AppEventService implements OnDestroy {
           return fullEvent;
         }
 
+        // Regeneration mode: replace activity objects with parsed ones from source files.
         if (hydrationMode === 'replace_activities') {
           event.clearActivities();
           event.addActivities(fullEvent.getActivities());

@@ -3,9 +3,10 @@ import { NgZone } from '@angular/core';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { MapStyleService } from '../../services/map-style.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MapboxHeatmapLayerService } from '../../services/map/mapbox-heatmap-layer.service';
 import { JumpHeatmapWeightingService } from '../../services/map/jump-heatmap-weighting.service';
+import { MapboxStartPointLayerService } from '../../services/map/mapbox-start-point-layer.service';
 
 // Mock dependencies
 class MockNgZone extends NgZone {
@@ -40,6 +41,8 @@ const mockMap = {
     getStyle: vi.fn(),
     off: vi.fn(),
     on: vi.fn(),
+    queryRenderedFeatures: vi.fn().mockReturnValue([]),
+    getCanvas: vi.fn().mockReturnValue({ style: { cursor: '' } }),
 };
 
 const mockMapboxGL = {
@@ -70,26 +73,33 @@ describe('TracksMapManager', () => {
     let mapEventHandlers: Record<string, Array<(...args: any[]) => void>>;
     let mapboxHeatmapLayerService: MapboxHeatmapLayerService;
     let jumpHeatmapWeightingService: JumpHeatmapWeightingService;
+    let mapboxStartPointLayerService: MapboxStartPointLayerService;
 
     beforeEach(() => {
         mapEventHandlers = {};
-        mockMap.on.mockImplementation((event: string, handler: (...args: any[]) => void) => {
+        mockMap.on.mockImplementation((event: string, layerOrHandler: any, maybeHandler?: (...args: any[]) => void) => {
+            const handler = typeof layerOrHandler === 'function' ? layerOrHandler : maybeHandler;
+            if (typeof handler !== 'function') return;
             mapEventHandlers[event] = mapEventHandlers[event] || [];
             mapEventHandlers[event].push(handler);
         });
-        mockMap.off.mockImplementation((event: string, handler: (...args: any[]) => void) => {
+        mockMap.off.mockImplementation((event: string, layerOrHandler: any, maybeHandler?: (...args: any[]) => void) => {
+            const handler = typeof layerOrHandler === 'function' ? layerOrHandler : maybeHandler;
+            if (typeof handler !== 'function') return;
             mapEventHandlers[event] = (mapEventHandlers[event] || []).filter(h => h !== handler);
         });
 
         zone = new MockNgZone();
         mapboxHeatmapLayerService = new MapboxHeatmapLayerService(mockLoggerService as any);
         jumpHeatmapWeightingService = new JumpHeatmapWeightingService();
+        mapboxStartPointLayerService = new MapboxStartPointLayerService(mockLoggerService as any);
         manager = new TracksMapManager(
             zone,
             mockEventColorService,
             mockMapStyleService,
             mapboxHeatmapLayerService,
             jumpHeatmapWeightingService,
+            mapboxStartPointLayerService,
             mockLoggerService as any
         );
         manager.setMap(mockMap, mockMapboxGL);
@@ -227,6 +237,112 @@ describe('TracksMapManager', () => {
             emitMapEvent('style.load');
 
             const afterStyleReload = mockMap.addLayer.mock.calls.filter((call) => call[0]?.id === 'jump-heat-layer').length;
+            expect(afterStyleReload).toBeGreaterThan(beforeStyleReload);
+        });
+    });
+
+    describe('activity start points', () => {
+        it('should create start-point source and layers', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+
+            manager.setActivityStartPoints([{
+                eventId: 'event-1',
+                activityId: 'activity-1',
+                activityType: 'Running',
+                startDate: 1731062400000,
+                durationLabel: '1:02:03',
+                distanceLabel: '10 km',
+                lng: 10,
+                lat: 20
+            }]);
+
+            const sourceCall = mockMap.addSource.mock.calls.find((call) => call[0] === 'track-start-source');
+            expect(sourceCall).toBeDefined();
+            expect(mockMap.addLayer.mock.calls.some((call) => call[0]?.id === 'track-start-layer')).toBe(true);
+            expect(mockMap.addLayer.mock.calls.some((call) => call[0]?.id === 'track-start-hit-layer')).toBe(true);
+        });
+
+        it('should forward start-point selection through handler', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+            const selectionSpy = vi.fn();
+            manager.setStartMarkerSelectionHandler(selectionSpy);
+
+            manager.setActivityStartPoints([{
+                eventId: 'event-1',
+                activityId: 'activity-1',
+                activityType: 'Running',
+                startDate: 1731062400000,
+                durationLabel: '1:02:03',
+                distanceLabel: '10 km',
+                lng: 10,
+                lat: 20
+            }]);
+
+            const sourceCall = mockMap.addSource.mock.calls.find((call) => call[0] === 'track-start-source');
+            const pointId = sourceCall?.[1]?.data?.features?.[0]?.properties?.pointId;
+            mockMap.queryRenderedFeatures.mockReturnValue([{}]);
+
+            const clickHandlers = mapEventHandlers['click'] || [];
+            clickHandlers.forEach((handler) => handler({
+                features: [{
+                    properties: { pointId },
+                    geometry: { coordinates: [10, 20] }
+                }],
+                point: { x: 15, y: 16 }
+            }));
+
+            expect(selectionSpy).toHaveBeenCalledWith(expect.objectContaining({
+                eventId: 'event-1',
+                activityId: 'activity-1',
+                lng: 10,
+                lat: 20
+            }));
+        });
+
+        it('should clear start-point source and layers', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+            manager.setActivityStartPoints([{
+                eventId: 'event-1',
+                activityId: 'activity-1',
+                activityType: 'Running',
+                startDate: 1731062400000,
+                durationLabel: '1:02:03',
+                distanceLabel: '10 km',
+                lng: 10,
+                lat: 20
+            }]);
+
+            mockMap.getLayer.mockImplementation((id: string) => id === 'track-start-layer' || id === 'track-start-hit-layer');
+            mockMap.getSource.mockImplementation((id: string) => id === 'track-start-source');
+            manager.clearActivityStartPoints();
+
+            expect(mockMap.removeLayer).toHaveBeenCalledWith('track-start-hit-layer');
+            expect(mockMap.removeLayer).toHaveBeenCalledWith('track-start-layer');
+            expect(mockMap.removeSource).toHaveBeenCalledWith('track-start-source');
+        });
+
+        it('should restore start-point layers after style reload', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+
+            manager.setActivityStartPoints([{
+                eventId: 'event-1',
+                activityId: 'activity-1',
+                activityType: 'Running',
+                startDate: 1731062400000,
+                durationLabel: '1:02:03',
+                distanceLabel: '10 km',
+                lng: 10,
+                lat: 20
+            }]);
+            const beforeStyleReload = mockMap.addLayer.mock.calls.filter((call) => call[0]?.id === 'track-start-layer').length;
+
+            emitMapEvent('style.load');
+
+            const afterStyleReload = mockMap.addLayer.mock.calls.filter((call) => call[0]?.id === 'track-start-layer').length;
             expect(afterStyleReload).toBeGreaterThan(beforeStyleReload);
         });
     });
