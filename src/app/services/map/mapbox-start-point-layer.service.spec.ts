@@ -45,9 +45,8 @@ describe('MapboxStartPointLayerService', () => {
       expect.objectContaining({ type: 'geojson' })
     );
     const markerLayerCall = mockMap.addLayer.mock.calls.find((call: any[]) => call[0]?.id === 'track-start-layer');
-    const hitLayerCall = mockMap.addLayer.mock.calls.find((call: any[]) => call[0]?.id === 'track-start-hit-layer');
     expect(markerLayerCall?.[0]?.minzoom).toBe(10);
-    expect(hitLayerCall?.[0]?.minzoom).toBe(10);
+    expect(mockMap.addLayer.mock.calls.some((call: any[]) => call[0]?.id === 'track-start-hit-layer')).toBe(false);
   });
 
   it('should bind interaction and emit selection/clear events', () => {
@@ -56,12 +55,13 @@ describe('MapboxStartPointLayerService', () => {
 
     service.bindInteraction(mockMap, {
       hitLayerId: 'track-start-hit-layer',
+      interactionLayerId: 'track-start-layer',
       onSelect,
       onClear
     });
 
     const layerClickHandler = mockMap.on.mock.calls.find(
-      (call: any[]) => call[0] === 'click' && call[1] === 'track-start-hit-layer'
+      (call: any[]) => call[0] === 'click' && call[1] === 'track-start-layer'
     )?.[2];
     const mapClickHandler = mockMap.on.mock.calls.find(
       (call: any[]) => call[0] === 'click' && typeof call[1] === 'function'
@@ -91,6 +91,7 @@ describe('MapboxStartPointLayerService', () => {
 
     service.bindInteraction(mockMap, {
       hitLayerId: 'track-start-hit-layer',
+      interactionLayerId: 'track-start-layer',
       onSelect: vi.fn(),
       onClear: vi.fn()
     });
@@ -127,5 +128,25 @@ describe('MapboxStartPointLayerService', () => {
 
     expect(mockMap.addSource).toHaveBeenCalled();
   });
-});
 
+  it('should refresh paint on existing layers', () => {
+    mockMap.getSource.mockReturnValue({ setData: vi.fn() });
+    mockMap.getLayer.mockImplementation((id: string) => id === 'track-start-layer' || id === 'track-start-hit-layer');
+
+    service.renderStartPoints(mockMap, {
+      sourceId: 'track-start-source',
+      layerId: 'track-start-layer',
+      hitLayerId: 'track-start-hit-layer',
+      markerColor: '#ffffff',
+      markerStrokeColor: '#000000',
+      points: [{ lng: 20, lat: 40, properties: { pointId: 'p1' } }]
+    });
+
+    expect(mockMap.setPaintProperty).toHaveBeenCalledWith(
+      'track-start-layer',
+      'circle-color',
+      expect.arrayContaining(['coalesce'])
+    );
+    expect(mockMap.setPaintProperty).toHaveBeenCalledWith('track-start-layer', 'circle-stroke-color', '#000000');
+  });
+});

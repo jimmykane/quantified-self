@@ -18,6 +18,7 @@ export interface TrackStartPoint {
     eventId: string;
     activityId: string;
     activityType: string;
+    activityTypeValue?: ActivityTypes | string | number | null;
     startDate: number | null;
     durationLabel: string;
     distanceLabel: string;
@@ -38,6 +39,7 @@ export class TracksMapManager {
     private static readonly TRACK_START_LAYER_ID = 'track-start-layer';
     private static readonly TRACK_START_HIT_LAYER_ID = 'track-start-hit-layer';
     private static readonly TRACK_START_MIN_ZOOM = 10;
+    private static readonly TRACK_START_MARKER_STROKE = '#f5f8ff';
 
     private map: any; // Mapbox GL map instance
     private activeLayerIds: string[] = []; // Store IDs of added layers/sources
@@ -84,10 +86,16 @@ export class TracksMapManager {
 
     public setIsDarkTheme(isDark: boolean) {
         this.isDarkTheme = isDark;
+        if (this.map && this.trackStartPoints.length > 0) {
+            this.renderTrackStartPoints();
+        }
     }
 
     public setMapStyle(mapStyle: MapStyleName) {
         this.mapStyle = mapStyle ?? 'default';
+        if (this.map && this.trackStartPoints.length > 0) {
+            this.renderTrackStartPoints();
+        }
     }
 
     public getMap(): any {
@@ -155,6 +163,7 @@ export class TracksMapManager {
                     eventId: point.eventId,
                     activityId: point.activityId,
                     activityType: (point.activityType || 'Activity').toString(),
+                    activityTypeValue: this.normalizeActivityTypeValue(point.activityTypeValue),
                     startDate: typeof point.startDate === 'number' && Number.isFinite(point.startDate) ? point.startDate : null,
                     durationLabel: (point.durationLabel || '-').toString(),
                     distanceLabel: (point.distanceLabel || '-').toString(),
@@ -545,24 +554,27 @@ export class TracksMapManager {
             this.clearTrackStartPointsLayerAndInteraction();
             return;
         }
-
         this.zone.runOutsideAngular(() => {
             this.mapboxStartPointLayerService.renderStartPoints(this.map, {
                 sourceId: TracksMapManager.TRACK_START_SOURCE_ID,
                 layerId: TracksMapManager.TRACK_START_LAYER_ID,
                 hitLayerId: TracksMapManager.TRACK_START_HIT_LAYER_ID,
                 minzoom: TracksMapManager.TRACK_START_MIN_ZOOM,
+                markerColor: '#2ca3ff',
+                markerStrokeColor: TracksMapManager.TRACK_START_MARKER_STROKE,
                 points: this.trackStartPoints.map((point) => ({
                     lng: point.lng,
                     lat: point.lat,
                     properties: {
-                        pointId: point.pointId
+                        pointId: point.pointId,
+                        markerColor: this.resolveTrackColors(point.activityTypeValue ?? undefined).adjustedColor
                     }
                 }))
             });
 
             this.mapboxStartPointLayerService.bindInteraction(this.map, {
                 hitLayerId: TracksMapManager.TRACK_START_HIT_LAYER_ID,
+                interactionLayerId: TracksMapManager.TRACK_START_LAYER_ID,
                 onSelect: (selection) => this.handleTrackStartPointSelection(selection),
                 onClear: () => this.emitTrackStartSelection(null)
             });
@@ -601,6 +613,12 @@ export class TracksMapManager {
 
     private emitTrackStartSelection(selection: TrackStartSelection | null): void {
         this.startSelectionHandler?.(selection);
+    }
+
+    private normalizeActivityTypeValue(value: unknown): ActivityTypes | string | number | null {
+        if (typeof value === 'number' && Number.isFinite(value)) return value;
+        if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+        return null;
     }
 
     private buildTrackStartPointId(point: TrackStartPoint, duplicateCounter: Map<string, number>): string {
@@ -659,9 +677,11 @@ export class TracksMapManager {
         return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value.trim());
     }
 
-    private resolveTrackColors(activityType: ActivityTypes | undefined): { baseColor: string; adjustedColor: string } {
+    private resolveTrackColors(activityType: ActivityTypes | string | number | undefined | null): { baseColor: string; adjustedColor: string } {
         const fallbackColor = '#2ca3ff';
-        const maybeBaseColor = activityType ? this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType) : undefined;
+        const maybeBaseColor = activityType !== undefined && activityType !== null
+            ? this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType as ActivityTypes)
+            : undefined;
         const baseColor = this.isHexColor(maybeBaseColor) ? maybeBaseColor : fallbackColor;
         const adjusted = this.mapStyleService.adjustColorForTheme(baseColor, this.isDarkTheme ? AppThemes.Dark : AppThemes.Normal);
         const adjustedColor = this.isHexColor(adjusted) ? adjusted : fallbackColor;

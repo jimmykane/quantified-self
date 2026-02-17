@@ -4,7 +4,6 @@ import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import { AppEventService } from '../../services/app.event.service';
 import { take, debounceTime, filter } from 'rxjs/operators';
-import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { Subject, Subscription } from 'rxjs';
@@ -126,7 +125,6 @@ export class TracksComponent implements OnInit, OnDestroy {
     private bottomSheet: MatBottomSheet,
     private overlay: Overlay,
     private userService: AppUserService,
-    private snackBar: MatSnackBar,
     private mapboxLoader: MapboxLoaderService,
     private themeService: AppThemeService,
     private mapStyleService: MapStyleService,
@@ -283,15 +281,6 @@ export class TracksComponent implements OnInit, OnDestroy {
         const control = new TerrainControl(!!initialSettings?.is3D, (is3D) => {
           // Toggle map locally immediately for responsiveness
           this.tracksMapManager.toggleTerrain(is3D, true);
-
-          if (is3D) {
-            this.zone.run(() => {
-              this.snackBar.open('Use Ctrl + Left Click (or Right Click) + Drag to rotate and tilt the map in 3D.', 'OK', {
-                duration: 5000,
-                verticalPosition: 'top'
-              });
-            });
-          }
 
           // Persist 3D setting via service
           this.userSettingsQuery.updateMyTracksSettings({ is3D });
@@ -830,6 +819,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       eventId: String(eventId),
       activityId: String(activityId),
       activityType: this.resolveActivityTypeLabel(activity),
+      activityTypeValue: activity?.type ?? null,
       startDate,
       durationLabel: this.formatActivityDurationLabel(activity),
       distanceLabel: this.formatActivityDistanceLabel(activity),

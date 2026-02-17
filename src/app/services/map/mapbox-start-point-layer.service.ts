@@ -15,6 +15,8 @@ export interface MapboxStartPointLayerRenderConfig {
   minzoom?: number;
   visibility?: 'visible' | 'none';
   beforeLayerId?: string;
+  markerColor?: string;
+  markerStrokeColor?: string;
 }
 
 export interface MapboxStartPointSelection {
@@ -26,12 +28,13 @@ export interface MapboxStartPointSelection {
 
 export interface MapboxStartPointInteractionConfig {
   hitLayerId: string;
+  interactionLayerId?: string;
   onSelect: (selection: MapboxStartPointSelection) => void;
   onClear: () => void;
 }
 
 interface BoundInteractionHandlers {
-  hitLayerId: string;
+  layerId: string;
   onLayerClick: (event: any) => void;
   onMapClick: (event: any) => void;
   onMouseEnter: () => void;
@@ -95,36 +98,29 @@ export class MapboxStartPointLayerService {
       minzoom,
       layout: { visibility },
       paint: {
-        'circle-radius': ['interpolate', ['linear'], ['zoom'], minzoom, 7, 14, 9, 18, 12],
-        'circle-color': '#ffb300',
-        'circle-opacity': 0.98,
-        'circle-stroke-color': '#1a1a1a',
-        'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], minzoom, 1.8, 18, 2.6],
-        'circle-blur': 0.08
-      }
-    };
-
-    const hitLayer = {
-      id: config.hitLayerId,
-      type: 'circle',
-      source: config.sourceId,
-      minzoom,
-      layout: { visibility },
-      paint: {
-        'circle-radius': ['interpolate', ['linear'], ['zoom'], minzoom, 14, 18, 22],
-        'circle-color': 'rgba(0,0,0,0)',
+        'circle-color': ['coalesce', ['get', 'markerColor'], config.markerColor || '#2ca3ff'],
+        'circle-stroke-color': config.markerStrokeColor || '#f5f8ff',
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], minzoom, 5.6, 14, 7.2, 18, 9.6],
         'circle-opacity': 1,
-        'circle-stroke-width': 0
+        // Keep marker color readable in Mapbox Standard night lighting.
+        'circle-emissive-strength': 1,
+        'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], minzoom, 2.6, 18, 3.4],
+        'circle-stroke-opacity': 0.96,
+        'circle-blur': 0.03
       }
     };
 
     this.ensureLayer(map, markerLayer, config.beforeLayerId);
-    this.ensureLayer(map, hitLayer, config.beforeLayerId);
+    // Ensure any legacy hit layer is removed so it cannot appear as a visual artifact.
+    if (map.getLayer?.(config.hitLayerId)) {
+      map.removeLayer(config.hitLayerId);
+    }
   }
 
   public bindInteraction(map: any, config: MapboxStartPointInteractionConfig): void {
     if (!map?.on || !config) return;
     this.unbindInteraction(map);
+    const layerId = config.interactionLayerId || config.hitLayerId;
 
     const onLayerClick = (event: any) => {
       const feature = event?.features?.[0];
@@ -147,7 +143,7 @@ export class MapboxStartPointLayerService {
 
     const onMapClick = (event: any) => {
       if (typeof map.queryRenderedFeatures !== 'function') return;
-      const features = map.queryRenderedFeatures(event?.point, { layers: [config.hitLayerId] }) || [];
+      const features = map.queryRenderedFeatures(event?.point, { layers: [layerId] }) || [];
       if (Array.isArray(features) && features.length > 0) return;
       config.onClear();
     };
@@ -166,13 +162,13 @@ export class MapboxStartPointLayerService {
       }
     };
 
-    map.on('click', config.hitLayerId, onLayerClick);
+    map.on('click', layerId, onLayerClick);
     map.on('click', onMapClick);
-    map.on('mouseenter', config.hitLayerId, onMouseEnter);
-    map.on('mouseleave', config.hitLayerId, onMouseLeave);
+    map.on('mouseenter', layerId, onMouseEnter);
+    map.on('mouseleave', layerId, onMouseLeave);
 
     this.interactionHandlersByMap.set(map, {
-      hitLayerId: config.hitLayerId,
+      layerId,
       onLayerClick,
       onMapClick,
       onMouseEnter,
@@ -185,10 +181,10 @@ export class MapboxStartPointLayerService {
     const handlers = this.interactionHandlersByMap.get(map);
     if (!handlers) return;
 
-    map.off('click', handlers.hitLayerId, handlers.onLayerClick);
+    map.off('click', handlers.layerId, handlers.onLayerClick);
     map.off('click', handlers.onMapClick);
-    map.off('mouseenter', handlers.hitLayerId, handlers.onMouseEnter);
-    map.off('mouseleave', handlers.hitLayerId, handlers.onMouseLeave);
+    map.off('mouseenter', handlers.layerId, handlers.onMouseEnter);
+    map.off('mouseleave', handlers.layerId, handlers.onMouseLeave);
     this.interactionHandlersByMap.delete(map);
   }
 
@@ -225,6 +221,11 @@ export class MapboxStartPointLayerService {
     }
     if (typeof map.setLayoutProperty === 'function') {
       map.setLayoutProperty(layer.id, 'visibility', layer.layout?.visibility || 'visible');
+    }
+    if (layer.paint && typeof map.setPaintProperty === 'function') {
+      Object.entries(layer.paint).forEach(([property, value]) => {
+        map.setPaintProperty(layer.id, property, value);
+      });
     }
   }
 

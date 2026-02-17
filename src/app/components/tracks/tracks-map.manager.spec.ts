@@ -2,7 +2,7 @@ import { TracksMapManager } from './tracks-map.manager';
 import { NgZone } from '@angular/core';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { MapStyleService } from '../../services/map-style.service';
-import { AppThemes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, AppThemes } from '@sports-alliance/sports-lib';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MapboxHeatmapLayerService } from '../../services/map/mapbox-heatmap-layer.service';
 import { JumpHeatmapWeightingService } from '../../services/map/jump-heatmap-weighting.service';
@@ -245,11 +245,13 @@ describe('TracksMapManager', () => {
         it('should create start-point source and layers', () => {
             mockMap.getSource.mockReturnValue(null);
             mockMap.getLayer.mockReturnValue(null);
+            mockMapStyleService.adjustColorForTheme = vi.fn().mockReturnValue('#00ff00');
 
             manager.setActivityStartPoints([{
                 eventId: 'event-1',
                 activityId: 'activity-1',
                 activityType: 'Running',
+                activityTypeValue: ActivityTypes.Running,
                 startDate: 1731062400000,
                 durationLabel: '1:02:03',
                 distanceLabel: '10 km',
@@ -260,7 +262,83 @@ describe('TracksMapManager', () => {
             const sourceCall = mockMap.addSource.mock.calls.find((call) => call[0] === 'track-start-source');
             expect(sourceCall).toBeDefined();
             expect(mockMap.addLayer.mock.calls.some((call) => call[0]?.id === 'track-start-layer')).toBe(true);
-            expect(mockMap.addLayer.mock.calls.some((call) => call[0]?.id === 'track-start-hit-layer')).toBe(true);
+            expect(mockMap.addLayer.mock.calls.some((call) => call[0]?.id === 'track-start-hit-layer')).toBe(false);
+            const markerColor = sourceCall?.[1]?.data?.features?.[0]?.properties?.markerColor;
+            expect(markerColor).toBe('#00ff00');
+        });
+
+        it('should use whitish marker border color', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+            manager.setIsDarkTheme(true);
+
+            manager.setActivityStartPoints([{
+                eventId: 'event-1',
+                activityId: 'activity-1',
+                activityType: 'Running',
+                activityTypeValue: ActivityTypes.Running,
+                startDate: 1731062400000,
+                durationLabel: '1:02:03',
+                distanceLabel: '10 km',
+                lng: 10,
+                lat: 20
+            }]);
+
+            const markerLayerCall = mockMap.addLayer.mock.calls.find((call) => call[0]?.id === 'track-start-layer');
+            expect(markerLayerCall?.[0]?.paint?.['circle-stroke-color']).toBe('#f5f8ff');
+        });
+
+        it('should color markers using per-feature activity color expression', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+            manager.setIsDarkTheme(true);
+            manager.setMapStyle('satellite');
+
+            manager.setActivityStartPoints([{
+                eventId: 'event-1',
+                activityId: 'activity-1',
+                activityType: 'Running',
+                activityTypeValue: ActivityTypes.Running,
+                startDate: 1731062400000,
+                durationLabel: '1:02:03',
+                distanceLabel: '10 km',
+                lng: 10,
+                lat: 20
+            }]);
+
+            const markerLayerCall = mockMap.addLayer.mock.calls.find((call) => call[0]?.id === 'track-start-layer');
+            expect(markerLayerCall?.[0]?.paint?.['circle-color']).toEqual(
+                expect.arrayContaining(['coalesce'])
+            );
+        });
+
+        it('should re-render start markers when map style changes', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+            manager.setIsDarkTheme(true);
+            manager.setMapStyle('default');
+            manager.setActivityStartPoints([{
+                eventId: 'event-1',
+                activityId: 'activity-1',
+                activityType: 'Running',
+                activityTypeValue: ActivityTypes.Running,
+                startDate: 1731062400000,
+                durationLabel: '1:02:03',
+                distanceLabel: '10 km',
+                lng: 10,
+                lat: 20
+            }]);
+
+            vi.clearAllMocks();
+            mockMap.getSource.mockReturnValue({ setData: vi.fn() });
+            mockMap.getLayer.mockReturnValue(true);
+            manager.setMapStyle('satellite');
+
+            expect(mockMap.setPaintProperty).toHaveBeenCalledWith(
+                'track-start-layer',
+                'circle-color',
+                expect.arrayContaining(['coalesce'])
+            );
         });
 
         it('should forward start-point selection through handler', () => {
@@ -273,6 +351,7 @@ describe('TracksMapManager', () => {
                 eventId: 'event-1',
                 activityId: 'activity-1',
                 activityType: 'Running',
+                activityTypeValue: ActivityTypes.Running,
                 startDate: 1731062400000,
                 durationLabel: '1:02:03',
                 distanceLabel: '10 km',
@@ -308,6 +387,7 @@ describe('TracksMapManager', () => {
                 eventId: 'event-1',
                 activityId: 'activity-1',
                 activityType: 'Running',
+                activityTypeValue: ActivityTypes.Running,
                 startDate: 1731062400000,
                 durationLabel: '1:02:03',
                 distanceLabel: '10 km',
@@ -332,6 +412,7 @@ describe('TracksMapManager', () => {
                 eventId: 'event-1',
                 activityId: 'activity-1',
                 activityType: 'Running',
+                activityTypeValue: ActivityTypes.Running,
                 startDate: 1731062400000,
                 durationLabel: '1:02:03',
                 distanceLabel: '10 km',
