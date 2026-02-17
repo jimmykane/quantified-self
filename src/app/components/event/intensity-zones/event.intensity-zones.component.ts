@@ -215,6 +215,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       },
       tooltip: {
         trigger: 'item',
+        triggerOn: this.isMobile ? 'click' : 'mousemove|click',
         appendToBody: true,
         confine: false,
         backgroundColor: darkTheme ? '#303030' : '#ffffff',

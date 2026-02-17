@@ -303,6 +303,7 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
       },
       tooltip: {
         trigger: 'item',
+        triggerOn: this.isMobile ? 'click' : 'mousemove|click',
         appendToBody: true,
         confine: false,
         backgroundColor: darkTheme ? '#222222' : '#ffffff',

@@ -317,7 +317,14 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
         },
       },
       tooltip: {
-        trigger: 'item',
+        trigger: this.isMobile ? 'axis' : 'item',
+        triggerOn: this.isMobile ? 'click' : 'mousemove|click',
+        axisPointer: this.isMobile
+          ? {
+            type: 'line',
+            snap: true,
+          }
+          : undefined,
         appendToBody: true,
         confine: false,
         backgroundColor: darkTheme ? '#222222' : '#ffffff',
@@ -412,7 +419,11 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
   }
 
   private formatTooltip(params: unknown, hasMultipleActivities: boolean): string {
-    const entry = params as {
+    const resolved = Array.isArray(params)
+      ? params.find((item: any) => item && item.data)
+      : params;
+
+    const entry = resolved as {
       seriesName?: string;
       data?: {
         duration?: unknown;
