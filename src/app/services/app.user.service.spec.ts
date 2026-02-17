@@ -338,6 +338,38 @@ describe('AppUserService', () => {
                 { displayName: 'New Name' }
             );
         });
+
+        it('should fallback to setDoc merge when main user doc is missing', async () => {
+            const user = { uid: 'test-uid' } as AppUserInterface;
+            const propertiesToUpdate = {
+                onboardingCompleted: true
+            };
+
+            (updateDoc as any).mockRejectedValueOnce({ code: 'not-found' });
+
+            await service.updateUserProperties(user, propertiesToUpdate);
+
+            expect(updateDoc).toHaveBeenCalledWith(
+                expect.anything(),
+                { onboardingCompleted: true }
+            );
+            expect(setDoc).toHaveBeenCalledWith(
+                expect.anything(),
+                { onboardingCompleted: true },
+                { merge: true }
+            );
+        });
+
+        it('should throw when main user doc update fails for non-not-found errors', async () => {
+            const user = { uid: 'test-uid' } as AppUserInterface;
+            const propertiesToUpdate = {
+                displayName: 'New Name'
+            };
+
+            (updateDoc as any).mockRejectedValueOnce(new Error('permission-denied'));
+
+            await expect(service.updateUserProperties(user, propertiesToUpdate)).rejects.toThrow('permission-denied');
+        });
     });
 
     describe('deleteAllUserData', () => {
