@@ -820,6 +820,8 @@ export class TracksComponent implements OnInit, OnDestroy {
       activityId: String(activityId),
       activityType: this.resolveActivityTypeLabel(activity),
       activityTypeValue: activity?.type ?? null,
+      durationValue: this.getNumericActivityStatValue(activity?.getDuration?.()),
+      distanceValue: this.getNumericActivityStatValue(activity?.getDistance?.()),
       startDate,
       durationLabel: this.formatActivityDurationLabel(activity),
       distanceLabel: this.formatActivityDistanceLabel(activity),
@@ -860,6 +862,14 @@ export class TracksComponent implements OnInit, OnDestroy {
     const unit = distanceStat.getDisplayUnit?.();
     if (value === undefined || value === null || value === '') return '-';
     return `${value}${unit ? ` ${unit}` : ''}`.trim();
+  }
+
+  private getNumericActivityStatValue(stat: any): number | null {
+    const value = stat?.getValue?.();
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+      return value;
+    }
+    return null;
   }
 
   private bindStartPointPopupMapListeners(map: any): void {

@@ -90,6 +90,13 @@ export class MapboxStartPointLayerService {
 
     const visibility = config.visibility || 'visible';
     const minzoom = config.minzoom ?? 10;
+    const sizeFactorExpression: any[] = [
+      'interpolate',
+      ['linear'],
+      ['coalesce', ['get', 'markerSizeWeight'], 0],
+      0, 0.8,
+      1, 1.2
+    ];
 
     const markerLayer = {
       id: config.layerId,
@@ -100,7 +107,15 @@ export class MapboxStartPointLayerService {
       paint: {
         'circle-color': ['coalesce', ['get', 'markerColor'], config.markerColor || '#2ca3ff'],
         'circle-stroke-color': config.markerStrokeColor || '#f5f8ff',
-        'circle-radius': ['interpolate', ['linear'], ['zoom'], minzoom, 5.6, 14, 7.2, 18, 9.6],
+        // Use a valid composite expression: zoom interpolation at top-level.
+        'circle-radius': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          minzoom, ['*', 5.6, sizeFactorExpression],
+          14, ['*', 7.2, sizeFactorExpression],
+          18, ['*', 9.6, sizeFactorExpression]
+        ],
         'circle-opacity': 1,
         // Keep marker color readable in Mapbox Standard night lighting.
         'circle-emissive-strength': 1,

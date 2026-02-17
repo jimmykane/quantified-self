@@ -19,6 +19,8 @@ export interface TrackStartPoint {
     activityId: string;
     activityType: string;
     activityTypeValue?: ActivityTypes | string | number | null;
+    durationValue?: number | null;
+    distanceValue?: number | null;
     startDate: number | null;
     durationLabel: string;
     distanceLabel: string;
@@ -164,6 +166,8 @@ export class TracksMapManager {
                     activityId: point.activityId,
                     activityType: (point.activityType || 'Activity').toString(),
                     activityTypeValue: this.normalizeActivityTypeValue(point.activityTypeValue),
+                    durationValue: this.normalizeMetricValue(point.durationValue),
+                    distanceValue: this.normalizeMetricValue(point.distanceValue),
                     startDate: typeof point.startDate === 'number' && Number.isFinite(point.startDate) ? point.startDate : null,
                     durationLabel: (point.durationLabel || '-').toString(),
                     distanceLabel: (point.distanceLabel || '-').toString(),
@@ -554,6 +558,7 @@ export class TracksMapManager {
             this.clearTrackStartPointsLayerAndInteraction();
             return;
         }
+        const sizeWeightsByPointId = this.buildTrackStartMarkerSizeWeights(this.trackStartPoints);
         this.zone.runOutsideAngular(() => {
             this.mapboxStartPointLayerService.renderStartPoints(this.map, {
                 sourceId: TracksMapManager.TRACK_START_SOURCE_ID,
@@ -567,7 +572,8 @@ export class TracksMapManager {
                     lat: point.lat,
                     properties: {
                         pointId: point.pointId,
-                        markerColor: this.resolveTrackColors(point.activityTypeValue ?? undefined).adjustedColor
+                        markerColor: this.resolveTrackColors(point.activityTypeValue ?? undefined).adjustedColor,
+                        markerSizeWeight: sizeWeightsByPointId.get(point.pointId) ?? 0
                     }
                 }))
             });
@@ -619,6 +625,55 @@ export class TracksMapManager {
         if (typeof value === 'number' && Number.isFinite(value)) return value;
         if (typeof value === 'string' && value.trim().length > 0) return value.trim();
         return null;
+    }
+
+    private normalizeMetricValue(value: unknown): number | null {
+        if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+        if (value < 0) return null;
+        return value;
+    }
+
+    private buildTrackStartMarkerSizeWeights(points: TrackStartPointWithId[]): Map<string, number> {
+        const durationValues = points
+            .map((point) => point.durationValue)
+            .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+        const distanceValues = points
+            .map((point) => point.distanceValue)
+            .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+
+        const durationMin = durationValues.length ? Math.min(...durationValues) : null;
+        const durationMax = durationValues.length ? Math.max(...durationValues) : null;
+        const distanceMin = distanceValues.length ? Math.min(...distanceValues) : null;
+        const distanceMax = distanceValues.length ? Math.max(...distanceValues) : null;
+
+        const weights = new Map<string, number>();
+        points.forEach((point) => {
+            const durationWeight = durationMin === null || durationMax === null
+                ? null
+                : this.normalizeValue(point.durationValue, durationMin, durationMax);
+            const distanceWeight = distanceMin === null || distanceMax === null
+                ? null
+                : this.normalizeValue(point.distanceValue, distanceMin, distanceMax);
+
+            let finalWeight = 0;
+            if (durationWeight !== null && distanceWeight !== null) {
+                // 50/50 weighting as requested.
+                finalWeight = 0.5 * durationWeight + 0.5 * distanceWeight;
+            } else if (durationWeight !== null) {
+                finalWeight = durationWeight;
+            } else if (distanceWeight !== null) {
+                finalWeight = distanceWeight;
+            }
+            weights.set(point.pointId, finalWeight);
+        });
+
+        return weights;
+    }
+
+    private normalizeValue(value: number | null | undefined, min: number, max: number): number | null {
+        if (value === null || value === undefined || !Number.isFinite(value)) return null;
+        if (min === max) return 1;
+        return (value - min) / (max - min);
     }
 
     private buildTrackStartPointId(point: TrackStartPoint, duplicateCounter: Map<string, number>): string {
