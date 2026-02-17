@@ -8,9 +8,9 @@ export const AppActivityTypeGroupIcons: { [key in ActivityTypeGroups]: string } 
     [ActivityTypeGroups.Performance]: 'workspace_premium',
     [ActivityTypeGroups.IndoorSports]: 'fitness_center',
     [ActivityTypeGroups.OutdoorAdventures]: 'hiking',
-    [ActivityTypeGroups.WinterSports]: 'ac_unit',
-    [ActivityTypeGroups.WaterSports]: 'rowing',
+    [ActivityTypeGroups.WinterSports]: 'downhill_skiing',
+    [ActivityTypeGroups.WaterSports]: 'waves',
     [ActivityTypeGroups.Diving]: 'scuba_diving',
-    [ActivityTypeGroups.TeamRacket]: 'sports_tennis',
+    [ActivityTypeGroups.TeamRacket]: 'sports_soccer',
     [ActivityTypeGroups.Unspecified]: 'category',
 };

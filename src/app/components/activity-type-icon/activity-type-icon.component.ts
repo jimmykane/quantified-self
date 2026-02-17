@@ -2,6 +2,53 @@ import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
 import { AppActivityTypeGroupIcons } from '../../services/color/app.activity-type-group.icons';
 
+const ACTIVITY_TYPE_ICON_OVERRIDES: Readonly<Record<string, string>> = {
+    virtualcycling: 'computer',
+    virtualride: 'computer',
+    virtualrunning: 'computer',
+    virtualrun: 'computer',
+    treadmill: 'sprint',
+    indoorrunning: 'sprint',
+    ebiking: 'electric_bike',
+    ebike: 'electric_bike',
+    openwaterswimming: 'waves',
+    kayaking: 'kayaking',
+    canoeing: 'kayaking',
+    paddling: 'kayaking',
+    standuppaddling: 'kayaking',
+    sup: 'kayaking',
+    rowing: 'rowing',
+    indoorrowing: 'rowing',
+    sailing: 'sailing',
+    surfing: 'surfing',
+    wakeboarding: 'surfing',
+    kitesurfing: 'kitesurfing',
+    snowboarding: 'snowboarding',
+    iceskating: 'ice_skating',
+    snowshoeing: 'snowshoeing',
+    walking: 'directions_walk',
+    nordicwalking: 'nordic_walking',
+    trekking: 'hiking',
+    yoga: 'self_improvement',
+    pilates: 'self_improvement',
+    flexibilitytraining: 'self_improvement',
+    weighttraining: 'weight',
+    strengthtraining: 'weight',
+    kettlebell: 'weight',
+    basketball: 'sports_basketball',
+    football: 'sports_soccer',
+    americanfootball: 'sports_football',
+    rugby: 'sports_rugby',
+    tennis: 'sports_tennis',
+    golf: 'sports_golf',
+    cricket: 'sports_cricket',
+    baseball: 'sports_baseball',
+    softball: 'sports_baseball',
+    handball: 'sports_handball',
+    icehockey: 'sports_hockey',
+    volleyball: 'sports_volleyball'
+};
+
 @Component({
     selector: 'app-activity-type-icon',
     templateUrl: './activity-type-icon.component.html',
@@ -14,6 +61,15 @@ export class ActivityTypeIconComponent {
     @Input() size?: string;
     @Input() vAlign?: string;
 
+    private normalizeActivityTypeKey(activity: string): string {
+        return activity
+            .toLowerCase()
+            .replace(/[_-]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .replace(/\s/g, '');
+    }
+
     getIcon(): string {
         if (!this.activityType) {
             return 'category';
@@ -21,12 +77,10 @@ export class ActivityTypeIconComponent {
         const activities = this.activityType.split(',').map(a => a.trim());
         const activity = activities[0];
 
-        // Special cases where we want a specific icon regardless of group
-        if (activity === 'Virtual Cycling' || activity === 'VirtualRide') {
-            return 'computer';
-        }
-        if (activity === 'Virtual Running' || activity === 'VirtualRun') {
-            return 'computer';
+        const normalizedActivityType = this.normalizeActivityTypeKey(activity);
+        const overrideIcon = ACTIVITY_TYPE_ICON_OVERRIDES[normalizedActivityType];
+        if (overrideIcon) {
+            return overrideIcon;
         }
 
         const activityTypeEnum = ActivityTypes[activity as keyof typeof ActivityTypes] || (Object.values(ActivityTypes).includes(activity as ActivityTypes) ? activity as ActivityTypes : ActivityTypes.Other);
