@@ -297,6 +297,27 @@ describe('TracksComponent', () => {
       expect(synchronizer.update).toHaveBeenCalled();
     });
 
+    it('should update map style without reloading track data', async () => {
+      const loadTracksSpy = vi
+        .spyOn(component as any, 'loadTracksMapForUserByDateRange')
+        .mockResolvedValue(undefined);
+
+      await component.ngOnInit();
+      fixture.detectChanges();
+      await waitForAsyncWork();
+
+      const loadCallsBefore = loadTracksSpy.mock.calls.length;
+      expect(loadCallsBefore).toBeGreaterThan(0);
+
+      mockUserSettingsQuery.myTracksSettings.set({
+        ...mockUserSettingsQuery.myTracksSettings(),
+        mapStyle: 'satellite'
+      });
+      await waitForAsyncWork();
+
+      expect(loadTracksSpy.mock.calls.length).toBe(loadCallsBefore);
+    });
+
     it('should persist jump heatmap setting when toggled', () => {
       component.onShowJumpHeatmapToggle(false);
 

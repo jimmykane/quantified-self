@@ -144,7 +144,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.searchPeekDefaultExpanded.set(this.resolveDesktopViewportDefault());
 
     // Track last settings to prevent redundant data fetching
-    let lastLoadedDataSettings: { dateRange: DateRanges, activityTypes?: ActivityTypes[], mapStyle?: string } | null = null;
+    let lastLoadedDataSettings: { dateRange: DateRanges, activityTypes?: ActivityTypes[] } | null = null;
     let isFirstRun = true;
 
     // Unified Reactive State: Combines Settings and Theme
@@ -183,11 +183,10 @@ export class TracksComponent implements OnInit, OnDestroy {
 
       // 4. Data Loading
       // Check if data-impacting settings changed
-      const currentSnapshot = { dateRange: settings.dateRange, activityTypes: settings.activityTypes, mapStyle: settings.mapStyle };
+      const currentSnapshot = { dateRange: settings.dateRange, activityTypes: settings.activityTypes };
 
       const dataChanged = !lastLoadedDataSettings ||
         lastLoadedDataSettings.dateRange !== currentSnapshot.dateRange ||
-        lastLoadedDataSettings.mapStyle !== currentSnapshot.mapStyle ||
         JSON.stringify(lastLoadedDataSettings.activityTypes) !== JSON.stringify(currentSnapshot.activityTypes);
 
       if (dataChanged) {
