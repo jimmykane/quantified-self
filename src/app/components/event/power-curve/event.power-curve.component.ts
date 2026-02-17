@@ -18,6 +18,7 @@ import {
   ActivityInterface,
   ChartThemes,
   DataDuration,
+  DataPower,
 } from '@sports-alliance/sports-lib';
 import { AppBreakpoints } from '../../../constants/breakpoints';
 import { AppColors } from '../../../services/color/app.colors';
@@ -312,7 +313,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
         axisLabel: {
           fontSize: axisLabelFontSize,
           color: textColor,
-          formatter: (value: number) => `${Math.round(value)}`,
+          formatter: (value: number) => this.formatPowerLabel(value),
         },
       },
       tooltip: {
@@ -433,7 +434,7 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
       ? ` (${wattsPerKg.toFixed(2)} W/kg)`
       : '';
 
-    return `<b>${this.formatDurationLabel(duration)}</b><br/>${activityPrefix}Power: <b>${Math.round(power)} W</b>${wattsPerKgLabel}`;
+    return `<b>${this.formatDurationLabel(duration)}</b><br/>${activityPrefix}Power: <b>${this.formatPowerLabel(power, true)}</b>${wattsPerKgLabel}`;
   }
 
   private calculateAxisRange(values: number[], options: {
@@ -483,6 +484,23 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
       return '';
     }
     return new DataDuration(seconds).getDisplayValue(false, false).trim();
+  }
+
+  private formatPowerLabel(power: number, includeUnit = false): string {
+    if (!Number.isFinite(power)) {
+      return '';
+    }
+
+    const dataPower = new DataPower(power);
+    const value = `${dataPower.getDisplayValue()}`.trim();
+    if (!includeUnit) {
+      return value;
+    }
+
+    const unit = `${dataPower.getDisplayUnit()}`.trim();
+    return unit.length > 0
+      ? `${value} ${unit}`
+      : value;
   }
 
   private buildVisibleDurationLabelSet(durations: number[]): Set<number> {
