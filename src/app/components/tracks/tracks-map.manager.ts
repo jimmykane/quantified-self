@@ -40,7 +40,7 @@ export class TracksMapManager {
     private static readonly TRACK_START_SOURCE_ID = 'track-start-source';
     private static readonly TRACK_START_LAYER_ID = 'track-start-layer';
     private static readonly TRACK_START_HIT_LAYER_ID = 'track-start-hit-layer';
-    private static readonly TRACK_START_MIN_ZOOM = 10;
+    private static readonly TRACK_START_MIN_ZOOM = 0;
     private static readonly TRACK_START_MARKER_STROKE = '#f5f8ff';
     private static readonly TRACK_START_MARKER_RADIUS_MIN = 5.6;
     private static readonly TRACK_START_MARKER_RADIUS_MAX = 6.72;
