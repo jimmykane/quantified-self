@@ -40,7 +40,8 @@ app-peek-panel.tracks-search-peek app-event-search {
   z-index: 1000;
   background: transparent;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
 }
 
@@ -50,11 +51,14 @@ app-peek-panel.tracks-search-peek app-event-search {
   border-radius: 4px;
 }
 
-.map-style-controls .jump-heat-toggle {
-  background-color: var(--mat-sys-surface);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  border-radius: 4px;
-  padding: 2px 8px;
+/* Keep jumps toggle visual parity with style toggles, but without selected checkmark glyph. */
+:host ::ng-deep .map-style-controls .jump-heat-toggle .mat-button-toggle-checkbox-wrapper {
+  display: none;
+}
+
+:host ::ng-deep .map-style-controls .jump-heat-toggle .mat-button-toggle-checked .mat-button-toggle-button {
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .tracks-trips-peek-anchor {

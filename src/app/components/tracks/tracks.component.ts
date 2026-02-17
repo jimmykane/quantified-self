@@ -298,6 +298,15 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.logger.info('[TracksComponent] User selected map style', { styleType });
   }
 
+  public isJumpHeatmapEnabled(): boolean {
+    const settings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
+    return settings?.showJumpHeatmap !== false;
+  }
+
+  public toggleJumpHeatmap(): void {
+    this.onShowJumpHeatmapToggle(!this.isJumpHeatmapEnabled());
+  }
+
   public onShowJumpHeatmapToggle(checked: boolean) {
     this.userSettingsQuery.updateMyTracksSettings({ showJumpHeatmap: checked });
   }

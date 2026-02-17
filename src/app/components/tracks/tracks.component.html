@@ -15,19 +15,20 @@
 
   <div #mapDiv id="map"></div>
   <div class="map-style-controls">
+    @if (hasDetectedJumps()) {
+    <mat-button-toggle-group class="jump-heat-toggle" appearance="legacy" name="jumpHeatmap" aria-label="Jump Heatmap"
+      [disabled]="isLoading()" [value]="isJumpHeatmapEnabled() ? 'on' : 'off'">
+      <mat-button-toggle [value]="isJumpHeatmapEnabled() ? 'on' : 'off'" (click)="toggleJumpHeatmap()">
+        Jumps: {{ isJumpHeatmapEnabled() ? 'On' : 'Off' }}
+      </mat-button-toggle>
+    </mat-button-toggle-group>
+    }
     <mat-button-toggle-group appearance="legacy" name="mapStyle" aria-label="Map Style" [disabled]="isLoading()"
       [value]="user?.settings?.myTracksSettings?.mapStyle || 'default'" (change)="setMapStyle($any($event).value)">
       <mat-button-toggle value="default">Default</mat-button-toggle>
       <mat-button-toggle value="satellite">Satellite</mat-button-toggle>
       <mat-button-toggle value="outdoors">Outdoors</mat-button-toggle>
     </mat-button-toggle-group>
-    @if (hasDetectedJumps()) {
-    <mat-slide-toggle class="jump-heat-toggle" [disabled]="isLoading()"
-      [checked]="user?.settings?.myTracksSettings?.showJumpHeatmap !== false"
-      (change)="onShowJumpHeatmapToggle($event.checked)">
-      Jump heatmap
-    </mat-slide-toggle>
-    }
     @if (isLoading()) {
     <mat-spinner diameter="24"></mat-spinner>
     }
