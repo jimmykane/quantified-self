@@ -37,5 +37,14 @@ describe('ActivityTypeIconComponent', () => {
 
     component.activityType = 'Tennis';
     expect(component.getIcon()).toBe('sports_tennis');
+
+    component.activityType = 'Weight Training';
+    expect(component.getIcon()).toBe('fitness_center');
+
+    component.activityType = 'Strength Training';
+    expect(component.getIcon()).toBe('exercise');
+
+    component.activityType = 'Kettlebell';
+    expect(component.getIcon()).toBe('weight');
   });
 });
