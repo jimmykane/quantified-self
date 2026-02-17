@@ -4,7 +4,8 @@
   "license": "SEE LICENSE IN LICENSE.md",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve --port 4200",
+    "start": "ng serve --configuration local --port 4200",
+    "start:default": "ng serve --port 4200",
     "clean": "rm -rf dist",
     "build": "ng build --verbose",
     "build-beta": "ng build --configuration beta",

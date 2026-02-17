@@ -2,6 +2,7 @@
 // The build system defaults to the dev environment which uses `environment.ts`, but if you do
 // `ng build --env=prod` then `environment.prod.ts` will be used instead.
 // The list of which env maps to which file can be found in `.angular-cli.json`.
+import { mapboxAccessToken } from './mapbox-token';
 declare function require(moduleName: string): any;
 const appVersion = require('../../package.json').version;
 
@@ -27,6 +28,6 @@ export const environment = {
     recaptchaSiteKey: '6Lfi_EwsAAAAACWwUUff0cd4E-92EJnXEwFuOSzz'
   },
   googleMapsMapId: '1192252b0032f7559388bd8a',
-  mapboxAccessToken: 'pk.eyJ1IjoiamltbXlrYW5lIiwiYSI6ImNta3Y2bXZrdjAyZWozZHBja2hsd3kxbmYifQ.LMMjdYEmiiKr7CtIQT66uQ',
+  mapboxAccessToken,
 
 };

@@ -69,6 +69,7 @@ licenses.json
 # SSL certificates (generate locally with mkcert)
 /certs
 functions/.env
+src/environments/mapbox-token.local.ts
 
 PR_DESCRIPTION.md
 
