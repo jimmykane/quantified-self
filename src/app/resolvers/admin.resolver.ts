@@ -18,8 +18,8 @@ export const adminResolver: ResolveFn<AdminResolverData> = (route, state) => {
     const initialParams: ListUsersParams = {
         page: 0,
         pageSize: 10,
-        sortField: 'email',
-        sortDirection: 'asc'
+        sortField: 'created',
+        sortDirection: 'desc'
     };
 
     return forkJoin({

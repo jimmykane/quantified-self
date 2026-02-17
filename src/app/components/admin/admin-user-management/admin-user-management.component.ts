@@ -92,8 +92,8 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
     // Search and sort state
     searchTerm = '';
-    sortField = 'email';
-    sortDirection: 'asc' | 'desc' = 'asc';
+    sortField = 'created';
+    sortDirection: 'asc' | 'desc' = 'desc';
 
     displayedColumns: string[] = [
         'photoURL', 'email', 'providerIds', 'displayName', 'role', 'subscription',
@@ -208,8 +208,8 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     }
 
     onSortChange(sort: Sort): void {
-        this.sortField = sort.active || 'email';
-        this.sortDirection = (sort.direction as 'asc' | 'desc') || 'asc';
+        this.sortField = sort.active || 'created';
+        this.sortDirection = (sort.direction as 'asc' | 'desc') || 'desc';
         this.currentPage = 0;
         this.fetchUsers();
     }

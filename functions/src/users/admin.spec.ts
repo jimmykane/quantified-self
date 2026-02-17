@@ -404,18 +404,18 @@ describe('listUsers Cloud Function', () => {
         expect(result.users).toHaveLength(1);
     });
 
-    it('should use default sort (email) when sortField is invalid', async () => {
+    it('should use default sort (created) when sortField is invalid', async () => {
         const mockUsers = [
-            { uid: 'u1', email: 'b@test.com', providerData: [] },
-            { uid: 'u2', email: 'a@test.com', providerData: [] }
+            { uid: 'u1', email: 'b@test.com', metadata: { creationTime: '2024-02-01' }, providerData: [] },
+            { uid: 'u2', email: 'a@test.com', metadata: { creationTime: '2024-01-01' }, providerData: [] }
         ];
         mockListUsers.mockResolvedValue({ users: mockUsers, pageToken: undefined });
 
-        // invalid_field causes fall through to default which compares by email
+        // invalid_field causes fall through to default which compares by creation date
         const result: any = await (listUsers as any)(getAdminRequest({ sortField: 'invalid_field' as any, sortDirection: 'asc' }));
 
-        expect(result.users[0].email).toBe('a@test.com');
-        expect(result.users[1].email).toBe('b@test.com');
+        expect(result.users[0].uid).toBe('u2');
+        expect(result.users[1].uid).toBe('u1');
     });
 
     // -------------------------------------------------------------------------

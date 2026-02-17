@@ -239,8 +239,8 @@ describe('AdminUserManagementComponent', () => {
             page: 1,
             pageSize: 50,
             searchTerm: undefined,
-            sortField: 'email',
-            sortDirection: 'asc',
+            sortField: 'created',
+            sortDirection: 'desc',
             filterService: undefined
         });
     });

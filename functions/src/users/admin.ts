@@ -282,8 +282,8 @@ export const listUsers = onAdminCall<ListUsersRequest, any>({
                     bValue = b.providerIds[0] || '';
                     break;
                 default:
-                    aValue = a.email || '';
-                    bValue = b.email || '';
+                    aValue = a.metadata.creationTime ? new Date(a.metadata.creationTime).getTime() : 0;
+                    bValue = b.metadata.creationTime ? new Date(b.metadata.creationTime).getTime() : 0;
             }
 
             if (typeof aValue === 'string' && typeof bValue === 'string') {
