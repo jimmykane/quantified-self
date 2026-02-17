@@ -30,6 +30,10 @@ const waitForAsyncWork = async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
+const createStat = (value: number) => ({
+  getValue: () => value
+});
+
 const createMockEvent = (eventId: string, startDateIso: string, latitudeDegrees: number, longitudeDegrees: number, activityType = ActivityTypes.Running) => {
   const startPositionStat = {
     getValue: () => ({ latitudeDegrees, longitudeDegrees })
@@ -291,6 +295,101 @@ describe('TracksComponent', () => {
 
       const synchronizer = mockMapStyleService.createSynchronizer.mock.results[0].value;
       expect(synchronizer.update).toHaveBeenCalled();
+    });
+
+    it('should persist jump heatmap setting when toggled', () => {
+      component.onShowJumpHeatmapToggle(false);
+
+      expect(mockUserSettingsQuery.updateMyTracksSettings).toHaveBeenCalledWith({ showJumpHeatmap: false });
+    });
+
+    it('should show jump heatmap toggle only when jumps are detected', () => {
+      component.hasDetectedJumps.set(false);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.jump-heat-toggle')).toBeNull();
+
+      component.hasDetectedJumps.set(true);
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('.jump-heat-toggle')).not.toBeNull();
+    });
+
+    it('should collect jump heat points from loaded activities', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setJumpHeatPointsSpy = vi.spyOn(trackManager, 'setJumpHeatPoints');
+
+      const activity = {
+        type: ActivityTypes.Running,
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+        getAllEvents: () => [{
+          jumpData: {
+            position_lat: createStat(40.645),
+            position_long: createStat(22.945),
+            hang_time: createStat(1.7),
+            distance: createStat(4.2),
+          }
+        }]
+      };
+
+      const event = createMockEvent('jump-event-1', '2024-11-08T08:00:00Z', 40.64, 22.94);
+
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+      mockEventService.attachStreamsToEventWithActivities.mockImplementation((_user: unknown, hydratedEvent: any) => {
+        hydratedEvent.getActivities = () => [activity];
+        return of(hydratedEvent);
+      });
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(setJumpHeatPointsSpy).toHaveBeenCalledTimes(1);
+      expect(setJumpHeatPointsSpy).toHaveBeenCalledWith([
+        expect.objectContaining({
+          lng: 22.945,
+          lat: 40.645,
+          hangTime: 1.7,
+          distance: 4.2
+        })
+      ]);
+    });
+
+    it('should clear jump heatmap when no valid jump points are found', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setJumpHeatPointsSpy = vi.spyOn(trackManager, 'setJumpHeatPoints');
+      const clearJumpHeatmapSpy = vi.spyOn(trackManager, 'clearJumpHeatmap');
+
+      const activity = {
+        type: ActivityTypes.Running,
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+        getAllEvents: () => [{
+          jumpData: {
+            position_lat: createStat(200),
+            position_long: createStat(22.945),
+            hang_time: createStat(1.2),
+          }
+        }]
+      };
+
+      const event = createMockEvent('jump-event-empty', '2024-11-08T08:00:00Z', 40.64, 22.94);
+
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+      mockEventService.attachStreamsToEventWithActivities.mockImplementation((_user: unknown, hydratedEvent: any) => {
+        hydratedEvent.getActivities = () => [activity];
+        return of(hydratedEvent);
+      });
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(setJumpHeatPointsSpy).not.toHaveBeenCalled();
+      expect(clearJumpHeatmapSpy).toHaveBeenCalled();
     });
   });
 

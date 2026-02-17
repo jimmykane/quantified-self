@@ -50,6 +50,13 @@ app-peek-panel.tracks-search-peek app-event-search {
   border-radius: 4px;
 }
 
+.map-style-controls .jump-heat-toggle {
+  background-color: var(--mat-sys-surface);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+
 .tracks-trips-peek-anchor {
   position: absolute;
   left: 0;

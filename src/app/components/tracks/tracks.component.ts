@@ -11,6 +11,7 @@ import { Subject, Subscription } from 'rxjs';
 import { DateRanges, ActivityTypes } from '@sports-alliance/sports-lib';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
 import { DataPositionInterface } from '@sports-alliance/sports-lib';
+import { DataJumpEvent } from '@sports-alliance/sports-lib';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { AppFileService } from '../../services/app.file.service';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib';
@@ -32,6 +33,8 @@ import { TracksMapManager } from './tracks-map.manager'; // Imported Manager
 import { MapStyleService } from '../../services/map-style.service';
 import { MapboxStyleSynchronizer } from '../../services/map/mapbox-style-synchronizer';
 import { MapStyleName } from '../../services/map/map-style.types';
+import { MapboxHeatmapLayerService } from '../../services/map/mapbox-heatmap-layer.service';
+import { JumpHeatmapWeightingService } from '../../services/map/jump-heatmap-weighting.service';
 import { Search } from '../event-search/event-search.component';
 import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-detection.service';
 import { TripDetectionInput } from '../../services/my-tracks-trip-detection.service';
@@ -40,6 +43,18 @@ import { ResolvedTripLocationLabel, TripLocationLabelService } from '../../servi
 
 interface DetectedTripViewModel extends DetectedTrip {
   locationLabel: string | null;
+}
+
+interface JumpHeatPoint {
+  lng: number;
+  lat: number;
+  hangTime: number | null;
+  distance: number | null;
+}
+
+interface JumpHeatCollectionStats {
+  jumpsWithCoordinates: number;
+  jumpsWithWeightMetrics: number;
 }
 
 @Component({
@@ -93,6 +108,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   public hasEvaluatedTripDetection: WritableSignal<boolean> = signal(false);
   public detectedTripsPanelExpanded: WritableSignal<boolean> = signal(false);
   public searchPeekDefaultExpanded: WritableSignal<boolean> = signal(true);
+  public hasDetectedJumps: WritableSignal<boolean> = signal(false);
   // Removed legacy state tracking
 
   constructor(
@@ -110,8 +126,17 @@ export class TracksComponent implements OnInit, OnDestroy {
     private mapboxLoader: MapboxLoaderService,
     private themeService: AppThemeService,
     private mapStyleService: MapStyleService,
+    private mapboxHeatmapLayerService: MapboxHeatmapLayerService,
+    private jumpHeatmapWeightingService: JumpHeatmapWeightingService,
   ) {
-    this.tracksMapManager = new TracksMapManager(this.zone, this.eventColorService, this.mapStyleService, this.logger); // Initialize Manager
+    this.tracksMapManager = new TracksMapManager(
+      this.zone,
+      this.eventColorService,
+      this.mapStyleService,
+      this.mapboxHeatmapLayerService,
+      this.jumpHeatmapWeightingService,
+      this.logger
+    );
     this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
 
     const platformId = inject(PLATFORM_ID);
@@ -148,6 +173,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       // 2. Update Tracks Colors (Theme based)
       this.tracksMapManager.setIsDarkTheme(theme === AppThemes.Dark);
       this.tracksMapManager.refreshTrackColors();
+      this.tracksMapManager.setJumpHeatmapVisible(settings.showJumpHeatmap !== false);
 
       // 3. Terrain (is3D)
       if (terrainControl) {
@@ -273,6 +299,10 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.logger.info('[TracksComponent] User selected map style', { styleType });
   }
 
+  public onShowJumpHeatmapToggle(checked: boolean) {
+    this.userSettingsQuery.updateMyTracksSettings({ showJumpHeatmap: checked });
+  }
+
   public async search(event: Search) {
     if (!isPlatformBrowser(this.platformId)) return;
 
@@ -352,7 +382,9 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.hasEvaluatedTripDetection.set(false);
     this.detectedTrips.set([]);
     this.detectedTripsPanelExpanded.set(false);
+    this.hasDetectedJumps.set(false);
     this.trackCoordinatesByEventId.clear();
+    this.tracksMapManager.clearJumpHeatmap();
     this.clearProgressAndOpenBottomSheet();
     const dates = getDatesForDateRange(dateRange, user.settings?.unitSettings?.startOfTheWeek || 1);
     const where = []
@@ -387,6 +419,7 @@ export class TracksComponent implements OnInit, OnDestroy {
               return;
             }
             this.tracksMapManager.clearAllTracks();
+            this.hasDetectedJumps.set(false);
             this.hasEvaluatedTripDetection.set(true);
             this.clearProgressAndCloseBottomSheet();
             return;
@@ -407,6 +440,9 @@ export class TracksComponent implements OnInit, OnDestroy {
           let count = 0;
           let addedTrackCount = 0;
           const allCoordinates: number[][] = [];
+          const jumpHeatPoints: JumpHeatPoint[] = [];
+          let jumpsWithCoordinates = 0;
+          let jumpsWithWeightMetrics = 0;
           const detectionCandidatesByEvent = new Map<string, TripDetectionInput>();
 
           for (const eventsChunk of chunckedEvents) {
@@ -435,6 +471,10 @@ export class TracksComponent implements OnInit, OnDestroy {
                     .filter((activity: any) => activity.hasPositionData())
                     .filter((activity: any) => !activityTypes || activityTypes.length === 0 || activityTypes.includes(activity.type))
                     .forEach((activity: any) => {
+                      const jumpStats = this.collectJumpHeatPointsFromActivity(activity, jumpHeatPoints);
+                      jumpsWithCoordinates += jumpStats.jumpsWithCoordinates;
+                      jumpsWithWeightMetrics += jumpStats.jumpsWithWeightMetrics;
+
                       const coordinates = activity.getPositionData()
                         .filter((position: any) => position)
                         .map((position: any) => {
@@ -486,6 +526,19 @@ export class TracksComponent implements OnInit, OnDestroy {
           if (addedTrackCount === 0) {
             this.tracksMapManager.clearAllTracks();
           }
+          if (jumpHeatPoints.length > 0) {
+            this.hasDetectedJumps.set(true);
+            this.tracksMapManager.setJumpHeatPoints(jumpHeatPoints);
+          } else {
+            this.hasDetectedJumps.set(false);
+            this.tracksMapManager.clearJumpHeatmap();
+          }
+          this.logger.log('[TracksComponent] Jump heatmap collection summary.', {
+            jumpsWithCoordinates,
+            jumpsWithWeightMetrics,
+            renderableHeatPoints: jumpHeatPoints.length,
+            promiseTime
+          });
           this.logger.log('[TracksComponent] Prepared trip detection candidates.', {
             candidateCount: detectionCandidatesByEvent.size,
             promiseTime
@@ -626,6 +679,49 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   private updateTotalProgress(value: number) {
     this.totalProgress.next(value);
+  }
+
+  private collectJumpHeatPointsFromActivity(activity: any, jumpHeatPoints: JumpHeatPoint[]): JumpHeatCollectionStats {
+    let jumpsWithCoordinates = 0;
+    let jumpsWithWeightMetrics = 0;
+    const activityEvents = typeof activity?.getAllEvents === 'function' ? activity.getAllEvents() : [];
+    (activityEvents || []).forEach((activityEvent: any) => {
+      const jumpData = activityEvent instanceof DataJumpEvent ? activityEvent.jumpData : activityEvent?.jumpData;
+      const lat = this.getNumericJumpStatValue(jumpData?.position_lat);
+      const lng = this.getNumericJumpStatValue(jumpData?.position_long);
+      if (lat === null || lng === null) {
+        return;
+      }
+      if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+        return;
+      }
+      jumpsWithCoordinates++;
+
+      const hangTime = this.getNumericJumpStatValue(jumpData?.hang_time);
+      const distance = this.getNumericJumpStatValue(jumpData?.distance);
+      if (hangTime === null && distance === null) {
+        return;
+      }
+      jumpsWithWeightMetrics++;
+      jumpHeatPoints.push({
+        lng,
+        lat,
+        hangTime,
+        distance
+      });
+    });
+    return {
+      jumpsWithCoordinates,
+      jumpsWithWeightMetrics
+    };
+  }
+
+  private getNumericJumpStatValue(stat: any): number | null {
+    const value = stat?.getValue?.();
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    return null;
   }
 
   // Refactored helpers

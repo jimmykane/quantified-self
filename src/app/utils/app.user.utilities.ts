@@ -369,6 +369,7 @@ export class AppUserUtilities {
         settings.myTracksSettings.dateRange = isNumber(settings.myTracksSettings.dateRange)
             ? settings.myTracksSettings.dateRange
             : AppUserUtilities.getDefaultMyTracksDateRange();
+        (settings.myTracksSettings as any).showJumpHeatmap = (settings.myTracksSettings as any).showJumpHeatmap !== false;
 
         // Export to CSV
         settings.exportToCSVSettings = settings.exportToCSVSettings || <UserExportToCsvSettingsInterface>{};

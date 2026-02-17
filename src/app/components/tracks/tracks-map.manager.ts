@@ -4,11 +4,16 @@ import { ActivityTypes, AppThemes } from '@sports-alliance/sports-lib';
 import { MapStyleService } from '../../services/map-style.service';
 import { MapStyleName } from '../../services/map/map-style.types';
 import { LoggerService } from '../../services/logger.service';
+import { MapboxHeatmapLayerService } from '../../services/map/mapbox-heatmap-layer.service';
+import { JumpHeatPointInput, JumpHeatmapWeightingService } from '../../services/map/jump-heatmap-weighting.service';
 
 type TrackStyleMode = 'dark-glow' | 'light-contrast';
 type TrackLayerRole = 'glow' | 'casing' | 'main';
 
 export class TracksMapManager {
+    private static readonly JUMP_HEAT_SOURCE_ID = 'jump-heat-source';
+    private static readonly JUMP_HEAT_LAYER_ID = 'jump-heat-layer';
+
     private map: any; // Mapbox GL map instance
     private activeLayerIds: string[] = []; // Store IDs of added layers/sources
     private mapboxgl: any; // Mapbox GL JS library reference
@@ -20,11 +25,15 @@ export class TracksMapManager {
     private isDarkTheme = false;
     private mapStyle: MapStyleName = 'default';
     private trackLayerBaseColors = new Map<string, string>();
+    private jumpHeatPoints: JumpHeatPointInput[] = [];
+    private jumpHeatmapVisible = true;
 
     constructor(
         private zone: NgZone,
         private eventColorService: AppEventColorService,
         private mapStyleService: MapStyleService,
+        private mapboxHeatmapLayerService: MapboxHeatmapLayerService,
+        private jumpHeatmapWeightingService: JumpHeatmapWeightingService,
         private logger: LoggerService
     ) { }
 
@@ -32,6 +41,11 @@ export class TracksMapManager {
         this.map = map;
         this.mapboxgl = mapboxgl;
         this.attachStyleReloadHandler();
+        if (this.jumpHeatPoints.length > 0) {
+            this.renderJumpHeatmap();
+        } else {
+            this.updateJumpHeatmapVisibility();
+        }
     }
 
     public setIsDarkTheme(isDark: boolean) {
@@ -44,6 +58,45 @@ export class TracksMapManager {
 
     public getMap(): any {
         return this.map;
+    }
+
+    public setJumpHeatmapVisible(visible: boolean): void {
+        this.jumpHeatmapVisible = visible !== false;
+        this.updateJumpHeatmapVisibility();
+    }
+
+    public setJumpHeatPoints(points: { lng: number; lat: number; hangTime: number | null; distance: number | null; }[]): void {
+        this.jumpHeatPoints = (points || [])
+            .filter((point) =>
+                Number.isFinite(point?.lng)
+                && Number.isFinite(point?.lat)
+                && Math.abs(point.lng) <= 180
+                && Math.abs(point.lat) <= 90
+            )
+            .map((point) => ({
+                lng: point.lng,
+                lat: point.lat,
+                hangTime: typeof point.hangTime === 'number' && Number.isFinite(point.hangTime) ? point.hangTime : null,
+                distance: typeof point.distance === 'number' && Number.isFinite(point.distance) ? point.distance : null
+            }))
+            .filter((point) => point.hangTime !== null || point.distance !== null);
+
+        this.logger.log('[TracksMapManager] setJumpHeatPoints called.', {
+            inputPoints: points?.length || 0,
+            validWeightedPoints: this.jumpHeatPoints.length
+        });
+
+        if (!this.jumpHeatPoints.length) {
+            this.removeJumpHeatmapLayerAndSource();
+            return;
+        }
+
+        this.renderJumpHeatmap();
+    }
+
+    public clearJumpHeatmap(): void {
+        this.jumpHeatPoints = [];
+        this.removeJumpHeatmapLayerAndSource();
     }
 
     public addTracks(activities: any[]) {
@@ -290,14 +343,107 @@ export class TracksMapManager {
     }
 
     private restoreTracksAfterStyleReload() {
-        if (!this.map || this.tracksByActivityId.size === 0) return;
+        if (!this.map || (this.tracksByActivityId.size === 0 && this.jumpHeatPoints.length === 0)) return;
 
         this.zone.runOutsideAngular(() => {
+            this.renderJumpHeatmap();
             this.tracksByActivityId.forEach(({ activity, coordinates }) => {
                 this.addTrackFromActivity(activity, coordinates);
             });
             this.refreshTrackColors();
+            this.updateJumpHeatmapVisibility();
         });
+    }
+
+    private renderJumpHeatmap(): void {
+        if (!this.map) return;
+        const sourceData = this.jumpHeatmapWeightingService.buildWeightedFeatureCollection(this.jumpHeatPoints);
+        if (!sourceData.features.length) {
+            this.logger.log('[TracksMapManager] No renderable jump heat features after weighting.', {
+                inputPoints: this.jumpHeatPoints.length
+            });
+            this.removeJumpHeatmapLayerAndSource();
+            return;
+        }
+
+        this.zone.runOutsideAngular(() => {
+            const visibility = this.jumpHeatmapVisible ? 'visible' : 'none';
+            const beforeLayerId = this.getFirstTrackLayerId();
+            this.logger.log('[TracksMapManager] Rendering jump heatmap layer.', {
+                inputPoints: this.jumpHeatPoints.length,
+                renderableFeatures: sourceData.features.length,
+                visibility,
+                beforeLayerId: beforeLayerId || null
+            });
+
+            this.mapboxHeatmapLayerService.renderGeoJsonHeatmapLayer(this.map, {
+                sourceId: TracksMapManager.JUMP_HEAT_SOURCE_ID,
+                layerId: TracksMapManager.JUMP_HEAT_LAYER_ID,
+                featureCollection: sourceData,
+                maxzoom: 18,
+                visibility,
+                beforeLayerId,
+                paint: {
+                    'heatmap-weight': [
+                        'interpolate',
+                        ['linear'],
+                        ['coalesce', ['get', 'heatWeight'], 0],
+                        0, 0.2,
+                        1, 1.0
+                    ],
+                    'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 0.55, 8, 0.9, 12, 1.15, 18, 1.35],
+                    'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 8, 8, 14, 12, 20, 18, 28],
+                    'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.48, 10, 0.65, 18, 0.72],
+                    'heatmap-color': [
+                        'interpolate',
+                        ['linear'],
+                        ['heatmap-density'],
+                        0, 'rgba(0, 0, 255, 0)',
+                        0.08, 'rgba(30, 136, 229, 0.35)',
+                        0.2, '#1e88e5',
+                        0.4, '#00acc1',
+                        0.62, '#fdd835',
+                        0.82, '#fb8c00',
+                        1, '#e53935'
+                    ]
+                }
+            });
+        });
+    }
+
+    private updateJumpHeatmapVisibility(): void {
+        if (!this.map) return;
+        if (!this.jumpHeatPoints.length) {
+            this.removeJumpHeatmapLayerAndSource();
+            return;
+        }
+
+        this.zone.runOutsideAngular(() => {
+            const layerId = TracksMapManager.JUMP_HEAT_LAYER_ID;
+            if (!this.map.getLayer?.(layerId)) {
+                this.renderJumpHeatmap();
+                return;
+            }
+            this.mapboxHeatmapLayerService.setLayerVisibility(this.map, layerId, this.jumpHeatmapVisible);
+        });
+    }
+
+    private removeJumpHeatmapLayerAndSource(): void {
+        if (!this.map) return;
+
+        this.zone.runOutsideAngular(() => {
+            this.mapboxHeatmapLayerService.clearLayerAndSource(
+                this.map,
+                TracksMapManager.JUMP_HEAT_SOURCE_ID,
+                TracksMapManager.JUMP_HEAT_LAYER_ID
+            );
+        });
+    }
+
+    private getFirstTrackLayerId(): string | undefined {
+        const layers = this.map?.getStyle?.()?.layers;
+        if (!Array.isArray(layers)) return undefined;
+        return layers.find((layer: any) => typeof layer?.id === 'string' && layer.id.startsWith('track-layer-'))?.id;
     }
 
     private ensureTrackSource(sourceId: string, coordinates: number[][]) {

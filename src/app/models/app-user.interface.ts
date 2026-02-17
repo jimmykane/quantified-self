@@ -4,6 +4,7 @@ export interface AppMyTracksSettings extends UserMyTracksSettingsInterface {
     is3D?: boolean;
     activityTypes?: ActivityTypes[];
     mapStyle?: 'default' | 'satellite' | 'outdoors';
+    showJumpHeatmap?: boolean;
 }
 
 export interface AppDashboardSettingsInterface extends UserDashboardSettingsInterface {

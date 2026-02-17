@@ -4,6 +4,8 @@ import { AppEventColorService } from '../../services/color/app.event.color.servi
 import { MapStyleService } from '../../services/map-style.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { MapboxHeatmapLayerService } from '../../services/map/mapbox-heatmap-layer.service';
+import { JumpHeatmapWeightingService } from '../../services/map/jump-heatmap-weighting.service';
 
 // Mock dependencies
 class MockNgZone extends NgZone {
@@ -21,6 +23,7 @@ const mockMap = {
     getSource: vi.fn(),
     addLayer: vi.fn(),
     getLayer: vi.fn(),
+    moveLayer: vi.fn(),
     removeLayer: vi.fn(),
     removeSource: vi.fn(),
     fitBounds: vi.fn(),
@@ -33,6 +36,8 @@ const mockMap = {
     isStyleLoaded: vi.fn().mockReturnValue(true),
     once: vi.fn(),
     setPaintProperty: vi.fn(),
+    setLayoutProperty: vi.fn(),
+    getStyle: vi.fn(),
     off: vi.fn(),
     on: vi.fn(),
 };
@@ -53,6 +58,7 @@ const mockMapStyleService = {
 
 const mockLoggerService = {
     log: vi.fn(),
+    info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
     captureMessage: vi.fn()
@@ -62,6 +68,8 @@ describe('TracksMapManager', () => {
     let manager: TracksMapManager;
     let zone: NgZone;
     let mapEventHandlers: Record<string, Array<(...args: any[]) => void>>;
+    let mapboxHeatmapLayerService: MapboxHeatmapLayerService;
+    let jumpHeatmapWeightingService: JumpHeatmapWeightingService;
 
     beforeEach(() => {
         mapEventHandlers = {};
@@ -74,13 +82,23 @@ describe('TracksMapManager', () => {
         });
 
         zone = new MockNgZone();
-        manager = new TracksMapManager(zone, mockEventColorService, mockMapStyleService, mockLoggerService as any);
+        mapboxHeatmapLayerService = new MapboxHeatmapLayerService(mockLoggerService as any);
+        jumpHeatmapWeightingService = new JumpHeatmapWeightingService();
+        manager = new TracksMapManager(
+            zone,
+            mockEventColorService,
+            mockMapStyleService,
+            mapboxHeatmapLayerService,
+            jumpHeatmapWeightingService,
+            mockLoggerService as any
+        );
         manager.setMap(mockMap, mockMapboxGL);
 
         // Reset mocks
         vi.clearAllMocks();
         mockMap.getSource.mockReset();
         mockMap.getLayer.mockReset();
+        mockMap.getStyle.mockReturnValue({ layers: [] });
         // Reset default return values that might be cleared
         mockEventColorService.getColorForActivityTypeByActivityTypeGroup = vi.fn().mockReturnValue('#ff0000');
         mockMapStyleService.adjustColorForTheme = vi.fn().mockReturnValue('#adjustedColor');
@@ -163,6 +181,53 @@ describe('TracksMapManager', () => {
 
             expect(mockMap.addSource).toHaveBeenCalledTimes(2);
             expect(mockMap.addLayer).toHaveBeenCalledTimes(6);
+        });
+    });
+
+    describe('jump heatmap', () => {
+        it('should create jump heat source/layer with computed weights', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+            mockMap.getStyle.mockReturnValue({ layers: [{ id: 'track-layer-glow-123' }] });
+
+            manager.setJumpHeatPoints([
+                { lng: 10, lat: 20, hangTime: 1.2, distance: 2.5 },
+                { lng: 10.1, lat: 20.1, hangTime: 2.4, distance: 5.0 },
+            ]);
+
+            const sourceCall = mockMap.addSource.mock.calls.find((call) => call[0] === 'jump-heat-source');
+            expect(sourceCall).toBeDefined();
+            const features = sourceCall?.[1]?.data?.features || [];
+            expect(features.length).toBe(2);
+            expect(features.some((feature: any) => feature.properties.heatWeight > 0)).toBe(true);
+
+            const heatLayerCall = mockMap.addLayer.mock.calls.find((call) => call[0]?.id === 'jump-heat-layer');
+            expect(heatLayerCall?.[0]?.type).toBe('heatmap');
+            expect(heatLayerCall?.[1]).toBe('track-layer-glow-123');
+        });
+
+        it('should toggle jump heatmap layer visibility', () => {
+            mockMap.getLayer.mockImplementation((id: string) => id === 'jump-heat-layer');
+            manager.setJumpHeatPoints([{ lng: 10, lat: 20, hangTime: 1.2, distance: 3.1 }]);
+
+            manager.setJumpHeatmapVisible(false);
+            expect(mockMap.setLayoutProperty).toHaveBeenCalledWith('jump-heat-layer', 'visibility', 'none');
+
+            manager.setJumpHeatmapVisible(true);
+            expect(mockMap.setLayoutProperty).toHaveBeenCalledWith('jump-heat-layer', 'visibility', 'visible');
+        });
+
+        it('should restore jump heatmap after style reload', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockReturnValue(null);
+
+            manager.setJumpHeatPoints([{ lng: 10, lat: 20, hangTime: 1.1, distance: 3.2 }]);
+            const beforeStyleReload = mockMap.addLayer.mock.calls.filter((call) => call[0]?.id === 'jump-heat-layer').length;
+
+            emitMapEvent('style.load');
+
+            const afterStyleReload = mockMap.addLayer.mock.calls.filter((call) => call[0]?.id === 'jump-heat-layer').length;
+            expect(afterStyleReload).toBeGreaterThan(beforeStyleReload);
         });
     });
 

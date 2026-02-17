@@ -21,6 +21,13 @@
       <mat-button-toggle value="satellite">Satellite</mat-button-toggle>
       <mat-button-toggle value="outdoors">Outdoors</mat-button-toggle>
     </mat-button-toggle-group>
+    @if (hasDetectedJumps()) {
+    <mat-slide-toggle class="jump-heat-toggle" [disabled]="isLoading()"
+      [checked]="user?.settings?.myTracksSettings?.showJumpHeatmap !== false"
+      (change)="onShowJumpHeatmapToggle($event.checked)">
+      Jump heatmap
+    </mat-slide-toggle>
+    }
     @if (isLoading()) {
     <mat-spinner diameter="24"></mat-spinner>
     }
