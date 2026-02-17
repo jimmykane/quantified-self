@@ -101,4 +101,14 @@ describe('EventDevicesService', () => {
             expect(groups[0].category).toBe('shifting');
         });
     });
+
+    describe('formatType', () => {
+        it('should format snake_case type values', () => {
+            expect(service.formatType('heart_rate_monitor')).toBe('Heart Rate Monitor');
+        });
+
+        it('should return empty string for object type values', () => {
+            expect(service.formatType({ raw: 'heart_rate' })).toBe('');
+        });
+    });
 });
