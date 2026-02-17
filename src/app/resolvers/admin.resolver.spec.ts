@@ -30,7 +30,7 @@ describe('adminResolver', () => {
 
     it('should resolve with users and stats on success', () => new Promise<void>(done => {
         const mockUsers = { users: [{ email: 'test@test.com' }], totalCount: 1 };
-        const mockStats = { total: 10, pro: 5, basic: 5 };
+        const mockStats = { total: 10, pro: 5, basic: 5, free: 0, onboardingCompleted: 8, providers: {} };
 
         adminServiceSpy.getUsers.mockReturnValue(of(mockUsers));
         adminServiceSpy.getTotalUserCount.mockReturnValue(of(mockStats));

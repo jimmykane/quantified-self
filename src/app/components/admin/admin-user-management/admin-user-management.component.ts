@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, LOCALE_ID, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
@@ -25,12 +25,17 @@ import { AdminResolverData } from '../../../resolvers/admin.resolver';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import type { EChartsType } from 'echarts/core';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
+import dayjs from 'dayjs';
+import localizedFormat from 'dayjs/plugin/localizedFormat';
+
+dayjs.extend(localizedFormat);
 
 export interface UserStats {
     total: number;
     pro: number;
     basic: number;
     free: number;
+    onboardingCompleted: number;
     providers?: Record<string, number>;
 }
 
@@ -72,6 +77,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     private snackBar = inject(MatSnackBar);
     private logger = inject(LoggerService);
     private eChartsLoader = inject(EChartsLoaderService);
+    private locale = inject(LOCALE_ID);
 
     // Data state
     users: AdminUser[] = [];
@@ -91,7 +97,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
     displayedColumns: string[] = [
         'photoURL', 'email', 'providerIds', 'displayName', 'role', 'subscription',
-        'services', 'created', 'lastLogin', 'status', 'actions'
+        'services', 'created', 'lastLogin', 'onboarding', 'status', 'actions'
     ];
 
     private searchSubject = new Subject<string>();
@@ -101,6 +107,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     private isDark = false;
     private resizeObserver: ResizeObserver | null = null;
     private providerData: Record<string, number> | null = null;
+    private readonly dayjsLocale = this.normalizeDayjsLocale(this.locale);
 
     private readonly CHART_TEXT_DARK = 'rgba(255, 255, 255, 0.8)';
     private readonly CHART_TEXT_LIGHT = 'rgba(0, 0, 0, 0.8)';
@@ -290,15 +297,19 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     }
 
     private formatDate(timestamp: any): string {
-        if (!timestamp) return '';
-        const date = new Date(timestamp.seconds ? timestamp.seconds * 1000 : timestamp);
-        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        return this.formatLocalizedDate(timestamp, false);
     }
 
     formatConnectionDate(timestamp: any): string {
-        if (!timestamp) return 'Time unknown';
-        const date = new Date(timestamp.seconds ? timestamp.seconds * 1000 : timestamp);
-        return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+        return this.formatLocalizedDate(timestamp, false) || 'Time unknown';
+    }
+
+    formatCreatedDate(timestamp: any): string {
+        return this.formatLocalizedDate(timestamp, false);
+    }
+
+    formatLastLoginDate(timestamp: any): string {
+        return this.formatLocalizedDate(timestamp, true);
     }
 
     getServiceLogo(provider: string): string {
@@ -308,6 +319,41 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
             case 'coros': return 'assets/logos/coros.svg';
             default: return '';
         }
+    }
+
+    private formatLocalizedDate(timestamp: any, includeTime: boolean): string {
+        if (!timestamp) return '';
+
+        const value = timestamp.seconds ? timestamp.seconds * 1000 : timestamp;
+        const parsed = dayjs(value);
+        if (!parsed.isValid()) {
+            return '';
+        }
+
+        return parsed.locale(this.dayjsLocale).format(includeTime ? 'L LT' : 'L');
+    }
+
+    private normalizeDayjsLocale(locale: string): string {
+        if (!locale) return 'en';
+
+        const lowerLocale = locale.toLowerCase();
+        const localeMap: Record<string, string> = {
+            'en-us': 'en',
+            'en-gb': 'en-gb',
+            'el-gr': 'el',
+            'de-de': 'de',
+            'fr-fr': 'fr',
+            'es-es': 'es',
+            'it-it': 'it',
+            'nl-nl': 'nl',
+            'pl-pl': 'pl',
+        };
+
+        if (localeMap[lowerLocale]) {
+            return localeMap[lowerLocale];
+        }
+
+        return lowerLocale.split('-')[0];
     }
 
     private async initializeChart(): Promise<void> {

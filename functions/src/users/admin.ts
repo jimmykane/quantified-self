@@ -54,6 +54,7 @@ interface EnrichedUser extends BasicUser {
         stripeLink: string | undefined;
     } | null;
     connectedServices: { provider: string; connectedAt: unknown }[];
+    onboardingCompleted: boolean;
 }
 
 /**
@@ -64,6 +65,21 @@ async function enrichUsers(
     users: BasicUser[],
     db: admin.firestore.Firestore
 ): Promise<EnrichedUser[]> {
+    const onboardingStatusByUid = new Map<string, boolean>();
+
+    if (users.length > 0) {
+        try {
+            const onboardingDocRefs = users.map(user => db.collection('users').doc(user.uid));
+            const onboardingDocs = await db.getAll(...onboardingDocRefs);
+
+            onboardingDocs.forEach(snapshot => {
+                onboardingStatusByUid.set(snapshot.id, snapshot.data()?.onboardingCompleted === true);
+            });
+        } catch (e) {
+            logger.warn('Failed to fetch onboarding flags for admin user list', e);
+        }
+    }
+
     return Promise.all(
         users.map(async (user) => {
             let subscriptionData: EnrichedUser['subscription'] = null;
@@ -115,7 +131,8 @@ async function enrichUsers(
             return {
                 ...user,
                 subscription: subscriptionData,
-                connectedServices: connectedServices
+                connectedServices: connectedServices,
+                onboardingCompleted: onboardingStatusByUid.get(user.uid) === true
             };
         })
     );
@@ -128,8 +145,8 @@ async function enrichUsers(
  * Performance:
  * - Firebase Auth listUsers: FREE (no Firestore reads)
  * - Search/Sort on Auth data: FREE
- * - Enrich current page only: ~4 reads per user (subscription, garmin, suunto, coros)
- * - For pageSize=10: ~40 Firestore reads total
+ * - Enrich current page only: ~5 reads per user (onboarding, subscription, garmin, suunto, coros)
+ * - For pageSize=10: ~50 Firestore reads total
  */
 export const listUsers = onAdminCall<ListUsersRequest, any>({
     region: FUNCTIONS_MANIFEST.listUsers.region,
@@ -326,7 +343,7 @@ export const getUserCount = onAdminCall<void, any>({
 
         // 1. Get stats from Firestore (subscriptions)
         // Parallel efficient count queries
-        const [totalSnapshot, proSnapshot, basicSnapshot] = await Promise.all([
+        const [totalSnapshot, proSnapshot, basicSnapshot, onboardedSnapshot] = await Promise.all([
             db.collection('users').count().get(),
             db.collectionGroup('subscriptions')
                 .where('status', 'in', ['active', 'trialing'])
@@ -335,12 +352,16 @@ export const getUserCount = onAdminCall<void, any>({
             db.collectionGroup('subscriptions')
                 .where('status', 'in', ['active', 'trialing'])
                 .where('role', '==', 'basic')
+                .count().get(),
+            db.collection('users')
+                .where('onboardingCompleted', '==', true)
                 .count().get()
         ]);
 
         const total = totalSnapshot.data().count;
         const pro = proSnapshot.data().count;
         const basic = basicSnapshot.data().count;
+        const onboardingCompleted = onboardedSnapshot.data().count;
         const free = Math.max(0, total - pro - basic); // Users with no active subscription
 
         // 2. Get provider breakdown from Firebase Auth
@@ -376,6 +397,7 @@ export const getUserCount = onAdminCall<void, any>({
             pro,
             basic,
             free,
+            onboardingCompleted,
             providers: providerCounts
         };
     } catch (error: unknown) {
