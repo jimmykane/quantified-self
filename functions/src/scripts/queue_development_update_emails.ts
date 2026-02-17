@@ -208,6 +208,16 @@ async function queueEmails() {
         return;
     }
 
+    console.log('\nSelected recipients for this run:');
+    selectedUsers.forEach((user, index) => {
+        const fullName = `${user.firstName} ${user.lastName}`.trim();
+        const namePart = fullName ? ` (${fullName})` : '';
+        console.log(
+            `${index + 1}. ${user.email}${namePart} [csvIndex=${user.originalIndex}] ` +
+            `-> template data: first_name="${user.firstName}", last_name="${user.lastName}"`
+        );
+    });
+
     let queuedNow = 0;
     let skippedBecauseRace = 0;
     let failed = 0;
