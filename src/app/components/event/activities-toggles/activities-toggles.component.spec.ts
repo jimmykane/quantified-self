@@ -35,6 +35,41 @@ describe('ActivitiesTogglesComponent', () => {
       select: vi.fn(),
       deselect: vi.fn(),
     },
+    isActivitySelected: vi.fn((activity: any, selectedActivities: any[] = []) => {
+      const activityID = activity?.getID?.();
+      if (activityID) {
+        return selectedActivities.some((selectedActivity) => selectedActivity?.getID?.() === activityID);
+      }
+      return selectedActivities.some((selectedActivity) => selectedActivity === activity);
+    }),
+    selectActivity: vi.fn((activity: any, selectedActivities: any[] = []) => {
+      if (mockSelectionService.isActivitySelected(activity, selectedActivities)) {
+        return false;
+      }
+      mockSelectionService.selectedActivities.select(activity);
+      return true;
+    }),
+    deselectActivity: vi.fn((activity: any, selectedActivities: any[] = [], keepAtLeastOneSelected = false) => {
+      const activityID = activity?.getID?.();
+      const selectedActivityRef = activityID
+        ? selectedActivities.find((selectedActivity) => selectedActivity?.getID?.() === activityID)
+        : selectedActivities.find((selectedActivity) => selectedActivity === activity);
+
+      if (!selectedActivityRef) {
+        return false;
+      }
+      if (keepAtLeastOneSelected && selectedActivities.length <= 1) {
+        return false;
+      }
+      mockSelectionService.selectedActivities.deselect(selectedActivityRef);
+      return true;
+    }),
+    toggleActivitySelection: vi.fn((activity: any, selectedActivities: any[] = [], keepAtLeastOneSelected = false) => {
+      if (mockSelectionService.isActivitySelected(activity, selectedActivities)) {
+        return mockSelectionService.deselectActivity(activity, selectedActivities, keepAtLeastOneSelected);
+      }
+      return mockSelectionService.selectActivity(activity, selectedActivities);
+    }),
   };
 
   const mockColorService = {

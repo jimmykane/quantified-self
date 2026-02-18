@@ -84,29 +84,14 @@ export class ActivitiesTogglesComponent {
    * Check if an activity is selected.
    */
   isSelected(activity: ActivityInterface): boolean {
-    const state = this.selectedState();
-    const activityID = activity?.getID?.();
-    if (activityID) {
-      return state.selectedIDs.has(activityID);
-    }
-    return state.selectedRefs.has(activity);
+    return this.activitySelectionService.isActivitySelected(activity, this.selectedActivities());
   }
 
   /**
    * Toggle activity selection.
    */
   toggleActivity(activity: ActivityInterface): void {
-    const isSelected = this.isSelected(activity);
-    const selectedCount = this.selectedState().selectedCount;
-
-    if (isSelected) {
-      if (selectedCount <= 1) {
-        return;
-      }
-      this.activitySelectionService.selectedActivities.deselect(activity);
-    } else {
-      this.activitySelectionService.selectedActivities.select(activity);
-    }
+    this.activitySelectionService.toggleActivitySelection(activity, this.selectedActivities(), true);
   }
 
   canDeselectActivity(activity: ActivityInterface): boolean {

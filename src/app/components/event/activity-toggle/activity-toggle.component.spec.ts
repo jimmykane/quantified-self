@@ -25,6 +25,35 @@ describe('ActivityToggleComponent', () => {
       select: vi.fn(),
       deselect: vi.fn(),
     },
+    isActivitySelected: vi.fn((activity: any, selectedActivities: any[] = []) => {
+      const activityID = activity?.getID?.();
+      if (activityID) {
+        return selectedActivities.some((selectedActivity) => selectedActivity?.getID?.() === activityID);
+      }
+      return selectedActivities.some((selectedActivity) => selectedActivity === activity);
+    }),
+    selectActivity: vi.fn((activity: any, selectedActivities: any[] = []) => {
+      if (mockSelectionService.isActivitySelected(activity, selectedActivities)) {
+        return false;
+      }
+      mockSelectionService.selectedActivities.select(activity);
+      return true;
+    }),
+    deselectActivity: vi.fn((activity: any, selectedActivities: any[] = [], keepAtLeastOneSelected = false) => {
+      const activityID = activity?.getID?.();
+      const selectedActivityRef = activityID
+        ? selectedActivities.find((selectedActivity) => selectedActivity?.getID?.() === activityID)
+        : selectedActivities.find((selectedActivity) => selectedActivity === activity);
+
+      if (!selectedActivityRef) {
+        return false;
+      }
+      if (keepAtLeastOneSelected && selectedActivities.length <= 1) {
+        return false;
+      }
+      mockSelectionService.selectedActivities.deselect(selectedActivityRef);
+      return true;
+    }),
   };
 
   const mockColorService = {
@@ -68,11 +97,24 @@ describe('ActivityToggleComponent', () => {
     expect(component.isSelected()).toBe(true);
   });
 
-  it('deselects using the selected reference when IDs match but refs differ', () => {
+  it('does not deselect the only selected activity when IDs match but refs differ', () => {
     const renderedActivity = createActivity('a1');
     const selectedClone = createActivity('a1');
 
     setRequiredInputs(renderedActivity, [selectedClone]);
+
+    component.onActivityClick(renderedActivity);
+
+    expect(mockSelectionService.selectedActivities.deselect).not.toHaveBeenCalled();
+    expect(mockSelectionService.selectedActivities.select).not.toHaveBeenCalled();
+  });
+
+  it('deselects using the selected reference when more than one activity is selected', () => {
+    const renderedActivity = createActivity('a1');
+    const selectedClone = createActivity('a1');
+    const secondSelected = createActivity('a2');
+
+    setRequiredInputs(renderedActivity, [selectedClone, secondSelected]);
 
     component.onActivityClick(renderedActivity);
 

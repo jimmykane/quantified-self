@@ -141,6 +141,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   private processSequence = 0;
   private previousState: any = {};
   private pendingFitBoundsTimeout: ReturnType<typeof setTimeout> | null = null;
+  private deferredMapActivities: { shouldFitBounds: boolean; requestCount: number; lastReason: string } | null = null;
   private jumpHangTimeMin: number | null = null;
   private jumpHangTimeMax: number | null = null;
 
@@ -226,7 +227,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
             strokeWidth: normalized.strokeWidth,
             activitiesCount: this.activitiesMapData.length,
           });
-          this.mapActivities(++this.processSequence, false);
+          this.requestMapActivities(false, 'settings-sync');
         }
         if (hasTerrainDelta) {
           this.logMapSettingsState('settings-sync: apply terrain delta', {
@@ -340,7 +341,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     if (Object.keys(changes).length > 0) {
       const shouldFitBounds = !!changes.selectedActivitiesIDs || !!changes.eventID;
       this.previousState = { ...this.previousState, ...currentState };
-      this.mapActivities(++this.processSequence, shouldFitBounds);
+      this.requestMapActivities(shouldFitBounds, 'ngOnChanges');
     }
   }
 
@@ -352,7 +353,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
   onShowLapsChange(value: boolean) {
     this.showLaps = value;
-    this.mapActivities(++this.processSequence, false);
+    this.requestMapActivities(false, 'showLaps');
   }
 
   onShowArrowsChange(value: boolean) {
@@ -499,7 +500,10 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
           applyingTerrain: this.is3D,
         });
         this.mapReady = true;
-        this.renderMapData(true);
+        const flushedDeferred = this.flushDeferredMapActivities(`styleReady:${source}`);
+        if (!flushedDeferred) {
+          this.renderMapData(true);
+        }
         this.mapManager.toggleTerrain(this.is3D, false);
         this.apiLoaded.set(true);
         this.changeDetectorRef.markForCheck();
@@ -526,9 +530,10 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       this.mapStyleSynchronizer.set(this.mapStyleService.createSynchronizer(map));
       this.bindMapPopupListeners(map);
 
-      this.mapActivities(++this.processSequence, true);
+      this.requestMapActivities(true, 'initializeMap');
       this.logPerformance('initializeMap:queuedMapActivities', initializeStartedAt, {
         processSequence: this.processSequence,
+        deferredRequests: this.deferredMapActivities?.requestCount || 0,
       });
     } catch (error) {
       this.logger.error('Failed to initialize EventCard Mapbox map.', error);
@@ -1039,6 +1044,45 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     if (this.lineMouseMoveSubscription) {
       this.lineMouseMoveSubscription.unsubscribe();
     }
+  }
+
+  private requestMapActivities(shouldFitBounds: boolean, reason: string): void {
+    if (!this.mapReady) {
+      const previous = this.deferredMapActivities;
+      this.deferredMapActivities = {
+        shouldFitBounds: (previous?.shouldFitBounds || false) || shouldFitBounds,
+        requestCount: (previous?.requestCount || 0) + 1,
+        lastReason: reason,
+      };
+      this.logger.log('[EventCardMapPerf] mapActivities:deferred', {
+        reason,
+        shouldFitBounds,
+        mergedShouldFitBounds: this.deferredMapActivities.shouldFitBounds,
+        requestCount: this.deferredMapActivities.requestCount,
+        hasMapInstance: !!this.mapInstance(),
+        mapReady: this.mapReady,
+      });
+      return;
+    }
+
+    this.mapActivities(++this.processSequence, shouldFitBounds);
+  }
+
+  private flushDeferredMapActivities(reason: string): boolean {
+    const deferred = this.deferredMapActivities;
+    if (!deferred) {
+      return false;
+    }
+
+    this.deferredMapActivities = null;
+    this.logger.log('[EventCardMapPerf] mapActivities:flushDeferred', {
+      reason,
+      shouldFitBounds: deferred.shouldFitBounds,
+      requestCount: deferred.requestCount,
+      lastReason: deferred.lastReason,
+    });
+    this.mapActivities(++this.processSequence, deferred.shouldFitBounds);
+    return true;
   }
 }
 
