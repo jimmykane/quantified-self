@@ -16,23 +16,42 @@ export class LapTypeIconComponent {
   @Input() vAlign: string;
 
   getColumnHeaderIcon(lapType: LapTypes): string {
-    switch (lapType) {
-      case LapTypes.Distance:
+    switch (String(lapType).trim().toLowerCase()) {
+      case 'distance':
         return 'straighten';
-      case LapTypes.Unknown:
+      case 'unknown':
         return 'help';
-      case LapTypes.AutoLap:
+      case 'autolap':
+      case 'auto lap':
         return 'autorenew'
-      case LapTypes.Location:
+      case 'location':
         return 'pin_drop'
-      case LapTypes.Time:
+      case 'time':
         return 'schedule'
-      case LapTypes.Manual:
+      case 'manual':
         return 'touch_app';
-      case LapTypes.Interval:
+      case 'interval':
         return 'pace';
-      case LapTypes.FitnessEquipment:
+      case 'low interval':
+        return 'keyboard_double_arrow_down';
+      case 'high interval':
+        return 'keyboard_double_arrow_up';
+      case 'fitness equipment':
         return 'fitness_center';
+      case 'start':
+      case 'position start':
+        return 'play_arrow';
+      case 'stop':
+      case 'session end':
+        return 'stop_circle';
+      case 'heart rate':
+        return 'favorite';
+      case 'position lap':
+        return 'location_on';
+      case 'position waypoint':
+        return 'route';
+      case 'position marked':
+        return 'bookmark';
       default:
         return null;
     }
