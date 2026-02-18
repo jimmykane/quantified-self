@@ -28,21 +28,7 @@
       }
     }
   ],
-  "dataGroups": [
-    {
-      "name": "google-fonts",
-      "urls": [
-        "https://fonts.googleapis.com/**",
-        "https://fonts.gstatic.com/**"
-      ],
-      "cacheConfig": {
-        "maxSize": 20,
-        "maxAge": "30d",
-        "timeout": "10s",
-        "strategy": "performance"
-      }
-    }
-  ],
+  "dataGroups": [],
   "navigationUrls": [
     "/**",
     "!/**/*.*",

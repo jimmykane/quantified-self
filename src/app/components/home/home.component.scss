@@ -529,7 +529,7 @@
                     fill: var(--mat-sys-on-surface);
                     font-size: 10px;
                     font-weight: 700;
-                    font-family: 'JetBrains Mono', monospace;
+                    font-family: 'Noto Sans', sans-serif;
                 }
 
                 &.primary rect {
@@ -594,7 +594,7 @@
                     fill: var(--mat-sys-secondary);
                     font-size: 11px;
                     font-weight: 800;
-                    font-family: 'JetBrains Mono', monospace;
+                    font-family: 'Noto Sans', sans-serif;
                 }
             }
         }
@@ -631,7 +631,7 @@
             font-size: 8px;
             opacity: 0.4;
             letter-spacing: 1px;
-            font-family: 'JetBrains Mono', monospace;
+            font-family: 'Noto Sans', sans-serif;
         }
 
         .stat-preview {
@@ -659,7 +659,7 @@
             .stat-value {
                 font-size: 1.1rem;
                 font-weight: 700;
-                font-family: 'JetBrains Mono', monospace;
+                font-family: 'Noto Sans', sans-serif;
 
                 &.success {
                     color: #4CAF50;
