@@ -82,6 +82,40 @@ describe('MapboxLoaderService', () => {
                 pitch: 45
             }));
         });
+
+        it('should enable cooperative gestures by default', async () => {
+            const mapSpy = vi.fn();
+            const mockMb = {
+                Map: mapSpy,
+                accessToken: ''
+            };
+            (service as any).mapboxgl = mockMb;
+
+            const container = document.createElement('div');
+            await service.createMap(container);
+
+            expect(mapSpy).toHaveBeenCalledWith(expect.objectContaining({
+                container,
+                cooperativeGestures: true
+            }));
+        });
+
+        it('should allow cooperative gestures override when explicitly provided', async () => {
+            const mapSpy = vi.fn();
+            const mockMb = {
+                Map: mapSpy,
+                accessToken: ''
+            };
+            (service as any).mapboxgl = mockMb;
+
+            const container = document.createElement('div');
+            await service.createMap(container, { cooperativeGestures: false });
+
+            expect(mapSpy).toHaveBeenCalledWith(expect.objectContaining({
+                container,
+                cooperativeGestures: false
+            }));
+        });
     });
 
     // Test for Server Platform separately
