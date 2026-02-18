@@ -313,7 +313,12 @@ export class EventCardMapManager {
     if (!this.map || !this.mapboxgl) {
       return;
     }
-    this.clearTracksAndMarkers();
+    const incomingActivityIds = new Set((this.currentTracks || []).map((track) => track.activityId));
+    this.activeLayersByActivityId.forEach((_ids, activityId) => {
+      if (!incomingActivityIds.has(activityId)) {
+        this.removeTrack(activityId);
+      }
+    });
 
     this.currentTracks.forEach((track) => this.renderSingleTrack(track));
   }
@@ -328,6 +333,7 @@ export class EventCardMapManager {
       .map(position => [position.longitudeDegrees, position.latitudeDegrees] as [number, number]);
 
     if (coordinates.length <= 1) {
+      this.removeTrack(track.activityId);
       return;
     }
 
@@ -374,6 +380,11 @@ export class EventCardMapManager {
           'line-emissive-strength': 1
         }
       });
+    } else {
+      this.map.setPaintProperty?.(lineLayerId, 'line-color', track.strokeColor);
+      this.map.setPaintProperty?.(lineLayerId, 'line-width', this.currentOptions.strokeWidth || 3);
+      this.map.setPaintProperty?.(lineLayerId, 'line-opacity', 1);
+      this.map.setPaintProperty?.(lineLayerId, 'line-emissive-strength', 1);
     }
 
     if (this.currentOptions.showArrows) {
@@ -399,7 +410,13 @@ export class EventCardMapManager {
             'text-opacity': 1
           }
         });
+      } else {
+        this.map.setPaintProperty?.(arrowLayerId, 'text-halo-color', track.strokeColor);
+        this.map.setPaintProperty?.(arrowLayerId, 'text-opacity', 1);
       }
+    } else if (this.map.getLayer?.(arrowLayerId)) {
+      this.unbindLineClick(arrowLayerId);
+      this.map.removeLayer?.(arrowLayerId);
     }
 
     this.activeLayersByActivityId.set(track.activityId, {
@@ -422,6 +439,7 @@ export class EventCardMapManager {
     }
 
     const activityId = track.activityId;
+    this.removeTrackMarkers(activityId);
     const start = coordinates[0];
     const end = coordinates[coordinates.length - 1];
     this.startMarkers.set(activityId, this.createMarker(
@@ -467,6 +485,9 @@ export class EventCardMapManager {
     if (!this.map || !this.map.getLayer?.(layerId) || !this.map.on) {
       return;
     }
+    if (this.clickBindings.some((binding) => binding.layerId === layerId)) {
+      return;
+    }
 
     const clickHandler = (event: any) => {
       const lat = event?.lngLat?.lat;
@@ -479,6 +500,21 @@ export class EventCardMapManager {
 
     this.map.on('click', layerId, clickHandler);
     this.clickBindings.push({ layerId, handler: clickHandler });
+  }
+
+  private unbindLineClick(layerId: string): void {
+    if (!this.map?.off) {
+      return;
+    }
+    const retained: LayerClickBinding[] = [];
+    this.clickBindings.forEach((binding) => {
+      if (binding.layerId === layerId) {
+        this.map?.off?.('click', binding.layerId, binding.handler);
+        return;
+      }
+      retained.push(binding);
+    });
+    this.clickBindings = retained;
   }
 
   private renderCursorMarkers(): void {
@@ -542,6 +578,51 @@ export class EventCardMapManager {
 
     this.jumpMarkers.forEach(markers => markers.forEach(marker => marker.remove()));
     this.jumpMarkers.clear();
+  }
+
+  private removeTrack(activityId: string): void {
+    if (!this.map) {
+      return;
+    }
+    const ids = this.activeLayersByActivityId.get(activityId);
+    if (ids) {
+      this.unbindLineClick(ids.arrowLayerId);
+      this.unbindLineClick(ids.lineLayerId);
+      if (this.map.getLayer?.(ids.arrowLayerId)) {
+        this.map.removeLayer(ids.arrowLayerId);
+      }
+      if (this.map.getLayer?.(ids.lineLayerId)) {
+        this.map.removeLayer(ids.lineLayerId);
+      }
+      if (this.map.getSource?.(ids.sourceId)) {
+        this.map.removeSource(ids.sourceId);
+      }
+      this.activeLayersByActivityId.delete(activityId);
+    }
+    this.removeTrackMarkers(activityId);
+  }
+
+  private removeTrackMarkers(activityId: string): void {
+    const start = this.startMarkers.get(activityId);
+    if (start) {
+      start.remove();
+      this.startMarkers.delete(activityId);
+    }
+    const end = this.endMarkers.get(activityId);
+    if (end) {
+      end.remove();
+      this.endMarkers.delete(activityId);
+    }
+    const laps = this.lapMarkers.get(activityId);
+    if (laps?.length) {
+      laps.forEach((marker) => marker.remove());
+      this.lapMarkers.delete(activityId);
+    }
+    const jumps = this.jumpMarkers.get(activityId);
+    if (jumps?.length) {
+      jumps.forEach((marker) => marker.remove());
+      this.jumpMarkers.delete(activityId);
+    }
   }
 
   private sanitizeLayerId(value: string): string {
