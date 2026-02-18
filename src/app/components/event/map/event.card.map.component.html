@@ -1,86 +1,49 @@
 <div class="map-component-wrapper">
   <app-event-section-header icon="map">
-    <app-map-actions [showLaps]="showLaps" [showArrows]="showArrows" [user]="user"
-      (showLapsChange)="onShowLapsChange($event)" (showArrowsChange)="onShowArrowsChange($event)">
+    <app-map-actions
+      [showLaps]="showLaps"
+      [showArrows]="showArrows"
+      [is3D]="is3D"
+      [mapStyle]="mapStyle"
+      [user]="user"
+      (showLapsChange)="onShowLapsChange($event)"
+      (showArrowsChange)="onShowArrowsChange($event)"
+      (is3DChange)="onShow3DChange($event)"
+      (mapStyleChange)="onMapStyleChange($event)">
     </app-map-actions>
   </app-event-section-header>
-  <app-loading-overlay [isLoading]="isLoading || !apiLoaded() || !isMapVisible()" [hasError]="noMapData"
-    errorMessage="No Map Data" [showSkeleton]="true" height="60vh">
-    @if (googleMap && event.getActivities().length > 1) {
+
+  <app-loading-overlay
+    [isLoading]="isLoading || !apiLoaded()"
+    [hasError]="noMapData"
+    errorMessage="No Map Data"
+    [showSkeleton]="true"
+    height="60vh">
+
+    @if (event && event.getActivities().length > 1) {
     <mat-card class="map-legend mat-elevation-z0">
       @for (activity of event.getActivities(); track activity.getID()) {
-      <app-activity-toggle [activity]="activity" [event]="event" [showActions]="false" [showToggle]="false"
-        [showStats]="false" [showDate]="false" [selectedActivities]="selectedActivities">
+      <app-activity-toggle
+        [activity]="activity"
+        [event]="event"
+        [showActions]="false"
+        [showToggle]="false"
+        [showStats]="false"
+        [showDate]="false"
+        [selectedActivities]="selectedActivities">
       </app-activity-toggle>
       }
     </mat-card>
     }
-    <!-- Placeholder when no data -->
-    @if (activitiesMapData.length === 0) {
-    <section class="placeholder"></section>
-    }
 
-    <!-- Google Map -->
-    @defer (on viewport) {
-    @if (activitiesMapData.length > 0 && apiLoaded() && isMapVisible()) {
-    <google-map height="100%" width="100%" [center]="mapCenter()" [zoom]="mapZoom()" [mapTypeId]="mapTypeId()"
-      [options]="mapOptions()" (mapInitialized)="onMapReady($event)" (zoomChanged)="onZoomChanged()"
-      (centerChanged)="onCenterChanged()" (mapClick)="onMapClick($event)">
-      @for (activityMapData of activitiesMapData; track activityMapData.activity.getID()) {
-      <!-- Start Marker -->
-      @if (activityMapData.positions.length > 0) {
-      <map-advanced-marker
-        [position]="{lat: activityMapData.positions[0].latitudeDegrees, lng: activityMapData.positions[0].longitudeDegrees}"
-        [options]="getHomeMarkerOptions(activityMapData.activity, activityMapData.strokeColor)">
-      </map-advanced-marker>
-      }
-      <!-- Cursor Marker -->
-      @if (activitiesCursors.get(activityMapData.activity.getID() || '')) {
-      <map-advanced-marker
-        [position]="{lat: activitiesCursors.get(activityMapData.activity.getID() || '').latitudeDegrees, lng: activitiesCursors.get(activityMapData.activity.getID() || '').longitudeDegrees}"
-        [options]="getCursorMarkerOptions(activityMapData.activity, activityMapData.strokeColor)">
-      </map-advanced-marker>
-      }
-      <!-- Activity Polyline -->
-      <map-polyline [path]="getPolylinePath(activityMapData)" [options]="getPolylineOptions(activityMapData)"
-        (polylineClick)="onPolylineClick($event, activityMapData)">
-      </map-polyline>
-      <!-- End Marker -->
-      @if (activityMapData.positions.length > 0) {
-      <map-advanced-marker
-        [position]="{lat: activityMapData.positions[activityMapData.positions.length - 1].latitudeDegrees, lng: activityMapData.positions[activityMapData.positions.length - 1].longitudeDegrees}"
-        [options]="getFlagMarkerOptions(activityMapData.activity, activityMapData.strokeColor)">
-      </map-advanced-marker>
-      }
-      <!-- Lap Markers -->
-      @for (lap of activityMapData.laps; track lap.lap.startDate.getTime(); let i = $index) {
-      <map-advanced-marker [position]="{lat: lap.lapPosition.latitudeDegrees, lng: lap.lapPosition.longitudeDegrees}"
-        [options]="getLapMarkerOptions(activityMapData.activity, activityMapData.strokeColor, i)">
-      </map-advanced-marker>
-      }
-      <!-- Jump Markers -->
-      @for (jump of activityMapData.jumps; track jump.event.timestamp) {
-      <map-advanced-marker #marker="mapAdvancedMarker"
-        [position]="{lat: jump.position.latitudeDegrees, lng: jump.position.longitudeDegrees}"
-        [options]="getJumpMarkerOptions(jump.event, activityMapData.strokeColor)"
-        (mapClick)="openJumpMarkerInfoWindow(jump.event, marker)"
-        (click)="openJumpMarkerInfoWindow(jump.event, marker)">
-      </map-advanced-marker>
-      }
+    <section class="mapbox-stage">
+      <div #mapDiv class="mapbox-map"></div>
 
-      <map-info-window>
-        @if (openedJumpMarkerInfoWindow) {
-        <app-jump-marker-popup [jump]="openedJumpMarkerInfoWindow"
-          (dismiss)="infoWindow.close()"></app-jump-marker-popup>
-        }
-      </map-info-window>
-
-
+      @if (openedJumpMarkerInfoWindow && jumpPopupScreenPosition(); as popupPosition) {
+      <div class="jump-popup-anchor" [style.left.px]="popupPosition.x" [style.top.px]="popupPosition.y">
+        <app-jump-marker-popup [jump]="openedJumpMarkerInfoWindow" (dismiss)="onJumpPopupDismiss()"></app-jump-marker-popup>
+      </div>
       }
-    </google-map>
-    }
-    } @placeholder {
-    <section class="placeholder"></section>
-    }
+    </section>
   </app-loading-overlay>
 </div>

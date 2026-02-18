@@ -14,5 +14,15 @@ describe('LapTypeIconComponent', () => {
     expect(component.getColumnHeaderIcon(LapTypes.Manual)).toBe('touch_app');
     expect(component.getColumnHeaderIcon(LapTypes.Interval)).toBe('pace');
     expect(component.getColumnHeaderIcon(LapTypes.FitnessEquipment)).toBe('fitness_center');
+    expect(component.getColumnHeaderIcon(LapTypes.Start)).toBe('play_arrow');
+    expect(component.getColumnHeaderIcon(LapTypes.Stop)).toBe('stop_circle');
+    expect(component.getColumnHeaderIcon(LapTypes['Low Interval'])).toBe('keyboard_double_arrow_down');
+    expect(component.getColumnHeaderIcon(LapTypes['High Interval'])).toBe('keyboard_double_arrow_up');
+    expect(component.getColumnHeaderIcon(LapTypes.HeartRate)).toBe('favorite');
+    expect(component.getColumnHeaderIcon(LapTypes.position_start)).toBe('play_arrow');
+    expect(component.getColumnHeaderIcon(LapTypes.position_lap)).toBe('location_on');
+    expect(component.getColumnHeaderIcon(LapTypes.position_waypoint)).toBe('route');
+    expect(component.getColumnHeaderIcon(LapTypes.position_marked)).toBe('bookmark');
+    expect(component.getColumnHeaderIcon(LapTypes.session_end)).toBe('stop_circle');
   });
 });

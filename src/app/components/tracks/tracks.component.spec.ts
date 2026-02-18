@@ -100,8 +100,11 @@ describe('TracksComponent', () => {
     settings: {
       myTracksSettings: {
         dateRange: DateRanges.thisWeek,
-        is3D: true,
         activityTypes: []
+      },
+      mapSettings: {
+        mapStyle: 'default',
+        is3D: true,
       },
       unitSettings: {
         startOfTheWeek: 1
@@ -179,10 +182,14 @@ describe('TracksComponent', () => {
     mockUserSettingsQuery = {
       myTracksSettings: signal({
         dateRange: DateRanges.thisWeek,
-        is3D: true,
         activityTypes: []
       }),
-      updateMyTracksSettings: vi.fn()
+      mapSettings: signal({
+        mapStyle: 'default',
+        is3D: true,
+      }),
+      updateMyTracksSettings: vi.fn(),
+      updateMapSettings: vi.fn()
     };
 
     mockTripDetectionService = {
@@ -334,13 +341,35 @@ describe('TracksComponent', () => {
       const loadCallsBefore = loadTracksSpy.mock.calls.length;
       expect(loadCallsBefore).toBeGreaterThan(0);
 
-      mockUserSettingsQuery.myTracksSettings.set({
-        ...mockUserSettingsQuery.myTracksSettings(),
+      mockUserSettingsQuery.mapSettings.set({
+        ...mockUserSettingsQuery.mapSettings(),
         mapStyle: 'satellite'
       });
       await waitForAsyncWork();
 
       expect(loadTracksSpy.mock.calls.length).toBe(loadCallsBefore);
+    });
+
+    it('should persist map style under mapSettings', () => {
+      component.setMapStyle('satellite');
+
+      expect(mockUserSettingsQuery.updateMapSettings).toHaveBeenCalledWith({ mapStyle: 'satellite' });
+    });
+
+    it('should persist 3d toggle under mapSettings via terrain control', async () => {
+      await component.ngOnInit();
+      fixture.detectChanges();
+      await waitForAsyncWork();
+      mockUserSettingsQuery.updateMapSettings.mockClear();
+
+      const terrainControl = mockMap.addControl.mock.calls
+        .map((call: any[]) => call[0])
+        .find((control: any) => typeof control?.set3DState === 'function');
+
+      expect(terrainControl).toBeTruthy();
+      (terrainControl as any).onToggle(true);
+
+      expect(mockUserSettingsQuery.updateMapSettings).toHaveBeenCalledWith({ is3D: true });
     });
 
     it('should persist jump heatmap setting when toggled', () => {

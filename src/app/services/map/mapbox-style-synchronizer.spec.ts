@@ -14,6 +14,7 @@ describe('MapboxStyleSynchronizer', () => {
         mockMap = {
             isStyleLoaded: vi.fn().mockReturnValue(true),
             setStyle: vi.fn(),
+            setTerrain: vi.fn(),
             on: vi.fn(),
             off: vi.fn(),
             once: vi.fn() // Used for style.load listener
@@ -45,6 +46,7 @@ describe('MapboxStyleSynchronizer', () => {
         const state: MapStyleState = { styleUrl: 'mapbox://styles/mapbox/standard', preset: 'day' };
         synchronizer.update(state);
 
+        expect(mockMap.setTerrain).toHaveBeenCalledWith(null);
         // Should call setStyle immediately because isStyleLoaded is true
         expect(mockMap.setStyle).toHaveBeenCalledWith(state.styleUrl, { diff: false });
     });
@@ -152,5 +154,20 @@ describe('MapboxStyleSynchronizer', () => {
         // Should not crash
         expect(() => vi.advanceTimersByTime(200)).not.toThrow();
         expect(mockLogger.error).toHaveBeenCalled();
+    });
+
+    it('should continue style swap when clearing terrain fails', () => {
+        const state: MapStyleState = { styleUrl: 'url-terrain-failure' };
+        mockMap.setTerrain.mockImplementation(() => {
+            throw new Error('Terrain clear failure');
+        });
+
+        synchronizer.update(state);
+
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+            '[MapboxStyleSynchronizer] Failed to clear terrain before style swap.',
+            expect.anything()
+        );
+        expect(mockMap.setStyle).toHaveBeenCalledWith(state.styleUrl, { diff: false });
     });
 });

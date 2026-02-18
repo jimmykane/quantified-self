@@ -4,27 +4,22 @@
   background: transparent;
 }
 
-/* map-progress-bar removed, handled by app-loading-overlay */
-
-google-map {
+.mapbox-stage {
+  position: relative;
   width: 100%;
   min-height: 60vh;
   height: 60vh;
-  display: block;
-  overflow: hidden;
 }
 
-section.container {
-  position: relative;
+.mapbox-map {
+  width: 100%;
+  height: 100%;
   min-height: 60vh;
+  overflow: hidden;
 }
 
 section.placeholder {
   min-height: 45vh;
-}
-
-mat-icon {
-  vertical-align: middle;
 }
 
 mat-card.map-legend {
@@ -36,31 +31,19 @@ mat-card.map-legend {
   position: absolute;
   bottom: 21px;
   right: 48px;
-  z-index: 1;
+  z-index: 2;
   background: inherit;
   box-shadow: none;
 }
 
-mat-slide-toggle {
-  margin-top: 10000px !important;
+.jump-popup-anchor {
+  position: absolute;
+  z-index: 4;
+  transform: translate(-50%, calc(-100% - 14px));
+  pointer-events: auto;
 }
 
-.info-window-content {
-  padding: 8px;
-  min-width: 150px;
-}
-
-.info-window-content h3 {
-  margin: 0 0 8px 0;
-  font: var(--mat-sys-title-small);
-  color: var(--mat-sys-primary);
-  border-bottom: 1px solid var(--mat-sys-outline-variant);
-  padding-bottom: 4px;
-}
-
-.info-window-content p {
-  margin: 4px 0;
-  font: var(--mat-sys-body-small);
-  display: flex;
-  justify-content: space-between;
+.jump-popup-anchor app-jump-marker-popup {
+  display: block;
+  width: min(320px, calc(100vw - 32px));
 }

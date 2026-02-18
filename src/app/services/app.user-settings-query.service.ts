@@ -6,14 +6,17 @@ import { AppAuthService } from '../authentication/app.auth.service';
 import { AppUserService } from './app.user.service';
 import {
     UserChartSettingsInterface,
-    UserMapSettingsInterface,
     UserMyTracksSettingsInterface,
     UserSummariesSettingsInterface,
     AppThemes
 } from '@sports-alliance/sports-lib';
 import { AppUserUtilities } from '../utils/app.user.utilities';
 import equal from 'fast-deep-equal';
-import { AppMyTracksSettings, AppUserInterface } from '../models/app-user.interface';
+import {
+    AppMapSettingsInterface,
+    AppMyTracksSettings,
+    AppUserInterface
+} from '../models/app-user.interface';
 
 import { LoggerService } from './logger.service';
 
@@ -49,10 +52,10 @@ export class AppUserSettingsQueryService {
      */
     public readonly mapSettings = toSignal(
         this.user$.pipe(
-            map(user => user?.settings?.mapSettings ?? {} as UserMapSettingsInterface),
+            map(user => user?.settings?.mapSettings ?? {} as AppMapSettingsInterface),
             distinctUntilChanged((prev, curr) => equal(prev, curr))
         ),
-        { initialValue: {} as UserMapSettingsInterface }
+        { initialValue: {} as AppMapSettingsInterface }
     );
 
     /**
@@ -141,9 +144,9 @@ export class AppUserSettingsQueryService {
     /**
      * Updates Map settings by merging the provided partial settings.
      */
-    public async updateMapSettings(settings: Partial<UserMapSettingsInterface>): Promise<void> {
+    public async updateMapSettings(settings: Partial<AppMapSettingsInterface>): Promise<void> {
         const currentSettings = this.mapSettings();
-        const hasChanges = Object.keys(settings).some(key => !equal(settings[key as keyof UserMapSettingsInterface], currentSettings[key as keyof UserMapSettingsInterface]));
+        const hasChanges = Object.keys(settings).some(key => !equal(settings[key as keyof AppMapSettingsInterface], currentSettings[key as keyof AppMapSettingsInterface]));
         if (!hasChanges) {
             return;
         }

@@ -56,6 +56,7 @@ export class MapboxStyleSynchronizer {
             this.pendingState = state; // Keep track of desired preset for when load completes
 
             try {
+                this.clearTerrainForStyleSwap();
                 // diff: false prevents some hybrid quirks, forces fresh load
                 this.map.setStyle(styleUrl, { diff: false });
             } catch (err) {
@@ -68,6 +69,23 @@ export class MapboxStyleSynchronizer {
         // Style URL is same, check/apply preset
         // We delegate to the service's "safe" applier which checks for redundancy
         this.styleService.applyStandardPreset(this.map, styleUrl, preset);
+    }
+
+    /**
+     * Prevent Mapbox terrain internals from referencing missing DEM sources during style swaps.
+     * Terrain is re-applied by the screen-level managers/effects after the new style loads.
+     */
+    private clearTerrainForStyleSwap() {
+        if (!this.map || typeof this.map.setTerrain !== 'function') {
+            return;
+        }
+
+        try {
+            this.map.setTerrain(null);
+            this.logger.info('[MapboxStyleSynchronizer] Cleared terrain before style swap.');
+        } catch (error) {
+            this.logger.warn('[MapboxStyleSynchronizer] Failed to clear terrain before style swap.', { error });
+        }
     }
 
     private attachListeners() {

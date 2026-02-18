@@ -23,7 +23,6 @@ import { EventDurabilityCurveComponent } from '../components/event/durability-cu
 import { EventCadencePowerComponent } from '../components/event/cadence-power/event.cadence-power.component';
 import { EventPerformanceChartsComponent } from '../components/event/performance-charts/event.performance-charts.component';
 import { LapTypeIconComponent } from '../components/lap-type-icon/lap-type-icon.component';
-import { GoogleMapsModule } from '@angular/google-maps';
 import { EventDetailsSummaryBottomSheetComponent } from '../components/event-summary/event-details-summary-bottom-sheet/event-details-summary-bottom-sheet.component';
 import { EventStatsBottomSheetComponent } from '../components/event/stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
 import { EventDevicesBottomSheetComponent } from '../components/event/devices/event-devices-bottom-sheet/event-devices-bottom-sheet.component';
@@ -40,7 +39,6 @@ import { DeviceNameEditDialogComponent } from '../components/event/activities-to
         SharedModule,
         MaterialModule,
         EventRoutingModule,
-        GoogleMapsModule,
     ],
     exports: [
         EventSummaryComponent

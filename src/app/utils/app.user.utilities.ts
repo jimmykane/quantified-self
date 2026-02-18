@@ -26,7 +26,6 @@ import {
     TimeIntervals,
     UserAppSettingsInterface,
     UserChartSettingsInterface,
-    UserMapSettingsInterface,
     UserMyTracksSettingsInterface,
     UserUnitSettingsInterface,
     UserSummariesSettingsInterface,
@@ -55,7 +54,12 @@ import {
     User,
 } from '@sports-alliance/sports-lib';
 import { isNumber } from 'lodash-es';
-import { AppDashboardSettingsInterface, AppUserInterface, AppUserSettingsInterface } from '../models/app-user.interface';
+import {
+    AppDashboardSettingsInterface,
+    AppMapSettingsInterface,
+    AppUserInterface,
+    AppUserSettingsInterface
+} from '../models/app-user.interface';
 import { StripeRole } from '../models/stripe-role.model';
 
 /**
@@ -356,13 +360,15 @@ export class AppUserUtilities {
         settings.summariesSettings = settings.summariesSettings || <UserSummariesSettingsInterface>{};
         settings.summariesSettings.removeAscentForEventTypes = settings.summariesSettings.removeAscentForEventTypes || AppUserUtilities.getDefaultActivityTypesToRemoveAscentFromSummaries();
         // Map
-        settings.mapSettings = settings.mapSettings || <UserMapSettingsInterface>{};
+        settings.mapSettings = settings.mapSettings || <AppMapSettingsInterface>{};
         settings.mapSettings.theme = settings.mapSettings.theme || MapThemes.Normal;
         settings.mapSettings.showLaps = settings.mapSettings.showLaps !== false;
 
         settings.mapSettings.showArrows = settings.mapSettings.showArrows !== false;
         settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || AppUserUtilities.getDefaultMapLapTypes();
         settings.mapSettings.mapType = settings.mapSettings.mapType || AppUserUtilities.getDefaultMapType();
+        settings.mapSettings.mapStyle = settings.mapSettings.mapStyle || 'default';
+        settings.mapSettings.is3D = settings.mapSettings.is3D === true;
         settings.mapSettings.strokeWidth = settings.mapSettings.strokeWidth || AppUserUtilities.getDefaultMapStrokeWidth();
         // MyTracks
         settings.myTracksSettings = settings.myTracksSettings || <UserMyTracksSettingsInterface>{};
