@@ -353,10 +353,20 @@ export class EventDurabilityCurveComponent implements AfterViewInit, OnChanges, 
       tooltip: {
         trigger: this.isMobile ? 'axis' : 'item',
         triggerOn: this.isMobile ? 'click' : 'mousemove|click',
+        alwaysShowContent: this.isMobile,
         axisPointer: this.isMobile
           ? {
             type: 'line',
             snap: true,
+            label: { show: false },
+            handle: {
+              show: true,
+              size: 22,
+              margin: 8,
+              color: darkTheme ? '#90caf9' : '#1976d2',
+              shadowBlur: 3,
+              shadowColor: darkTheme ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.2)',
+            },
           }
           : undefined,
         appendToBody: !this.isMobile,
