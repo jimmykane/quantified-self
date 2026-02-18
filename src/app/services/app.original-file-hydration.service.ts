@@ -23,6 +23,7 @@ export interface ParseOptions {
   strictAllFilesRequired?: boolean;
   preserveActivityIdsFromEvent?: boolean;
   mergeMultipleFiles?: boolean;
+  metadataCacheTtlMs?: number;
 }
 
 export interface ParseFailure {
@@ -159,7 +160,11 @@ export class AppOriginalFileHydrationService {
     const failedFiles: ParseFailure[] = [];
 
     for (const sourceFile of sourceFiles) {
-      const result = await this.fetchAndParseOneFile(sourceFile, options.skipEnrichment === true);
+      const result = await this.fetchAndParseOneFile(
+        sourceFile,
+        options.skipEnrichment === true,
+        options.metadataCacheTtlMs,
+      );
       if (result.event) {
         parsedEvents.push(result.event);
       } else {
@@ -247,9 +252,12 @@ export class AppOriginalFileHydrationService {
   private async fetchAndParseOneFile(
     fileMeta: { path: string; bucket?: string },
     skipEnrichment: boolean = false,
+    metadataCacheTtlMs?: number,
   ): Promise<{ event: EventInterface | null; reason?: string }> {
     try {
-      const arrayBuffer = await this.downloadFile(fileMeta.path);
+      const arrayBuffer = metadataCacheTtlMs === undefined
+        ? await this.downloadFile(fileMeta.path)
+        : await this.downloadFile(fileMeta.path, { metadataCacheTtlMs });
       const extension = this.getNormalizedExtensionFromPath(fileMeta.path);
       const options = createParsingOptions();
       let newEvent: EventInterface;

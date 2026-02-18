@@ -269,6 +269,24 @@ describe('TracksComponent', () => {
       expect(logger.warn).toHaveBeenCalledWith('[TracksComponent] Skipping track load because user is undefined.');
     });
 
+    it('should use one-hour metadata cache TTL when hydrating streams for myTracks', async () => {
+      const event = createMockEvent('hydration-cache-event', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(mockEventService.attachStreamsToEventWithActivities).toHaveBeenCalledWith(
+        mockUser,
+        expect.anything(),
+        [expect.any(String), expect.any(String)],
+        true,
+        false,
+        'attach_streams_only',
+        { metadataCacheTtlMs: 60 * 60 * 1000 },
+      );
+    });
+
     it('should add mapbox-dem source before setting terrain', async () => {
       mockMap.isStyleLoaded.mockReturnValue(true);
       await component.ngOnInit();

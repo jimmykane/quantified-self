@@ -1148,6 +1148,58 @@ describe('AppEventService', () => {
             expect(result).toBe(event);
         });
 
+        it('should pass metadata cache TTL to hydration parsing when provided', async () => {
+            const hydrationService = (service as any).originalFileHydrationService;
+            const parsedStreams = [{ type: 'Speed' }] as any[];
+            const existingActivity = {
+                getID: () => 'a-1',
+                clearStreams: vi.fn(),
+                addStreams: vi.fn(),
+            } as any;
+            const parsedActivity = {
+                getID: () => 'a-1',
+                getAllStreams: vi.fn().mockReturnValue(parsedStreams),
+            } as any;
+            const parsedEvent = {
+                setID: vi.fn().mockReturnThis(),
+                getActivities: vi.fn().mockReturnValue([parsedActivity]),
+            } as any;
+            vi.spyOn(hydrationService, 'parseEventFromOriginalFiles').mockResolvedValue({
+                finalEvent: parsedEvent,
+                parsedEvents: [parsedEvent],
+                sourceFilesCount: 1,
+                failedFiles: [],
+            });
+
+            const event = {
+                getID: () => 'event-1',
+                originalFile: { path: 'users/u1/events/e1/original.fit' },
+                getActivities: vi.fn().mockReturnValue([existingActivity]),
+                clearActivities: vi.fn(),
+                addActivities: vi.fn(),
+            } as any;
+
+            await firstValueFrom(
+                service.attachStreamsToEventWithActivities(
+                    { uid: 'u1' } as any,
+                    event,
+                    undefined,
+                    true,
+                    false,
+                    'attach_streams_only',
+                    { metadataCacheTtlMs: 3600000 },
+                ),
+            );
+
+            expect(hydrationService.parseEventFromOriginalFiles).toHaveBeenCalledWith(
+                event,
+                expect.objectContaining({
+                    strictAllFilesRequired: true,
+                    metadataCacheTtlMs: 3600000,
+                }),
+            );
+        });
+
         it('should respect streamTypes filter when attaching streams in stream-only mode', async () => {
             const hydrationService = (service as any).originalFileHydrationService;
             const parsedStreams = [{ type: 'Speed' }, { type: 'Distance' }, { type: 'Power' }] as any[];

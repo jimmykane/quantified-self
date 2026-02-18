@@ -296,6 +296,21 @@ describe('AppOriginalFileHydrationService', () => {
     expect(loggerMock.error).toHaveBeenCalled();
   });
 
+  it('fetchAndParseOneFile should pass metadata cache TTL override to downloadFile', async () => {
+    const parsedEvent = { getActivities: () => [] } as any;
+    const downloadSpy = vi.spyOn(service, 'downloadFile').mockResolvedValue(new ArrayBuffer(8));
+    vi.spyOn(EventImporterFIT, 'getFromArrayBuffer').mockResolvedValue(parsedEvent as any);
+
+    const result = await (service as any).fetchAndParseOneFile(
+      { path: 'users/u/events/e/original.fit' },
+      true,
+      3600000,
+    );
+
+    expect(downloadSpy).toHaveBeenCalledWith('users/u/events/e/original.fit', { metadataCacheTtlMs: 3600000 });
+    expect(result.event).toBe(parsedEvent);
+  });
+
   it('downloadFile should use default metadata TTL of 30s', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));

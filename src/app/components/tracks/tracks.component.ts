@@ -64,6 +64,8 @@ interface JumpHeatCollectionStats {
   standalone: false
 })
 export class TracksComponent implements OnInit, OnDestroy {
+  private static readonly MY_TRACKS_METADATA_CACHE_TTL_MS = 60 * 60 * 1000;
+
   @ViewChild('mapDiv', { static: true }) mapDiv!: ElementRef;
 
   public dateRangesToShow: DateRanges[] = [
@@ -486,7 +488,8 @@ export class TracksComponent implements OnInit, OnDestroy {
                   ],
                   true,
                   false,
-                  'attach_streams_only'
+                  'attach_streams_only',
+                  { metadataCacheTtlMs: TracksComponent.MY_TRACKS_METADATA_CACHE_TTL_MS },
                 ).pipe(take(1)).toPromise();
                 fullEvent = hydratedEvent || event;
               } catch (error) {

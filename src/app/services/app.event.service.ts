@@ -824,6 +824,7 @@ export class AppEventService implements OnDestroy {
     merge: boolean = true,
     skipEnrichment: boolean = false,
     hydrationMode: StreamHydrationMode = 'attach_streams_only',
+    downloadFileOptions?: DownloadFileOptions,
   ): Observable<EventInterface> {
     this.logger.log(`[AppEventService] attachStreams for ${event.getID()}. originalFile: ${!!event.originalFile}, originalFiles: ${!!event.originalFiles}`);
     const hasOriginalFiles = (event.originalFiles && event.originalFiles.length > 0)
@@ -836,12 +837,21 @@ export class AppEventService implements OnDestroy {
       return throwError(() => new Error('No original source file metadata found for event hydration.'));
     }
 
-    return from(this.originalFileHydrationService.parseEventFromOriginalFiles(event, {
+    const parseOptions = {
       skipEnrichment,
       strictAllFilesRequired: true,
       preserveActivityIdsFromEvent: true,
       mergeMultipleFiles: true,
-    })).pipe(
+    } as const;
+
+    const parseOptionsWithDownload = downloadFileOptions?.metadataCacheTtlMs === undefined
+      ? parseOptions
+      : {
+        ...parseOptions,
+        metadataCacheTtlMs: downloadFileOptions.metadataCacheTtlMs,
+      };
+
+    return from(this.originalFileHydrationService.parseEventFromOriginalFiles(event, parseOptionsWithDownload)).pipe(
       map((parseResult) => {
         const fullEvent = parseResult.finalEvent;
         if (!fullEvent) {
