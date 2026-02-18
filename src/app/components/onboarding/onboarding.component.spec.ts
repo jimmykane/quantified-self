@@ -264,7 +264,7 @@ describe('OnboardingComponent', () => {
         expect(privacyControl!.value).toBe(true);
     });
 
-    it('should keep non-dirty form controls unchanged on ngOnChanges (current behavior)', () => {
+    it('should patch non-dirty form controls on ngOnChanges', () => {
         const privacyControl = component.termsFormGroup.get('acceptPrivacyPolicy');
         expect(privacyControl!.dirty).toBe(false);
 
@@ -278,7 +278,7 @@ describe('OnboardingComponent', () => {
             }
         });
 
-        expect(privacyControl!.value).toBe(false);
+        expect(privacyControl!.value).toBe(true);
     });
 
     it('should call checkAndAdvance in ngOnChanges only after first change', () => {

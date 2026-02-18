@@ -115,6 +115,7 @@ export class OnboardingComponent implements OnInit, AfterViewInit, OnChanges {
 
     ngOnChanges(changes: SimpleChanges) {
         if (changes['user'] && !changes['user'].firstChange) {
+            this.updateForm();
             this.checkAndAdvance();
         }
     }
