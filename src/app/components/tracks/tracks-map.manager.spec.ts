@@ -114,9 +114,9 @@ describe('TracksMapManager', () => {
         mockMapStyleService.adjustColorForTheme = vi.fn().mockReturnValue('#adjustedColor');
     });
 
-    const emitMapEvent = (event: string) => {
+    const emitMapEvent = (event: string, payload?: any) => {
         const handlers = mapEventHandlers[event] || [];
-        handlers.forEach(handler => handler());
+        handlers.forEach(handler => handler(payload));
     };
 
     it('should be created', () => {
@@ -425,6 +425,89 @@ describe('TracksMapManager', () => {
 
             const afterStyleReload = mockMap.addLayer.mock.calls.filter((call) => call[0]?.id === 'track-start-layer').length;
             expect(afterStyleReload).toBeGreaterThan(beforeStyleReload);
+        });
+
+        it('should highlight related polyline on start-point hover and restore on mouse leave', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockImplementation((id: string) => id.startsWith('track-layer-') || id === 'track-start-layer');
+            const activity = { getID: () => 'activity-1', type: ActivityTypes.Running };
+            manager.addTrackFromActivity(activity, [[10, 20], [10.01, 20.01]]);
+            vi.clearAllMocks();
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockImplementation((id: string) => id.startsWith('track-layer-') || id === 'track-start-layer');
+
+            manager.setActivityStartPoints([{
+                eventId: 'event-1',
+                activityId: 'activity-1',
+                activityType: 'Running',
+                activityTypeValue: ActivityTypes.Running,
+                startDate: 1731062400000,
+                durationLabel: '1:02:03',
+                distanceLabel: '10 km',
+                lng: 10,
+                lat: 20
+            }]);
+
+            const sourceCall = mockMap.addSource.mock.calls.find((call) => call[0] === 'track-start-source');
+            const pointId = sourceCall?.[1]?.data?.features?.[0]?.properties?.pointId;
+            emitMapEvent('mousemove', {
+                features: [{
+                    properties: { pointId },
+                    geometry: { coordinates: [10, 20] }
+                }]
+            });
+            expect(mockMap.setPaintProperty).toHaveBeenCalledWith('track-layer-activity-1', 'line-width', 4.2);
+
+            emitMapEvent('mouseleave');
+            expect(mockMap.setPaintProperty).toHaveBeenCalledWith('track-layer-activity-1', 'line-width', 3);
+        });
+
+        it('should highlight selected polyline and set marker green while popup selection is open', () => {
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockImplementation((id: string) => id.startsWith('track-layer-') || id === 'track-start-layer');
+            const activity = { getID: () => 'activity-1', type: ActivityTypes.Running };
+            manager.addTrackFromActivity(activity, [[10, 20], [10.01, 20.01]]);
+            vi.clearAllMocks();
+            mockMap.getSource.mockReturnValue(null);
+            mockMap.getLayer.mockImplementation((id: string) => id.startsWith('track-layer-') || id === 'track-start-layer');
+
+            manager.setActivityStartPoints([{
+                eventId: 'event-1',
+                activityId: 'activity-1',
+                activityType: 'Running',
+                activityTypeValue: ActivityTypes.Running,
+                startDate: 1731062400000,
+                durationLabel: '1:02:03',
+                distanceLabel: '10 km',
+                lng: 10,
+                lat: 20
+            }]);
+
+            const sourceCall = mockMap.addSource.mock.calls.find((call) => call[0] === 'track-start-source');
+            const pointId = sourceCall?.[1]?.data?.features?.[0]?.properties?.pointId;
+            mockMap.queryRenderedFeatures.mockReturnValue([{}]);
+            emitMapEvent('click', {
+                features: [{
+                    properties: { pointId },
+                    geometry: { coordinates: [10, 20] }
+                }],
+                point: { x: 1, y: 1 }
+            });
+
+            const latestSelectedSourceCall = mockMap.addSource.mock.calls
+                .filter((call) => call[0] === 'track-start-source')
+                .at(-1);
+            const selectedMarkerColor = latestSelectedSourceCall?.[1]?.data?.features?.[0]?.properties?.markerColor;
+            expect(selectedMarkerColor).toBe('#22c55e');
+            expect(mockMap.setPaintProperty).toHaveBeenCalledWith('track-layer-activity-1', 'line-width', 4.2);
+
+            manager.clearStartPointSelection();
+            const latestClearedSourceCall = mockMap.addSource.mock.calls
+                .filter((call) => call[0] === 'track-start-source')
+                .at(-1);
+            const clearedMarkerColor = latestClearedSourceCall?.[1]?.data?.features?.[0]?.properties?.markerColor;
+            expect(clearedMarkerColor).toBe('#2ca3ff');
+            expect(mockMap.setPaintProperty).toHaveBeenCalledWith('track-layer-activity-1', 'line-width', 3);
         });
     });
 

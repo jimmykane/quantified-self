@@ -31,12 +31,14 @@ export interface MapboxStartPointInteractionConfig {
   interactionLayerId?: string;
   onSelect: (selection: MapboxStartPointSelection) => void;
   onClear: () => void;
+  onHover?: (selection: Pick<MapboxStartPointSelection, 'pointId' | 'lng' | 'lat' | 'feature'> | null) => void;
 }
 
 interface BoundInteractionHandlers {
   layerId: string;
   onLayerClick: (event: any) => void;
   onMapClick: (event: any) => void;
+  onMouseMove: (event: any) => void;
   onMouseEnter: () => void;
   onMouseLeave: () => void;
 }
@@ -155,15 +157,36 @@ export class MapboxStartPointLayerService {
       }
     };
 
+    const onMouseMove = (event: any) => {
+      if (!config.onHover) return;
+      const feature = event?.features?.[0];
+      if (!feature) {
+        config.onHover(null);
+        return;
+      }
+      const coordinates = feature?.geometry?.coordinates;
+      const lng = Array.isArray(coordinates) ? Number(coordinates[0]) : NaN;
+      const lat = Array.isArray(coordinates) ? Number(coordinates[1]) : NaN;
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+        config.onHover(null);
+        return;
+      }
+      const pointIdRaw = feature?.properties?.pointId;
+      const pointId = pointIdRaw === undefined || pointIdRaw === null ? null : String(pointIdRaw);
+      config.onHover({ pointId, lng, lat, feature });
+    };
+
     const onMouseLeave = () => {
       const canvas = map.getCanvas?.();
       if (canvas?.style) {
         canvas.style.cursor = '';
       }
+      config.onHover?.(null);
     };
 
     map.on('click', layerId, onLayerClick);
     map.on('click', onMapClick);
+    map.on('mousemove', layerId, onMouseMove);
     map.on('mouseenter', layerId, onMouseEnter);
     map.on('mouseleave', layerId, onMouseLeave);
 
@@ -171,6 +194,7 @@ export class MapboxStartPointLayerService {
       layerId,
       onLayerClick,
       onMapClick,
+      onMouseMove,
       onMouseEnter,
       onMouseLeave
     });
@@ -183,6 +207,7 @@ export class MapboxStartPointLayerService {
 
     map.off('click', handlers.layerId, handlers.onLayerClick);
     map.off('click', handlers.onMapClick);
+    map.off('mousemove', handlers.layerId, handlers.onMouseMove);
     map.off('mouseenter', handlers.layerId, handlers.onMouseEnter);
     map.off('mouseleave', handlers.layerId, handlers.onMouseLeave);
     this.interactionHandlersByMap.delete(map);

@@ -131,6 +131,7 @@ describe('TracksComponent', () => {
       queryRenderedFeatures: vi.fn().mockReturnValue([]),
       getCanvas: vi.fn().mockReturnValue({ style: { cursor: '' } }),
       project: vi.fn().mockReturnValue({ x: 100, y: 120 }),
+      panTo: vi.fn(),
     };
 
     mockAuthService = {
@@ -480,6 +481,9 @@ describe('TracksComponent', () => {
       const selectionHandler = manager.startSelectionHandler as ((selection: any) => void);
       expect(typeof selectionHandler).toBe('function');
 
+      component.searchPeekExpanded.set(true);
+      component.detectedTripsPanelExpanded.set(true);
+
       selectionHandler({
         eventId: 'event-1',
         activityId: 'activity-1',
@@ -496,6 +500,11 @@ describe('TracksComponent', () => {
         activityId: 'activity-1'
       }));
       expect(component.selectedStartPointScreen()).toEqual({ x: 100, y: 120 });
+      expect(component.searchPeekExpanded()).toBe(false);
+      expect(component.detectedTripsPanelExpanded()).toBe(false);
+      expect(mockMap.panTo).toHaveBeenCalledWith([10, 20], expect.objectContaining({
+        essential: true
+      }));
 
       selectionHandler(null);
       expect(component.selectedStartPoint()).toBeNull();

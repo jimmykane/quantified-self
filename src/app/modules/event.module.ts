@@ -32,7 +32,6 @@ import { JumpMarkerPopupComponent } from '../components/event/map/popups/jump-ma
 import { BenchmarkSelectionDialogComponent } from '../components/benchmark/benchmark-selection-dialog.component';
 import { BenchmarkReportComponent } from '../components/benchmark/benchmark-report.component';
 import { BenchmarkBottomSheetComponent } from '../components/benchmark/benchmark-bottom-sheet.component';
-import { EventSectionHeaderComponent } from '../components/event/section-header/event.section-header.component';
 import { DeviceNameEditDialogComponent } from '../components/event/activities-toggles/device-name-edit-dialog/device-name-edit-dialog.component';
 
 @NgModule({
@@ -74,7 +73,6 @@ import { DeviceNameEditDialogComponent } from '../components/event/activities-to
         BenchmarkSelectionDialogComponent,
         BenchmarkReportComponent,
         BenchmarkBottomSheetComponent,
-        EventSectionHeaderComponent,
         DeviceNameEditDialogComponent,
     ]
 })

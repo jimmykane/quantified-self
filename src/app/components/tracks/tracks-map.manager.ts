@@ -42,6 +42,7 @@ export class TracksMapManager {
     private static readonly TRACK_START_HIT_LAYER_ID = 'track-start-hit-layer';
     private static readonly TRACK_START_MIN_ZOOM = 0;
     private static readonly TRACK_START_MARKER_STROKE = '#f5f8ff';
+    private static readonly TRACK_START_MARKER_SELECTED_COLOR = '#22c55e';
     private static readonly TRACK_START_MARKER_RADIUS_MIN = 5.6;
     private static readonly TRACK_START_MARKER_RADIUS_MAX = 6.72;
 
@@ -61,6 +62,8 @@ export class TracksMapManager {
     private trackStartPoints: TrackStartPointWithId[] = [];
     private trackStartPointsById = new Map<string, TrackStartPointWithId>();
     private startSelectionHandler: ((selection: TrackStartSelection | null) => void) | null = null;
+    private selectedTrackStartPointId: string | null = null;
+    private hoveredTrackStartPointId: string | null = null;
 
     constructor(
         private zone: NgZone,
@@ -149,6 +152,14 @@ export class TracksMapManager {
         this.startSelectionHandler = handler;
     }
 
+    public clearStartPointSelection(): void {
+        if (!this.selectedTrackStartPointId && !this.hoveredTrackStartPointId) return;
+        this.selectedTrackStartPointId = null;
+        this.hoveredTrackStartPointId = null;
+        this.refreshTrackStartPointsForSelectionState();
+        this.applyTrackHighlightState();
+    }
+
     public setActivityStartPoints(points: TrackStartPoint[]): void {
         const duplicateCounter = new Map<string, number>();
         this.trackStartPoints = (points || [])
@@ -184,6 +195,12 @@ export class TracksMapManager {
             });
 
         this.trackStartPointsById = new Map(this.trackStartPoints.map((point) => [point.pointId, point]));
+        if (this.selectedTrackStartPointId && !this.trackStartPointsById.has(this.selectedTrackStartPointId)) {
+            this.selectedTrackStartPointId = null;
+        }
+        if (this.hoveredTrackStartPointId && !this.trackStartPointsById.has(this.hoveredTrackStartPointId)) {
+            this.hoveredTrackStartPointId = null;
+        }
 
         this.logger.log('[TracksMapManager] setActivityStartPoints called.', {
             inputPoints: points?.length || 0,
@@ -201,7 +218,10 @@ export class TracksMapManager {
     public clearActivityStartPoints(): void {
         this.trackStartPoints = [];
         this.trackStartPointsById.clear();
+        this.selectedTrackStartPointId = null;
+        this.hoveredTrackStartPointId = null;
         this.clearTrackStartPointsLayerAndInteraction();
+        this.applyTrackHighlightState();
         this.emitTrackStartSelection(null);
     }
 
@@ -265,6 +285,7 @@ export class TracksMapManager {
                 this.trackLayerBaseColors.set(glowLayerId, colorInfo.baseColor);
                 this.trackLayerBaseColors.set(casingLayerId, colorInfo.baseColor);
                 this.trackLayerBaseColors.set(layerId, colorInfo.baseColor);
+                this.applyTrackHighlightState();
 
             } catch (error: any) {
                 if (error?.message?.includes('Style is not done loading')) {
@@ -322,6 +343,7 @@ export class TracksMapManager {
                     }
                 }
             });
+            this.applyTrackHighlightState();
         });
     }
 
@@ -460,6 +482,7 @@ export class TracksMapManager {
             this.refreshTrackColors();
             this.updateJumpHeatmapVisibility();
             this.renderTrackStartPoints();
+            this.applyTrackHighlightState();
         });
     }
 
@@ -574,7 +597,7 @@ export class TracksMapManager {
                     lat: point.lat,
                     properties: {
                         pointId: point.pointId,
-                        markerColor: this.resolveTrackColors(point.activityTypeValue ?? undefined).adjustedColor,
+                        markerColor: this.resolveTrackStartPointMarkerColor(point),
                         markerRadius: this.resolveTrackStartMarkerRadius(sizeWeightsByPointId.get(point.pointId) ?? 0)
                     }
                 }))
@@ -584,7 +607,14 @@ export class TracksMapManager {
                 hitLayerId: TracksMapManager.TRACK_START_HIT_LAYER_ID,
                 interactionLayerId: TracksMapManager.TRACK_START_LAYER_ID,
                 onSelect: (selection) => this.handleTrackStartPointSelection(selection),
-                onClear: () => this.emitTrackStartSelection(null)
+                onClear: () => {
+                    this.selectedTrackStartPointId = null;
+                    this.hoveredTrackStartPointId = null;
+                    this.refreshTrackStartPointsForSelectionState();
+                    this.applyTrackHighlightState();
+                    this.emitTrackStartSelection(null);
+                },
+                onHover: (selection) => this.handleTrackStartPointHover(selection?.pointId || null)
             });
         });
     }
@@ -600,22 +630,79 @@ export class TracksMapManager {
         });
     }
 
+    private refreshTrackStartPointsForSelectionState(): void {
+        if (!this.map || !this.trackStartPoints.length) return;
+        this.renderTrackStartPoints();
+    }
+
+    private resolveTrackStartPointMarkerColor(point: TrackStartPointWithId): string {
+        if (this.selectedTrackStartPointId === point.pointId) {
+            return TracksMapManager.TRACK_START_MARKER_SELECTED_COLOR;
+        }
+        return this.resolveTrackColors(point.activityTypeValue ?? undefined).adjustedColor;
+    }
+
+    private handleTrackStartPointHover(pointId: string | null): void {
+        const normalizedPointId = pointId && this.trackStartPointsById.has(pointId) ? pointId : null;
+        if (this.hoveredTrackStartPointId === normalizedPointId) return;
+        this.hoveredTrackStartPointId = normalizedPointId;
+        this.applyTrackHighlightState();
+    }
+
     private handleTrackStartPointSelection(selection: MapboxStartPointSelection): void {
         if (!selection?.pointId) {
+            this.selectedTrackStartPointId = null;
+            this.refreshTrackStartPointsForSelectionState();
+            this.applyTrackHighlightState();
             this.emitTrackStartSelection(null);
             return;
         }
 
         const point = this.trackStartPointsById.get(selection.pointId);
         if (!point) {
+            this.selectedTrackStartPointId = null;
+            this.refreshTrackStartPointsForSelectionState();
+            this.applyTrackHighlightState();
             this.emitTrackStartSelection(null);
             return;
         }
+
+        this.selectedTrackStartPointId = point.pointId;
+        this.refreshTrackStartPointsForSelectionState();
+        this.applyTrackHighlightState();
 
         this.emitTrackStartSelection({
             ...point,
             lng: selection.lng,
             lat: selection.lat
+        });
+    }
+
+    private applyTrackHighlightState(): void {
+        if (!this.map || !this.tracksByActivityId.size) return;
+        const highlightedActivityIds = new Set<string>();
+        const selectedPoint = this.selectedTrackStartPointId ? this.trackStartPointsById.get(this.selectedTrackStartPointId) : null;
+        const hoveredPoint = this.hoveredTrackStartPointId ? this.trackStartPointsById.get(this.hoveredTrackStartPointId) : null;
+        if (selectedPoint?.activityId) {
+            highlightedActivityIds.add(this.sanitizeLayerId(String(selectedPoint.activityId)));
+        }
+        if (hoveredPoint?.activityId) {
+            highlightedActivityIds.add(this.sanitizeLayerId(String(hoveredPoint.activityId)));
+        }
+
+        this.tracksByActivityId.forEach(({ baseColor }, activityId) => {
+            const isHighlighted = highlightedActivityIds.has(activityId);
+            const layerIds = [
+                `track-layer-glow-${activityId}`,
+                `track-layer-casing-${activityId}`,
+                `track-layer-${activityId}`
+            ];
+            layerIds.forEach((layerId) => {
+                if (!this.map.getLayer?.(layerId) || !this.map.setPaintProperty) return;
+                const role = this.resolveLayerRole(layerId);
+                const paint = this.buildLayerPaint(role, baseColor, isHighlighted);
+                this.applyPaintProperties(layerId, paint);
+            });
         });
     }
 
@@ -768,7 +855,7 @@ export class TracksMapManager {
         return 'main';
     }
 
-    private buildLayerPaint(role: TrackLayerRole, baseColor: string): Record<string, number | string> {
+    private buildLayerPaint(role: TrackLayerRole, baseColor: string, isHighlighted: boolean = false): Record<string, number | string> {
         const theme = this.isDarkTheme ? AppThemes.Dark : AppThemes.Normal;
         const styleMode = this.resolveStyleMode();
         const isBusy = this.isBusyMapStyle();
@@ -783,9 +870,9 @@ export class TracksMapManager {
                 case 'glow':
                     return {
                         'line-color': mainColor,
-                        'line-width': 7,
-                        'line-blur': 4,
-                        'line-opacity': 0.55,
+                        'line-width': isHighlighted ? 10 : 7,
+                        'line-blur': isHighlighted ? 5 : 4,
+                        'line-opacity': isHighlighted ? 0.85 : 0.55,
                         'line-emissive-strength': 1.0
                     };
                 case 'casing':
@@ -800,9 +887,9 @@ export class TracksMapManager {
                 default:
                     return {
                         'line-color': mainColor,
-                        'line-width': 3,
+                        'line-width': isHighlighted ? 4.8 : 3,
                         'line-blur': 0,
-                        'line-opacity': 0.95,
+                        'line-opacity': isHighlighted ? 1.0 : 0.95,
                         'line-emissive-strength': 1.0
                     };
             }
@@ -812,27 +899,27 @@ export class TracksMapManager {
             case 'glow':
                 return {
                     'line-color': mainColor,
-                    'line-width': 0,
-                    'line-blur': 0,
-                    'line-opacity': 0,
-                    'line-emissive-strength': 0
+                    'line-width': isHighlighted ? 3.8 : 0,
+                    'line-blur': isHighlighted ? 2.2 : 0,
+                    'line-opacity': isHighlighted ? 0.34 : 0,
+                    'line-emissive-strength': isHighlighted ? 0.45 : 0
                 };
             case 'casing':
                 return {
                     'line-color': casingColor,
-                    'line-width': isBusy ? 6.5 : 5.5,
+                    'line-width': isHighlighted ? (isBusy ? 8.2 : 7.2) : (isBusy ? 6.5 : 5.5),
                     'line-blur': 0,
-                    'line-opacity': isBusy ? 0.85 : 0.75,
+                    'line-opacity': isHighlighted ? 1 : (isBusy ? 0.85 : 0.75),
                     'line-emissive-strength': 0
                 };
             case 'main':
             default:
                 return {
                     'line-color': mainColor,
-                    'line-width': isBusy ? 3.2 : 3.0,
+                    'line-width': isHighlighted ? (isBusy ? 4.5 : 4.2) : (isBusy ? 3.2 : 3.0),
                     'line-blur': 0,
-                    'line-opacity': 0.95,
-                    'line-emissive-strength': 0.6
+                    'line-opacity': isHighlighted ? 1 : 0.95,
+                    'line-emissive-strength': isHighlighted ? 0.9 : 0.6
                 };
         }
     }

@@ -1,6 +1,8 @@
 <mat-card class="tracks-map-shell mat-elevation-z0">
   @if (user) {
   <app-peek-panel class="tracks-search-peek" position="top" topAnchor="center"
+    [expanded]="searchPeekExpanded()"
+    (expandedChange)="searchPeekExpanded.set($event)"
     [defaultExpanded]="searchPeekDefaultExpanded()"
     borderMode="none" [expandedSizePx]="332" [collapsedSizePx]="28" ariaLabelExpand="Expand filters"
     ariaLabelCollapse="Collapse filters">
@@ -18,29 +20,38 @@
   @if (selectedStartPointScreen(); as startPointScreen) {
   <div class="track-start-popup-anchor" [style.left.px]="startPointScreen.x" [style.top.px]="startPointScreen.y">
     <mat-card class="track-start-popup qs-glass-card-panel glass-card mat-elevation-z0">
-      <div class="track-start-popup-header">
-        <h3 class="track-start-popup-title">{{ startPoint.activityType || 'Activity' }}</h3>
-        <button mat-icon-button class="track-start-popup-close" (click)="closeSelectedStartPointPopup()"
-          aria-label="Close activity popup">
-          <mat-icon>close</mat-icon>
-        </button>
-      </div>
+      <div class="summary-primary-info performance-header track-start-summary-primary-info">
+        <div class="identity-section">
+          <div class="activity-icon-container track-start-activity-icon-container">
+            <app-activity-type-icon class="activity-main-icon"
+              [activityType]="resolveStartPointIconActivityType(startPoint)" size="32px"></app-activity-type-icon>
+          </div>
+          <div class="text-stack">
+            <div class="top-meta">
+              @if (startPoint.startDate) {
+              <span class="date"><b>{{ startPoint.startDate | date:'d MMM yyyy' }}</b></span>
+              <span class="time-separator">at</span>
+              <span class="time">{{ startPoint.startDate | date:'shortTime' }}</span>
+              } @else {
+              <span class="time">Activity start</span>
+              }
+            </div>
+            <div class="chips-row">
+              <span class="chip activity-chip">{{ startPoint.activityType || 'Activity' }}</span>
+            </div>
+          </div>
+        </div>
 
-      @if (startPoint.startDate) {
-      <p class="track-start-popup-date">{{ startPoint.startDate | date:'MMM d, y, HH:mm' }}</p>
-      }
-
-      <div class="track-start-popup-meta">
-        @if (startPoint.distanceLabel && startPoint.distanceLabel !== '-') {
-        <span class="track-start-popup-chip">Distance {{ startPoint.distanceLabel }}</span>
-        }
-        @if (startPoint.durationLabel && startPoint.durationLabel !== '-') {
-        <span class="track-start-popup-chip">Duration {{ startPoint.durationLabel }}</span>
-        }
-        @if ((!startPoint.distanceLabel || startPoint.distanceLabel === '-') && (!startPoint.durationLabel ||
-        startPoint.durationLabel === '-')) {
-        <span class="track-start-popup-fallback">Activity start point</span>
-        }
+        <div class="hero-metrics">
+          <div class="metric-item">
+            <span class="value">{{ (startPoint.distanceLabel && startPoint.distanceLabel !== '-') ? startPoint.distanceLabel : '--' }}</span>
+            <span class="unit">Distance</span>
+          </div>
+          <div class="metric-item">
+            <span class="value">{{ (startPoint.durationLabel && startPoint.durationLabel !== '-') ? startPoint.durationLabel : '--' }}</span>
+            <span class="unit">Duration</span>
+          </div>
+        </div>
       </div>
 
       <div class="track-start-popup-actions">

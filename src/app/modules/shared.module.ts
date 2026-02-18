@@ -25,6 +25,7 @@ import { BottomSheetHeaderComponent } from '../components/shared/bottom-sheet-he
 import { PeekPanelComponent } from '../components/shared/peek-panel/peek-panel.component';
 import { MaterialPillTabsComponent } from '../components/shared/material-pill-tabs/material-pill-tabs.component';
 import { MaterialPillTabDirective } from '../components/shared/material-pill-tabs/material-pill-tab.directive';
+import { EventSectionHeaderComponent } from '../components/event/section-header/event.section-header.component';
 
 @NgModule({
     imports: [
@@ -54,6 +55,7 @@ import { MaterialPillTabDirective } from '../components/shared/material-pill-tab
         PeekPanelComponent,
         MaterialPillTabsComponent,
         MaterialPillTabDirective,
+        EventSectionHeaderComponent,
     ],
     providers: [],
     exports: [
@@ -81,6 +83,7 @@ import { MaterialPillTabDirective } from '../components/shared/material-pill-tab
         PeekPanelComponent,
         MaterialPillTabsComponent,
         MaterialPillTabDirective,
+        EventSectionHeaderComponent,
     ]
 })
 

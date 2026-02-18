@@ -111,6 +111,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   public hasEvaluatedTripDetection: WritableSignal<boolean> = signal(false);
   public detectedTripsPanelExpanded: WritableSignal<boolean> = signal(false);
   public searchPeekDefaultExpanded: WritableSignal<boolean> = signal(true);
+  public searchPeekExpanded: WritableSignal<boolean> = signal(true);
   public hasDetectedJumps: WritableSignal<boolean> = signal(false);
   public selectedStartPoint: WritableSignal<TrackStartSelection | null> = signal(null);
   public selectedStartPointScreen: WritableSignal<{ x: number; y: number } | null> = signal(null);
@@ -148,6 +149,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     const platformId = inject(PLATFORM_ID);
     this.platformId = platformId;
     this.searchPeekDefaultExpanded.set(this.resolveDesktopViewportDefault());
+    this.searchPeekExpanded.set(this.searchPeekDefaultExpanded());
 
     // Track last settings to prevent redundant data fetching
     let lastLoadedDataSettings: { dateRange: DateRanges, activityTypes?: ActivityTypes[] } | null = null;
@@ -249,8 +251,11 @@ export class TracksComponent implements OnInit, OnDestroy {
               this.closeSelectedStartPointPopup();
               return;
             }
+            this.searchPeekExpanded.set(false);
+            this.detectedTripsPanelExpanded.set(false);
             this.selectedStartPoint.set(selection);
             this.updateSelectedStartPointScreenPosition();
+            this.centerMapOnStartPoint(selection);
           });
         });
         this.bindStartPointPopupMapListeners(mapInstance);
@@ -652,6 +657,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   }
 
   public closeSelectedStartPointPopup(): void {
+    this.tracksMapManager.clearStartPointSelection();
     this.selectedStartPoint.set(null);
     this.selectedStartPointScreen.set(null);
   }
@@ -669,6 +675,20 @@ export class TracksComponent implements OnInit, OnDestroy {
 
     this.router.navigate(['/user', userId, 'event', selected.eventId]);
     this.closeSelectedStartPointPopup();
+  }
+
+  public resolveStartPointIconActivityType(startPoint: TrackStartSelection | null): string {
+    const rawType = startPoint?.activityTypeValue;
+    if (typeof rawType === 'string' && rawType.trim().length > 0) {
+      return rawType.trim();
+    }
+    if (typeof rawType === 'number' && Number.isFinite(rawType) && ActivityTypes[rawType]) {
+      return String(ActivityTypes[rawType]);
+    }
+    if (typeof startPoint?.activityType === 'string' && startPoint.activityType.trim().length > 0) {
+      return startPoint.activityType.trim();
+    }
+    return 'Other';
   }
 
   private getTripDetectionInputFromEvent(event: any): TripDetectionInput | null {
@@ -915,6 +935,27 @@ export class TracksComponent implements OnInit, OnDestroy {
       return;
     }
     this.selectedStartPointScreen.set({ x, y });
+  }
+
+  private centerMapOnStartPoint(selection: TrackStartSelection): void {
+    if (!selection) return;
+    const map = this.tracksMapManager.getMap();
+    if (!map?.panTo) return;
+    const target: [number, number] = [selection.lng, selection.lat];
+    this.zone.runOutsideAngular(() => {
+      try {
+        map.panTo(target, {
+          animate: true,
+          duration: 320,
+          essential: true
+        });
+      } catch (error) {
+        this.logger.warn('[TracksComponent] Failed to pan map to selected start point.', {
+          selection,
+          error
+        });
+      }
+    });
   }
 
   // Refactored helpers
