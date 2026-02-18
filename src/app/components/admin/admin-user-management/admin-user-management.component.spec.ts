@@ -258,6 +258,26 @@ describe('AdminUserManagementComponent', () => {
         expect(adminServiceSpy.getUsers).toHaveBeenCalled();
     });
 
+    it('should fallback to created desc when sort state is cleared', () => {
+        component.sortField = 'email';
+        component.sortDirection = 'asc';
+        vi.clearAllMocks();
+
+        const sortEvent: Sort = { active: '', direction: '' };
+        component.onSortChange(sortEvent);
+
+        expect(component.sortField).toBe('created');
+        expect(component.sortDirection).toBe('desc');
+        expect(adminServiceSpy.getUsers).toHaveBeenCalledWith({
+            page: 0,
+            pageSize: 10,
+            searchTerm: undefined,
+            sortField: 'created',
+            sortDirection: 'desc',
+            filterService: undefined
+        });
+    });
+
     it('should return correct role', () => {
         expect(component.getRole(mockUsers[0])).toBe('pro');
         expect(component.getRole(mockUsers[1])).toBe('free');

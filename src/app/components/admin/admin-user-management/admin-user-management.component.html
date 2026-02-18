@@ -131,7 +131,8 @@
             </div>
 
             <div class="table-wrapper">
-                <table mat-table [dataSource]="users" matSort (matSortChange)="onSortChange($event)">
+                <table mat-table [dataSource]="users" matSort [matSortActive]="sortField"
+                    [matSortDirection]="sortDirection" matSortDisableClear (matSortChange)="onSortChange($event)">
 
                     <!-- Photo Column -->
                     <ng-container matColumnDef="photoURL">
