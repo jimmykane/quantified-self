@@ -45,7 +45,7 @@ import { AppCacheService } from './app.cache.service';
 import { BenchmarkEventAdapter } from './benchmark-event.adapter';
 import { SPORTS_LIB_VERSION } from '../constants/sports-lib-version.browser';
 import { buildActivityEditWritePayload, buildActivityWriteData, buildEventWriteData } from '../utils/activity-edit.persistence';
-import { AppOriginalFileHydrationService } from './app.original-file-hydration.service';
+import { AppOriginalFileHydrationService, DownloadFileOptions } from './app.original-file-hydration.service';
 
 export interface GetEventsOnceOptions {
   preferCache?: boolean;
@@ -1005,8 +1005,11 @@ export class AppEventService implements OnDestroy {
 
   // ... (imports)
 
-  public async downloadFile(path: string): Promise<ArrayBuffer> {
-    return this.originalFileHydrationService.downloadFile(path);
+  public async downloadFile(path: string, options?: DownloadFileOptions): Promise<ArrayBuffer> {
+    if (options === undefined) {
+      return this.originalFileHydrationService.downloadFile(path);
+    }
+    return this.originalFileHydrationService.downloadFile(path, options);
   }
 
   private async decompressIfNeeded(buffer: ArrayBuffer, path: string): Promise<ArrayBuffer> {

@@ -1079,6 +1079,23 @@ describe('AppEventService', () => {
             expect(result).toBe(expectedBuffer);
         });
 
+        it('should forward downloadFile options to AppOriginalFileHydrationService', async () => {
+            const hydrationService = (service as any).originalFileHydrationService;
+            const expectedBuffer = new ArrayBuffer(4);
+            vi.spyOn(hydrationService, 'downloadFile').mockResolvedValue(expectedBuffer);
+
+            const result = await service.downloadFile(
+                'users/u1/events/e1/original.fit',
+                { metadataCacheTtlMs: 120000 },
+            );
+
+            expect(hydrationService.downloadFile).toHaveBeenCalledWith(
+                'users/u1/events/e1/original.fit',
+                { metadataCacheTtlMs: 120000 },
+            );
+            expect(result).toBe(expectedBuffer);
+        });
+
         it('should delegate attachStreamsToEventWithActivities to parsing and attach streams only by default', async () => {
             const hydrationService = (service as any).originalFileHydrationService;
             const oldAscentStat = { getValue: () => 280.8 };

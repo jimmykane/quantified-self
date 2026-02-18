@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Storage } from '@angular/fire/storage';
 import { AppOriginalFileHydrationService } from './app.original-file-hydration.service';
 import { AppFileService } from './app.file.service';
@@ -39,6 +39,8 @@ describe('AppOriginalFileHydrationService', () => {
   let loggerMock: any;
 
   beforeEach(() => {
+    vi.clearAllMocks();
+
     fileServiceMock = {
       decompressIfNeeded: vi.fn(async (buffer: ArrayBuffer) => buffer),
     };
@@ -70,6 +72,10 @@ describe('AppOriginalFileHydrationService', () => {
     });
 
     service = TestBed.inject(AppOriginalFileHydrationService);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('should parse single-file events successfully', async () => {
@@ -288,6 +294,100 @@ describe('AppOriginalFileHydrationService', () => {
     expect(storageMocks.getBytes).toHaveBeenCalled();
     expect(result).toBe(fallbackBuffer);
     expect(loggerMock.error).toHaveBeenCalled();
+  });
+
+  it('downloadFile should use default metadata TTL of 30s', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+
+    const path = 'users/u/events/e/original.fit';
+    const cachedBuffer = new ArrayBuffer(16);
+    cacheServiceMock.getFile.mockResolvedValue({ buffer: cachedBuffer, generation: 'gen-1' });
+
+    await service.downloadFile(path);
+    expect(storageMocks.getMetadata).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date('2025-01-01T00:00:20.000Z'));
+    await service.downloadFile(path);
+    expect(storageMocks.getMetadata).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date('2025-01-01T00:00:31.000Z'));
+    await service.downloadFile(path);
+    expect(storageMocks.getMetadata).toHaveBeenCalledTimes(2);
+  });
+
+  it('downloadFile should honor caller-provided metadata TTL override', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+
+    const path = 'users/u/events/e/original.fit';
+    const cachedBuffer = new ArrayBuffer(16);
+    cacheServiceMock.getFile.mockResolvedValue({ buffer: cachedBuffer, generation: 'gen-1' });
+
+    await service.downloadFile(path, { metadataCacheTtlMs: 120000 });
+    expect(storageMocks.getMetadata).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date('2025-01-01T00:00:31.000Z'));
+    await service.downloadFile(path, { metadataCacheTtlMs: 120000 });
+    expect(storageMocks.getMetadata).toHaveBeenCalledTimes(1);
+  });
+
+  it('downloadFile should disable reusable metadata caching when TTL is zero', async () => {
+    const path = 'users/u/events/e/original.fit';
+    const cachedBuffer = new ArrayBuffer(16);
+    cacheServiceMock.getFile.mockResolvedValue({ buffer: cachedBuffer, generation: 'gen-1' });
+
+    await service.downloadFile(path, { metadataCacheTtlMs: 0 });
+    await service.downloadFile(path, { metadataCacheTtlMs: 0 });
+
+    expect(storageMocks.getMetadata).toHaveBeenCalledTimes(2);
+  });
+
+  it('downloadFile should dedupe in-flight metadata calls for the same path under concurrency', async () => {
+    const path = 'users/u/events/e/original.fit';
+    const cachedBuffer = new ArrayBuffer(16);
+    cacheServiceMock.getFile.mockResolvedValue({ buffer: cachedBuffer, generation: 'gen-1' });
+
+    storageMocks.getMetadata.mockImplementation(async () => {
+      await Promise.resolve();
+      return { generation: 'gen-1' };
+    });
+
+    await Promise.all(Array.from({ length: 200 }, () => service.downloadFile(path)));
+
+    expect(storageMocks.getMetadata).toHaveBeenCalledTimes(1);
+    expect(storageMocks.getBytes).not.toHaveBeenCalled();
+  });
+
+  it('downloadFile should hold metadata call count during heavy same-path bursts within TTL and refresh after expiry', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2025-01-01T00:00:00.000Z'));
+
+    const path = 'users/u/events/e/original.fit';
+    const cachedBuffer = new ArrayBuffer(16);
+    cacheServiceMock.getFile.mockResolvedValue({ buffer: cachedBuffer, generation: 'gen-1' });
+
+    for (let round = 0; round < 15; round += 1) {
+      await Promise.all(Array.from({ length: 100 }, () => service.downloadFile(path)));
+    }
+    expect(storageMocks.getMetadata).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date('2025-01-01T00:00:31.000Z'));
+    await Promise.all(Array.from({ length: 100 }, () => service.downloadFile(path)));
+    expect(storageMocks.getMetadata).toHaveBeenCalledTimes(2);
+  });
+
+  it('downloadFile should dedupe metadata lookups independently per path under mixed-path stress', async () => {
+    const cachedBuffer = new ArrayBuffer(16);
+    cacheServiceMock.getFile.mockResolvedValue({ buffer: cachedBuffer, generation: 'gen-1' });
+
+    const paths = Array.from({ length: 50 }, (_, index) => `users/u/events/e/original-${index}.fit`);
+    const requests = paths.flatMap((path) => Array.from({ length: 20 }, () => service.downloadFile(path)));
+
+    await Promise.all(requests);
+
+    expect(storageMocks.getMetadata).toHaveBeenCalledTimes(50);
+    expect(storageMocks.getBytes).not.toHaveBeenCalled();
   });
 
   it('should parse FIT files and apply enrichment', async () => {

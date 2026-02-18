@@ -37,23 +37,32 @@ export interface ParseResult {
   failedFiles: ParseFailure[];
 }
 
+export interface DownloadFileOptions {
+  metadataCacheTtlMs?: number;
+}
+
 @Injectable({
   providedIn: 'root'
 })
 export class AppOriginalFileHydrationService {
+  private static readonly DEFAULT_METADATA_CACHE_TTL_MS = 30000;
+
   private storage = inject(Storage);
   private injector = inject(Injector);
   private fileService = inject(AppFileService);
   private logger = inject(LoggerService);
   private appEventUtilities = inject(AppEventUtilities);
   private cacheService = inject(AppCacheService);
+  private metadataGenerationCache = new Map<string, { generation: string; expiresAt: number }>();
+  private inFlightMetadataByPath = new Map<string, Promise<string>>();
+  private inFlightMetadataTtlByPath = new Map<string, number>();
 
-  public async downloadFile(path: string): Promise<ArrayBuffer> {
+  public async downloadFile(path: string, options?: DownloadFileOptions): Promise<ArrayBuffer> {
     const fileRef = runInInjectionContext(this.injector, () => ref(this.storage, path));
+    const metadataCacheTtlMs = this.getMetadataCacheTtlMs(options);
 
     try {
-      const metadata = await runInInjectionContext(this.injector, () => getMetadata(fileRef));
-      const generation = metadata.generation;
+      const generation = await this.getGeneration(path, fileRef, metadataCacheTtlMs);
       const cached = await this.cacheService.getFile(path);
 
       if (cached && cached.generation === generation) {
@@ -69,6 +78,75 @@ export class AppOriginalFileHydrationService {
       this.logger.error(`[AppOriginalFileHydrationService] Error downloading/caching file ${path}`, e);
       const buffer = await runInInjectionContext(this.injector, () => getBytes(fileRef));
       return this.fileService.decompressIfNeeded(buffer, path);
+    }
+  }
+
+  private getMetadataCacheTtlMs(options?: DownloadFileOptions): number {
+    const metadataCacheTtlMs = options?.metadataCacheTtlMs;
+    if (metadataCacheTtlMs === undefined || metadataCacheTtlMs === null || !Number.isFinite(metadataCacheTtlMs)) {
+      return AppOriginalFileHydrationService.DEFAULT_METADATA_CACHE_TTL_MS;
+    }
+
+    if (metadataCacheTtlMs <= 0) {
+      return 0;
+    }
+
+    return metadataCacheTtlMs;
+  }
+
+  private pruneExpiredMetadataCache(now: number): void {
+    for (const [path, value] of this.metadataGenerationCache) {
+      if (value.expiresAt <= now) {
+        this.metadataGenerationCache.delete(path);
+      }
+    }
+  }
+
+  private async getGeneration(path: string, fileRef: ReturnType<typeof ref>, metadataCacheTtlMs: number): Promise<string> {
+    const now = Date.now();
+    if (metadataCacheTtlMs > 0) {
+      this.pruneExpiredMetadataCache(now);
+      const cachedMetadata = this.metadataGenerationCache.get(path);
+      if (cachedMetadata && cachedMetadata.expiresAt > now) {
+        return cachedMetadata.generation;
+      }
+    }
+
+    const existingInFlight = this.inFlightMetadataByPath.get(path);
+    if (existingInFlight) {
+      const existingTtl = this.inFlightMetadataTtlByPath.get(path) ?? 0;
+      if (metadataCacheTtlMs > existingTtl) {
+        this.inFlightMetadataTtlByPath.set(path, metadataCacheTtlMs);
+      }
+      return existingInFlight;
+    }
+
+    const metadataPromise = (async (): Promise<string> => {
+      const metadata = await runInInjectionContext(this.injector, () => getMetadata(fileRef));
+      const generation = metadata.generation;
+      const effectiveTtlMs = this.inFlightMetadataTtlByPath.get(path) ?? metadataCacheTtlMs;
+
+      if (effectiveTtlMs > 0) {
+        this.metadataGenerationCache.set(path, {
+          generation,
+          expiresAt: Date.now() + effectiveTtlMs,
+        });
+      } else {
+        this.metadataGenerationCache.delete(path);
+      }
+
+      return generation;
+    })();
+
+    this.inFlightMetadataByPath.set(path, metadataPromise);
+    this.inFlightMetadataTtlByPath.set(path, metadataCacheTtlMs);
+    try {
+      return await metadataPromise;
+    } finally {
+      if (this.inFlightMetadataByPath.get(path) === metadataPromise) {
+        this.inFlightMetadataByPath.delete(path);
+      }
+      this.inFlightMetadataTtlByPath.delete(path);
     }
   }
 
