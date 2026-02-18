@@ -14,7 +14,7 @@ import { LoggerService } from '../logger.service';
 })
 export class AppEventColorService {
 
-  private colorCache = new Map<string, string>();
+  private colorCache = new WeakMap<ActivityInterface[], Map<ActivityInterface, string>>();
 
   constructor(private amChartsService: AmChartsService, private logger: LoggerService) { }
 
@@ -32,7 +32,7 @@ export class AppEventColorService {
    * Clears the color cache. Should be called when activities change context (e.g. new event load)
    */
   public clearCache() {
-    this.colorCache.clear();
+    this.colorCache = new WeakMap<ActivityInterface[], Map<ActivityInterface, string>>();
   }
 
   public getColorByNumber(number: number): string {
@@ -47,22 +47,26 @@ export class AppEventColorService {
     const activityID = activity.getID();
     const creatorName = activity.creator.name || 'Unknown';
 
-    const cacheKey = `${activities.length}-${activityID}`;
-    if (this.colorCache.has(cacheKey)) {
-      return this.colorCache.get(cacheKey)!;
+    let eventColorCache = this.colorCache.get(activities);
+    if (!eventColorCache) {
+      eventColorCache = new Map<ActivityInterface, string>();
+      this.colorCache.set(activities, eventColorCache);
+    }
+    if (eventColorCache.has(activity)) {
+      return eventColorCache.get(activity)!;
     }
 
     // Get the index of the requested activity among all activities
-    // If ID is missing, fallback to reference matching or index-in-array if possible
-    let activityIndex = activities.findIndex((eventActivity) => {
-      const id = eventActivity.getID();
-      return activityID && id ? activityID === id : activity === eventActivity;
-    });
+    // Prefer reference matching first to avoid collisions with duplicate IDs.
+    let activityIndex = activities.indexOf(activity);
+    if (activityIndex === -1 && activityID) {
+      activityIndex = activities.findIndex((eventActivity) => eventActivity.getID() === activityID);
+    }
 
     // If still not found, return a default color based on a safe fallback
     if (activityIndex === -1) {
       this.logger.warn('[AppEventColorService] Activity not found in provided array, using default offset');
-      activityIndex = 0;
+      activityIndex = activities.length + this.getColorSeedFromText(`${creatorName}-${activityID || 'no-id'}`);
     }
 
     const deviceColors = AppDeviceColors as any;
@@ -70,17 +74,17 @@ export class AppEventColorService {
     if (!deviceColors[creatorName]) {
       const color = this.getColorByNumber(activityIndex + 5 /* + 10 = pretty */);
 
-      this.colorCache.set(cacheKey, color); // Cache the color
+      eventColorCache.set(activity, color);
       return color;
     }
 
     // Find the activities that have the same creator
     const sameCreatorActivities = activities.filter(eventActivity => eventActivity.creator.name === creatorName);
     // Get the index on the same creator activities
-    const sameCreatorActivitiesActivityIndex = sameCreatorActivities.findIndex((eventActivity) => {
-      const id = eventActivity.getID();
-      return activityID && id ? activityID === id : activity === eventActivity;
-    });
+    let sameCreatorActivitiesActivityIndex = sameCreatorActivities.indexOf(activity);
+    if (sameCreatorActivitiesActivityIndex === -1 && activityID) {
+      sameCreatorActivitiesActivityIndex = sameCreatorActivities.findIndex((eventActivity) => eventActivity.getID() === activityID);
+    }
 
 
 
@@ -88,15 +92,24 @@ export class AppEventColorService {
     if (sameCreatorActivitiesActivityIndex === 0) {
       const color = deviceColors[creatorName];
 
-      this.colorCache.set(cacheKey, color);
+      eventColorCache.set(activity, color);
       return color;
     }
 
     // Else it's not the first one, then return the global activity index color
     const color = this.getColorByNumber(activityIndex);
 
-    this.colorCache.set(cacheKey, color);
+    eventColorCache.set(activity, color);
     return color;
+  }
+
+  private getColorSeedFromText(text: string): number {
+    let hash = 0;
+    for (let index = 0; index < text.length; index += 1) {
+      hash = (hash << 5) - hash + text.charCodeAt(index);
+      hash |= 0;
+    }
+    return Math.abs(hash) + 1;
   }
 
   getColorForActivityTypeByActivityTypeGroup(activityType: ActivityTypes): string {
