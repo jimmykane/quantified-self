@@ -486,8 +486,6 @@ export class TracksComponent implements OnInit, OnDestroy {
               return;
             }
 
-            const chunkCoordinates: number[][] = [];
-
             await Promise.all(eventsChunk.map(async (event: any) => {
               this.logger.log(`[TracksComponent] Fetching activities for event: ${event.getID()}, promiseTime: ${promiseTime}`);
               event.addActivities(await this.eventService.getActivities(user, event.getID()).pipe(take(1)).toPromise());
@@ -548,7 +546,6 @@ export class TracksComponent implements OnInit, OnDestroy {
                     );
 
                   if (coordinates.length > 1) {
-                    this.tracksMapManager.addTrackFromActivity(activity, coordinates);
                     const activityId = activity?.getID?.();
                     if (eventId && activityId) {
                       this.activitiesByStartPointKey.set(this.buildStartPointActivityKey(eventId, String(activityId)), activity);
@@ -562,10 +559,10 @@ export class TracksComponent implements OnInit, OnDestroy {
                     if (startPoint) {
                       trackStartPoints.push(startPoint);
                     }
+                    this.tracksMapManager.addTrackFromActivity(activity, coordinates);
                     addedTrackCount++;
                     hasVisibleTrackForEvent = true;
                     coordinates.forEach((coordinate: number[]) => {
-                      chunkCoordinates.push(coordinate);
                       allCoordinates.push(coordinate);
                       eventCoordinates.push(coordinate);
                     });
@@ -583,22 +580,20 @@ export class TracksComponent implements OnInit, OnDestroy {
               count++;
               this.updateTotalProgress(Math.ceil((count / events.length) * 100));
             }));
+          }
 
-            if (count < events.length && chunkCoordinates.length > 0) {
-              this.fitBoundsToTracks(chunkCoordinates);
-            }
+          if (addedTrackCount === 0) {
+            this.tracksMapManager.clearAllTracks();
+          } else if (trackStartPoints.length > 0) {
+            this.tracksMapManager.setActivityStartPoints(trackStartPoints);
+            await this.waitForStartPointLayerReady();
+          } else {
+            this.tracksMapManager.clearActivityStartPoints();
           }
 
           if (allCoordinates.length > 0) {
+            await this.waitForMapRenderTick();
             this.fitBoundsToTracks(allCoordinates);
-          }
-          if (addedTrackCount === 0) {
-            this.tracksMapManager.clearAllTracks();
-          }
-          if (trackStartPoints.length > 0) {
-            this.tracksMapManager.setActivityStartPoints(trackStartPoints);
-          } else {
-            this.tracksMapManager.clearActivityStartPoints();
           }
           if (jumpHeatPoints.length > 0) {
             this.hasDetectedJumps.set(true);
@@ -1118,6 +1113,71 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
 
     return window.innerWidth >= 641;
+  }
+
+  private waitForMapRenderTick(): Promise<void> {
+    const map = this.tracksMapManager.getMap();
+    if (!map?.once) {
+      return Promise.resolve();
+    }
+
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+
+      try {
+        map.once('render', done);
+      } catch {
+        done();
+        return;
+      }
+
+      setTimeout(done, 40);
+    });
+  }
+
+  private waitForStartPointLayerReady(timeoutMs: number = 240): Promise<void> {
+    const map = this.tracksMapManager.getMap();
+    const layerId = 'track-start-layer';
+    if (!map?.getLayer) {
+      return Promise.resolve();
+    }
+    if (map.getLayer(layerId)) {
+      return this.waitForMapRenderTick();
+    }
+
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const cleanup = () => {
+        if (!map?.off) return;
+        map.off('styledata', checkReady);
+        map.off('render', checkReady);
+        map.off('idle', checkReady);
+      };
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve();
+      };
+      const checkReady = () => {
+        if (map.getLayer?.(layerId)) {
+          done();
+        }
+      };
+
+      if (map?.on) {
+        map.on('styledata', checkReady);
+        map.on('render', checkReady);
+        map.on('idle', checkReady);
+      }
+      checkReady();
+      setTimeout(done, timeoutMs);
+    });
   }
 }
 

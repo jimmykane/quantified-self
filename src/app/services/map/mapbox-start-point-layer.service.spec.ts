@@ -148,5 +148,6 @@ describe('MapboxStartPointLayerService', () => {
       expect.arrayContaining(['coalesce'])
     );
     expect(mockMap.setPaintProperty).toHaveBeenCalledWith('track-start-layer', 'circle-stroke-color', '#000000');
+    expect(mockMap.moveLayer).toHaveBeenCalledWith('track-start-layer');
   });
 });

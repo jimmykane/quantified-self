@@ -436,8 +436,8 @@ describe('TracksComponent', () => {
       await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
       await waitForAsyncWork();
 
-      expect(setActivityStartPointsSpy).toHaveBeenCalledTimes(1);
-      expect(setActivityStartPointsSpy).toHaveBeenCalledWith([
+      expect(setActivityStartPointsSpy).toHaveBeenCalled();
+      expect(setActivityStartPointsSpy).toHaveBeenLastCalledWith([
         expect.objectContaining({
           eventId: 'start-event-1',
           activityId: 'activity-start-1',

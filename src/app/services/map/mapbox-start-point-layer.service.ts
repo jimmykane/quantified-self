@@ -90,8 +90,8 @@ export class MapboxStartPointLayerService {
       source.setData(sourceData);
     }
 
-    const visibility = config.visibility || 'visible';
-    const minzoom = config.minzoom ?? 10;
+    const visibility = config.visibility ?? 'visible';
+    const minzoom = this.normalizeMinZoom(config.minzoom);
 
     const markerLayer = {
       id: config.layerId,
@@ -241,8 +241,13 @@ export class MapboxStartPointLayerService {
       return;
     }
 
-    if (beforeLayerId && typeof map.moveLayer === 'function') {
-      map.moveLayer(layer.id, beforeLayerId);
+    if (typeof map.moveLayer === 'function') {
+      if (beforeLayerId) {
+        map.moveLayer(layer.id, beforeLayerId);
+      } else {
+        // Keep start markers on top when no explicit insertion target is provided.
+        map.moveLayer(layer.id);
+      }
     }
     if (typeof map.setLayoutProperty === 'function') {
       map.setLayoutProperty(layer.id, 'visibility', layer.layout?.visibility || 'visible');
@@ -297,5 +302,14 @@ export class MapboxStartPointLayerService {
       this.pendingRenderKeysByMap.set(map, keySet);
     }
     return keySet;
+  }
+
+  private normalizeMinZoom(minzoom: number | undefined): number {
+    if (typeof minzoom !== 'number' || !Number.isFinite(minzoom)) {
+      return 10;
+    }
+    if (minzoom < 0) return 0;
+    if (minzoom > 24) return 24;
+    return minzoom;
   }
 }
