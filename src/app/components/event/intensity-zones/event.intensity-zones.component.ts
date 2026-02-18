@@ -143,6 +143,9 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     const textColor = darkTheme ? '#ffffff' : '#2a2a2a';
     const gridLineColor = darkTheme ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)';
     const zoneBackgroundOpacity = darkTheme ? 0.18 : 0.12;
+    const tooltipExtraCssText = this.isMobile
+      ? 'max-width: min(80vw, 280px); white-space: normal; overflow-wrap: anywhere; word-break: break-word;'
+      : '';
     const rightInset = 0;
     const zoneAxisRichStyles = this.createZoneAxisRichStyles(data.zones);
     const zoneBulletRichStyles = this.createZoneBulletRichStyles(data.zones);
@@ -216,8 +219,9 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       tooltip: {
         trigger: 'item',
         triggerOn: this.isMobile ? 'click' : 'mousemove|click',
-        appendToBody: true,
-        confine: false,
+        appendToBody: !this.isMobile,
+        confine: this.isMobile,
+        extraCssText: tooltipExtraCssText,
         backgroundColor: darkTheme ? '#303030' : '#ffffff',
         borderColor: darkTheme ? '#6b6b6b' : '#d6d6d6',
         textStyle: {
