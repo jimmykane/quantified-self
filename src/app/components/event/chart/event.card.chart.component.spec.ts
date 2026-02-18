@@ -15,7 +15,7 @@ import { LoggerService } from '../../../services/logger.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ChangeDetectorRef, CUSTOM_ELEMENTS_SCHEMA, NgZone, signal } from '@angular/core';
 import { of } from 'rxjs';
-import { ActivityTypes, DataAltitude, DataPowerAvg, DataSpeedAvgKilometersPerHour, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
+import { ActivityTypes, DataAltitude, DataPace, DataPowerAvg, DataSpeedAvgKilometersPerHour, LapTypes, XAxisTypes } from '@sports-alliance/sports-lib';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 
 describe('EventCardChartComponent', () => {
@@ -292,6 +292,41 @@ describe('EventCardChartComponent', () => {
             expect(series.dummyData.displayName).toBe('Average Power');
             expect(series.tooltipText).toContain('Average Power');
             expect(series.legendSettings.labelText).toContain('Average Power');
+        });
+    });
+
+    describe('pace axis outlier scaling', () => {
+        it('should refresh pace axis bounds when updating an existing pace series', () => {
+            const existingSeries: any = {
+                id: 's1',
+                dummyData: { stream: { type: DataPace.type } },
+                yAxis: {},
+                data: []
+            };
+            const activity = { getID: () => 'a1', creator: { name: 'Runner' } } as any;
+            const stream = { type: DataPace.type } as any;
+
+            component.event = {
+                getActivities: () => [activity],
+                isMultiSport: () => false,
+                getActivityTypesAsArray: () => [ActivityTypes.Running],
+            } as any;
+
+            (component as any).chart = {
+                isDisposed: () => false,
+                series: {
+                    values: [existingSeries],
+                    push: vi.fn((series: any) => series),
+                },
+            };
+
+            vi.spyOn(component as any, 'convertStreamDataToSeriesData').mockReturnValue([{ value: 300 }]);
+            vi.spyOn(component as any, 'getSeriesIDFromActivityAndStream').mockReturnValue('s1');
+            const refreshSpy = vi.spyOn(component as any, 'refreshPaceAxisRangeForSeries').mockImplementation(() => { });
+
+            (component as any).createOrUpdateChartSeries(activity, stream);
+
+            expect(refreshSpy).toHaveBeenCalledWith(existingSeries);
         });
     });
 
