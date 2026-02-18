@@ -108,6 +108,38 @@ describe('onboardingGuard', () => {
         expect((result as any).toString()).toContain('/onboarding');
     });
 
+    it('should redirect payment cancel route to onboarding if onboarding is incomplete', async () => {
+        const user = {
+            uid: '123',
+            stripeRole: null,
+            acceptedPrivacyPolicy: true,
+            acceptedDataPolicy: true,
+            acceptedTos: true,
+            hasSubscribedOnce: false,
+            onboardingCompleted: false
+        };
+
+        const result = await (runGuard(user, [{ path: 'payment' }, { path: 'cancel' }] as any) as any).toPromise();
+        expect(result).not.toBe(true);
+        expect(result).not.toBe(false);
+        expect((result as any).toString()).toContain('/onboarding');
+    });
+
+    it('should allow payment success route when onboarding is incomplete', async () => {
+        const user = {
+            uid: '123',
+            stripeRole: null,
+            acceptedPrivacyPolicy: true,
+            acceptedDataPolicy: true,
+            acceptedTos: true,
+            hasSubscribedOnce: false,
+            onboardingCompleted: false
+        };
+
+        const result = await (runGuard(user, [{ path: 'payment' }, { path: 'success' }] as any) as any).toPromise();
+        expect(result).toBe(true);
+    });
+
     it('should allow access if hasSubscribedOnce is true', async () => {
         const user = {
             uid: '123',

@@ -58,15 +58,15 @@ export const onboardingGuard: CanMatchFn = (route, segments) => {
             // If onboarding isn't completed and we aren't already going to onboarding or payment
             const path = segments.map(s => s.path).join('/');
             const isOnboarding = path.includes('onboarding');
-            const isPayment = path.includes('payment/');
+            const isPaymentSuccess = path.includes('payment/success');
             const isPricing = path.includes('pricing');
             const isSubscriptions = path.includes('subscriptions');
 
-            if (!onboardingCompleted && !isOnboarding && !isPayment && !isPricing && !isSubscriptions) {
+            if (!onboardingCompleted && !isOnboarding && !isPaymentSuccess && !isPricing && !isSubscriptions) {
                 logger.log(`[OnboardingGuard] Redirecting from /${path} to /onboarding because onboarding is NOT completed.`);
                 return router.createUrlTree(['/onboarding']);
             } else {
-                logger.log(`[OnboardingGuard] Allowing access to /${path}. (Completed: ${onboardingCompleted}, IsOnboarding: ${isOnboarding}, IsPayment: ${isPayment}, IsPricing: ${isPricing}, IsSubscriptions: ${isSubscriptions})`);
+                logger.log(`[OnboardingGuard] Allowing access to /${path}. (Completed: ${onboardingCompleted}, IsOnboarding: ${isOnboarding}, IsPaymentSuccess: ${isPaymentSuccess}, IsPricing: ${isPricing}, IsSubscriptions: ${isSubscriptions})`);
                 return true;
             }
         })
