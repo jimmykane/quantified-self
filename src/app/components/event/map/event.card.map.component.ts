@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  ElementRef,
   HostListener,
   Input,
   NgZone,
@@ -11,26 +12,50 @@ import {
   OnInit,
   SimpleChanges,
   ViewChild,
-  signal,
-  computed,
   effect,
+  signal,
   untracked,
 } from '@angular/core';
-import { GoogleMap, MapInfoWindow, MapAdvancedMarker } from '@angular/google-maps';
 import { throttleTime } from 'rxjs/operators';
-import { AppEventColorService } from '../../../services/color/app.event.color.service';
-import { EventInterface, ActivityInterface, LapInterface, User, LapTypes, GeoLibAdapter, DataLatitudeDegrees, DataLongitudeDegrees, DataJumpEvent, DataEvent, DynamicDataLoader, DataInterface } from '@sports-alliance/sports-lib';
-import { AppEventService } from '../../../services/app.event.service';
+import {
+  ActivityInterface,
+  DataEvent,
+  DataInterface,
+  DataJumpEvent,
+  DataLatitudeDegrees,
+  DataLongitudeDegrees,
+  DynamicDataLoader,
+  EventInterface,
+  GeoLibAdapter,
+  LapInterface,
+  LapTypes,
+  User
+} from '@sports-alliance/sports-lib';
 import { Subject, Subscription, asyncScheduler } from 'rxjs';
-import { AppUserService } from '../../../services/app.user.service';
+import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { AppUserUtilities } from '../../../utils/app.user.utilities';
 import { AppUserSettingsQueryService } from '../../../services/app.user-settings-query.service';
 import { AppActivityCursorService } from '../../../services/activity-cursor/app-activity-cursor.service';
 import { MapAbstractDirective } from '../../map/map-abstract.directive';
-import { environment } from '../../../../environments/environment';
 import { LoggerService } from '../../../services/logger.service';
-import { GoogleMapsLoaderService } from '../../../services/google-maps-loader.service';
 import { MarkerFactoryService } from '../../../services/map/marker-factory.service';
+import { MapboxLoaderService } from '../../../services/mapbox-loader.service';
+import { MapStyleService } from '../../../services/map-style.service';
+import { MapboxStyleSynchronizer } from '../../../services/map/mapbox-style-synchronizer';
+import { AppMapStyleName } from '../../../models/app-user.interface';
+import {
+  EventCardMapManager,
+  EventCursorRenderData,
+  EventTrackRenderData,
+} from './event-card-map.manager';
+
+interface MapViewSettingsState {
+  showLaps: boolean;
+  showArrows: boolean;
+  strokeWidth: number;
+  mapStyle: AppMapStyleName;
+  is3D: boolean;
+}
 
 @Component({
   selector: 'app-event-card-map',
@@ -41,19 +66,54 @@ import { MarkerFactoryService } from '../../../services/map/marker-factory.servi
 })
 export class EventCardMapComponent extends MapAbstractDirective implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   public static readonly JUMP_MARKER_SIZE_BUCKETS = [18, 22, 26, 30, 34] as const;
-  @ViewChild(GoogleMap) googleMap!: GoogleMap;
+
+  @ViewChild('mapDiv', { static: false }) mapDiv!: ElementRef<HTMLDivElement>;
   @Input() event!: EventInterface;
   @Input() targetUserID!: string;
   @Input() user!: User;
   @Input() selectedActivities!: ActivityInterface[];
-  public get showLaps() { return this.userSettingsQuery.mapSettings()?.showLaps ?? true; }
-  public set showLaps(value: boolean) { this.userSettingsQuery.updateMapSettings({ showLaps: value }); }
 
-  public get showArrows() { return this.userSettingsQuery.mapSettings()?.showArrows ?? true; }
-  public set showArrows(value: boolean) { this.userSettingsQuery.updateMapSettings({ showArrows: value }); }
+  private mapViewSettings = signal<MapViewSettingsState>({
+    showLaps: true,
+    showArrows: true,
+    strokeWidth: 2,
+    mapStyle: 'default',
+    is3D: false,
+  });
 
-  public get strokeWidth() { return this.userSettingsQuery.mapSettings()?.strokeWidth ?? 2; }
-  public set strokeWidth(value: number) { this.userSettingsQuery.updateMapSettings({ strokeWidth: value }); }
+  public get showLaps() { return this.mapViewSettings().showLaps; }
+  public set showLaps(value: boolean) {
+    this.mapViewSettings.update(settings => ({ ...settings, showLaps: value }));
+    this.userSettingsQuery.updateMapSettings({ showLaps: value });
+  }
+
+  public get showArrows() { return this.mapViewSettings().showArrows; }
+  public set showArrows(value: boolean) {
+    this.mapViewSettings.update(settings => ({ ...settings, showArrows: value }));
+    this.userSettingsQuery.updateMapSettings({ showArrows: value });
+  }
+
+  public get strokeWidth() { return this.mapViewSettings().strokeWidth; }
+  public set strokeWidth(value: number) {
+    this.mapViewSettings.update(settings => ({ ...settings, strokeWidth: value }));
+    this.userSettingsQuery.updateMapSettings({ strokeWidth: value });
+  }
+
+  public get mapStyle(): AppMapStyleName {
+    return this.mapViewSettings().mapStyle;
+  }
+  public set mapStyle(value: AppMapStyleName) {
+    this.mapViewSettings.update(settings => ({ ...settings, mapStyle: value }));
+    this.userSettingsQuery.updateMapSettings({ mapStyle: value });
+  }
+
+  public get is3D(): boolean {
+    return this.mapViewSettings().is3D;
+  }
+  public set is3D(value: boolean) {
+    this.mapViewSettings.update(settings => ({ ...settings, is3D: value }));
+    this.userSettingsQuery.updateMapSettings({ is3D: value });
+  }
 
   public get lapTypes(): LapTypes[] {
     const types = (this._lapTypes && this._lapTypes.length > 0)
@@ -66,97 +126,137 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
   private _lapTypes: LapTypes[] = [];
 
-  @Input() set mapType(type: google.maps.MapTypeId | string) {
-    if (type) {
-      this.mapTypeId.set(type as google.maps.MapTypeId);
-    }
-  }
-
   public activitiesMapData: MapData[] = [];
   public noMapData = false;
-  @ViewChild(MapInfoWindow) infoWindow!: MapInfoWindow;
-  public openedLapMarkerInfoWindow: LapInterface | undefined;
-  public openedActivityStartMarkerInfoWindow: ActivityInterface | undefined;
+
   public openedJumpMarkerInfoWindow: DataJumpEvent | undefined;
-
-  public mapTypeId = signal<google.maps.MapTypeId>('roadmap' as google.maps.MapTypeId);
-  public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
-  public mapCenter = signal<google.maps.LatLngLiteral>({ lat: 0, lng: 0 }, {
-    equal: (a, b) => a.lat === b.lat && a.lng === b.lng
-  });
-  public mapZoom = signal(12);
-
-  // Map options
-  public mapOptions = computed<google.maps.MapOptions>(() => ({
-    controlSize: 32,
-    disableDefaultUI: true,
-    backgroundColor: 'transparent',
-    gestureHandling: 'cooperative',
-    fullscreenControl: true,
-    scaleControl: true,
-    rotateControl: true,
-    zoomControl: true,
-    streetViewControl: true,
-    mapTypeControl: true,
-    mapTypeControlOptions: {
-      mapTypeIds: ['roadmap', 'hybrid', 'terrain']
-    },
-    mapId: environment.googleMapsMapId,
-    colorScheme: this.mapColorScheme(),
-    clickableIcons: false
-  }));
-
-  private activitiesCursorSubscription: Subscription = new Subscription();
-  private lineMouseMoveSubject: Subject<{ event: google.maps.MapMouseEvent, activityMapData: MapData }> = new Subject();
-  private lineMouseMoveSubscription: Subscription = new Subscription();
-  private nativeMap!: google.maps.Map;
-  private mapListener!: google.maps.MapsEventListener;
+  public jumpPopupScreenPosition = signal<{ x: number; y: number } | null>(null);
 
   public apiLoaded = signal(false);
+
+  private activitiesCursorSubscription: Subscription = new Subscription();
+  private lineMouseMoveSubject: Subject<{ latitudeDegrees: number; longitudeDegrees: number; activityMapData: MapData }> = new Subject();
+  private lineMouseMoveSubscription: Subscription = new Subscription();
+
   private processSequence = 0;
   private previousState: any = {};
   private pendingFitBoundsTimeout: ReturnType<typeof setTimeout> | null = null;
   private jumpHangTimeMin: number | null = null;
   private jumpHangTimeMax: number | null = null;
 
-  public mapInstance = signal<google.maps.Map | undefined>(undefined);
-  public isMapVisible = signal(true);
-  private lastAppliedColorScheme: string | undefined;
+  private mapReady = false;
+  private hasAppliedInitialBounds = false;
+  private mapInstance = signal<any | null>(null);
+  private mapStyleSynchronizer = signal<MapboxStyleSynchronizer | undefined>(undefined);
+  private mapMoveRepositionHandler: (() => void) | null = null;
+  private openedJumpCoordinates: { latitudeDegrees: number; longitudeDegrees: number } | null = null;
+
+  private mapManager: EventCardMapManager;
 
   constructor(
     private zone: NgZone,
     private changeDetectorRef: ChangeDetectorRef,
-    private eventService: AppEventService,
     private userSettingsQuery: AppUserSettingsQueryService,
     private activityCursorService: AppActivityCursorService,
     public eventColorService: AppEventColorService,
-    private mapsLoader: GoogleMapsLoaderService,
     private markerFactory: MarkerFactoryService,
-    protected logger: LoggerService) {
+    private mapboxLoader: MapboxLoaderService,
+    private mapStyleService: MapStyleService,
+    protected logger: LoggerService,
+  ) {
     super(changeDetectorRef, logger);
 
-    // Re-initialize map on theme change
+    this.mapManager = new EventCardMapManager(this.markerFactory, this.logger);
+
     effect(() => {
-      const colorScheme = this.mapColorScheme();
-      // Use untracked to avoid reacting to mapInstance changes
-      const map = untracked(() => this.mapInstance());
+      const map = this.mapInstance();
+      const synchronizer = this.mapStyleSynchronizer();
+      const mapStyle = this.mapStyle;
+      const theme = this.appTheme();
 
-      // Only re-initialize if the scheme actually changed AND we have an active map
-      if (map && this.lastAppliedColorScheme !== colorScheme) {
-        this.logger.info(`Theme changed to ${colorScheme} - Re-initializing map...`);
-
-        // Update the guard immediately to prevent loops
-        this.lastAppliedColorScheme = colorScheme;
-
-        this.isMapVisible.set(false);
-        this.changeDetectorRef.detectChanges();
-
-        this.isMapVisible.set(true);
-        this.changeDetectorRef.detectChanges();
-      } else if (!this.lastAppliedColorScheme) {
-        // Initial set
-        this.lastAppliedColorScheme = colorScheme;
+      if (!map || !synchronizer) {
+        return;
       }
+
+      const resolvedStyle = this.mapStyleService.resolve(mapStyle, theme);
+      this.logMapSettingsState('style-sync', {
+        mapStyle,
+        theme,
+        resolvedStyle,
+        is3D: this.is3D,
+      });
+      synchronizer.update(resolvedStyle);
+
+      // Keep map marker popups correctly positioned when the projection changes.
+      if (untracked(() => this.openedJumpMarkerInfoWindow)) {
+        this.updateJumpPopupPosition();
+      }
+    });
+
+    effect(() => {
+      const remoteSettings = this.userSettingsQuery.mapSettings();
+      const normalized = this.normalizeMapViewSettings(remoteSettings);
+      const previous = untracked(() => this.mapViewSettings());
+      const hasLayerSettingsDelta = previous.showLaps !== normalized.showLaps
+        || previous.showArrows !== normalized.showArrows
+        || previous.strokeWidth !== normalized.strokeWidth;
+      const hasTerrainDelta = previous.is3D !== normalized.is3D;
+
+      this.logMapSettingsState('settings-sync', {
+        remoteSettings,
+        previousLocalSettings: previous,
+        normalizedSettings: normalized,
+        hasLayerSettingsDelta,
+        hasTerrainDelta,
+        hasMapInstance: !!this.mapInstance(),
+        mapReady: this.mapReady,
+      });
+
+      this.mapViewSettings.set(normalized);
+
+      if (!this.mapInstance()) {
+        return;
+      }
+
+      untracked(() => {
+        if (hasLayerSettingsDelta && this.activitiesMapData.length) {
+          this.logMapSettingsState('settings-sync: re-render map layers', {
+            showLaps: normalized.showLaps,
+            showArrows: normalized.showArrows,
+            strokeWidth: normalized.strokeWidth,
+            activitiesCount: this.activitiesMapData.length,
+          });
+          this.mapActivities(++this.processSequence, false);
+        }
+        if (hasTerrainDelta) {
+          this.logMapSettingsState('settings-sync: apply terrain delta', {
+            is3D: normalized.is3D,
+          });
+          this.mapManager.toggleTerrain(normalized.is3D, false);
+        }
+      });
+    });
+
+    effect(() => {
+      const map = this.mapInstance();
+      const theme = this.appTheme();
+
+      if (!map || !this.activitiesMapData.length) {
+        return;
+      }
+
+      this.logMapSettingsState('theme-sync: refresh track colors', {
+        theme,
+        activitiesCount: this.activitiesMapData.length,
+      });
+
+      untracked(() => {
+        this.activitiesMapData = this.activitiesMapData.map((activityMapData) => ({
+          ...activityMapData,
+          strokeColor: this.resolveActivityStrokeColor(activityMapData.activity),
+        }));
+        this.renderMapData(false);
+      });
     });
   }
 
@@ -164,57 +264,58 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     if (!this.targetUserID || !this.event) {
       throw new Error('Component needs events and userID');
     }
-    if (this.user?.settings?.mapSettings?.mapType) {
-      this.mapTypeId.set(this.user.settings.mapSettings.mapType as unknown as google.maps.MapTypeId);
-    }
 
-    // Load 'maps' library
-    await this.mapsLoader.importLibrary('maps');
-    await this.mapsLoader.importLibrary('marker');
+    this.logMapSettingsState('ngOnInit', {
+      remoteSettings: this.userSettingsQuery.mapSettings(),
+      localSettings: this.mapViewSettings(),
+    });
 
-    this.apiLoaded.set(true);
-    this.changeDetectorRef.markForCheck();
-  }
-
-  ngAfterViewInit(): void {
-    // Subscribe to cursor changes from chart
     this.activitiesCursorSubscription.add(this.activityCursorService.cursors.pipe(
       throttleTime(1000, asyncScheduler, { leading: true, trailing: true })
     ).subscribe((cursors) => {
       cursors.filter(cursor => cursor.byChart === true).forEach(cursor => {
         const cursorActivityMapData = this.activitiesMapData.find(amd => (amd.activity.getID() || '') === cursor.activityID);
         if (cursorActivityMapData && cursorActivityMapData.positions.length > 0) {
-          // Use linear scan - more reliable than binary search for edge cases
           const position = cursorActivityMapData.positions.reduce((prev, curr) =>
             Math.abs(curr.time - cursor.time) < Math.abs(prev.time - cursor.time) ? curr : prev);
+
           if (position) {
             this.activitiesCursors.set(cursor.activityID, {
               latitudeDegrees: position.latitudeDegrees,
               longitudeDegrees: position.longitudeDegrees
             });
-            if (this.googleMap?.googleMap) {
-              this.googleMap.googleMap.panTo({
-                lat: position.latitudeDegrees,
-                lng: position.longitudeDegrees
+
+            const map = this.mapInstance();
+            if (map?.panTo) {
+              map.panTo([position.longitudeDegrees, position.latitudeDegrees], {
+                animate: true,
+                duration: 250,
+                essential: true
               });
             }
           }
         }
       });
+
+      this.pushCursorMarkersToMap();
       this.changeDetectorRef.detectChanges();
     }));
 
     this.lineMouseMoveSubscription.add(this.lineMouseMoveSubject.subscribe(value => {
-      this.lineMouseMove(value.event, value.activityMapData);
+      this.lineMouseMove(value.latitudeDegrees, value.longitudeDegrees, value.activityMapData);
     }));
   }
 
-  ngOnChanges(simpleChanges: SimpleChanges) {
+  async ngAfterViewInit(): Promise<void> {
+    await this.initializeMap();
+  }
+
+  ngOnChanges(_simpleChanges: SimpleChanges) {
     if (!this.event) return;
 
     const currentSelectedActivitiesIDs = (this.selectedActivities || []).map(a => a.getID()).sort().join(',');
     const currentEventID = this.event?.getID();
-    const mapSettings = this.userSettingsQuery.mapSettings();
+    const mapSettings = this.mapViewSettings();
 
     const currentState: any = {
       eventID: currentEventID,
@@ -222,6 +323,8 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       showLaps: mapSettings?.showLaps,
       showArrows: mapSettings?.showArrows,
       strokeWidth: mapSettings?.strokeWidth,
+      mapStyle: mapSettings?.mapStyle,
+      is3D: mapSettings?.is3D,
       lapTypes: JSON.stringify(this.lapTypes)
     };
 
@@ -235,132 +338,50 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     });
 
     if (Object.keys(changes).length > 0) {
-      const shouldFitBounds = !!changes.selectedActivitiesIDs;
+      const shouldFitBounds = !!changes.selectedActivitiesIDs || !!changes.eventID;
       this.previousState = { ...this.previousState, ...currentState };
-
-      if (this.nativeMap || !this.googleMap) { // If map is ready or not yet using google-map
-        this.mapActivities(++this.processSequence, shouldFitBounds);
-      }
+      this.mapActivities(++this.processSequence, shouldFitBounds);
     }
   }
 
-  onZoomChanged() {
-    if (this.googleMap) {
-      const newZoom = this.googleMap.getZoom();
-      if (newZoom !== undefined && newZoom !== this.mapZoom()) {
-        this.mapZoom.set(newZoom);
-      }
-    }
-  }
+  public activitiesCursors: Map<string, { latitudeDegrees: number, longitudeDegrees: number }> = new Map();
 
-  onCenterChanged() {
-    if (this.googleMap) {
-      const center = this.googleMap.getCenter();
-      if (center) {
-        const newCenter = { lat: center.lat(), lng: center.lng() };
-        const currentCenter = this.mapCenter();
-        if (newCenter.lat !== currentCenter.lat || newCenter.lng !== currentCenter.lng) {
-          this.mapCenter.set(newCenter);
-        }
-      }
-    }
+  public async onMapStyleChange(style: AppMapStyleName): Promise<void> {
+    this.mapStyle = style;
   }
 
   onShowLapsChange(value: boolean) {
-    this.showLaps = value; // Triggers setter -> updates service -> triggers ngOnChanges
+    this.showLaps = value;
+    this.mapActivities(++this.processSequence, false);
   }
 
   onShowArrowsChange(value: boolean) {
-    this.showArrows = value; // Triggers setter -> updates service -> triggers ngOnChanges
+    this.showArrows = value;
+    this.renderMapData(false);
   }
 
-  async onMapReady(map: google.maps.Map) {
-    this.logger.info('onMapReady called', map);
-    this.nativeMap = map;
-    this.mapInstance.set(map);
-    this.mapActivities(++this.processSequence);
-
-    // Store listener reference for cleanup if needed
-    this.nativeMap.addListener('click', (_e: google.maps.MapMouseEvent) => {
-      // Map click handling - no debug logging
+  onShow3DChange(value: boolean) {
+    this.logMapSettingsState('3d-toggle:user-action', {
+      value,
+      previousLocalSettings: this.mapViewSettings(),
+      remoteSettings: this.userSettingsQuery.mapSettings(),
+      hasMapInstance: !!this.mapInstance(),
+      mapReady: this.mapReady,
     });
-
-    // Add native listener for map type changes from Google controls
-    if (this.mapListener) {
-      this.mapListener.remove();
-    }
-    this.mapListener = this.nativeMap.addListener('maptypeid_changed', () => {
-      const newType = this.nativeMap.getMapTypeId();
-      // Only trigger change if the type is actually different from what's in user settings
-      // to avoid infinite loops between signal updates and native events.
-      if (this.user?.settings?.mapSettings?.mapType?.toString() !== newType?.toString()) {
-        this.changeMapType(newType as google.maps.MapTypeId);
-      }
+    this.is3D = value;
+    this.mapManager.toggleTerrain(value, true);
+    this.logMapSettingsState('3d-toggle:applied', {
+      value,
+      localSettings: this.mapViewSettings(),
+      remoteSettings: this.userSettingsQuery.mapSettings(),
     });
   }
 
-  openLapMarkerInfoWindow(lap: LapInterface) {
-    this.openedLapMarkerInfoWindow = lap;
-    this.openedActivityStartMarkerInfoWindow = void 0;
-    this.openedJumpMarkerInfoWindow = void 0;
+  onJumpPopupDismiss() {
+    this.closeJumpPopup();
   }
 
-  openActivityStartMarkerInfoWindow(activity: ActivityInterface) {
-    this.openedActivityStartMarkerInfoWindow = activity;
-    this.openedLapMarkerInfoWindow = void 0;
-    this.openedJumpMarkerInfoWindow = void 0;
-  }
-
-  openJumpMarkerInfoWindow(jump: DataJumpEvent, marker: MapAdvancedMarker) {
-    this.zone.run(() => {
-      this.openedJumpMarkerInfoWindow = jump;
-      this.openedLapMarkerInfoWindow = void 0;
-      this.openedActivityStartMarkerInfoWindow = void 0;
-      this.infoWindow.open(marker);
-      this.changeDetectorRef.markForCheck();
-    });
-  }
-
-  onMapClick(_event: google.maps.MapMouseEvent | google.maps.IconMouseEvent) {
-    // Map click handler - available for future use
-  }
-
-  getMarkerOptions(_activity: ActivityInterface, color: string): google.maps.marker.AdvancedMarkerElementOptions {
-    return {
-      content: this.markerFactory.createPinMarker(color),
-      gmpClickable: true
-    };
-  }
-
-  getHomeMarkerOptions(_activity: ActivityInterface, color: string): google.maps.marker.AdvancedMarkerElementOptions {
-    return {
-      content: this.markerFactory.createHomeMarker(color),
-      title: 'Start',
-      zIndex: 100
-    };
-  }
-
-  getFlagMarkerOptions(_activity: ActivityInterface, color: string): google.maps.marker.AdvancedMarkerElementOptions {
-    return {
-      content: this.markerFactory.createFlagMarker(color)
-    };
-  }
-
-  getCursorMarkerOptions(_activity: ActivityInterface, color: string): google.maps.marker.AdvancedMarkerElementOptions {
-    return {
-      content: this.markerFactory.createCursorMarker(color),
-      zIndex: 200
-    };
-  }
-
-  getLapMarkerOptions(_activity: ActivityInterface, color: string, lapIndex: number): google.maps.marker.AdvancedMarkerElementOptions {
-    return {
-      content: this.markerFactory.createLapMarker(color, lapIndex),
-      zIndex: lapIndex + 1
-    };
-  }
-
-  getJumpMarkerOptions(jump: DataJumpEvent, color: string): google.maps.marker.AdvancedMarkerElementOptions {
+  getJumpMarkerOptions(jump: DataJumpEvent, color: string): { content: HTMLElement; title: string } {
     const data = jump.jumpData;
     const hangTimeDisplay = data.hang_time ? data.hang_time.getDisplayValue(false, true, true) : '-';
     const distanceDisplay = this.getJumpStatDisplay(data.distance);
@@ -377,98 +398,107 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       `Rotations: ${rotationsDisplay}`
     ].join('\n');
 
-    const options = {
+    return {
       content: this.markerFactory.createJumpMarker(color, this.getJumpMarkerSize(jump)),
       title: `Jump Stats:\n${stats}`,
-      zIndex: 150,
-      gmpClickable: true
     };
-    return options;
-  }
-
-  getPolylineOptions(activityMapData: MapData): google.maps.PolylineOptions {
-    const options: google.maps.PolylineOptions = {
-      strokeColor: activityMapData.strokeColor,
-      strokeWeight: this.strokeWidth || 3,
-      strokeOpacity: 1,
-      clickable: true,
-      icons: this.showArrows ? [{
-        icon: {
-          path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-          scale: 2,
-          strokeColor: '#FFF',
-          strokeWeight: 1,
-          fillColor: activityMapData.strokeColor,
-          fillOpacity: 1
-        },
-        offset: '50%',
-        repeat: '100px'
-      }] : []
-    };
-
-    return options;
-  }
-
-  getPolylinePath(activityMapData: MapData): google.maps.LatLngLiteral[] {
-    return activityMapData.positions.map(pos => ({
-      lat: pos.latitudeDegrees,
-      lng: pos.longitudeDegrees
-    }));
-  }
-
-  onPolylineClick(event: google.maps.MapMouseEvent, activityMapData: MapData) {
-    this.lineMouseMoveSubject.next({ event, activityMapData });
-  }
-
-  private async lineMouseMove(event: google.maps.MapMouseEvent, activityMapData: MapData) {
-    if (!event.latLng) return;
-
-    this.activitiesCursors.set(activityMapData.activity.getID() || '', {
-      latitudeDegrees: event.latLng.lat(),
-      longitudeDegrees: event.latLng.lng()
-    });
-    this.changeDetectorRef.detectChanges();
-
-    const nearest = <{ latitude: number, longitude: number, time: number }>(new GeoLibAdapter()).findNearest({
-      latitude: event.latLng.lat(),
-      longitude: event.latLng.lng()
-    }, activityMapData.positions.map(a => ({
-      latitude: a.latitudeDegrees,
-      longitude: a.longitudeDegrees,
-      time: a.time
-    })));
-
-    if (!nearest) return;
-
-    this.activityCursorService.setCursor({
-      activityID: activityMapData.activity.getID() || '',
-      time: nearest.time,
-      byMap: true,
-    });
-  }
-
-  getMapValuesAsArray<K, V>(_map: Map<K, V>): V[] {
-    return Array.from(_map.values());
-  }
-
-  async changeMapType(mapType: google.maps.MapTypeId) {
-    if (!this.user || this.user.settings?.mapSettings?.mapType?.toString() === mapType?.toString()) return;
-    this.mapTypeId.set(mapType);
-
-    // Safe persist via service
-    this.userSettingsQuery.updateMapSettings({ mapType: mapType as any });
   }
 
   @HostListener('window:resize')
   onResize() {
     this.fitBoundsToActivities();
+    this.updateJumpPopupPosition();
   }
 
   ngOnDestroy(): void {
     this.unSubscribeFromAll();
+
     if (this.pendingFitBoundsTimeout) {
       clearTimeout(this.pendingFitBoundsTimeout);
       this.pendingFitBoundsTimeout = null;
+    }
+
+    this.unbindMapPopupListeners();
+    this.mapManager.clearAll();
+
+    const map = this.mapInstance();
+    if (map?.remove) {
+      map.remove();
+    }
+  }
+
+  private async initializeMap(): Promise<void> {
+    if (!this.mapDiv?.nativeElement || this.mapInstance()) {
+      return;
+    }
+
+    try {
+      const resolvedStyle = this.mapStyleService.resolve(this.mapStyle, this.appTheme());
+      const initialCamera = this.resolveInitialCamera();
+      const mapOptions: any = {
+        center: initialCamera.center,
+        zoom: initialCamera.zoom,
+        style: resolvedStyle.styleUrl,
+      };
+
+      this.logMapSettingsState('initialize-map:start', {
+        remoteSettings: this.userSettingsQuery.mapSettings(),
+        localSettings: this.mapViewSettings(),
+        initialCamera,
+        resolvedStyle,
+      });
+
+      if (this.mapStyleService.isStandard(resolvedStyle.styleUrl) && resolvedStyle.preset) {
+        mapOptions.config = { basemap: { lightPreset: resolvedStyle.preset } };
+      }
+
+      const map = await this.mapboxLoader.createMap(this.mapDiv.nativeElement, mapOptions);
+      const mapboxgl = await this.mapboxLoader.loadMapbox();
+
+      this.mapManager.setMap(map, mapboxgl);
+      this.mapManager.setTrackClickHandler((activityId, latitudeDegrees, longitudeDegrees) => {
+        this.zone.run(() => this.onTrackLineClick(activityId, latitudeDegrees, longitudeDegrees));
+      });
+      this.mapManager.setJumpClickHandler((jump, latitudeDegrees, longitudeDegrees) => {
+        this.zone.run(() => this.openJumpMarkerInfoWindow(jump, latitudeDegrees, longitudeDegrees));
+      });
+
+      map.addControl(new mapboxgl.FullscreenControl(), 'bottom-right');
+      map.addControl(new mapboxgl.NavigationControl({
+        visualizePitch: true,
+        showCompass: true,
+        showZoom: true
+      }), 'bottom-right');
+
+      map.on('load', () => {
+        this.zone.run(() => {
+          this.logMapSettingsState('map-load', {
+            remoteSettings: this.userSettingsQuery.mapSettings(),
+            localSettings: this.mapViewSettings(),
+            applyingTerrain: this.is3D,
+          });
+          this.mapReady = true;
+          this.renderMapData(true);
+          this.mapManager.toggleTerrain(this.is3D, false);
+          this.apiLoaded.set(true);
+          this.changeDetectorRef.markForCheck();
+        });
+      });
+
+      map.on('click', () => {
+        this.zone.run(() => this.closeJumpPopup());
+      });
+
+      this.mapInstance.set(map);
+      this.mapStyleSynchronizer.set(this.mapStyleService.createSynchronizer(map));
+      this.bindMapPopupListeners(map);
+
+      this.mapActivities(++this.processSequence, true);
+    } catch (error) {
+      this.logger.error('Failed to initialize EventCard Mapbox map.', error);
+      this.noMapData = true;
+      this.apiLoaded.set(true);
+      this.changeDetectorRef.markForCheck();
     }
   }
 
@@ -476,6 +506,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     if (this.processSequence !== sequence) {
       return;
     }
+
     this.loading();
     this.noMapData = false;
     this.activitiesMapData = [];
@@ -484,6 +515,10 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
     if (!this.selectedActivities?.length) {
       this.noMapData = true;
+      this.mapManager.renderActivities([], {
+        showArrows: this.showArrows,
+        strokeWidth: this.strokeWidth || 3,
+      });
       this.loaded();
       return;
     }
@@ -507,15 +542,15 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         }, []);
 
       this.activitiesMapData.push({
-        activity: activity,
-        positions: positions,
-        strokeColor: this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+        activity,
+        positions,
+        strokeColor: this.resolveActivityStrokeColor(activity),
         laps: activity.getLaps().reduce<any[]>((laps, lap) => {
           const lapPositionData = activity.getSquashedPositionData(lap.startDate, lap.endDate);
           if (!lapPositionData.length || !this.showLaps) return laps;
           if (this.lapTypes.indexOf(lap.type) === -1) return laps;
           laps.push({
-            lap: lap,
+            lap,
             lapPosition: {
               latitudeDegrees: lapPositionData[lapPositionData.length - 1]?.latitudeDegrees || 0,
               longitudeDegrees: lapPositionData[lapPositionData.length - 1]?.longitudeDegrees || 0
@@ -526,7 +561,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         jumps: (activity.getAllEvents() || []).reduce<any[]>((jumps, event: DataEvent) => {
           if (event instanceof DataJumpEvent && event.jumpData.position_lat && event.jumpData.position_long) {
             jumps.push({
-              event: event,
+              event,
               position: {
                 latitudeDegrees: event.jumpData.position_lat.getValue(),
                 longitudeDegrees: event.jumpData.position_long.getValue()
@@ -538,36 +573,200 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       });
     });
 
-    // Treat "activities without any usable position samples" as no map data.
     const hasRenderableMapData = this.activitiesMapData.some((data) => data.positions.length > 0);
     if (!hasRenderableMapData) {
       this.noMapData = true;
+      this.mapManager.renderActivities([], {
+        showArrows: this.showArrows,
+        strokeWidth: this.strokeWidth || 3,
+      });
       this.loaded();
       return;
     }
 
     this.updateJumpHangTimeRange();
+    this.renderMapData(shouldFitBounds);
     this.loaded();
+  }
+
+  private renderMapData(shouldFitBounds: boolean) {
+    if (!this.mapReady || !this.mapInstance()) {
+      return;
+    }
+
+    const tracks: EventTrackRenderData[] = this.activitiesMapData.map((activityMapData) => ({
+      activityId: activityMapData.activity.getID() || '',
+      strokeColor: activityMapData.strokeColor,
+      positions: activityMapData.positions,
+      laps: activityMapData.laps.map((lap, index) => ({
+        lapIndex: index,
+        latitudeDegrees: lap.lapPosition.latitudeDegrees,
+        longitudeDegrees: lap.lapPosition.longitudeDegrees,
+      })),
+      jumps: activityMapData.jumps.map((jump) => ({
+        event: jump.event,
+        latitudeDegrees: jump.position.latitudeDegrees,
+        longitudeDegrees: jump.position.longitudeDegrees,
+        markerSize: this.getJumpMarkerSize(jump.event),
+      }))
+    }));
+
+    this.mapManager.renderActivities(tracks, {
+      showArrows: this.showArrows,
+      strokeWidth: this.strokeWidth || 3,
+    });
+
+    this.pushCursorMarkersToMap();
 
     if (shouldFitBounds) {
-      // Set initial center if we have data (only on initial load or activity changes)
-      if (this.activitiesMapData.length > 0 && this.activitiesMapData[0].positions.length > 0) {
-        this.mapCenter.set({
-          lat: this.activitiesMapData[0].positions[0].latitudeDegrees,
-          lng: this.activitiesMapData[0].positions[0].longitudeDegrees
-        });
-      }
-
-      // Fit bounds after a short delay to ensure map is ready and container has size
-      // Cancel any pending fitBounds to prevent duplicate calls
       if (this.pendingFitBoundsTimeout) {
         clearTimeout(this.pendingFitBoundsTimeout);
       }
       this.pendingFitBoundsTimeout = setTimeout(() => {
         this.pendingFitBoundsTimeout = null;
         this.fitBoundsToActivities();
-      }, 500);
+      }, 250);
     }
+  }
+
+  private fitBoundsToActivities() {
+    if (!this.mapReady || !this.activitiesMapData.length) {
+      return;
+    }
+
+    const animate = this.hasAppliedInitialBounds;
+    const didFit = this.mapManager.fitBoundsToTracks(animate);
+    if (didFit) {
+      this.hasAppliedInitialBounds = true;
+    }
+  }
+
+  private onTrackLineClick(activityId: string, latitudeDegrees: number, longitudeDegrees: number): void {
+    const activityMapData = this.activitiesMapData.find(data => (data.activity.getID() || '') === activityId);
+    if (!activityMapData) {
+      return;
+    }
+
+    this.lineMouseMoveSubject.next({
+      latitudeDegrees,
+      longitudeDegrees,
+      activityMapData,
+    });
+  }
+
+  private lineMouseMove(latitudeDegrees: number, longitudeDegrees: number, activityMapData: MapData) {
+    const activityId = activityMapData.activity.getID() || '';
+
+    this.activitiesCursors.set(activityId, {
+      latitudeDegrees,
+      longitudeDegrees,
+    });
+
+    const nearest = <{ latitude: number, longitude: number, time: number }>(new GeoLibAdapter()).findNearest({
+      latitude: latitudeDegrees,
+      longitude: longitudeDegrees
+    }, activityMapData.positions.map(a => ({
+      latitude: a.latitudeDegrees,
+      longitude: a.longitudeDegrees,
+      time: a.time
+    })));
+
+    if (!nearest) {
+      return;
+    }
+
+    this.activityCursorService.setCursor({
+      activityID: activityId,
+      time: nearest.time,
+      byMap: true,
+    });
+
+    this.pushCursorMarkersToMap();
+    this.changeDetectorRef.markForCheck();
+  }
+
+  private pushCursorMarkersToMap() {
+    const cursors: EventCursorRenderData[] = this.activitiesMapData
+      .map((data) => {
+        const activityId = data.activity.getID() || '';
+        const cursor = this.activitiesCursors.get(activityId);
+        if (!cursor) {
+          return null;
+        }
+
+        return {
+          activityId,
+          latitudeDegrees: cursor.latitudeDegrees,
+          longitudeDegrees: cursor.longitudeDegrees,
+          color: data.strokeColor,
+        } as EventCursorRenderData;
+      })
+      .filter((cursor): cursor is EventCursorRenderData => !!cursor);
+
+    this.mapManager.setCursorMarkers(cursors);
+  }
+
+  private openJumpMarkerInfoWindow(jump: DataJumpEvent, latitudeDegrees: number, longitudeDegrees: number) {
+    this.openedJumpMarkerInfoWindow = jump;
+    this.openedJumpCoordinates = { latitudeDegrees, longitudeDegrees };
+    this.updateJumpPopupPosition();
+    this.changeDetectorRef.markForCheck();
+  }
+
+  private closeJumpPopup() {
+    this.openedJumpMarkerInfoWindow = void 0;
+    this.openedJumpCoordinates = null;
+    this.jumpPopupScreenPosition.set(null);
+    this.changeDetectorRef.markForCheck();
+  }
+
+  private bindMapPopupListeners(map: any): void {
+    this.unbindMapPopupListeners();
+
+    if (!map?.on) {
+      return;
+    }
+
+    this.mapMoveRepositionHandler = () => {
+      if (!this.openedJumpMarkerInfoWindow) {
+        return;
+      }
+      this.zone.run(() => this.updateJumpPopupPosition());
+    };
+
+    ['move', 'zoom', 'rotate', 'pitch', 'resize'].forEach((eventName) => {
+      map.on(eventName, this.mapMoveRepositionHandler);
+    });
+  }
+
+  private unbindMapPopupListeners(): void {
+    if (!this.mapMoveRepositionHandler) {
+      return;
+    }
+
+    const map = this.mapInstance();
+    if (!map?.off) {
+      return;
+    }
+
+    ['move', 'zoom', 'rotate', 'pitch', 'resize'].forEach((eventName) => {
+      map.off(eventName, this.mapMoveRepositionHandler);
+    });
+
+    this.mapMoveRepositionHandler = null;
+  }
+
+  private updateJumpPopupPosition(): void {
+    if (!this.openedJumpCoordinates || !this.openedJumpMarkerInfoWindow) {
+      this.jumpPopupScreenPosition.set(null);
+      return;
+    }
+
+    const screen = this.mapManager.project(
+      this.openedJumpCoordinates.latitudeDegrees,
+      this.openedJumpCoordinates.longitudeDegrees
+    );
+    this.jumpPopupScreenPosition.set(screen);
   }
 
   private updateJumpHangTimeRange() {
@@ -637,16 +836,76 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     return buckets[bucketIndex];
   }
 
-  private fitBoundsToActivities() {
-    if (!this.googleMap?.googleMap || !this.activitiesMapData.length) {
-      return;
+  private normalizeMapViewSettings(settings: any): MapViewSettingsState {
+    return {
+      showLaps: settings?.showLaps ?? true,
+      showArrows: settings?.showArrows ?? true,
+      strokeWidth: settings?.strokeWidth ?? 2,
+      mapStyle: (settings?.mapStyle as AppMapStyleName) || 'default',
+      is3D: settings?.is3D === true,
+    };
+  }
+
+  private resolveActivityStrokeColor(activity: ActivityInterface): string {
+    const fallbackColor = '#2ca3ff';
+    const baseColor = this.sanitizeStrokeColor(
+      this.eventColorService.getActivityColor(this.event.getActivities(), activity),
+      fallbackColor
+    );
+    const adjustedColor = this.mapStyleService.adjustColorForTheme(baseColor, this.appTheme());
+    return this.sanitizeStrokeColor(adjustedColor, fallbackColor);
+  }
+
+  private sanitizeStrokeColor(color: unknown, fallbackColor: string): string {
+    if (typeof color !== 'string') {
+      return fallbackColor;
     }
 
-    const allPositions = this.activitiesMapData.reduce<PositionWithTime[]>((arr, data) => arr.concat(data.positions), []);
-    if (allPositions.length === 0) return;
+    const trimmed = color.trim();
+    if (trimmed.length === 0) {
+      return fallbackColor;
+    }
 
-    const bounds = this.getBounds(allPositions);
-    this.googleMap.googleMap.fitBounds(bounds);
+    if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmed)) {
+      return trimmed;
+    }
+
+    const keyword = trimmed.toLowerCase();
+    if (keyword === 'black') {
+      return '#000000';
+    }
+    if (keyword === 'white') {
+      return '#ffffff';
+    }
+
+    return fallbackColor;
+  }
+
+  private resolveInitialCamera(): { center: [number, number]; zoom: number } {
+    const firstPosition = (this.selectedActivities || [])
+      .filter((activity) => activity.hasPositionData())
+      .map((activity) => activity.getSquashedPositionData()?.[0])
+      .find((position) =>
+        position
+        && Number.isFinite(position.latitudeDegrees)
+        && Number.isFinite(position.longitudeDegrees)
+      );
+
+    if (firstPosition) {
+      return {
+        center: [firstPosition.longitudeDegrees, firstPosition.latitudeDegrees],
+        zoom: 12,
+      };
+    }
+
+    return {
+      center: [0, 0],
+      zoom: 2,
+    };
+  }
+
+  private logMapSettingsState(stage: string, state: Record<string, unknown>): void {
+    this.logger.log(`[EventCardMapComponent] ${stage}`, state);
   }
 
   private unSubscribeFromAll() {

@@ -58,7 +58,7 @@
     </mat-button-toggle-group>
     }
     <mat-button-toggle-group appearance="legacy" name="mapStyle" aria-label="Map Style" [disabled]="isLoading()"
-      [value]="user?.settings?.myTracksSettings?.mapStyle || 'default'" (change)="setMapStyle($any($event).value)">
+      [value]="user?.settings?.mapSettings?.mapStyle || 'default'" (change)="setMapStyle($any($event).value)">
       <mat-button-toggle value="default">Default</mat-button-toggle>
       <mat-button-toggle value="satellite">Satellite</mat-button-toggle>
       <mat-button-toggle value="outdoors">Outdoors</mat-button-toggle>

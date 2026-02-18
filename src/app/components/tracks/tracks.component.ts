@@ -26,7 +26,7 @@ import { MapboxLoaderService } from '../../services/mapbox-loader.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
-import { AppMyTracksSettings } from '../../models/app-user.interface';
+import { AppMapSettingsInterface, AppMyTracksSettings } from '../../models/app-user.interface';
 import { LoggerService } from '../../services/logger.service';
 import { TrackStartPoint, TrackStartSelection, TracksMapManager } from './tracks-map.manager'; // Imported Manager
 import { MapStyleService } from '../../services/map-style.service';
@@ -167,23 +167,24 @@ export class TracksComponent implements OnInit, OnDestroy {
 
     // Unified Reactive State: Combines Settings and Theme
     const viewState = computed(() => {
-      const settings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
+      const myTracksSettings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
+      const mapSettings = this.userSettingsQuery.mapSettings() as AppMapSettingsInterface;
       const theme = this.themeService.appTheme();
-      return { settings, theme };
+      return { myTracksSettings, mapSettings, theme };
     });
 
     // Single Effect to drive Map State
     effect(() => {
-      const { settings, theme } = viewState();
+      const { myTracksSettings, mapSettings, theme } = viewState();
       const map = this.mapSignal();
       const user = this.userSignal();
       const synchronizer = this.mapSynchronizer();
       const terrainControl = this.terrainControl();
 
-      if (!map || !synchronizer || !settings || !user) return;
+      if (!map || !synchronizer || !myTracksSettings || !user) return;
 
       // 1. Update Map Style via Synchronizer
-      const mapStyle = settings.mapStyle || 'default';
+      const mapStyle = mapSettings?.mapStyle || 'default';
       this.tracksMapManager.setMapStyle(mapStyle as MapStyleName);
       const resolved = this.mapStyleService.resolve(mapStyle, theme);
       synchronizer.update(resolved);
@@ -191,17 +192,17 @@ export class TracksComponent implements OnInit, OnDestroy {
       // 2. Update Tracks Colors (Theme based)
       this.tracksMapManager.setIsDarkTheme(theme === AppThemes.Dark);
       this.tracksMapManager.refreshTrackColors();
-      this.tracksMapManager.setJumpHeatmapVisible(settings.showJumpHeatmap !== false);
+      this.tracksMapManager.setJumpHeatmapVisible(myTracksSettings.showJumpHeatmap !== false);
 
       // 3. Terrain (is3D)
       if (terrainControl) {
-        this.tracksMapManager.toggleTerrain(!!settings.is3D, !isFirstRun);
+        this.tracksMapManager.toggleTerrain(!!mapSettings?.is3D, !isFirstRun);
       }
       isFirstRun = false;
 
       // 4. Data Loading
       // Check if data-impacting settings changed
-      const currentSnapshot = { dateRange: settings.dateRange, activityTypes: settings.activityTypes };
+      const currentSnapshot = { dateRange: myTracksSettings.dateRange, activityTypes: myTracksSettings.activityTypes };
 
       const dataChanged = !lastLoadedDataSettings ||
         lastLoadedDataSettings.dateRange !== currentSnapshot.dateRange ||
@@ -210,7 +211,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       if (dataChanged) {
         lastLoadedDataSettings = currentSnapshot;
         this.isLoading.set(true);
-        this.loadTracksMapForUserByDateRange(user, settings.dateRange, settings.activityTypes)
+        this.loadTracksMapForUserByDateRange(user, myTracksSettings.dateRange, myTracksSettings.activityTypes)
           .catch(err => this.logger.error('Error loading tracks', err))
           .finally(() => this.isLoading.set(false));
       }
@@ -225,8 +226,8 @@ export class TracksComponent implements OnInit, OnDestroy {
     try {
       // --- Constructor Style Injection ---
       // Resolve user's preferred style BEFORE creating the map.
-      const initialSettings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
-      const prefMapStyle = initialSettings?.mapStyle || 'default';
+      const initialMapSettings = this.userSettingsQuery.mapSettings() as AppMapSettingsInterface;
+      const prefMapStyle = initialMapSettings?.mapStyle || 'default';
       const initialTheme = this.themeService.appTheme();
       const resolved = this.mapStyleService.resolve(prefMapStyle as any, initialTheme);
       const initialStyleUrl = resolved.styleUrl;
@@ -300,20 +301,20 @@ export class TracksComponent implements OnInit, OnDestroy {
             })
         );
 
-        // Restore terrain control (initialSettings already loaded above)
+        // Restore terrain control (initial map settings already loaded above)
         // Initialize 3D state immediately for responsiveness and test compliance
-        const control = new TerrainControl(!!initialSettings?.is3D, (is3D) => {
+        const control = new TerrainControl(!!initialMapSettings?.is3D, (is3D) => {
           // Toggle map locally immediately for responsiveness
           this.tracksMapManager.toggleTerrain(is3D, true);
 
           // Persist 3D setting via service
-          this.userSettingsQuery.updateMyTracksSettings({ is3D });
+          this.userSettingsQuery.updateMapSettings({ is3D });
         });
         this.terrainControl.set(control);
         mapInstance.addControl(control, 'bottom-right');
         this.tracksMapManager.setTerrainControl(control);
 
-        // Restore terrain control (initialSettings already loaded above)
+        // Restore terrain control (initial map settings already loaded above)
         // Initialize 3D state - The effect handles the initial toggleTerrain call.
       });
 
@@ -324,7 +325,7 @@ export class TracksComponent implements OnInit, OnDestroy {
 
   public setMapStyle(styleType: 'default' | 'satellite' | 'outdoors') {
     // Just update settings. The effect handles the rest.
-    this.userSettingsQuery.updateMyTracksSettings({ mapStyle: styleType });
+    this.userSettingsQuery.updateMapSettings({ mapStyle: styleType });
     this.logger.info('[TracksComponent] User selected map style', { styleType });
   }
 
