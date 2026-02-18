@@ -432,14 +432,20 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       return;
     }
 
+    const initializeStartedAt = this.nowMs();
+    this.logger.log('[EventCardMapPerf] initializeMap:start', {
+      selectedActivities: this.selectedActivities?.length || 0,
+      hasExistingMap: !!this.mapInstance(),
+    });
+
     try {
       const resolvedStyle = this.mapStyleService.resolve(this.mapStyle, this.appTheme());
       const initialCamera = this.resolveInitialCamera();
       const mapOptions: any = {
         center: initialCamera.center,
         zoom: initialCamera.zoom,
-        style: resolvedStyle.styleUrl,
       };
+      mapOptions.style = resolvedStyle.styleUrl;
 
       this.logMapSettingsState('initialize-map:start', {
         remoteSettings: this.userSettingsQuery.mapSettings(),
@@ -452,8 +458,15 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         mapOptions.config = { basemap: { lightPreset: resolvedStyle.preset } };
       }
 
+      const createMapStartedAt = this.nowMs();
       const map = await this.mapboxLoader.createMap(this.mapDiv.nativeElement, mapOptions);
+      this.logPerformance('initializeMap:createMap', createMapStartedAt, {
+        resolvedStyleValue: resolvedStyle.styleUrl,
+      });
+
+      const loadMapboxStartedAt = this.nowMs();
       const mapboxgl = await this.mapboxLoader.loadMapbox();
+      this.logPerformance('initializeMap:loadMapbox', loadMapboxStartedAt);
 
       this.mapManager.setMap(map, mapboxgl);
       this.mapManager.setTrackClickHandler((activityId, latitudeDegrees, longitudeDegrees) => {
@@ -470,18 +483,38 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         showZoom: true
       }), 'bottom-right');
 
+      let styleReadyHandled = false;
+      const applyInitialMapState = (source: 'style.load' | 'load') => {
+        if (styleReadyHandled) {
+          return;
+        }
+        styleReadyHandled = true;
+        this.logPerformance('initializeMap:styleReady', initializeStartedAt, {
+          source,
+          activitiesPrepared: this.activitiesMapData.length,
+        });
+        this.logMapSettingsState(`map-${source}`, {
+          remoteSettings: this.userSettingsQuery.mapSettings(),
+          localSettings: this.mapViewSettings(),
+          applyingTerrain: this.is3D,
+        });
+        this.mapReady = true;
+        this.renderMapData(true);
+        this.mapManager.toggleTerrain(this.is3D, false);
+        this.apiLoaded.set(true);
+        this.changeDetectorRef.markForCheck();
+      };
+
+      map.on('style.load', () => {
+        this.zone.run(() => applyInitialMapState('style.load'));
+      });
+
       map.on('load', () => {
         this.zone.run(() => {
-          this.logMapSettingsState('map-load', {
-            remoteSettings: this.userSettingsQuery.mapSettings(),
-            localSettings: this.mapViewSettings(),
-            applyingTerrain: this.is3D,
+          this.logPerformance('initializeMap:mapLoadEvent', initializeStartedAt, {
+            activitiesPrepared: this.activitiesMapData.length,
           });
-          this.mapReady = true;
-          this.renderMapData(true);
-          this.mapManager.toggleTerrain(this.is3D, false);
-          this.apiLoaded.set(true);
-          this.changeDetectorRef.markForCheck();
+          applyInitialMapState('load');
         });
       });
 
@@ -494,6 +527,9 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       this.bindMapPopupListeners(map);
 
       this.mapActivities(++this.processSequence, true);
+      this.logPerformance('initializeMap:queuedMapActivities', initializeStartedAt, {
+        processSequence: this.processSequence,
+      });
     } catch (error) {
       this.logger.error('Failed to initialize EventCard Mapbox map.', error);
       this.noMapData = true;
@@ -503,9 +539,20 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   private mapActivities(sequence: number, shouldFitBounds = true) {
+    const mapActivitiesStartedAt = this.nowMs();
     if (this.processSequence !== sequence) {
+      this.logger.log('[EventCardMapPerf] mapActivities:staleSequenceSkipped', {
+        expectedSequence: this.processSequence,
+        receivedSequence: sequence,
+      });
       return;
     }
+
+    this.logger.log('[EventCardMapPerf] mapActivities:start', {
+      sequence,
+      shouldFitBounds,
+      selectedActivities: this.selectedActivities?.length || 0,
+    });
 
     this.loading();
     this.noMapData = false;
@@ -520,11 +567,20 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         strokeWidth: this.strokeWidth || 3,
       });
       this.loaded();
+      this.logPerformance('mapActivities:noSelectedActivities', mapActivitiesStartedAt, { sequence });
       return;
     }
 
+    let activitiesProcessed = 0;
+    let activitiesWithPositions = 0;
+    let totalPositions = 0;
+    let totalLaps = 0;
+    let totalJumps = 0;
+
     this.selectedActivities.forEach((activity) => {
+      activitiesProcessed++;
       if (!activity.hasPositionData()) return;
+      activitiesWithPositions++;
 
       const positionData = activity.getSquashedPositionData();
       const positions = activity.generateTimeStream([DataLatitudeDegrees.type, DataLongitudeDegrees.type])
@@ -541,35 +597,43 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
           return positionWithTimeArray;
         }, []);
 
+      const laps = activity.getLaps().reduce<any[]>((lapsArray, lap) => {
+        const lapPositionData = activity.getSquashedPositionData(lap.startDate, lap.endDate);
+        if (!lapPositionData.length || !this.showLaps) return lapsArray;
+        if (this.lapTypes.indexOf(lap.type) === -1) return lapsArray;
+        lapsArray.push({
+          lap,
+          lapPosition: {
+            latitudeDegrees: lapPositionData[lapPositionData.length - 1]?.latitudeDegrees || 0,
+            longitudeDegrees: lapPositionData[lapPositionData.length - 1]?.longitudeDegrees || 0
+          }
+        });
+        return lapsArray;
+      }, []);
+
+      const jumps = (activity.getAllEvents() || []).reduce<any[]>((jumpsArray, event: DataEvent) => {
+        if (event instanceof DataJumpEvent && event.jumpData.position_lat && event.jumpData.position_long) {
+          jumpsArray.push({
+            event,
+            position: {
+              latitudeDegrees: event.jumpData.position_lat.getValue(),
+              longitudeDegrees: event.jumpData.position_long.getValue()
+            }
+          });
+        }
+        return jumpsArray;
+      }, []);
+
+      totalPositions += positions.length;
+      totalLaps += laps.length;
+      totalJumps += jumps.length;
+
       this.activitiesMapData.push({
         activity,
         positions,
         strokeColor: this.resolveActivityStrokeColor(activity),
-        laps: activity.getLaps().reduce<any[]>((laps, lap) => {
-          const lapPositionData = activity.getSquashedPositionData(lap.startDate, lap.endDate);
-          if (!lapPositionData.length || !this.showLaps) return laps;
-          if (this.lapTypes.indexOf(lap.type) === -1) return laps;
-          laps.push({
-            lap,
-            lapPosition: {
-              latitudeDegrees: lapPositionData[lapPositionData.length - 1]?.latitudeDegrees || 0,
-              longitudeDegrees: lapPositionData[lapPositionData.length - 1]?.longitudeDegrees || 0
-            }
-          });
-          return laps;
-        }, []),
-        jumps: (activity.getAllEvents() || []).reduce<any[]>((jumps, event: DataEvent) => {
-          if (event instanceof DataJumpEvent && event.jumpData.position_lat && event.jumpData.position_long) {
-            jumps.push({
-              event,
-              position: {
-                latitudeDegrees: event.jumpData.position_lat.getValue(),
-                longitudeDegrees: event.jumpData.position_long.getValue()
-              }
-            });
-          }
-          return jumps;
-        }, [])
+        laps,
+        jumps
       });
     });
 
@@ -581,19 +645,40 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         strokeWidth: this.strokeWidth || 3,
       });
       this.loaded();
+      this.logPerformance('mapActivities:noRenderableData', mapActivitiesStartedAt, {
+        sequence,
+        activitiesProcessed,
+        activitiesWithPositions,
+      });
       return;
     }
 
     this.updateJumpHangTimeRange();
     this.renderMapData(shouldFitBounds);
     this.loaded();
+    this.logPerformance('mapActivities:complete', mapActivitiesStartedAt, {
+      sequence,
+      activitiesProcessed,
+      activitiesWithPositions,
+      totalPositions,
+      totalLaps,
+      totalJumps,
+      mappedActivities: this.activitiesMapData.length,
+    });
   }
 
   private renderMapData(shouldFitBounds: boolean) {
+    const renderStartedAt = this.nowMs();
     if (!this.mapReady || !this.mapInstance()) {
+      this.logger.log('[EventCardMapPerf] renderMapData:skipped', {
+        mapReady: this.mapReady,
+        hasMapInstance: !!this.mapInstance(),
+        shouldFitBounds,
+      });
       return;
     }
 
+    const tracksBuildStartedAt = this.nowMs();
     const tracks: EventTrackRenderData[] = this.activitiesMapData.map((activityMapData) => ({
       activityId: activityMapData.activity.getID() || '',
       strokeColor: activityMapData.strokeColor,
@@ -610,18 +695,31 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         markerSize: this.getJumpMarkerSize(jump.event),
       }))
     }));
+    const tracksBuildDuration = this.nowMs() - tracksBuildStartedAt;
 
+    const managerRenderStartedAt = this.nowMs();
     this.mapManager.renderActivities(tracks, {
       showArrows: this.showArrows,
       strokeWidth: this.strokeWidth || 3,
     });
+    const managerRenderDuration = this.nowMs() - managerRenderStartedAt;
 
     this.pushCursorMarkersToMap();
+    this.logPerformance('renderMapData:complete', renderStartedAt, {
+      tracks: tracks.length,
+      shouldFitBounds,
+      tracksBuildDurationMs: Math.round(tracksBuildDuration * 10) / 10,
+      managerRenderDurationMs: Math.round(managerRenderDuration * 10) / 10,
+    });
 
     if (shouldFitBounds) {
       if (this.pendingFitBoundsTimeout) {
         clearTimeout(this.pendingFitBoundsTimeout);
       }
+      this.logger.log('[EventCardMapPerf] renderMapData:fitBoundsScheduled', {
+        delayMs: 250,
+        hasAppliedInitialBounds: this.hasAppliedInitialBounds,
+      });
       this.pendingFitBoundsTimeout = setTimeout(() => {
         this.pendingFitBoundsTimeout = null;
         this.fitBoundsToActivities();
@@ -630,7 +728,12 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   }
 
   private fitBoundsToActivities() {
+    const fitBoundsStartedAt = this.nowMs();
     if (!this.mapReady || !this.activitiesMapData.length) {
+      this.logger.log('[EventCardMapPerf] fitBoundsToActivities:skipped', {
+        mapReady: this.mapReady,
+        activitiesMapDataLength: this.activitiesMapData.length,
+      });
       return;
     }
 
@@ -639,6 +742,12 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     if (didFit) {
       this.hasAppliedInitialBounds = true;
     }
+    this.logPerformance('fitBoundsToActivities:complete', fitBoundsStartedAt, {
+      animate,
+      didFit,
+      hasAppliedInitialBounds: this.hasAppliedInitialBounds,
+      activitiesMapDataLength: this.activitiesMapData.length,
+    });
   }
 
   private onTrackLineClick(activityId: string, latitudeDegrees: number, longitudeDegrees: number): void {
@@ -906,6 +1015,21 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
 
   private logMapSettingsState(stage: string, state: Record<string, unknown>): void {
     this.logger.log(`[EventCardMapComponent] ${stage}`, state);
+  }
+
+  private nowMs(): number {
+    if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+      return performance.now();
+    }
+    return Date.now();
+  }
+
+  private logPerformance(stage: string, startedAt: number, state: Record<string, unknown> = {}): void {
+    const durationMs = Math.round((this.nowMs() - startedAt) * 10) / 10;
+    this.logger.log(`[EventCardMapPerf] ${stage}`, {
+      durationMs,
+      ...state,
+    });
   }
 
   private unSubscribeFromAll() {
