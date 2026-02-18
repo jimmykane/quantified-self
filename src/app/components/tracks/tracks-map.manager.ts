@@ -10,6 +10,24 @@ import {
     MapboxStartPointLayerService,
     MapboxStartPointSelection
 } from '../../services/map/mapbox-start-point-layer.service';
+import {
+    ensureLayer,
+    removeLayerIfExists,
+    removeSourceIfExists,
+    setPaintIfLayerExists,
+    upsertGeoJsonSource
+} from '../../services/map/mapbox-layer.utils';
+import {
+    applyTerrain,
+    clearDeferredTerrainToggleState,
+    deferTerrainToggleUntilReady,
+    DeferredTerrainToggleState
+} from '../../services/map/mapbox-terrain.utils';
+import {
+    attachStyleReloadHandler,
+    isStyleReady,
+    runWhenStyleReady
+} from '../../services/map/mapbox-style-ready.utils';
 
 type TrackStyleMode = 'dark-glow' | 'light-contrast';
 type TrackLayerRole = 'glow' | 'casing' | 'main';
@@ -53,10 +71,9 @@ export class TracksMapManager {
     private activeLayerIds: string[] = []; // Store IDs of added layers/sources
     private mapboxgl: any; // Mapbox GL JS library reference
     private tracksByActivityId = new Map<string, { activity: any; coordinates: number[][]; baseColor: string }>();
-    private styleLoadListenerAttached = false;
+    private styleLoadHandlerCleanup: (() => void) | null = null;
     private terrainControl: any;
-    private pendingTerrainToggle: { enable: boolean; animate: boolean } | null = null;
-    private pendingTerrainListenerAttached = false;
+    private terrainToggleState: DeferredTerrainToggleState = { pendingRequest: null };
     private isDarkTheme = false;
     private mapStyle: MapStyleName = 'default';
     private trackLayerBaseColors = new Map<string, string>();
@@ -79,6 +96,8 @@ export class TracksMapManager {
     ) { }
 
     public setMap(map: any, mapboxgl: any) {
+        this.styleLoadHandlerCleanup?.();
+        clearDeferredTerrainToggleState(this.terrainToggleState);
         this.map = map;
         this.mapboxgl = mapboxgl;
         this.attachStyleReloadHandler();
@@ -281,10 +300,45 @@ export class TracksMapManager {
 
         this.zone.runOutsideAngular(() => {
             try {
-                this.ensureTrackSource(sourceId, validCoordinates);
-                this.ensureTrackLayer(glowLayerId, sourceId, this.buildLayerPaint('glow', colorInfo.baseColor));
-                this.ensureTrackLayer(casingLayerId, sourceId, this.buildLayerPaint('casing', colorInfo.baseColor));
-                this.ensureTrackLayer(layerId, sourceId, this.buildLayerPaint('main', colorInfo.baseColor));
+                const sourceData = {
+                    type: 'Feature',
+                    properties: {},
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: validCoordinates
+                    }
+                };
+                upsertGeoJsonSource(this.map, sourceId, sourceData);
+
+                const glowPaint = this.buildLayerPaint('glow', colorInfo.baseColor);
+                const casingPaint = this.buildLayerPaint('casing', colorInfo.baseColor);
+                const mainPaint = this.buildLayerPaint('main', colorInfo.baseColor);
+                const layerLayout = { 'line-join': 'round', 'line-cap': 'round' };
+
+                ensureLayer(this.map, {
+                    id: glowLayerId,
+                    type: 'line',
+                    source: sourceId,
+                    layout: layerLayout,
+                    paint: glowPaint
+                });
+                ensureLayer(this.map, {
+                    id: casingLayerId,
+                    type: 'line',
+                    source: sourceId,
+                    layout: layerLayout,
+                    paint: casingPaint
+                });
+                ensureLayer(this.map, {
+                    id: layerId,
+                    type: 'line',
+                    source: sourceId,
+                    layout: layerLayout,
+                    paint: mainPaint
+                });
+                setPaintIfLayerExists(this.map, glowLayerId, glowPaint);
+                setPaintIfLayerExists(this.map, casingLayerId, casingPaint);
+                setPaintIfLayerExists(this.map, layerId, mainPaint);
 
                 this.rememberActiveId(glowLayerId);
                 this.rememberActiveId(casingLayerId);
@@ -313,11 +367,11 @@ export class TracksMapManager {
             const sources = this.activeLayerIds.filter(id => id.startsWith('track-source-'));
 
             layers.forEach(id => {
-                if (this.map.getLayer(id)) this.map.removeLayer(id);
+                removeLayerIfExists(this.map, id);
             });
 
             sources.forEach(id => {
-                if (this.map.getSource(id)) this.map.removeSource(id);
+                removeSourceIfExists(this.map, id);
             });
 
             this.activeLayerIds = [];
@@ -333,8 +387,11 @@ export class TracksMapManager {
 
     public refreshTrackColors() {
         if (!this.map || !this.trackLayerBaseColors.size) return;
-        if (!this.isStyleReady()) {
-            this.map.once('style.load', () => this.refreshTrackColors());
+        if (!isStyleReady(this.map)) {
+            runWhenStyleReady(this.map, () => this.refreshTrackColors(), {
+                events: ['style.load'],
+                runImmediately: false
+            });
             return;
         }
 
@@ -383,37 +440,19 @@ export class TracksMapManager {
 
         this.zone.runOutsideAngular(() => {
             try {
-                if (!this.isStyleReady()) {
+                if (!isStyleReady(this.map)) {
                     this.logger.log('[TracksMapManager] Style not loaded yet. Deferring terrain toggle.');
-                    this.deferTerrainToggle(enable, animate);
+                    deferTerrainToggleUntilReady(
+                        this.map,
+                        { enable, animate },
+                        this.terrainToggleState,
+                        (pending) => this.toggleTerrain(pending.enable, pending.animate)
+                    );
                     return;
                 }
 
-                if (enable) {
-                    if (!this.map.getSource('mapbox-dem')) {
-                        this.logger.log('[TracksMapManager] Adding mapbox-dem source.');
-                        this.map.addSource('mapbox-dem', {
-                            'type': 'raster-dem',
-                            'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
-                            'tileSize': 512,
-                            'maxzoom': 14
-                        });
-                    } else {
-                        this.logger.log('[TracksMapManager] mapbox-dem source already exists.');
-                    }
-                }
-
-                if (enable) {
-                    this.logger.log('[TracksMapManager] Setting terrain to mapbox-dem and pitching to 60.');
-                    this.map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
-                    if (animate) this.map.easeTo({ pitch: 60 });
-                    else this.map.setPitch(60);
-                } else {
-                    this.logger.log('[TracksMapManager] Removing terrain and pitching to 0.');
-                    this.map.setTerrain(null);
-                    if (animate) this.map.easeTo({ pitch: 0 });
-                    else this.map.setPitch(0);
-                }
+                clearDeferredTerrainToggleState(this.terrainToggleState);
+                applyTerrain(this.map, enable, animate);
 
                 if (this.terrainControl) {
                     this.terrainControl.set3DState(enable);
@@ -421,62 +460,27 @@ export class TracksMapManager {
 
             } catch (error: any) {
                 this.logger.error('[TracksMapManager] Error toggling terrain:', error);
-                if (error?.message?.includes('Style is not done loading') || !this.isStyleReady()) {
+                if (error?.message?.includes('Style is not done loading') || !isStyleReady(this.map)) {
                     this.logger.log('[TracksMapManager] Style/Map state not ready, deferring terrain toggle.');
-                    this.deferTerrainToggle(enable, animate);
+                    deferTerrainToggleUntilReady(
+                        this.map,
+                        { enable, animate },
+                        this.terrainToggleState,
+                        (pending) => this.toggleTerrain(pending.enable, pending.animate)
+                    );
                 }
             }
         });
     }
 
-    private isStyleReady(): boolean {
-        if (!this.map) return false;
-        if (typeof this.map.isStyleLoaded === 'function') {
-            return this.map.isStyleLoaded();
-        }
-        if (typeof this.map.loaded === 'function') {
-            return this.map.loaded();
-        }
-        return true;
-    }
-
-    private deferTerrainToggle(enable: boolean, animate: boolean) {
-        this.pendingTerrainToggle = { enable, animate };
-        if (this.pendingTerrainListenerAttached || !this.map?.on) return;
-        this.pendingTerrainListenerAttached = true;
-
-        const tryApply = () => {
-            if (!this.isStyleReady()) {
-                return;
-            }
-            this.pendingTerrainListenerAttached = false;
-            if (this.map?.off) {
-                this.map.off('style.load', tryApply);
-                this.map.off('styledata', tryApply);
-                this.map.off('load', tryApply);
-                this.map.off('idle', tryApply);
-            }
-            const pending = this.pendingTerrainToggle;
-            this.pendingTerrainToggle = null;
-            if (pending) {
-                this.toggleTerrain(pending.enable, pending.animate);
-            }
-        };
-
-        this.map.on('style.load', tryApply);
-        this.map.on('styledata', tryApply);
-        this.map.on('load', tryApply);
-        this.map.on('idle', tryApply);
-        tryApply();
-    }
-
     private attachStyleReloadHandler() {
-        if (!this.map || this.styleLoadListenerAttached || !this.map.on) return;
-        this.styleLoadListenerAttached = true;
-
-        this.map.on('style.load', () => {
-            this.restoreTracksAfterStyleReload();
-        });
+        if (!this.map) return;
+        this.styleLoadHandlerCleanup?.();
+        this.styleLoadHandlerCleanup = attachStyleReloadHandler(
+            this.map,
+            () => this.restoreTracksAfterStyleReload(),
+            'tracks-map-manager'
+        );
     }
 
     private restoreTracksAfterStyleReload() {
@@ -786,44 +790,6 @@ export class TracksMapManager {
         return count === 0 ? baseId : `${baseId}-${count}`;
     }
 
-    private ensureTrackSource(sourceId: string, coordinates: number[][]) {
-        const sourceData = {
-            type: 'Feature',
-            properties: {},
-            geometry: {
-                type: 'LineString',
-                coordinates
-            }
-        };
-
-        const source = this.map.getSource(sourceId);
-        if (!source) {
-            this.map.addSource(sourceId, {
-                type: 'geojson',
-                data: sourceData
-            });
-            return;
-        }
-
-        if (typeof source.setData === 'function') {
-            source.setData(sourceData);
-        }
-    }
-
-    private ensureTrackLayer(layerId: string, sourceId: string, paint: Record<string, number | string>) {
-        if (this.map.getLayer(layerId)) return;
-
-        this.map.addLayer({
-            id: layerId,
-            type: 'line',
-            source: sourceId,
-            layout: { 'line-join': 'round', 'line-cap': 'round' },
-            paint: {
-                ...paint
-            }
-        });
-    }
-
     private sanitizeLayerId(activityId: string): string {
         const sanitized = activityId.replace(/[^a-zA-Z0-9_-]/g, '-');
         if (sanitized.length > 0) return sanitized;
@@ -933,9 +899,7 @@ export class TracksMapManager {
     }
 
     private applyPaintProperties(layerId: string, paint: Record<string, number | string>) {
-        Object.entries(paint).forEach(([property, value]) => {
-            this.map.setPaintProperty(layerId, property, value);
-        });
+        setPaintIfLayerExists(this.map, layerId, paint);
     }
 
     private getSafeColor(color: string, fallback: string): string {

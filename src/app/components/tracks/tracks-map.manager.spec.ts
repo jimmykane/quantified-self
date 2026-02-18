@@ -123,6 +123,13 @@ describe('TracksMapManager', () => {
         expect(manager).toBeTruthy();
     });
 
+    it('should keep one style.load handler when setMap is called repeatedly', () => {
+        manager.setMap(mockMap, mockMapboxGL);
+        manager.setMap(mockMap, mockMapboxGL);
+
+        expect((mapEventHandlers['style.load'] || []).length).toBe(1);
+    });
+
     describe('addTrackFromActivity', () => {
         it('should add source and layers for a valid track', () => {
             const mockActivity = {
@@ -618,6 +625,21 @@ describe('TracksMapManager', () => {
 
             expect(mockMap.setTerrain).toHaveBeenCalledWith(null);
             expect(mockMap.easeTo).toHaveBeenCalledWith({ pitch: 0 });
+        });
+
+        it('should apply only latest deferred terrain request once style is ready', () => {
+            mockMap.isStyleLoaded.mockReturnValue(false);
+
+            manager.toggleTerrain(true, false);
+            manager.toggleTerrain(false, false);
+            expect(mockMap.setTerrain).not.toHaveBeenCalled();
+
+            mockMap.isStyleLoaded.mockReturnValue(true);
+            emitMapEvent('style.load');
+
+            expect(mockMap.setTerrain).toHaveBeenCalledTimes(1);
+            expect(mockMap.setTerrain).toHaveBeenCalledWith(null);
+            expect(mockMap.setPitch).toHaveBeenCalledWith(0);
         });
     });
 });

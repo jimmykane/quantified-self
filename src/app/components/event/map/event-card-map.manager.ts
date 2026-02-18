@@ -1,6 +1,26 @@
 import { DataJumpEvent } from '@sports-alliance/sports-lib';
 import { MarkerFactoryService } from '../../../services/map/marker-factory.service';
 import { LoggerService } from '../../../services/logger.service';
+import {
+  bindLayerClickOnce,
+  ensureLayer,
+  LayerBindingRegistry,
+  removeLayerIfExists,
+  removeSourceIfExists,
+  setPaintIfLayerExists,
+  unbindLayerClicks,
+  upsertGeoJsonSource,
+} from '../../../services/map/mapbox-layer.utils';
+import {
+  applyTerrain,
+  clearDeferredTerrainToggleState,
+  deferTerrainToggleUntilReady,
+  DeferredTerrainToggleState,
+} from '../../../services/map/mapbox-terrain.utils';
+import {
+  attachStyleReloadHandler,
+  isStyleReady,
+} from '../../../services/map/mapbox-style-ready.utils';
 
 export interface EventTrackLapRenderData {
   lapIndex: number;
@@ -38,26 +58,17 @@ export interface EventMapRenderOptions {
 type TrackClickHandler = (activityId: string, latitudeDegrees: number, longitudeDegrees: number) => void;
 type JumpClickHandler = (jump: DataJumpEvent, latitudeDegrees: number, longitudeDegrees: number) => void;
 
-interface LayerClickBinding {
-  layerId: string;
-  handler: (event: any) => void;
-}
-
 interface StoredTrackLayers {
   sourceId: string;
   lineLayerId: string;
   arrowLayerId: string;
 }
 
-interface PendingTerrainToggle {
-  enable: boolean;
-  animate: boolean;
-}
-
 export class EventCardMapManager {
   private map: any | null = null;
   private mapboxgl: any | null = null;
   private styleLoadHandler: (() => void) | null = null;
+  private styleLoadHandlerCleanup: (() => void) | null = null;
   private trackClickHandler: TrackClickHandler | null = null;
   private jumpClickHandler: JumpClickHandler | null = null;
 
@@ -65,7 +76,7 @@ export class EventCardMapManager {
   private currentOptions: EventMapRenderOptions = { showArrows: true, strokeWidth: 3 };
 
   private activeLayersByActivityId = new Map<string, StoredTrackLayers>();
-  private clickBindings: LayerClickBinding[] = [];
+  private clickBindings: LayerBindingRegistry = [];
   private startMarkers = new Map<string, any>();
   private endMarkers = new Map<string, any>();
   private lapMarkers = new Map<string, any[]>();
@@ -73,8 +84,7 @@ export class EventCardMapManager {
   private cursorMarkers = new Map<string, any>();
   private cursorState = new Map<string, EventCursorRenderData>();
   private terrainEnabled = false;
-  private pendingTerrainToggle: PendingTerrainToggle | null = null;
-  private pendingTerrainListenerAttached = false;
+  private terrainToggleState: DeferredTerrainToggleState = { pendingRequest: null };
 
   constructor(
     private markerFactory: MarkerFactoryService,
@@ -86,9 +96,8 @@ export class EventCardMapManager {
       return;
     }
 
-    if (this.map && this.styleLoadHandler && this.map.off) {
-      this.map.off('style.load', this.styleLoadHandler);
-    }
+    this.styleLoadHandlerCleanup?.();
+    clearDeferredTerrainToggleState(this.terrainToggleState);
 
     this.map = map;
     this.mapboxgl = mapboxgl;
@@ -103,7 +112,11 @@ export class EventCardMapManager {
         this.toggleTerrain(true, false);
       }
     };
-    this.map.on?.('style.load', this.styleLoadHandler);
+    this.styleLoadHandlerCleanup = attachStyleReloadHandler(
+      this.map,
+      this.styleLoadHandler,
+      'event-card-map-manager'
+    );
   }
 
   public setTrackClickHandler(handler: TrackClickHandler | null): void {
@@ -157,39 +170,23 @@ export class EventCardMapManager {
     this.logger.log('[EventCardMapManager] toggleTerrain requested.', {
       enable: this.terrainEnabled,
       animate,
-      styleReady: this.isStyleReady(),
+      styleReady: isStyleReady(this.map),
     });
 
     try {
-      if (!this.isStyleReady()) {
+      if (!isStyleReady(this.map)) {
         this.logger.log('[EventCardMapManager] Style not ready. Deferring terrain toggle.', { enable, animate });
-        this.deferTerrainToggle(enable, animate);
+        deferTerrainToggleUntilReady(
+          this.map,
+          { enable: this.terrainEnabled, animate },
+          this.terrainToggleState,
+          (pending) => this.toggleTerrain(pending.enable, pending.animate)
+        );
         return;
       }
 
-      if (this.terrainEnabled) {
-        if (!this.map.getSource?.('mapbox-dem')) {
-          this.map.addSource('mapbox-dem', {
-            type: 'raster-dem',
-            url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-            tileSize: 512,
-            maxzoom: 14
-          });
-        }
-        this.map.setTerrain?.({ source: 'mapbox-dem', exaggeration: 1.5 });
-        if (animate) {
-          this.map.easeTo?.({ pitch: 60 });
-        } else {
-          this.map.setPitch?.(60);
-        }
-      } else {
-        this.map.setTerrain?.(null);
-        if (animate) {
-          this.map.easeTo?.({ pitch: 0 });
-        } else {
-          this.map.setPitch?.(0);
-        }
-      }
+      clearDeferredTerrainToggleState(this.terrainToggleState);
+      applyTerrain(this.map, this.terrainEnabled, animate);
 
       this.logger.log('[EventCardMapManager] toggleTerrain applied.', {
         enable: this.terrainEnabled,
@@ -202,58 +199,16 @@ export class EventCardMapManager {
         animate,
         error,
       });
-      if (message.includes('Style is not done loading') || !this.isStyleReady()) {
+      if (message.includes('Style is not done loading') || !isStyleReady(this.map)) {
         this.logger.log('[EventCardMapManager] Deferring terrain toggle after failure.', { enable, animate });
-        this.deferTerrainToggle(enable, animate);
+        deferTerrainToggleUntilReady(
+          this.map,
+          { enable: this.terrainEnabled, animate },
+          this.terrainToggleState,
+          (pending) => this.toggleTerrain(pending.enable, pending.animate)
+        );
       }
     }
-  }
-
-  private isStyleReady(): boolean {
-    if (!this.map) {
-      return false;
-    }
-    if (typeof this.map.isStyleLoaded === 'function') {
-      return this.map.isStyleLoaded();
-    }
-    if (typeof this.map.loaded === 'function') {
-      return this.map.loaded();
-    }
-    return true;
-  }
-
-  private deferTerrainToggle(enable: boolean, animate: boolean): void {
-    this.pendingTerrainToggle = { enable, animate };
-    if (this.pendingTerrainListenerAttached || !this.map?.on) {
-      return;
-    }
-    this.pendingTerrainListenerAttached = true;
-
-    const tryApply = () => {
-      if (!this.isStyleReady()) {
-        return;
-      }
-
-      this.pendingTerrainListenerAttached = false;
-      if (this.map?.off) {
-        this.map.off('style.load', tryApply);
-        this.map.off('styledata', tryApply);
-        this.map.off('load', tryApply);
-        this.map.off('idle', tryApply);
-      }
-
-      const pending = this.pendingTerrainToggle;
-      this.pendingTerrainToggle = null;
-      if (pending) {
-        this.toggleTerrain(pending.enable, pending.animate);
-      }
-    };
-
-    this.map.on('style.load', tryApply);
-    this.map.on('styledata', tryApply);
-    this.map.on('load', tryApply);
-    this.map.on('idle', tryApply);
-    tryApply();
   }
 
   public fitBoundsToTracks(animate: boolean = true): boolean {
@@ -353,70 +308,59 @@ export class EventCardMapManager {
       }
     };
 
-    const source = this.map.getSource?.(sourceId);
-    if (!source) {
-      this.map.addSource(sourceId, {
-        type: 'geojson',
-        data: sourceData
-      });
-    } else if (typeof source.setData === 'function') {
-      source.setData(sourceData);
-    }
-
-    if (!this.map.getLayer?.(lineLayerId)) {
-      this.map.addLayer({
-        id: lineLayerId,
-        type: 'line',
-        source: sourceId,
-        layout: {
-          'line-cap': 'round',
-          'line-join': 'round'
-        },
-        paint: {
-          'line-color': track.strokeColor,
-          'line-width': this.currentOptions.strokeWidth || 3,
-          'line-opacity': 1,
-          // Keep line color visible under dark/night lighting and terrain shading.
-          'line-emissive-strength': 1
-        }
-      });
-    } else {
-      this.map.setPaintProperty?.(lineLayerId, 'line-color', track.strokeColor);
-      this.map.setPaintProperty?.(lineLayerId, 'line-width', this.currentOptions.strokeWidth || 3);
-      this.map.setPaintProperty?.(lineLayerId, 'line-opacity', 1);
-      this.map.setPaintProperty?.(lineLayerId, 'line-emissive-strength', 1);
-    }
+    upsertGeoJsonSource(this.map, sourceId, sourceData);
+    ensureLayer(this.map, {
+      id: lineLayerId,
+      type: 'line',
+      source: sourceId,
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round'
+      },
+      paint: {
+        'line-color': track.strokeColor,
+        'line-width': this.currentOptions.strokeWidth || 3,
+        'line-opacity': 1,
+        // Keep line color visible under dark/night lighting and terrain shading.
+        'line-emissive-strength': 1
+      }
+    });
+    setPaintIfLayerExists(this.map, lineLayerId, {
+      'line-color': track.strokeColor,
+      'line-width': this.currentOptions.strokeWidth || 3,
+      'line-opacity': 1,
+      'line-emissive-strength': 1,
+    });
 
     if (this.currentOptions.showArrows) {
-      if (!this.map.getLayer?.(arrowLayerId)) {
-        this.map.addLayer({
-          id: arrowLayerId,
-          type: 'symbol',
-          source: sourceId,
-          layout: {
-            'symbol-placement': 'line',
-            'symbol-spacing': 100,
-            'text-field': '▶',
-            'text-size': 11,
-            'text-rotation-alignment': 'map',
-            'text-keep-upright': false,
-            'text-allow-overlap': true,
-            'text-ignore-placement': true
-          },
-          paint: {
-            'text-color': '#ffffff',
-            'text-halo-color': track.strokeColor,
-            'text-halo-width': 1.1,
-            'text-opacity': 1
-          }
-        });
-      } else {
-        this.map.setPaintProperty?.(arrowLayerId, 'text-halo-color', track.strokeColor);
-        this.map.setPaintProperty?.(arrowLayerId, 'text-opacity', 1);
-      }
-    } else if (this.map.getLayer?.(arrowLayerId)) {
+      ensureLayer(this.map, {
+        id: arrowLayerId,
+        type: 'symbol',
+        source: sourceId,
+        layout: {
+          'symbol-placement': 'line',
+          'symbol-spacing': 100,
+          'text-field': '▶',
+          'text-size': 11,
+          'text-rotation-alignment': 'map',
+          'text-keep-upright': false,
+          'text-allow-overlap': true,
+          'text-ignore-placement': true
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-halo-color': track.strokeColor,
+          'text-halo-width': 1.1,
+          'text-opacity': 1
+        }
+      });
+      setPaintIfLayerExists(this.map, arrowLayerId, {
+        'text-halo-color': track.strokeColor,
+        'text-opacity': 1,
+      });
+    } else {
       this.unbindLineClick(arrowLayerId);
-      this.map.removeLayer?.(arrowLayerId);
+      removeLayerIfExists(this.map, arrowLayerId);
     }
 
     this.activeLayersByActivityId.set(track.activityId, {
@@ -482,10 +426,7 @@ export class EventCardMapManager {
   }
 
   private bindLineClick(layerId: string, activityId: string): void {
-    if (!this.map || !this.map.getLayer?.(layerId) || !this.map.on) {
-      return;
-    }
-    if (this.clickBindings.some((binding) => binding.layerId === layerId)) {
+    if (!this.map || !this.map.getLayer?.(layerId)) {
       return;
     }
 
@@ -498,23 +439,11 @@ export class EventCardMapManager {
       this.trackClickHandler?.(activityId, lat, lng);
     };
 
-    this.map.on('click', layerId, clickHandler);
-    this.clickBindings.push({ layerId, handler: clickHandler });
+    bindLayerClickOnce(this.map, this.clickBindings, layerId, clickHandler);
   }
 
   private unbindLineClick(layerId: string): void {
-    if (!this.map?.off) {
-      return;
-    }
-    const retained: LayerClickBinding[] = [];
-    this.clickBindings.forEach((binding) => {
-      if (binding.layerId === layerId) {
-        this.map?.off?.('click', binding.layerId, binding.handler);
-        return;
-      }
-      retained.push(binding);
-    });
-    this.clickBindings = retained;
+    unbindLayerClicks(this.map, this.clickBindings, layerId);
   }
 
   private renderCursorMarkers(): void {
@@ -550,21 +479,12 @@ export class EventCardMapManager {
       return;
     }
 
-    this.clickBindings.forEach((binding) => {
-      this.map?.off?.('click', binding.layerId, binding.handler);
-    });
-    this.clickBindings = [];
+    unbindLayerClicks(this.map, this.clickBindings);
 
     this.activeLayersByActivityId.forEach((ids) => {
-      if (this.map.getLayer?.(ids.arrowLayerId)) {
-        this.map.removeLayer(ids.arrowLayerId);
-      }
-      if (this.map.getLayer?.(ids.lineLayerId)) {
-        this.map.removeLayer(ids.lineLayerId);
-      }
-      if (this.map.getSource?.(ids.sourceId)) {
-        this.map.removeSource(ids.sourceId);
-      }
+      removeLayerIfExists(this.map, ids.arrowLayerId);
+      removeLayerIfExists(this.map, ids.lineLayerId);
+      removeSourceIfExists(this.map, ids.sourceId);
     });
     this.activeLayersByActivityId.clear();
 
@@ -588,15 +508,9 @@ export class EventCardMapManager {
     if (ids) {
       this.unbindLineClick(ids.arrowLayerId);
       this.unbindLineClick(ids.lineLayerId);
-      if (this.map.getLayer?.(ids.arrowLayerId)) {
-        this.map.removeLayer(ids.arrowLayerId);
-      }
-      if (this.map.getLayer?.(ids.lineLayerId)) {
-        this.map.removeLayer(ids.lineLayerId);
-      }
-      if (this.map.getSource?.(ids.sourceId)) {
-        this.map.removeSource(ids.sourceId);
-      }
+      removeLayerIfExists(this.map, ids.arrowLayerId);
+      removeLayerIfExists(this.map, ids.lineLayerId);
+      removeSourceIfExists(this.map, ids.sourceId);
       this.activeLayersByActivityId.delete(activityId);
     }
     this.removeTrackMarkers(activityId);

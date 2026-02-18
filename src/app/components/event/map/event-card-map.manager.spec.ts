@@ -61,7 +61,16 @@ describe('EventCardMapManager', () => {
         handlers[event] = handlers[event] || [];
         handlers[event].push({ layerId: typeof layerOrHandler === 'string' ? layerOrHandler : null, handler });
       }),
-      off: vi.fn(),
+      off: vi.fn((event: string, layerOrHandler: any, maybeHandler?: any) => {
+        const handler = typeof layerOrHandler === 'function' ? layerOrHandler : maybeHandler;
+        const layerId = typeof layerOrHandler === 'string' ? layerOrHandler : null;
+        handlers[event] = (handlers[event] || []).filter((binding) => {
+          if (layerId && binding.layerId !== layerId) {
+            return true;
+          }
+          return binding.handler !== handler;
+        });
+      }),
     };
 
     markerFactory = {
@@ -225,5 +234,20 @@ describe('EventCardMapManager', () => {
     expect(map.addSource).toHaveBeenCalledWith('mapbox-dem', expect.anything());
     expect(map.setTerrain).toHaveBeenCalledWith(expect.objectContaining({ source: 'mapbox-dem' }));
     expect(map.setPitch).toHaveBeenCalledWith(60);
+  });
+
+  it('applies only latest deferred terrain toggle request', () => {
+    map.isStyleLoaded = vi.fn().mockReturnValue(false);
+
+    manager.toggleTerrain(true, false);
+    manager.toggleTerrain(false, false);
+    expect(map.setTerrain).not.toHaveBeenCalled();
+
+    map.isStyleLoaded.mockReturnValue(true);
+    (handlers['style.load'] || []).forEach(binding => binding.handler());
+
+    expect(map.setTerrain).toHaveBeenCalledTimes(1);
+    expect(map.setTerrain).toHaveBeenCalledWith(null);
+    expect(map.setPitch).toHaveBeenCalledWith(0);
   });
 });
