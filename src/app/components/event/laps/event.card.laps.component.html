@@ -3,7 +3,10 @@
   @for (availableLapType of availableLapTypes; track availableLapType) {
   <mat-tab [label]="availableLapType">
     <ng-template matTabLabel>
-      <app-lap-type-icon [lapType]="availableLapType"></app-lap-type-icon>
+      <span class="lap-tab-label">
+        <app-lap-type-icon [lapType]="availableLapType" size="20px"></app-lap-type-icon>
+        <span class="lap-tab-text">{{ formatLapTypeLabel(availableLapType) }}</span>
+      </span>
     </ng-template>
     <ng-template matTabContent>
       @for (activity of selectedActivities; track activity; let i = $index) {

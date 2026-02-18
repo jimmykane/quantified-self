@@ -124,4 +124,8 @@ export class EventCardLapsComponent extends DataTableAbstractDirective implement
   isStickyEnd(column: string) {
     return false;
   }
+
+  formatLapTypeLabel(lapType: LapTypes): string {
+    return String(lapType).replace(/([a-z])([A-Z])/g, '$1 $2');
+  }
 }

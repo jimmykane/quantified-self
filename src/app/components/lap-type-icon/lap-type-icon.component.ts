@@ -1,6 +1,4 @@
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
-import { DataDistance } from '@sports-alliance/sports-lib';
-import { DataAscent } from '@sports-alliance/sports-lib';
 import { LapTypes } from '@sports-alliance/sports-lib';
 
 
@@ -17,23 +15,24 @@ export class LapTypeIconComponent {
   @Input() size: string;
   @Input() vAlign: string;
 
-  getColumnHeaderIcon(lapType): string {
+  getColumnHeaderIcon(lapType: LapTypes): string {
     switch (lapType) {
       case LapTypes.Distance:
-        return 'trending_flat';
+        return 'straighten';
       case LapTypes.Unknown:
-        return 'emoji_flags';
+        return 'help';
       case LapTypes.AutoLap:
         return 'autorenew'
       case LapTypes.Location:
-        return 'location_on'
+        return 'pin_drop'
       case LapTypes.Time:
-        return 'timer'
+        return 'schedule'
       case LapTypes.Manual:
-        return 'front_hand';
+        return 'touch_app';
       case LapTypes.Interval:
+        return 'pace';
       case LapTypes.FitnessEquipment:
-        return 'exercise';
+        return 'fitness_center';
       default:
         return null;
     }
