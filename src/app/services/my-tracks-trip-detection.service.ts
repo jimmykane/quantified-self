@@ -100,6 +100,7 @@ export class MyTracksTripDetectionService {
   private static readonly SAME_DESTINATION_REJOIN_MAX_GAP_MS = 5 * 24 * 60 * 60 * 1000;
   private static readonly DESTINATION_ID_ROUNDING_DECIMALS = 3;
   private static readonly ENABLE_LEGACY_COMPARISON_LOG = false;
+  private static readonly MIN_TRIP_COUNT_TO_REPORT = 2;
 
   private static readonly LEGACY_MAX_GAP_MS = 72 * 60 * 60 * 1000;
   private static readonly LEGACY_MAX_DISTANCE_KM = 180;
@@ -151,12 +152,15 @@ export class MyTracksTripDetectionService {
     });
     const rejoinResult = this.mergeNearbyVisitWindowsWithoutInterleavingDestinations(qualificationResult.qualifiedVisitWindows);
     const detectedTrips = this.mapVisitWindowsToTrips(rejoinResult.visitWindows);
+    const reportableTrips = detectedTrips.length < MyTracksTripDetectionService.MIN_TRIP_COUNT_TO_REPORT
+      ? []
+      : detectedTrips;
 
     if (MyTracksTripDetectionService.ENABLE_LEGACY_COMPARISON_LOG) {
       const legacyCount = this.detectTripsLegacyCount(normalized);
       this.logger.log('[MyTracksTripDetectionService] Legacy vs V2 comparison.', {
         legacyCount,
-        v2Count: detectedTrips.length,
+        v2Count: reportableTrips.length,
       });
     }
 
@@ -166,7 +170,7 @@ export class MyTracksTripDetectionService {
       clusterCount: destinationClusters.filter((cluster) => !cluster.isNoise).length,
       visitWindowCount: visitWindows.length,
       rejoinedVisitCount: rejoinResult.rejoinedVisitCount,
-      qualifiedVisitCount: detectedTrips.length,
+      qualifiedVisitCount: reportableTrips.length,
       homeClusterDetected: !!homeDestinationId,
       rejectionCounters: qualificationResult.rejectionCounters,
       thresholds: {
@@ -182,7 +186,7 @@ export class MyTracksTripDetectionService {
       }
     });
 
-    return detectedTrips;
+    return reportableTrips;
   }
 
   private clusterDestinations(entries: NormalizedActivityStart[]): DestinationCluster[] {

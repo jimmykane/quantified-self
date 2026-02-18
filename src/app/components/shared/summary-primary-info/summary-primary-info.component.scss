@@ -243,6 +243,65 @@
   display: none;
 }
 
+.summary-primary-info--force-mobile:not(.summary-primary-info--compact) {
+  flex-direction: column;
+  position: relative;
+  padding: 12px;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.summary-primary-info--force-mobile:not(.summary-primary-info--compact) .identity-section {
+  gap: 12px;
+  padding-right: 104px;
+}
+
+.summary-primary-info--force-mobile:not(.summary-primary-info--compact) .activity-icon-container {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.summary-primary-info--force-mobile:not(.summary-primary-info--compact) .top-meta {
+  flex-direction: column;
+  gap: 0;
+}
+
+.summary-primary-info--force-mobile:not(.summary-primary-info--compact) .time-separator {
+  display: none;
+}
+
+.summary-primary-info--force-mobile:not(.summary-primary-info--compact) .time {
+  font-size: 0.85rem;
+}
+
+.summary-primary-info--force-mobile:not(.summary-primary-info--compact) .hero-metrics {
+  width: 100%;
+  justify-content: space-evenly;
+  background: var(--mat-app-surface-container-lowest);
+  padding: 12px;
+  border-radius: 16px;
+  gap: 16px;
+  margin: 0;
+  box-shadow: inset 0 0 0 1px var(--mat-app-outline-variant);
+}
+
+.summary-primary-info--force-mobile:not(.summary-primary-info--compact) .summary-actions {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  margin: 0;
+}
+
+.summary-primary-info--force-mobile:not(.summary-primary-info--compact) .metric-item .value {
+  font-size: 1.4rem;
+}
+
+.summary-primary-info--force-mobile:not(.summary-primary-info--compact) .metric-item .unit {
+  font-size: 0.65rem;
+}
+
 @include bp.max-900 {
   .hero-metrics {
     gap: 16px;

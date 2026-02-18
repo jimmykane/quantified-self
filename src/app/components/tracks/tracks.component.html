@@ -25,7 +25,8 @@
         [iconActivityType]="resolveStartPointIconActivityType(startPoint)"
         [startDate]="startPoint.startDate"
         [fallbackTopMetaText]="'Activity start'"
-        [metrics]="getStartPointSummaryMetrics(startPoint)">
+        [metrics]="getStartPointSummaryMetrics(startPoint)"
+        [forceMobileLayout]="true">
         @if (resolveStartPointEvent(startPoint); as selectedEvent) {
         <div summary-icon-badge class="privacy-mini-wrapper">
           <app-privacy-icon [privacy]="selectedEvent.privacy"></app-privacy-icon>
