@@ -5,12 +5,15 @@ export interface MapboxAutoResizeConfig {
   container?: HTMLElement | null;
   onResize?: () => void;
   triggerInitialResize?: boolean;
+  throttleMs?: number;
 }
 
 interface AutoResizeBinding {
   handler: () => void;
   observer: ResizeObserver | null;
   frameId: number | null;
+  timeoutId: ReturnType<typeof setTimeout> | null;
+  lastResizeAt: number;
 }
 
 @Injectable({
@@ -29,13 +32,16 @@ export class MapboxAutoResizeService {
     const binding: AutoResizeBinding = {
       handler: () => { },
       observer: null,
-      frameId: null
+      frameId: null,
+      timeoutId: null,
+      lastResizeAt: 0
     };
+    const throttleMs = this.normalizeThrottleMs(config.throttleMs);
 
     const triggerResize = () => {
       if (!map?.resize) return;
 
-      const run = () => {
+      const runResizeNow = () => {
         try {
           map.resize();
         } catch (error) {
@@ -43,21 +49,44 @@ export class MapboxAutoResizeService {
           return;
         }
 
+        binding.lastResizeAt = Date.now();
         config.onResize?.();
       };
 
-      if (typeof requestAnimationFrame === 'function') {
-        if (binding.frameId !== null && typeof cancelAnimationFrame === 'function') {
-          cancelAnimationFrame(binding.frameId);
+      const runViaAnimationFrame = () => {
+        if (typeof requestAnimationFrame === 'function') {
+          if (binding.frameId !== null && typeof cancelAnimationFrame === 'function') {
+            cancelAnimationFrame(binding.frameId);
+          }
+          binding.frameId = requestAnimationFrame(() => {
+            binding.frameId = null;
+            runResizeNow();
+          });
+          return;
         }
-        binding.frameId = requestAnimationFrame(() => {
-          binding.frameId = null;
-          run();
-        });
+
+        runResizeNow();
+      };
+
+      const elapsedMs = Date.now() - binding.lastResizeAt;
+      if (binding.lastResizeAt === 0 || elapsedMs >= throttleMs) {
+        if (binding.timeoutId !== null) {
+          clearTimeout(binding.timeoutId);
+          binding.timeoutId = null;
+        }
+        runViaAnimationFrame();
         return;
       }
 
-      run();
+      if (binding.timeoutId !== null) {
+        return;
+      }
+
+      const waitMs = Math.max(0, throttleMs - elapsedMs);
+      binding.timeoutId = setTimeout(() => {
+        binding.timeoutId = null;
+        runViaAnimationFrame();
+      }, waitMs);
     };
 
     binding.handler = triggerResize;
@@ -112,7 +141,18 @@ export class MapboxAutoResizeService {
       cancelAnimationFrame(binding.frameId);
       binding.frameId = null;
     }
+    if (binding.timeoutId !== null) {
+      clearTimeout(binding.timeoutId);
+      binding.timeoutId = null;
+    }
 
     this.bindingsByMap.delete(map);
+  }
+
+  private normalizeThrottleMs(inputThrottleMs: number | undefined): number {
+    if (typeof inputThrottleMs !== 'number' || !Number.isFinite(inputThrottleMs)) {
+      return 300;
+    }
+    return Math.max(0, inputThrottleMs);
   }
 }
