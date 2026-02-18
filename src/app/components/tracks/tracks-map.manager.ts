@@ -24,6 +24,9 @@ export interface TrackStartPoint {
     startDate: number | null;
     durationLabel: string;
     distanceLabel: string;
+    effortLabel?: string;
+    effortDisplayLabel?: string;
+    effortStatType?: string;
     lng: number;
     lat: number;
 }
@@ -184,6 +187,11 @@ export class TracksMapManager {
                     startDate: typeof point.startDate === 'number' && Number.isFinite(point.startDate) ? point.startDate : null,
                     durationLabel: (point.durationLabel || '-').toString(),
                     distanceLabel: (point.distanceLabel || '-').toString(),
+                    effortLabel: (point.effortLabel || '').toString(),
+                    effortDisplayLabel: (point.effortDisplayLabel || '-').toString(),
+                    effortStatType: typeof point.effortStatType === 'string' && point.effortStatType.trim().length > 0
+                        ? point.effortStatType.trim()
+                        : undefined,
                     lng: point.lng,
                     lat: point.lat
                 };

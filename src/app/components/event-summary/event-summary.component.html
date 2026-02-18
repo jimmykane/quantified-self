@@ -1,50 +1,31 @@
 <div class="glass-card event-summary-card">
   <!-- Primary Info Section -->
-  <div class="summary-primary-info performance-header">
-    <!-- Left: Identity & Metadata -->
-    <div class="identity-section">
-      <div class="activity-icon-container" (click)="toggleEventPrivacy()">
-        <app-activity-type-icon class="activity-main-icon" [activityType]="mainActivityType" size="32px"
-          [matTooltip]="'Event is ' + event.privacy"></app-activity-type-icon>
-        <div class="privacy-mini-wrapper">
-          <app-privacy-icon [privacy]="event.privacy"></app-privacy-icon>
-        </div>
-      </div>
-      <div class="text-stack">
-        <div class="top-meta">
-          <span class="date"><b>{{ event.startDate | date:"d MMM yyyy" }}</b></span>
-          <span class="time-separator">at</span>
-          <span class="time">{{ event.startDate | date:"shortTime" }}</span>
-          <app-service-source-icon [event]="event" [user]="user"></app-service-source-icon>
-        </div>
-        <div class="chips-row">
-          <span class="chip activity-chip">{{ mainActivityType }}</span>
-          @if (feelingIcon) {
-          <span class="chip feeling-chip" [matTooltip]="'Feeling: ' + feelingLabel" [attr.aria-label]="'Feeling: ' + feelingLabel">
-            <mat-icon aria-hidden="true">{{ feelingIcon }}</mat-icon>
-          </span>
-          }
-          @if (rpe) {
-          <span class="chip rpe-chip" [matTooltip]="'RPE: ' + rpeLabel">RPE {{ rpe }}</span>
-          }
-        </div>
-      </div>
+  <app-summary-primary-info
+    [activityType]="mainActivityType"
+    [iconActivityType]="mainActivityType"
+    [startDate]="event.startDate"
+    [iconTooltip]="'Event is ' + event.privacy"
+    [iconClickable]="true"
+    [metrics]="heroSummaryMetrics"
+    (iconClick)="toggleEventPrivacy()">
+    <div summary-icon-badge class="privacy-mini-wrapper">
+      <app-privacy-icon [privacy]="event.privacy"></app-privacy-icon>
     </div>
 
-    <!-- Center: Hero Metrics -->
-    <div class="hero-metrics">
-      @for (stat of heroStats; track stat) {
-      <div class="metric-item">
-        <span class="value">{{ getStatValue(stat) }}</span>
-        <span class="unit">{{ getStatUnit(stat) }}</span>
-      </div>
-      }
-    </div>
+    <app-service-source-icon summary-top-meta-suffix [event]="event" [user]="user"></app-service-source-icon>
 
-    <!-- Right: Actions -->
-    <div class="summary-actions">
+    @if (feelingIcon) {
+    <span summary-chips class="chip feeling-chip" [matTooltip]="'Feeling: ' + feelingLabel" [attr.aria-label]="'Feeling: ' + feelingLabel">
+      <mat-icon aria-hidden="true">{{ feelingIcon }}</mat-icon>
+    </span>
+    }
+    @if (rpe) {
+    <span summary-chips class="chip rpe-chip" [matTooltip]="'RPE: ' + rpeLabel">RPE {{ rpe }}</span>
+    }
+
+    <div summary-actions class="event-summary-actions">
       @if (isOwner) {
-      <div class="summary-actions-primary">
+      <div class="event-summary-actions-primary">
         <button mat-icon-button (click)="openEditDetails()" matTooltip="Edit details">
           <mat-icon>edit</mat-icon>
         </button>
@@ -60,7 +41,7 @@
       </div>
       }
 
-      <div class="summary-actions-secondary">
+      <div class="event-summary-actions-secondary">
         @if (hasDevices) {
         <button mat-icon-button class="summary-stats-action-button devices-button" (click)="openDevices()"
           matTooltip="View sensors & devices" aria-label="View sensors and devices">
@@ -73,7 +54,7 @@
         </button>
       </div>
     </div>
-  </div>
+  </app-summary-primary-info>
 
   <!-- Activities Toggles Section -->
   @if (eventActivitiesCount > 1) {

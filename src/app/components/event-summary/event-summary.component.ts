@@ -7,15 +7,11 @@ import {
   Privacy,
   DataDistance,
   DataDuration,
-  DataEnergy,
-  DataPowerAvg,
+  DataSpeedAvg,
   DataFeeling,
   DataRPE,
   Feelings,
   RPEBorgCR10SCale,
-  ActivityTypes,
-  ActivityTypesHelper,
-  ActivityTypeGroups,
 } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
@@ -23,6 +19,9 @@ import { EventDetailsSummaryBottomSheetComponent } from './event-details-summary
 import { EventStatsBottomSheetComponent } from '../event/stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
 import { EventDevicesBottomSheetComponent } from '../event/devices/event-devices-bottom-sheet/event-devices-bottom-sheet.component';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
+import { resolvePrimaryUnitAwareDisplayStat } from '../../helpers/summary-display.helper';
+import { resolvePreferredSpeedDerivedAverageTypeForActivity } from '../../helpers/summary-stats.helper';
+import { SummaryPrimaryInfoMetric } from '../shared/summary-primary-info/summary-primary-info.component';
 
 @Component({
   selector: 'app-event-summary',
@@ -48,6 +47,7 @@ export class EventSummaryComponent implements OnChanges {
   private heroStatLookup = new Map<string, { value: string; unit: string }>();
   private hasDevicesValue = false;
   private heroStatsValue: string[] = [];
+  private heroEffortStatTypeValue: string = DataSpeedAvg.type;
   private eventActivitiesCountValue = 0;
   private mainActivityTypeValue = 'Other';
   private benchmarkCountValue = 0;
@@ -196,6 +196,14 @@ export class EventSummaryComponent implements OnChanges {
     return this.mainActivityTypeValue;
   }
 
+  get heroSummaryMetrics(): SummaryPrimaryInfoMetric[] {
+    this.ensureTemplateState();
+    return this.heroStatsValue.map((statType) => ({
+      value: this.getStatValue(statType),
+      label: this.getStatUnit(statType),
+    }));
+  }
+
   get benchmarkCount(): number {
     this.ensureTemplateState();
     return this.benchmarkCountValue;
@@ -212,7 +220,8 @@ export class EventSummaryComponent implements OnChanges {
       return cachedStat.value;
     }
     const stat = this.event?.getStat(statType);
-    return stat ? String(stat.getDisplayValue()) : '--';
+    const unitAware = resolvePrimaryUnitAwareDisplayStat(stat, this.unitSettings, statType);
+    return unitAware ? unitAware.value : '--';
   }
 
   getStatUnit(statType: string): string {
@@ -222,7 +231,8 @@ export class EventSummaryComponent implements OnChanges {
       return cachedStat.unit;
     }
     const stat = this.event?.getStat(statType);
-    return stat ? stat.getDisplayUnit() : '';
+    const unitAware = resolvePrimaryUnitAwareDisplayStat(stat, this.unitSettings, statType);
+    return unitAware ? unitAware.unit : '';
   }
 
   get feeling(): Feelings | null {
@@ -254,6 +264,7 @@ export class EventSummaryComponent implements OnChanges {
     const activities = this.event?.getActivities?.() ?? [];
     this.eventActivitiesCountValue = activities.length;
     this.mainActivityTypeValue = activities[0]?.type || 'Other';
+    this.heroEffortStatTypeValue = resolvePreferredSpeedDerivedAverageTypeForActivity(this.mainActivityTypeValue) || DataSpeedAvg.type;
     this.heroStatsValue = this.resolveHeroStats(this.mainActivityTypeValue);
     this.heroStatLookup = this.buildHeroStatLookup();
     this.hasDevicesValue = this.selectedActivities?.some(a =>
@@ -274,36 +285,22 @@ export class EventSummaryComponent implements OnChanges {
     this.templateStateInitialized = true;
   }
 
-  private resolveHeroStats(type: string): string[] {
-    if (type === 'Virtual Cycling' || type === 'VirtualRide') {
-      return [DataDuration.type, DataPowerAvg.type];
-    }
-    const activityTypeEnum = ActivityTypes[type as keyof typeof ActivityTypes] || (Object.values(ActivityTypes).includes(type as ActivityTypes) ? type as ActivityTypes : ActivityTypes.Other);
-    const group = ActivityTypesHelper.getActivityGroupForActivityType(activityTypeEnum);
-
-    switch (group) {
-      case ActivityTypeGroups.IndoorSports:
-        return [DataDuration.type, DataEnergy.type];
-      case ActivityTypeGroups.Running:
-      case ActivityTypeGroups.TrailRunning:
-      case ActivityTypeGroups.Cycling:
-      case ActivityTypeGroups.Swimming:
-      case ActivityTypeGroups.OutdoorAdventures:
-      case ActivityTypeGroups.WinterSports:
-      case ActivityTypeGroups.WaterSports:
-      case ActivityTypeGroups.Performance:
-      default:
-        return [DataDistance.type, DataDuration.type];
-    }
+  private resolveHeroStats(_type: string): string[] {
+    return [
+      DataDuration.type,
+      DataDistance.type,
+      this.heroEffortStatTypeValue || DataSpeedAvg.type,
+    ];
   }
 
   private buildHeroStatLookup(): Map<string, { value: string; unit: string }> {
     const lookup = new Map<string, { value: string; unit: string }>();
     this.heroStatsValue.forEach((statType) => {
       const stat = this.event?.getStat(statType);
+      const unitAware = resolvePrimaryUnitAwareDisplayStat(stat, this.unitSettings, statType);
       lookup.set(statType, {
-        value: stat ? String(stat.getDisplayValue()) : '--',
-        unit: stat ? stat.getDisplayUnit() : '',
+        value: unitAware ? unitAware.value : '--',
+        unit: unitAware ? unitAware.unit : '',
       });
     });
     return lookup;

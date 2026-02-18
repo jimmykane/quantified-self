@@ -255,6 +255,9 @@ describe('TracksMapManager', () => {
                 startDate: 1731062400000,
                 durationLabel: '1:02:03',
                 distanceLabel: '10 km',
+                effortLabel: 'Pace',
+                effortDisplayLabel: '5:12 min/km',
+                effortStatType: 'Average Pace',
                 lng: 10,
                 lat: 20
             }]);
@@ -280,6 +283,9 @@ describe('TracksMapManager', () => {
                 startDate: 1731062400000,
                 durationLabel: '1:02:03',
                 distanceLabel: '10 km',
+                effortLabel: 'Pace',
+                effortDisplayLabel: '5:12 min/km',
+                effortStatType: 'Average Pace',
                 lng: 10,
                 lat: 20
             }]);
@@ -302,6 +308,9 @@ describe('TracksMapManager', () => {
                 startDate: 1731062400000,
                 durationLabel: '1:02:03',
                 distanceLabel: '10 km',
+                effortLabel: 'Pace',
+                effortDisplayLabel: '5:12 min/km',
+                effortStatType: 'Average Pace',
                 lng: 10,
                 lat: 20
             }]);
@@ -325,6 +334,9 @@ describe('TracksMapManager', () => {
                 startDate: 1731062400000,
                 durationLabel: '1:02:03',
                 distanceLabel: '10 km',
+                effortLabel: 'Pace',
+                effortDisplayLabel: '5:12 min/km',
+                effortStatType: 'Average Pace',
                 lng: 10,
                 lat: 20
             }]);
@@ -355,6 +367,9 @@ describe('TracksMapManager', () => {
                 startDate: 1731062400000,
                 durationLabel: '1:02:03',
                 distanceLabel: '10 km',
+                effortLabel: 'Pace',
+                effortDisplayLabel: '5:12 min/km',
+                effortStatType: 'Average Pace',
                 lng: 10,
                 lat: 20
             }]);
@@ -375,6 +390,9 @@ describe('TracksMapManager', () => {
             expect(selectionSpy).toHaveBeenCalledWith(expect.objectContaining({
                 eventId: 'event-1',
                 activityId: 'activity-1',
+                effortLabel: 'Pace',
+                effortDisplayLabel: '5:12 min/km',
+                effortStatType: 'Average Pace',
                 lng: 10,
                 lat: 20
             }));

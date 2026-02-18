@@ -19,45 +19,27 @@
   @if (selectedStartPoint(); as startPoint) {
   @if (selectedStartPointScreen(); as startPointScreen) {
   <div class="track-start-popup-anchor" [style.left.px]="startPointScreen.x" [style.top.px]="startPointScreen.y">
-    <mat-card class="track-start-popup qs-glass-card-panel glass-card mat-elevation-z0">
-      <div class="summary-primary-info performance-header track-start-summary-primary-info">
-        <div class="identity-section">
-          <div class="activity-icon-container track-start-activity-icon-container">
-            <app-activity-type-icon class="activity-main-icon"
-              [activityType]="resolveStartPointIconActivityType(startPoint)" size="32px"></app-activity-type-icon>
-          </div>
-          <div class="text-stack">
-            <div class="top-meta">
-              @if (startPoint.startDate) {
-              <span class="date"><b>{{ startPoint.startDate | date:'d MMM yyyy' }}</b></span>
-              <span class="time-separator">at</span>
-              <span class="time">{{ startPoint.startDate | date:'shortTime' }}</span>
-              } @else {
-              <span class="time">Activity start</span>
-              }
-            </div>
-            <div class="chips-row">
-              <span class="chip activity-chip">{{ startPoint.activityType || 'Activity' }}</span>
-            </div>
-          </div>
+    <div class="track-start-popup qs-glass-card-panel glass-card">
+      <app-summary-primary-info
+        [activityType]="startPoint.activityType || 'Activity'"
+        [iconActivityType]="resolveStartPointIconActivityType(startPoint)"
+        [startDate]="startPoint.startDate"
+        [fallbackTopMetaText]="'Activity start'"
+        [metrics]="getStartPointSummaryMetrics(startPoint)">
+        @if (resolveStartPointEvent(startPoint); as selectedEvent) {
+        <div summary-icon-badge class="privacy-mini-wrapper">
+          <app-privacy-icon [privacy]="selectedEvent.privacy"></app-privacy-icon>
         </div>
-
-        <div class="hero-metrics">
-          <div class="metric-item">
-            <span class="value">{{ (startPoint.distanceLabel && startPoint.distanceLabel !== '-') ? startPoint.distanceLabel : '--' }}</span>
-            <span class="unit">Distance</span>
-          </div>
-          <div class="metric-item">
-            <span class="value">{{ (startPoint.durationLabel && startPoint.durationLabel !== '-') ? startPoint.durationLabel : '--' }}</span>
-            <span class="unit">Duration</span>
-          </div>
-        </div>
-      </div>
+        @if (user) {
+        <app-service-source-icon summary-top-meta-suffix [event]="selectedEvent" [user]="user"></app-service-source-icon>
+        }
+        }
+      </app-summary-primary-info>
 
       <div class="track-start-popup-actions">
         <button mat-button color="primary" (click)="openSelectedStartPointEvent()">Open activity</button>
       </div>
-    </mat-card>
+    </div>
   </div>
   }
   }

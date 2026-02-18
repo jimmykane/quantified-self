@@ -17,7 +17,7 @@ import { LoggerService } from '../../services/logger.service';
 import { MapStyleService } from '../../services/map-style.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { of } from 'rxjs';
-import { ActivityTypes, AppThemes, DataStartPosition, DateRanges } from '@sports-alliance/sports-lib';
+import { ActivityTypes, AppThemes, DataDistance, DataDuration, DataPaceAvg, DataSpeedAvg, DataStartPosition, DateRanges } from '@sports-alliance/sports-lib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Overlay } from '@angular/cdk/overlay';
 import { MaterialModule } from '../../modules/material.module';
@@ -416,6 +416,16 @@ describe('TracksComponent', () => {
           getDisplayValue: () => '10.5',
           getDisplayUnit: () => 'km'
         }),
+        getStat: (type: string) => {
+          if (type === DataPaceAvg.type) {
+            return {
+              getDisplayValue: () => '5:10',
+              getDisplayUnit: () => 'min/km',
+              getType: () => DataPaceAvg.type
+            };
+          }
+          return null;
+        },
         getAllEvents: () => []
       };
 
@@ -433,8 +443,96 @@ describe('TracksComponent', () => {
           activityId: 'activity-start-1',
           durationLabel: '01:00:00',
           distanceLabel: '10.5 km',
+          effortLabel: 'Pace',
+          effortDisplayLabel: '5:10 min/km',
           lng: 22.94,
           lat: 40.64
+        })
+      ]);
+    });
+
+    it('should resolve pace metric for trail running start points', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setActivityStartPointsSpy = vi.spyOn(trackManager, 'setActivityStartPoints');
+
+      const activity = {
+        type: ActivityTypes.TrailRunning,
+        getID: () => 'activity-trail-1',
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+        getDuration: () => ({ getDisplayValue: () => '00:50:00' }),
+        getDistance: () => ({ getDisplayValue: () => '8.0', getDisplayUnit: () => 'km' }),
+        getStat: (type: string) => {
+          if (type === DataPaceAvg.type) {
+            return {
+              getDisplayValue: () => '6:01',
+              getDisplayUnit: () => 'min/km',
+              getType: () => DataPaceAvg.type
+            };
+          }
+          return null;
+        },
+        getAllEvents: () => []
+      };
+
+      const event = createMockEvent('trail-event-1', '2024-11-08T08:00:00Z', 40.64, 22.94, ActivityTypes.TrailRunning);
+      (event as any).getActivities = () => [activity];
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.TrailRunning]);
+      await waitForAsyncWork();
+
+      expect(setActivityStartPointsSpy).toHaveBeenCalledWith([
+        expect.objectContaining({
+          activityId: 'activity-trail-1',
+          effortLabel: 'Pace',
+          effortDisplayLabel: '6:01 min/km'
+        })
+      ]);
+    });
+
+    it('should resolve speed metric for cycling start points', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setActivityStartPointsSpy = vi.spyOn(trackManager, 'setActivityStartPoints');
+
+      const activity = {
+        type: ActivityTypes.Cycling,
+        getID: () => 'activity-bike-1',
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+        getDuration: () => ({ getDisplayValue: () => '00:45:00' }),
+        getDistance: () => ({ getDisplayValue: () => '20.0', getDisplayUnit: () => 'km' }),
+        getStat: (type: string) => {
+          if (type === DataSpeedAvg.type) {
+            return {
+              getDisplayValue: () => '26.7',
+              getDisplayUnit: () => 'km/h',
+              getType: () => DataSpeedAvg.type
+            };
+          }
+          return null;
+        },
+        getAllEvents: () => []
+      };
+
+      const event = createMockEvent('bike-event-1', '2024-11-08T08:00:00Z', 40.64, 22.94, ActivityTypes.Cycling);
+      (event as any).getActivities = () => [activity];
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Cycling]);
+      await waitForAsyncWork();
+
+      expect(setActivityStartPointsSpy).toHaveBeenCalledWith([
+        expect.objectContaining({
+          activityId: 'activity-bike-1',
+          effortLabel: 'Speed',
+          effortDisplayLabel: '26.7 km/h'
         })
       ]);
     });
@@ -531,6 +629,44 @@ describe('TracksComponent', () => {
       expect(router.navigate).toHaveBeenCalledWith(['/user', 'user-1', 'event', 'event-42']);
       expect(component.selectedStartPoint()).toBeNull();
       expect(component.selectedStartPointScreen()).toBeNull();
+    });
+
+    it('should build popup summary metrics from selected activity stats instead of preformatted labels', () => {
+      const activity = {
+        type: ActivityTypes.Running,
+        getDuration: () => ({ getType: () => DataDuration.type, getDisplayValue: () => '00:45:00', getDisplayUnit: () => '' }),
+        getDistance: () => ({ getType: () => DataDistance.type, getDisplayValue: () => '8.5', getDisplayUnit: () => 'km' }),
+        getStat: (type: string) => {
+          if (type === DataPaceAvg.type) {
+            return {
+              getDisplayValue: () => '5:20',
+              getDisplayUnit: () => 'min/km',
+              getType: () => DataPaceAvg.type
+            };
+          }
+          return null;
+        }
+      };
+      (component as any).activitiesByStartPointKey.set('event-1::activity-1', activity);
+
+      const metrics = component.getStartPointSummaryMetrics({
+        eventId: 'event-1',
+        activityId: 'activity-1',
+        activityType: 'Running',
+        activityTypeValue: ActivityTypes.Running,
+        startDate: 1731062400000,
+        durationLabel: 'SHOULD_NOT_BE_USED',
+        distanceLabel: 'SHOULD_NOT_BE_USED',
+        effortDisplayLabel: 'SHOULD_NOT_BE_USED',
+        lng: 10,
+        lat: 20
+      } as any);
+
+      expect(metrics).toEqual([
+        { value: '00:45:00', label: '' },
+        { value: '8.5', label: 'km' },
+        { value: '5:20', label: 'min/km' },
+      ]);
     });
   });
 

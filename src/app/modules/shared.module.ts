@@ -26,6 +26,7 @@ import { PeekPanelComponent } from '../components/shared/peek-panel/peek-panel.c
 import { MaterialPillTabsComponent } from '../components/shared/material-pill-tabs/material-pill-tabs.component';
 import { MaterialPillTabDirective } from '../components/shared/material-pill-tabs/material-pill-tab.directive';
 import { EventSectionHeaderComponent } from '../components/event/section-header/event.section-header.component';
+import { SummaryPrimaryInfoComponent } from '../components/shared/summary-primary-info/summary-primary-info.component';
 
 @NgModule({
     imports: [
@@ -56,6 +57,7 @@ import { EventSectionHeaderComponent } from '../components/event/section-header/
         MaterialPillTabsComponent,
         MaterialPillTabDirective,
         EventSectionHeaderComponent,
+        SummaryPrimaryInfoComponent,
     ],
     providers: [],
     exports: [
@@ -84,6 +86,7 @@ import { EventSectionHeaderComponent } from '../components/event/section-header/
         MaterialPillTabsComponent,
         MaterialPillTabDirective,
         EventSectionHeaderComponent,
+        SummaryPrimaryInfoComponent,
     ]
 })
 

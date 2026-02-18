@@ -7,7 +7,7 @@ import { take, debounceTime, filter } from 'rxjs/operators';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { Subject, Subscription } from 'rxjs';
-import { DateRanges, ActivityTypes } from '@sports-alliance/sports-lib';
+import { DateRanges, ActivityTypes, DataDistance, DataDuration, DataPaceAvg, DataSpeedAvg, DataSwimPaceAvg } from '@sports-alliance/sports-lib';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
 import { DataPositionInterface } from '@sports-alliance/sports-lib';
 import { DataJumpEvent } from '@sports-alliance/sports-lib';
@@ -40,6 +40,12 @@ import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-dete
 import { TripDetectionInput } from '../../services/my-tracks-trip-detection.service';
 import { DetectedTrip } from '../../services/my-tracks-trip-detection.service';
 import { TripLocationLabelService } from '../../services/trip-location-label.service';
+import { resolvePrimaryUnitAwareDisplayStat } from '../../helpers/summary-display.helper';
+import {
+  resolvePreferredSpeedDerivedAverageTypeForActivity,
+  resolvePreferredSpeedDerivedAverageTypesForActivity
+} from '../../helpers/summary-stats.helper';
+import { SummaryPrimaryInfoMetric } from '../shared/summary-primary-info/summary-primary-info.component';
 
 interface DetectedTripViewModel extends DetectedTrip {
   locationLabel: string | null;
@@ -90,6 +96,8 @@ export class TracksComponent implements OnInit, OnDestroy {
   private scrolled = false;
   private hasTrackBoundsBeenApplied = false;
   private trackCoordinatesByEventId = new Map<string, number[][]>();
+  private activitiesByStartPointKey = new Map<string, any>();
+  private eventsById = new Map<string, any>();
 
   private eventsSubscription: Subscription = new Subscription();
   private trackLoadingSubscription: Subscription = new Subscription();
@@ -407,6 +415,8 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.detectedTripsPanelExpanded.set(false);
     this.hasDetectedJumps.set(false);
     this.trackCoordinatesByEventId.clear();
+    this.activitiesByStartPointKey.clear();
+    this.eventsById.clear();
     this.closeSelectedStartPointPopup();
     this.tracksMapManager.clearJumpHeatmap();
     this.tracksMapManager.clearActivityStartPoints();
@@ -509,6 +519,9 @@ export class TracksComponent implements OnInit, OnDestroy {
               }
 
               const eventId = fullEvent?.getID?.() || event.getID();
+              if (eventId) {
+                this.eventsById.set(eventId, fullEvent || event);
+              }
               let hasVisibleTrackForEvent = false;
               const eventCoordinates: number[][] = [];
               fullEvent.getActivities()
@@ -536,6 +549,10 @@ export class TracksComponent implements OnInit, OnDestroy {
 
                   if (coordinates.length > 1) {
                     this.tracksMapManager.addTrackFromActivity(activity, coordinates);
+                    const activityId = activity?.getID?.();
+                    if (eventId && activityId) {
+                      this.activitiesByStartPointKey.set(this.buildStartPointActivityKey(eventId, String(activityId)), activity);
+                    }
                     const startPoint = this.buildTrackStartPoint(
                       activity,
                       eventId,
@@ -689,6 +706,57 @@ export class TracksComponent implements OnInit, OnDestroy {
       return startPoint.activityType.trim();
     }
     return 'Other';
+  }
+
+  public getStartPointSummaryMetrics(startPoint: TrackStartSelection | null): SummaryPrimaryInfoMetric[] {
+    if (!startPoint) return [];
+    const activity = this.resolveActivityFromStartPointSelection(startPoint);
+    if (!activity) {
+      const durationMetric = this.toPopupMetric(startPoint.durationLabel);
+      const distanceMetric = this.toPopupMetric(startPoint.distanceLabel);
+      const effortMetric = this.toPopupMetric(startPoint.effortDisplayLabel);
+      return [
+        {
+          value: durationMetric.value,
+          label: durationMetric.label,
+        },
+        {
+          value: distanceMetric.value,
+          label: distanceMetric.label,
+        },
+        {
+          value: effortMetric.value,
+          label: effortMetric.label || '',
+        },
+      ];
+    }
+
+    const effortType = resolvePreferredSpeedDerivedAverageTypeForActivity(activity?.type) || DataSpeedAvg.type;
+    const metricTypes = [DataDuration.type, DataDistance.type, effortType];
+
+    return metricTypes.map((metricType) => this.resolveSummaryMetricFromActivity(activity, metricType));
+  }
+
+  public resolveStartPointEvent(startPoint: TrackStartSelection | null): any | null {
+    if (!startPoint?.eventId) return null;
+    return this.eventsById.get(startPoint.eventId) || null;
+  }
+
+  private toPopupMetric(rawDisplay: string | null | undefined): SummaryPrimaryInfoMetric {
+    const normalized = typeof rawDisplay === 'string' ? rawDisplay.trim() : '';
+    if (!normalized || normalized === '-') {
+      return { value: '--', label: '' };
+    }
+
+    const separatorIndex = normalized.indexOf(' ');
+    if (separatorIndex <= 0 || separatorIndex >= normalized.length - 1) {
+      return { value: normalized, label: '' };
+    }
+
+    return {
+      value: normalized.slice(0, separatorIndex).trim() || normalized,
+      label: normalized.slice(separatorIndex + 1).trim(),
+    };
   }
 
   private getTripDetectionInputFromEvent(event: any): TripDetectionInput | null {
@@ -848,6 +916,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       startDate,
       durationLabel: this.formatActivityDurationLabel(activity),
       distanceLabel: this.formatActivityDistanceLabel(activity),
+      ...this.resolveActivityEffortMetric(activity),
       lng,
       lat
     };
@@ -895,6 +964,81 @@ export class TracksComponent implements OnInit, OnDestroy {
     return null;
   }
 
+  private resolveSummaryMetricFromActivity(activity: any, statType: string): SummaryPrimaryInfoMetric {
+    const stat = this.getActivitySummaryStat(activity, statType);
+    const unitSettings = typeof this.userSettingsQuery.unitSettings === 'function'
+      ? this.userSettingsQuery.unitSettings()
+      : undefined;
+    const display = resolvePrimaryUnitAwareDisplayStat(stat, unitSettings, statType);
+
+    return {
+      value: display?.value || '--',
+      label: display?.unit || '',
+    };
+  }
+
+  private getActivitySummaryStat(activity: any, statType: string): any {
+    if (statType === DataDuration.type && typeof activity?.getDuration === 'function') {
+      return activity.getDuration();
+    }
+    if (statType === DataDistance.type && typeof activity?.getDistance === 'function') {
+      return activity.getDistance();
+    }
+    if (typeof activity?.getStat === 'function') {
+      return activity.getStat(statType);
+    }
+    return null;
+  }
+
+  private resolveActivityFromStartPointSelection(startPoint: TrackStartSelection | null): any | null {
+    if (!startPoint?.eventId || !startPoint?.activityId) return null;
+    return this.activitiesByStartPointKey.get(this.buildStartPointActivityKey(startPoint.eventId, startPoint.activityId)) || null;
+  }
+
+  private buildStartPointActivityKey(eventId: string, activityId: string): string {
+    return `${eventId}::${activityId}`;
+  }
+
+  private resolveActivityEffortMetric(activity: any): Pick<TrackStartPoint, 'effortLabel' | 'effortDisplayLabel' | 'effortStatType'> {
+    const preferredType = resolvePreferredSpeedDerivedAverageTypeForActivity(activity?.type);
+    const candidateTypes = [
+      preferredType,
+      ...resolvePreferredSpeedDerivedAverageTypesForActivity(activity?.type),
+      DataSpeedAvg.type,
+      DataPaceAvg.type,
+      DataSwimPaceAvg.type,
+    ].filter((type): type is string => typeof type === 'string' && type.length > 0);
+
+    const orderedTypes = [...new Set(candidateTypes).values()];
+    const unitSettings = typeof this.userSettingsQuery.unitSettings === 'function'
+      ? this.userSettingsQuery.unitSettings()
+      : undefined;
+
+    for (const statType of orderedTypes) {
+      const stat = activity?.getStat?.(statType);
+      const display = resolvePrimaryUnitAwareDisplayStat(stat, unitSettings, statType);
+      if (!display || !display.value) {
+        continue;
+      }
+      return {
+        effortLabel: this.isPaceDerivedStatType(statType) ? 'Pace' : 'Speed',
+        effortDisplayLabel: `${display.value}${display.unit ? ` ${display.unit}` : ''}`.trim(),
+        effortStatType: display.type || statType,
+      };
+    }
+
+    const fallbackType = preferredType || DataSpeedAvg.type;
+    return {
+      effortLabel: this.isPaceDerivedStatType(fallbackType) ? 'Pace' : 'Speed',
+      effortDisplayLabel: '-',
+      effortStatType: fallbackType,
+    };
+  }
+
+  private isPaceDerivedStatType(statType: string | null | undefined): boolean {
+    return typeof statType === 'string' && statType.toLowerCase().includes('pace');
+  }
+
   private bindStartPointPopupMapListeners(map: any): void {
     this.unbindStartPointPopupMapListeners();
     if (!map?.on) return;
@@ -928,8 +1072,8 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
 
     const projected = map.project([selected.lng, selected.lat]);
-    const x = Number(projected?.x);
-    const y = Number(projected?.y);
+    const x = Math.round(Number(projected?.x));
+    const y = Math.round(Number(projected?.y));
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       this.selectedStartPointScreen.set(null);
       return;
