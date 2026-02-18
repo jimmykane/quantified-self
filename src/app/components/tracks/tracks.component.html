@@ -28,12 +28,16 @@
         [metrics]="getStartPointSummaryMetrics(startPoint)"
         [forceMobileLayout]="true">
         @if (resolveStartPointEvent(startPoint); as selectedEvent) {
-        <div summary-icon-badge class="privacy-mini-wrapper">
-          <app-privacy-icon [privacy]="selectedEvent.privacy"></app-privacy-icon>
-        </div>
-        @if (user) {
-        <app-service-source-icon summary-top-meta-suffix [event]="selectedEvent" [user]="user"></app-service-source-icon>
+        <ng-container summary-icon-badge>
+          <div class="privacy-mini-wrapper">
+            <app-privacy-icon [privacy]="selectedEvent.privacy"></app-privacy-icon>
+          </div>
+        </ng-container>
         }
+        @if (resolveStartPointEvent(startPoint); as selectedEvent) {
+          @if (user) {
+          <app-service-source-icon summary-top-meta-suffix [event]="selectedEvent" [user]="user"></app-service-source-icon>
+          }
         }
       </app-summary-primary-info>
 

@@ -24,6 +24,7 @@ import { MaterialModule } from '../../modules/material.module';
 import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-detection.service';
 import { TripLocationLabelService } from '../../services/trip-location-label.service';
 import { PeekPanelComponent } from '../shared/peek-panel/peek-panel.component';
+import { MapboxAutoResizeService } from '../../services/map/mapbox-auto-resize.service';
 
 const waitForAsyncWork = async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -218,6 +219,7 @@ describe('TracksComponent', () => {
         { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQuery },
         { provide: MyTracksTripDetectionService, useValue: mockTripDetectionService },
         { provide: TripLocationLabelService, useValue: mockTripLocationLabelService },
+        { provide: MapboxAutoResizeService, useValue: { bind: vi.fn(), unbind: vi.fn() } },
       ],
       schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();

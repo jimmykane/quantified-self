@@ -35,6 +35,7 @@ import { MapStyleName } from '../../services/map/map-style.types';
 import { MapboxHeatmapLayerService } from '../../services/map/mapbox-heatmap-layer.service';
 import { JumpHeatmapWeightingService } from '../../services/map/jump-heatmap-weighting.service';
 import { MapboxStartPointLayerService } from '../../services/map/mapbox-start-point-layer.service';
+import { MapboxAutoResizeService } from '../../services/map/mapbox-auto-resize.service';
 import { Search } from '../event-search/event-search.component';
 import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-detection.service';
 import { TripDetectionInput } from '../../services/my-tracks-trip-detection.service';
@@ -142,6 +143,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     private mapboxHeatmapLayerService: MapboxHeatmapLayerService,
     private jumpHeatmapWeightingService: JumpHeatmapWeightingService,
     private mapboxStartPointLayerService: MapboxStartPointLayerService,
+    private mapboxAutoResizeService: MapboxAutoResizeService,
   ) {
     this.tracksMapManager = new TracksMapManager(
       this.zone,
@@ -267,6 +269,13 @@ export class TracksComponent implements OnInit, OnDestroy {
           });
         });
         this.bindStartPointPopupMapListeners(mapInstance);
+        this.mapboxAutoResizeService.bind(mapInstance, {
+          container: this.mapDiv?.nativeElement,
+          onResize: () => {
+            if (!this.selectedStartPoint()) return;
+            this.zone.run(() => this.updateSelectedStartPointScreenPosition());
+          }
+        });
 
         mapInstance.addControl(new mapboxgl.FullscreenControl(), 'bottom-right');
 
@@ -355,6 +364,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.bottomSheet.dismiss();
     this.tracksMapManager.setStartMarkerSelectionHandler(null);
     this.unbindStartPointPopupMapListeners();
+    this.mapboxAutoResizeService.unbind(this.tracksMapManager.getMap());
     if (this.mapSignal()) {
       this.mapSignal().remove();
     }
@@ -460,9 +470,8 @@ export class TracksComponent implements OnInit, OnDestroy {
             return;
           }
 
-          const chuckArraySize = 15;
-          const chunckedEvents: any[][] = events.reduce((all: any[][], one: any, i: number) => {
-            const ch = Math.floor(i / chuckArraySize);
+          const chunkedEvents: any[][] = events.reduce((all: any[][], one: any, i: number) => {
+            const ch = Math.floor(i / 15);
             all[ch] = ([] as any[]).concat((all[ch] || []), one);
             return all
           }, [])
@@ -481,7 +490,7 @@ export class TracksComponent implements OnInit, OnDestroy {
           let jumpsWithWeightMetrics = 0;
           const detectionCandidatesByEvent = new Map<string, TripDetectionInput>();
 
-          for (const eventsChunk of chunckedEvents) {
+          for (const eventsChunk of chunkedEvents) {
             if (this.promiseTime !== promiseTime) {
               return;
             }
