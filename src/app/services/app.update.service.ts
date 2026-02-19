@@ -12,6 +12,8 @@ import { AppWindowService } from './app.window.service';
 })
 export class AppUpdateService {
   public isUpdateAvailable = signal(false);
+  private readonly seenVersionHashes = new Set<string>();
+  private readonly seenVersionHashesStorageKey = 'app.update.seen-version-hashes';
 
   constructor(appRef: ApplicationRef, updates: SwUpdate, private snackbar: MatSnackBar, private logger: LoggerService, private windowService: AppWindowService) {
     if (!updates.isEnabled) {
@@ -25,12 +27,13 @@ export class AppUpdateService {
     everyTenMinutesOnceAppIsStable$.subscribe(() => updates.checkForUpdate());
     updates.versionUpdates
       .pipe(filter((evt): evt is VersionReadyEvent => evt.type === 'VERSION_READY'))
-      .subscribe(() => {
-        // Guard against duplicate VERSION_READY emissions in the same app runtime.
-        if (this.isUpdateAvailable()) {
+      .subscribe((event) => {
+        this.isUpdateAvailable.set(true);
+        const versionHash = this.getVersionHash(event);
+        if (this.hasSeenVersionHash(versionHash)) {
           return;
         }
-        this.isUpdateAvailable.set(true);
+        this.markVersionHashAsSeen(versionHash);
 
         const snack = this.snackbar.open('There is a new version available', 'Reload', {
           duration: 0,
@@ -54,6 +57,58 @@ export class AppUpdateService {
 
   public activateUpdate() {
     this.windowService.windowRef.location.reload();
+  }
+
+  private getVersionHash(event: VersionReadyEvent): string {
+    return event.latestVersion.hash || event.currentVersion.hash || 'unknown-version-hash';
+  }
+
+  private hasSeenVersionHash(hash: string): boolean {
+    if (this.seenVersionHashes.has(hash)) {
+      return true;
+    }
+
+    const persistedHashes = this.getPersistedSeenHashes();
+    if (persistedHashes.has(hash)) {
+      this.seenVersionHashes.add(hash);
+      return true;
+    }
+
+    return false;
+  }
+
+  private markVersionHashAsSeen(hash: string): void {
+    this.seenVersionHashes.add(hash);
+    this.persistSeenHashes();
+  }
+
+  private getPersistedSeenHashes(): Set<string> {
+    try {
+      const raw = this.windowService.windowRef.localStorage?.getItem(this.seenVersionHashesStorageKey);
+      if (!raw) {
+        return new Set<string>();
+      }
+
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return new Set<string>();
+      }
+
+      return new Set<string>(parsed.filter(item => typeof item === 'string'));
+    } catch {
+      return new Set<string>();
+    }
+  }
+
+  private persistSeenHashes(): void {
+    try {
+      this.windowService.windowRef.localStorage?.setItem(
+        this.seenVersionHashesStorageKey,
+        JSON.stringify(Array.from(this.seenVersionHashes))
+      );
+    } catch {
+      // Ignore storage failures; in-memory deduplication still works in this tab.
+    }
   }
 
 }

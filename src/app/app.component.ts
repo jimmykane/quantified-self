@@ -302,7 +302,8 @@ export class AppComponent implements OnInit, OnDestroy {
 
   public openWhatsNew() {
     this.dialog.open(WhatsNewDialogComponent, {
-      width: '600px',
+      width: '860px',
+      maxWidth: '96vw',
       autoFocus: false
     });
   }
