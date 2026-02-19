@@ -1,14 +1,9 @@
-<div class="summary-primary-info performance-header" [class.summary-primary-info--compact]="compact"
-  [class.summary-primary-info--force-mobile]="forceMobileLayout">
+<div class="summary-primary-info performance-header" [class.summary-primary-info--force-mobile]="forceMobileLayout">
   <div class="identity-section">
-    <div class="activity-icon-container"
-      [class.activity-icon-container--clickable]="iconClickable"
+    <div class="activity-icon-container" [class.activity-icon-container--clickable]="iconClickable"
       (click)="onIconContainerClick()">
-      <app-activity-type-icon class="activity-main-icon"
-        [activityType]="resolvedIconActivityType"
-        size="32px"
-        [matTooltip]="iconTooltip"
-        [matTooltipDisabled]="!iconTooltip"></app-activity-type-icon>
+      <app-activity-type-icon class="activity-main-icon" [activityType]="resolvedIconActivityType" size="32px"
+        [matTooltip]="iconTooltip" [matTooltipDisabled]="!iconTooltip"></app-activity-type-icon>
       <div class="summary-icon-badge">
         <ng-content select="[summary-icon-badge]"></ng-content>
       </div>

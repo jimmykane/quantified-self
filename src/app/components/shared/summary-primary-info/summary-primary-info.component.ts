@@ -20,7 +20,7 @@ export class SummaryPrimaryInfoComponent {
   @Input() metrics: SummaryPrimaryInfoMetric[] = [];
   @Input() iconTooltip = '';
   @Input() iconClickable = false;
-  @Input() compact = false;
+
   @Input() forceMobileLayout = false;
 
   @Output() iconClick = new EventEmitter<void>();

@@ -179,71 +179,8 @@
   display: none;
 }
 
-.summary-primary-info--compact {
-  gap: 12px;
-  padding: 6px 6px 4px;
-}
 
-.summary-primary-info--compact .identity-section {
-  gap: 10px;
-  flex: 1 1 auto;
-}
-
-.summary-primary-info--compact .activity-icon-container {
-  flex: 0 0 auto;
-}
-
-.summary-primary-info--compact .top-meta {
-  gap: 5px;
-  font-size: 13px;
-  line-height: 1.2;
-}
-
-.summary-primary-info--compact .time-separator {
-  font-size: 11px;
-}
-
-.summary-primary-info--compact .time {
-  font-size: 12px;
-}
-
-.summary-primary-info--compact .chips-row {
-  gap: 6px;
-}
-
-.summary-primary-info--compact .chip {
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-}
-
-.summary-primary-info--compact .hero-metrics {
-  gap: 8px;
-  padding: 0 0 0 6px;
-  border-left: 1px solid color-mix(in srgb, var(--mat-app-outline-variant) 80%, transparent);
-}
-
-.summary-primary-info--compact .metric-item {
-  min-width: 62px;
-}
-
-.summary-primary-info--compact .metric-item .value {
-  font-size: 18px;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.summary-primary-info--compact .metric-item .unit {
-  font-size: 10px;
-  letter-spacing: 0.04em;
-}
-
-.summary-primary-info--compact .summary-actions {
-  display: none;
-}
-
-.summary-primary-info--force-mobile:not(.summary-primary-info--compact) {
+.summary-primary-info--force-mobile {
   flex-direction: column;
   position: relative;
   padding: 12px;
@@ -251,32 +188,32 @@
   align-items: stretch;
 }
 
-.summary-primary-info--force-mobile:not(.summary-primary-info--compact) .identity-section {
+.summary-primary-info--force-mobile .identity-section {
   gap: 12px;
   padding-right: 104px;
 }
 
-.summary-primary-info--force-mobile:not(.summary-primary-info--compact) .activity-icon-container {
+.summary-primary-info--force-mobile .activity-icon-container {
   width: 48px;
   height: 48px;
   border-radius: 12px;
   flex-shrink: 0;
 }
 
-.summary-primary-info--force-mobile:not(.summary-primary-info--compact) .top-meta {
+.summary-primary-info--force-mobile .top-meta {
   flex-direction: column;
   gap: 0;
 }
 
-.summary-primary-info--force-mobile:not(.summary-primary-info--compact) .time-separator {
+.summary-primary-info--force-mobile .time-separator {
   display: none;
 }
 
-.summary-primary-info--force-mobile:not(.summary-primary-info--compact) .time {
+.summary-primary-info--force-mobile .time {
   font-size: 0.85rem;
 }
 
-.summary-primary-info--force-mobile:not(.summary-primary-info--compact) .hero-metrics {
+.summary-primary-info--force-mobile .hero-metrics {
   width: 100%;
   justify-content: space-evenly;
   background: var(--mat-app-surface-container-lowest);
@@ -287,18 +224,18 @@
   box-shadow: inset 0 0 0 1px var(--mat-app-outline-variant);
 }
 
-.summary-primary-info--force-mobile:not(.summary-primary-info--compact) .summary-actions {
+.summary-primary-info--force-mobile .summary-actions {
   position: absolute;
   top: 12px;
   right: 12px;
   margin: 0;
 }
 
-.summary-primary-info--force-mobile:not(.summary-primary-info--compact) .metric-item .value {
+.summary-primary-info--force-mobile .metric-item .value {
   font-size: 1.4rem;
 }
 
-.summary-primary-info--force-mobile:not(.summary-primary-info--compact) .metric-item .unit {
+.summary-primary-info--force-mobile .metric-item .unit {
   font-size: 0.65rem;
 }
 
@@ -310,7 +247,7 @@
 }
 
 @include bp.max-768 {
-  .summary-primary-info:not(.summary-primary-info--compact) {
+  .summary-primary-info {
     flex-direction: column;
     position: relative;
     padding: 12px;
@@ -318,32 +255,32 @@
     align-items: stretch;
   }
 
-  .summary-primary-info:not(.summary-primary-info--compact) .identity-section {
+  .summary-primary-info .identity-section {
     gap: 12px;
     padding-right: 116px;
   }
 
-  .summary-primary-info:not(.summary-primary-info--compact) .activity-icon-container {
+  .summary-primary-info .activity-icon-container {
     width: 48px;
     height: 48px;
     border-radius: 12px;
     flex-shrink: 0;
   }
 
-  .summary-primary-info:not(.summary-primary-info--compact) .top-meta {
+  .summary-primary-info .top-meta {
     flex-direction: column;
     gap: 0;
   }
 
-  .summary-primary-info:not(.summary-primary-info--compact) .time-separator {
+  .summary-primary-info .time-separator {
     display: none;
   }
 
-  .summary-primary-info:not(.summary-primary-info--compact) .time {
+  .summary-primary-info .time {
     font-size: 0.85rem;
   }
 
-  .summary-primary-info:not(.summary-primary-info--compact) .hero-metrics {
+  .summary-primary-info .hero-metrics {
     width: 100%;
     justify-content: space-evenly;
     background: var(--mat-app-surface-container-lowest);
@@ -354,7 +291,7 @@
     box-shadow: inset 0 0 0 1px var(--mat-app-outline-variant);
   }
 
-  .summary-primary-info:not(.summary-primary-info--compact) .summary-actions {
+  .summary-primary-info .summary-actions {
     position: absolute;
     top: 12px;
     right: 12px;
@@ -362,42 +299,28 @@
   }
 }
 
-@include bp.max-640 {
-  .summary-primary-info--compact {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    padding: 4px 4px 2px;
-  }
 
-  .summary-primary-info--compact .hero-metrics {
-    border-left: 0;
-    border-top: 1px solid color-mix(in srgb, var(--mat-app-outline-variant) 80%, transparent);
-    padding: 8px 0 0;
-    justify-content: space-between;
-  }
-}
 
 @include bp.max-480 {
-  .summary-primary-info:not(.summary-primary-info--compact) {
+  .summary-primary-info {
     padding: 12px;
     gap: 12px;
   }
 
-  .summary-primary-info:not(.summary-primary-info--compact) .identity-section {
+  .summary-primary-info .identity-section {
     padding-right: 104px;
   }
 
-  .summary-primary-info:not(.summary-primary-info--compact) .hero-metrics {
+  .summary-primary-info .hero-metrics {
     padding: 12px;
     gap: 16px;
   }
 
-  .summary-primary-info:not(.summary-primary-info--compact) .metric-item .value {
+  .summary-primary-info .metric-item .value {
     font-size: 1.4rem;
   }
 
-  .summary-primary-info:not(.summary-primary-info--compact) .metric-item .unit {
+  .summary-primary-info .metric-item .unit {
     font-size: 0.65rem;
   }
 }
