@@ -17,10 +17,18 @@ export interface LayerBindingEntry {
 
 export type LayerBindingRegistry = LayerBindingEntry[];
 
+export interface GeoJsonSourceOptions {
+  cluster?: boolean;
+  clusterRadius?: number;
+  clusterMaxZoom?: number;
+  generateId?: boolean;
+}
+
 export function upsertGeoJsonSource(
   map: MapboxLikeMap | null | undefined,
   sourceId: string,
-  feature: any
+  feature: any,
+  options: GeoJsonSourceOptions = {}
 ): void {
   if (!map) return;
 
@@ -29,6 +37,7 @@ export function upsertGeoJsonSource(
     map.addSource?.(sourceId, {
       type: 'geojson',
       data: feature,
+      ...options,
     });
     return;
   }

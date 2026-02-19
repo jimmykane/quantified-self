@@ -1,8 +1,11 @@
-import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
+import { Component, Input, OnInit, inject } from '@angular/core';
 import { AppUserService } from '../../../../services/app.user.service';
 import { TileActionsAbstractDirective } from '../tile-actions-abstract.directive';
-import { MapTypes } from '@sports-alliance/sports-lib';
 import { TileMapSettingsInterface } from '@sports-alliance/sports-lib';
+import { MapStyleService } from '../../../../services/map-style.service';
+import { MapStyleName } from '../../../../services/map/map-style.types';
+
+type DashboardMapTileSettings = TileMapSettingsInterface & { mapStyle?: MapStyleName };
 
 @Component({
   selector: 'app-tile-map-actions',
@@ -12,11 +15,14 @@ import { TileMapSettingsInterface } from '@sports-alliance/sports-lib';
   standalone: false
 })
 export class TileMapActionsComponent extends TileActionsAbstractDirective implements OnInit {
-  @Input() mapType!: MapTypes;
+  @Input() mapStyle: MapStyleName = 'default';
   @Input() clusterMarkers!: boolean;
-
-  public mapTypes = MapTypes;
   public iconColor: string = '';
+  private mapStyleService = inject(MapStyleService);
+
+  public get mapStyleOptions() {
+    return this.mapStyleService.getSupportedStyleOptions();
+  }
 
   constructor(
     userService: AppUserService) {
@@ -30,11 +36,12 @@ export class TileMapActionsComponent extends TileActionsAbstractDirective implem
     }
   }
 
-  async changeMapType(event: any) {
-    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeMapType' });
-    const tile = <TileMapSettingsInterface>this.user?.settings.dashboardSettings.tiles.find(tile => tile.order === this.order);
+  async changeMapStyle(event: any) {
+    this.analyticsService.logEvent('dashboard_tile_action', { method: 'changeMapStyle' });
+    const tile = <DashboardMapTileSettings>this.user?.settings.dashboardSettings.tiles.find(tile => tile.order === this.order);
     if (tile) {
-      tile.mapType = event.value;
+      tile.mapStyle = this.mapStyleService.normalizeStyle(event.value);
+      delete (tile as any).mapType;
     }
     return this.userService.updateUserProperties(this.user!, { settings: this.user!.settings })
   }
@@ -51,6 +58,5 @@ export class TileMapActionsComponent extends TileActionsAbstractDirective implem
   }
 
 }
-
 
 

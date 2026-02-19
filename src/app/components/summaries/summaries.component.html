@@ -14,7 +14,7 @@
       }
       @if (tile.type === tileTypes.Map) {
       <app-tile-map class="glass-card" [user]="user" [type]="tile.type" [isLoading]="isLoading"
-        [showActions]="showActions" [events]="getMapTile(tile).events" [mapType]="getMapTile(tile).mapType"
+        [showActions]="showActions" [events]="getMapTile(tile).events" [mapStyle]="getMapTile(tile).mapStyle || 'default'"
         [clusterMarkers]="getMapTile(tile).clusterMarkers" [size]="tile.size" [order]="tile.order"></app-tile-map>
       }
     </mat-grid-tile>

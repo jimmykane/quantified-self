@@ -12,6 +12,7 @@ import { User } from '@sports-alliance/sports-lib';
 import { vi } from 'vitest';
 import { MapActionsComponent } from './map.actions.component';
 import { AppAnalyticsService } from '../../../../services/app.analytics.service';
+import { MapStyleService } from '../../../../services/map-style.service';
 
 describe('MapActionsComponent', () => {
     let component: MapActionsComponent;
@@ -19,6 +20,14 @@ describe('MapActionsComponent', () => {
 
     const analyticsServiceMock = {
         logEvent: vi.fn(),
+    };
+    const mapStyleServiceMock = {
+        getSupportedStyleOptions: vi.fn().mockReturnValue([
+            { value: 'default', label: 'Default' },
+            { value: 'satellite', label: 'Satellite' },
+            { value: 'outdoors', label: 'Outdoors' },
+        ]),
+        normalizeStyle: vi.fn((value: string) => value),
     };
 
     const userMock = {
@@ -44,6 +53,7 @@ describe('MapActionsComponent', () => {
             ],
             providers: [
                 { provide: AppAnalyticsService, useValue: analyticsServiceMock },
+                { provide: MapStyleService, useValue: mapStyleServiceMock },
             ],
         }).compileComponents();
 

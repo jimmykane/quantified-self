@@ -22,25 +22,6 @@
   pointer-events: none;
 }
 
-.track-start-popup {
-  pointer-events: auto;
-  width: min(360px, calc(100vw - 16px));
-  min-width: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  overflow: visible;
-  color: var(--mat-app-on-surface);
-}
-
-.track-start-popup-actions {
-  margin-top: 0;
-  padding: 0 12px 10px;
-  display: flex;
-  justify-content: flex-end;
-}
-
 app-peek-panel.tracks-search-peek {
   position: absolute;
   top: 0;
@@ -201,12 +182,6 @@ app-peek-panel.tracks-trips-peek .detected-trips-empty {
 }
 
 @include bp.max-640 {
-  .track-start-popup {
-    width: calc(100vw - 16px);
-    min-width: 0;
-    padding: 0;
-  }
-
   app-peek-panel.tracks-search-peek {
     width: 100%;
   }

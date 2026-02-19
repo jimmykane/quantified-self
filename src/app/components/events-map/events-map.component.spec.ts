@@ -1,422 +1,308 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { describe, it, expect, beforeEach, afterEach, vi, Mock } from 'vitest';
+import { CUSTOM_ELEMENTS_SCHEMA, NgZone, SimpleChange, signal } from '@angular/core';
+import { RouterTestingModule } from '@angular/router/testing';
+import { of } from 'rxjs';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  ActivityTypes,
+  AppThemes,
+  DataLatitudeDegrees,
+  DataLongitudeDegrees,
+  DataPositionInterface,
+  DataStartPosition,
+  EventInterface,
+  User,
+} from '@sports-alliance/sports-lib';
 import { EventsMapComponent } from './events-map.component';
 import { AppEventService } from '../../services/app.event.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppThemeService } from '../../services/app.theme.service';
-import { AppUserService } from '../../services/app.user.service';
-import { AppThemes } from '@sports-alliance/sports-lib';
-import { signal } from '@angular/core';
-import { RouterTestingModule } from '@angular/router/testing';
-import { GoogleMapsLoaderService } from '../../services/google-maps-loader.service';
-import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
-import { MarkerFactoryService } from '../../services/map/marker-factory.service';
+import { MapboxLoaderService } from '../../services/mapbox-loader.service';
+import { MapStyleService } from '../../services/map-style.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { NgZone, ChangeDetectorRef, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
-import { of } from 'rxjs';
-import {
-    EventInterface,
-    MapTypes,
-    User,
-    ActivityInterface,
-    DataPositionInterface,
-    DataStartPosition,
-    DataLatitudeDegrees,
-    DataLongitudeDegrees,
-    ActivityTypes
-} from '@sports-alliance/sports-lib';
-import { MarkerClusterer } from '@googlemaps/markerclusterer';
 
-vi.mock('@googlemaps/markerclusterer', () => {
-    return {
-        MarkerClusterer: vi.fn().mockImplementation(() => ({
-            addMarkers: vi.fn(),
-            clearMarkers: vi.fn()
-        }))
-    };
-});
+const EVENTS_SOURCE_ID = 'events-map-events-source';
+const EVENTS_UNCLUSTERED_LAYER_ID = 'events-map-events-unclustered';
+const EVENTS_CLUSTER_LAYER_ID = 'events-map-events-clusters';
+const SELECTED_TRACKS_SOURCE_ID = 'events-map-selected-event-tracks-source';
 
 describe('EventsMapComponent', () => {
-    let component: EventsMapComponent;
-    let fixture: ComponentFixture<EventsMapComponent>;
-    let mockEventService: any;
-    let mockColorService: any;
-    let mockLogger: any;
-    let mockZone: any;
-    let mockUser: User;
-    let mockEvent: any; // Use any to allow easy mocking of methods
-    let mockThemeService: any;
-    let mockSnackBar: any;
+  let component: EventsMapComponent;
+  let fixture: ComponentFixture<EventsMapComponent>;
 
-    beforeEach(async () => {
-        mockEventService = {
-            attachStreamsToEventWithActivities: vi.fn(),
-            getActivities: vi.fn()
-        };
-        mockColorService = {
-            getColorForActivityTypeByActivityTypeGroup: vi.fn(),
-            getActivityColor: vi.fn()
-        };
-        mockLogger = {
+  let mockEventService: any;
+  let mockColorService: any;
+  let mockMapboxLoader: any;
+  let mockMapStyleService: any;
+  let mockSnackBar: any;
+
+  let map: any;
+  let mapEventHandlers: Record<string, Array<(...args: any[]) => void>>;
+  let layerEventHandlers: Record<string, Array<(...args: any[]) => void>>;
+
+  const emitMapEvent = (event: string, payload?: any) => {
+    const handlers = mapEventHandlers[event] || [];
+    handlers.forEach((handler) => handler(payload));
+  };
+
+  const emitLayerEvent = (event: string, layerId: string, payload?: any) => {
+    const handlers = layerEventHandlers[`${event}:${layerId}`] || [];
+    handlers.forEach((handler) => handler(payload));
+  };
+
+  const flush = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+
+  const initMap = async () => {
+    fixture.detectChanges();
+    await flush();
+    emitMapEvent('load');
+    await flush();
+  };
+
+  const createEvent = (eventId: string, latitudeDegrees = 40.64, longitudeDegrees = 22.94): EventInterface => {
+    const startPosition = {
+      getValue: () => ({ latitudeDegrees, longitudeDegrees }),
+    } as DataStartPosition;
+
+    const event = {
+      getID: () => eventId,
+      getStat: (type: string) => (type === DataStartPosition.type ? startPosition : null),
+      getActivityTypesAsArray: () => [ActivityTypes.Running],
+      getActivityTypesAsString: () => 'Running',
+      getDuration: () => ({ getDisplayValue: () => '1h' }),
+      getDistance: () => ({ getDisplayValue: () => '10', getDisplayUnit: () => 'km' }),
+      getActivities: () => [],
+      startDate: new Date('2025-01-01T10:00:00Z'),
+      description: 'Test event',
+    } as unknown as EventInterface;
+
+    return event;
+  };
+
+  beforeEach(async () => {
+    mapEventHandlers = {};
+    layerEventHandlers = {};
+
+    const sourceState = new Map<string, any>();
+    const layerState = new Set<string>();
+
+    map = {
+      on: vi.fn((event: string, layerOrHandler: any, maybeHandler?: any) => {
+        if (typeof layerOrHandler === 'function') {
+          mapEventHandlers[event] = mapEventHandlers[event] || [];
+          mapEventHandlers[event].push(layerOrHandler);
+          return;
+        }
+
+        const key = `${event}:${layerOrHandler}`;
+        layerEventHandlers[key] = layerEventHandlers[key] || [];
+        layerEventHandlers[key].push(maybeHandler);
+      }),
+      off: vi.fn((event: string, layerOrHandler: any, maybeHandler?: any) => {
+        if (typeof layerOrHandler === 'function') {
+          mapEventHandlers[event] = (mapEventHandlers[event] || []).filter((handler) => handler !== layerOrHandler);
+          return;
+        }
+
+        const key = `${event}:${layerOrHandler}`;
+        layerEventHandlers[key] = (layerEventHandlers[key] || []).filter((handler) => handler !== maybeHandler);
+      }),
+      addSource: vi.fn((sourceId: string, source: any) => {
+        sourceState.set(sourceId, {
+          ...source,
+          setData: vi.fn(),
+          getClusterExpansionZoom: vi.fn((_clusterId: number, callback: (error: any, zoom: number) => void) => callback(null, 8)),
+        });
+      }),
+      getSource: vi.fn((sourceId: string) => sourceState.get(sourceId) || null),
+      removeSource: vi.fn((sourceId: string) => {
+        sourceState.delete(sourceId);
+      }),
+      addLayer: vi.fn((layer: any) => {
+        layerState.add(layer.id);
+      }),
+      getLayer: vi.fn((layerId: string) => (layerState.has(layerId) ? { id: layerId } : null)),
+      removeLayer: vi.fn((layerId: string) => {
+        layerState.delete(layerId);
+      }),
+      setPaintProperty: vi.fn(),
+      easeTo: vi.fn(),
+      fitBounds: vi.fn(),
+      remove: vi.fn(),
+      isStyleLoaded: vi.fn().mockReturnValue(true),
+    };
+
+    mockEventService = {
+      attachStreamsToEventWithActivities: vi.fn(),
+    };
+
+    mockColorService = {
+      getColorForActivityTypeByActivityTypeGroup: vi.fn().mockReturnValue('#00aaff'),
+      getActivityColor: vi.fn().mockReturnValue('#ff5500'),
+    };
+
+    mockMapStyleService = {
+      resolve: vi.fn().mockReturnValue({ styleUrl: 'mapbox://styles/mapbox/standard', preset: 'day' }),
+      isStandard: vi.fn().mockReturnValue(true),
+      normalizeStyle: vi.fn((value: string | undefined) => (value === 'satellite' ? 'satellite' : 'default')),
+      createSynchronizer: vi.fn().mockReturnValue({ update: vi.fn() }),
+      adjustColorForTheme: vi.fn((color: string) => color),
+    };
+
+    mockMapboxLoader = {
+      createMap: vi.fn().mockResolvedValue(map),
+      loadMapbox: vi.fn().mockResolvedValue({
+        LngLatBounds: class {
+          public points: [number, number][] = [];
+
+          extend(point: [number, number]) {
+            this.points.push(point);
+          }
+        },
+      }),
+    };
+
+    mockSnackBar = {
+      open: vi.fn(),
+    };
+
+    await TestBed.configureTestingModule({
+      declarations: [EventsMapComponent],
+      imports: [RouterTestingModule],
+      providers: [
+        { provide: AppEventService, useValue: mockEventService },
+        { provide: AppEventColorService, useValue: mockColorService },
+        {
+          provide: LoggerService,
+          useValue: {
             error: vi.fn(),
+            warn: vi.fn(),
             log: vi.fn(),
             info: vi.fn(),
-            warn: vi.fn()
-        };
-        mockThemeService = {
+          },
+        },
+        {
+          provide: AppThemeService,
+          useValue: {
             appTheme: signal(AppThemes.Normal),
-            getAppTheme: vi.fn().mockReturnValue(of(AppThemes.Normal)),
-            getChartTheme: vi.fn().mockReturnValue(of(AppThemes.Normal)),
-        };
-        mockSnackBar = {
-            open: vi.fn(),
-        };
+          },
+        },
+        { provide: MapboxLoaderService, useValue: mockMapboxLoader },
+        { provide: MapStyleService, useValue: mockMapStyleService },
+        { provide: MatSnackBar, useValue: mockSnackBar },
+        { provide: NgZone, useValue: new NgZone({ enableLongStackTrace: false }) },
+      ],
+      schemas: [CUSTOM_ELEMENTS_SCHEMA],
+    }).compileComponents();
 
-        await TestBed.configureTestingModule({
-            declarations: [EventsMapComponent], // Standalone: false, so declare it
-            providers: [
-                { provide: AppEventService, useValue: mockEventService },
-                { provide: AppEventColorService, useValue: mockColorService },
-                { provide: LoggerService, useValue: mockLogger },
-                { provide: AppThemeService, useValue: mockThemeService },
-                {
-                    provide: GoogleMapsLoaderService,
-                    useValue: {
-                        importLibrary: vi.fn().mockResolvedValue({
-                            Map: vi.fn(),
-                            AdvancedMarkerElement: vi.fn()
-                        })
-                    }
-                },
-                {
-                    provide: AppUserService,
-                    useValue: {
-                        updateUserProperties: vi.fn().mockResolvedValue(true)
-                    }
-                },
-                {
-                    provide: AppUserSettingsQueryService,
-                    useValue: {
-                        mapSettings: signal({ mapType: 'roadmap' }),
-                        chartSettings: signal({}),
-                        unitSettings: signal({}),
-                        updateMapSettings: vi.fn()
-                    }
-                },
-                {
-                    provide: MarkerFactoryService,
-                    useValue: {
-                        createPinMarker: vi.fn(),
-                        createHomeMarker: vi.fn(),
-                        createFlagMarker: vi.fn(),
-                        createCursorMarker: vi.fn(),
-                        createLapMarker: vi.fn(),
-                        createPointMarker: vi.fn(),
-                        createEventMarker: vi.fn(),
-                        createClusterMarker: vi.fn(),
-                        createJumpMarker: vi.fn()
-                    }
-                },
-                { provide: MatSnackBar, useValue: mockSnackBar },
-                ChangeDetectorRef
-            ],
-            schemas: [CUSTOM_ELEMENTS_SCHEMA],
-            imports: [RouterTestingModule]
-        })
-            .compileComponents();
+    fixture = TestBed.createComponent(EventsMapComponent);
+    component = fixture.componentInstance;
+
+    component.user = { uid: 'test-user' } as User;
+    component.events = [createEvent('event-1')];
+    component.mapStyle = 'default';
+    component.clusterMarkers = true;
+  });
+
+  it('should create', () => {
+    expect(component).toBeTruthy();
+  });
+
+  it('should initialize mapbox and render clustered event layers on load', async () => {
+    await initMap();
+
+    expect(mockMapboxLoader.createMap).toHaveBeenCalled();
+    expect(map.addSource).toHaveBeenCalledWith(EVENTS_SOURCE_ID, expect.objectContaining({ cluster: true }));
+    expect(map.addLayer).toHaveBeenCalledWith(expect.objectContaining({ id: EVENTS_UNCLUSTERED_LAYER_ID }));
+    expect(map.addLayer).toHaveBeenCalledWith(expect.objectContaining({ id: EVENTS_CLUSTER_LAYER_ID }));
+    expect(component.noMapData).toBe(false);
+  });
+
+  it('should mark map data as empty when no event has start positions', async () => {
+    component.events = [];
+    await initMap();
+
+    expect(component.noMapData).toBe(true);
+    expect(map.addSource).not.toHaveBeenCalledWith(EVENTS_SOURCE_ID, expect.anything());
+  });
+
+  it('should hydrate selected event tracks when clicking an event point', async () => {
+    const clickedEvent = component.events[0];
+    const populatedActivity = {
+      getSquashedPositionData: vi.fn().mockReturnValue([
+        { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+        { latitudeDegrees: 40.66, longitudeDegrees: 22.96 },
+      ] as DataPositionInterface[]),
+    };
+
+    const populatedEvent = {
+      ...clickedEvent,
+      getActivities: () => [populatedActivity],
+    };
+
+    mockEventService.attachStreamsToEventWithActivities.mockReturnValue(of(populatedEvent));
+
+    await initMap();
+
+    emitLayerEvent('click', EVENTS_UNCLUSTERED_LAYER_ID, {
+      features: [{ properties: { eventId: 'event-1' } }],
     });
 
-    beforeEach(() => {
-        fixture = TestBed.createComponent(EventsMapComponent);
-        component = fixture.componentInstance;
+    await flush();
 
-        // Inject real NgZone
-        const zone = TestBed.inject(NgZone);
+    expect(mockEventService.attachStreamsToEventWithActivities).toHaveBeenCalledWith(
+      component.user,
+      clickedEvent,
+      [DataLatitudeDegrees.type, DataLongitudeDegrees.type]
+    );
+    expect(component.selectedEvent).toBe(populatedEvent);
+    expect(map.addSource).toHaveBeenCalledWith(SELECTED_TRACKS_SOURCE_ID, expect.anything());
+  });
 
-        // Mock global google object
-        (window as any).google = {
-            maps: {
-                Map: vi.fn().mockImplementation(() => ({
-                    setOptions: vi.fn(),
-                    fitBounds: vi.fn(),
-                    mapTypes: { set: vi.fn() },
-                    setMapTypeId: vi.fn()
-                })),
-                LatLng: class { },
-                LatLngLiteral: class { },
-                MapTypeId: { ROADMAP: 'roadmap' },
-                Marker: vi.fn().mockImplementation((options) => ({
-                    setMap: vi.fn(),
-                    addListener: vi.fn((event, handler) => {
-                        // Store handler to trigger click manually in tests if needed
-                        (this as any)._clickHandler = handler;
-                    }),
-                    setPosition: vi.fn(),
-                    setIcon: vi.fn(),
-                    setTitle: vi.fn()
-                })),
-                SymbolPath: { CIRCLE: 'CIRCLE' },
-                LatLngBounds: vi.fn().mockImplementation(() => ({
-                    extend: vi.fn()
-                })),
-                StyledMapType: vi.fn(),
-                event: {
-                    addListenerOnce: vi.fn()
-                },
-                marker: {
-                    AdvancedMarkerElement: vi.fn().mockImplementation((options) => ({
-                        map: null,
-                        content: options.content,
-                        position: options.position,
-                        addListener: vi.fn((event, handler) => {
-                            (this as any)._clickHandler = handler;
-                        }),
-                        setMap: vi.fn() // For compatibility if used
-                    }))
-                }
-            }
-        };
+  it('should switch to non-clustered source/layers when clustering is disabled', async () => {
+    await initMap();
 
-        // Mock User and Event
-        mockUser = { uid: 'test-uid' } as User;
-        mockEvent = {
-            getStat: vi.fn(),
-            getActivityTypesAsString: vi.fn(),
-            getDuration: vi.fn(),
-            getDistance: vi.fn(),
-            getActivityTypesAsArray: vi.fn(),
-            getID: vi.fn()
-        };
-
-        component.user = mockUser;
-        component['AdvancedMarkerElement'] = (window as any).google.maps.marker.AdvancedMarkerElement;
+    component.clusterMarkers = false;
+    component.ngOnChanges({
+      clusterMarkers: new SimpleChange(true, false, false),
     });
 
-    afterEach(() => {
-        // Cleanup if necessary
-    });
+    expect(map.removeLayer).toHaveBeenCalledWith(EVENTS_CLUSTER_LAYER_ID);
+    const eventsSourceCalls = map.addSource.mock.calls.filter((call: any[]) => call[0] === EVENTS_SOURCE_ID);
+    const lastSourceCall = eventsSourceCalls[eventsSourceCalls.length - 1];
+    expect(lastSourceCall?.[1]?.cluster).toBeUndefined();
+  });
 
-    it('should create', () => {
-        expect(component).toBeTruthy();
-    });
+  it('should bootstrap map with bounds when multiple event start positions are available', async () => {
+    component.events = [
+      createEvent('event-1', 40.64, 22.94),
+      createEvent('event-2', 41.05, 23.77),
+    ];
 
-    describe('onMapReady', () => {
-        it('should initialize map and data', () => {
-            component.apiLoaded.set(true);
-            const mockMap = new (window as any).google.maps.Map();
+    fixture.detectChanges();
+    await flush();
 
-            // Spy on initMapData
-            const initMapDataSpy = vi.spyOn(component, 'initMapData' as any); // Cast to any to spy on private method
+    const createMapCall = mockMapboxLoader.createMap.mock.calls[0];
+    const mapOptions = createMapCall?.[1];
 
-            component.onMapReady(mockMap);
-            expect(component['nativeMap']).toBe(mockMap);
-            expect(initMapDataSpy).toHaveBeenCalled();
-        });
-    });
+    expect(mapOptions?.bounds).toEqual([
+      [22.94, 40.64],
+      [23.77, 41.05],
+    ]);
+    expect(mapOptions?.center).toBeUndefined();
+    expect(mapOptions?.zoom).toBeUndefined();
+  });
 
-    describe('initMapData (called via onMapReady)', () => {
-        it('should set noMapData when there are no events', () => {
-            component.events = [];
-            component.apiLoaded.set(true);
+  it('should not show a zero activities metric in selected event popup summary', () => {
+    const event = createEvent('event-1');
+    (event as any).getActivities = () => [];
 
-            const mockMap = new (window as any).google.maps.Map();
-            component['nativeMap'] = mockMap;
+    const metrics = component.getSelectedEventSummaryMetrics(event);
 
-            component['initMapData']();
-
-            expect(component.noMapData).toBe(true);
-            expect(component.markers.length).toBe(0);
-        });
-
-        it('should set noMapData when events have no start positions', () => {
-            mockEvent.getStat.mockReturnValue(null);
-            mockEvent.getID.mockReturnValue('evt-no-start');
-            component.events = [mockEvent];
-            component.apiLoaded.set(true);
-
-            const mockMap = new (window as any).google.maps.Map();
-            component['nativeMap'] = mockMap;
-
-            component['initMapData']();
-
-            expect(component.noMapData).toBe(true);
-            expect(component.markers.length).toBe(0);
-        });
-
-        it('should create markers for events', () => {
-            // Mock Stat for position
-            const mockStat = { getValue: () => ({ latitudeDegrees: 10, longitudeDegrees: 20 }) } as DataStartPosition;
-            mockEvent.getStat.mockReturnValue(mockStat);
-
-            // Mock display values
-            mockEvent.getDuration.mockReturnValue({ getDisplayValue: () => '1h' });
-            mockEvent.getDistance.mockReturnValue({ getDisplayValue: () => '10km' });
-            mockEvent.getActivityTypesAsArray.mockReturnValue([ActivityTypes.Running]);
-            mockEvent.getActivityTypesAsString.mockReturnValue('Running');
-            mockEvent.getID.mockReturnValue('evt1');
-
-            component.events = [mockEvent];
-            component.apiLoaded.set(true);
-
-            const mockMap = new (window as any).google.maps.Map();
-            component['nativeMap'] = mockMap; // Set nativeMap directly for initMapData
-
-            // Use spy to check private methods if needed, or just check effects
-            // Here we stick to public effects or inspecting the markers array if public
-            component['initMapData'](); // Call private method directly
-
-            expect(component.markers.length).toBe(1);
-            expect(component.noMapData).toBe(false);
-            expect((window as any).google.maps.marker.AdvancedMarkerElement).toHaveBeenCalledWith(expect.objectContaining({
-                // map: mockMap, // Map is not passed to constructor, it's set via setMap later
-                title: 'Running for 1h and 10km'
-            }));
-        });
-
-        it('should initialize MarkerClusterer when clusterMarkers is true', () => {
-            const mockStat = { getValue: () => ({ latitudeDegrees: 10, longitudeDegrees: 20 }) } as DataStartPosition;
-            mockEvent.getStat.mockReturnValue(mockStat);
-            // Mock display values - add defaults to avoid errors if referenced
-            mockEvent.getDuration.mockReturnValue({ getDisplayValue: () => '1h' });
-            mockEvent.getDistance.mockReturnValue({ getDisplayValue: () => '10km' });
-            mockEvent.getActivityTypesAsArray.mockReturnValue([ActivityTypes.Running]);
-            mockEvent.getActivityTypesAsString.mockReturnValue('Running');
-            mockEvent.getID.mockReturnValue('evt1');
-
-            component.events = [mockEvent];
-            component.clusterMarkers = true;
-            component.apiLoaded.set(true);
-
-            const mockMap = new (window as any).google.maps.Map();
-            component['nativeMap'] = mockMap;
-
-            component['initMapData']();
-
-            expect(MarkerClusterer).toHaveBeenCalled();
-            // Verify constructor arguments if possible, though checking call is a good start
-            // The new API expects an object { map, markers, renderer }
-            expect(MarkerClusterer).toHaveBeenCalledWith(expect.objectContaining({
-                map: mockMap,
-                markers: expect.any(Array)
-            }));
-        });
-
-        it('should initialize mapTypeId from user settings', () => {
-            expect(component.mapTypeId()).toBe('roadmap');
-        });
-
-        it('should update user settings when map type changes', async () => {
-            const queryService = TestBed.inject(AppUserSettingsQueryService);
-
-            await component.changeMapType('hybrid' as any);
-
-            expect(component.mapTypeId()).toBe('hybrid');
-            expect(queryService.updateMapSettings).toHaveBeenCalledWith({ mapType: 'hybrid' });
-        });
-    });
-
-    describe('Marker Click Handler', () => {
-        describe('Marker Click Handler', () => {
-            it('should load streams and update map bounds on click', async () => {
-                // 1. Setup Data
-                const mockMap = new (window as any).google.maps.Map();
-
-                const mockStat = { getValue: () => ({ latitudeDegrees: 10, longitudeDegrees: 20 }) } as DataStartPosition;
-                mockEvent.getStat.mockReturnValue(mockStat);
-                mockEvent.getDuration.mockReturnValue({ getDisplayValue: () => '1h' });
-                mockEvent.getDistance.mockReturnValue({ getDisplayValue: () => '10km' });
-                mockEvent.getActivityTypesAsArray.mockReturnValue([ActivityTypes.Running]);
-                mockEvent.getID.mockReturnValue('evt1');
-
-                component.events = [mockEvent];
-                component.apiLoaded.set(true);
-                component.onMapReady(mockMap);
-
-                // 2. Setup Service Return
-                const mockActivity = {
-                    getSquashedPositionData: vi.fn(),
-                    getID: vi.fn()
-                } as any;
-
-                mockActivity.getSquashedPositionData.mockReturnValue([{ latitudeDegrees: 10, longitudeDegrees: 20 }] as DataPositionInterface[]);
-                mockActivity.getID.mockReturnValue('act1');
-
-                const mockPopulatedEvent = {
-                    getActivities: vi.fn(),
-                    getID: vi.fn().mockReturnValue('evt1'),
-                    getActivityTypesAsString: vi.fn().mockReturnValue('Run'),
-                    getDuration: vi.fn().mockReturnValue({ getValue: () => 100, getDisplayValue: () => '100 mins', getDisplayUnit: () => 'mins' }),
-                    getDistance: vi.fn().mockReturnValue({ getValue: () => 1000, getDisplayValue: () => '1km', getDisplayUnit: () => 'km' }),
-                    getStat: vi.fn().mockReturnValue({ getValue: () => ({ latitudeDegrees: 10, longitudeDegrees: 20 }) }),
-                    getActivityTypesAsArray: vi.fn().mockReturnValue(['Run']),
-                    originalFile: { path: 'path/to/file' }
-                } as any;
-                mockPopulatedEvent.getActivities.mockReturnValue([mockActivity]);
-
-                mockEventService.attachStreamsToEventWithActivities.mockReturnValue(of(mockPopulatedEvent));
-                mockColorService.getActivityColor.mockReturnValue('red');
-
-                // 3. Trigger Click
-                // Access the marker created
-                const marker = component.markers[0];
-                // We need to access the spy to get the handler
-                const addListenerSpy = marker.addListener as unknown as Mock;
-                // The mock implementation we defined: (event, handler) => { (this as any)._clickHandler = handler; }
-                // BUT 'this' in arrow function might not be what we expect.
-                // Let's rely on the call arguments to get the handler.
-                expect(addListenerSpy).toHaveBeenCalledWith('gmp-click', expect.any(Function));
-                const handler = addListenerSpy.mock.calls[0][1];
-
-                expect(handler).toBeDefined();
-
-                await handler(); // Trigger click and await promise
-
-                // 4. Verify
-                expect(mockEventService.attachStreamsToEventWithActivities).toHaveBeenCalledWith(
-                    mockUser,
-                    mockEvent,
-                    [DataLatitudeDegrees.type, DataLongitudeDegrees.type]
-                );
-                expect(component.selectedEventPositionsByActivity.length).toBe(1);
-                expect(component.selectedEventPositionsByActivity[0].color).toBe('red');
-                expect(mockMap.fitBounds).toHaveBeenCalled();
-                expect(component.selectedEvent).toBe(mockPopulatedEvent);
-            });
-
-            it('should show snackbar and call loaded when hydration fails on click', async () => {
-                const mockMap = new (window as any).google.maps.Map();
-                const mockStat = { getValue: () => ({ latitudeDegrees: 10, longitudeDegrees: 20 }) } as DataStartPosition;
-                mockEvent.getStat.mockReturnValue(mockStat);
-                mockEvent.getDuration.mockReturnValue({ getDisplayValue: () => '1h' });
-                mockEvent.getDistance.mockReturnValue({ getDisplayValue: () => '10km' });
-                mockEvent.getActivityTypesAsArray.mockReturnValue([ActivityTypes.Running]);
-                mockEvent.getID.mockReturnValue('evt1');
-
-                component.events = [mockEvent];
-                component.apiLoaded.set(true);
-                component.onMapReady(mockMap);
-                mockEventService.attachStreamsToEventWithActivities.mockReturnValue({
-                    pipe: () => ({
-                        toPromise: () => Promise.reject(new Error('hydrate failed')),
-                    }),
-                } as any);
-                const loadedSpy = vi.spyOn(component, 'loaded');
-
-                const marker = component.markers[0];
-                const addListenerSpy = marker.addListener as unknown as Mock;
-                const handler = addListenerSpy.mock.calls[0][1];
-
-                await handler();
-
-                expect(mockSnackBar.open).toHaveBeenCalledWith(
-                    'Could not load event track data',
-                    undefined,
-                    { duration: 3000 },
-                );
-                expect(loadedSpy).toHaveBeenCalled();
-            });
-        });
-
-    });
+    expect(metrics.some((metric) => metric.label === 'activity' || metric.label === 'activities')).toBe(false);
+  });
 });

@@ -9,18 +9,12 @@
 </section>
 
 <mat-menu #layersMenu="matMenu" xPosition="before" class="qs-menu-panel">
-  <button mat-menu-item [disabled]="!user" (click)="onMapStyleSelect('default')">
-    <mat-icon>{{ mapStyle === 'default' ? 'radio_button_checked' : 'radio_button_unchecked' }}</mat-icon>
-    <span>Default</span>
+  @for (style of mapStyleOptions; track style.value) {
+  <button mat-menu-item [disabled]="!user" (click)="onMapStyleSelect(style.value)">
+    <mat-icon>{{ mapStyle === style.value ? 'radio_button_checked' : 'radio_button_unchecked' }}</mat-icon>
+    <span>{{ style.label }}</span>
   </button>
-  <button mat-menu-item [disabled]="!user" (click)="onMapStyleSelect('satellite')">
-    <mat-icon>{{ mapStyle === 'satellite' ? 'radio_button_checked' : 'radio_button_unchecked' }}</mat-icon>
-    <span>Satellite</span>
-  </button>
-  <button mat-menu-item [disabled]="!user" (click)="onMapStyleSelect('outdoors')">
-    <mat-icon>{{ mapStyle === 'outdoors' ? 'radio_button_checked' : 'radio_button_unchecked' }}</mat-icon>
-    <span>Outdoors</span>
-  </button>
+  }
   <mat-divider></mat-divider>
   <section mat-menu-item>
     <mat-slide-toggle class="map-layer-toggle" [checked]="showLaps" [disabled]="!user"

@@ -8,6 +8,7 @@ import {
 import { User } from '@sports-alliance/sports-lib';
 import { AppAnalyticsService } from '../../../../services/app.analytics.service';
 import { AppMapStyleName } from '../../../../models/app-user.interface';
+import { MapStyleService } from '../../../../services/map-style.service';
 
 @Component({
   selector: 'app-map-actions',
@@ -31,6 +32,11 @@ export class MapActionsComponent {
   @Output() mapStyleChange = new EventEmitter<AppMapStyleName>();
 
   private analyticsService = inject(AppAnalyticsService);
+  private mapStyleService = inject(MapStyleService);
+
+  public get mapStyleOptions() {
+    return this.mapStyleService.getSupportedStyleOptions();
+  }
 
   onShowLapsToggle(checked: boolean) {
     this.showLaps = checked;
@@ -43,7 +49,7 @@ export class MapActionsComponent {
   }
 
   onMapStyleSelect(style: AppMapStyleName) {
-    this.mapStyle = style;
+    this.mapStyle = this.mapStyleService.normalizeStyle(style);
     this.checkBoxChanged();
   }
 

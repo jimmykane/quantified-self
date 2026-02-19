@@ -27,7 +27,6 @@ import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import { MAT_MENU_DEFAULT_OPTIONS, MatMenuDefaultOptions } from '@angular/material/menu';
 import { ServiceWorkerModule } from '@angular/service-worker';
 import { UploadActivitiesComponent } from './components/upload/upload-activities/upload-activities.component';
-import { GoogleMapsLoaderService } from './services/google-maps-loader.service';
 import { LoggerService } from './services/logger.service';
 import { maybeConnectAuthEmulator } from './authentication/auth-emulator.config';
 
@@ -139,7 +138,6 @@ const enableAppCheck = environment.production || environment.beta || environment
     provideAppInitializer(() => {
       const remoteConfigService = inject(AppRemoteConfigService);
       // Just inject to ensure initialization
-      inject(GoogleMapsLoaderService);
       inject(AppUpdateService); // Check if we can move this from constructor
     }),
   ]

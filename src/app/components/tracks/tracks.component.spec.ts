@@ -173,6 +173,12 @@ describe('TracksComponent', () => {
       isStandard: vi.fn().mockReturnValue(true),
       applyStandardPreset: vi.fn(),
       enforcePresetOnStyleEvents: vi.fn(),
+      getSupportedStyleOptions: vi.fn().mockReturnValue([
+        { value: 'default', label: 'Default' },
+        { value: 'satellite', label: 'Satellite' },
+        { value: 'outdoors', label: 'Outdoors' },
+      ]),
+      normalizeStyle: vi.fn().mockImplementation((value: string) => value || 'default'),
       adjustColorForTheme: vi.fn().mockReturnValue('#ffffff'),
       createSynchronizer: vi.fn().mockReturnValue({
         update: vi.fn()

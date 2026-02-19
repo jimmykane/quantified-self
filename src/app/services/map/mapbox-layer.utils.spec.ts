@@ -39,6 +39,23 @@ describe('mapbox-layer.utils', () => {
     expect(map.addSource).not.toHaveBeenCalled();
   });
 
+  it('upsertGeoJsonSource forwards source options on creation', () => {
+    const map = {
+      getSource: vi.fn().mockReturnValue(null),
+      addSource: vi.fn(),
+    };
+
+    upsertGeoJsonSource(map as any, 's1', { type: 'FeatureCollection', features: [] }, {
+      cluster: true,
+      clusterRadius: 60,
+    });
+
+    expect(map.addSource).toHaveBeenCalledWith('s1', expect.objectContaining({
+      cluster: true,
+      clusterRadius: 60,
+    }));
+  });
+
   it('ensureLayer only adds when missing', () => {
     const existing = new Set<string>();
     const map = {

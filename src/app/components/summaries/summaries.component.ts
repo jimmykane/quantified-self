@@ -40,6 +40,7 @@ import * as weeknumber from 'weeknumber'
 import { convertIntensityZonesStatsToChartData } from '../../helpers/intensity-zones-chart-data-helper';
 import { AppEventUtilities } from '../../utils/app.event.utilities';
 import { DataDescent } from '@sports-alliance/sports-lib';
+import { MapStyleName } from '../../services/map/map-style.types';
 
 @Component({
   selector: 'app-summaries',
@@ -149,7 +150,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
       return `${item.chartType}${item.dataCategoryType}${item.dataValueType}${item.name}${item.order}${item.timeInterval}`;
     } else if ('clusterMarkers' in item) {
       const mapItem = item as SummariesMapTileInterface;
-      return `${mapItem.clusterMarkers}${mapItem.mapTheme}${mapItem.mapType}${mapItem.name}${mapItem.order}${mapItem.showHeatMap}`;
+      return `${mapItem.clusterMarkers}${mapItem.mapTheme}${mapItem.mapStyle}${mapItem.name}${mapItem.order}${mapItem.showHeatMap}`;
     }
     return `${item.name}${item.order}`;
   }
@@ -247,7 +248,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
           break;
         // Map
         case TileTypes.Map:
-          const mapTile = <TileMapSettingsInterface>tile;
+          const mapTile = <SummariesMapTileSettings>tile;
           chartsAndData.push({
             ...mapTile, ...{
               events: this.events,
@@ -508,7 +509,11 @@ export interface SummariesChartTileInterface extends TileChartSettingsInterface 
   data: SummariesChartDataInterface[]
 }
 
-export interface SummariesMapTileInterface extends TileMapSettingsInterface {
+export type SummariesMapTileSettings = Omit<TileMapSettingsInterface, 'mapType'> & {
+  mapStyle?: MapStyleName;
+};
+
+export interface SummariesMapTileInterface extends SummariesMapTileSettings {
   events: EventInterface[];
 }
 

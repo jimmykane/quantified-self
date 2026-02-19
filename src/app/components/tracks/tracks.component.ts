@@ -136,6 +136,10 @@ export class TracksComponent implements OnInit, OnDestroy {
   public selectedStartPointScreen: WritableSignal<{ x: number; y: number } | null> = signal(null);
   // Removed legacy state tracking
 
+  public get mapStyleOptions() {
+    return this.mapStyleService.getSupportedStyleOptions();
+  }
+
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
     private eventService: AppEventService,
@@ -194,7 +198,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       if (!map || !synchronizer || !myTracksSettings || !user) return;
 
       // 1. Update Map Style via Synchronizer
-      const mapStyle = mapSettings?.mapStyle || 'default';
+      const mapStyle = this.mapStyleService.normalizeStyle(mapSettings?.mapStyle);
       this.tracksMapManager.setMapStyle(mapStyle as MapStyleName);
       const resolved = this.mapStyleService.resolve(mapStyle, theme);
       synchronizer.update(resolved);
@@ -237,9 +241,9 @@ export class TracksComponent implements OnInit, OnDestroy {
       // --- Constructor Style Injection ---
       // Resolve user's preferred style BEFORE creating the map.
       const initialMapSettings = this.userSettingsQuery.mapSettings() as AppMapSettingsInterface;
-      const prefMapStyle = initialMapSettings?.mapStyle || 'default';
+      const prefMapStyle = this.mapStyleService.normalizeStyle(initialMapSettings?.mapStyle);
       const initialTheme = this.themeService.appTheme();
-      const resolved = this.mapStyleService.resolve(prefMapStyle as any, initialTheme);
+      const resolved = this.mapStyleService.resolve(prefMapStyle, initialTheme);
       const initialStyleUrl = resolved.styleUrl;
 
       // Removed manualStyleOverride logic
@@ -333,10 +337,11 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
   }
 
-  public setMapStyle(styleType: 'default' | 'satellite' | 'outdoors') {
+  public setMapStyle(styleType: MapStyleName) {
+    const normalized = this.mapStyleService.normalizeStyle(styleType);
     // Just update settings. The effect handles the rest.
-    this.userSettingsQuery.updateMapSettings({ mapStyle: styleType });
-    this.logger.info('[TracksComponent] User selected map style', { styleType });
+    this.userSettingsQuery.updateMapSettings({ mapStyle: normalized });
+    this.logger.info('[TracksComponent] User selected map style', { styleType: normalized });
   }
 
   public isJumpHeatmapEnabled(): boolean {

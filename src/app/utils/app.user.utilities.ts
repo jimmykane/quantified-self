@@ -55,6 +55,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { isNumber } from 'lodash-es';
 import {
+    AppMapStyleName,
     AppDashboardSettingsInterface,
     AppMapSettingsInterface,
     AppUserInterface,
@@ -120,11 +121,11 @@ export class AppUserUtilities {
     }
 
     static getDefaultUserDashboardMapTile(): TileMapSettingsInterface {
-        return {
+        return <TileMapSettingsInterface><unknown>{
             name: 'Clustered HeatMap',
             order: 0,
             type: TileTypes.Map,
-            mapType: MapTypes.Terrain,
+            mapStyle: this.getDefaultDashboardMapStyle(),
             mapTheme: MapThemes.Normal,
             showHeatMap: true,
             clusterMarkers: true,
@@ -133,11 +134,11 @@ export class AppUserUtilities {
     }
 
     static getDefaultUserDashboardTiles(): TileSettingsInterface[] {
-        return [<TileMapSettingsInterface>{
+        return [<TileMapSettingsInterface><unknown>{
             name: 'Clustered HeatMap',
             order: 0,
             type: TileTypes.Map,
-            mapType: MapTypes.RoadMap,
+            mapStyle: this.getDefaultDashboardMapStyle(),
             mapTheme: MapThemes.Normal,
             showHeatMap: true,
             clusterMarkers: true,
@@ -201,6 +202,10 @@ export class AppUserUtilities {
 
     static getDefaultMapType(): MapTypes {
         return MapTypes.RoadMap;
+    }
+
+    static getDefaultDashboardMapStyle(): AppMapStyleName {
+        return 'default';
     }
 
     static getDefaultDateRange(): DateRanges {
@@ -352,6 +357,16 @@ export class AppUserUtilities {
         settings.dashboardSettings.activityTypes = settings.dashboardSettings.activityTypes || [];
         settings.dashboardSettings.includeMergedEvents = settings.dashboardSettings.includeMergedEvents !== false;
         settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserUtilities.getDefaultUserDashboardTiles();
+        settings.dashboardSettings.tiles = settings.dashboardSettings.tiles.map((tile: TileSettingsInterface) => {
+            if (tile.type !== TileTypes.Map) {
+                return tile;
+            }
+
+            const mapTile = tile as any;
+            mapTile.mapStyle = mapTile.mapStyle || AppUserUtilities.getDefaultDashboardMapStyle();
+            delete mapTile.mapType;
+            return mapTile;
+        });
         // Patch missing defaults
         settings.dashboardSettings.tableSettings = settings.dashboardSettings.tableSettings || AppUserUtilities.getDefaultTableSettings();
         settings.dashboardSettings.tableSettings.selectedColumns = settings.dashboardSettings.tableSettings.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns()

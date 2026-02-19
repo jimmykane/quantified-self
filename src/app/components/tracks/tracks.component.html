@@ -19,32 +19,19 @@
   @if (selectedStartPoint(); as startPoint) {
   @if (selectedStartPointScreen(); as startPointScreen) {
   <div #trackStartPopupAnchor class="track-start-popup-anchor" [style.left.px]="startPointScreen.x" [style.top.px]="startPointScreen.y">
-    <div class="track-start-popup qs-glass-card-panel glass-card">
-      <app-summary-primary-info
-        [activityType]="startPoint.activityType || 'Activity'"
-        [iconActivityType]="resolveStartPointIconActivityType(startPoint)"
-        [startDate]="startPoint.startDate"
-        [fallbackTopMetaText]="'Activity start'"
-        [metrics]="getStartPointSummaryMetrics(startPoint)"
-        [forceMobileLayout]="true">
-        @if (resolveStartPointEvent(startPoint); as selectedEvent) {
-        <ng-container summary-icon-badge>
-          <div class="privacy-mini-wrapper">
-            <app-privacy-icon [privacy]="selectedEvent.privacy"></app-privacy-icon>
-          </div>
-        </ng-container>
-        }
-        @if (resolveStartPointEvent(startPoint); as selectedEvent) {
-          @if (user) {
-          <app-service-source-icon summary-top-meta-suffix [event]="selectedEvent" [user]="user"></app-service-source-icon>
-          }
-        }
-      </app-summary-primary-info>
-
-      <div class="track-start-popup-actions">
-        <button mat-button color="primary" (click)="openSelectedStartPointEvent()">Open activity</button>
-      </div>
-    </div>
+    <app-map-activity-popup
+      [activityType]="startPoint.activityType || 'Activity'"
+      [iconActivityType]="resolveStartPointIconActivityType(startPoint)"
+      [startDate]="startPoint.startDate"
+      [fallbackTopMetaText]="'Activity start'"
+      [metrics]="getStartPointSummaryMetrics(startPoint)"
+      [event]="resolveStartPointEvent(startPoint)"
+      [user]="user"
+      [actionLabel]="'Open activity'"
+      [dismissible]="false"
+      [forceMobileLayout]="true"
+      (actionClick)="openSelectedStartPointEvent()">
+    </app-map-activity-popup>
   </div>
   }
   }
@@ -59,9 +46,9 @@
     }
     <mat-button-toggle-group appearance="legacy" name="mapStyle" aria-label="Map Style" [disabled]="isLoading()"
       [value]="user?.settings?.mapSettings?.mapStyle || 'default'" (change)="setMapStyle($any($event).value)">
-      <mat-button-toggle value="default">Default</mat-button-toggle>
-      <mat-button-toggle value="satellite">Satellite</mat-button-toggle>
-      <mat-button-toggle value="outdoors">Outdoors</mat-button-toggle>
+      @for (style of mapStyleOptions; track style.value) {
+      <mat-button-toggle [value]="style.value">{{ style.label }}</mat-button-toggle>
+      }
     </mat-button-toggle-group>
     @if (isLoading()) {
     <mat-spinner diameter="24"></mat-spinner>

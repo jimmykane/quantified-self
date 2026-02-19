@@ -13,20 +13,22 @@ import { MatIconModule } from '@angular/material/icon';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { FormsModule } from '@angular/forms';
 import { vi } from 'vitest';
+import { MapStyleService } from '../../../../services/map-style.service';
 
 describe('TileMapActionsComponent', () => {
     let component: TileMapActionsComponent;
     let fixture: ComponentFixture<TileMapActionsComponent>;
     let userMock: any;
     let analyticsMock: any;
+    let mapStyleServiceMock: any;
 
     beforeEach(async () => {
         userMock = {
             settings: {
                 dashboardSettings: {
                     tiles: [
-                        { order: 0, mapType: 'roadmap', clusterMarkers: false, size: { columns: 1, rows: 1 } },
-                        { order: 1, mapType: 'satellite', clusterMarkers: true, size: { columns: 1, rows: 1 } }
+                        { order: 0, mapStyle: 'default', clusterMarkers: false, size: { columns: 1, rows: 1 } },
+                        { order: 1, mapStyle: 'satellite', clusterMarkers: true, size: { columns: 1, rows: 1 } }
                     ]
                 }
             },
@@ -35,6 +37,14 @@ describe('TileMapActionsComponent', () => {
 
         analyticsMock = {
             logEvent: vi.fn()
+        };
+        mapStyleServiceMock = {
+            getSupportedStyleOptions: vi.fn().mockReturnValue([
+                { value: 'default', label: 'Default' },
+                { value: 'satellite', label: 'Satellite' },
+                { value: 'outdoors', label: 'Outdoors' }
+            ]),
+            normalizeStyle: vi.fn().mockImplementation((value: string) => value),
         };
 
         await TestBed.configureTestingModule({
@@ -49,7 +59,8 @@ describe('TileMapActionsComponent', () => {
             ],
             providers: [
                 { provide: AppUserService, useValue: userMock },
-                { provide: AppAnalyticsService, useValue: analyticsMock }
+                { provide: AppAnalyticsService, useValue: analyticsMock },
+                { provide: MapStyleService, useValue: mapStyleServiceMock },
             ]
         })
             .compileComponents();
@@ -58,7 +69,7 @@ describe('TileMapActionsComponent', () => {
         component = fixture.componentInstance;
         component.user = userMock;
         component.order = 0;
-        component.mapType = 'roadmap' as any;
+        component.mapStyle = 'default';
         component.clusterMarkers = false;
         component.size = { columns: 1, rows: 1 };
         fixture.detectChanges();
@@ -102,6 +113,14 @@ describe('TileMapActionsComponent', () => {
         await component.addNewTile({} as any);
         expect(analyticsMock.logEvent).toHaveBeenCalledWith('dashboard_tile_action', { method: 'addNewTile' });
         expect(userMock.settings.dashboardSettings.tiles.length).toBe(3);
+        expect(userMock.updateUserProperties).toHaveBeenCalled();
+    });
+
+    it('should persist tile mapStyle and stop writing legacy mapType', async () => {
+        await component.changeMapStyle({ value: 'outdoors' } as any);
+
+        expect(userMock.settings.dashboardSettings.tiles[0].mapStyle).toBe('outdoors');
+        expect(userMock.settings.dashboardSettings.tiles[0].mapType).toBeUndefined();
         expect(userMock.updateUserProperties).toHaveBeenCalled();
     });
 });
