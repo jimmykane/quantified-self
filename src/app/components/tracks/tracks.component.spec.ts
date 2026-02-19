@@ -695,8 +695,10 @@ describe('TracksComponent', () => {
       expect(component.selectedStartPointScreen()).toEqual({ x: 100, y: 120 });
       expect(component.searchPeekExpanded()).toBe(false);
       expect(component.detectedTripsPanelExpanded()).toBe(false);
-      expect(mockMap.panTo).toHaveBeenCalledWith([10, 20], expect.objectContaining({
-        essential: true
+      expect(mockMap.easeTo).toHaveBeenCalledWith(expect.objectContaining({
+        center: [10, 20],
+        essential: true,
+        animate: true
       }));
 
       selectionHandler(null);
@@ -729,7 +731,7 @@ describe('TracksComponent', () => {
     it('should build start-point popup content from shared popup service using event data', () => {
       const event = createMockEvent('event-1', '2024-11-08T08:00:00Z', 40.64, 22.94);
       (event as any).getActivities = () => [];
-      (event as any).getDuration = () => ({ getType: () => 'DataDuration', getDisplayValue: () => '00:45:00', getDisplayUnit: () => '' });
+      (event as any).getDuration = () => ({ getType: () => 'DataDuration', getDisplayValue: (..._args: any[]) => '00:45:00', getDisplayUnit: () => '' });
       (event as any).getDistance = () => ({ getType: () => 'DataDistance', getDisplayValue: () => '8.5', getDisplayUnit: () => 'km' });
       (event as any).getStat = (type: string) => {
         if (type === DataPaceAvg.type) {
@@ -750,7 +752,7 @@ describe('TracksComponent', () => {
       } as any);
 
       expect(popupContent?.metrics).toEqual([
-        { value: '00:45:00', label: '' },
+        expect.objectContaining({ value: '00:45:00', label: 'Duration' }),
         { value: '8.5', label: 'km' },
         { value: '5:20', label: 'min/km' },
       ]);

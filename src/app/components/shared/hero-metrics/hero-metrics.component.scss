@@ -1,0 +1,106 @@
+@use '../../../../styles/breakpoints' as bp;
+
+:host {
+    display: flex;
+    align-items: baseline;
+    gap: 32px;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Noto Sans', sans-serif;
+}
+
+.metric-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.metric-item .value {
+    display: flex;
+    align-items: baseline;
+    gap: 1px;
+    font-size: 1.8rem;
+    font-weight: 300;
+    color: var(--mat-app-on-surface);
+    line-height: 1.1;
+    font-family: 'Barlow Condensed', sans-serif;
+}
+
+.metric-item .sub-value {
+    font-size: 1rem;
+    font-weight: 300;
+    color: var(--mat-app-on-surface-variant);
+    opacity: 0.75;
+    font-family: 'Barlow Condensed', sans-serif;
+}
+
+.metric-item .unit {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--mat-app-on-surface-variant);
+    opacity: 0.8;
+    letter-spacing: 0.05em;
+    line-height: 1.1;
+}
+
+// ── Skeleton shimmer ────────────────────────────────────────────
+@keyframes shimmer {
+    0% {
+        opacity: 0.4;
+    }
+
+    50% {
+        opacity: 0.9;
+    }
+
+    100% {
+        opacity: 0.4;
+    }
+}
+
+.skeleton-block {
+    display: block;
+    background: var(--mat-app-surface-container-high);
+    border-radius: 4px;
+    animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-value {
+    width: 56px;
+    height: 1.8rem;
+    margin-bottom: 4px;
+}
+
+.skeleton-unit {
+    width: 36px;
+    height: 0.65rem;
+}
+
+// ── Responsive ──────────────────────────────────────────────────
+@include bp.max-900 {
+    :host {
+        gap: 16px;
+        padding: 0 10px;
+    }
+}
+
+// On mobile :host gets overridden by the parent's media rule to stretch full-width;
+// individual metric layout is unchanged below 768 px.
+@include bp.max-480 {
+    :host {
+        padding: 12px;
+        gap: 16px;
+    }
+
+    .metric-item .value {
+        font-size: 1.4rem;
+    }
+
+    .metric-item .sub-value {
+        font-size: 0.8rem;
+    }
+
+    .metric-item .unit {
+        font-size: 0.65rem;
+    }
+}

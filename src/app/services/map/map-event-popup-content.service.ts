@@ -10,7 +10,7 @@ import {
 } from '@sports-alliance/sports-lib';
 import { SummaryPrimaryInfoMetric } from '../../components/shared/summary-primary-info/summary-primary-info.component';
 import { AppUserSettingsQueryService } from '../app.user-settings-query.service';
-import { resolvePrimaryUnitAwareDisplayStat } from '../../helpers/summary-display.helper';
+import { buildHeroMetric, resolvePrimaryUnitAwareDisplayStat } from '../../helpers/summary-display.helper';
 import {
   resolvePreferredSpeedDerivedAverageTypeForActivity,
   resolvePreferredSpeedDerivedAverageTypesForActivity
@@ -48,8 +48,9 @@ export class MapEventPopupContentService {
   }
 
   private buildMetricsFromEvent(event: EventInterface): SummaryPrimaryInfoMetric[] {
+    const unitSettings = this.resolveUnitSettings();
     return [
-      this.resolveSummaryMetricFromEvent(event, DataDuration.type),
+      buildHeroMetric(DataDuration.type, this.getEventSummaryStat(event, DataDuration.type), unitSettings),
       this.resolveSummaryMetricFromEvent(event, DataDistance.type),
       this.resolveEffortMetricFromEvent(event),
     ];

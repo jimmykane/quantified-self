@@ -138,35 +138,13 @@
   padding-left: 0;
 }
 
-.hero-metrics {
-  display: flex;
-  align-items: baseline;
-  gap: 32px;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-.metric-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.metric-item .value {
-  font-size: 1.8rem;
-  font-weight: 300;
-  color: var(--mat-app-on-surface);
-  line-height: 1.1;
-  font-family: 'Barlow Condensed', sans-serif;
-}
-
-.metric-item .unit {
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  color: var(--mat-app-on-surface-variant);
-  opacity: 0.8;
-  letter-spacing: 0.05em;
-  line-height: 1.1;
+.metrics-divider {
+  width: 1px;
+  align-self: stretch;
+  background: var(--mat-app-outline-variant);
+  opacity: 0.5;
+  margin: 8px 0;
+  flex: 0 0 auto;
 }
 
 .summary-actions {
@@ -213,7 +191,11 @@
   font-size: 0.85rem;
 }
 
-.summary-primary-info--force-mobile .hero-metrics {
+.summary-primary-info--force-mobile .metrics-divider {
+  display: none;
+}
+
+.summary-primary-info--force-mobile app-hero-metrics {
   width: 100%;
   justify-content: space-evenly;
   background: var(--mat-app-surface-container-lowest);
@@ -231,16 +213,8 @@
   margin: 0;
 }
 
-.summary-primary-info--force-mobile .metric-item .value {
-  font-size: 1.4rem;
-}
-
-.summary-primary-info--force-mobile .metric-item .unit {
-  font-size: 0.65rem;
-}
-
 @include bp.max-900 {
-  .hero-metrics {
+  app-hero-metrics {
     gap: 16px;
     padding: 0 10px;
   }
@@ -280,7 +254,11 @@
     font-size: 0.85rem;
   }
 
-  .summary-primary-info .hero-metrics {
+  .summary-primary-info .metrics-divider {
+    display: none;
+  }
+
+  .summary-primary-info app-hero-metrics {
     width: 100%;
     justify-content: space-evenly;
     background: var(--mat-app-surface-container-lowest);
@@ -311,16 +289,8 @@
     padding-right: 104px;
   }
 
-  .summary-primary-info .hero-metrics {
+  .summary-primary-info app-hero-metrics {
     padding: 12px;
     gap: 16px;
-  }
-
-  .summary-primary-info .metric-item .value {
-    font-size: 1.4rem;
-  }
-
-  .summary-primary-info .metric-item .unit {
-    font-size: 0.65rem;
   }
 }

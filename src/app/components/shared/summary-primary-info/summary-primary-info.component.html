@@ -26,14 +26,8 @@
     </div>
   </div>
 
-  <div class="hero-metrics">
-    @for (metric of metrics; track $index) {
-    <div class="metric-item">
-      <span class="value">{{ metric.value || '--' }}</span>
-      <span class="unit">{{ metric.label || '' }}</span>
-    </div>
-    }
-  </div>
+  <div class="metrics-divider" aria-hidden="true"></div>
+  <app-hero-metrics [metrics]="metrics"></app-hero-metrics>
 
   <div class="summary-actions">
     <ng-content select="[summary-actions]"></ng-content>

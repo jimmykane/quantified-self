@@ -24,7 +24,7 @@ describe('MapEventPopupContentService', () => {
   });
 
   it('builds duration/distance/effort from event stats when activities are empty', () => {
-    const durationStat = { getType: () => DataDuration.type, getDisplayValue: () => '00:45:00', getDisplayUnit: () => '' };
+    const durationStat = { getType: () => DataDuration.type, getDisplayValue: (..._args: any[]) => '00:45:00', getDisplayUnit: () => '' };
     const distanceStat = { getType: () => DataDistance.type, getDisplayValue: () => '8.5', getDisplayUnit: () => 'km' };
     const paceStat = { getType: () => DataPaceAvg.type, getDisplayValue: () => '5:20', getDisplayUnit: () => 'min/km' };
 
@@ -48,7 +48,7 @@ describe('MapEventPopupContentService', () => {
     expect(content.eventType).toBe('Running');
     expect(content.iconEventType).toBe('Running');
     expect(content.metrics).toEqual([
-      { value: '00:45:00', label: '' },
+      expect.objectContaining({ value: '00:45:00', label: 'Duration' }),
       { value: '8.5', label: 'km' },
       { value: '5:20', label: 'min/km' },
     ]);

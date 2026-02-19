@@ -3,6 +3,7 @@ import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output } from 
 export interface SummaryPrimaryInfoMetric {
   value: string;
   label: string;
+  subValue?: string;
 }
 
 @Component({

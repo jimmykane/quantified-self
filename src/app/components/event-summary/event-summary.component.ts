@@ -19,7 +19,7 @@ import { EventDetailsSummaryBottomSheetComponent } from './event-details-summary
 import { EventStatsBottomSheetComponent } from '../event/stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
 import { EventDevicesBottomSheetComponent } from '../event/devices/event-devices-bottom-sheet/event-devices-bottom-sheet.component';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
-import { resolvePrimaryUnitAwareDisplayStat } from '../../helpers/summary-display.helper';
+import { resolvePrimaryUnitAwareDisplayStat, buildHeroMetric } from '../../helpers/summary-display.helper';
 import { resolvePreferredSpeedDerivedAverageTypeForActivity } from '../../helpers/summary-stats.helper';
 import { SummaryPrimaryInfoMetric } from '../shared/summary-primary-info/summary-primary-info.component';
 
@@ -198,10 +198,9 @@ export class EventSummaryComponent implements OnChanges {
 
   get heroSummaryMetrics(): SummaryPrimaryInfoMetric[] {
     this.ensureTemplateState();
-    return this.heroStatsValue.map((statType) => ({
-      value: this.getStatValue(statType),
-      label: this.getStatUnit(statType),
-    }));
+    return this.heroStatsValue.map((statType) =>
+      buildHeroMetric(statType, this.event?.getStat(statType), this.unitSettings)
+    );
   }
 
   get benchmarkCount(): number {
