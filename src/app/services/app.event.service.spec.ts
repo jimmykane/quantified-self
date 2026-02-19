@@ -1200,9 +1200,12 @@ describe('AppEventService', () => {
             );
         });
 
-        it('should respect streamTypes filter when attaching streams in stream-only mode', async () => {
+        it('should forward streamTypes to parseEventFromOriginalFiles and attach all returned streams', async () => {
             const hydrationService = (service as any).originalFileHydrationService;
-            const parsedStreams = [{ type: 'Speed' }, { type: 'Distance' }, { type: 'Power' }] as any[];
+            // The mock parser returns streams it has already filtered — in production the
+            // real parser would only return Distance and Power when streamTypes is ['Distance','Power'].
+            // Here we make the mock reflect that by returning only those two.
+            const filteredParsedStreams = [{ type: 'Distance' }, { type: 'Power' }] as any[];
             const existingActivity = {
                 getID: () => 'a-1',
                 clearStreams: vi.fn(),
@@ -1210,7 +1213,7 @@ describe('AppEventService', () => {
             } as any;
             const parsedActivity = {
                 getID: () => 'a-1',
-                getAllStreams: vi.fn().mockReturnValue(parsedStreams),
+                getAllStreams: vi.fn().mockReturnValue(filteredParsedStreams),
             } as any;
             const parsedEvent = {
                 setID: vi.fn().mockReturnThis(),
@@ -1232,11 +1235,18 @@ describe('AppEventService', () => {
 
             await firstValueFrom(service.attachStreamsToEventWithActivities({ uid: 'u1' } as any, event, ['Distance', 'Power']));
 
+            // Filtering is delegated to the parser — streamTypes must appear in the parse options.
+            expect(hydrationService.parseEventFromOriginalFiles).toHaveBeenCalledWith(
+                event,
+                expect.objectContaining({ streamTypes: ['Distance', 'Power'] }),
+            );
+            // All streams the parser returned are attached as-is (no second client-side filter).
             expect(existingActivity.clearStreams).toHaveBeenCalledTimes(1);
-            expect(existingActivity.addStreams).toHaveBeenCalledWith([{ type: 'Distance' }, { type: 'Power' }]);
+            expect(existingActivity.addStreams).toHaveBeenCalledWith(filteredParsedStreams);
             expect(event.clearActivities).not.toHaveBeenCalled();
             expect(event.addActivities).not.toHaveBeenCalled();
         });
+
 
         it('should attach matched IDs only and warn on ID mismatch in stream-only mode', async () => {
             const hydrationService = (service as any).originalFileHydrationService;

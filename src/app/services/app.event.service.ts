@@ -842,7 +842,8 @@ export class AppEventService implements OnDestroy {
       strictAllFilesRequired: true,
       preserveActivityIdsFromEvent: true,
       mergeMultipleFiles: true,
-    } as const;
+      ...(streamTypes && streamTypes.length > 0 ? { streamTypes } : {}),
+    };
 
     const parseOptionsWithDownload = downloadFileOptions?.metadataCacheTtlMs === undefined
       ? parseOptions
@@ -922,11 +923,8 @@ export class AppEventService implements OnDestroy {
       }
 
       const parsedStreams = parsedActivity.getAllStreams();
-      const filteredStreams = streamTypes && streamTypes.length > 0
-        ? parsedStreams.filter((stream) => streamTypes.includes(stream.type))
-        : parsedStreams;
       existingActivity.clearStreams();
-      existingActivity.addStreams(filteredStreams);
+      existingActivity.addStreams(parsedStreams);
       parsedActivitiesByID.delete(existingActivityID);
       attachedCount += 1;
     });
@@ -947,7 +945,6 @@ export class AppEventService implements OnDestroy {
         unmatchedParsedActivityIDs,
         parsedActivitiesMissingID,
         duplicateParsedActivityIDs: Array.from(duplicateParsedIDs),
-        streamTypeFilter: streamTypes && streamTypes.length > 0 ? streamTypes : 'all',
       });
     }
   }
