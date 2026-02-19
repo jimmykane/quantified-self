@@ -416,6 +416,8 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
         const textColor = this.isDark ? this.CHART_TEXT_DARK : this.CHART_TEXT_LIGHT;
         const borderColor = this.isDark ? 'rgba(255,255,255,0.05)' : '#ffffff';
+        const containerWidth = this.authChartRef?.nativeElement?.clientWidth ?? 0;
+        const isMobileLayout = containerWidth > 0 && containerWidth < 680;
 
         const seriesData = entries.map(([key, value]) => ({
             name: providerLabels[key] || key,
@@ -432,17 +434,22 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
                 formatter: '{b}: {c} ({d}%)'
             },
             legend: {
-                orient: 'vertical',
-                right: 10,
-                top: 'center',
-                textStyle: { color: textColor }
+                orient: isMobileLayout ? 'horizontal' : 'vertical',
+                left: isMobileLayout ? 'center' : undefined,
+                right: isMobileLayout ? undefined : 10,
+                top: isMobileLayout ? 'bottom' : 'center',
+                textStyle: {
+                    color: textColor,
+                    fontSize: isMobileLayout ? 11 : 12
+                },
+                itemGap: isMobileLayout ? 10 : 8
             },
             series: [
                 {
                     name: 'Auth Provider Breakdown',
                     type: 'pie',
-                    radius: ['55%', '72%'],
-                    center: ['38%', '50%'],
+                    radius: isMobileLayout ? ['42%', '64%'] : ['55%', '72%'],
+                    center: isMobileLayout ? ['50%', '40%'] : ['38%', '50%'],
                     avoidLabelOverlap: true,
                     label: { show: false },
                     labelLine: { show: false },
@@ -456,27 +463,27 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
             graphic: [
                 {
                     type: 'group',
-                    left: '38%',
-                    top: 'center',
+                    left: isMobileLayout ? '50%' : '38%',
+                    top: isMobileLayout ? '40%' : 'center',
                     bounding: 'raw',
                     children: [
                         {
                             type: 'text',
                             style: {
                                 text: centerText,
-                                fontSize: 24,
+                                fontSize: isMobileLayout ? 20 : 24,
                                 fontWeight: 700,
                                 fill: textColor,
                                 textAlign: 'center'
                             },
                             left: 'center',
-                            top: -12
+                            top: isMobileLayout ? -10 : -12
                         },
                         {
                             type: 'text',
                             style: {
                                 text: 'accounts',
-                                fontSize: 12,
+                                fontSize: isMobileLayout ? 11 : 12,
                                 fontWeight: 400,
                                 fill: textColor,
                                 opacity: 0.75,
@@ -489,7 +496,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
                             type: 'text',
                             style: {
                                 text: centerSubtitle,
-                                fontSize: 12,
+                                fontSize: isMobileLayout ? 11 : 12,
                                 fontWeight: 500,
                                 fill: textColor,
                                 opacity: 0.9,

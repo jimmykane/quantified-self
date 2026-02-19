@@ -52,6 +52,16 @@
     animation: fadeIn 0.6s ease-out;
 }
 
+.editor-card {
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+
+    @include bp.xsmall {
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+    }
+}
+
 .section-title {
     display: flex;
     justify-content: space-between;
@@ -70,6 +80,11 @@
             font: var(--mat-sys-title-medium);
         }
     }
+}
+
+.changelog-form {
+    max-width: 960px;
+    margin: 0 auto;
 }
 
 // Custom Form Row override for specifically 3-item row
@@ -91,6 +106,10 @@
         min-height: 56px;
         padding-top: 8px; // Offset for form field label space
     }
+
+    @include bp.xsmall {
+        gap: 8px;
+    }
 }
 
 
@@ -103,6 +122,17 @@
 .table-wrapper {
     overflow-x: auto;
     width: 100%;
+}
+
+.table-actions {
+    margin-top: 0;
+    justify-content: flex-start;
+}
+
+.empty-table-state {
+    padding: 2rem;
+    text-align: center;
+    color: var(--mat-sys-on-surface-variant);
 }
 
 table {
@@ -207,6 +237,25 @@ td.mat-cell {
         opacity: 0.5;
         font-style: italic;
         font: var(--mat-sys-body-small);
+    }
+}
+
+@include bp.xsmall {
+    .header-container .header-content {
+        align-items: flex-start;
+    }
+
+    .section-title {
+        margin-top: 1.5rem;
+    }
+
+    .section-title h2 {
+        gap: 8px;
+    }
+
+    .qs-form-actions {
+        width: 100%;
+        justify-content: flex-end;
     }
 }
 
