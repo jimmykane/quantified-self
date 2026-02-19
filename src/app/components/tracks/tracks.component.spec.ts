@@ -16,7 +16,7 @@ import { BrowserCompatibilityService } from '../../services/browser.compatibilit
 import { LoggerService } from '../../services/logger.service';
 import { MapStyleService } from '../../services/map-style.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { ActivityTypes, AppThemes, DataPaceAvg, DataSpeedAvg, DataStartPosition, DateRanges } from '@sports-alliance/sports-lib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Overlay } from '@angular/cdk/overlay';
@@ -605,6 +605,71 @@ describe('TracksComponent', () => {
 
       expect(setJumpHeatPointsSpy).not.toHaveBeenCalled();
       expect(clearJumpHeatmapSpy).toHaveBeenCalled();
+    });
+
+    it('should not apply stale jump heatmap data when a newer load starts', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setJumpHeatPointsSpy = vi.spyOn(trackManager, 'setJumpHeatPoints');
+
+      const slowHydrationSubject = new Subject<any>();
+      const eventAActivity = {
+        type: ActivityTypes.Running,
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+        getAllEvents: () => [{
+          jumpData: {
+            position_lat: createStat(40.645),
+            position_long: createStat(22.945),
+            hang_time: createStat(1.7),
+            distance: createStat(4.2),
+          }
+        }],
+        getDuration: () => ({ getDisplayValue: () => '00:40:00' }),
+        getDistance: () => ({ getDisplayValue: () => '7.0', getDisplayUnit: () => 'km' }),
+        getID: () => 'activity-a'
+      };
+      const eventA = createMockEvent('event-a', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (eventA as any).getActivities = () => [eventAActivity];
+
+      const eventB = createMockEvent('event-b', '2024-11-09T08:00:00Z', 40.66, 22.96);
+      (eventB as any).getActivities = () => [];
+
+      let eventsCallCount = 0;
+      mockEventService.getEventsBy.mockImplementation(() => {
+        eventsCallCount += 1;
+        if (eventsCallCount === 1) {
+          return of([eventA]);
+        }
+        return of([eventB]);
+      });
+
+      mockEventService.getActivities.mockImplementation((_user: any, eventId: string) => {
+        if (eventId === 'event-a') return of([eventAActivity]);
+        return of([]);
+      });
+
+      mockEventService.attachStreamsToEventWithActivities.mockImplementation((_user: any, event: any) => {
+        if (event.getID?.() === 'event-a') {
+          return slowHydrationSubject.asObservable();
+        }
+        return of(eventB as any);
+      });
+
+      const firstLoad = (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.lastMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      slowHydrationSubject.next(eventA as any);
+      slowHydrationSubject.complete();
+      await firstLoad;
+      await waitForAsyncWork();
+
+      expect(setJumpHeatPointsSpy).toHaveBeenCalledTimes(0);
     });
 
     it('should update popup state from start marker selection handler', async () => {

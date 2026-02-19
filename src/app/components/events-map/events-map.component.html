@@ -9,7 +9,7 @@
   minHeight="100%">
 
   @if (selectedEvent; as popupEvent) {
-  @if (getSelectedEventPopupContent(popupEvent); as popupContent) {
+  @if (selectedEventPopupContent; as popupContent) {
   <div class="events-map-popup-anchor">
     <app-map-activity-popup
       [activityType]="popupContent.eventType"

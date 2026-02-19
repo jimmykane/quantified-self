@@ -609,6 +609,15 @@ export class TracksComponent implements OnInit, OnDestroy {
             }));
           }
 
+          // Ensure canceled/stale loads never commit map/UI state after a newer request started.
+          if (this.promiseTime !== promiseTime) {
+            this.logger.log('[TracksComponent] Skipping stale tracks load commit.', {
+              promiseTime,
+              currentPromiseTime: this.promiseTime,
+            });
+            return;
+          }
+
           if (addedTrackCount === 0) {
             this.tracksMapManager.clearAllTracks();
           } else if (trackStartPoints.length > 0) {

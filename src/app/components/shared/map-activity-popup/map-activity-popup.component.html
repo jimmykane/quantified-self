@@ -12,13 +12,6 @@
     [fallbackTopMetaText]="fallbackTopMetaText"
     [metrics]="metrics"
     [forceMobileLayout]="forceMobileLayout">
-    @if (event) {
-    <ng-container summary-icon-badge>
-      <div class="privacy-mini-wrapper">
-        <app-privacy-icon [privacy]="event.privacy"></app-privacy-icon>
-      </div>
-    </ng-container>
-    }
     @if (event && user) {
     <app-service-source-icon summary-top-meta-suffix [event]="event" [user]="user"></app-service-source-icon>
     }

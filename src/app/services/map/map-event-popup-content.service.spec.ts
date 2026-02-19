@@ -90,6 +90,28 @@ describe('MapEventPopupContentService', () => {
     expect(content.metrics[2]).toEqual({ value: '--', label: '' });
   });
 
+  it('uses event effort display fallback when stat instances do not expose getType', () => {
+    const event = {
+      startDate: new Date('2025-01-01T10:00:00Z'),
+      getActivityTypesAsArray: () => [ActivityTypes.Hiking],
+      getActivityTypesAsString: () => 'Hiking',
+      getDuration: () => ({ getDisplayValue: () => '01h 41m 05s', getDisplayUnit: () => '' }),
+      getDistance: () => ({ getDisplayValue: () => '6.52', getDisplayUnit: () => 'km' }),
+      getStat: (type: string) => {
+        if (type === DataSpeedAvg.type) {
+          return { getDisplayValue: () => '1.07', getDisplayUnit: () => 'm/s' };
+        }
+        if (type === DataPaceAvg.type) {
+          return { getDisplayValue: () => '15:31', getDisplayUnit: () => 'min/km' };
+        }
+        return null;
+      },
+    } as unknown as EventInterface;
+
+    const content = service.buildFromEvent(event);
+    expect(content.metrics[2]).toEqual({ value: '1.07', label: 'm/s' });
+  });
+
   it('returns default placeholder content when event is missing', () => {
     const content = service.buildFromEvent(null);
 

@@ -48,11 +48,10 @@ export class MapEventPopupContentService {
   }
 
   private buildMetricsFromEvent(event: EventInterface): SummaryPrimaryInfoMetric[] {
-    const effortType = this.resolveEffortMetricType(event);
     return [
       this.resolveSummaryMetricFromEvent(event, DataDuration.type),
       this.resolveSummaryMetricFromEvent(event, DataDistance.type),
-      this.resolveSummaryMetricFromEvent(event, effortType),
+      this.resolveEffortMetricFromEvent(event),
     ];
   }
 
@@ -107,7 +106,7 @@ export class MapEventPopupContentService {
     return 'Other';
   }
 
-  private resolveEffortMetricType(event: EventInterface): string {
+  private resolveEffortMetricFromEvent(event: EventInterface): SummaryPrimaryInfoMetric {
     const primaryActivityType = (event.getActivityTypesAsArray?.() || [])[0];
     const preferredType = resolvePreferredSpeedDerivedAverageTypeForActivity(primaryActivityType as any);
     const candidateTypes = [
@@ -119,24 +118,52 @@ export class MapEventPopupContentService {
     ].filter((type): type is string => typeof type === 'string' && type.length > 0);
     const orderedTypes = [...new Set(candidateTypes).values()];
 
-    const unitSettings = this.resolveUnitSettings();
     for (const statType of orderedTypes) {
-      const stat = event.getStat?.(statType);
-      const display = resolvePrimaryUnitAwareDisplayStat(stat, unitSettings, statType);
-      if (display?.value) {
-        return statType;
+      const metric = this.resolveSummaryMetricFromEvent(event, statType);
+      if (metric.value !== '--') {
+        return metric;
       }
     }
 
-    return preferredType || DataSpeedAvg.type;
+    return { value: '--', label: '' };
   }
 
   private resolveSummaryMetricFromEvent(event: EventInterface, statType: string): SummaryPrimaryInfoMetric {
     const stat = this.getEventSummaryStat(event, statType);
     const display = resolvePrimaryUnitAwareDisplayStat(stat, this.resolveUnitSettings(), statType);
+    const convertedValue = this.toDisplayString(display?.value);
+    const convertedUnit = this.toDisplayString(display?.unit);
+    if (this.hasMeaningfulDisplayValue(convertedValue)) {
+      return {
+        value: convertedValue,
+        label: convertedUnit,
+      };
+    }
+
+    const fallbackMetric = this.resolveMetricFromRawStat(stat);
+    if (fallbackMetric.value !== '--') {
+      return fallbackMetric;
+    }
+
     return {
-      value: display?.value || '--',
-      label: display?.unit || '',
+      value: '--',
+      label: '',
+    };
+  }
+
+  private resolveMetricFromRawStat(stat: any): SummaryPrimaryInfoMetric {
+    const fallbackValue = this.toDisplayString(stat?.getDisplayValue?.());
+    const fallbackUnit = this.toDisplayString(stat?.getDisplayUnit?.());
+    if (this.hasMeaningfulDisplayValue(fallbackValue)) {
+      return {
+        value: fallbackValue,
+        label: fallbackUnit,
+      };
+    }
+
+    return {
+      value: '--',
+      label: '',
     };
   }
 
@@ -158,5 +185,30 @@ export class MapEventPopupContentService {
       return this.userSettingsQuery.unitSettings();
     }
     return undefined;
+  }
+
+  private toDisplayString(value: unknown): string {
+    if (value === null || value === undefined) {
+      return '';
+    }
+    return String(value);
+  }
+
+  private hasMeaningfulDisplayValue(value: string | null | undefined): boolean {
+    if (typeof value !== 'string') {
+      return false;
+    }
+
+    const normalized = value.trim();
+    if (!normalized) {
+      return false;
+    }
+
+    const normalizedLower = normalized.toLowerCase();
+    if (normalized === '--' || normalized === '-' || normalizedLower === 'n/a' || normalizedLower === 'na') {
+      return false;
+    }
+
+    return true;
   }
 }

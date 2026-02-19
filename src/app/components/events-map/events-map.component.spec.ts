@@ -1,45 +1,36 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CUSTOM_ELEMENTS_SCHEMA, NgZone, SimpleChange, signal } from '@angular/core';
 import { RouterTestingModule } from '@angular/router/testing';
-import { of, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ActivityTypes,
   AppThemes,
   DataDistance,
   DataDuration,
-  DataLatitudeDegrees,
-  DataLongitudeDegrees,
   DataPaceAvg,
-  DataPositionInterface,
   DataStartPosition,
   EventInterface,
   User,
 } from '@sports-alliance/sports-lib';
 import { EventsMapComponent } from './events-map.component';
-import { AppEventService } from '../../services/app.event.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { MapboxLoaderService } from '../../services/mapbox-loader.service';
 import { MapStyleService } from '../../services/map-style.service';
-import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 
 const EVENTS_SOURCE_ID = 'events-map-events-source';
 const EVENTS_UNCLUSTERED_LAYER_ID = 'events-map-events-unclustered';
 const EVENTS_CLUSTER_LAYER_ID = 'events-map-events-clusters';
-const SELECTED_TRACKS_SOURCE_ID = 'events-map-selected-event-tracks-source';
 
 describe('EventsMapComponent', () => {
   let component: EventsMapComponent;
   let fixture: ComponentFixture<EventsMapComponent>;
 
-  let mockEventService: any;
   let mockColorService: any;
   let mockMapboxLoader: any;
   let mockMapStyleService: any;
-  let mockSnackBar: any;
   let mockUserSettingsQuery: any;
 
   let map: any;
@@ -141,10 +132,6 @@ describe('EventsMapComponent', () => {
       isStyleLoaded: vi.fn().mockReturnValue(true),
     };
 
-    mockEventService = {
-      attachStreamsToEventWithActivities: vi.fn(),
-    };
-
     mockColorService = {
       getColorForActivityTypeByActivityTypeGroup: vi.fn().mockReturnValue('#00aaff'),
       getActivityColor: vi.fn().mockReturnValue('#ff5500'),
@@ -171,10 +158,6 @@ describe('EventsMapComponent', () => {
       }),
     };
 
-    mockSnackBar = {
-      open: vi.fn(),
-    };
-
     mockUserSettingsQuery = {
       unitSettings: vi.fn().mockReturnValue(undefined),
     };
@@ -183,7 +166,6 @@ describe('EventsMapComponent', () => {
       declarations: [EventsMapComponent],
       imports: [RouterTestingModule],
       providers: [
-        { provide: AppEventService, useValue: mockEventService },
         { provide: AppEventColorService, useValue: mockColorService },
         {
           provide: LoggerService,
@@ -203,7 +185,6 @@ describe('EventsMapComponent', () => {
         { provide: MapboxLoaderService, useValue: mockMapboxLoader },
         { provide: MapStyleService, useValue: mockMapStyleService },
         { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQuery },
-        { provide: MatSnackBar, useValue: mockSnackBar },
         { provide: NgZone, useValue: new NgZone({ enableLongStackTrace: false }) },
       ],
       schemas: [CUSTOM_ELEMENTS_SCHEMA],
@@ -240,21 +221,8 @@ describe('EventsMapComponent', () => {
     expect(map.addSource).not.toHaveBeenCalledWith(EVENTS_SOURCE_ID, expect.anything());
   });
 
-  it('should hydrate selected event tracks when clicking an event point', async () => {
+  it('should select an event when clicking an event point without stream hydration', async () => {
     const clickedEvent = component.events[0];
-    const populatedActivity = {
-      getSquashedPositionData: vi.fn().mockReturnValue([
-        { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
-        { latitudeDegrees: 40.66, longitudeDegrees: 22.96 },
-      ] as DataPositionInterface[]),
-    };
-
-    const populatedEvent = {
-      ...clickedEvent,
-      getActivities: () => [populatedActivity],
-    };
-
-    mockEventService.attachStreamsToEventWithActivities.mockReturnValue(of(populatedEvent));
 
     await initMap();
 
@@ -264,34 +232,7 @@ describe('EventsMapComponent', () => {
 
     await flush();
 
-    expect(mockEventService.attachStreamsToEventWithActivities).toHaveBeenCalledWith(
-      component.user,
-      clickedEvent,
-      [DataLatitudeDegrees.type, DataLongitudeDegrees.type]
-    );
-    expect(component.selectedEvent).toBe(populatedEvent);
-    expect(map.addSource).toHaveBeenCalledWith(SELECTED_TRACKS_SOURCE_ID, expect.anything());
-  });
-
-  it('shows popup content from event stats before stream hydration resolves', async () => {
-    const clickedEvent = createEvent('event-early');
-    component.events = [clickedEvent];
-
-    const hydrationSubject = new Subject<EventInterface>();
-    mockEventService.attachStreamsToEventWithActivities.mockReturnValue(hydrationSubject.asObservable());
-
-    await initMap();
-    emitLayerEvent('click', EVENTS_UNCLUSTERED_LAYER_ID, {
-      features: [{ properties: { eventId: 'event-early' } }],
-    });
-
     expect(component.selectedEvent).toBe(clickedEvent);
-    const popupContent = component.getSelectedEventPopupContent(component.selectedEvent);
-    expect(popupContent.metrics.length).toBe(3);
-
-    hydrationSubject.next(clickedEvent);
-    hydrationSubject.complete();
-    await flush();
   });
 
   it('should switch to non-clustered source/layers when clustering is disabled', async () => {
