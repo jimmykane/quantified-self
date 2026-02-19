@@ -17,8 +17,9 @@
 .popup-container {
     padding: 16px;
     min-width: 0;
-    width: min(320px, calc(100vw - 48px));
-    max-width: calc(100vw - 48px);
+    width: fit-content;
+    min-width: min(190px, calc(100vw - 24px));
+    max-width: min(280px, calc(100vw - 24px));
     box-sizing: border-box;
 }
 
@@ -103,8 +104,8 @@
 @include bp.max-480 {
     .popup-container {
         padding: 12px;
-        width: min(300px, calc(100vw - 32px));
-        max-width: calc(100vw - 32px);
+        min-width: min(170px, calc(100vw - 20px));
+        max-width: min(250px, calc(100vw - 20px));
     }
 
     .stats-grid {

@@ -39,11 +39,11 @@ mat-card.map-legend {
 .jump-popup-anchor {
   position: absolute;
   z-index: 4;
-  transform: translate(-50%, calc(-100% - 14px));
   pointer-events: auto;
 }
 
 .jump-popup-anchor app-jump-marker-popup {
   display: block;
-  width: min(320px, calc(100vw - 32px));
+  width: fit-content;
+  max-width: min(280px, calc(100vw - 24px));
 }

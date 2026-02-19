@@ -47,6 +47,10 @@ import {
   resolvePreferredSpeedDerivedAverageTypesForActivity
 } from '../../helpers/summary-stats.helper';
 import { SummaryPrimaryInfoMetric } from '../shared/summary-primary-info/summary-primary-info.component';
+import {
+  correctPopupPositionToViewport,
+  resolvePopupAnchorPosition,
+} from '../../services/map/mapbox-popup-positioning.utils';
 
 interface DetectedTripViewModel extends DetectedTrip {
   locationLabel: string | null;
@@ -72,8 +76,13 @@ interface JumpHeatCollectionStats {
 })
 export class TracksComponent implements OnInit, OnDestroy {
   private static readonly MY_TRACKS_METADATA_CACHE_TTL_MS = 60 * 60 * 1000;
+  private static readonly START_POINT_POPUP_MARGIN_PX = 10;
+  private static readonly START_POINT_POPUP_OFFSET_PX = 10;
+  private static readonly START_POINT_POPUP_WIDTH_ESTIMATE_PX = 340;
+  private static readonly START_POINT_POPUP_HEIGHT_ESTIMATE_PX = 240;
 
   @ViewChild('mapDiv', { static: true }) mapDiv!: ElementRef;
+  @ViewChild('trackStartPopupAnchor', { static: false }) trackStartPopupAnchor?: ElementRef<HTMLDivElement>;
 
   public dateRangesToShow: DateRanges[] = [
     DateRanges.thisWeek,
@@ -107,6 +116,7 @@ export class TracksComponent implements OnInit, OnDestroy {
   private terrainControl = signal<any>(null); // Using any to avoid forward reference issues if class is defined below
   private platformId!: object;
   private startPointPopupRepositionHandler: (() => void) | null = null;
+  private pendingStartPointPopupCorrectionRaf: number | null = null;
 
   private promiseTime!: number;
   private analyticsService = inject(AppAnalyticsService);
@@ -365,6 +375,10 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.bottomSheet.dismiss();
     this.tracksMapManager.setStartMarkerSelectionHandler(null);
     this.unbindStartPointPopupMapListeners();
+    if (this.pendingStartPointPopupCorrectionRaf !== null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(this.pendingStartPointPopupCorrectionRaf);
+      this.pendingStartPointPopupCorrectionRaf = null;
+    }
     this.mapboxAutoResizeService.unbind(this.tracksMapManager.getMap());
     if (this.mapSignal()) {
       this.mapSignal().remove();
@@ -1083,7 +1097,51 @@ export class TracksComponent implements OnInit, OnDestroy {
       this.selectedStartPointScreen.set(null);
       return;
     }
-    this.selectedStartPointScreen.set({ x, y });
+    const position = resolvePopupAnchorPosition({ x, y }, this.mapDiv?.nativeElement, {
+      preferredWidthPx: TracksComponent.START_POINT_POPUP_WIDTH_ESTIMATE_PX,
+      preferredHeightPx: TracksComponent.START_POINT_POPUP_HEIGHT_ESTIMATE_PX,
+      marginPx: TracksComponent.START_POINT_POPUP_MARGIN_PX,
+      offsetPx: TracksComponent.START_POINT_POPUP_OFFSET_PX,
+      minWidthPx: 170,
+      minHeightPx: 120,
+      preferAbove: true,
+    });
+    if (!position) {
+      this.selectedStartPointScreen.set(null);
+      return;
+    }
+    this.selectedStartPointScreen.set(position);
+    this.scheduleStartPointPopupViewportCorrection();
+  }
+
+  private scheduleStartPointPopupViewportCorrection(): void {
+    if (this.pendingStartPointPopupCorrectionRaf !== null || typeof requestAnimationFrame !== 'function') {
+      return;
+    }
+
+    this.pendingStartPointPopupCorrectionRaf = requestAnimationFrame(() => {
+      this.pendingStartPointPopupCorrectionRaf = null;
+      this.correctStartPointPopupPositionWithMeasuredSize();
+    });
+  }
+
+  private correctStartPointPopupPositionWithMeasuredSize(): void {
+    const current = this.selectedStartPointScreen();
+    const mapElement = this.mapDiv?.nativeElement;
+    const popupElement = this.trackStartPopupAnchor?.nativeElement;
+    if (!this.selectedStartPoint() || !current || !mapElement || !popupElement) {
+      return;
+    }
+
+    const corrected = correctPopupPositionToViewport(
+      current,
+      mapElement,
+      popupElement,
+      TracksComponent.START_POINT_POPUP_MARGIN_PX
+    );
+    if (corrected) {
+      this.selectedStartPointScreen.set(corrected);
+    }
   }
 
   private centerMapOnStartPoint(selection: TrackStartSelection): void {

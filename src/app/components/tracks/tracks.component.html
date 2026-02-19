@@ -18,7 +18,7 @@
   <div #mapDiv id="map"></div>
   @if (selectedStartPoint(); as startPoint) {
   @if (selectedStartPointScreen(); as startPointScreen) {
-  <div class="track-start-popup-anchor" [style.left.px]="startPointScreen.x" [style.top.px]="startPointScreen.y">
+  <div #trackStartPopupAnchor class="track-start-popup-anchor" [style.left.px]="startPointScreen.x" [style.top.px]="startPointScreen.y">
     <div class="track-start-popup qs-glass-card-panel glass-card">
       <app-summary-primary-info
         [activityType]="startPoint.activityType || 'Activity'"

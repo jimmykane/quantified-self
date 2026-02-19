@@ -44,6 +44,10 @@ import { MapStyleService } from '../../../services/map-style.service';
 import { MapboxStyleSynchronizer } from '../../../services/map/mapbox-style-synchronizer';
 import { AppMapStyleName } from '../../../models/app-user.interface';
 import {
+  correctPopupPositionToViewport,
+  resolvePopupAnchorPosition
+} from '../../../services/map/mapbox-popup-positioning.utils';
+import {
   EventCardMapManager,
   EventCursorRenderData,
   EventTrackRenderData,
@@ -66,8 +70,13 @@ interface MapViewSettingsState {
 })
 export class EventCardMapComponent extends MapAbstractDirective implements OnChanges, OnInit, OnDestroy, AfterViewInit {
   public static readonly JUMP_MARKER_SIZE_BUCKETS = [18, 22, 26, 30, 34] as const;
+  private static readonly JUMP_POPUP_OFFSET_PX = 14;
+  private static readonly JUMP_POPUP_MARGIN_PX = 12;
+  private static readonly JUMP_POPUP_WIDTH_ESTIMATE_PX = 260;
+  private static readonly JUMP_POPUP_HEIGHT_ESTIMATE_PX = 220;
 
   @ViewChild('mapDiv', { static: false }) mapDiv!: ElementRef<HTMLDivElement>;
+  @ViewChild('jumpPopupAnchor', { static: false }) jumpPopupAnchor?: ElementRef<HTMLDivElement>;
   @Input() event!: EventInterface;
   @Input() targetUserID!: string;
   @Input() user!: User;
@@ -151,6 +160,7 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
   private mapStyleSynchronizer = signal<MapboxStyleSynchronizer | undefined>(undefined);
   private mapMoveRepositionHandler: (() => void) | null = null;
   private openedJumpCoordinates: { latitudeDegrees: number; longitudeDegrees: number } | null = null;
+  private pendingJumpPopupCorrectionRaf: number | null = null;
 
   private mapManager: EventCardMapManager;
 
@@ -417,6 +427,10 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
     if (this.pendingFitBoundsTimeout) {
       clearTimeout(this.pendingFitBoundsTimeout);
       this.pendingFitBoundsTimeout = null;
+    }
+    if (this.pendingJumpPopupCorrectionRaf !== null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(this.pendingJumpPopupCorrectionRaf);
+      this.pendingJumpPopupCorrectionRaf = null;
     }
 
     this.unbindMapPopupListeners();
@@ -880,7 +894,51 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
       this.openedJumpCoordinates.latitudeDegrees,
       this.openedJumpCoordinates.longitudeDegrees
     );
-    this.jumpPopupScreenPosition.set(screen);
+    const clamped = resolvePopupAnchorPosition(screen, this.mapDiv?.nativeElement, {
+      preferredWidthPx: EventCardMapComponent.JUMP_POPUP_WIDTH_ESTIMATE_PX,
+      preferredHeightPx: EventCardMapComponent.JUMP_POPUP_HEIGHT_ESTIMATE_PX,
+      marginPx: EventCardMapComponent.JUMP_POPUP_MARGIN_PX,
+      offsetPx: EventCardMapComponent.JUMP_POPUP_OFFSET_PX,
+      minWidthPx: 140,
+      minHeightPx: 120,
+      preferAbove: true,
+    });
+    if (!clamped) {
+      this.jumpPopupScreenPosition.set(null);
+      return;
+    }
+    this.jumpPopupScreenPosition.set(clamped);
+    this.scheduleJumpPopupViewportCorrection();
+  }
+
+  private scheduleJumpPopupViewportCorrection(): void {
+    if (this.pendingJumpPopupCorrectionRaf !== null || typeof requestAnimationFrame !== 'function') {
+      return;
+    }
+
+    this.pendingJumpPopupCorrectionRaf = requestAnimationFrame(() => {
+      this.pendingJumpPopupCorrectionRaf = null;
+      this.correctJumpPopupPositionWithMeasuredSize();
+    });
+  }
+
+  private correctJumpPopupPositionWithMeasuredSize(): void {
+    const anchor = this.jumpPopupAnchor?.nativeElement;
+    const mapElement = this.mapDiv?.nativeElement;
+    const current = this.jumpPopupScreenPosition();
+    if (!anchor || !mapElement || !current || !this.openedJumpMarkerInfoWindow) {
+      return;
+    }
+
+    const corrected = correctPopupPositionToViewport(
+      current,
+      mapElement,
+      anchor,
+      EventCardMapComponent.JUMP_POPUP_MARGIN_PX
+    );
+    if (corrected) {
+      this.jumpPopupScreenPosition.set(corrected);
+    }
   }
 
   private updateJumpHangTimeRange() {

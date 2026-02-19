@@ -40,7 +40,7 @@
       <div #mapDiv class="mapbox-map"></div>
 
       @if (openedJumpMarkerInfoWindow && jumpPopupScreenPosition(); as popupPosition) {
-      <div class="jump-popup-anchor" [style.left.px]="popupPosition.x" [style.top.px]="popupPosition.y">
+      <div #jumpPopupAnchor class="jump-popup-anchor" [style.left.px]="popupPosition.x" [style.top.px]="popupPosition.y">
         <app-jump-marker-popup [jump]="openedJumpMarkerInfoWindow" (dismiss)="onJumpPopupDismiss()"></app-jump-marker-popup>
       </div>
       }
