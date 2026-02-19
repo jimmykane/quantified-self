@@ -22,6 +22,10 @@
   pointer-events: none;
 }
 
+:host ::ng-deep .track-start-popup-anchor app-map-activity-popup .track-start-popup {
+  width: min(300px, calc(100vw - 20px));
+}
+
 app-peek-panel.tracks-search-peek {
   position: absolute;
   top: 0;

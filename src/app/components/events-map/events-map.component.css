@@ -34,3 +34,7 @@ app-loading-overlay {
   z-index: 3;
   pointer-events: auto;
 }
+
+:host ::ng-deep .events-map-popup-anchor app-map-activity-popup .track-start-popup {
+  width: min(300px, calc(100vw - 20px));
+}
