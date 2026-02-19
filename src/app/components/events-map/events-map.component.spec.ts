@@ -1,18 +1,23 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CUSTOM_ELEMENTS_SCHEMA, NgZone, SimpleChange, signal } from '@angular/core';
 import { RouterTestingModule } from '@angular/router/testing';
+import { of, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ActivityTypes,
   AppThemes,
   DataDistance,
   DataDuration,
+  DataLatitudeDegrees,
+  DataLongitudeDegrees,
   DataPaceAvg,
+  DataPositionInterface,
   DataStartPosition,
   EventInterface,
   User,
 } from '@sports-alliance/sports-lib';
 import { EventsMapComponent } from './events-map.component';
+import { AppEventService } from '../../services/app.event.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppThemeService } from '../../services/app.theme.service';
@@ -23,11 +28,13 @@ import { AppUserSettingsQueryService } from '../../services/app.user-settings-qu
 const EVENTS_SOURCE_ID = 'events-map-events-source';
 const EVENTS_UNCLUSTERED_LAYER_ID = 'events-map-events-unclustered';
 const EVENTS_CLUSTER_LAYER_ID = 'events-map-events-clusters';
+const SELECTED_TRACKS_SOURCE_ID = 'events-map-selected-event-tracks-source';
 
 describe('EventsMapComponent', () => {
   let component: EventsMapComponent;
   let fixture: ComponentFixture<EventsMapComponent>;
 
+  let mockEventService: any;
   let mockColorService: any;
   let mockMapboxLoader: any;
   let mockMapStyleService: any;
@@ -132,6 +139,10 @@ describe('EventsMapComponent', () => {
       isStyleLoaded: vi.fn().mockReturnValue(true),
     };
 
+    mockEventService = {
+      getEventActivitiesAndSomeStreams: vi.fn(),
+    };
+
     mockColorService = {
       getColorForActivityTypeByActivityTypeGroup: vi.fn().mockReturnValue('#00aaff'),
       getActivityColor: vi.fn().mockReturnValue('#ff5500'),
@@ -166,6 +177,7 @@ describe('EventsMapComponent', () => {
       declarations: [EventsMapComponent],
       imports: [RouterTestingModule],
       providers: [
+        { provide: AppEventService, useValue: mockEventService },
         { provide: AppEventColorService, useValue: mockColorService },
         {
           provide: LoggerService,
@@ -221,10 +233,22 @@ describe('EventsMapComponent', () => {
     expect(map.addSource).not.toHaveBeenCalledWith(EVENTS_SOURCE_ID, expect.anything());
   });
 
-  it('should select an event when clicking an event point without stream hydration', async () => {
+  it('hydrates selected event and renders selected track polylines on click', async () => {
     const clickedEvent = component.events[0];
+    const populatedActivity = {
+      getSquashedPositionData: vi.fn().mockReturnValue([
+        { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+        { latitudeDegrees: 40.66, longitudeDegrees: 22.96 },
+      ] as DataPositionInterface[]),
+    };
+    const populatedEvent = {
+      ...clickedEvent,
+      getActivities: () => [populatedActivity],
+    } as EventInterface;
+    mockEventService.getEventActivitiesAndSomeStreams.mockReturnValue(of(populatedEvent));
 
     await initMap();
+    const fitBoundsCallsBefore = map.fitBounds.mock.calls.length;
 
     emitLayerEvent('click', EVENTS_UNCLUSTERED_LAYER_ID, {
       features: [{ properties: { eventId: 'event-1' } }],
@@ -232,7 +256,135 @@ describe('EventsMapComponent', () => {
 
     await flush();
 
-    expect(component.selectedEvent).toBe(clickedEvent);
+    expect(mockEventService.getEventActivitiesAndSomeStreams).toHaveBeenCalledWith(
+      component.user,
+      'event-1',
+      [DataLatitudeDegrees.type, DataLongitudeDegrees.type]
+    );
+    expect(component.selectedEvent?.getID?.()).toBe('event-1');
+    expect(map.addSource).toHaveBeenCalledWith(SELECTED_TRACKS_SOURCE_ID, expect.anything());
+    expect(map.fitBounds.mock.calls.length).toBeGreaterThan(fitBoundsCallsBefore);
+  });
+
+  it('does not render selected tracks when hydration returns no position streams', async () => {
+    const clickedEvent = component.events[0];
+    const populatedEvent = {
+      ...clickedEvent,
+      getActivities: () => [
+        {
+          getSquashedPositionData: () => [],
+        },
+      ],
+    } as EventInterface;
+    mockEventService.getEventActivitiesAndSomeStreams.mockReturnValue(of(populatedEvent));
+
+    await initMap();
+    const fitBoundsCallsBefore = map.fitBounds.mock.calls.length;
+
+    emitLayerEvent('click', EVENTS_UNCLUSTERED_LAYER_ID, {
+      features: [{ properties: { eventId: 'event-1' } }],
+    });
+
+    await flush();
+
+    const selectedSourceCalls = map.addSource.mock.calls.filter((call: any[]) => call[0] === SELECTED_TRACKS_SOURCE_ID);
+    expect(selectedSourceCalls.length).toBe(0);
+    expect(map.fitBounds.mock.calls.length).toBe(fitBoundsCallsBefore);
+  });
+
+  it('reclicking same selected marker refits bounds without re-hydration', async () => {
+    const clickedEvent = component.events[0];
+    const populatedEvent = {
+      ...clickedEvent,
+      getActivities: () => [
+        {
+          getSquashedPositionData: () => [
+            { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+            { latitudeDegrees: 40.66, longitudeDegrees: 22.96 },
+          ],
+        },
+      ],
+    } as EventInterface;
+    mockEventService.getEventActivitiesAndSomeStreams.mockReturnValue(of(populatedEvent));
+
+    await initMap();
+
+    emitLayerEvent('click', EVENTS_UNCLUSTERED_LAYER_ID, {
+      features: [{ properties: { eventId: 'event-1' } }],
+    });
+    await flush();
+
+    const hydrateCallsBeforeReclick = mockEventService.getEventActivitiesAndSomeStreams.mock.calls.length;
+    const fitBoundsCallsBeforeReclick = map.fitBounds.mock.calls.length;
+
+    emitLayerEvent('click', EVENTS_UNCLUSTERED_LAYER_ID, {
+      features: [{ properties: { eventId: 'event-1' } }],
+    });
+    await flush();
+
+    expect(mockEventService.getEventActivitiesAndSomeStreams.mock.calls.length).toBe(hydrateCallsBeforeReclick);
+    expect(map.fitBounds.mock.calls.length).toBeGreaterThan(fitBoundsCallsBeforeReclick);
+  });
+
+  it('ignores stale hydration responses when a newer marker click happens', async () => {
+    const firstEvent = createEvent('event-1', 40.64, 22.94);
+    const secondEvent = createEvent('event-2', 41.05, 23.77);
+    component.events = [firstEvent, secondEvent];
+
+    const firstHydration$ = new Subject<EventInterface>();
+    const secondHydration$ = new Subject<EventInterface>();
+    mockEventService.getEventActivitiesAndSomeStreams.mockImplementation((_user: User, eventId: string) => {
+      if (eventId === 'event-1') {
+        return firstHydration$.asObservable();
+      }
+      return secondHydration$.asObservable();
+    });
+
+    await initMap();
+
+    emitLayerEvent('click', EVENTS_UNCLUSTERED_LAYER_ID, {
+      features: [{ properties: { eventId: 'event-1' } }],
+    });
+    emitLayerEvent('click', EVENTS_UNCLUSTERED_LAYER_ID, {
+      features: [{ properties: { eventId: 'event-2' } }],
+    });
+    await flush();
+
+    firstHydration$.next({
+      ...firstEvent,
+      getActivities: () => [
+        {
+          getSquashedPositionData: () => [
+            { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+            { latitudeDegrees: 40.66, longitudeDegrees: 22.96 },
+          ],
+        },
+      ],
+    } as EventInterface);
+    firstHydration$.complete();
+    await flush();
+
+    const selectedSourceCallsAfterStale = map.addSource.mock.calls.filter((call: any[]) => call[0] === SELECTED_TRACKS_SOURCE_ID);
+    expect(selectedSourceCallsAfterStale.length).toBe(0);
+    expect(component.selectedEvent?.getID?.()).toBe('event-2');
+
+    secondHydration$.next({
+      ...secondEvent,
+      getActivities: () => [
+        {
+          getSquashedPositionData: () => [
+            { latitudeDegrees: 41.05, longitudeDegrees: 23.77 },
+            { latitudeDegrees: 41.09, longitudeDegrees: 23.8 },
+          ],
+        },
+      ],
+    } as EventInterface);
+    secondHydration$.complete();
+    await flush();
+
+    const selectedSourceCallsFinal = map.addSource.mock.calls.filter((call: any[]) => call[0] === SELECTED_TRACKS_SOURCE_ID);
+    expect(selectedSourceCallsFinal.length).toBe(1);
+    expect(component.selectedEvent?.getID?.()).toBe('event-2');
   });
 
   it('should switch to non-clustered source/layers when clustering is disabled', async () => {

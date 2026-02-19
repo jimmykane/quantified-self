@@ -18,8 +18,12 @@ import { DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
 import {
   ActivityTypes,
+  ActivityInterface,
   DataDistance,
+  DataLatitudeDegrees,
+  DataLongitudeDegrees,
   DataPaceAvg,
+  DataPositionInterface,
   DataSpeedAvg,
   DataStartPosition,
   DataSwimPaceAvg,
@@ -30,6 +34,7 @@ import {
 import { MapAbstractDirective } from '../map/map-abstract.directive';
 import { LoggerService } from '../../services/logger.service';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
+import { AppEventService } from '../../services/app.event.service';
 import { MapboxLoaderService } from '../../services/mapbox-loader.service';
 import { MapStyleService } from '../../services/map-style.service';
 import { MapboxStyleSynchronizer } from '../../services/map/mapbox-style-synchronizer';
@@ -48,6 +53,8 @@ import {
   upsertGeoJsonSource
 } from '../../services/map/mapbox-layer.utils';
 import { attachStyleReloadHandler, isStyleReady, runWhenStyleReady } from '../../services/map/mapbox-style-ready.utils';
+import { firstValueFrom } from 'rxjs';
+import { take } from 'rxjs/operators';
 
 interface EventPointFeature {
   type: 'Feature';
@@ -74,6 +81,8 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   private static readonly EVENTS_UNCLUSTERED_LAYER_ID = 'events-map-events-unclustered';
   private static readonly EVENTS_CLUSTER_LAYER_ID = 'events-map-events-clusters';
   private static readonly EVENTS_CLUSTER_COUNT_LAYER_ID = 'events-map-events-cluster-count';
+  private static readonly SELECTED_TRACKS_SOURCE_ID = 'events-map-selected-event-tracks-source';
+  private static readonly SELECTED_TRACKS_LAYER_ID = 'events-map-selected-event-tracks-layer';
 
   @ViewChild('mapDiv', { static: false }) mapDiv?: ElementRef<HTMLDivElement>;
   @Input() events: EventInterface[] = [];
@@ -91,6 +100,11 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   public noMapData = false;
   public selectedEvent?: EventInterface;
   public selectedEventPopupContent: MapEventPopupContent | null = null;
+  public selectedEventPositionsByActivity: Array<{
+    activity: ActivityInterface;
+    color: string;
+    positions: DataPositionInterface[];
+  }> = [];
   public apiLoaded = signal(false);
 
   private readonly mapStyleSignal = signal<MapStyleName>('default');
@@ -105,11 +119,15 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   private currentSourceClusterMode: boolean | null = null;
   private pendingEventsFitBounds = true;
   private lastPopupDebugFingerprint: string | null = null;
+  private activeHydrationSequence = 0;
+  private hydrationInFlightEventId: string | null = null;
+  private hydratedEventId: string | null = null;
 
   constructor(
     private zone: NgZone,
     private changeDetectorRef: ChangeDetectorRef,
     private eventColorService: AppEventColorService,
+    private eventService: AppEventService,
     private mapboxLoader: MapboxLoaderService,
     private mapStyleService: MapStyleService,
     private popupContentService: MapEventPopupContentService,
@@ -169,8 +187,13 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   }
 
   public clearSelectedEvent(): void {
+    this.activeHydrationSequence += 1;
+    this.hydrationInFlightEventId = null;
+    this.hydratedEventId = null;
     this.selectedEvent = undefined;
     this.selectedEventPopupContent = null;
+    this.selectedEventPositionsByActivity = [];
+    this.renderSelectedEventTracks();
 
     if (this.events?.length) {
       this.fitBoundsToEvents(false);
@@ -274,6 +297,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     }
 
     this.renderEventLayers();
+    this.renderSelectedEventTracks();
   }
 
   private renderEventLayers(): void {
@@ -447,22 +471,166 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
 
   private onEventPointClick(eventId: string): void {
     const event = this.eventsById.get(eventId);
-    if (!event) {
+    if (!event || !this.user) {
       return;
     }
 
-    if (this.selectedEvent?.getID?.() === eventId) {
+    const isSameSelection = this.selectedEvent?.getID?.() === eventId;
+    if (isSameSelection && (this.hydrationInFlightEventId === eventId || this.hydratedEventId === eventId)) {
       this.logPopupStatSnapshot('click:selected:duplicate', event);
+      if (this.selectedEventPositionsByActivity.length > 0) {
+        this.fitBoundsToSelectedTracks(false);
+      }
       return;
     }
 
+    this.activeHydrationSequence += 1;
+    const requestSequence = this.activeHydrationSequence;
+    this.hydrationInFlightEventId = eventId;
+    this.hydratedEventId = null;
     this.lastPopupDebugFingerprint = null;
     const popupContent = this.popupContentService.buildFromEvent(event);
     this.logPopupStatSnapshot('click:selected', event, popupContent);
     this.logPopupStatSnapshot('popup:build', event, popupContent);
     this.selectedEventPopupContent = popupContent;
     this.selectedEvent = event;
+    this.selectedEventPositionsByActivity = [];
+    this.renderSelectedEventTracks();
     this.changeDetectorRef.markForCheck();
+    void this.hydrateSelectedEventTracks(eventId, requestSequence, event);
+  }
+
+  private async hydrateSelectedEventTracks(
+    eventId: string,
+    requestSequence: number,
+    fallbackEvent: EventInterface
+  ): Promise<void> {
+    const user = this.user;
+    if (!user) {
+      return;
+    }
+
+    try {
+      const hydratedEvent = await firstValueFrom(
+        this.eventService.getEventActivitiesAndSomeStreams(
+          user,
+          eventId,
+          [DataLatitudeDegrees.type, DataLongitudeDegrees.type]
+        ).pipe(take(1))
+      );
+
+      if (requestSequence !== this.activeHydrationSequence) {
+        return;
+      }
+
+      const activities = hydratedEvent?.getActivities?.() || [];
+      this.selectedEventPositionsByActivity = activities.reduce<Array<{
+        activity: ActivityInterface;
+        color: string;
+        positions: DataPositionInterface[];
+      }>>((result, activity) => {
+        const positions = activity.getSquashedPositionData?.() || [];
+        if (!positions.length) {
+          return result;
+        }
+
+        result.push({
+          activity,
+          color: this.eventColorService.getActivityColor(activities, activity),
+          positions,
+        });
+        return result;
+      }, []);
+
+      this.selectedEvent = hydratedEvent || fallbackEvent;
+      this.hydrationInFlightEventId = null;
+      this.hydratedEventId = eventId;
+      this.renderSelectedEventTracks();
+      if (this.selectedEventPositionsByActivity.length > 0) {
+        this.fitBoundsToSelectedTracks(false);
+      }
+      this.changeDetectorRef.markForCheck();
+    } catch (error) {
+      if (requestSequence !== this.activeHydrationSequence) {
+        return;
+      }
+      this.hydrationInFlightEventId = null;
+      this.logger.error('[EventsMapComponent] Failed to hydrate selected event streams.', {
+        eventId,
+        error,
+      });
+      this.changeDetectorRef.markForCheck();
+    }
+  }
+
+  private renderSelectedEventTracks(): void {
+    const map = this.mapInstance();
+    if (!map || !isStyleReady(map)) {
+      return;
+    }
+
+    const lineFeatures = this.selectedEventPositionsByActivity
+      .map((item) => {
+        const coordinates = (item.positions || [])
+          .filter((position) => Number.isFinite(position?.longitudeDegrees) && Number.isFinite(position?.latitudeDegrees))
+          .map((position) => [position.longitudeDegrees, position.latitudeDegrees] as [number, number]);
+
+        if (coordinates.length <= 1) {
+          return null;
+        }
+
+        return {
+          type: 'Feature',
+          properties: {
+            color: this.mapStyleService.adjustColorForTheme(item.color || '#2ca3ff', this.appTheme()),
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates,
+          },
+        };
+      })
+      .filter((feature): feature is {
+        type: 'Feature';
+        properties: { color: string };
+        geometry: { type: 'LineString'; coordinates: [number, number][] };
+      } => !!feature);
+
+    if (!lineFeatures.length) {
+      removeLayerIfExists(map, EventsMapComponent.SELECTED_TRACKS_LAYER_ID);
+      removeSourceIfExists(map, EventsMapComponent.SELECTED_TRACKS_SOURCE_ID);
+      return;
+    }
+
+    upsertGeoJsonSource(map, EventsMapComponent.SELECTED_TRACKS_SOURCE_ID, {
+      type: 'FeatureCollection',
+      features: lineFeatures,
+    });
+
+    if (!map.getLayer?.(EventsMapComponent.SELECTED_TRACKS_LAYER_ID)) {
+      map.addLayer?.({
+        id: EventsMapComponent.SELECTED_TRACKS_LAYER_ID,
+        type: 'line',
+        source: EventsMapComponent.SELECTED_TRACKS_SOURCE_ID,
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': ['coalesce', ['get', 'color'], '#2ca3ff'],
+          'line-width': 3,
+          'line-opacity': 1,
+          'line-emissive-strength': 1,
+        },
+      });
+    }
+
+    setPaintIfLayerExists(map, EventsMapComponent.SELECTED_TRACKS_LAYER_ID, {
+      'line-color': ['coalesce', ['get', 'color'], '#2ca3ff'],
+      'line-width': 3,
+      'line-opacity': 1,
+      'line-emissive-strength': 1,
+    });
   }
 
   private clearEventLayersAndSource(): void {
@@ -495,6 +663,35 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     pointFeatures.forEach((feature) => {
       bounds.extend(feature.geometry.coordinates);
       hasPoints = true;
+    });
+
+    if (!hasPoints) {
+      return;
+    }
+
+    this.mapInstance()?.fitBounds?.(bounds, {
+      padding: 80,
+      animate,
+    });
+  }
+
+  private fitBoundsToSelectedTracks(animate: boolean): void {
+    if (!this.mapboxgl) {
+      return;
+    }
+
+    const bounds = new this.mapboxgl.LngLatBounds();
+    let hasPoints = false;
+
+    this.selectedEventPositionsByActivity.forEach((positionsByActivity) => {
+      (positionsByActivity.positions || []).forEach((position) => {
+        if (!Number.isFinite(position?.longitudeDegrees) || !Number.isFinite(position?.latitudeDegrees)) {
+          return;
+        }
+
+        bounds.extend([position.longitudeDegrees, position.latitudeDegrees]);
+        hasPoints = true;
+      });
     });
 
     if (!hasPoints) {
