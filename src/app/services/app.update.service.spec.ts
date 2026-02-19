@@ -24,7 +24,7 @@ describe('AppUpdateService', () => {
         mockWindow = {
             location: {
                 reload: vi.fn()
-            }
+            },
         };
 
         windowServiceMock = {
@@ -93,5 +93,20 @@ describe('AppUpdateService', () => {
 
         expect(loggerMock.error).toHaveBeenCalled();
         expect(mockWindow.location.reload).toHaveBeenCalled();
+    });
+
+    it('should not show snackbar more than once for the same version hash', () => {
+        const event = { type: 'VERSION_READY' } as VersionReadyEvent;
+
+        versionUpdatesSubject.next(event);
+        versionUpdatesSubject.next(event);
+
+        expect(snackBarMock.open).toHaveBeenCalledTimes(1);
+    });
+
+    it('should expose update availability after first version ready event', () => {
+        expect(service.isUpdateAvailable()).toBe(false);
+        versionUpdatesSubject.next({ type: 'VERSION_READY' } as VersionReadyEvent);
+        expect(service.isUpdateAvailable()).toBe(true);
     });
 });

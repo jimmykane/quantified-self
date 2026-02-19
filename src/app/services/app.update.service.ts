@@ -26,7 +26,12 @@ export class AppUpdateService {
     updates.versionUpdates
       .pipe(filter((evt): evt is VersionReadyEvent => evt.type === 'VERSION_READY'))
       .subscribe(() => {
+        // Guard against duplicate VERSION_READY emissions in the same app runtime.
+        if (this.isUpdateAvailable()) {
+          return;
+        }
         this.isUpdateAvailable.set(true);
+
         const snack = this.snackbar.open('There is a new version available', 'Reload', {
           duration: 0,
         });
