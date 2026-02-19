@@ -1058,17 +1058,22 @@ export class TracksComponent implements OnInit, OnDestroy {
   private centerMapOnStartPoint(selection: TrackStartSelection): void {
     if (!selection) return;
     const map = this.tracksMapManager.getMap();
-    if (!map?.panTo) return;
+    if (!map?.easeTo) return;
     const target: [number, number] = [selection.lng, selection.lat];
+    const MIN_ZOOM_ON_SELECT = 11;
+    const currentZoom = typeof map.getZoom === 'function' ? map.getZoom() : 0;
+    const targetZoom = Math.max(currentZoom, MIN_ZOOM_ON_SELECT);
     this.zone.runOutsideAngular(() => {
       try {
-        map.panTo(target, {
+        map.easeTo({
+          center: target,
+          zoom: targetZoom,
           animate: true,
-          duration: 320,
+          duration: 480,
           essential: true
         });
       } catch (error) {
-        this.logger.warn('[TracksComponent] Failed to pan map to selected start point.', {
+        this.logger.warn('[TracksComponent] Failed to pan/zoom map to selected start point.', {
           selection,
           error
         });
