@@ -214,7 +214,9 @@ export class AppPaymentService {
         attempt: number
     ): Promise<void> {
         const checkoutInput = this.resolveCheckoutInput(price);
-        const promotionCodeId = await this.resolvePromotionCodeIdForCheckout(price, checkoutInput);
+        const resolvedPromotionCodeId = await this.resolvePromotionCodeIdForCheckout(price, checkoutInput);
+        const hasPaidHistory = resolvedPromotionCodeId ? await this.hasPaidSubscriptionHistory() : false;
+        const promotionCodeId = hasPaidHistory ? null : resolvedPromotionCodeId;
 
         await this.runPreCheckoutLinkCheck(user);
 
