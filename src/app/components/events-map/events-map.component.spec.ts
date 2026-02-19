@@ -1,13 +1,16 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CUSTOM_ELEMENTS_SCHEMA, NgZone, SimpleChange, signal } from '@angular/core';
 import { RouterTestingModule } from '@angular/router/testing';
-import { of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ActivityTypes,
   AppThemes,
+  DataDistance,
+  DataDuration,
   DataLatitudeDegrees,
   DataLongitudeDegrees,
+  DataPaceAvg,
   DataPositionInterface,
   DataStartPosition,
   EventInterface,
@@ -21,6 +24,7 @@ import { AppThemeService } from '../../services/app.theme.service';
 import { MapboxLoaderService } from '../../services/mapbox-loader.service';
 import { MapStyleService } from '../../services/map-style.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 
 const EVENTS_SOURCE_ID = 'events-map-events-source';
 const EVENTS_UNCLUSTERED_LAYER_ID = 'events-map-events-unclustered';
@@ -36,6 +40,7 @@ describe('EventsMapComponent', () => {
   let mockMapboxLoader: any;
   let mockMapStyleService: any;
   let mockSnackBar: any;
+  let mockUserSettingsQuery: any;
 
   let map: any;
   let mapEventHandlers: Record<string, Array<(...args: any[]) => void>>;
@@ -170,6 +175,10 @@ describe('EventsMapComponent', () => {
       open: vi.fn(),
     };
 
+    mockUserSettingsQuery = {
+      unitSettings: vi.fn().mockReturnValue(undefined),
+    };
+
     await TestBed.configureTestingModule({
       declarations: [EventsMapComponent],
       imports: [RouterTestingModule],
@@ -193,6 +202,7 @@ describe('EventsMapComponent', () => {
         },
         { provide: MapboxLoaderService, useValue: mockMapboxLoader },
         { provide: MapStyleService, useValue: mockMapStyleService },
+        { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQuery },
         { provide: MatSnackBar, useValue: mockSnackBar },
         { provide: NgZone, useValue: new NgZone({ enableLongStackTrace: false }) },
       ],
@@ -263,6 +273,27 @@ describe('EventsMapComponent', () => {
     expect(map.addSource).toHaveBeenCalledWith(SELECTED_TRACKS_SOURCE_ID, expect.anything());
   });
 
+  it('shows popup content from event stats before stream hydration resolves', async () => {
+    const clickedEvent = createEvent('event-early');
+    component.events = [clickedEvent];
+
+    const hydrationSubject = new Subject<EventInterface>();
+    mockEventService.attachStreamsToEventWithActivities.mockReturnValue(hydrationSubject.asObservable());
+
+    await initMap();
+    emitLayerEvent('click', EVENTS_UNCLUSTERED_LAYER_ID, {
+      features: [{ properties: { eventId: 'event-early' } }],
+    });
+
+    expect(component.selectedEvent).toBe(clickedEvent);
+    const popupContent = component.getSelectedEventPopupContent(component.selectedEvent);
+    expect(popupContent.metrics.length).toBe(3);
+
+    hydrationSubject.next(clickedEvent);
+    hydrationSubject.complete();
+    await flush();
+  });
+
   it('should switch to non-clustered source/layers when clustering is disabled', async () => {
     await initMap();
 
@@ -297,12 +328,25 @@ describe('EventsMapComponent', () => {
     expect(mapOptions?.zoom).toBeUndefined();
   });
 
-  it('should not show a zero activities metric in selected event popup summary', () => {
+  it('should use mytracks-like popup metric slots without activities count', () => {
     const event = createEvent('event-1');
     (event as any).getActivities = () => [];
+    (event as any).getDuration = () => ({ getType: () => DataDuration.type, getDisplayValue: () => '42:10', getDisplayUnit: () => '' });
+    (event as any).getDistance = () => ({ getType: () => DataDistance.type, getDisplayValue: () => '10.0', getDisplayUnit: () => 'km' });
+    (event as any).getStat = (type: string) => {
+      if (type === DataPaceAvg.type) {
+        return { getType: () => type, getDisplayValue: () => '4:13', getDisplayUnit: () => 'min/km' };
+      }
+      return null;
+    };
 
-    const metrics = component.getSelectedEventSummaryMetrics(event);
+    const popupContent = component.getSelectedEventPopupContent(event);
+    const metrics = popupContent.metrics;
 
+    expect(metrics.length).toBe(3);
+    expect(metrics[0]).toBeTruthy();
+    expect(metrics[1]).toBeTruthy();
+    expect(metrics[2]).toBeTruthy();
     expect(metrics.some((metric) => metric.label === 'activity' || metric.label === 'activities')).toBe(false);
   });
 });

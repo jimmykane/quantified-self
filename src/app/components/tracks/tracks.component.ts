@@ -7,7 +7,7 @@ import { take, debounceTime, filter } from 'rxjs/operators';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { Subject, Subscription } from 'rxjs';
-import { DateRanges, ActivityTypes, DataDistance, DataDuration, DataPaceAvg, DataSpeedAvg, DataSwimPaceAvg } from '@sports-alliance/sports-lib';
+import { DateRanges, ActivityTypes, DataPaceAvg, DataSpeedAvg, DataSwimPaceAvg } from '@sports-alliance/sports-lib';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
 import { DataPositionInterface } from '@sports-alliance/sports-lib';
 import { DataJumpEvent } from '@sports-alliance/sports-lib';
@@ -46,7 +46,10 @@ import {
   resolvePreferredSpeedDerivedAverageTypeForActivity,
   resolvePreferredSpeedDerivedAverageTypesForActivity
 } from '../../helpers/summary-stats.helper';
-import { SummaryPrimaryInfoMetric } from '../shared/summary-primary-info/summary-primary-info.component';
+import {
+  MapEventPopupContent,
+  MapEventPopupContentService
+} from '../../services/map/map-event-popup-content.service';
 import {
   correctPopupPositionToViewport,
   resolvePopupAnchorPosition,
@@ -106,7 +109,6 @@ export class TracksComponent implements OnInit, OnDestroy {
   private scrolled = false;
   private hasTrackBoundsBeenApplied = false;
   private trackCoordinatesByEventId = new Map<string, number[][]>();
-  private activitiesByStartPointKey = new Map<string, any>();
   private eventsById = new Map<string, any>();
 
   private eventsSubscription: Subscription = new Subscription();
@@ -158,6 +160,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     private jumpHeatmapWeightingService: JumpHeatmapWeightingService,
     private mapboxStartPointLayerService: MapboxStartPointLayerService,
     private mapboxAutoResizeService: MapboxAutoResizeService,
+    private popupContentService: MapEventPopupContentService,
   ) {
     this.tracksMapManager = new TracksMapManager(
       this.zone,
@@ -445,7 +448,6 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.detectedTripsPanelExpanded.set(false);
     this.hasDetectedJumps.set(false);
     this.trackCoordinatesByEventId.clear();
-    this.activitiesByStartPointKey.clear();
     this.eventsById.clear();
     this.closeSelectedStartPointPopup();
     this.tracksMapManager.clearJumpHeatmap();
@@ -575,10 +577,6 @@ export class TracksComponent implements OnInit, OnDestroy {
                     );
 
                   if (coordinates.length > 1) {
-                    const activityId = activity?.getID?.();
-                    if (eventId && activityId) {
-                      this.activitiesByStartPointKey.set(this.buildStartPointActivityKey(eventId, String(activityId)), activity);
-                    }
                     const startPoint = this.buildTrackStartPoint(
                       activity,
                       eventId,
@@ -718,69 +716,17 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.closeSelectedStartPointPopup();
   }
 
-  public resolveStartPointIconActivityType(startPoint: TrackStartSelection | null): string {
-    const rawType = startPoint?.activityTypeValue;
-    if (typeof rawType === 'string' && rawType.trim().length > 0) {
-      return rawType.trim();
-    }
-    if (typeof rawType === 'number' && Number.isFinite(rawType) && ActivityTypes[rawType]) {
-      return String(ActivityTypes[rawType]);
-    }
-    if (typeof startPoint?.activityType === 'string' && startPoint.activityType.trim().length > 0) {
-      return startPoint.activityType.trim();
-    }
-    return 'Other';
-  }
-
-  public getStartPointSummaryMetrics(startPoint: TrackStartSelection | null): SummaryPrimaryInfoMetric[] {
-    if (!startPoint) return [];
-    const activity = this.resolveActivityFromStartPointSelection(startPoint);
-    if (!activity) {
-      const durationMetric = this.toPopupMetric(startPoint.durationLabel);
-      const distanceMetric = this.toPopupMetric(startPoint.distanceLabel);
-      const effortMetric = this.toPopupMetric(startPoint.effortDisplayLabel);
-      return [
-        {
-          value: durationMetric.value,
-          label: durationMetric.label,
-        },
-        {
-          value: distanceMetric.value,
-          label: distanceMetric.label,
-        },
-        {
-          value: effortMetric.value,
-          label: effortMetric.label || '',
-        },
-      ];
-    }
-
-    const effortType = resolvePreferredSpeedDerivedAverageTypeForActivity(activity?.type) || DataSpeedAvg.type;
-    const metricTypes = [DataDuration.type, DataDistance.type, effortType];
-
-    return metricTypes.map((metricType) => this.resolveSummaryMetricFromActivity(activity, metricType));
-  }
-
   public resolveStartPointEvent(startPoint: TrackStartSelection | null): any | null {
     if (!startPoint?.eventId) return null;
     return this.eventsById.get(startPoint.eventId) || null;
   }
 
-  private toPopupMetric(rawDisplay: string | null | undefined): SummaryPrimaryInfoMetric {
-    const normalized = typeof rawDisplay === 'string' ? rawDisplay.trim() : '';
-    if (!normalized || normalized === '-') {
-      return { value: '--', label: '' };
+  public getStartPointPopupContent(startPoint: TrackStartSelection | null): MapEventPopupContent | null {
+    const event = this.resolveStartPointEvent(startPoint);
+    if (!event) {
+      return null;
     }
-
-    const separatorIndex = normalized.indexOf(' ');
-    if (separatorIndex <= 0 || separatorIndex >= normalized.length - 1) {
-      return { value: normalized, label: '' };
-    }
-
-    return {
-      value: normalized.slice(0, separatorIndex).trim() || normalized,
-      label: normalized.slice(separatorIndex + 1).trim(),
-    };
+    return this.popupContentService.buildFromEvent(event);
   }
 
   private getTripDetectionInputFromEvent(event: any): TripDetectionInput | null {
@@ -986,41 +932,6 @@ export class TracksComponent implements OnInit, OnDestroy {
       return value;
     }
     return null;
-  }
-
-  private resolveSummaryMetricFromActivity(activity: any, statType: string): SummaryPrimaryInfoMetric {
-    const stat = this.getActivitySummaryStat(activity, statType);
-    const unitSettings = typeof this.userSettingsQuery.unitSettings === 'function'
-      ? this.userSettingsQuery.unitSettings()
-      : undefined;
-    const display = resolvePrimaryUnitAwareDisplayStat(stat, unitSettings, statType);
-
-    return {
-      value: display?.value || '--',
-      label: display?.unit || '',
-    };
-  }
-
-  private getActivitySummaryStat(activity: any, statType: string): any {
-    if (statType === DataDuration.type && typeof activity?.getDuration === 'function') {
-      return activity.getDuration();
-    }
-    if (statType === DataDistance.type && typeof activity?.getDistance === 'function') {
-      return activity.getDistance();
-    }
-    if (typeof activity?.getStat === 'function') {
-      return activity.getStat(statType);
-    }
-    return null;
-  }
-
-  private resolveActivityFromStartPointSelection(startPoint: TrackStartSelection | null): any | null {
-    if (!startPoint?.eventId || !startPoint?.activityId) return null;
-    return this.activitiesByStartPointKey.get(this.buildStartPointActivityKey(startPoint.eventId, startPoint.activityId)) || null;
-  }
-
-  private buildStartPointActivityKey(eventId: string, activityId: string): string {
-    return `${eventId}::${activityId}`;
   }
 
   private resolveActivityEffortMetric(activity: any): Pick<TrackStartPoint, 'effortLabel' | 'effortDisplayLabel' | 'effortStatType'> {

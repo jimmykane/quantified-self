@@ -18,13 +18,14 @@
   <div #mapDiv id="map"></div>
   @if (selectedStartPoint(); as startPoint) {
   @if (selectedStartPointScreen(); as startPointScreen) {
+  @if (getStartPointPopupContent(startPoint); as popupContent) {
   <div #trackStartPopupAnchor class="track-start-popup-anchor" [style.left.px]="startPointScreen.x" [style.top.px]="startPointScreen.y">
     <app-map-activity-popup
-      [activityType]="startPoint.activityType || 'Activity'"
-      [iconActivityType]="resolveStartPointIconActivityType(startPoint)"
-      [startDate]="startPoint.startDate"
+      [activityType]="popupContent.eventType"
+      [iconActivityType]="popupContent.iconEventType"
+      [startDate]="popupContent.startDate"
       [fallbackTopMetaText]="'Activity start'"
-      [metrics]="getStartPointSummaryMetrics(startPoint)"
+      [metrics]="popupContent.metrics"
       [event]="resolveStartPointEvent(startPoint)"
       [user]="user"
       [actionLabel]="'Open activity'"
@@ -33,6 +34,7 @@
       (actionClick)="openSelectedStartPointEvent()">
     </app-map-activity-popup>
   </div>
+  }
   }
   }
   <div class="map-style-controls">

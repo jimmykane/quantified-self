@@ -8,15 +8,16 @@
   height="100%"
   minHeight="100%">
 
-  @if (selectedEvent) {
+  @if (selectedEvent; as popupEvent) {
+  @if (getSelectedEventPopupContent(popupEvent); as popupContent) {
   <div class="events-map-popup-anchor">
     <app-map-activity-popup
-      [activityType]="selectedEvent.getActivityTypesAsString() || 'Activity'"
-      [iconActivityType]="resolveSelectedEventIconActivityType(selectedEvent)"
-      [startDate]="selectedEvent.startDate"
+      [activityType]="popupContent.eventType"
+      [iconActivityType]="popupContent.iconEventType"
+      [startDate]="popupContent.startDate"
       [fallbackTopMetaText]="'Activity start'"
-      [metrics]="getSelectedEventSummaryMetrics(selectedEvent)"
-      [event]="selectedEvent"
+      [metrics]="popupContent.metrics"
+      [event]="popupEvent"
       [user]="user"
       [actionLabel]="'Open activity'"
       [dismissible]="true"
@@ -25,6 +26,7 @@
       (actionClick)="openSelectedEvent()">
     </app-map-activity-popup>
   </div>
+  }
   }
 
   <section class="mapbox-stage">

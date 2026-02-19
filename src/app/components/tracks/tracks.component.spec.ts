@@ -17,7 +17,7 @@ import { LoggerService } from '../../services/logger.service';
 import { MapStyleService } from '../../services/map-style.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { of } from 'rxjs';
-import { ActivityTypes, AppThemes, DataDistance, DataDuration, DataPaceAvg, DataSpeedAvg, DataStartPosition, DateRanges } from '@sports-alliance/sports-lib';
+import { ActivityTypes, AppThemes, DataPaceAvg, DataSpeedAvg, DataStartPosition, DateRanges } from '@sports-alliance/sports-lib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Overlay } from '@angular/cdk/overlay';
 import { MaterialModule } from '../../modules/material.module';
@@ -668,42 +668,35 @@ describe('TracksComponent', () => {
       expect(component.selectedStartPointScreen()).toBeNull();
     });
 
-    it('should build popup summary metrics from selected activity stats instead of preformatted labels', () => {
-      const activity = {
-        type: ActivityTypes.Running,
-        getDuration: () => ({ getType: () => DataDuration.type, getDisplayValue: () => '00:45:00', getDisplayUnit: () => '' }),
-        getDistance: () => ({ getType: () => DataDistance.type, getDisplayValue: () => '8.5', getDisplayUnit: () => 'km' }),
-        getStat: (type: string) => {
-          if (type === DataPaceAvg.type) {
-            return {
-              getDisplayValue: () => '5:20',
-              getDisplayUnit: () => 'min/km',
-              getType: () => DataPaceAvg.type
-            };
-          }
-          return null;
+    it('should build start-point popup content from shared popup service using event data', () => {
+      const event = createMockEvent('event-1', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [];
+      (event as any).getDuration = () => ({ getType: () => 'DataDuration', getDisplayValue: () => '00:45:00', getDisplayUnit: () => '' });
+      (event as any).getDistance = () => ({ getType: () => 'DataDistance', getDisplayValue: () => '8.5', getDisplayUnit: () => 'km' });
+      (event as any).getStat = (type: string) => {
+        if (type === DataPaceAvg.type) {
+          return {
+            getDisplayValue: () => '5:20',
+            getDisplayUnit: () => 'min/km',
+            getType: () => DataPaceAvg.type
+          };
         }
+        return null;
       };
-      (component as any).activitiesByStartPointKey.set('event-1::activity-1', activity);
+      (event as any).getActivityTypesAsArray = () => [ActivityTypes.Running];
+      (event as any).getActivityTypesAsString = () => 'Running';
+      (component as any).eventsById.set('event-1', event);
 
-      const metrics = component.getStartPointSummaryMetrics({
+      const popupContent = component.getStartPointPopupContent({
         eventId: 'event-1',
-        activityId: 'activity-1',
-        activityType: 'Running',
-        activityTypeValue: ActivityTypes.Running,
-        startDate: 1731062400000,
-        durationLabel: 'SHOULD_NOT_BE_USED',
-        distanceLabel: 'SHOULD_NOT_BE_USED',
-        effortDisplayLabel: 'SHOULD_NOT_BE_USED',
-        lng: 10,
-        lat: 20
       } as any);
 
-      expect(metrics).toEqual([
+      expect(popupContent?.metrics).toEqual([
         { value: '00:45:00', label: '' },
         { value: '8.5', label: 'km' },
         { value: '5:20', label: 'min/km' },
       ]);
+      expect(popupContent?.iconEventType).toBe('Running');
     });
   });
 

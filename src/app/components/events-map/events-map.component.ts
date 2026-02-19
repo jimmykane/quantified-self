@@ -36,7 +36,10 @@ import { MapStyleService } from '../../services/map-style.service';
 import { MapboxStyleSynchronizer } from '../../services/map/mapbox-style-synchronizer';
 import { MapStyleName } from '../../services/map/map-style.types';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { SummaryPrimaryInfoMetric } from '../shared/summary-primary-info/summary-primary-info.component';
+import {
+  MapEventPopupContent,
+  MapEventPopupContentService
+} from '../../services/map/map-event-popup-content.service';
 import {
   bindLayerClickOnce,
   LayerBindingRegistry,
@@ -118,6 +121,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     private eventService: AppEventService,
     private mapboxLoader: MapboxLoaderService,
     private mapStyleService: MapStyleService,
+    private popupContentService: MapEventPopupContentService,
     private router: Router,
     private snackBar: MatSnackBar,
     protected logger: LoggerService
@@ -197,64 +201,8 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     this.clearSelectedEvent();
   }
 
-  public resolveSelectedEventIconActivityType(event: EventInterface | undefined): string {
-    if (!event) {
-      return 'Other';
-    }
-
-    const types = event.getActivityTypesAsArray?.() || [];
-    if (types.length === 1) {
-      const type = types[0];
-      if (typeof type === 'string' && type.trim().length > 0) {
-        return type.trim();
-      }
-      if (typeof type === 'number' && Number.isFinite(type) && ActivityTypes[type]) {
-        return String(ActivityTypes[type]);
-      }
-    }
-
-    if (types.length > 1) {
-      return 'Multisport';
-    }
-
-    const displayType = event.getActivityTypesAsString?.();
-    if (typeof displayType === 'string' && displayType.trim().length > 0) {
-      return displayType.trim();
-    }
-
-    return 'Other';
-  }
-
-  public getSelectedEventSummaryMetrics(event: EventInterface | undefined): SummaryPrimaryInfoMetric[] {
-    if (!event) {
-      return [];
-    }
-
-    const durationDisplay = event.getDuration?.()?.getDisplayValue?.(false, false);
-    const distanceStat = event.getDistance?.();
-    const distanceDisplay = distanceStat
-      ? `${distanceStat.getDisplayValue?.() || ''} ${distanceStat.getDisplayUnit?.() || ''}`.trim()
-      : '';
-    const hydratedActivitiesCount = this.selectedEventPositionsByActivity?.length || 0;
-    const fallbackActivitiesCount = event.getActivities?.()?.length || 0;
-    const activitiesCount = hydratedActivitiesCount > 0 ? hydratedActivitiesCount : fallbackActivitiesCount;
-
-    const durationMetric = this.toPopupMetric(durationDisplay);
-    const distanceMetric = this.toPopupMetric(distanceDisplay);
-
-    const metrics: SummaryPrimaryInfoMetric[] = [
-      durationMetric,
-      distanceMetric,
-    ];
-
-    if (activitiesCount > 0) {
-      metrics.push({
-        value: String(activitiesCount),
-        label: activitiesCount === 1 ? 'activity' : 'activities',
-      });
-    }
-
-    return metrics;
+  public getSelectedEventPopupContent(event: EventInterface | null | undefined): MapEventPopupContent {
+    return this.popupContentService.buildFromEvent(event);
   }
 
   private async initializeMap(): Promise<void> {
@@ -514,7 +462,9 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
     }
 
     this.loading();
+    this.selectedEvent = event;
     this.selectedEventPositionsByActivity = [];
+    this.changeDetectorRef.markForCheck();
 
     try {
       const types = [DataLatitudeDegrees.type, DataLongitudeDegrees.type];
@@ -706,23 +656,6 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       padding: 80,
       animate,
     });
-  }
-
-  private toPopupMetric(rawDisplay: string | null | undefined): SummaryPrimaryInfoMetric {
-    const normalized = typeof rawDisplay === 'string' ? rawDisplay.trim() : '';
-    if (!normalized || normalized === '-') {
-      return { value: '--', label: '' };
-    }
-
-    const separatorIndex = normalized.indexOf(' ');
-    if (separatorIndex <= 0 || separatorIndex >= normalized.length - 1) {
-      return { value: normalized, label: '' };
-    }
-
-    return {
-      value: normalized.slice(0, separatorIndex).trim() || normalized,
-      label: normalized.slice(separatorIndex + 1).trim(),
-    };
   }
 
   private resolveInitialCamera(): { center: [number, number]; zoom: number } {
