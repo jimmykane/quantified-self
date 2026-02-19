@@ -39,7 +39,7 @@ app-peek-panel.tracks-search-peek app-event-search {
 
 
 
-.map-style-controls {
+.map-layers-controls {
   position: absolute;
   bottom: 30px;
   left: 10px;
@@ -49,22 +49,6 @@ app-peek-panel.tracks-search-peek app-event-search {
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
-}
-
-.map-style-controls mat-button-toggle-group {
-  background-color: var(--mat-sys-surface);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  border-radius: 4px;
-}
-
-/* Keep jumps toggle visual parity with style toggles, but without selected checkmark glyph. */
-:host ::ng-deep .map-style-controls .jump-heat-toggle .mat-button-toggle-checkbox-wrapper {
-  display: none;
-}
-
-:host ::ng-deep .map-style-controls .jump-heat-toggle .mat-button-toggle-checked .mat-button-toggle-button {
-  padding-left: 0;
-  padding-right: 0;
 }
 
 .tracks-trips-peek-anchor {

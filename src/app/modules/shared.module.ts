@@ -28,6 +28,7 @@ import { MaterialPillTabDirective } from '../components/shared/material-pill-tab
 import { EventSectionHeaderComponent } from '../components/event/section-header/event.section-header.component';
 import { SummaryPrimaryInfoComponent } from '../components/shared/summary-primary-info/summary-primary-info.component';
 import { MapActivityPopupComponent } from '../components/shared/map-activity-popup/map-activity-popup.component';
+import { MapLayersActionsComponent } from '../components/map/map-layers-actions/map-layers-actions.component';
 
 @NgModule({
     imports: [
@@ -60,6 +61,7 @@ import { MapActivityPopupComponent } from '../components/shared/map-activity-pop
         EventSectionHeaderComponent,
         SummaryPrimaryInfoComponent,
         MapActivityPopupComponent,
+        MapLayersActionsComponent,
     ],
     providers: [],
     exports: [
@@ -90,6 +92,7 @@ import { MapActivityPopupComponent } from '../components/shared/map-activity-pop
         EventSectionHeaderComponent,
         SummaryPrimaryInfoComponent,
         MapActivityPopupComponent,
+        MapLayersActionsComponent,
     ]
 })
 

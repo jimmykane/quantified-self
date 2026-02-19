@@ -1,16 +1,19 @@
 <div class="map-component-wrapper">
   <app-event-section-header icon="map">
-    <app-map-actions
+    <app-map-layers-actions
       [showLaps]="showLaps"
       [showArrows]="showArrows"
       [is3D]="is3D"
       [mapStyle]="mapStyle"
       [user]="user"
+      [enableLapsToggle]="true"
+      [enableArrowsToggle]="true"
+      [enable3DToggle]="true"
       (showLapsChange)="onShowLapsChange($event)"
       (showArrowsChange)="onShowArrowsChange($event)"
       (is3DChange)="onShow3DChange($event)"
       (mapStyleChange)="onMapStyleChange($event)">
-    </app-map-actions>
+    </app-map-layers-actions>
   </app-event-section-header>
 
   <app-loading-overlay

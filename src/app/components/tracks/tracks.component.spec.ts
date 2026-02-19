@@ -25,6 +25,8 @@ import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-dete
 import { TripLocationLabelService } from '../../services/trip-location-label.service';
 import { PeekPanelComponent } from '../shared/peek-panel/peek-panel.component';
 import { MapboxAutoResizeService } from '../../services/map/mapbox-auto-resize.service';
+import { MapLayersActionsComponent } from '../map/map-layers-actions/map-layers-actions.component';
+import { By } from '@angular/platform-browser';
 
 const waitForAsyncWork = async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -208,7 +210,7 @@ describe('TracksComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      declarations: [TracksComponent, PeekPanelComponent],
+      declarations: [TracksComponent, PeekPanelComponent, MapLayersActionsComponent],
       imports: [MaterialModule],
       providers: [
         { provide: AppAuthService, useValue: mockAuthService },
@@ -362,19 +364,8 @@ describe('TracksComponent', () => {
       expect(mockUserSettingsQuery.updateMapSettings).toHaveBeenCalledWith({ mapStyle: 'satellite' });
     });
 
-    it('should persist 3d toggle under mapSettings via terrain control', async () => {
-      await component.ngOnInit();
-      fixture.detectChanges();
-      await waitForAsyncWork();
-      mockUserSettingsQuery.updateMapSettings.mockClear();
-
-      const terrainControl = mockMap.addControl.mock.calls
-        .map((call: any[]) => call[0])
-        .find((control: any) => typeof control?.set3DState === 'function');
-
-      expect(terrainControl).toBeTruthy();
-      (terrainControl as any).onToggle(true);
-
+    it('should persist 3d toggle under mapSettings', async () => {
+      component.onMyTracks3DToggle(true);
       expect(mockUserSettingsQuery.updateMapSettings).toHaveBeenCalledWith({ is3D: true });
     });
 
@@ -384,14 +375,16 @@ describe('TracksComponent', () => {
       expect(mockUserSettingsQuery.updateMyTracksSettings).toHaveBeenCalledWith({ showJumpHeatmap: false });
     });
 
-    it('should show jump heatmap toggle only when jumps are detected', () => {
+    it('should always expose jump heatmap toggle in layers menu', () => {
+      let layersActions = fixture.debugElement.query(By.directive(MapLayersActionsComponent)).componentInstance as MapLayersActionsComponent;
       component.hasDetectedJumps.set(false);
       fixture.detectChanges();
-      expect(fixture.nativeElement.querySelector('.jump-heat-toggle')).toBeNull();
+      expect(layersActions.enableJumpHeatmapToggle).toBe(true);
 
       component.hasDetectedJumps.set(true);
       fixture.detectChanges();
-      expect(fixture.nativeElement.querySelector('.jump-heat-toggle')).not.toBeNull();
+      layersActions = fixture.debugElement.query(By.directive(MapLayersActionsComponent)).componentInstance as MapLayersActionsComponent;
+      expect(layersActions.enableJumpHeatmapToggle).toBe(true);
     });
 
     it('should collect jump heat points from loaded activities', async () => {

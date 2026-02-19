@@ -115,7 +115,6 @@ export class TracksComponent implements OnInit, OnDestroy {
   private trackLoadingSubscription: Subscription = new Subscription();
 
   private mapSynchronizer = signal<MapboxStyleSynchronizer | undefined>(undefined);
-  private terrainControl = signal<any>(null); // Using any to avoid forward reference issues if class is defined below
   private platformId!: object;
   private startPointPopupRepositionHandler: (() => void) | null = null;
   private pendingStartPointPopupCorrectionRaf: number | null = null;
@@ -196,7 +195,6 @@ export class TracksComponent implements OnInit, OnDestroy {
       const map = this.mapSignal();
       const user = this.userSignal();
       const synchronizer = this.mapSynchronizer();
-      const terrainControl = this.terrainControl();
 
       if (!map || !synchronizer || !myTracksSettings || !user) return;
 
@@ -212,9 +210,7 @@ export class TracksComponent implements OnInit, OnDestroy {
       this.tracksMapManager.setJumpHeatmapVisible(myTracksSettings.showJumpHeatmap !== false);
 
       // 3. Terrain (is3D)
-      if (terrainControl) {
-        this.tracksMapManager.toggleTerrain(!!mapSettings?.is3D, !isFirstRun);
-      }
+      this.tracksMapManager.toggleTerrain(!!mapSettings?.is3D, !isFirstRun);
       isFirstRun = false;
 
       // 4. Data Loading
@@ -318,21 +314,6 @@ export class TracksComponent implements OnInit, OnDestroy {
             })
         );
 
-        // Restore terrain control (initial map settings already loaded above)
-        // Initialize 3D state immediately for responsiveness and test compliance
-        const control = new TerrainControl(!!initialMapSettings?.is3D, (is3D) => {
-          // Toggle map locally immediately for responsiveness
-          this.tracksMapManager.toggleTerrain(is3D, true);
-
-          // Persist 3D setting via service
-          this.userSettingsQuery.updateMapSettings({ is3D });
-        });
-        this.terrainControl.set(control);
-        mapInstance.addControl(control, 'bottom-right');
-        this.tracksMapManager.setTerrainControl(control);
-
-        // Restore terrain control (initial map settings already loaded above)
-        // Initialize 3D state - The effect handles the initial toggleTerrain call.
       });
 
     } catch (error) {
@@ -345,6 +326,11 @@ export class TracksComponent implements OnInit, OnDestroy {
     // Just update settings. The effect handles the rest.
     this.userSettingsQuery.updateMapSettings({ mapStyle: normalized });
     this.logger.info('[TracksComponent] User selected map style', { styleType: normalized });
+  }
+
+  public onMyTracks3DToggle(is3D: boolean): void {
+    this.tracksMapManager.toggleTerrain(is3D, true);
+    this.userSettingsQuery.updateMapSettings({ is3D });
   }
 
   public isJumpHeatmapEnabled(): boolean {
@@ -1172,59 +1158,4 @@ export class TracksComponent implements OnInit, OnDestroy {
       setTimeout(done, timeoutMs);
     });
   }
-}
-
-class TerrainControl {
-  private map: any;
-  private container: HTMLElement | undefined;
-  private icon: HTMLElement | undefined;
-
-  constructor(private is3D: boolean, private onToggle: (val: boolean) => void) { }
-
-  onAdd(map: any) {
-    this.map = map;
-    this.container = document.createElement('div');
-    this.container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
-    const btn = document.createElement('button');
-    btn.className = 'mapboxgl-ctrl-icon mapboxgl-ctrl-terrain';
-    btn.type = 'button';
-    btn.title = 'Toggle 3D Terrain';
-    btn.style.display = 'block';
-
-    this.icon = document.createElement('span');
-    this.icon.className = 'material-symbols-rounded';
-    this.icon.style.fontSize = '20px';
-    this.icon.style.lineHeight = '29px';
-    this.icon.innerText = 'landscape';
-
-    // Set initial state
-    if (this.is3D) {
-      this.icon.style.color = '#4264fb';
-    }
-
-    btn.appendChild(this.icon);
-
-    btn.onclick = () => {
-      const was3D = !!map.getTerrain();
-      const isNow3D = !was3D;
-      this.onToggle(isNow3D);
-    };
-
-    this.container.appendChild(btn);
-    return this.container;
-  }
-
-  onRemove() {
-    this.container?.parentNode?.removeChild(this.container);
-    this.map = undefined;
-  }
-
-  public set3DState(is3D: boolean) {
-    this.is3D = is3D;
-    if (this.icon) {
-      this.icon.style.color = is3D ? '#4264fb' : '';
-    }
-  }
-
-
 }

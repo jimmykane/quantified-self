@@ -7,7 +7,6 @@ import { EventCardComponent } from '../components/event/event.card.component';
 import { EventCardMapComponent } from '../components/event/map/event.card.map.component';
 import { EventCardLapsComponent } from '../components/event/laps/event.card.laps.component';
 import { ActivityActionsComponent } from '../components/activity-actions/activity.actions.component';
-import { MapActionsComponent } from '../components/event/map/map-actions/map.actions.component';
 import { EventCardChartActionsComponent } from '../components/event/chart/actions/event.card.chart.actions.component';
 import { EventCardDevicesComponent } from '../components/event/devices/event.card.devices.component';
 import { EventSummaryComponent } from '../components/event-summary/event-summary.component';
@@ -60,7 +59,6 @@ import { DeviceNameEditDialogComponent } from '../components/event/activities-to
         ActivitiesTogglesComponent,
         ActivityActionsComponent,
         ActivityToggleComponent,
-        MapActionsComponent,
         EventIntensityZonesComponent,
         EventPowerCurveComponent,
         EventDurabilityCurveComponent,
