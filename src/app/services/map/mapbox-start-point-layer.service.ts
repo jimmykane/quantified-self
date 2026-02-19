@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { LoggerService } from '../logger.service';
+import { buildReadableActivityMarkerPaint } from './map-activity-color.utils';
 
 export interface MapboxStartPointRenderPoint {
   lng: number;
@@ -99,17 +100,12 @@ export class MapboxStartPointLayerService {
       source: config.sourceId,
       minzoom,
       layout: { visibility },
-      paint: {
-        'circle-color': ['coalesce', ['get', 'markerColor'], config.markerColor || '#2ca3ff'],
-        'circle-stroke-color': config.markerStrokeColor || '#f5f8ff',
-        'circle-radius': ['coalesce', ['get', 'markerRadius'], 6],
-        'circle-opacity': 1,
-        // Keep marker color readable in Mapbox Standard night lighting.
-        'circle-emissive-strength': 1,
-        'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], minzoom, 2.6, 18, 3.4],
-        'circle-stroke-opacity': 0.96,
-        'circle-blur': 0.03
-      }
+      paint: buildReadableActivityMarkerPaint({
+        colorExpression: ['coalesce', ['get', 'markerColor'], config.markerColor || '#2ca3ff'],
+        strokeColor: config.markerStrokeColor || '#f5f8ff',
+        radiusExpression: ['coalesce', ['get', 'markerRadius'], 6],
+        strokeWidthExpression: ['interpolate', ['linear'], ['zoom'], minzoom, 2.6, 18, 3.4],
+      })
     };
 
     this.ensureLayer(map, markerLayer, config.beforeLayerId);

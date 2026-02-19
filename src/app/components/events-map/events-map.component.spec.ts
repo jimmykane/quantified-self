@@ -233,6 +233,47 @@ describe('EventsMapComponent', () => {
     expect(map.addSource).not.toHaveBeenCalledWith(EVENTS_SOURCE_ID, expect.anything());
   });
 
+  it('applies theme-adjusted marker color for event points', async () => {
+    await initMap();
+
+    expect(mockMapStyleService.adjustColorForTheme).toHaveBeenCalledWith('#00aaff', AppThemes.Normal);
+  });
+
+  it('uses emissive marker paint for dark-style readability on unclustered points', async () => {
+    await initMap();
+
+    expect(map.setPaintProperty).toHaveBeenCalledWith(
+      EVENTS_UNCLUSTERED_LAYER_ID,
+      'circle-emissive-strength',
+      1
+    );
+  });
+
+  it('normalizes lowercase event activity type before resolving marker color', async () => {
+    const cyclingEvent = {
+      ...createEvent('event-lower'),
+      getActivityTypesAsArray: () => ['cycling'],
+    } as EventInterface;
+    component.events = [cyclingEvent];
+
+    mockColorService.getColorForActivityTypeByActivityTypeGroup = vi.fn().mockImplementation((activityType: ActivityTypes) => {
+      return activityType === ActivityTypes.Cycling ? '#FF7C3B' : '#A3ADB0';
+    });
+
+    await initMap();
+
+    expect(mockColorService.getColorForActivityTypeByActivityTypeGroup).toHaveBeenCalledWith(ActivityTypes.Cycling);
+  });
+
+  it('applies theme-adjusted cluster colors', async () => {
+    await initMap();
+
+    expect(mockMapStyleService.adjustColorForTheme).toHaveBeenCalledWith('#50b5ff', AppThemes.Normal);
+    expect(mockMapStyleService.adjustColorForTheme).toHaveBeenCalledWith('#3288d8', AppThemes.Normal);
+    expect(mockMapStyleService.adjustColorForTheme).toHaveBeenCalledWith('#2266a5', AppThemes.Normal);
+    expect(mockMapStyleService.adjustColorForTheme).toHaveBeenCalledWith('#1a4f7d', AppThemes.Normal);
+  });
+
   it('hydrates selected event and renders selected track polylines on click', async () => {
     const clickedEvent = component.events[0];
     const populatedActivity = {

@@ -18,6 +18,7 @@ import { DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
 import {
   ActivityTypes,
+  AppThemes,
   ActivityInterface,
   DataDistance,
   DataLatitudeDegrees,
@@ -55,6 +56,10 @@ import {
 import { attachStyleReloadHandler, isStyleReady, runWhenStyleReady } from '../../services/map/mapbox-style-ready.utils';
 import { firstValueFrom } from 'rxjs';
 import { take } from 'rxjs/operators';
+import {
+  buildReadableActivityMarkerPaint,
+  resolveThemedActivityColor
+} from '../../services/map/map-activity-color.utils';
 
 interface EventPointFeature {
   type: 'Feature';
@@ -147,6 +152,8 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       }
 
       synchronizer.update(this.mapStyleService.resolve(mapStyle, theme));
+      this.renderMapData();
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -329,7 +336,9 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       EventsMapComponent.EVENTS_UNCLUSTERED_LAYER_ID,
       EventsMapComponent.EVENTS_CLUSTER_LAYER_ID,
       EventsMapComponent.EVENTS_CLUSTER_COUNT_LAYER_ID,
-      EventsMapComponent.EVENTS_SOURCE_ID
+      EventsMapComponent.EVENTS_SOURCE_ID,
+      this.mapStyleService,
+      this.appTheme(),
     );
 
     this.bindEventLayerInteractions();
@@ -436,10 +445,7 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
         return features;
       }
 
-      const activityTypes = event.getActivityTypesAsArray?.() || [];
-      const activityType = activityTypes.length > 1
-        ? ActivityTypes.Multisport
-        : (activityTypes[0] as ActivityTypes);
+      const activityType = this.resolvePrimaryEventActivityType(event);
 
       const color = this.resolveMarkerColor(activityType);
 
@@ -461,12 +467,33 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
   }
 
   private resolveMarkerColor(activityType: ActivityTypes): string {
-    try {
-      const color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType);
-      return color || '#2ca3ff';
-    } catch {
-      return '#2ca3ff';
+    return resolveThemedActivityColor(
+      activityType,
+      this.appTheme(),
+      this.eventColorService,
+      this.mapStyleService,
+    ).adjustedColor;
+  }
+
+  private resolvePrimaryEventActivityType(event: EventInterface): ActivityTypes {
+    const activityTypes = event.getActivityTypesAsArray?.() || [];
+    if (activityTypes.length > 1) {
+      return ActivityTypes.Multisport;
     }
+    return this.normalizeActivityType(activityTypes[0]);
+  }
+
+  private normalizeActivityType(value: unknown): ActivityTypes {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      const normalized = value.trim().toLowerCase();
+      const matched = Object.values(ActivityTypes).find((candidate) =>
+        typeof candidate === 'string' && candidate.toLowerCase() === normalized
+      );
+      if (matched) {
+        return matched as ActivityTypes;
+      }
+    }
+    return ActivityTypes.unknown;
   }
 
   private onEventPointClick(eventId: string): void {
@@ -815,7 +842,9 @@ function ensureEventPointLayers(
   unclusteredLayerId: string,
   clusterLayerId: string,
   clusterCountLayerId: string,
-  sourceId: string
+  sourceId: string,
+  mapStyleService: MapStyleService,
+  theme: AppThemes,
 ): void {
   if (!map) {
     return;
@@ -827,29 +856,33 @@ function ensureEventPointLayers(
       type: 'circle',
       source: sourceId,
       filter: ['!', ['has', 'point_count']],
-      paint: {
-        'circle-color': ['coalesce', ['get', 'color'], '#2ca3ff'],
-        'circle-radius': 6,
-        'circle-stroke-color': '#ffffff',
-        'circle-stroke-width': 1.2,
-        'circle-opacity': 0.95,
-      },
+      paint: buildReadableActivityMarkerPaint({
+        colorExpression: ['coalesce', ['get', 'color'], '#2ca3ff'],
+        radiusExpression: 6,
+        strokeWidthExpression: 2.2,
+      }),
     });
   }
 
-  setPaintIfLayerExists(map, unclusteredLayerId, {
-    'circle-color': ['coalesce', ['get', 'color'], '#2ca3ff'],
-    'circle-radius': 6,
-    'circle-stroke-color': '#ffffff',
-    'circle-stroke-width': 1.2,
-    'circle-opacity': 0.95,
-  });
+  setPaintIfLayerExists(map, unclusteredLayerId, buildReadableActivityMarkerPaint({
+    colorExpression: ['coalesce', ['get', 'color'], '#2ca3ff'],
+    radiusExpression: 6,
+    strokeWidthExpression: 2.2,
+  }));
 
   if (!clustered) {
     removeLayerIfExists(map, clusterCountLayerId);
     removeLayerIfExists(map, clusterLayerId);
     return;
   }
+
+  const clusterStepColors = [
+    '#50b5ff',
+    '#3288d8',
+    '#2266a5',
+    '#1a4f7d',
+  ].map((color) => mapStyleService.adjustColorForTheme(color, theme) || color);
+  const clusterTextColor = theme === AppThemes.Dark ? '#101828' : '#ffffff';
 
   if (!map.getLayer?.(clusterLayerId)) {
     map.addLayer?.({
@@ -861,13 +894,13 @@ function ensureEventPointLayers(
         'circle-color': [
           'step',
           ['get', 'point_count'],
-          '#50b5ff',
+          clusterStepColors[0],
           20,
-          '#3288d8',
+          clusterStepColors[1],
           50,
-          '#2266a5',
+          clusterStepColors[2],
           100,
-          '#1a4f7d',
+          clusterStepColors[3],
         ],
         'circle-radius': [
           'step',
@@ -897,8 +930,26 @@ function ensureEventPointLayers(
         'text-size': 12,
       },
       paint: {
-        'text-color': '#ffffff',
+        'text-color': clusterTextColor,
       },
     });
   }
+
+  setPaintIfLayerExists(map, clusterLayerId, {
+    'circle-color': [
+      'step',
+      ['get', 'point_count'],
+      clusterStepColors[0],
+      20,
+      clusterStepColors[1],
+      50,
+      clusterStepColors[2],
+      100,
+      clusterStepColors[3],
+    ],
+  });
+
+  setPaintIfLayerExists(map, clusterCountLayerId, {
+    'text-color': clusterTextColor,
+  });
 }

@@ -28,6 +28,7 @@ import {
     isStyleReady,
     runWhenStyleReady
 } from '../../services/map/mapbox-style-ready.utils';
+import { resolveThemedActivityColor } from '../../services/map/map-activity-color.utils';
 
 type TrackStyleMode = 'dark-glow' | 'light-contrast';
 type TrackLayerRole = 'glow' | 'casing' | 'main';
@@ -803,13 +804,16 @@ export class TracksMapManager {
 
     private resolveTrackColors(activityType: ActivityTypes | string | number | undefined | null): { baseColor: string; adjustedColor: string } {
         const fallbackColor = '#2ca3ff';
-        const maybeBaseColor = activityType !== undefined && activityType !== null
-            ? this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType as ActivityTypes)
-            : undefined;
-        const baseColor = this.isHexColor(maybeBaseColor) ? maybeBaseColor : fallbackColor;
-        const adjusted = this.mapStyleService.adjustColorForTheme(baseColor, this.isDarkTheme ? AppThemes.Dark : AppThemes.Normal);
-        const adjustedColor = this.isHexColor(adjusted) ? adjusted : fallbackColor;
-        return { baseColor, adjustedColor };
+        const normalizedActivityType = activityType !== undefined && activityType !== null
+            ? activityType as ActivityTypes
+            : ActivityTypes.unknown;
+        return resolveThemedActivityColor(
+            normalizedActivityType,
+            this.isDarkTheme ? AppThemes.Dark : AppThemes.Normal,
+            this.eventColorService,
+            this.mapStyleService,
+            fallbackColor
+        );
     }
 
     private resolveStyleMode(): TrackStyleMode {
