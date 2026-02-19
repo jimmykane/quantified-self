@@ -26,7 +26,6 @@ import {
     TimeIntervals,
     UserAppSettingsInterface,
     UserChartSettingsInterface,
-    UserMapSettingsInterface,
     UserMyTracksSettingsInterface,
     UserUnitSettingsInterface,
     UserSummariesSettingsInterface,
@@ -55,7 +54,13 @@ import {
     User,
 } from '@sports-alliance/sports-lib';
 import { isNumber } from 'lodash-es';
-import { AppDashboardSettingsInterface, AppUserInterface, AppUserSettingsInterface } from '../models/app-user.interface';
+import {
+    AppMapStyleName,
+    AppDashboardSettingsInterface,
+    AppMapSettingsInterface,
+    AppUserInterface,
+    AppUserSettingsInterface
+} from '../models/app-user.interface';
 import { StripeRole } from '../models/stripe-role.model';
 
 /**
@@ -116,11 +121,11 @@ export class AppUserUtilities {
     }
 
     static getDefaultUserDashboardMapTile(): TileMapSettingsInterface {
-        return {
+        return <TileMapSettingsInterface><unknown>{
             name: 'Clustered HeatMap',
             order: 0,
             type: TileTypes.Map,
-            mapType: MapTypes.Terrain,
+            mapStyle: this.getDefaultDashboardMapStyle(),
             mapTheme: MapThemes.Normal,
             showHeatMap: true,
             clusterMarkers: true,
@@ -129,11 +134,11 @@ export class AppUserUtilities {
     }
 
     static getDefaultUserDashboardTiles(): TileSettingsInterface[] {
-        return [<TileMapSettingsInterface>{
+        return [<TileMapSettingsInterface><unknown>{
             name: 'Clustered HeatMap',
             order: 0,
             type: TileTypes.Map,
-            mapType: MapTypes.RoadMap,
+            mapStyle: this.getDefaultDashboardMapStyle(),
             mapTheme: MapThemes.Normal,
             showHeatMap: true,
             clusterMarkers: true,
@@ -197,6 +202,10 @@ export class AppUserUtilities {
 
     static getDefaultMapType(): MapTypes {
         return MapTypes.RoadMap;
+    }
+
+    static getDefaultDashboardMapStyle(): AppMapStyleName {
+        return 'default';
     }
 
     static getDefaultDateRange(): DateRanges {
@@ -348,6 +357,16 @@ export class AppUserUtilities {
         settings.dashboardSettings.activityTypes = settings.dashboardSettings.activityTypes || [];
         settings.dashboardSettings.includeMergedEvents = settings.dashboardSettings.includeMergedEvents !== false;
         settings.dashboardSettings.tiles = settings.dashboardSettings.tiles || AppUserUtilities.getDefaultUserDashboardTiles();
+        settings.dashboardSettings.tiles = settings.dashboardSettings.tiles.map((tile: TileSettingsInterface) => {
+            if (tile.type !== TileTypes.Map) {
+                return tile;
+            }
+
+            const mapTile = tile as any;
+            mapTile.mapStyle = mapTile.mapStyle || AppUserUtilities.getDefaultDashboardMapStyle();
+            delete mapTile.mapType;
+            return mapTile;
+        });
         // Patch missing defaults
         settings.dashboardSettings.tableSettings = settings.dashboardSettings.tableSettings || AppUserUtilities.getDefaultTableSettings();
         settings.dashboardSettings.tableSettings.selectedColumns = settings.dashboardSettings.tableSettings.selectedColumns || AppUserUtilities.getDefaultSelectedTableColumns()
@@ -356,19 +375,22 @@ export class AppUserUtilities {
         settings.summariesSettings = settings.summariesSettings || <UserSummariesSettingsInterface>{};
         settings.summariesSettings.removeAscentForEventTypes = settings.summariesSettings.removeAscentForEventTypes || AppUserUtilities.getDefaultActivityTypesToRemoveAscentFromSummaries();
         // Map
-        settings.mapSettings = settings.mapSettings || <UserMapSettingsInterface>{};
+        settings.mapSettings = settings.mapSettings || <AppMapSettingsInterface>{};
         settings.mapSettings.theme = settings.mapSettings.theme || MapThemes.Normal;
         settings.mapSettings.showLaps = settings.mapSettings.showLaps !== false;
 
         settings.mapSettings.showArrows = settings.mapSettings.showArrows !== false;
         settings.mapSettings.lapTypes = settings.mapSettings.lapTypes || AppUserUtilities.getDefaultMapLapTypes();
         settings.mapSettings.mapType = settings.mapSettings.mapType || AppUserUtilities.getDefaultMapType();
+        settings.mapSettings.mapStyle = settings.mapSettings.mapStyle || 'default';
+        settings.mapSettings.is3D = settings.mapSettings.is3D === true;
         settings.mapSettings.strokeWidth = settings.mapSettings.strokeWidth || AppUserUtilities.getDefaultMapStrokeWidth();
         // MyTracks
         settings.myTracksSettings = settings.myTracksSettings || <UserMyTracksSettingsInterface>{};
         settings.myTracksSettings.dateRange = isNumber(settings.myTracksSettings.dateRange)
             ? settings.myTracksSettings.dateRange
             : AppUserUtilities.getDefaultMyTracksDateRange();
+        (settings.myTracksSettings as any).showJumpHeatmap = (settings.myTracksSettings as any).showJumpHeatmap !== false;
 
         // Export to CSV
         settings.exportToCSVSettings = settings.exportToCSVSettings || <UserExportToCsvSettingsInterface>{};

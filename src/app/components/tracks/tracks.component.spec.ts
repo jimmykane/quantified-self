@@ -16,19 +16,26 @@ import { BrowserCompatibilityService } from '../../services/browser.compatibilit
 import { LoggerService } from '../../services/logger.service';
 import { MapStyleService } from '../../services/map-style.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
-import { of } from 'rxjs';
-import { ActivityTypes, AppThemes, DataStartPosition, DateRanges } from '@sports-alliance/sports-lib';
+import { of, Subject } from 'rxjs';
+import { ActivityTypes, AppThemes, DataPaceAvg, DataSpeedAvg, DataStartPosition, DateRanges } from '@sports-alliance/sports-lib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Overlay } from '@angular/cdk/overlay';
 import { MaterialModule } from '../../modules/material.module';
 import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-detection.service';
 import { TripLocationLabelService } from '../../services/trip-location-label.service';
 import { PeekPanelComponent } from '../shared/peek-panel/peek-panel.component';
+import { MapboxAutoResizeService } from '../../services/map/mapbox-auto-resize.service';
+import { MapLayersActionsComponent } from '../map/map-layers-actions/map-layers-actions.component';
+import { By } from '@angular/platform-browser';
 
 const waitForAsyncWork = async () => {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await new Promise((resolve) => setTimeout(resolve, 0));
 };
+
+const createStat = (value: number) => ({
+  getValue: () => value
+});
 
 const createMockEvent = (eventId: string, startDateIso: string, latitudeDegrees: number, longitudeDegrees: number, activityType = ActivityTypes.Running) => {
   const startPositionStat = {
@@ -91,11 +98,15 @@ describe('TracksComponent', () => {
   let mockTripLocationLabelService: any;
 
   const mockUser = {
+    uid: 'user-1',
     settings: {
       myTracksSettings: {
         dateRange: DateRanges.thisWeek,
-        is3D: true,
         activityTypes: []
+      },
+      mapSettings: {
+        mapStyle: 'default',
+        is3D: true,
       },
       unitSettings: {
         startOfTheWeek: 1
@@ -123,6 +134,10 @@ describe('TracksComponent', () => {
       remove: vi.fn(),
       off: vi.fn(),
       on: vi.fn(),
+      queryRenderedFeatures: vi.fn().mockReturnValue([]),
+      getCanvas: vi.fn().mockReturnValue({ style: { cursor: '' } }),
+      project: vi.fn().mockReturnValue({ x: 100, y: 120 }),
+      panTo: vi.fn(),
     };
 
     mockAuthService = {
@@ -160,6 +175,12 @@ describe('TracksComponent', () => {
       isStandard: vi.fn().mockReturnValue(true),
       applyStandardPreset: vi.fn(),
       enforcePresetOnStyleEvents: vi.fn(),
+      getSupportedStyleOptions: vi.fn().mockReturnValue([
+        { value: 'default', label: 'Default' },
+        { value: 'satellite', label: 'Satellite' },
+        { value: 'outdoors', label: 'Outdoors' },
+      ]),
+      normalizeStyle: vi.fn().mockImplementation((value: string) => value || 'default'),
       adjustColorForTheme: vi.fn().mockReturnValue('#ffffff'),
       createSynchronizer: vi.fn().mockReturnValue({
         update: vi.fn()
@@ -169,10 +190,14 @@ describe('TracksComponent', () => {
     mockUserSettingsQuery = {
       myTracksSettings: signal({
         dateRange: DateRanges.thisWeek,
-        is3D: true,
         activityTypes: []
       }),
-      updateMyTracksSettings: vi.fn()
+      mapSettings: signal({
+        mapStyle: 'default',
+        is3D: true,
+      }),
+      updateMyTracksSettings: vi.fn(),
+      updateMapSettings: vi.fn()
     };
 
     mockTripDetectionService = {
@@ -185,7 +210,7 @@ describe('TracksComponent', () => {
     };
 
     await TestBed.configureTestingModule({
-      declarations: [TracksComponent, PeekPanelComponent],
+      declarations: [TracksComponent, PeekPanelComponent, MapLayersActionsComponent],
       imports: [MaterialModule],
       providers: [
         { provide: AppAuthService, useValue: mockAuthService },
@@ -209,6 +234,7 @@ describe('TracksComponent', () => {
         { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQuery },
         { provide: MyTracksTripDetectionService, useValue: mockTripDetectionService },
         { provide: TripLocationLabelService, useValue: mockTripLocationLabelService },
+        { provide: MapboxAutoResizeService, useValue: { bind: vi.fn(), unbind: vi.fn() } },
       ],
       schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
@@ -261,6 +287,24 @@ describe('TracksComponent', () => {
       expect(logger.warn).toHaveBeenCalledWith('[TracksComponent] Skipping track load because user is undefined.');
     });
 
+    it('should use one-hour metadata cache TTL when hydrating streams for myTracks', async () => {
+      const event = createMockEvent('hydration-cache-event', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(mockEventService.attachStreamsToEventWithActivities).toHaveBeenCalledWith(
+        mockUser,
+        expect.anything(),
+        [expect.any(String), expect.any(String)],
+        true,
+        false,
+        'attach_streams_only',
+        { metadataCacheTtlMs: 60 * 60 * 1000 },
+      );
+    });
+
     it('should add mapbox-dem source before setting terrain', async () => {
       mockMap.isStyleLoaded.mockReturnValue(true);
       await component.ngOnInit();
@@ -291,6 +335,428 @@ describe('TracksComponent', () => {
 
       const synchronizer = mockMapStyleService.createSynchronizer.mock.results[0].value;
       expect(synchronizer.update).toHaveBeenCalled();
+    });
+
+    it('should update map style without reloading track data', async () => {
+      const loadTracksSpy = vi
+        .spyOn(component as any, 'loadTracksMapForUserByDateRange')
+        .mockResolvedValue(undefined);
+
+      await component.ngOnInit();
+      fixture.detectChanges();
+      await waitForAsyncWork();
+
+      const loadCallsBefore = loadTracksSpy.mock.calls.length;
+      expect(loadCallsBefore).toBeGreaterThan(0);
+
+      mockUserSettingsQuery.mapSettings.set({
+        ...mockUserSettingsQuery.mapSettings(),
+        mapStyle: 'satellite'
+      });
+      await waitForAsyncWork();
+
+      expect(loadTracksSpy.mock.calls.length).toBe(loadCallsBefore);
+    });
+
+    it('should persist map style under mapSettings', () => {
+      component.setMapStyle('satellite');
+
+      expect(mockUserSettingsQuery.updateMapSettings).toHaveBeenCalledWith({ mapStyle: 'satellite' });
+    });
+
+    it('should persist 3d toggle under mapSettings', async () => {
+      component.onMyTracks3DToggle(true);
+      expect(mockUserSettingsQuery.updateMapSettings).toHaveBeenCalledWith({ is3D: true });
+    });
+
+    it('should persist jump heatmap setting when toggled', () => {
+      component.onShowJumpHeatmapToggle(false);
+
+      expect(mockUserSettingsQuery.updateMyTracksSettings).toHaveBeenCalledWith({ showJumpHeatmap: false });
+    });
+
+    it('should always expose jump heatmap toggle in layers menu', () => {
+      let layersActions = fixture.debugElement.query(By.directive(MapLayersActionsComponent)).componentInstance as MapLayersActionsComponent;
+      component.hasDetectedJumps.set(false);
+      fixture.detectChanges();
+      expect(layersActions.enableJumpHeatmapToggle).toBe(true);
+
+      component.hasDetectedJumps.set(true);
+      fixture.detectChanges();
+      layersActions = fixture.debugElement.query(By.directive(MapLayersActionsComponent)).componentInstance as MapLayersActionsComponent;
+      expect(layersActions.enableJumpHeatmapToggle).toBe(true);
+    });
+
+    it('should collect jump heat points from loaded activities', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setJumpHeatPointsSpy = vi.spyOn(trackManager, 'setJumpHeatPoints');
+
+      const activity = {
+        type: ActivityTypes.Running,
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+        getAllEvents: () => [{
+          jumpData: {
+            position_lat: createStat(40.645),
+            position_long: createStat(22.945),
+            hang_time: createStat(1.7),
+            distance: createStat(4.2),
+          }
+        }]
+      };
+
+      const event = createMockEvent('jump-event-1', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [activity];
+
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(setJumpHeatPointsSpy).toHaveBeenCalledTimes(1);
+      expect(setJumpHeatPointsSpy).toHaveBeenCalledWith([
+        expect.objectContaining({
+          lng: 22.945,
+          lat: 40.645,
+          hangTime: 1.7,
+          distance: 4.2
+        })
+      ]);
+    });
+
+    it('should collect activity start points from loaded activities', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setActivityStartPointsSpy = vi.spyOn(trackManager, 'setActivityStartPoints');
+
+      const activity = {
+        type: ActivityTypes.Running,
+        getID: () => 'activity-start-1',
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+        getDuration: () => ({
+          getDisplayValue: () => '01:00:00'
+        }),
+        getDistance: () => ({
+          getDisplayValue: () => '10.5',
+          getDisplayUnit: () => 'km'
+        }),
+        getStat: (type: string) => {
+          if (type === DataPaceAvg.type) {
+            return {
+              getDisplayValue: () => '5:10',
+              getDisplayUnit: () => 'min/km',
+              getType: () => DataPaceAvg.type
+            };
+          }
+          return null;
+        },
+        getAllEvents: () => []
+      };
+
+      const event = createMockEvent('start-event-1', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [activity];
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(setActivityStartPointsSpy).toHaveBeenCalled();
+      expect(setActivityStartPointsSpy).toHaveBeenLastCalledWith([
+        expect.objectContaining({
+          eventId: 'start-event-1',
+          activityId: 'activity-start-1',
+          durationLabel: '01:00:00',
+          distanceLabel: '10.5 km',
+          effortLabel: 'Pace',
+          effortDisplayLabel: '5:10 min/km',
+          lng: 22.94,
+          lat: 40.64
+        })
+      ]);
+    });
+
+    it('should resolve pace metric for trail running start points', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setActivityStartPointsSpy = vi.spyOn(trackManager, 'setActivityStartPoints');
+
+      const activity = {
+        type: ActivityTypes.TrailRunning,
+        getID: () => 'activity-trail-1',
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+        getDuration: () => ({ getDisplayValue: () => '00:50:00' }),
+        getDistance: () => ({ getDisplayValue: () => '8.0', getDisplayUnit: () => 'km' }),
+        getStat: (type: string) => {
+          if (type === DataPaceAvg.type) {
+            return {
+              getDisplayValue: () => '6:01',
+              getDisplayUnit: () => 'min/km',
+              getType: () => DataPaceAvg.type
+            };
+          }
+          return null;
+        },
+        getAllEvents: () => []
+      };
+
+      const event = createMockEvent('trail-event-1', '2024-11-08T08:00:00Z', 40.64, 22.94, ActivityTypes.TrailRunning);
+      (event as any).getActivities = () => [activity];
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.TrailRunning]);
+      await waitForAsyncWork();
+
+      expect(setActivityStartPointsSpy).toHaveBeenCalledWith([
+        expect.objectContaining({
+          activityId: 'activity-trail-1',
+          effortLabel: 'Pace',
+          effortDisplayLabel: '6:01 min/km'
+        })
+      ]);
+    });
+
+    it('should resolve speed metric for cycling start points', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setActivityStartPointsSpy = vi.spyOn(trackManager, 'setActivityStartPoints');
+
+      const activity = {
+        type: ActivityTypes.Cycling,
+        getID: () => 'activity-bike-1',
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+        getDuration: () => ({ getDisplayValue: () => '00:45:00' }),
+        getDistance: () => ({ getDisplayValue: () => '20.0', getDisplayUnit: () => 'km' }),
+        getStat: (type: string) => {
+          if (type === DataSpeedAvg.type) {
+            return {
+              getDisplayValue: () => '26.7',
+              getDisplayUnit: () => 'km/h',
+              getType: () => DataSpeedAvg.type
+            };
+          }
+          return null;
+        },
+        getAllEvents: () => []
+      };
+
+      const event = createMockEvent('bike-event-1', '2024-11-08T08:00:00Z', 40.64, 22.94, ActivityTypes.Cycling);
+      (event as any).getActivities = () => [activity];
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Cycling]);
+      await waitForAsyncWork();
+
+      expect(setActivityStartPointsSpy).toHaveBeenCalledWith([
+        expect.objectContaining({
+          activityId: 'activity-bike-1',
+          effortLabel: 'Speed',
+          effortDisplayLabel: '26.7 km/h'
+        })
+      ]);
+    });
+
+    it('should clear jump heatmap when no valid jump points are found', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setJumpHeatPointsSpy = vi.spyOn(trackManager, 'setJumpHeatPoints');
+      const clearJumpHeatmapSpy = vi.spyOn(trackManager, 'clearJumpHeatmap');
+
+      const activity = {
+        type: ActivityTypes.Running,
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+        getAllEvents: () => [{
+          jumpData: {
+            position_lat: createStat(200),
+            position_long: createStat(22.945),
+            hang_time: createStat(1.2),
+          }
+        }]
+      };
+
+      const event = createMockEvent('jump-event-empty', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [activity];
+
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(setJumpHeatPointsSpy).not.toHaveBeenCalled();
+      expect(clearJumpHeatmapSpy).toHaveBeenCalled();
+    });
+
+    it('should not apply stale jump heatmap data when a newer load starts', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const setJumpHeatPointsSpy = vi.spyOn(trackManager, 'setJumpHeatPoints');
+
+      const slowHydrationSubject = new Subject<any>();
+      const eventAActivity = {
+        type: ActivityTypes.Running,
+        hasPositionData: () => true,
+        getPositionData: () => [
+          { latitudeDegrees: 40.64, longitudeDegrees: 22.94 },
+          { latitudeDegrees: 40.65, longitudeDegrees: 22.95 },
+        ],
+        getAllEvents: () => [{
+          jumpData: {
+            position_lat: createStat(40.645),
+            position_long: createStat(22.945),
+            hang_time: createStat(1.7),
+            distance: createStat(4.2),
+          }
+        }],
+        getDuration: () => ({ getDisplayValue: () => '00:40:00' }),
+        getDistance: () => ({ getDisplayValue: () => '7.0', getDisplayUnit: () => 'km' }),
+        getID: () => 'activity-a'
+      };
+      const eventA = createMockEvent('event-a', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (eventA as any).getActivities = () => [eventAActivity];
+
+      const eventB = createMockEvent('event-b', '2024-11-09T08:00:00Z', 40.66, 22.96);
+      (eventB as any).getActivities = () => [];
+
+      let eventsCallCount = 0;
+      mockEventService.getEventsBy.mockImplementation(() => {
+        eventsCallCount += 1;
+        if (eventsCallCount === 1) {
+          return of([eventA]);
+        }
+        return of([eventB]);
+      });
+
+      mockEventService.getActivities.mockImplementation((_user: any, eventId: string) => {
+        if (eventId === 'event-a') return of([eventAActivity]);
+        return of([]);
+      });
+
+      mockEventService.attachStreamsToEventWithActivities.mockImplementation((_user: any, event: any) => {
+        if (event.getID?.() === 'event-a') {
+          return slowHydrationSubject.asObservable();
+        }
+        return of(eventB as any);
+      });
+
+      const firstLoad = (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.lastMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      slowHydrationSubject.next(eventA as any);
+      slowHydrationSubject.complete();
+      await firstLoad;
+      await waitForAsyncWork();
+
+      expect(setJumpHeatPointsSpy).toHaveBeenCalledTimes(0);
+    });
+
+    it('should update popup state from start marker selection handler', async () => {
+      await component.ngOnInit();
+      fixture.detectChanges();
+      await waitForAsyncWork();
+
+      const manager = (component as any).tracksMapManager as any;
+      const selectionHandler = manager.startSelectionHandler as ((selection: any) => void);
+      expect(typeof selectionHandler).toBe('function');
+
+      component.searchPeekExpanded.set(true);
+      component.detectedTripsPanelExpanded.set(true);
+
+      selectionHandler({
+        eventId: 'event-1',
+        activityId: 'activity-1',
+        activityType: 'Running',
+        startDate: 1731062400000,
+        durationLabel: '01:00:00',
+        distanceLabel: '10 km',
+        lng: 10,
+        lat: 20
+      });
+
+      expect(component.selectedStartPoint()).toEqual(expect.objectContaining({
+        eventId: 'event-1',
+        activityId: 'activity-1'
+      }));
+      expect(component.selectedStartPointScreen()).toEqual({ x: 100, y: 120 });
+      expect(component.searchPeekExpanded()).toBe(false);
+      expect(component.detectedTripsPanelExpanded()).toBe(false);
+      expect(mockMap.easeTo).toHaveBeenCalledWith(expect.objectContaining({
+        center: [10, 20],
+        essential: true,
+        animate: true
+      }));
+
+      selectionHandler(null);
+      expect(component.selectedStartPoint()).toBeNull();
+      expect(component.selectedStartPointScreen()).toBeNull();
+    });
+
+    it('should navigate to event when opening selected start marker activity', async () => {
+      component.user = mockUser as any;
+      component.selectedStartPoint.set({
+        eventId: 'event-42',
+        activityId: 'activity-42',
+        activityType: 'Running',
+        startDate: 1731062400000,
+        durationLabel: '00:40:00',
+        distanceLabel: '7 km',
+        lng: 10,
+        lat: 20
+      });
+      component.selectedStartPointScreen.set({ x: 120, y: 140 });
+
+      component.openSelectedStartPointEvent();
+
+      const router = TestBed.inject(Router) as any;
+      expect(router.navigate).toHaveBeenCalledWith(['/user', 'user-1', 'event', 'event-42']);
+      expect(component.selectedStartPoint()).toBeNull();
+      expect(component.selectedStartPointScreen()).toBeNull();
+    });
+
+    it('should build start-point popup content from shared popup service using event data', () => {
+      const event = createMockEvent('event-1', '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [];
+      (event as any).getDuration = () => ({ getType: () => 'DataDuration', getDisplayValue: (..._args: any[]) => '00:45:00', getDisplayUnit: () => '' });
+      (event as any).getDistance = () => ({ getType: () => 'DataDistance', getDisplayValue: () => '8.5', getDisplayUnit: () => 'km' });
+      (event as any).getStat = (type: string) => {
+        if (type === DataPaceAvg.type) {
+          return {
+            getDisplayValue: () => '5:20',
+            getDisplayUnit: () => 'min/km',
+            getType: () => DataPaceAvg.type
+          };
+        }
+        return null;
+      };
+      (event as any).getActivityTypesAsArray = () => [ActivityTypes.Running];
+      (event as any).getActivityTypesAsString = () => 'Running';
+      (component as any).eventsById.set('event-1', event);
+
+      const popupContent = component.getStartPointPopupContent({
+        eventId: 'event-1',
+      } as any);
+
+      expect(popupContent?.metrics).toEqual([
+        expect.objectContaining({ value: '00:45:00', label: 'Duration' }),
+        { value: '8.5', label: 'km' },
+        { value: '5:20', label: 'min/km' },
+      ]);
+      expect(popupContent?.iconEventType).toBe('Running');
     });
   });
 

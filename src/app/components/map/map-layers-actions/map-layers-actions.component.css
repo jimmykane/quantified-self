@@ -1,0 +1,16 @@
+section.map-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.layers-trigger {
+  min-width: 0;
+}
+
+.layers-trigger mat-icon {
+  margin-right: 4px;
+}
+
+.map-layer-toggle {
+  width: 100%;
+}

@@ -7,7 +7,6 @@ import { EventCardComponent } from '../components/event/event.card.component';
 import { EventCardMapComponent } from '../components/event/map/event.card.map.component';
 import { EventCardLapsComponent } from '../components/event/laps/event.card.laps.component';
 import { ActivityActionsComponent } from '../components/activity-actions/activity.actions.component';
-import { MapActionsComponent } from '../components/event/map/map-actions/map.actions.component';
 import { EventCardChartActionsComponent } from '../components/event/chart/actions/event.card.chart.actions.component';
 import { EventCardDevicesComponent } from '../components/event/devices/event.card.devices.component';
 import { EventSummaryComponent } from '../components/event-summary/event-summary.component';
@@ -23,7 +22,6 @@ import { EventDurabilityCurveComponent } from '../components/event/durability-cu
 import { EventCadencePowerComponent } from '../components/event/cadence-power/event.cadence-power.component';
 import { EventPerformanceChartsComponent } from '../components/event/performance-charts/event.performance-charts.component';
 import { LapTypeIconComponent } from '../components/lap-type-icon/lap-type-icon.component';
-import { GoogleMapsModule } from '@angular/google-maps';
 import { EventDetailsSummaryBottomSheetComponent } from '../components/event-summary/event-details-summary-bottom-sheet/event-details-summary-bottom-sheet.component';
 import { EventStatsBottomSheetComponent } from '../components/event/stats-table/event-stats-bottom-sheet/event-stats-bottom-sheet.component';
 import { EventDevicesBottomSheetComponent } from '../components/event/devices/event-devices-bottom-sheet/event-devices-bottom-sheet.component';
@@ -32,7 +30,6 @@ import { JumpMarkerPopupComponent } from '../components/event/map/popups/jump-ma
 import { BenchmarkSelectionDialogComponent } from '../components/benchmark/benchmark-selection-dialog.component';
 import { BenchmarkReportComponent } from '../components/benchmark/benchmark-report.component';
 import { BenchmarkBottomSheetComponent } from '../components/benchmark/benchmark-bottom-sheet.component';
-import { EventSectionHeaderComponent } from '../components/event/section-header/event.section-header.component';
 import { DeviceNameEditDialogComponent } from '../components/event/activities-toggles/device-name-edit-dialog/device-name-edit-dialog.component';
 
 @NgModule({
@@ -41,7 +38,6 @@ import { DeviceNameEditDialogComponent } from '../components/event/activities-to
         SharedModule,
         MaterialModule,
         EventRoutingModule,
-        GoogleMapsModule,
     ],
     exports: [
         EventSummaryComponent
@@ -63,7 +59,6 @@ import { DeviceNameEditDialogComponent } from '../components/event/activities-to
         ActivitiesTogglesComponent,
         ActivityActionsComponent,
         ActivityToggleComponent,
-        MapActionsComponent,
         EventIntensityZonesComponent,
         EventPowerCurveComponent,
         EventDurabilityCurveComponent,
@@ -74,7 +69,6 @@ import { DeviceNameEditDialogComponent } from '../components/event/activities-to
         BenchmarkSelectionDialogComponent,
         BenchmarkReportComponent,
         BenchmarkBottomSheetComponent,
-        EventSectionHeaderComponent,
         DeviceNameEditDialogComponent,
     ]
 })

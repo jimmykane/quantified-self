@@ -23,19 +23,32 @@
 }
 
 .mat-expansion-panel-header {
-    height: 64px !important;
     padding: 0 24px;
+    width: 100%;
+}
+
+::ng-deep .changelog-panel .mat-expansion-panel-header {
+    width: 100%;
+}
+
+::ng-deep .changelog-panel .mat-expansion-panel-header .mat-content {
+    width: 100%;
+    flex: 1 1 100%;
+    max-width: 100%;
+    margin-right: 0 !important;
 }
 
 .mat-panel-title {
     flex-grow: 1;
     margin-right: 16px;
+    min-width: 0;
 }
 
 .mat-panel-description {
     flex-grow: 0;
     justify-content: flex-end;
     align-items: center;
+    min-width: 0;
 }
 
 .expandable-image {
@@ -82,13 +95,43 @@
 .header-right {
     display: flex;
     align-items: center;
+    justify-content: flex-start;
+    text-align: left;
     gap: 12px;
+    min-width: 0;
+}
+
+.header-stack {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 6px;
+    align-items: flex-start;
+    text-align: left;
+}
+
+.header-bottom {
+    align-items: center;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* Full-mode metadata should read as plain left-aligned text, not padded pills. */
+::ng-deep .changelog-panel .mat-expansion-panel-header .header-bottom .version-tag,
+::ng-deep .changelog-panel .mat-expansion-panel-header .header-bottom .unpublished-tag {
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    text-transform: none;
+    letter-spacing: normal;
 }
 
 .post-title {
     margin: 0;
     font: var(--mat-sys-title-medium);
     color: var(--mat-sys-on-surface);
+    overflow-wrap: anywhere;
 }
 
 .header-separator {
@@ -100,6 +143,7 @@
     font: var(--mat-sys-label-medium);
     color: var(--mat-sys-on-surface-variant);
     white-space: nowrap;
+    font-family: 'Barlow Condensed', sans-serif;
 }
 
 .unread-dot {
@@ -123,11 +167,60 @@
 .version-tag {
     background: var(--mat-sys-secondary-container);
     color: var(--mat-sys-on-secondary-container);
+    font-family: 'Barlow Condensed', sans-serif;
 }
 
 .unpublished-tag {
     background: var(--mat-sys-error-container);
     color: var(--mat-sys-on-error-container);
+}
+
+@media (max-width: 599.98px) {
+    .mat-expansion-panel-header {
+        padding: 12px 48px 12px 16px;
+        align-items: flex-start;
+    }
+
+    .mat-panel-title,
+    .mat-panel-description {
+        margin-top: 0;
+        margin-bottom: 0;
+        width: 100%;
+        max-width: 100%;
+        flex: 0 0 100%;
+    }
+
+    .mat-panel-title {
+        margin-right: 0;
+    }
+
+    .mat-panel-description {
+        justify-content: flex-start;
+    }
+
+    .header-left,
+    .header-right {
+        width: 100%;
+        flex-wrap: wrap;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    ::ng-deep .mat-content {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        width: 100%;
+        flex: 1 1 100%;
+        gap: 6px;
+        overflow: visible;
+        margin-right: 0;
+        min-width: 0;
+    }
+
+    .header-date {
+        white-space: normal;
+    }
 }
 
 // Content Elements

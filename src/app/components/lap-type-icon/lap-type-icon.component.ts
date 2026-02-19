@@ -1,6 +1,4 @@
 import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
-import { DataDistance } from '@sports-alliance/sports-lib';
-import { DataAscent } from '@sports-alliance/sports-lib';
 import { LapTypes } from '@sports-alliance/sports-lib';
 
 
@@ -17,23 +15,43 @@ export class LapTypeIconComponent {
   @Input() size: string;
   @Input() vAlign: string;
 
-  getColumnHeaderIcon(lapType): string {
-    switch (lapType) {
-      case LapTypes.Distance:
-        return 'trending_flat';
-      case LapTypes.Unknown:
-        return 'emoji_flags';
-      case LapTypes.AutoLap:
+  getColumnHeaderIcon(lapType: LapTypes): string {
+    switch (String(lapType).trim().toLowerCase()) {
+      case 'distance':
+        return 'straighten';
+      case 'unknown':
+        return 'help';
+      case 'autolap':
+      case 'auto lap':
         return 'autorenew'
-      case LapTypes.Location:
-        return 'location_on'
-      case LapTypes.Time:
-        return 'timer'
-      case LapTypes.Manual:
-        return 'front_hand';
-      case LapTypes.Interval:
-      case LapTypes.FitnessEquipment:
-        return 'exercise';
+      case 'location':
+        return 'pin_drop'
+      case 'time':
+        return 'schedule'
+      case 'manual':
+        return 'touch_app';
+      case 'interval':
+        return 'pace';
+      case 'low interval':
+        return 'keyboard_double_arrow_down';
+      case 'high interval':
+        return 'keyboard_double_arrow_up';
+      case 'fitness equipment':
+        return 'fitness_center';
+      case 'start':
+      case 'position start':
+        return 'play_arrow';
+      case 'stop':
+      case 'session end':
+        return 'stop_circle';
+      case 'heart rate':
+        return 'favorite';
+      case 'position lap':
+        return 'location_on';
+      case 'position waypoint':
+        return 'route';
+      case 'position marked':
+        return 'bookmark';
       default:
         return null;
     }

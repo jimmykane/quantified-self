@@ -48,7 +48,6 @@
 }
 
 :host ::ng-deep .performance-charts-tabs .mdc-tab__text-label {
-  font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

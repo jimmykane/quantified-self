@@ -62,7 +62,31 @@ const toNormalizedActivityTypeLookupKey = (activityType: string): string => {
   return typeof normalizedType === 'string' ? normalizedType.trim().toLowerCase() : '';
 };
 
-const resolvePreferredSpeedDerivedAverageTypesForActivity = (activityType: ActivityTypes): string[] => {
+const resolveActivityTypeInput = (
+  activityTypeInput: ActivityTypes | string | number | null | undefined
+): ActivityTypes => {
+  if (typeof activityTypeInput === 'number' && Number.isFinite(activityTypeInput)) {
+    const byNumericIndex = (ActivityTypes as unknown as Record<number, string>)[activityTypeInput];
+    if (typeof byNumericIndex === 'string' && byNumericIndex.trim().length > 0) {
+      return normalizeActivityType(byNumericIndex as ActivityTypes);
+    }
+  }
+
+  if (typeof activityTypeInput === 'string' && activityTypeInput.trim().length > 0) {
+    return normalizeActivityType(activityTypeInput as ActivityTypes);
+  }
+
+  if (typeof activityTypeInput === 'string') {
+    return activityTypeInput as ActivityTypes;
+  }
+
+  return ActivityTypes.Other;
+};
+
+export const resolvePreferredSpeedDerivedAverageTypesForActivity = (
+  activityTypeInput: ActivityTypes | string | number | null | undefined
+): string[] => {
+  const activityType = resolveActivityTypeInput(activityTypeInput);
   const metrics = ActivityTypesHelper.averageSpeedDerivedDataTypesToUseForActivityType(activityType) || [];
   const hasPaceMetric = metrics.includes(DataPaceAvg.type);
   const hasSwimPaceMetric = metrics.includes(DataSwimPaceAvg.type);
@@ -77,6 +101,24 @@ const resolvePreferredSpeedDerivedAverageTypesForActivity = (activityType: Activ
   }
 
   return metrics;
+};
+
+export const resolvePreferredSpeedDerivedAverageTypeForActivity = (
+  activityTypeInput: ActivityTypes | string | number | null | undefined
+): string | null => {
+  const speedDerivedTypes = resolvePreferredSpeedDerivedAverageTypesForActivity(activityTypeInput);
+  if (!speedDerivedTypes.length) {
+    return null;
+  }
+
+  const preferredOrder = [DataPaceAvg.type, DataSwimPaceAvg.type, DataSpeedAvg.type];
+  for (const preferredType of preferredOrder) {
+    if (speedDerivedTypes.includes(preferredType)) {
+      return preferredType;
+    }
+  }
+
+  return speedDerivedTypes[0];
 };
 
 export const getDefaultSummaryStatTypes = (

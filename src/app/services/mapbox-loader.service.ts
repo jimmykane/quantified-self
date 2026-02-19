@@ -54,6 +54,7 @@ export class MapboxLoaderService {
                 style: 'mapbox://styles/mapbox/standard', // Default standard style
                 center: [0, 0],
                 zoom: 2,
+                cooperativeGestures: true,
                 ...options
             });
         });

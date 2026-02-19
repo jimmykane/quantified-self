@@ -1079,6 +1079,23 @@ describe('AppEventService', () => {
             expect(result).toBe(expectedBuffer);
         });
 
+        it('should forward downloadFile options to AppOriginalFileHydrationService', async () => {
+            const hydrationService = (service as any).originalFileHydrationService;
+            const expectedBuffer = new ArrayBuffer(4);
+            vi.spyOn(hydrationService, 'downloadFile').mockResolvedValue(expectedBuffer);
+
+            const result = await service.downloadFile(
+                'users/u1/events/e1/original.fit',
+                { metadataCacheTtlMs: 120000 },
+            );
+
+            expect(hydrationService.downloadFile).toHaveBeenCalledWith(
+                'users/u1/events/e1/original.fit',
+                { metadataCacheTtlMs: 120000 },
+            );
+            expect(result).toBe(expectedBuffer);
+        });
+
         it('should delegate attachStreamsToEventWithActivities to parsing and attach streams only by default', async () => {
             const hydrationService = (service as any).originalFileHydrationService;
             const oldAscentStat = { getValue: () => 280.8 };
@@ -1131,9 +1148,9 @@ describe('AppEventService', () => {
             expect(result).toBe(event);
         });
 
-        it('should respect streamTypes filter when attaching streams in stream-only mode', async () => {
+        it('should pass metadata cache TTL to hydration parsing when provided', async () => {
             const hydrationService = (service as any).originalFileHydrationService;
-            const parsedStreams = [{ type: 'Speed' }, { type: 'Distance' }, { type: 'Power' }] as any[];
+            const parsedStreams = [{ type: 'Speed' }] as any[];
             const existingActivity = {
                 getID: () => 'a-1',
                 clearStreams: vi.fn(),
@@ -1142,6 +1159,61 @@ describe('AppEventService', () => {
             const parsedActivity = {
                 getID: () => 'a-1',
                 getAllStreams: vi.fn().mockReturnValue(parsedStreams),
+            } as any;
+            const parsedEvent = {
+                setID: vi.fn().mockReturnThis(),
+                getActivities: vi.fn().mockReturnValue([parsedActivity]),
+            } as any;
+            vi.spyOn(hydrationService, 'parseEventFromOriginalFiles').mockResolvedValue({
+                finalEvent: parsedEvent,
+                parsedEvents: [parsedEvent],
+                sourceFilesCount: 1,
+                failedFiles: [],
+            });
+
+            const event = {
+                getID: () => 'event-1',
+                originalFile: { path: 'users/u1/events/e1/original.fit' },
+                getActivities: vi.fn().mockReturnValue([existingActivity]),
+                clearActivities: vi.fn(),
+                addActivities: vi.fn(),
+            } as any;
+
+            await firstValueFrom(
+                service.attachStreamsToEventWithActivities(
+                    { uid: 'u1' } as any,
+                    event,
+                    undefined,
+                    true,
+                    false,
+                    'attach_streams_only',
+                    { metadataCacheTtlMs: 3600000 },
+                ),
+            );
+
+            expect(hydrationService.parseEventFromOriginalFiles).toHaveBeenCalledWith(
+                event,
+                expect.objectContaining({
+                    strictAllFilesRequired: true,
+                    metadataCacheTtlMs: 3600000,
+                }),
+            );
+        });
+
+        it('should forward streamTypes to parseEventFromOriginalFiles and attach all returned streams', async () => {
+            const hydrationService = (service as any).originalFileHydrationService;
+            // The mock parser returns streams it has already filtered — in production the
+            // real parser would only return Distance and Power when streamTypes is ['Distance','Power'].
+            // Here we make the mock reflect that by returning only those two.
+            const filteredParsedStreams = [{ type: 'Distance' }, { type: 'Power' }] as any[];
+            const existingActivity = {
+                getID: () => 'a-1',
+                clearStreams: vi.fn(),
+                addStreams: vi.fn(),
+            } as any;
+            const parsedActivity = {
+                getID: () => 'a-1',
+                getAllStreams: vi.fn().mockReturnValue(filteredParsedStreams),
             } as any;
             const parsedEvent = {
                 setID: vi.fn().mockReturnThis(),
@@ -1163,11 +1235,18 @@ describe('AppEventService', () => {
 
             await firstValueFrom(service.attachStreamsToEventWithActivities({ uid: 'u1' } as any, event, ['Distance', 'Power']));
 
+            // Filtering is delegated to the parser — streamTypes must appear in the parse options.
+            expect(hydrationService.parseEventFromOriginalFiles).toHaveBeenCalledWith(
+                event,
+                expect.objectContaining({ streamTypes: ['Distance', 'Power'] }),
+            );
+            // All streams the parser returned are attached as-is (no second client-side filter).
             expect(existingActivity.clearStreams).toHaveBeenCalledTimes(1);
-            expect(existingActivity.addStreams).toHaveBeenCalledWith([{ type: 'Distance' }, { type: 'Power' }]);
+            expect(existingActivity.addStreams).toHaveBeenCalledWith(filteredParsedStreams);
             expect(event.clearActivities).not.toHaveBeenCalled();
             expect(event.addActivities).not.toHaveBeenCalled();
         });
+
 
         it('should attach matched IDs only and warn on ID mismatch in stream-only mode', async () => {
             const hydrationService = (service as any).originalFileHydrationService;

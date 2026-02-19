@@ -4,49 +4,256 @@ import { ActivityTypes, AppThemes } from '@sports-alliance/sports-lib';
 import { MapStyleService } from '../../services/map-style.service';
 import { MapStyleName } from '../../services/map/map-style.types';
 import { LoggerService } from '../../services/logger.service';
+import { MapboxHeatmapLayerService } from '../../services/map/mapbox-heatmap-layer.service';
+import { JumpHeatPointInput, JumpHeatmapWeightingService } from '../../services/map/jump-heatmap-weighting.service';
+import {
+    MapboxStartPointLayerService,
+    MapboxStartPointSelection
+} from '../../services/map/mapbox-start-point-layer.service';
+import {
+    ensureLayer,
+    removeLayerIfExists,
+    removeSourceIfExists,
+    setPaintIfLayerExists,
+    upsertGeoJsonSource
+} from '../../services/map/mapbox-layer.utils';
+import {
+    applyTerrain,
+    clearDeferredTerrainToggleState,
+    deferTerrainToggleUntilReady,
+    DeferredTerrainToggleState
+} from '../../services/map/mapbox-terrain.utils';
+import {
+    attachStyleReloadHandler,
+    isStyleReady,
+    runWhenStyleReady
+} from '../../services/map/mapbox-style-ready.utils';
+import { resolveThemedActivityColor } from '../../services/map/map-activity-color.utils';
 
 type TrackStyleMode = 'dark-glow' | 'light-contrast';
 type TrackLayerRole = 'glow' | 'casing' | 'main';
 
+export interface TrackStartPoint {
+    eventId: string;
+    activityId: string;
+    activityType: string;
+    activityTypeValue?: ActivityTypes | string | number | null;
+    durationValue?: number | null;
+    distanceValue?: number | null;
+    startDate: number | null;
+    durationLabel: string;
+    distanceLabel: string;
+    effortLabel?: string;
+    effortDisplayLabel?: string;
+    effortStatType?: string;
+    lng: number;
+    lat: number;
+}
+
+export type TrackStartSelection = TrackStartPoint;
+
+interface TrackStartPointWithId extends TrackStartPoint {
+    pointId: string;
+}
+
 export class TracksMapManager {
+    private static readonly JUMP_HEAT_SOURCE_ID = 'jump-heat-source';
+    private static readonly JUMP_HEAT_LAYER_ID = 'jump-heat-layer';
+    private static readonly TRACK_START_SOURCE_ID = 'track-start-source';
+    private static readonly TRACK_START_LAYER_ID = 'track-start-layer';
+    private static readonly TRACK_START_HIT_LAYER_ID = 'track-start-hit-layer';
+    private static readonly TRACK_START_MIN_ZOOM = 0;
+    private static readonly TRACK_START_MARKER_STROKE = '#f5f8ff';
+    private static readonly TRACK_START_MARKER_SELECTED_COLOR = '#22c55e';
+    private static readonly TRACK_START_MARKER_RADIUS_MIN = 5.6;
+    private static readonly TRACK_START_MARKER_RADIUS_MAX = 6.72;
+
     private map: any; // Mapbox GL map instance
     private activeLayerIds: string[] = []; // Store IDs of added layers/sources
     private mapboxgl: any; // Mapbox GL JS library reference
     private tracksByActivityId = new Map<string, { activity: any; coordinates: number[][]; baseColor: string }>();
-    private styleLoadListenerAttached = false;
+    private styleLoadHandlerCleanup: (() => void) | null = null;
     private terrainControl: any;
-    private pendingTerrainToggle: { enable: boolean; animate: boolean } | null = null;
-    private pendingTerrainListenerAttached = false;
+    private terrainToggleState: DeferredTerrainToggleState = { pendingRequest: null };
     private isDarkTheme = false;
     private mapStyle: MapStyleName = 'default';
     private trackLayerBaseColors = new Map<string, string>();
+    private jumpHeatPoints: JumpHeatPointInput[] = [];
+    private jumpHeatmapVisible = true;
+    private trackStartPoints: TrackStartPointWithId[] = [];
+    private trackStartPointsById = new Map<string, TrackStartPointWithId>();
+    private startSelectionHandler: ((selection: TrackStartSelection | null) => void) | null = null;
+    private selectedTrackStartPointId: string | null = null;
+    private hoveredTrackStartPointId: string | null = null;
 
     constructor(
         private zone: NgZone,
         private eventColorService: AppEventColorService,
         private mapStyleService: MapStyleService,
+        private mapboxHeatmapLayerService: MapboxHeatmapLayerService,
+        private jumpHeatmapWeightingService: JumpHeatmapWeightingService,
+        private mapboxStartPointLayerService: MapboxStartPointLayerService,
         private logger: LoggerService
     ) { }
 
     public setMap(map: any, mapboxgl: any) {
+        this.styleLoadHandlerCleanup?.();
+        clearDeferredTerrainToggleState(this.terrainToggleState);
         this.map = map;
         this.mapboxgl = mapboxgl;
         this.attachStyleReloadHandler();
+        if (this.jumpHeatPoints.length > 0) {
+            this.renderJumpHeatmap();
+        } else {
+            this.updateJumpHeatmapVisibility();
+        }
+        if (this.trackStartPoints.length > 0) {
+            this.renderTrackStartPoints();
+        } else {
+            this.clearTrackStartPointsLayerAndInteraction();
+        }
     }
 
     public setIsDarkTheme(isDark: boolean) {
         this.isDarkTheme = isDark;
+        if (this.map && this.trackStartPoints.length > 0) {
+            this.renderTrackStartPoints();
+        }
     }
 
     public setMapStyle(mapStyle: MapStyleName) {
         this.mapStyle = mapStyle ?? 'default';
+        if (this.map && this.trackStartPoints.length > 0) {
+            this.renderTrackStartPoints();
+        }
     }
 
     public getMap(): any {
         return this.map;
     }
 
-    public addTracks(activities: any[]) {
+    public setJumpHeatmapVisible(visible: boolean): void {
+        this.jumpHeatmapVisible = visible !== false;
+        this.updateJumpHeatmapVisibility();
+    }
+
+    public setJumpHeatPoints(points: { lng: number; lat: number; hangTime: number | null; distance: number | null; }[]): void {
+        this.jumpHeatPoints = (points || [])
+            .filter((point) =>
+                Number.isFinite(point?.lng)
+                && Number.isFinite(point?.lat)
+                && Math.abs(point.lng) <= 180
+                && Math.abs(point.lat) <= 90
+            )
+            .map((point) => ({
+                lng: point.lng,
+                lat: point.lat,
+                hangTime: typeof point.hangTime === 'number' && Number.isFinite(point.hangTime) ? point.hangTime : null,
+                distance: typeof point.distance === 'number' && Number.isFinite(point.distance) ? point.distance : null
+            }))
+            .filter((point) => point.hangTime !== null || point.distance !== null);
+
+        this.logger.log('[TracksMapManager] setJumpHeatPoints called.', {
+            inputPoints: points?.length || 0,
+            validWeightedPoints: this.jumpHeatPoints.length
+        });
+
+        if (!this.jumpHeatPoints.length) {
+            this.removeJumpHeatmapLayerAndSource();
+            return;
+        }
+
+        this.renderJumpHeatmap();
+    }
+
+    public clearJumpHeatmap(): void {
+        this.jumpHeatPoints = [];
+        this.removeJumpHeatmapLayerAndSource();
+    }
+
+    public setStartMarkerSelectionHandler(handler: ((selection: TrackStartSelection | null) => void) | null): void {
+        this.startSelectionHandler = handler;
+    }
+
+    public clearStartPointSelection(): void {
+        if (!this.selectedTrackStartPointId && !this.hoveredTrackStartPointId) return;
+        this.selectedTrackStartPointId = null;
+        this.hoveredTrackStartPointId = null;
+        this.refreshTrackStartPointsForSelectionState();
+        this.applyTrackHighlightState();
+    }
+
+    public setActivityStartPoints(points: TrackStartPoint[]): void {
+        const duplicateCounter = new Map<string, number>();
+        this.trackStartPoints = (points || [])
+            .filter((point) =>
+                typeof point?.eventId === 'string'
+                && point.eventId.length > 0
+                && typeof point?.activityId === 'string'
+                && point.activityId.length > 0
+                && Number.isFinite(point?.lng)
+                && Number.isFinite(point?.lat)
+                && Math.abs(point.lng) <= 180
+                && Math.abs(point.lat) <= 90
+            )
+            .map((point) => {
+                const normalizedPoint: TrackStartPoint = {
+                    eventId: point.eventId,
+                    activityId: point.activityId,
+                    activityType: (point.activityType || 'Activity').toString(),
+                    activityTypeValue: this.normalizeActivityTypeValue(point.activityTypeValue),
+                    durationValue: this.normalizeMetricValue(point.durationValue),
+                    distanceValue: this.normalizeMetricValue(point.distanceValue),
+                    startDate: typeof point.startDate === 'number' && Number.isFinite(point.startDate) ? point.startDate : null,
+                    durationLabel: (point.durationLabel || '-').toString(),
+                    distanceLabel: (point.distanceLabel || '-').toString(),
+                    effortLabel: (point.effortLabel || '').toString(),
+                    effortDisplayLabel: (point.effortDisplayLabel || '-').toString(),
+                    effortStatType: typeof point.effortStatType === 'string' && point.effortStatType.trim().length > 0
+                        ? point.effortStatType.trim()
+                        : undefined,
+                    lng: point.lng,
+                    lat: point.lat
+                };
+                const pointId = this.buildTrackStartPointId(normalizedPoint, duplicateCounter);
+                return {
+                    ...normalizedPoint,
+                    pointId
+                };
+            });
+
+        this.trackStartPointsById = new Map(this.trackStartPoints.map((point) => [point.pointId, point]));
+        if (this.selectedTrackStartPointId && !this.trackStartPointsById.has(this.selectedTrackStartPointId)) {
+            this.selectedTrackStartPointId = null;
+        }
+        if (this.hoveredTrackStartPointId && !this.trackStartPointsById.has(this.hoveredTrackStartPointId)) {
+            this.hoveredTrackStartPointId = null;
+        }
+
+        this.logger.log('[TracksMapManager] setActivityStartPoints called.', {
+            inputPoints: points?.length || 0,
+            validPoints: this.trackStartPoints.length
+        });
+
+        if (!this.trackStartPoints.length) {
+            this.clearActivityStartPoints();
+            return;
+        }
+
+        this.renderTrackStartPoints();
+    }
+
+    public clearActivityStartPoints(): void {
+        this.trackStartPoints = [];
+        this.trackStartPointsById.clear();
+        this.selectedTrackStartPointId = null;
+        this.hoveredTrackStartPointId = null;
+        this.clearTrackStartPointsLayerAndInteraction();
+        this.applyTrackHighlightState();
+        this.emitTrackStartSelection(null);
+    }
+
+    public addTracks(_activities: any[]) {
         if (!this.map) return;
 
         // We expect the caller to filter activities and attach streams before calling this
@@ -94,10 +301,45 @@ export class TracksMapManager {
 
         this.zone.runOutsideAngular(() => {
             try {
-                this.ensureTrackSource(sourceId, validCoordinates);
-                this.ensureTrackLayer(glowLayerId, sourceId, this.buildLayerPaint('glow', colorInfo.baseColor));
-                this.ensureTrackLayer(casingLayerId, sourceId, this.buildLayerPaint('casing', colorInfo.baseColor));
-                this.ensureTrackLayer(layerId, sourceId, this.buildLayerPaint('main', colorInfo.baseColor));
+                const sourceData = {
+                    type: 'Feature',
+                    properties: {},
+                    geometry: {
+                        type: 'LineString',
+                        coordinates: validCoordinates
+                    }
+                };
+                upsertGeoJsonSource(this.map, sourceId, sourceData);
+
+                const glowPaint = this.buildLayerPaint('glow', colorInfo.baseColor);
+                const casingPaint = this.buildLayerPaint('casing', colorInfo.baseColor);
+                const mainPaint = this.buildLayerPaint('main', colorInfo.baseColor);
+                const layerLayout = { 'line-join': 'round', 'line-cap': 'round' };
+
+                ensureLayer(this.map, {
+                    id: glowLayerId,
+                    type: 'line',
+                    source: sourceId,
+                    layout: layerLayout,
+                    paint: glowPaint
+                });
+                ensureLayer(this.map, {
+                    id: casingLayerId,
+                    type: 'line',
+                    source: sourceId,
+                    layout: layerLayout,
+                    paint: casingPaint
+                });
+                ensureLayer(this.map, {
+                    id: layerId,
+                    type: 'line',
+                    source: sourceId,
+                    layout: layerLayout,
+                    paint: mainPaint
+                });
+                setPaintIfLayerExists(this.map, glowLayerId, glowPaint);
+                setPaintIfLayerExists(this.map, casingLayerId, casingPaint);
+                setPaintIfLayerExists(this.map, layerId, mainPaint);
 
                 this.rememberActiveId(glowLayerId);
                 this.rememberActiveId(casingLayerId);
@@ -106,6 +348,7 @@ export class TracksMapManager {
                 this.trackLayerBaseColors.set(glowLayerId, colorInfo.baseColor);
                 this.trackLayerBaseColors.set(casingLayerId, colorInfo.baseColor);
                 this.trackLayerBaseColors.set(layerId, colorInfo.baseColor);
+                this.applyTrackHighlightState();
 
             } catch (error: any) {
                 if (error?.message?.includes('Style is not done loading')) {
@@ -125,17 +368,18 @@ export class TracksMapManager {
             const sources = this.activeLayerIds.filter(id => id.startsWith('track-source-'));
 
             layers.forEach(id => {
-                if (this.map.getLayer(id)) this.map.removeLayer(id);
+                removeLayerIfExists(this.map, id);
             });
 
             sources.forEach(id => {
-                if (this.map.getSource(id)) this.map.removeSource(id);
+                removeSourceIfExists(this.map, id);
             });
 
             this.activeLayerIds = [];
             this.trackLayerBaseColors.clear();
             this.tracksByActivityId.clear();
         });
+        this.clearActivityStartPoints();
     }
 
     public get hasTracks(): boolean {
@@ -144,8 +388,11 @@ export class TracksMapManager {
 
     public refreshTrackColors() {
         if (!this.map || !this.trackLayerBaseColors.size) return;
-        if (!this.isStyleReady()) {
-            this.map.once('style.load', () => this.refreshTrackColors());
+        if (!isStyleReady(this.map)) {
+            runWhenStyleReady(this.map, () => this.refreshTrackColors(), {
+                events: ['style.load'],
+                runImmediately: false
+            });
             return;
         }
 
@@ -162,6 +409,7 @@ export class TracksMapManager {
                     }
                 }
             });
+            this.applyTrackHighlightState();
         });
     }
 
@@ -193,37 +441,19 @@ export class TracksMapManager {
 
         this.zone.runOutsideAngular(() => {
             try {
-                if (!this.isStyleReady()) {
+                if (!isStyleReady(this.map)) {
                     this.logger.log('[TracksMapManager] Style not loaded yet. Deferring terrain toggle.');
-                    this.deferTerrainToggle(enable, animate);
+                    deferTerrainToggleUntilReady(
+                        this.map,
+                        { enable, animate },
+                        this.terrainToggleState,
+                        (pending) => this.toggleTerrain(pending.enable, pending.animate)
+                    );
                     return;
                 }
 
-                if (enable) {
-                    if (!this.map.getSource('mapbox-dem')) {
-                        this.logger.log('[TracksMapManager] Adding mapbox-dem source.');
-                        this.map.addSource('mapbox-dem', {
-                            'type': 'raster-dem',
-                            'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
-                            'tileSize': 512,
-                            'maxzoom': 14
-                        });
-                    } else {
-                        this.logger.log('[TracksMapManager] mapbox-dem source already exists.');
-                    }
-                }
-
-                if (enable) {
-                    this.logger.log('[TracksMapManager] Setting terrain to mapbox-dem and pitching to 60.');
-                    this.map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1.5 });
-                    if (animate) this.map.easeTo({ pitch: 60 });
-                    else this.map.setPitch(60);
-                } else {
-                    this.logger.log('[TracksMapManager] Removing terrain and pitching to 0.');
-                    this.map.setTerrain(null);
-                    if (animate) this.map.easeTo({ pitch: 0 });
-                    else this.map.setPitch(0);
-                }
+                clearDeferredTerrainToggleState(this.terrainToggleState);
+                applyTerrain(this.map, enable, animate);
 
                 if (this.terrainControl) {
                     this.terrainControl.set3DState(enable);
@@ -231,111 +461,334 @@ export class TracksMapManager {
 
             } catch (error: any) {
                 this.logger.error('[TracksMapManager] Error toggling terrain:', error);
-                if (error?.message?.includes('Style is not done loading') || !this.isStyleReady()) {
+                if (error?.message?.includes('Style is not done loading') || !isStyleReady(this.map)) {
                     this.logger.log('[TracksMapManager] Style/Map state not ready, deferring terrain toggle.');
-                    this.deferTerrainToggle(enable, animate);
+                    deferTerrainToggleUntilReady(
+                        this.map,
+                        { enable, animate },
+                        this.terrainToggleState,
+                        (pending) => this.toggleTerrain(pending.enable, pending.animate)
+                    );
                 }
             }
         });
     }
 
-    private isStyleReady(): boolean {
-        if (!this.map) return false;
-        if (typeof this.map.isStyleLoaded === 'function') {
-            return this.map.isStyleLoaded();
-        }
-        if (typeof this.map.loaded === 'function') {
-            return this.map.loaded();
-        }
-        return true;
-    }
-
-    private deferTerrainToggle(enable: boolean, animate: boolean) {
-        this.pendingTerrainToggle = { enable, animate };
-        if (this.pendingTerrainListenerAttached || !this.map?.on) return;
-        this.pendingTerrainListenerAttached = true;
-
-        const tryApply = () => {
-            if (!this.isStyleReady()) {
-                return;
-            }
-            this.pendingTerrainListenerAttached = false;
-            if (this.map?.off) {
-                this.map.off('style.load', tryApply);
-                this.map.off('styledata', tryApply);
-                this.map.off('load', tryApply);
-                this.map.off('idle', tryApply);
-            }
-            const pending = this.pendingTerrainToggle;
-            this.pendingTerrainToggle = null;
-            if (pending) {
-                this.toggleTerrain(pending.enable, pending.animate);
-            }
-        };
-
-        this.map.on('style.load', tryApply);
-        this.map.on('styledata', tryApply);
-        this.map.on('load', tryApply);
-        this.map.on('idle', tryApply);
-        tryApply();
-    }
-
     private attachStyleReloadHandler() {
-        if (!this.map || this.styleLoadListenerAttached || !this.map.on) return;
-        this.styleLoadListenerAttached = true;
-
-        this.map.on('style.load', () => {
-            this.restoreTracksAfterStyleReload();
-        });
+        if (!this.map) return;
+        this.styleLoadHandlerCleanup?.();
+        this.styleLoadHandlerCleanup = attachStyleReloadHandler(
+            this.map,
+            () => this.restoreTracksAfterStyleReload(),
+            'tracks-map-manager'
+        );
     }
 
     private restoreTracksAfterStyleReload() {
-        if (!this.map || this.tracksByActivityId.size === 0) return;
+        if (!this.map || (this.tracksByActivityId.size === 0 && this.jumpHeatPoints.length === 0 && this.trackStartPoints.length === 0)) return;
 
         this.zone.runOutsideAngular(() => {
+            this.renderJumpHeatmap();
             this.tracksByActivityId.forEach(({ activity, coordinates }) => {
                 this.addTrackFromActivity(activity, coordinates);
             });
             this.refreshTrackColors();
+            this.updateJumpHeatmapVisibility();
+            this.renderTrackStartPoints();
+            this.applyTrackHighlightState();
         });
     }
 
-    private ensureTrackSource(sourceId: string, coordinates: number[][]) {
-        const sourceData = {
-            type: 'Feature',
-            properties: {},
-            geometry: {
-                type: 'LineString',
-                coordinates
-            }
-        };
-
-        const source = this.map.getSource(sourceId);
-        if (!source) {
-            this.map.addSource(sourceId, {
-                type: 'geojson',
-                data: sourceData
+    private renderJumpHeatmap(): void {
+        if (!this.map) return;
+        const sourceData = this.jumpHeatmapWeightingService.buildWeightedFeatureCollection(this.jumpHeatPoints);
+        if (!sourceData.features.length) {
+            this.logger.log('[TracksMapManager] No renderable jump heat features after weighting.', {
+                inputPoints: this.jumpHeatPoints.length
             });
+            this.removeJumpHeatmapLayerAndSource();
             return;
         }
 
-        if (typeof source.setData === 'function') {
-            source.setData(sourceData);
-        }
+        this.zone.runOutsideAngular(() => {
+            const visibility = this.jumpHeatmapVisible ? 'visible' : 'none';
+            const beforeLayerId = this.getFirstTrackLayerId();
+            this.logger.log('[TracksMapManager] Rendering jump heatmap layer.', {
+                inputPoints: this.jumpHeatPoints.length,
+                renderableFeatures: sourceData.features.length,
+                visibility,
+                beforeLayerId: beforeLayerId || null
+            });
+
+            this.mapboxHeatmapLayerService.renderGeoJsonHeatmapLayer(this.map, {
+                sourceId: TracksMapManager.JUMP_HEAT_SOURCE_ID,
+                layerId: TracksMapManager.JUMP_HEAT_LAYER_ID,
+                featureCollection: sourceData,
+                maxzoom: 18,
+                visibility,
+                beforeLayerId,
+                paint: {
+                    'heatmap-weight': [
+                        'interpolate',
+                        ['linear'],
+                        ['coalesce', ['get', 'heatWeight'], 0],
+                        0, 0.2,
+                        1, 1.0
+                    ],
+                    'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 0.55, 8, 0.9, 12, 1.15, 18, 1.35],
+                    'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 8, 8, 14, 12, 20, 18, 28],
+                    'heatmap-opacity': ['interpolate', ['linear'], ['zoom'], 0, 0.48, 10, 0.65, 18, 0.72],
+                    'heatmap-color': [
+                        'interpolate',
+                        ['linear'],
+                        ['heatmap-density'],
+                        0, 'rgba(0, 0, 255, 0)',
+                        0.08, 'rgba(30, 136, 229, 0.35)',
+                        0.2, '#1e88e5',
+                        0.4, '#00acc1',
+                        0.62, '#fdd835',
+                        0.82, '#fb8c00',
+                        1, '#e53935'
+                    ]
+                }
+            });
+        });
     }
 
-    private ensureTrackLayer(layerId: string, sourceId: string, paint: Record<string, number | string>) {
-        if (this.map.getLayer(layerId)) return;
+    private updateJumpHeatmapVisibility(): void {
+        if (!this.map) return;
+        if (!this.jumpHeatPoints.length) {
+            this.removeJumpHeatmapLayerAndSource();
+            return;
+        }
 
-        this.map.addLayer({
-            id: layerId,
-            type: 'line',
-            source: sourceId,
-            layout: { 'line-join': 'round', 'line-cap': 'round' },
-            paint: {
-                ...paint
+        this.zone.runOutsideAngular(() => {
+            const layerId = TracksMapManager.JUMP_HEAT_LAYER_ID;
+            if (!this.map.getLayer?.(layerId)) {
+                this.renderJumpHeatmap();
+                return;
             }
+            this.mapboxHeatmapLayerService.setLayerVisibility(this.map, layerId, this.jumpHeatmapVisible);
         });
+    }
+
+    private removeJumpHeatmapLayerAndSource(): void {
+        if (!this.map) return;
+
+        this.zone.runOutsideAngular(() => {
+            this.mapboxHeatmapLayerService.clearLayerAndSource(
+                this.map,
+                TracksMapManager.JUMP_HEAT_SOURCE_ID,
+                TracksMapManager.JUMP_HEAT_LAYER_ID
+            );
+        });
+    }
+
+    private getFirstTrackLayerId(): string | undefined {
+        const layers = this.map?.getStyle?.()?.layers;
+        if (!Array.isArray(layers)) return undefined;
+        return layers.find((layer: any) => typeof layer?.id === 'string' && layer.id.startsWith('track-layer-'))?.id;
+    }
+
+    private renderTrackStartPoints(): void {
+        if (!this.map) return;
+        if (!this.trackStartPoints.length) {
+            this.clearTrackStartPointsLayerAndInteraction();
+            return;
+        }
+        const sizeWeightsByPointId = this.buildTrackStartMarkerSizeWeights(this.trackStartPoints);
+        this.zone.runOutsideAngular(() => {
+            this.mapboxStartPointLayerService.renderStartPoints(this.map, {
+                sourceId: TracksMapManager.TRACK_START_SOURCE_ID,
+                layerId: TracksMapManager.TRACK_START_LAYER_ID,
+                hitLayerId: TracksMapManager.TRACK_START_HIT_LAYER_ID,
+                minzoom: TracksMapManager.TRACK_START_MIN_ZOOM,
+                markerColor: '#2ca3ff',
+                markerStrokeColor: TracksMapManager.TRACK_START_MARKER_STROKE,
+                points: this.trackStartPoints.map((point) => ({
+                    lng: point.lng,
+                    lat: point.lat,
+                    properties: {
+                        pointId: point.pointId,
+                        markerColor: this.resolveTrackStartPointMarkerColor(point),
+                        markerRadius: this.resolveTrackStartMarkerRadius(sizeWeightsByPointId.get(point.pointId) ?? 0)
+                    }
+                }))
+            });
+
+            this.mapboxStartPointLayerService.bindInteraction(this.map, {
+                hitLayerId: TracksMapManager.TRACK_START_HIT_LAYER_ID,
+                interactionLayerId: TracksMapManager.TRACK_START_LAYER_ID,
+                onSelect: (selection) => this.handleTrackStartPointSelection(selection),
+                onClear: () => {
+                    this.selectedTrackStartPointId = null;
+                    this.hoveredTrackStartPointId = null;
+                    this.refreshTrackStartPointsForSelectionState();
+                    this.applyTrackHighlightState();
+                    this.emitTrackStartSelection(null);
+                },
+                onHover: (selection) => this.handleTrackStartPointHover(selection?.pointId || null)
+            });
+        });
+    }
+
+    private clearTrackStartPointsLayerAndInteraction(): void {
+        if (!this.map) return;
+        this.zone.runOutsideAngular(() => {
+            this.mapboxStartPointLayerService.clear(this.map, {
+                sourceId: TracksMapManager.TRACK_START_SOURCE_ID,
+                layerId: TracksMapManager.TRACK_START_LAYER_ID,
+                hitLayerId: TracksMapManager.TRACK_START_HIT_LAYER_ID
+            });
+        });
+    }
+
+    private refreshTrackStartPointsForSelectionState(): void {
+        if (!this.map || !this.trackStartPoints.length) return;
+        this.renderTrackStartPoints();
+    }
+
+    private resolveTrackStartPointMarkerColor(point: TrackStartPointWithId): string {
+        if (this.selectedTrackStartPointId === point.pointId) {
+            return TracksMapManager.TRACK_START_MARKER_SELECTED_COLOR;
+        }
+        return this.resolveTrackColors(point.activityTypeValue ?? undefined).adjustedColor;
+    }
+
+    private handleTrackStartPointHover(pointId: string | null): void {
+        const normalizedPointId = pointId && this.trackStartPointsById.has(pointId) ? pointId : null;
+        if (this.hoveredTrackStartPointId === normalizedPointId) return;
+        this.hoveredTrackStartPointId = normalizedPointId;
+        this.applyTrackHighlightState();
+    }
+
+    private handleTrackStartPointSelection(selection: MapboxStartPointSelection): void {
+        if (!selection?.pointId) {
+            this.selectedTrackStartPointId = null;
+            this.refreshTrackStartPointsForSelectionState();
+            this.applyTrackHighlightState();
+            this.emitTrackStartSelection(null);
+            return;
+        }
+
+        const point = this.trackStartPointsById.get(selection.pointId);
+        if (!point) {
+            this.selectedTrackStartPointId = null;
+            this.refreshTrackStartPointsForSelectionState();
+            this.applyTrackHighlightState();
+            this.emitTrackStartSelection(null);
+            return;
+        }
+
+        this.selectedTrackStartPointId = point.pointId;
+        this.refreshTrackStartPointsForSelectionState();
+        this.applyTrackHighlightState();
+
+        this.emitTrackStartSelection({
+            ...point,
+            lng: selection.lng,
+            lat: selection.lat
+        });
+    }
+
+    private applyTrackHighlightState(): void {
+        if (!this.map || !this.tracksByActivityId.size) return;
+        const highlightedActivityIds = new Set<string>();
+        const selectedPoint = this.selectedTrackStartPointId ? this.trackStartPointsById.get(this.selectedTrackStartPointId) : null;
+        const hoveredPoint = this.hoveredTrackStartPointId ? this.trackStartPointsById.get(this.hoveredTrackStartPointId) : null;
+        if (selectedPoint?.activityId) {
+            highlightedActivityIds.add(this.sanitizeLayerId(String(selectedPoint.activityId)));
+        }
+        if (hoveredPoint?.activityId) {
+            highlightedActivityIds.add(this.sanitizeLayerId(String(hoveredPoint.activityId)));
+        }
+
+        this.tracksByActivityId.forEach(({ baseColor }, activityId) => {
+            const isHighlighted = highlightedActivityIds.has(activityId);
+            const layerIds = [
+                `track-layer-glow-${activityId}`,
+                `track-layer-casing-${activityId}`,
+                `track-layer-${activityId}`
+            ];
+            layerIds.forEach((layerId) => {
+                if (!this.map.getLayer?.(layerId) || !this.map.setPaintProperty) return;
+                const role = this.resolveLayerRole(layerId);
+                const paint = this.buildLayerPaint(role, baseColor, isHighlighted);
+                this.applyPaintProperties(layerId, paint);
+            });
+        });
+    }
+
+    private emitTrackStartSelection(selection: TrackStartSelection | null): void {
+        this.startSelectionHandler?.(selection);
+    }
+
+    private normalizeActivityTypeValue(value: unknown): ActivityTypes | string | number | null {
+        if (typeof value === 'number' && Number.isFinite(value)) return value;
+        if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+        return null;
+    }
+
+    private normalizeMetricValue(value: unknown): number | null {
+        if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+        if (value < 0) return null;
+        return value;
+    }
+
+    private buildTrackStartMarkerSizeWeights(points: TrackStartPointWithId[]): Map<string, number> {
+        const durationValues = points
+            .map((point) => point.durationValue)
+            .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+        const distanceValues = points
+            .map((point) => point.distanceValue)
+            .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+
+        const durationMin = durationValues.length ? Math.min(...durationValues) : null;
+        const durationMax = durationValues.length ? Math.max(...durationValues) : null;
+        const distanceMin = distanceValues.length ? Math.min(...distanceValues) : null;
+        const distanceMax = distanceValues.length ? Math.max(...distanceValues) : null;
+
+        const weights = new Map<string, number>();
+        points.forEach((point) => {
+            const durationWeight = durationMin === null || durationMax === null
+                ? null
+                : this.normalizeValue(point.durationValue, durationMin, durationMax);
+            const distanceWeight = distanceMin === null || distanceMax === null
+                ? null
+                : this.normalizeValue(point.distanceValue, distanceMin, distanceMax);
+
+            let finalWeight = 0;
+            if (durationWeight !== null && distanceWeight !== null) {
+                // 50/50 weighting as requested.
+                finalWeight = 0.5 * durationWeight + 0.5 * distanceWeight;
+            } else if (durationWeight !== null) {
+                finalWeight = durationWeight;
+            } else if (distanceWeight !== null) {
+                finalWeight = distanceWeight;
+            }
+            weights.set(point.pointId, finalWeight);
+        });
+
+        return weights;
+    }
+
+    private normalizeValue(value: number | null | undefined, min: number, max: number): number | null {
+        if (value === null || value === undefined || !Number.isFinite(value)) return null;
+        if (min === max) return 1;
+        return (value - min) / (max - min);
+    }
+
+    private resolveTrackStartMarkerRadius(weight: number): number {
+        const safeWeight = Number.isFinite(weight) ? Math.min(Math.max(weight, 0), 1) : 0;
+        const range = TracksMapManager.TRACK_START_MARKER_RADIUS_MAX - TracksMapManager.TRACK_START_MARKER_RADIUS_MIN;
+        return TracksMapManager.TRACK_START_MARKER_RADIUS_MIN + (range * safeWeight);
+    }
+
+    private buildTrackStartPointId(point: TrackStartPoint, duplicateCounter: Map<string, number>): string {
+        const baseId = this.sanitizeLayerId(`${point.eventId}_${point.activityId}`);
+        const count = duplicateCounter.get(baseId) || 0;
+        duplicateCounter.set(baseId, count + 1);
+        return count === 0 ? baseId : `${baseId}-${count}`;
     }
 
     private sanitizeLayerId(activityId: string): string {
@@ -349,13 +802,18 @@ export class TracksMapManager {
         return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value.trim());
     }
 
-    private resolveTrackColors(activityType: ActivityTypes | undefined): { baseColor: string; adjustedColor: string } {
+    private resolveTrackColors(activityType: ActivityTypes | string | number | undefined | null): { baseColor: string; adjustedColor: string } {
         const fallbackColor = '#2ca3ff';
-        const maybeBaseColor = activityType ? this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType) : undefined;
-        const baseColor = this.isHexColor(maybeBaseColor) ? maybeBaseColor : fallbackColor;
-        const adjusted = this.mapStyleService.adjustColorForTheme(baseColor, this.isDarkTheme ? AppThemes.Dark : AppThemes.Normal);
-        const adjustedColor = this.isHexColor(adjusted) ? adjusted : fallbackColor;
-        return { baseColor, adjustedColor };
+        const normalizedActivityType = activityType !== undefined && activityType !== null
+            ? activityType as ActivityTypes
+            : ActivityTypes.unknown;
+        return resolveThemedActivityColor(
+            normalizedActivityType,
+            this.isDarkTheme ? AppThemes.Dark : AppThemes.Normal,
+            this.eventColorService,
+            this.mapStyleService,
+            fallbackColor
+        );
     }
 
     private resolveStyleMode(): TrackStyleMode {
@@ -375,7 +833,7 @@ export class TracksMapManager {
         return 'main';
     }
 
-    private buildLayerPaint(role: TrackLayerRole, baseColor: string): Record<string, number | string> {
+    private buildLayerPaint(role: TrackLayerRole, baseColor: string, isHighlighted: boolean = false): Record<string, number | string> {
         const theme = this.isDarkTheme ? AppThemes.Dark : AppThemes.Normal;
         const styleMode = this.resolveStyleMode();
         const isBusy = this.isBusyMapStyle();
@@ -390,9 +848,9 @@ export class TracksMapManager {
                 case 'glow':
                     return {
                         'line-color': mainColor,
-                        'line-width': 7,
-                        'line-blur': 4,
-                        'line-opacity': 0.55,
+                        'line-width': isHighlighted ? 10 : 7,
+                        'line-blur': isHighlighted ? 5 : 4,
+                        'line-opacity': isHighlighted ? 0.85 : 0.55,
                         'line-emissive-strength': 1.0
                     };
                 case 'casing':
@@ -407,9 +865,9 @@ export class TracksMapManager {
                 default:
                     return {
                         'line-color': mainColor,
-                        'line-width': 3,
+                        'line-width': isHighlighted ? 4.8 : 3,
                         'line-blur': 0,
-                        'line-opacity': 0.95,
+                        'line-opacity': isHighlighted ? 1.0 : 0.95,
                         'line-emissive-strength': 1.0
                     };
             }
@@ -419,35 +877,33 @@ export class TracksMapManager {
             case 'glow':
                 return {
                     'line-color': mainColor,
-                    'line-width': 0,
-                    'line-blur': 0,
-                    'line-opacity': 0,
-                    'line-emissive-strength': 0
+                    'line-width': isHighlighted ? 3.8 : 0,
+                    'line-blur': isHighlighted ? 2.2 : 0,
+                    'line-opacity': isHighlighted ? 0.34 : 0,
+                    'line-emissive-strength': isHighlighted ? 0.45 : 0
                 };
             case 'casing':
                 return {
                     'line-color': casingColor,
-                    'line-width': isBusy ? 6.5 : 5.5,
+                    'line-width': isHighlighted ? (isBusy ? 8.2 : 7.2) : (isBusy ? 6.5 : 5.5),
                     'line-blur': 0,
-                    'line-opacity': isBusy ? 0.85 : 0.75,
+                    'line-opacity': isHighlighted ? 1 : (isBusy ? 0.85 : 0.75),
                     'line-emissive-strength': 0
                 };
             case 'main':
             default:
                 return {
                     'line-color': mainColor,
-                    'line-width': isBusy ? 3.2 : 3.0,
+                    'line-width': isHighlighted ? (isBusy ? 4.5 : 4.2) : (isBusy ? 3.2 : 3.0),
                     'line-blur': 0,
-                    'line-opacity': 0.95,
-                    'line-emissive-strength': 0.6
+                    'line-opacity': isHighlighted ? 1 : 0.95,
+                    'line-emissive-strength': isHighlighted ? 0.9 : 0.6
                 };
         }
     }
 
     private applyPaintProperties(layerId: string, paint: Record<string, number | string>) {
-        Object.entries(paint).forEach(([property, value]) => {
-            this.map.setPaintProperty(layerId, property, value);
-        });
+        setPaintIfLayerExists(this.map, layerId, paint);
     }
 
     private getSafeColor(color: string, fallback: string): string {

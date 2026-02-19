@@ -1,9 +1,7 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Directive, Input } from '@angular/core';
-import { MapTypes } from '@sports-alliance/sports-lib';
+import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib';
-import { LoadingAbstractDirective } from '../../loading/loading-abstract.directive';
-import { User } from '@sports-alliance/sports-lib';
 import { TileAbstractDirective } from '../tile-abstract.directive';
+import { MapStyleName } from '../../../services/map/map-style.types';
 
 @Component({
   selector: 'app-tile-map',
@@ -14,10 +12,8 @@ import { TileAbstractDirective } from '../tile-abstract.directive';
 })
 
 export class TileMapComponent extends TileAbstractDirective {
-  @Input() mapType!: MapTypes;
+  @Input() mapStyle: MapStyleName = 'default';
   @Input() showActions!: boolean;
   @Input() clusterMarkers!: boolean;
   @Input() events: EventInterface[] = [];
-
-  public mapTypes = MapTypes;
 }

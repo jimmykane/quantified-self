@@ -167,10 +167,21 @@ export class EventDevicesService {
         return parts.join(' ') || 'Unknown Device';
     }
 
-    public formatType(type: string): string {
+    public formatType(type: unknown): string {
+        if (type == null) {
+            return '';
+        }
+
+        if (typeof type !== 'string') {
+            if (typeof type === 'number' || typeof type === 'boolean') {
+                return String(type);
+            }
+            return '';
+        }
+
         return type
             .replace(/_/g, ' ')
-            .replace(/\\b\\w/g, c => c.toUpperCase());
+            .replace(/\b\w/g, c => c.toUpperCase());
     }
 
     private capitalize(str: string): string {

@@ -157,6 +157,7 @@ describe('AppUserUtilities', () => {
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.all);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(true);
             expect(settings.unitSettings?.startOfTheWeek).toBe(1); // Monday
+            expect((settings.myTracksSettings as any)?.showJumpHeatmap).toBe(true);
         });
 
         it('should preserve existing settings', () => {
@@ -170,6 +171,19 @@ describe('AppUserUtilities', () => {
             expect(settings.appSettings?.theme).toBe(AppThemes.Dark);
             expect(settings.dashboardSettings?.dateRange).toBe(DateRanges.lastYear);
             expect(settings.dashboardSettings?.includeMergedEvents).toBe(false);
+        });
+
+        it('should preserve explicit showJumpHeatmap=false', () => {
+            const user = {
+                settings: {
+                    myTracksSettings: {
+                        showJumpHeatmap: false
+                    }
+                }
+            } as any;
+
+            const settings = AppUserUtilities.fillMissingAppSettings(user);
+            expect((settings.myTracksSettings as any)?.showJumpHeatmap).toBe(false);
         });
     });
 });

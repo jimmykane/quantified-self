@@ -172,6 +172,9 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
     const textColor = darkTheme ? '#f5f5f5' : '#1f1f1f';
     const axisColor = darkTheme ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.24)';
     const axisLabelFontSize = this.isMobile ? 11 : 12;
+    const tooltipExtraCssText = this.isMobile
+      ? 'max-width: min(80vw, 280px); white-space: normal; overflow-wrap: anywhere; word-break: break-word;'
+      : '';
 
     if (cadencePowerSeries.length === 0) {
       return {
@@ -303,8 +306,10 @@ export class EventCadencePowerComponent implements AfterViewInit, OnChanges, OnD
       },
       tooltip: {
         trigger: 'item',
-        appendToBody: true,
-        confine: false,
+        triggerOn: this.isMobile ? 'click' : 'mousemove|click',
+        appendToBody: !this.isMobile,
+        confine: this.isMobile,
+        extraCssText: tooltipExtraCssText,
         backgroundColor: darkTheme ? '#222222' : '#ffffff',
         borderColor: darkTheme ? '#555555' : '#d6d6d6',
         borderWidth: 1,

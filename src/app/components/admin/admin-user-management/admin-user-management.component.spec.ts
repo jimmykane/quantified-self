@@ -117,7 +117,7 @@ describe('AdminUserManagementComponent', () => {
     beforeEach(async () => {
         adminServiceSpy = {
             getUsers: vi.fn().mockReturnValue(of(mockResponse)),
-            getTotalUserCount: vi.fn().mockReturnValue(of({ total: 100, pro: 30, basic: 70, free: 0 })),
+            getTotalUserCount: vi.fn().mockReturnValue(of({ total: 100, pro: 30, basic: 70, free: 0, onboardingCompleted: 80 })),
             impersonateUser: vi.fn().mockReturnValue(of({ token: 'test-token' })),
         };
 
@@ -188,7 +188,7 @@ describe('AdminUserManagementComponent', () => {
                             data: {
                                 adminData: {
                                     usersData: mockResponse,
-                                    userStats: { total: 100, pro: 30, basic: 70, free: 0 }
+                                    userStats: { total: 100, pro: 30, basic: 70, free: 0, onboardingCompleted: 80 }
                                 }
                             }
                         }
@@ -218,7 +218,7 @@ describe('AdminUserManagementComponent', () => {
 
     it('should use resolved user stats on init', () => {
         expect(adminServiceSpy.getTotalUserCount).not.toHaveBeenCalled();
-        expect(component.userStats).toEqual({ total: 100, pro: 30, basic: 70, free: 0 });
+        expect(component.userStats).toEqual({ total: 100, pro: 30, basic: 70, free: 0, onboardingCompleted: 80 });
     });
 
     it('should handle errors when fetching users', () => {
@@ -239,8 +239,8 @@ describe('AdminUserManagementComponent', () => {
             page: 1,
             pageSize: 50,
             searchTerm: undefined,
-            sortField: 'email',
-            sortDirection: 'asc',
+            sortField: 'created',
+            sortDirection: 'desc',
             filterService: undefined
         });
     });
@@ -256,6 +256,26 @@ describe('AdminUserManagementComponent', () => {
         expect(component.sortDirection).toBe('desc');
         expect(component.currentPage).toBe(0);
         expect(adminServiceSpy.getUsers).toHaveBeenCalled();
+    });
+
+    it('should fallback to created desc when sort state is cleared', () => {
+        component.sortField = 'email';
+        component.sortDirection = 'asc';
+        vi.clearAllMocks();
+
+        const sortEvent: Sort = { active: '', direction: '' };
+        component.onSortChange(sortEvent);
+
+        expect(component.sortField).toBe('created');
+        expect(component.sortDirection).toBe('desc');
+        expect(adminServiceSpy.getUsers).toHaveBeenCalledWith({
+            page: 0,
+            pageSize: 10,
+            searchTerm: undefined,
+            sortField: 'created',
+            sortDirection: 'desc',
+            filterService: undefined
+        });
     });
 
     it('should return correct role', () => {
@@ -322,6 +342,21 @@ describe('AdminUserManagementComponent', () => {
 
         it('should return empty for unknown', () => {
             expect(component.getServiceLogo('unknown')).toBe('');
+        });
+    });
+
+    describe('localized date formatting', () => {
+        it('should format created date using localized Day.js format', () => {
+            const formatted = component.formatCreatedDate('2024-01-15T12:00:00Z');
+            expect(formatted).toBeTruthy();
+        });
+
+        it('should format last login date including time using localized Day.js format', () => {
+            const created = component.formatCreatedDate('2024-01-15T12:00:00Z');
+            const lastLogin = component.formatLastLoginDate('2024-01-15T12:00:00Z');
+
+            expect(lastLogin).toBeTruthy();
+            expect(lastLogin).not.toEqual(created);
         });
     });
 });

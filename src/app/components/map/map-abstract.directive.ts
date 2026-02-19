@@ -4,6 +4,13 @@ import { LoadingAbstractDirective } from '../loading/loading-abstract.directive'
 import { LoggerService } from '../../services/logger.service';
 import { AppThemeService } from '../../services/app.theme.service';
 
+export interface MapBoundsLiteral {
+  east: number;
+  west: number;
+  north: number;
+  south: number;
+}
+
 
 @Directive()
 export abstract class MapAbstractDirective extends LoadingAbstractDirective {
@@ -24,12 +31,12 @@ export abstract class MapAbstractDirective extends LoadingAbstractDirective {
     super(changeDetector)
   }
 
-  getBounds(positions: DataPositionInterface[]): google.maps.LatLngBoundsLiteral {
+  getBounds(positions: DataPositionInterface[]): MapBoundsLiteral {
     // Filter out potential 0,0 points which are often GPS noise/start-up errors
     const validPositions = positions.filter(p => p.latitudeDegrees !== 0 || p.longitudeDegrees !== 0);
 
     if (!validPositions.length) {
-      return <google.maps.LatLngBoundsLiteral>{
+      return <MapBoundsLiteral>{
         east: 0,
         west: 0,
         north: 0,
@@ -51,7 +58,7 @@ export abstract class MapAbstractDirective extends LoadingAbstractDirective {
       return (acc.latitudeDegrees > latLongPair.latitudeDegrees) ? latLongPair : acc;
     });
 
-    const bounds = <google.maps.LatLngBoundsLiteral>{
+    const bounds = <MapBoundsLiteral>{
       east: mostEast.longitudeDegrees,
       west: mostWest.longitudeDegrees,
       north: mostNorth.latitudeDegrees,

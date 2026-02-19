@@ -13,7 +13,7 @@ import { AppUserService } from '../../services/app.user.service';
 import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { Auth } from '@angular/fire/auth';
 import { LoggerService } from '../../services/logger.service';
-import { Observable, firstValueFrom, map } from 'rxjs';
+import { Observable, firstValueFrom, map, take } from 'rxjs';
 import { StripeRole } from '../../models/stripe-role.model';
 import { Router } from '@angular/router';
 
@@ -21,6 +21,7 @@ import { environment } from '../../../environments/environment';
 
 import { MatDialog } from '@angular/material/dialog';
 import { ConfirmationDialogComponent } from '../confirmation-dialog/confirmation-dialog.component';
+import { POLICY_CONTENT } from '../../shared/policies.content';
 
 interface SubscriptionSummary {
     status: StripeSubscription['status'];
@@ -46,6 +47,7 @@ export class PricingComponent implements OnInit, OnDestroy {
     activeSubscriptions$: Observable<StripeSubscription[]> | null = null;
     subscriptionSummary$: Observable<SubscriptionSummary | null> | null = null;
     hasPaidSubscriptionHistory: boolean | null = null;
+    private readonly requiredPolicies = POLICY_CONTENT.filter((policy) => !!policy.checkboxLabel && !policy.isOptional);
 
     private platformId = inject(PLATFORM_ID);
     private authService = inject(AppAuthService);
@@ -161,14 +163,19 @@ export class PricingComponent implements OnInit, OnDestroy {
             return;
         }
 
+        const userWithRequiredPolicies = await this.getUserWithRequiredPolicies();
+        if (!userWithRequiredPolicies) {
+            return;
+        }
+
         // Handle both price object and legacy string ID for backward compatibility
         const priceId = typeof price === 'string' ? price : price.id;
-        this.loadingPriceId = priceId;
 
         // Double-Billing Protection:
         // If user already has a Paid Role (Basic/Pro), they CANNOT checkout again.
         // They must manage/swap their existing subscription via the Portal.
         if (this.currentRole === 'pro' || this.currentRole === 'basic') {
+            this.loadingPriceId = priceId;
             await this.manageSubscription();
             if (!this.isLoading) {
                 this.loadingPriceId = null;
@@ -176,6 +183,7 @@ export class PricingComponent implements OnInit, OnDestroy {
             return;
         }
 
+        this.loadingPriceId = priceId;
         this.isLoading = true;
 
         try {
@@ -273,24 +281,20 @@ export class PricingComponent implements OnInit, OnDestroy {
             return;
         }
 
+        const userWithRequiredPolicies = await this.getUserWithRequiredPolicies();
+        if (!userWithRequiredPolicies) {
+            return;
+        }
+
         this.isLoading = true;
         try {
-            const uid = this.auth.currentUser?.uid;
-            if (!uid) {
-                this.router.navigate(['/login'], { queryParams: { returnUrl: this.getReturnUrl() } });
-                return;
-            }
-            const user = await firstValueFrom(this.userService.getUserByID(uid));
-
-            if (user) {
-                this.analyticsService.logSelectFreeTier();
-                await this.userService.setFreeTier(user);
-                this.logger.log('Free tier selected. Waiting for reactive updates to handle navigation.');
-                this.planSelected.emit();
-                this.isLoading = false;
-            }
+            this.analyticsService.logSelectFreeTier();
+            await this.userService.setFreeTier(userWithRequiredPolicies);
+            this.logger.log('Free tier selected. Waiting for reactive updates to handle navigation.');
+            this.planSelected.emit();
         } catch (error) {
             this.logger.error('Error selecting free tier:', error);
+        } finally {
             this.isLoading = false;
         }
     }
@@ -336,6 +340,39 @@ export class PricingComponent implements OnInit, OnDestroy {
     private getReturnUrl(): string {
         const url = this.router.url;
         return url && url.startsWith('/') ? url : '/subscriptions';
+    }
+
+    private async getUserWithRequiredPolicies() {
+        const user = await this.getCurrentAppUser();
+        if (!user) {
+            this.router.navigate(['/onboarding'], { queryParams: { returnUrl: '/subscriptions' } });
+            return null;
+        }
+
+        const termsAccepted = this.requiredPolicies.every((policy) => {
+            const userProperty = this.mapFormControlNameToUserProperty(policy.formControlName || '');
+            return (user as any)[userProperty] === true;
+        });
+
+        if (termsAccepted) {
+            return user;
+        }
+
+        this.logger.log('[PricingComponent] Required legal policies are missing. Redirecting to onboarding.');
+        this.router.navigate(['/onboarding'], { queryParams: { returnUrl: '/subscriptions' } });
+        return null;
+    }
+
+    private async getCurrentAppUser() {
+        const user = await firstValueFrom(this.authService.user$.pipe(take(1)));
+        return user;
+    }
+
+    private mapFormControlNameToUserProperty(formControlName: string): string {
+        if (!formControlName) {
+            return '';
+        }
+        return formControlName.replace(/^accept/, 'accepted');
     }
 
     private buildSubscriptionSummary(subscriptions: StripeSubscription[]): SubscriptionSummary | null {

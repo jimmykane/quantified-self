@@ -1,0 +1,25 @@
+<div class="track-start-popup qs-glass-card-panel glass-card">
+  @if (dismissible) {
+  <button class="track-start-popup-close" mat-icon-button type="button" (click)="onDismiss($event)" aria-label="Close popup">
+    <mat-icon>close</mat-icon>
+  </button>
+  }
+
+  <app-summary-primary-info
+    [activityType]="activityType || 'Activity'"
+    [iconActivityType]="iconActivityType"
+    [startDate]="startDate"
+    [fallbackTopMetaText]="fallbackTopMetaText"
+    [metrics]="metrics"
+    [forceMobileLayout]="forceMobileLayout">
+    @if (event && user) {
+    <app-service-source-icon summary-top-meta-suffix [event]="event" [user]="user"></app-service-source-icon>
+    }
+  </app-summary-primary-info>
+
+  @if (actionLabel) {
+  <div class="track-start-popup-actions">
+    <button mat-button color="primary" type="button" (click)="onActionClick()">{{ actionLabel }}</button>
+  </div>
+  }
+</div>

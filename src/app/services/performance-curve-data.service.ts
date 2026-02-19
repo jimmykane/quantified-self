@@ -438,9 +438,8 @@ export class PerformanceCurveDataService {
           return;
         }
 
-        const midpoint = Math.floor((bestStart + bestEnd) / 2);
-        const midpointPoint = series.points[midpoint];
-        if (!midpointPoint) {
+        const endPoint = series.points[bestEnd];
+        if (!endPoint) {
           return;
         }
 
@@ -450,11 +449,11 @@ export class PerformanceCurveDataService {
           activityLabel: series.label,
           windowSeconds,
           windowLabel: this.formatEffortWindow(windowSeconds),
-          duration: midpointPoint.duration,
-          efficiency: midpointPoint.efficiency,
+          duration: endPoint.duration,
+          efficiency: endPoint.efficiency,
           power: bestPower,
-          startDuration: series.points[bestStart]?.duration ?? midpointPoint.duration,
-          endDuration: series.points[bestEnd]?.duration ?? midpointPoint.duration,
+          startDuration: series.points[bestStart]?.duration ?? endPoint.duration,
+          endDuration: endPoint.duration,
         });
       });
     });

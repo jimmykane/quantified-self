@@ -3,3 +3,8 @@
   width: 100%;
   max-width: 100%
 }
+
+.table-container mat-cell,
+.table-container .mat-mdc-cell {
+  font-family: 'Barlow Condensed', 'Noto Sans', sans-serif;
+}

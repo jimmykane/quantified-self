@@ -3,6 +3,7 @@ import { MapStyleService } from './map-style.service';
 import { LoggerService } from './logger.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { SUPPORTED_MAP_STYLES } from './map/map-style.types';
 
 describe('MapStyleService', () => {
     let service: MapStyleService;
@@ -50,6 +51,32 @@ describe('MapStyleService', () => {
         it('should handle undefined map style as default', () => {
             const result = service.resolve(undefined, AppThemes.Normal);
             expect(result.styleUrl).toBe(service.standard);
+        });
+    });
+
+    describe('supported styles', () => {
+        it('should expose a canonical supported style list', () => {
+            expect(service.getSupportedStyles()).toEqual(SUPPORTED_MAP_STYLES);
+        });
+
+        it('should expose supported style options', () => {
+            expect(service.getSupportedStyleOptions()).toEqual([
+                { value: 'default', label: 'Default' },
+                { value: 'satellite', label: 'Satellite' },
+                { value: 'outdoors', label: 'Outdoors' }
+            ]);
+        });
+    });
+
+    describe('normalizeStyle', () => {
+        it('should normalize invalid style values to default', () => {
+            expect(service.normalizeStyle('invalid')).toBe('default');
+            expect(service.normalizeStyle(undefined)).toBe('default');
+            expect(service.normalizeStyle(null)).toBe('default');
+        });
+
+        it('should normalize case and whitespace', () => {
+            expect(service.normalizeStyle('  SATELLITE  ')).toBe('satellite');
         });
     });
 

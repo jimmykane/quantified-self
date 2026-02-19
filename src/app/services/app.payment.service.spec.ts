@@ -224,6 +224,33 @@ describe('AppPaymentService', () => {
             expect(payload.allow_promotion_codes).toBe(false);
         });
 
+        it('should not set promotion_code when user has paid subscription history', async () => {
+            const recurringPriceWithPromo = {
+                id: 'price_recurring_promo_history',
+                type: 'recurring',
+                active: true,
+                currency: 'usd',
+                unit_amount: 1000,
+                description: 'Monthly with promo for returning customer',
+                metadata: {
+                    promotion_code_id: 'promo_123456789'
+                }
+            } as any;
+
+            mockGetDocs.mockResolvedValueOnce({
+                docs: [{ id: 'sub_existing' }]
+            });
+
+            await service.appendCheckoutSession(recurringPriceWithPromo);
+
+            expect(mockAddDoc).toHaveBeenCalled();
+            const args = mockAddDoc.mock.calls[0];
+            const payload = args[1];
+
+            expect(payload.promotion_code).toBeUndefined();
+            expect(payload.allow_promotion_codes).toBe(true);
+        });
+
         it('should ignore non-ID promotion code metadata and keep manual promotion codes enabled', async () => {
             const recurringPriceWithInvalidPromo = {
                 id: 'price_recurring_invalid_promo',
@@ -385,7 +412,7 @@ describe('AppPaymentService', () => {
             const payload = args[1];
             expect(payload.promotion_code).toBe('promo_firestore_123');
             expect(payload.allow_promotion_codes).toBe(false);
-            expect(mockGetDocs).not.toHaveBeenCalled();
+            expect(mockGetDocs).toHaveBeenCalledTimes(1);
         });
 
         it('should apply promotion code from active-product scan when product ID is not present on price object', async () => {
@@ -416,7 +443,7 @@ describe('AppPaymentService', () => {
             const payload = args[1];
             expect(payload.promotion_code).toBe('promo_firestore_scan');
             expect(payload.allow_promotion_codes).toBe(false);
-            expect(mockGetDocs).toHaveBeenCalledTimes(1);
+            expect(mockGetDocs).toHaveBeenCalledTimes(2);
         });
     });
     describe('restorePurchases', () => {

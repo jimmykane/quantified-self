@@ -1,18 +1,9 @@
 /* mat-grid-list rule removed */
 
 mat-grid-tile {
-  /* Transition for hover effects if we want to animate the tile wrapper */
-  transition: transform 0.3s ease, z-index 0.3s;
   border-radius: 20px;
   /* Material grid tiles clip content by default, so we need to be careful with shadows */
   overflow: visible !important;
-}
-
-/* Hover effect for tiles */
-mat-grid-tile:hover {
-  transform: translateY(-4px);
-  z-index: 2;
-  /* Bring above others */
 }
 
 /* Common style for the tile content components */

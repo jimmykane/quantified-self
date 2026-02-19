@@ -79,6 +79,10 @@
     }
 }
 
+.chart-card {
+    margin-bottom: 24px;
+}
+
 .app-stat-card {
     display: flex;
     flex-direction: column;
@@ -137,6 +141,10 @@
     }
 }
 
+.app-stat-value-muted {
+    opacity: 0.7;
+}
+
 .app-spinner-mini {
     display: flex;
     justify-content: center;
@@ -147,11 +155,12 @@
 .chart-header {
     padding: 1.5rem 1.5rem 0.5rem 1.5rem;
     margin: 0;
-    color: #333;
+    color: var(--mat-sys-on-surface);
     font-size: 1.1rem;
     font-weight: 400;
     display: flex;
     align-items: center;
+    gap: 8px;
 
     :host-context(.dark-theme) & {
         color: rgba(255, 255, 255, 0.87);
@@ -159,6 +168,7 @@
 }
 
 .chart-wrapper {
+    padding: 16px;
     width: 100%;
     display: block;
     position: relative;
@@ -168,6 +178,10 @@
         width: 100%;
         height: 240px;
     }
+}
+
+.chart-empty-state {
+    padding: 0 24px 24px;
 }
 
 // Filter/Search Container
@@ -187,6 +201,7 @@
 
 .qs-filter-field {
     min-width: 150px;
+    max-width: 200px;
 }
 
 // Table Styles
@@ -262,6 +277,24 @@ td.mat-cell {
     gap: 4px;
 }
 
+.services-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px 0;
+}
+
+.service-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.service-logo {
+    width: 18px;
+    height: 18px;
+}
+
 .provider-google {
     color: #4285F4;
 }
@@ -316,6 +349,22 @@ td.mat-cell {
     &.disabled {
         background: rgba(244, 67, 54, 0.15);
         color: #f44336;
+    }
+}
+
+@include bp.xsmall {
+    .chart-wrapper .echart-surface {
+        height: 320px;
+    }
+
+    .qs-filter-container {
+        gap: 8px;
+    }
+
+    .qs-search-field,
+    .qs-filter-field {
+        width: 100%;
+        max-width: 100%;
     }
 }
 

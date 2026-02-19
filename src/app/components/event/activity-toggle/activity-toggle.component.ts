@@ -54,32 +54,14 @@ export class ActivityToggleComponent {
   }
 
   private selectActivity(activity: ActivityInterface): void {
-    if (this.isActivitySelected(activity)) {
-      return;
-    }
-    this.activitySelectionService.selectedActivities.select(activity);
+    this.activitySelectionService.selectActivity(activity, this.selectedActivities());
   }
 
   private deselectActivity(activity: ActivityInterface): void {
-    const selectedActivityRef = this.findSelectedActivity(activity);
-    if (!selectedActivityRef) {
-      return;
-    }
-    this.activitySelectionService.selectedActivities.deselect(selectedActivityRef);
+    this.activitySelectionService.deselectActivity(activity, this.selectedActivities(), true);
   }
 
   private isActivitySelected(activity: ActivityInterface): boolean {
-    return !!this.findSelectedActivity(activity);
-  }
-
-  private findSelectedActivity(activity: ActivityInterface): ActivityInterface | undefined {
-    const selectedActivities = this.selectedActivities() ?? [];
-    const activityID = activity?.getID?.();
-
-    if (activityID) {
-      return selectedActivities.find((selectedActivity) => selectedActivity?.getID?.() === activityID);
-    }
-
-    return selectedActivities.find((selectedActivity) => selectedActivity === activity);
+    return this.activitySelectionService.isActivitySelected(activity, this.selectedActivities());
   }
 }

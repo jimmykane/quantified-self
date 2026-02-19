@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, LOCALE_ID, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
@@ -25,12 +25,17 @@ import { AdminResolverData } from '../../../resolvers/admin.resolver';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import type { EChartsType } from 'echarts/core';
 import { EChartsLoaderService } from '../../../services/echarts-loader.service';
+import dayjs from 'dayjs';
+import localizedFormat from 'dayjs/plugin/localizedFormat';
+
+dayjs.extend(localizedFormat);
 
 export interface UserStats {
     total: number;
     pro: number;
     basic: number;
     free: number;
+    onboardingCompleted: number;
     providers?: Record<string, number>;
 }
 
@@ -72,6 +77,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     private snackBar = inject(MatSnackBar);
     private logger = inject(LoggerService);
     private eChartsLoader = inject(EChartsLoaderService);
+    private locale = inject(LOCALE_ID);
 
     // Data state
     users: AdminUser[] = [];
@@ -86,12 +92,12 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
     // Search and sort state
     searchTerm = '';
-    sortField = 'email';
-    sortDirection: 'asc' | 'desc' = 'asc';
+    sortField = 'created';
+    sortDirection: 'asc' | 'desc' = 'desc';
 
     displayedColumns: string[] = [
         'photoURL', 'email', 'providerIds', 'displayName', 'role', 'subscription',
-        'services', 'created', 'lastLogin', 'status', 'actions'
+        'services', 'created', 'lastLogin', 'onboarding', 'status', 'actions'
     ];
 
     private searchSubject = new Subject<string>();
@@ -101,6 +107,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     private isDark = false;
     private resizeObserver: ResizeObserver | null = null;
     private providerData: Record<string, number> | null = null;
+    private readonly dayjsLocale = this.normalizeDayjsLocale(this.locale);
 
     private readonly CHART_TEXT_DARK = 'rgba(255, 255, 255, 0.8)';
     private readonly CHART_TEXT_LIGHT = 'rgba(0, 0, 0, 0.8)';
@@ -201,8 +208,8 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     }
 
     onSortChange(sort: Sort): void {
-        this.sortField = sort.active || 'email';
-        this.sortDirection = (sort.direction as 'asc' | 'desc') || 'asc';
+        this.sortField = sort.active || 'created';
+        this.sortDirection = (sort.direction as 'asc' | 'desc') || 'desc';
         this.currentPage = 0;
         this.fetchUsers();
     }
@@ -290,15 +297,19 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
     }
 
     private formatDate(timestamp: any): string {
-        if (!timestamp) return '';
-        const date = new Date(timestamp.seconds ? timestamp.seconds * 1000 : timestamp);
-        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        return this.formatLocalizedDate(timestamp, false);
     }
 
     formatConnectionDate(timestamp: any): string {
-        if (!timestamp) return 'Time unknown';
-        const date = new Date(timestamp.seconds ? timestamp.seconds * 1000 : timestamp);
-        return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+        return this.formatLocalizedDate(timestamp, false) || 'Time unknown';
+    }
+
+    formatCreatedDate(timestamp: any): string {
+        return this.formatLocalizedDate(timestamp, false);
+    }
+
+    formatLastLoginDate(timestamp: any): string {
+        return this.formatLocalizedDate(timestamp, true);
     }
 
     getServiceLogo(provider: string): string {
@@ -308,6 +319,41 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
             case 'coros': return 'assets/logos/coros.svg';
             default: return '';
         }
+    }
+
+    private formatLocalizedDate(timestamp: any, includeTime: boolean): string {
+        if (!timestamp) return '';
+
+        const value = timestamp.seconds ? timestamp.seconds * 1000 : timestamp;
+        const parsed = dayjs(value);
+        if (!parsed.isValid()) {
+            return '';
+        }
+
+        return parsed.locale(this.dayjsLocale).format(includeTime ? 'L LT' : 'L');
+    }
+
+    private normalizeDayjsLocale(locale: string): string {
+        if (!locale) return 'en';
+
+        const lowerLocale = locale.toLowerCase();
+        const localeMap: Record<string, string> = {
+            'en-us': 'en',
+            'en-gb': 'en-gb',
+            'el-gr': 'el',
+            'de-de': 'de',
+            'fr-fr': 'fr',
+            'es-es': 'es',
+            'it-it': 'it',
+            'nl-nl': 'nl',
+            'pl-pl': 'pl',
+        };
+
+        if (localeMap[lowerLocale]) {
+            return localeMap[lowerLocale];
+        }
+
+        return lowerLocale.split('-')[0];
     }
 
     private async initializeChart(): Promise<void> {
@@ -370,6 +416,8 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
 
         const textColor = this.isDark ? this.CHART_TEXT_DARK : this.CHART_TEXT_LIGHT;
         const borderColor = this.isDark ? 'rgba(255,255,255,0.05)' : '#ffffff';
+        const containerWidth = this.authChartRef?.nativeElement?.clientWidth ?? 0;
+        const isMobileLayout = containerWidth > 0 && containerWidth < 680;
 
         const seriesData = entries.map(([key, value]) => ({
             name: providerLabels[key] || key,
@@ -386,17 +434,22 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
                 formatter: '{b}: {c} ({d}%)'
             },
             legend: {
-                orient: 'vertical',
-                right: 10,
-                top: 'center',
-                textStyle: { color: textColor }
+                orient: isMobileLayout ? 'horizontal' : 'vertical',
+                left: isMobileLayout ? 'center' : undefined,
+                right: isMobileLayout ? undefined : 10,
+                top: isMobileLayout ? 'bottom' : 'center',
+                textStyle: {
+                    color: textColor,
+                    fontSize: isMobileLayout ? 11 : 12
+                },
+                itemGap: isMobileLayout ? 10 : 8
             },
             series: [
                 {
                     name: 'Auth Provider Breakdown',
                     type: 'pie',
-                    radius: ['55%', '72%'],
-                    center: ['38%', '50%'],
+                    radius: isMobileLayout ? ['42%', '64%'] : ['55%', '72%'],
+                    center: isMobileLayout ? ['50%', '40%'] : ['38%', '50%'],
                     avoidLabelOverlap: true,
                     label: { show: false },
                     labelLine: { show: false },
@@ -410,27 +463,27 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
             graphic: [
                 {
                     type: 'group',
-                    left: '38%',
-                    top: 'center',
+                    left: isMobileLayout ? '50%' : '38%',
+                    top: isMobileLayout ? '40%' : 'center',
                     bounding: 'raw',
                     children: [
                         {
                             type: 'text',
                             style: {
                                 text: centerText,
-                                fontSize: 24,
+                                fontSize: isMobileLayout ? 20 : 24,
                                 fontWeight: 700,
                                 fill: textColor,
                                 textAlign: 'center'
                             },
                             left: 'center',
-                            top: -12
+                            top: isMobileLayout ? -10 : -12
                         },
                         {
                             type: 'text',
                             style: {
                                 text: 'accounts',
-                                fontSize: 12,
+                                fontSize: isMobileLayout ? 11 : 12,
                                 fontWeight: 400,
                                 fill: textColor,
                                 opacity: 0.75,
@@ -443,7 +496,7 @@ export class AdminUserManagementComponent implements OnInit, OnDestroy, AfterVie
                             type: 'text',
                             style: {
                                 text: centerSubtitle,
-                                fontSize: 12,
+                                fontSize: isMobileLayout ? 11 : 12,
                                 fontWeight: 500,
                                 fill: textColor,
                                 opacity: 0.9,

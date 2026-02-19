@@ -99,6 +99,7 @@ import { AppColors } from '../../../services/color/app.colors';
 import { ActivityUtilities } from '@sports-alliance/sports-lib';
 import { LoggerService } from '../../../services/logger.service';
 import { normalizeUnitDerivedTypeLabel } from '../../../helpers/stat-label.helper';
+import { computePaceAxisScaling } from '../../../helpers/pace-axis.helper';
 
 const DOWNSAMPLE_AFTER_X_HOURS = 8;
 const DOWNSAMPLE_FACTOR_PER_HOUR = 1.5;
@@ -879,7 +880,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
 
   protected createYAxisForSeries(streamType: string): am4charts.ValueAxis | am4charts.DurationAxis {
     let yAxis: am4charts.ValueAxis | am4charts.DurationAxis;
-    if ([DataPace.type, DataPaceMinutesPerMile.type, DataGradeAdjustedPace.type, DataGradeAdjustedPaceMinutesPerMile.type, DataSwimPace.type, DataSwimPaceMaxMinutesPer100Yard.type].indexOf(streamType) !== -1) {
+    if (this.isPaceStreamType(streamType)) {
       yAxis = new this.charts.DurationAxis();
     } else {
       yAxis = new this.charts.ValueAxis();
@@ -1308,6 +1309,7 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     // If there is already a series with this id only data update should be done
     if (series) {
       series.data = this.convertStreamDataToSeriesData(activity, stream);
+      this.refreshPaceAxisRangeForSeries(series);
       return series
     }
 
@@ -1384,7 +1386,46 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
     series.data = this.convertStreamDataToSeriesData(activity, stream);
     series.yAxis = this.getYAxisForSeries(series);
     series = this.chart.series.push(series);
+    this.refreshPaceAxisRangeForSeries(series);
     return series;
+  }
+
+  private isPaceStreamType(streamType: string): boolean {
+    return [
+      DataPace.type,
+      DataPaceMinutesPerMile.type,
+      DataGradeAdjustedPace.type,
+      DataGradeAdjustedPaceMinutesPerMile.type,
+      DataSwimPace.type,
+      DataSwimPaceMinutesPer100Yard.type,
+      DataSwimPaceMaxMinutesPer100Yard.type
+    ].indexOf(streamType) !== -1;
+  }
+
+  private refreshPaceAxisRangeForSeries(series: am4charts.XYSeries): void {
+    const streamType = series?.dummyData?.stream?.type;
+    if (!streamType || !this.isPaceStreamType(streamType)) {
+      return;
+    }
+
+    this.updatePaceAxisRange(series.yAxis as am4charts.DurationAxis);
+  }
+
+  private updatePaceAxisRange(yAxis: am4charts.DurationAxis | undefined): void {
+    if (!yAxis || !yAxis.series) {
+      return;
+    }
+
+    const values = yAxis.series.values
+      .flatMap((axisSeries) => Array.isArray(axisSeries.data) ? axisSeries.data : [])
+      .map((dataPoint: any) => Number(dataPoint?.value))
+      .filter((value) => Number.isFinite(value) && value > 0);
+
+    const scaling = computePaceAxisScaling(values, this.extraMaxForPace);
+    yAxis.min = scaling.min;
+    yAxis.max = scaling.max;
+    yAxis.strictMinMax = scaling.strictMinMax;
+    yAxis.extraMax = scaling.extraMax;
   }
 
   private getYAxisForSeries(series: XYSeries) {
@@ -1447,12 +1488,10 @@ export class EventCardChartComponent extends ChartAbstractDirective implements O
       yAxis.renderer.minGridDistance = 15;
 
       // Data specifics setup
-      if ([DataPace.type, DataGradeAdjustedPace.type, DataGradeAdjustedPaceMinutesPerMile.type, DataSwimPace.type, DataSwimPaceMinutesPer100Yard.type, DataPaceMinutesPerMile.type].indexOf(series.dummyData.stream.type) !== -1) {
+      if (this.isPaceStreamType(series.dummyData.stream.type)) {
         yAxis.renderer.inversed = true;
         yAxis.baseValue = Infinity;
         yAxis.extraMin = 0.0;
-        // yAxis.max = 1800;
-        // @todo this creates the issue
         yAxis.extraMax = this.extraMaxForPace;
         // yAxis.min = 0
         // yAxis.minY = 0;

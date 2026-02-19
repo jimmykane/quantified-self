@@ -15,7 +15,8 @@ const {
     mockListBudgets,
     mockGetTables,
     mockBigQueryQuery,
-    mockGetCloudTaskQueueDepth
+    mockGetCloudTaskQueueDepth,
+    mockGetAll
 } = vi.hoisted(() => {
     const mockListUsers = vi.fn();
     const mockCreateCustomToken = vi.fn();
@@ -23,9 +24,11 @@ const {
     const mockOnCall = vi.fn((_options: unknown, handler: unknown) => handler);
 
     const mockCollection = vi.fn() as any;
+    const mockGetAll = vi.fn();
     const mockFirestore = vi.fn(() => ({
         collection: mockCollection,
-        collectionGroup: mockCollection
+        collectionGroup: mockCollection,
+        getAll: mockGetAll
     }));
 
     const mockRemoteConfig = vi.fn(() => ({
@@ -61,7 +64,8 @@ const {
         mockListBudgets,
         mockGetTables,
         mockBigQueryQuery,
-        mockGetCloudTaskQueueDepth
+        mockGetCloudTaskQueueDepth,
+        mockGetAll
     };
 });
 
@@ -147,6 +151,7 @@ describe('listUsers Cloud Function', () => {
 
         // Default: Return empty user list (single page)
         mockListUsers.mockResolvedValue({ users: [], pageToken: undefined });
+        mockGetAll.mockResolvedValue([]);
 
         // Default: Empty Firestore results
         const emptyGet = vi.fn().mockResolvedValue({ empty: true, docs: [] });
@@ -213,6 +218,32 @@ describe('listUsers Cloud Function', () => {
         expect(result.page).toBe(0);
         expect(result.pageSize).toBe(2);
         expect(result.users[0].providerIds).toEqual(['google.com']);
+    });
+
+    it('should include onboardingCompleted=true when user doc has onboardingCompleted=true', async () => {
+        mockListUsers.mockResolvedValue({
+            users: [{ uid: 'user1', email: 'alice@test.com', providerData: [], metadata: {}, customClaims: {} }],
+            pageToken: undefined
+        });
+        mockGetAll.mockResolvedValue([
+            { id: 'user1', data: () => ({ onboardingCompleted: true }) }
+        ]);
+
+        const result: any = await (listUsers as any)(getAdminRequest({ page: 0, pageSize: 25 }));
+        expect(result.users[0].onboardingCompleted).toBe(true);
+    });
+
+    it('should default onboardingCompleted=false when user doc is missing the flag', async () => {
+        mockListUsers.mockResolvedValue({
+            users: [{ uid: 'user1', email: 'alice@test.com', providerData: [], metadata: {}, customClaims: {} }],
+            pageToken: undefined
+        });
+        mockGetAll.mockResolvedValue([
+            { id: 'user1', data: () => ({}) }
+        ]);
+
+        const result: any = await (listUsers as any)(getAdminRequest({ page: 0, pageSize: 25 }));
+        expect(result.users[0].onboardingCompleted).toBe(false);
     });
 
     it('should filter users by searchTerm', async () => {
@@ -373,18 +404,18 @@ describe('listUsers Cloud Function', () => {
         expect(result.users).toHaveLength(1);
     });
 
-    it('should use default sort (email) when sortField is invalid', async () => {
+    it('should use default sort (created) when sortField is invalid', async () => {
         const mockUsers = [
-            { uid: 'u1', email: 'b@test.com', providerData: [] },
-            { uid: 'u2', email: 'a@test.com', providerData: [] }
+            { uid: 'u1', email: 'b@test.com', metadata: { creationTime: '2024-02-01' }, providerData: [] },
+            { uid: 'u2', email: 'a@test.com', metadata: { creationTime: '2024-01-01' }, providerData: [] }
         ];
         mockListUsers.mockResolvedValue({ users: mockUsers, pageToken: undefined });
 
-        // invalid_field causes fall through to default which compares by email
+        // invalid_field causes fall through to default which compares by creation date
         const result: any = await (listUsers as any)(getAdminRequest({ sortField: 'invalid_field' as any, sortDirection: 'asc' }));
 
-        expect(result.users[0].email).toBe('a@test.com');
-        expect(result.users[1].email).toBe('b@test.com');
+        expect(result.users[0].uid).toBe('u2');
+        expect(result.users[1].uid).toBe('u1');
     });
 
     // -------------------------------------------------------------------------
@@ -744,6 +775,9 @@ describe('getUserCount Cloud Function', () => {
         const mockProCount = vi.fn().mockResolvedValue({
             data: () => ({ count: 50 })
         });
+        const mockOnboardingCount = vi.fn().mockResolvedValue({
+            data: () => ({ count: 40 })
+        });
 
         // Mock implementation for chainable queries
         const mockQuery = {
@@ -756,6 +790,11 @@ describe('getUserCount Cloud Function', () => {
         mockCollection.mockImplementation((name) => {
             if (name === 'users') {
                 return {
+                    where: vi.fn().mockReturnValue({
+                        count: vi.fn().mockReturnValue({
+                            get: mockOnboardingCount
+                        })
+                    }),
                     count: vi.fn().mockReturnValue({
                         get: mockTotalCount
                     })
@@ -776,6 +815,7 @@ describe('getUserCount Cloud Function', () => {
             pro: 50,
             basic: 50,
             free: 50,
+            onboardingCompleted: 40,
             providers: {}
         });
         expect(mockCollection).toHaveBeenCalledWith('users');

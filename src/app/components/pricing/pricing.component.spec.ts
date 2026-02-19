@@ -38,6 +38,9 @@ class MockAppUserService {
     getUserByID() {
         return of({});
     }
+    setFreeTier() {
+        return Promise.resolve();
+    }
 }
 
 import { MatDialog } from '@angular/material/dialog';
@@ -55,10 +58,22 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 describe('PricingComponent', () => {
     let component: PricingComponent;
     let fixture: ComponentFixture<PricingComponent>;
-
+    const acceptedPoliciesUser = {
+        uid: 'test-uid',
+        acceptedPrivacyPolicy: true,
+        acceptedDataPolicy: true,
+        acceptedTos: true
+    };
+    const authServiceMock = {
+        user$: of(acceptedPoliciesUser as any),
+        currentUser: { uid: 'test-uid' }
+    };
 
 
     beforeEach(async () => {
+        authServiceMock.user$ = of(acceptedPoliciesUser as any);
+        authServiceMock.currentUser = { uid: 'test-uid' };
+
         await TestBed.configureTestingModule({
             imports: [PricingComponent],
             providers: [
@@ -66,10 +81,7 @@ describe('PricingComponent', () => {
                 { provide: AppUserService, useClass: MockAppUserService },
                 {
                     provide: AppAuthService,
-                    useValue: {
-                        user$: of(null),
-                        currentUser: { uid: 'test-uid' }
-                    }
+                    useValue: authServiceMock
                 },
                 { provide: MatDialog, useClass: MockMatDialog },
                 {
@@ -203,6 +215,59 @@ describe('PricingComponent', () => {
         expect(component.isLoading).toBe(false);
     });
 
+    it('should redirect to onboarding and skip checkout when required legal policies are missing', async () => {
+        const paymentService = TestBed.inject(AppPaymentService);
+        const router = TestBed.inject(Router);
+        const navigateSpy = vi.spyOn(router, 'navigate');
+        const checkoutSpy = vi.spyOn(paymentService, 'appendCheckoutSession');
+        const analyticsService = TestBed.inject(AppAnalyticsService);
+        const beginCheckoutSpy = vi.spyOn(analyticsService, 'logBeginCheckout');
+
+        authServiceMock.user$ = of({
+            uid: 'test-uid',
+            acceptedPrivacyPolicy: true,
+            acceptedDataPolicy: false,
+            acceptedTos: true
+        } as any);
+
+        await component.subscribe({ id: 'price_123', currency: 'USD', unit_amount: 1000 });
+
+        expect(navigateSpy).toHaveBeenCalledWith(
+            ['/onboarding'],
+            { queryParams: { returnUrl: '/subscriptions' } }
+        );
+        expect(checkoutSpy).not.toHaveBeenCalled();
+        expect(beginCheckoutSpy).not.toHaveBeenCalled();
+        expect(component.isLoading).toBe(false);
+        expect(component.loadingPriceId).toBeNull();
+    });
+
+    it('should redirect to onboarding and skip free-tier selection when required legal policies are missing', async () => {
+        const userService = TestBed.inject(AppUserService);
+        const router = TestBed.inject(Router);
+        const navigateSpy = vi.spyOn(router, 'navigate');
+        const setFreeTierSpy = vi.spyOn(userService, 'setFreeTier');
+        const analyticsService = TestBed.inject(AppAnalyticsService);
+        const selectFreeTierSpy = vi.spyOn(analyticsService, 'logSelectFreeTier');
+
+        authServiceMock.user$ = of({
+            uid: 'test-uid',
+            acceptedPrivacyPolicy: false,
+            acceptedDataPolicy: true,
+            acceptedTos: true
+        } as any);
+
+        await component.selectFreeTier();
+
+        expect(navigateSpy).toHaveBeenCalledWith(
+            ['/onboarding'],
+            { queryParams: { returnUrl: '/subscriptions' } }
+        );
+        expect(setFreeTierSpy).not.toHaveBeenCalled();
+        expect(selectFreeTierSpy).not.toHaveBeenCalled();
+        expect(component.isLoading).toBe(false);
+    });
+
     it('should reset loading state when document becomes visible', () => {
         // Set component to loading state
         component.isLoading = true;
@@ -227,6 +292,8 @@ describe('PricingComponent', () => {
         const logSpy = vi.spyOn(analyticsService, 'logBeginCheckout');
         const price = { id: 'price_123', currency: 'USD', unit_amount: 1000 };
 
+        authServiceMock.user$ = of(acceptedPoliciesUser as any);
+
         await component.subscribe(price);
 
         expect(logSpy).toHaveBeenCalledWith('price_123', 'USD', 10);
@@ -235,13 +302,15 @@ describe('PricingComponent', () => {
     it('should log select_freetier event on selectFreeTier', async () => {
         const analyticsService = TestBed.inject(AppAnalyticsService);
         const logSpy = vi.spyOn(analyticsService, 'logSelectFreeTier');
-        // Mock user existing
         const userService = TestBed.inject(AppUserService);
-        vi.spyOn(userService, 'getUserByID').mockReturnValue(of({ uid: 'test-uid' } as any));
+        const setFreeTierSpy = vi.spyOn(userService, 'setFreeTier').mockResolvedValue();
+
+        authServiceMock.user$ = of(acceptedPoliciesUser as any);
 
         await component.selectFreeTier();
 
         expect(logSpy).toHaveBeenCalled();
+        expect(setFreeTierSpy).toHaveBeenCalled();
     });
 
     it('should log manage_subscription event on manageSubscription', async () => {

@@ -1,0 +1,20 @@
+@if (isEmpty) {
+@for (item of skeletonItems; track $index) {
+<div class="metric-item metric-item--skeleton">
+    <span class="value skeleton-block skeleton-value"></span>
+    <span class="unit skeleton-block skeleton-unit"></span>
+</div>
+}
+} @else {
+@for (metric of metrics; track $index) {
+<div class="metric-item">
+    <span class="value">
+        {{ metric.value }}
+        @if (metric.subValue) {
+        <span class="sub-value">{{ metric.subValue }}</span>
+        }
+    </span>
+    <span class="unit">{{ metric.label }}</span>
+</div>
+}
+}

@@ -9,6 +9,7 @@ export interface AdminUser {
     email: string;
     displayName?: string;
     photoURL?: string;
+    onboardingCompleted?: boolean;
     customClaims: {
         stripeRole?: string;
         admin?: boolean;
@@ -122,13 +123,14 @@ export class AdminService {
         );
     }
 
-    getTotalUserCount(): Observable<{ total: number; pro: number; basic: number; free: number; providers: Record<string, number> }> {
-        return from(this.functionsService.call<void, { count: number; total: number; pro: number; basic: number; free: number; providers: Record<string, number> }>('getUserCount')).pipe(
+    getTotalUserCount(): Observable<{ total: number; pro: number; basic: number; free: number; onboardingCompleted: number; providers: Record<string, number> }> {
+        return from(this.functionsService.call<void, { count: number; total: number; pro: number; basic: number; free: number; onboardingCompleted?: number; providers: Record<string, number> }>('getUserCount')).pipe(
             map(result => ({
                 total: result.data.total ?? result.data.count, // Fallback for safety
                 pro: result.data.pro ?? 0,
                 basic: result.data.basic ?? 0,
                 free: result.data.free ?? 0,
+                onboardingCompleted: result.data.onboardingCompleted ?? 0,
                 providers: result.data.providers || {}
             }))
         );

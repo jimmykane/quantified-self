@@ -4,7 +4,19 @@ import { AppEventService } from '../../services/app.event.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { ChangeDetectorRef, NO_ERRORS_SCHEMA } from '@angular/core';
-import { EventInterface, User, Privacy, ActivityTypes, DataFeeling, Feelings } from '@sports-alliance/sports-lib';
+import {
+    ActivityTypes,
+    DataDistance,
+    DataDuration,
+    DataFeeling,
+    DataPaceAvg,
+    DataSpeedAvg,
+    DynamicDataLoader,
+    EventInterface,
+    Feelings,
+    Privacy,
+    User
+} from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 
@@ -62,6 +74,7 @@ describe('EventSummaryComponent', () => {
         component = fixture.componentInstance;
         component.event = mockEvent;
         component.user = mockUser;
+        component.unitSettings = {} as any;
         fixture.detectChanges();
     });
 
@@ -116,14 +129,66 @@ describe('EventSummaryComponent', () => {
 
         it('getHeroStats should return specific stats for Running', () => {
             const stats = component.getHeroStats();
-            // Running usually returns [DataDistance.type, DataDuration.type]
-            expect(stats.length).toBe(2);
+            expect(stats).toEqual([DataDuration.type, DataDistance.type, DataPaceAvg.type]);
+        });
+
+        it('getHeroStats should use pace family for Trail Running', () => {
+            component.event = {
+                ...mockEvent,
+                getActivities: () => [{ type: ActivityTypes.TrailRunning }],
+            } as any;
+
+            fixture.detectChanges();
+            expect(component.getHeroStats()).toEqual([DataDuration.type, DataDistance.type, DataPaceAvg.type]);
+        });
+
+        it('getHeroStats should use speed family for Cycling', () => {
+            component.event = {
+                ...mockEvent,
+                getActivities: () => [{ type: ActivityTypes.Cycling }],
+            } as any;
+
+            fixture.detectChanges();
+            expect(component.getHeroStats()).toEqual([DataDuration.type, DataDistance.type, DataSpeedAvg.type]);
+        });
+
+        it('should resolve hero stat value from unit-aware DynamicDataLoader output', () => {
+            const basePaceStat = {
+                getType: () => DataPaceAvg.type,
+                getDisplayValue: () => 'base-pace',
+                getDisplayUnit: () => 'base-unit'
+            } as any;
+
+            const dynamicSpy = vi.spyOn(DynamicDataLoader, 'getUnitBasedDataFromDataInstance')
+                .mockReturnValue([{
+                    getType: () => DataPaceAvg.type,
+                    getDisplayValue: () => '5:05',
+                    getDisplayUnit: () => 'min/km'
+                }] as any);
+
+            component.event = {
+                ...mockEvent,
+                getActivities: () => [{ type: ActivityTypes.Running }],
+                getStat: (type: string) => {
+                    if (type === DataPaceAvg.type) {
+                        return basePaceStat;
+                    }
+                    return null;
+                }
+            } as any;
+
+            fixture.detectChanges();
+
+            expect(component.getStatValue(DataPaceAvg.type)).toBe('5:05');
+            expect(component.getStatUnit(DataPaceAvg.type)).toBe('min/km');
+            expect(dynamicSpy).toHaveBeenCalled();
+            dynamicSpy.mockRestore();
         });
     });
 
     describe('summary actions placement', () => {
         it('should render show more action in summary actions area outside the stats grid component', () => {
-            const outsideAction = fixture.nativeElement.querySelector('.summary-actions .show-more-button');
+            const outsideAction = fixture.nativeElement.querySelector('.event-summary-actions .show-more-button');
             const insideGridAction = fixture.nativeElement.querySelector('app-event-card-stats-grid .show-more-button');
 
             expect(outsideAction).toBeTruthy();
@@ -146,7 +211,7 @@ describe('EventSummaryComponent', () => {
 
             devicesFixture.detectChanges();
 
-            const sensorsAction = devicesFixture.nativeElement.querySelector('.summary-actions .devices-button');
+            const sensorsAction = devicesFixture.nativeElement.querySelector('.event-summary-actions .devices-button');
             expect(devicesComponent.hasDevices).toBe(true);
             expect(sensorsAction).toBeTruthy();
         });

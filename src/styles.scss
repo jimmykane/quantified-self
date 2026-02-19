@@ -5,9 +5,22 @@
 @use 'styles/forms';
 @use 'styles/search';
 @use 'styles/segmented-buttons';
-@use 'styles/google-maps';
 @use 'styles/panels';
 @use 'styles/icons';
+
+/* Bundle app fonts locally to avoid runtime dependency on external font CDNs. */
+@import '@fontsource/noto-sans/300.css';
+@import '@fontsource/noto-sans/400.css';
+@import '@fontsource/noto-sans/500.css';
+@import '@fontsource/noto-sans/600.css';
+@import '@fontsource/noto-sans/700.css';
+@import '@fontsource/noto-sans/800.css';
+
+@import '@fontsource/barlow-condensed/300.css';
+@import '@fontsource/barlow-condensed/400.css';
+@import '@fontsource/barlow-condensed/600.css';
+@import '@fontsource/barlow-condensed/700.css';
+@import '@fontsource/material-symbols-rounded/400.css';
 
 // Include the common styles for Angular Material. We include this here so that you only
 // have to load a single css file for Angular Material in your app.
@@ -71,7 +84,7 @@ $app-dark-theme: mat.m2-define-dark-theme((color: (primary: $dark-primary,
 }
 
 
-// Font face removed - using Google Fonts (Noto Sans)
+// Font face definitions are provided by local @fontsource imports above.
 
 
 // ... (existing imports)
@@ -770,6 +783,7 @@ mat-table {
     box-shadow:
       0 8px 32px rgba(0, 0, 0, 0.12),
       0 2px 8px rgba(0, 0, 0, 0.08) !important;
+    transition: box-shadow 0.25s ease, border-color 0.25s ease, background-color 0.25s ease !important;
   }
 
   .mat-mdc-dialog-title {

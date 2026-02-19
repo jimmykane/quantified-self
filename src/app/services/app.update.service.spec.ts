@@ -16,6 +16,7 @@ describe('AppUpdateService', () => {
     let versionUpdatesSubject: Subject<VersionReadyEvent>;
     let unrecoverableSubject: Subject<any>;
     let mockWindow: any;
+    let localStorageState: Record<string, string>;
 
     beforeEach(() => {
         versionUpdatesSubject = new Subject<VersionReadyEvent>();
@@ -24,7 +25,13 @@ describe('AppUpdateService', () => {
         mockWindow = {
             location: {
                 reload: vi.fn()
-            }
+            },
+            localStorage: {
+                getItem: vi.fn((key: string) => localStorageState[key] ?? null),
+                setItem: vi.fn((key: string, value: string) => {
+                    localStorageState[key] = value;
+                })
+            },
         };
 
         windowServiceMock = {
@@ -49,6 +56,7 @@ describe('AppUpdateService', () => {
             info: vi.fn(),
             warn: vi.fn()
         };
+        localStorageState = {};
 
         TestBed.configureTestingModule({
             providers: [
@@ -67,7 +75,11 @@ describe('AppUpdateService', () => {
     });
 
     it('should show snackbar when version is ready', () => {
-        versionUpdatesSubject.next({ type: 'VERSION_READY' } as VersionReadyEvent);
+        versionUpdatesSubject.next({
+            type: 'VERSION_READY',
+            currentVersion: { hash: 'v1-current', appData: {} },
+            latestVersion: { hash: 'v1-latest', appData: {} }
+        } as VersionReadyEvent);
 
         expect(snackBarMock.open).toHaveBeenCalledWith(
             'There is a new version available',
@@ -78,7 +90,11 @@ describe('AppUpdateService', () => {
 
     it('should activate update and reload when snackbar action is clicked', async () => {
         // Emit version ready event
-        versionUpdatesSubject.next({ type: 'VERSION_READY' } as VersionReadyEvent);
+        versionUpdatesSubject.next({
+            type: 'VERSION_READY',
+            currentVersion: { hash: 'v1-current', appData: {} },
+            latestVersion: { hash: 'v1-latest', appData: {} }
+        } as VersionReadyEvent);
 
         // Wait for async operations
         await new Promise(resolve => setTimeout(resolve, 10));
@@ -93,5 +109,46 @@ describe('AppUpdateService', () => {
 
         expect(loggerMock.error).toHaveBeenCalled();
         expect(mockWindow.location.reload).toHaveBeenCalled();
+    });
+
+    it('should not show snackbar more than once for the same version hash', () => {
+        const event = {
+            type: 'VERSION_READY',
+            currentVersion: { hash: 'v1-current', appData: {} },
+            latestVersion: { hash: 'v1-latest', appData: {} }
+        } as VersionReadyEvent;
+
+        versionUpdatesSubject.next(event);
+        versionUpdatesSubject.next(event);
+
+        expect(snackBarMock.open).toHaveBeenCalledTimes(1);
+    });
+
+    it('should show snackbar for a different version hash', () => {
+        versionUpdatesSubject.next({
+            type: 'VERSION_READY',
+            currentVersion: { hash: 'v1-current', appData: {} },
+            latestVersion: { hash: 'v1-latest', appData: {} }
+        } as VersionReadyEvent);
+
+        versionUpdatesSubject.next({
+            type: 'VERSION_READY',
+            currentVersion: { hash: 'v1-latest', appData: {} },
+            latestVersion: { hash: 'v2-latest', appData: {} }
+        } as VersionReadyEvent);
+
+        expect(snackBarMock.open).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not show snackbar when version hash was already stored', () => {
+        localStorageState['app.update.seen-version-hashes'] = JSON.stringify(['v1-latest']);
+
+        versionUpdatesSubject.next({
+            type: 'VERSION_READY',
+            currentVersion: { hash: 'v1-current', appData: {} },
+            latestVersion: { hash: 'v1-latest', appData: {} }
+        } as VersionReadyEvent);
+
+        expect(snackBarMock.open).not.toHaveBeenCalled();
     });
 });

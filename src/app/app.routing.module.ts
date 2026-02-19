@@ -81,7 +81,7 @@ const routes: Routes = [
   {
     path: 'payment/cancel',
     loadComponent: () => import('./components/payment-cancel/payment-cancel.component').then(m => m.PaymentCancelComponent),
-    canMatch: [authGuard],
+    canMatch: [authGuard, onboardingGuard],
     data: { title: 'Payment Cancelled' }
   },
   {

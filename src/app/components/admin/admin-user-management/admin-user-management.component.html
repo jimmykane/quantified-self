@@ -20,7 +20,7 @@
         </div>
 
         <!-- User Stats -->
-        <div class="stats-grid" style="margin-bottom: 24px;">
+        <div class="stats-grid">
             <!-- Total Users -->
             <div class="glass-card app-stat-card users">
                 <div class="app-stat-header">
@@ -63,7 +63,19 @@
                     <mat-icon>money_off</mat-icon>
                     <span>Free Users</span>
                 </div>
-                <div class="app-stat-value" *ngIf="userStats" style="opacity: 0.7;">{{ userStats.free }}</div>
+                <div class="app-stat-value app-stat-value-muted" *ngIf="userStats">{{ userStats.free }}</div>
+                <div class="app-spinner-mini" *ngIf="!userStats">
+                    <mat-spinner diameter="24"></mat-spinner>
+                </div>
+            </div>
+
+            <!-- Onboarded Users -->
+            <div class="glass-card app-stat-card status-success">
+                <div class="app-stat-header">
+                    <mat-icon>how_to_reg</mat-icon>
+                    <span>Onboarded Users</span>
+                </div>
+                <div class="app-stat-value" *ngIf="userStats">{{ userStats.onboardingCompleted }}</div>
                 <div class="app-spinner-mini" *ngIf="!userStats">
                     <mat-spinner diameter="24"></mat-spinner>
                 </div>
@@ -71,17 +83,17 @@
         </div>
 
         <!-- Auth Provider Breakdown Chart -->
-        <div class="glass-card" style="margin-bottom: 24px;">
+        <div class="glass-card chart-card">
             <h3 class="chart-header">
-                <mat-icon style="margin-right: 8px; vertical-align: middle;">security</mat-icon>
+                <mat-icon>security</mat-icon>
                 Auth Provider Breakdown
             </h3>
 
-            <div class="chart-wrapper" style="padding: 16px;">
+            <div class="chart-wrapper">
                 <div #authChart class="echart-surface"></div>
             </div>
 
-            <div *ngIf="!userStats?.providers" class="empty-state" style="padding: 0 24px 24px;">
+            <div *ngIf="!userStats?.providers" class="empty-state chart-empty-state">
                 No provider data available
             </div>
         </div>
@@ -97,7 +109,7 @@
                 </button>
             </mat-form-field>
 
-            <mat-form-field appearance="outline" class="qs-filter-field" style="max-width: 200px;"
+            <mat-form-field appearance="outline" class="qs-filter-field"
                 subscriptSizing="dynamic">
                 <mat-label>Filter Service</mat-label>
                 <mat-select [value]="filterService" (selectionChange)="onFilterServiceChange($event.value)">
@@ -119,7 +131,8 @@
             </div>
 
             <div class="table-wrapper">
-                <table mat-table [dataSource]="users" matSort (matSortChange)="onSortChange($event)">
+                <table mat-table [dataSource]="users" matSort [matSortActive]="sortField"
+                    [matSortDirection]="sortDirection" matSortDisableClear (matSortChange)="onSortChange($event)">
 
                     <!-- Photo Column -->
                     <ng-container matColumnDef="photoURL">
@@ -191,11 +204,11 @@
                     <ng-container matColumnDef="services">
                         <th mat-header-cell *matHeaderCellDef> Services </th>
                         <td mat-cell *matCellDef="let user">
-                            <div style="display: flex; flex-direction: column; gap: 4px; padding: 4px 0;">
+                            <div class="services-cell">
                                 <ng-container *ngFor="let service of user.connectedServices">
-                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                    <div class="service-row">
                                         <img [src]="getServiceLogo(service.provider)" [alt]="service.provider"
-                                            style="height: 18px; width: 18px;">
+                                            class="service-logo">
                                         <span class="text-detail-date">
                                             {{ formatConnectionDate(service.connectedAt) }}
                                         </span>
@@ -209,13 +222,23 @@
                     <!-- Created Column -->
                     <ng-container matColumnDef="created">
                         <th mat-header-cell *matHeaderCellDef mat-sort-header> Created </th>
-                        <td mat-cell *matCellDef="let user"> {{user.metadata.creationTime | date:'shortDate'}} </td>
+                        <td mat-cell *matCellDef="let user"> {{ formatCreatedDate(user.metadata.creationTime) || '-' }} </td>
                     </ng-container>
 
                     <!-- Last Login Column -->
                     <ng-container matColumnDef="lastLogin">
                         <th mat-header-cell *matHeaderCellDef mat-sort-header> Last Login </th>
-                        <td mat-cell *matCellDef="let user"> {{user.metadata.lastSignInTime | date:'short'}} </td>
+                        <td mat-cell *matCellDef="let user"> {{ formatLastLoginDate(user.metadata.lastSignInTime) || '-' }} </td>
+                    </ng-container>
+
+                    <!-- Onboarding Column -->
+                    <ng-container matColumnDef="onboarding">
+                        <th mat-header-cell *matHeaderCellDef> Onboarding </th>
+                        <td mat-cell *matCellDef="let user">
+                            <span class="status-badge" [ngClass]="user.onboardingCompleted ? 'active' : 'disabled'">
+                                {{ user.onboardingCompleted ? 'Completed' : 'Pending' }}
+                            </span>
+                        </td>
                     </ng-container>
 
                     <!-- Status Column -->
@@ -244,7 +267,7 @@
 
                     <!-- Row shown when there is no matching data. -->
                     <tr class="mat-row" *matNoDataRow>
-                        <td class="mat-cell" colspan="10">
+                        <td class="mat-cell" [attr.colspan]="displayedColumns.length">
                             <span *ngIf="searchTerm">No users found matching "{{searchTerm}}"</span>
                             <span *ngIf="!searchTerm && !isLoading">No users found</span>
                         </td>

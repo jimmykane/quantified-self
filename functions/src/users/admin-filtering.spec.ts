@@ -7,7 +7,8 @@ const {
     mockAuth,
     mockCollection,
     mockFirestore,
-    mockOnCall
+    mockOnCall,
+    mockGetAll
 } = vi.hoisted(() => {
     const mockListUsers = vi.fn();
     const mockAuth = { listUsers: mockListUsers };
@@ -15,9 +16,11 @@ const {
 
     // Mock Collection
     const mockCollection = vi.fn() as any;
+    const mockGetAll = vi.fn();
     const mockFirestore = vi.fn(() => ({
         collection: mockCollection,
-        collectionGroup: mockCollection
+        collectionGroup: mockCollection,
+        getAll: mockGetAll
     }));
 
     return {
@@ -26,6 +29,7 @@ const {
         mockOnCall,
         mockCollection,
         mockFirestore,
+        mockGetAll,
     };
 });
 
@@ -79,6 +83,7 @@ describe('listUsers Cloud Function - Service Filtering', () => {
         });
 
         // Default Firestore behavior: return empty
+        mockGetAll.mockResolvedValue([]);
         mockCollection.mockReturnValue({
             select: vi.fn().mockReturnThis(),
             get: vi.fn().mockResolvedValue({ docs: [] }),

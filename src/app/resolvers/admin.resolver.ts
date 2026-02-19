@@ -7,7 +7,7 @@ import { map, catchError } from 'rxjs/operators';
 
 export interface AdminResolverData {
     usersData: { users: AdminUser[], totalCount: number };
-    userStats: { total: number, pro: number, basic: number, free: number, providers: Record<string, number> } | null;
+    userStats: { total: number, pro: number, basic: number, free: number, onboardingCompleted: number, providers: Record<string, number> } | null;
 }
 
 export const adminResolver: ResolveFn<AdminResolverData> = (route, state) => {
@@ -18,8 +18,8 @@ export const adminResolver: ResolveFn<AdminResolverData> = (route, state) => {
     const initialParams: ListUsersParams = {
         page: 0,
         pageSize: 10,
-        sortField: 'email',
-        sortDirection: 'asc'
+        sortField: 'created',
+        sortDirection: 'desc'
     };
 
     return forkJoin({

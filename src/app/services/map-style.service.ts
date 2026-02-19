@@ -1,7 +1,13 @@
 import { Injectable } from '@angular/core';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { LoggerService } from './logger.service';
-import { MapStyleName, MapStyleState, MapStyleServiceInterface } from './map/map-style.types';
+import {
+  MapStyleName,
+  MapStyleOption,
+  MapStyleState,
+  MapStyleServiceInterface,
+  SUPPORTED_MAP_STYLES
+} from './map/map-style.types';
 import { MapboxStyleSynchronizer } from './map/mapbox-style-synchronizer';
 
 @Injectable({
@@ -12,6 +18,13 @@ export class MapStyleService implements MapStyleServiceInterface {
   readonly standard = 'mapbox://styles/mapbox/standard';
   readonly standardSatellite = 'mapbox://styles/mapbox/standard-satellite';
   readonly outdoors = 'mapbox://styles/mapbox/outdoors-v12';
+  private readonly supportedStyles: readonly MapStyleName[] = SUPPORTED_MAP_STYLES;
+  private readonly supportedStyleSet = new Set<MapStyleName>(this.supportedStyles);
+  private readonly supportedStyleOptions: readonly MapStyleOption[] = [
+    { value: 'default', label: 'Default' },
+    { value: 'satellite', label: 'Satellite' },
+    { value: 'outdoors', label: 'Outdoors' },
+  ];
 
   constructor(private logger: LoggerService) { }
 
@@ -19,11 +32,31 @@ export class MapStyleService implements MapStyleServiceInterface {
     return new MapboxStyleSynchronizer(map, this, this.logger);
   }
 
+  public getDefaultStyle(): MapStyleName {
+    return 'default';
+  }
+
+  public getSupportedStyles(): readonly MapStyleName[] {
+    return this.supportedStyles;
+  }
+
+  public getSupportedStyleOptions(): readonly MapStyleOption[] {
+    return this.supportedStyleOptions;
+  }
+
+  public normalizeStyle(mapStyle: string | null | undefined): MapStyleName {
+    if (typeof mapStyle !== 'string') {
+      return this.getDefaultStyle();
+    }
+    const normalizedStyle = mapStyle.trim().toLowerCase() as MapStyleName;
+    return this.supportedStyleSet.has(normalizedStyle) ? normalizedStyle : this.getDefaultStyle();
+  }
+
   /**
    * Resolve the style URL (and preset, if applicable) given a logical style + theme.
    */
   public resolve(mapStyle: MapStyleName | undefined, theme: AppThemes): MapStyleState {
-    const style = mapStyle ?? 'default';
+    const style = this.normalizeStyle(mapStyle);
     switch (style) {
       case 'satellite':
         // User requested no dark style for satellite

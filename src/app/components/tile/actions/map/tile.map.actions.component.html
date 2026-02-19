@@ -39,12 +39,12 @@
     </section>
     <section mat-menu-item>
       <mat-form-field>
-        <mat-label>Map Type</mat-label>
-        <mat-select placeholder="Map type" [value]="mapType" panelClass="qs-config-submenu"
-          (selectionChange)="changeMapType($event)">
-          @for (mapType of mapTypes | keyvalue; track mapType) {
-          <mat-option [value]="mapType.value">
-            {{mapType.key}}
+        <mat-label>Map Style</mat-label>
+        <mat-select placeholder="Map style" [value]="mapStyle" panelClass="qs-config-submenu"
+          (selectionChange)="changeMapStyle($event)">
+          @for (style of mapStyleOptions; track style.value) {
+          <mat-option [value]="style.value">
+            {{ style.label }}
           </mat-option>
           }
         </mat-select>

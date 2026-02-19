@@ -160,6 +160,9 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
     const textColor = darkTheme ? '#f5f5f5' : '#1f1f1f';
     const axisColor = darkTheme ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.24)';
     const axisLabelFontSize = this.isMobile ? 11 : 12;
+    const tooltipExtraCssText = this.isMobile
+      ? 'max-width: min(80vw, 280px); white-space: normal; overflow-wrap: anywhere; word-break: break-word;'
+      : '';
 
     if (powerSeries.length === 0) {
       return {
@@ -317,9 +320,27 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
         },
       },
       tooltip: {
-        trigger: 'item',
-        appendToBody: true,
-        confine: false,
+        trigger: this.isMobile ? 'axis' : 'item',
+        triggerOn: this.isMobile ? 'click' : 'mousemove|click',
+        alwaysShowContent: this.isMobile,
+        axisPointer: this.isMobile
+          ? {
+            type: 'line',
+            snap: true,
+            label: { show: false },
+            handle: {
+              show: true,
+              size: 22,
+              margin: 8,
+              color: darkTheme ? '#90caf9' : '#1976d2',
+              shadowBlur: 3,
+              shadowColor: darkTheme ? 'rgba(0,0,0,0.35)' : 'rgba(0,0,0,0.2)',
+            },
+          }
+          : undefined,
+        appendToBody: !this.isMobile,
+        confine: this.isMobile,
+        extraCssText: tooltipExtraCssText,
         backgroundColor: darkTheme ? '#222222' : '#ffffff',
         borderColor: darkTheme ? '#555555' : '#d6d6d6',
         borderWidth: 1,
@@ -412,7 +433,11 @@ export class EventPowerCurveComponent implements AfterViewInit, OnChanges, OnDes
   }
 
   private formatTooltip(params: unknown, hasMultipleActivities: boolean): string {
-    const entry = params as {
+    const resolved = Array.isArray(params)
+      ? params.find((item: any) => item && item.data)
+      : params;
+
+    const entry = resolved as {
       seriesName?: string;
       data?: {
         duration?: unknown;

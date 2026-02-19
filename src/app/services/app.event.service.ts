@@ -22,7 +22,7 @@ import { EventWriter, FirestoreAdapter, StorageAdapter, OriginalFile } from '../
 import { generateActivityID, generateEventID } from '../../../functions/src/shared/id-generator';
 import { createParsingOptions } from '../../../functions/src/shared/parsing-options';
 import { Bytes, serverTimestamp } from 'firebase/firestore';
-import { Storage, ref, uploadBytes, getBytes } from '@angular/fire/storage';
+import { Storage, ref, uploadBytes } from '@angular/fire/storage';
 import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
@@ -41,12 +41,11 @@ import { AppEventUtilities } from '../utils/app.event.utilities';
 import { LoggerService } from './logger.service';
 import { AppFileService } from './app.file.service';
 import { BrowserCompatibilityService } from './browser.compatibility.service';
-import { getMetadata } from '@angular/fire/storage';
 import { AppCacheService } from './app.cache.service';
 import { BenchmarkEventAdapter } from './benchmark-event.adapter';
 import { SPORTS_LIB_VERSION } from '../constants/sports-lib-version.browser';
 import { buildActivityEditWritePayload, buildActivityWriteData, buildEventWriteData } from '../utils/activity-edit.persistence';
-import { AppOriginalFileHydrationService } from './app.original-file-hydration.service';
+import { AppOriginalFileHydrationService, DownloadFileOptions } from './app.original-file-hydration.service';
 
 export interface GetEventsOnceOptions {
   preferCache?: boolean;
@@ -60,6 +59,15 @@ export interface GetEventsOnceResult {
   source: EventsOnceSource;
 }
 
+/**
+ * Controls how parsed data from original files is applied to an existing event.
+ * - `attach_streams_only` keeps existing activities and updates their streams.
+ * - `replace_activities` clears existing activities and replaces them with parsed activities.
+ *
+ * Use `replace_activities` only in regeneration/rebuild flows where callers explicitly
+ * require full activity replacement from source files. For normal read/load flows,
+ * use `attach_streams_only`.
+ */
 export type StreamHydrationMode = 'attach_streams_only' | 'replace_activities';
 
 
@@ -806,7 +814,7 @@ export class AppEventService implements OnDestroy {
    * @param streamTypes
    * @param merge
    * @param skipEnrichment
-   * @param hydrationMode
+   * @param hydrationMode `replace_activities` is intended for regeneration callers only.
    * @private
    */
   public attachStreamsToEventWithActivities(
@@ -816,6 +824,7 @@ export class AppEventService implements OnDestroy {
     merge: boolean = true,
     skipEnrichment: boolean = false,
     hydrationMode: StreamHydrationMode = 'attach_streams_only',
+    downloadFileOptions?: DownloadFileOptions,
   ): Observable<EventInterface> {
     this.logger.log(`[AppEventService] attachStreams for ${event.getID()}. originalFile: ${!!event.originalFile}, originalFiles: ${!!event.originalFiles}`);
     const hasOriginalFiles = (event.originalFiles && event.originalFiles.length > 0)
@@ -828,12 +837,22 @@ export class AppEventService implements OnDestroy {
       return throwError(() => new Error('No original source file metadata found for event hydration.'));
     }
 
-    return from(this.originalFileHydrationService.parseEventFromOriginalFiles(event, {
+    const parseOptions = {
       skipEnrichment,
       strictAllFilesRequired: true,
       preserveActivityIdsFromEvent: true,
       mergeMultipleFiles: true,
-    })).pipe(
+      ...(streamTypes && streamTypes.length > 0 ? { streamTypes } : {}),
+    };
+
+    const parseOptionsWithDownload = downloadFileOptions?.metadataCacheTtlMs === undefined
+      ? parseOptions
+      : {
+        ...parseOptions,
+        metadataCacheTtlMs: downloadFileOptions.metadataCacheTtlMs,
+      };
+
+    return from(this.originalFileHydrationService.parseEventFromOriginalFiles(event, parseOptionsWithDownload)).pipe(
       map((parseResult) => {
         const fullEvent = parseResult.finalEvent;
         if (!fullEvent) {
@@ -845,6 +864,7 @@ export class AppEventService implements OnDestroy {
           return fullEvent;
         }
 
+        // Regeneration mode: replace activity objects with parsed ones from source files.
         if (hydrationMode === 'replace_activities') {
           event.clearActivities();
           event.addActivities(fullEvent.getActivities());
@@ -903,11 +923,8 @@ export class AppEventService implements OnDestroy {
       }
 
       const parsedStreams = parsedActivity.getAllStreams();
-      const filteredStreams = streamTypes && streamTypes.length > 0
-        ? parsedStreams.filter((stream) => streamTypes.includes(stream.type))
-        : parsedStreams;
       existingActivity.clearStreams();
-      existingActivity.addStreams(filteredStreams);
+      existingActivity.addStreams(parsedStreams);
       parsedActivitiesByID.delete(existingActivityID);
       attachedCount += 1;
     });
@@ -928,7 +945,6 @@ export class AppEventService implements OnDestroy {
         unmatchedParsedActivityIDs,
         parsedActivitiesMissingID,
         duplicateParsedActivityIDs: Array.from(duplicateParsedIDs),
-        streamTypeFilter: streamTypes && streamTypes.length > 0 ? streamTypes : 'all',
       });
     }
   }
@@ -996,8 +1012,11 @@ export class AppEventService implements OnDestroy {
 
   // ... (imports)
 
-  public async downloadFile(path: string): Promise<ArrayBuffer> {
-    return this.originalFileHydrationService.downloadFile(path);
+  public async downloadFile(path: string, options?: DownloadFileOptions): Promise<ArrayBuffer> {
+    if (options === undefined) {
+      return this.originalFileHydrationService.downloadFile(path);
+    }
+    return this.originalFileHydrationService.downloadFile(path, options);
   }
 
   private async decompressIfNeeded(buffer: ArrayBuffer, path: string): Promise<ArrayBuffer> {

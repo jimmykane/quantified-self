@@ -1,0 +1,35 @@
+<div class="summary-primary-info performance-header" [class.summary-primary-info--force-mobile]="forceMobileLayout">
+  <div class="identity-section">
+    <div class="activity-icon-container" [class.activity-icon-container--clickable]="iconClickable"
+      (click)="onIconContainerClick()">
+      <app-activity-type-icon class="activity-main-icon" [activityType]="resolvedIconActivityType" size="32px"
+        [matTooltip]="iconTooltip" [matTooltipDisabled]="!iconTooltip"></app-activity-type-icon>
+      <div class="summary-icon-badge">
+        <ng-content select="[summary-icon-badge]"></ng-content>
+      </div>
+    </div>
+    <div class="text-stack">
+      <div class="top-meta">
+        @if (startDate) {
+        <span class="date"><b>{{ startDate | date:'d MMM yyyy' }}</b></span>
+        <span class="time-separator">at</span>
+        <span class="time">{{ startDate | date:'shortTime' }}</span>
+        } @else {
+        <span class="time">{{ fallbackTopMetaText }}</span>
+        }
+        <ng-content select="[summary-top-meta-suffix]"></ng-content>
+      </div>
+      <div class="chips-row">
+        <span class="chip activity-chip">{{ activityType || 'Activity' }}</span>
+        <ng-content select="[summary-chips]"></ng-content>
+      </div>
+    </div>
+  </div>
+
+  <div class="metrics-divider" aria-hidden="true"></div>
+  <app-hero-metrics [metrics]="metrics"></app-hero-metrics>
+
+  <div class="summary-actions">
+    <ng-content select="[summary-actions]"></ng-content>
+  </div>
+</div>

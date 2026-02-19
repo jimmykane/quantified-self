@@ -492,8 +492,17 @@ export class AppUserService implements OnDestroy {
       }
 
       if (Object.keys(propertiesToUpdate).length > 0) {
-        promises.push(updateDoc(doc(this.firestore, 'users', user.uid), propertiesToUpdate)
-          .catch(err => {
+        const userDocRef = doc(this.firestore, 'users', user.uid);
+        promises.push(updateDoc(userDocRef, propertiesToUpdate)
+          .catch(async err => {
+            const code = (err as { code?: string })?.code;
+            const isMissingDoc = code === 'not-found' || code === 'firestore/not-found';
+            if (isMissingDoc) {
+              this.logger.warn('[AppUserService] Main user doc missing; falling back to upsert merge.');
+              await setDoc(userDocRef, propertiesToUpdate, { merge: true });
+              return;
+            }
+
             this.logger.error('[AppUserService] Main user doc update FAILED', err);
             throw err;
           })

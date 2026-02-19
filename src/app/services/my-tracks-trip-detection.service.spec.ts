@@ -41,7 +41,7 @@ describe('MyTracksTripDetectionService', () => {
     expect(athensTrips[1].isRevisit).toBe(true);
   });
 
-  it('rejoins same-destination visits when gap is short and no destination is in between', () => {
+  it('does not report a single detected trip even when same-destination visits are rejoined', () => {
     const detectedTrips = service.detectTrips([
       input('it-1', '2025-05-07T06:00:00Z', 41.9028, 12.4964),
       input('it-2', '2025-05-08T06:00:00Z', 41.9010, 12.4990),
@@ -53,12 +53,7 @@ describe('MyTracksTripDetectionService', () => {
       input('it-8', '2025-05-21T10:00:00Z', 41.9020, 12.4970),
     ]);
 
-    expect(detectedTrips).toHaveLength(1);
-    expect(detectedTrips[0].activityCount).toBe(8);
-    expect(detectedTrips[0].destinationVisitCount).toBe(1);
-    expect(detectedTrips[0].isRevisit).toBe(false);
-    expect(detectedTrips[0].startDate.toISOString()).toBe('2025-05-07T06:00:00.000Z');
-    expect(detectedTrips[0].endDate.toISOString()).toBe('2025-05-21T10:00:00.000Z');
+    expect(detectedTrips).toEqual([]);
   });
 
   it('keeps A-B-C as separate destinations', () => {
@@ -131,7 +126,7 @@ describe('MyTracksTripDetectionService', () => {
     expect(detectedTrips).toEqual([]);
   });
 
-  it('keeps small remote trips when only home windows are suppressed', () => {
+  it('does not report a single remote trip when home windows are suppressed', () => {
     const detectedTrips = service.detectTrips([
       input('home-1', '2024-05-01T08:00:00Z', 37.9800, 23.7200),
       input('home-2', '2024-05-01T12:00:00Z', 37.9810, 23.7210),
@@ -141,10 +136,7 @@ describe('MyTracksTripDetectionService', () => {
       input('remote-2', '2024-05-04T09:00:00Z', 28.2300, 84.0000),
     ]);
 
-    expect(detectedTrips).toHaveLength(1);
-    expect(detectedTrips[0].activityCount).toBe(2);
-    expect(Math.abs(detectedTrips[0].centroidLat - 28.225)).toBeLessThan(0.2);
-    expect(Math.abs(detectedTrips[0].centroidLng - 83.995)).toBeLessThan(0.2);
+    expect(detectedTrips).toEqual([]);
   });
 
   it('returns deterministic trip IDs regardless of input order', () => {

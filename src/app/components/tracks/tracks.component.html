@@ -1,6 +1,8 @@
-<mat-card class="mat-elevation-z0">
+<mat-card class="tracks-map-shell mat-elevation-z0">
   @if (user) {
   <app-peek-panel class="tracks-search-peek" position="top" topAnchor="center"
+    [expanded]="searchPeekExpanded()"
+    (expandedChange)="searchPeekExpanded.set($event)"
     [defaultExpanded]="searchPeekDefaultExpanded()"
     borderMode="none" [expandedSizePx]="332" [collapsedSizePx]="28" ariaLabelExpand="Expand filters"
     ariaLabelCollapse="Collapse filters">
@@ -14,13 +16,43 @@
   }
 
   <div #mapDiv id="map"></div>
-  <div class="map-style-controls">
-    <mat-button-toggle-group appearance="legacy" name="mapStyle" aria-label="Map Style" [disabled]="isLoading()"
-      [value]="user?.settings?.myTracksSettings?.mapStyle || 'default'" (change)="setMapStyle($any($event).value)">
-      <mat-button-toggle value="default">Default</mat-button-toggle>
-      <mat-button-toggle value="satellite">Satellite</mat-button-toggle>
-      <mat-button-toggle value="outdoors">Outdoors</mat-button-toggle>
-    </mat-button-toggle-group>
+  @if (selectedStartPoint(); as startPoint) {
+  @if (selectedStartPointScreen(); as startPointScreen) {
+  @if (getStartPointPopupContent(startPoint); as popupContent) {
+  <div #trackStartPopupAnchor class="track-start-popup-anchor" [style.left.px]="startPointScreen.x" [style.top.px]="startPointScreen.y">
+    <app-map-activity-popup
+      [activityType]="popupContent.eventType"
+      [iconActivityType]="popupContent.iconEventType"
+      [startDate]="popupContent.startDate"
+      [fallbackTopMetaText]="'Activity start'"
+      [metrics]="popupContent.metrics"
+      [event]="resolveStartPointEvent(startPoint)"
+      [user]="user"
+      [actionLabel]="'Open activity'"
+      [dismissible]="false"
+      [forceMobileLayout]="true"
+      (actionClick)="openSelectedStartPointEvent()">
+    </app-map-activity-popup>
+  </div>
+  }
+  }
+  }
+  <div class="map-layers-controls">
+    <app-map-layers-actions
+      [user]="user"
+      [disabled]="isLoading()"
+      [mapStyle]="(user?.settings?.mapSettings?.mapStyle || 'default')"
+      [is3D]="!!user?.settings?.mapSettings?.is3D"
+      [showJumpHeatmap]="isJumpHeatmapEnabled()"
+      [enableJumpHeatmapToggle]="true"
+      [enable3DToggle]="true"
+      [enableLapsToggle]="false"
+      [enableArrowsToggle]="false"
+      [analyticsEventName]="'my_tracks_map_settings_change'"
+      (mapStyleChange)="setMapStyle($event)"
+      (is3DChange)="onMyTracks3DToggle($event)"
+      (showJumpHeatmapChange)="onShowJumpHeatmapToggle($event)">
+    </app-map-layers-actions>
     @if (isLoading()) {
     <mat-spinner diameter="24"></mat-spinner>
     }

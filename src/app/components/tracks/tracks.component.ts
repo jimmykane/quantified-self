@@ -1,16 +1,16 @@
-import { Component, Inject, ViewChild, ElementRef, ChangeDetectorRef, NgZone, effect, signal, WritableSignal, computed, PLATFORM_ID, OnInit, OnDestroy, inject } from '@angular/core';
+import { Component, ViewChild, ElementRef, ChangeDetectorRef, NgZone, effect, signal, WritableSignal, computed, PLATFORM_ID, OnInit, OnDestroy, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import { AppEventService } from '../../services/app.event.service';
 import { take, debounceTime, filter } from 'rxjs/operators';
-import { MatSnackBar } from '@angular/material/snack-bar';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { Subject, Subscription } from 'rxjs';
-import { DateRanges, ActivityTypes } from '@sports-alliance/sports-lib';
+import { DateRanges, ActivityTypes, DataPaceAvg, DataSpeedAvg, DataSwimPaceAvg } from '@sports-alliance/sports-lib';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
 import { DataPositionInterface } from '@sports-alliance/sports-lib';
+import { DataJumpEvent } from '@sports-alliance/sports-lib';
 import { getDatesForDateRange } from '../../helpers/date-range-helper';
 import { AppFileService } from '../../services/app.file.service';
 import { DataLatitudeDegrees } from '@sports-alliance/sports-lib';
@@ -26,20 +26,49 @@ import { MapboxLoaderService } from '../../services/mapbox-loader.service';
 import { AppThemeService } from '../../services/app.theme.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
-import { AppMyTracksSettings } from '../../models/app-user.interface';
+import { AppMapSettingsInterface, AppMyTracksSettings } from '../../models/app-user.interface';
 import { LoggerService } from '../../services/logger.service';
-import { TracksMapManager } from './tracks-map.manager'; // Imported Manager
+import { TrackStartPoint, TrackStartSelection, TracksMapManager } from './tracks-map.manager'; // Imported Manager
 import { MapStyleService } from '../../services/map-style.service';
 import { MapboxStyleSynchronizer } from '../../services/map/mapbox-style-synchronizer';
 import { MapStyleName } from '../../services/map/map-style.types';
+import { MapboxHeatmapLayerService } from '../../services/map/mapbox-heatmap-layer.service';
+import { JumpHeatmapWeightingService } from '../../services/map/jump-heatmap-weighting.service';
+import { MapboxStartPointLayerService } from '../../services/map/mapbox-start-point-layer.service';
+import { MapboxAutoResizeService } from '../../services/map/mapbox-auto-resize.service';
 import { Search } from '../event-search/event-search.component';
 import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-detection.service';
 import { TripDetectionInput } from '../../services/my-tracks-trip-detection.service';
 import { DetectedTrip } from '../../services/my-tracks-trip-detection.service';
-import { ResolvedTripLocationLabel, TripLocationLabelService } from '../../services/trip-location-label.service';
+import { TripLocationLabelService } from '../../services/trip-location-label.service';
+import { resolvePrimaryUnitAwareDisplayStat } from '../../helpers/summary-display.helper';
+import {
+  resolvePreferredSpeedDerivedAverageTypeForActivity,
+  resolvePreferredSpeedDerivedAverageTypesForActivity
+} from '../../helpers/summary-stats.helper';
+import {
+  MapEventPopupContent,
+  MapEventPopupContentService
+} from '../../services/map/map-event-popup-content.service';
+import {
+  correctPopupPositionToViewport,
+  resolvePopupAnchorPosition,
+} from '../../services/map/mapbox-popup-positioning.utils';
 
 interface DetectedTripViewModel extends DetectedTrip {
   locationLabel: string | null;
+}
+
+interface JumpHeatPoint {
+  lng: number;
+  lat: number;
+  hangTime: number | null;
+  distance: number | null;
+}
+
+interface JumpHeatCollectionStats {
+  jumpsWithCoordinates: number;
+  jumpsWithWeightMetrics: number;
 }
 
 @Component({
@@ -49,7 +78,14 @@ interface DetectedTripViewModel extends DetectedTrip {
   standalone: false
 })
 export class TracksComponent implements OnInit, OnDestroy {
+  private static readonly MY_TRACKS_METADATA_CACHE_TTL_MS = 60 * 60 * 1000;
+  private static readonly START_POINT_POPUP_MARGIN_PX = 10;
+  private static readonly START_POINT_POPUP_OFFSET_PX = 10;
+  private static readonly START_POINT_POPUP_WIDTH_ESTIMATE_PX = 340;
+  private static readonly START_POINT_POPUP_HEIGHT_ESTIMATE_PX = 240;
+
   @ViewChild('mapDiv', { static: true }) mapDiv!: ElementRef;
+  @ViewChild('trackStartPopupAnchor', { static: false }) trackStartPopupAnchor?: ElementRef<HTMLDivElement>;
 
   public dateRangesToShow: DateRanges[] = [
     DateRanges.thisWeek,
@@ -73,13 +109,15 @@ export class TracksComponent implements OnInit, OnDestroy {
   private scrolled = false;
   private hasTrackBoundsBeenApplied = false;
   private trackCoordinatesByEventId = new Map<string, number[][]>();
+  private eventsById = new Map<string, any>();
 
   private eventsSubscription: Subscription = new Subscription();
   private trackLoadingSubscription: Subscription = new Subscription();
 
   private mapSynchronizer = signal<MapboxStyleSynchronizer | undefined>(undefined);
-  private terrainControl = signal<any>(null); // Using any to avoid forward reference issues if class is defined below
   private platformId!: object;
+  private startPointPopupRepositionHandler: (() => void) | null = null;
+  private pendingStartPointPopupCorrectionRaf: number | null = null;
 
   private promiseTime!: number;
   private analyticsService = inject(AppAnalyticsService);
@@ -93,7 +131,15 @@ export class TracksComponent implements OnInit, OnDestroy {
   public hasEvaluatedTripDetection: WritableSignal<boolean> = signal(false);
   public detectedTripsPanelExpanded: WritableSignal<boolean> = signal(false);
   public searchPeekDefaultExpanded: WritableSignal<boolean> = signal(true);
+  public searchPeekExpanded: WritableSignal<boolean> = signal(true);
+  public hasDetectedJumps: WritableSignal<boolean> = signal(false);
+  public selectedStartPoint: WritableSignal<TrackStartSelection | null> = signal(null);
+  public selectedStartPointScreen: WritableSignal<{ x: number; y: number } | null> = signal(null);
   // Removed legacy state tracking
+
+  public get mapStyleOptions() {
+    return this.mapStyleService.getSupportedStyleOptions();
+  }
 
   constructor(
     private changeDetectorRef: ChangeDetectorRef,
@@ -106,41 +152,54 @@ export class TracksComponent implements OnInit, OnDestroy {
     private bottomSheet: MatBottomSheet,
     private overlay: Overlay,
     private userService: AppUserService,
-    private snackBar: MatSnackBar,
     private mapboxLoader: MapboxLoaderService,
     private themeService: AppThemeService,
     private mapStyleService: MapStyleService,
+    private mapboxHeatmapLayerService: MapboxHeatmapLayerService,
+    private jumpHeatmapWeightingService: JumpHeatmapWeightingService,
+    private mapboxStartPointLayerService: MapboxStartPointLayerService,
+    private mapboxAutoResizeService: MapboxAutoResizeService,
+    private popupContentService: MapEventPopupContentService,
   ) {
-    this.tracksMapManager = new TracksMapManager(this.zone, this.eventColorService, this.mapStyleService, this.logger); // Initialize Manager
+    this.tracksMapManager = new TracksMapManager(
+      this.zone,
+      this.eventColorService,
+      this.mapStyleService,
+      this.mapboxHeatmapLayerService,
+      this.jumpHeatmapWeightingService,
+      this.mapboxStartPointLayerService,
+      this.logger
+    );
     this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
 
     const platformId = inject(PLATFORM_ID);
     this.platformId = platformId;
     this.searchPeekDefaultExpanded.set(this.resolveDesktopViewportDefault());
+    this.searchPeekExpanded.set(this.searchPeekDefaultExpanded());
 
     // Track last settings to prevent redundant data fetching
-    let lastLoadedDataSettings: { dateRange: DateRanges, activityTypes?: ActivityTypes[], mapStyle?: string } | null = null;
+    let lastLoadedDataSettings: { dateRange: DateRanges, activityTypes?: ActivityTypes[] } | null = null;
     let isFirstRun = true;
 
     // Unified Reactive State: Combines Settings and Theme
     const viewState = computed(() => {
-      const settings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
+      const myTracksSettings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
+      const mapSettings = this.userSettingsQuery.mapSettings() as AppMapSettingsInterface;
       const theme = this.themeService.appTheme();
-      return { settings, theme };
+      return { myTracksSettings, mapSettings, theme };
     });
 
     // Single Effect to drive Map State
     effect(() => {
-      const { settings, theme } = viewState();
+      const { myTracksSettings, mapSettings, theme } = viewState();
       const map = this.mapSignal();
       const user = this.userSignal();
       const synchronizer = this.mapSynchronizer();
-      const terrainControl = this.terrainControl();
 
-      if (!map || !synchronizer || !settings || !user) return;
+      if (!map || !synchronizer || !myTracksSettings || !user) return;
 
       // 1. Update Map Style via Synchronizer
-      const mapStyle = settings.mapStyle || 'default';
+      const mapStyle = this.mapStyleService.normalizeStyle(mapSettings?.mapStyle);
       this.tracksMapManager.setMapStyle(mapStyle as MapStyleName);
       const resolved = this.mapStyleService.resolve(mapStyle, theme);
       synchronizer.update(resolved);
@@ -148,26 +207,24 @@ export class TracksComponent implements OnInit, OnDestroy {
       // 2. Update Tracks Colors (Theme based)
       this.tracksMapManager.setIsDarkTheme(theme === AppThemes.Dark);
       this.tracksMapManager.refreshTrackColors();
+      this.tracksMapManager.setJumpHeatmapVisible(myTracksSettings.showJumpHeatmap !== false);
 
       // 3. Terrain (is3D)
-      if (terrainControl) {
-        this.tracksMapManager.toggleTerrain(!!settings.is3D, !isFirstRun);
-      }
+      this.tracksMapManager.toggleTerrain(!!mapSettings?.is3D, !isFirstRun);
       isFirstRun = false;
 
       // 4. Data Loading
       // Check if data-impacting settings changed
-      const currentSnapshot = { dateRange: settings.dateRange, activityTypes: settings.activityTypes, mapStyle: settings.mapStyle };
+      const currentSnapshot = { dateRange: myTracksSettings.dateRange, activityTypes: myTracksSettings.activityTypes };
 
       const dataChanged = !lastLoadedDataSettings ||
         lastLoadedDataSettings.dateRange !== currentSnapshot.dateRange ||
-        lastLoadedDataSettings.mapStyle !== currentSnapshot.mapStyle ||
         JSON.stringify(lastLoadedDataSettings.activityTypes) !== JSON.stringify(currentSnapshot.activityTypes);
 
       if (dataChanged) {
         lastLoadedDataSettings = currentSnapshot;
         this.isLoading.set(true);
-        this.loadTracksMapForUserByDateRange(user, settings.dateRange, settings.activityTypes)
+        this.loadTracksMapForUserByDateRange(user, myTracksSettings.dateRange, myTracksSettings.activityTypes)
           .catch(err => this.logger.error('Error loading tracks', err))
           .finally(() => this.isLoading.set(false));
       }
@@ -182,10 +239,10 @@ export class TracksComponent implements OnInit, OnDestroy {
     try {
       // --- Constructor Style Injection ---
       // Resolve user's preferred style BEFORE creating the map.
-      const initialSettings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
-      const prefMapStyle = initialSettings?.mapStyle || 'default';
+      const initialMapSettings = this.userSettingsQuery.mapSettings() as AppMapSettingsInterface;
+      const prefMapStyle = this.mapStyleService.normalizeStyle(initialMapSettings?.mapStyle);
       const initialTheme = this.themeService.appTheme();
-      const resolved = this.mapStyleService.resolve(prefMapStyle as any, initialTheme);
+      const resolved = this.mapStyleService.resolve(prefMapStyle, initialTheme);
       const initialStyleUrl = resolved.styleUrl;
 
       // Removed manualStyleOverride logic
@@ -212,6 +269,27 @@ export class TracksComponent implements OnInit, OnDestroy {
         const mapboxgl = await this.mapboxLoader.loadMapbox();
         this.tracksMapManager.setMap(mapInstance, mapboxgl);
         this.tracksMapManager.setIsDarkTheme(this.themeService.appTheme() === AppThemes.Dark);
+        this.tracksMapManager.setStartMarkerSelectionHandler((selection) => {
+          this.zone.run(() => {
+            if (!selection) {
+              this.closeSelectedStartPointPopup();
+              return;
+            }
+            this.searchPeekExpanded.set(false);
+            this.detectedTripsPanelExpanded.set(false);
+            this.selectedStartPoint.set(selection);
+            this.updateSelectedStartPointScreenPosition();
+            this.centerMapOnStartPoint(selection);
+          });
+        });
+        this.bindStartPointPopupMapListeners(mapInstance);
+        this.mapboxAutoResizeService.bind(mapInstance, {
+          container: this.mapDiv?.nativeElement,
+          onResize: () => {
+            if (!this.selectedStartPoint()) return;
+            this.zone.run(() => this.updateSelectedStartPointScreenPosition());
+          }
+        });
 
         mapInstance.addControl(new mapboxgl.FullscreenControl(), 'bottom-right');
 
@@ -236,30 +314,6 @@ export class TracksComponent implements OnInit, OnDestroy {
             })
         );
 
-        // Restore terrain control (initialSettings already loaded above)
-        // Initialize 3D state immediately for responsiveness and test compliance
-        const control = new TerrainControl(!!initialSettings?.is3D, (is3D) => {
-          // Toggle map locally immediately for responsiveness
-          this.tracksMapManager.toggleTerrain(is3D, true);
-
-          if (is3D) {
-            this.zone.run(() => {
-              this.snackBar.open('Use Ctrl + Left Click (or Right Click) + Drag to rotate and tilt the map in 3D.', 'OK', {
-                duration: 5000,
-                verticalPosition: 'top'
-              });
-            });
-          }
-
-          // Persist 3D setting via service
-          this.userSettingsQuery.updateMyTracksSettings({ is3D });
-        });
-        this.terrainControl.set(control);
-        mapInstance.addControl(control, 'bottom-right');
-        this.tracksMapManager.setTerrainControl(control);
-
-        // Restore terrain control (initialSettings already loaded above)
-        // Initialize 3D state - The effect handles the initial toggleTerrain call.
       });
 
     } catch (error) {
@@ -267,10 +321,29 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
   }
 
-  public setMapStyle(styleType: 'default' | 'satellite' | 'outdoors') {
+  public setMapStyle(styleType: MapStyleName) {
+    const normalized = this.mapStyleService.normalizeStyle(styleType);
     // Just update settings. The effect handles the rest.
-    this.userSettingsQuery.updateMyTracksSettings({ mapStyle: styleType });
-    this.logger.info('[TracksComponent] User selected map style', { styleType });
+    this.userSettingsQuery.updateMapSettings({ mapStyle: normalized });
+    this.logger.info('[TracksComponent] User selected map style', { styleType: normalized });
+  }
+
+  public onMyTracks3DToggle(is3D: boolean): void {
+    this.tracksMapManager.toggleTerrain(is3D, true);
+    this.userSettingsQuery.updateMapSettings({ is3D });
+  }
+
+  public isJumpHeatmapEnabled(): boolean {
+    const settings = this.userSettingsQuery.myTracksSettings() as AppMyTracksSettings;
+    return settings?.showJumpHeatmap !== false;
+  }
+
+  public toggleJumpHeatmap(): void {
+    this.onShowJumpHeatmapToggle(!this.isJumpHeatmapEnabled());
+  }
+
+  public onShowJumpHeatmapToggle(checked: boolean) {
+    this.userSettingsQuery.updateMyTracksSettings({ showJumpHeatmap: checked });
   }
 
   public async search(event: Search) {
@@ -294,6 +367,13 @@ export class TracksComponent implements OnInit, OnDestroy {
   public ngOnDestroy() {
     this.unsubscribeFromAll()
     this.bottomSheet.dismiss();
+    this.tracksMapManager.setStartMarkerSelectionHandler(null);
+    this.unbindStartPointPopupMapListeners();
+    if (this.pendingStartPointPopupCorrectionRaf !== null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(this.pendingStartPointPopupCorrectionRaf);
+      this.pendingStartPointPopupCorrectionRaf = null;
+    }
+    this.mapboxAutoResizeService.unbind(this.tracksMapManager.getMap());
     if (this.mapSignal()) {
       this.mapSignal().remove();
     }
@@ -352,7 +432,12 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.hasEvaluatedTripDetection.set(false);
     this.detectedTrips.set([]);
     this.detectedTripsPanelExpanded.set(false);
+    this.hasDetectedJumps.set(false);
     this.trackCoordinatesByEventId.clear();
+    this.eventsById.clear();
+    this.closeSelectedStartPointPopup();
+    this.tracksMapManager.clearJumpHeatmap();
+    this.tracksMapManager.clearActivityStartPoints();
     this.clearProgressAndOpenBottomSheet();
     const dates = getDatesForDateRange(dateRange, user.settings?.unitSettings?.startOfTheWeek || 1);
     const where = []
@@ -387,14 +472,14 @@ export class TracksComponent implements OnInit, OnDestroy {
               return;
             }
             this.tracksMapManager.clearAllTracks();
+            this.hasDetectedJumps.set(false);
             this.hasEvaluatedTripDetection.set(true);
             this.clearProgressAndCloseBottomSheet();
             return;
           }
 
-          const chuckArraySize = 15;
-          const chunckedEvents: any[][] = events.reduce((all: any[][], one: any, i: number) => {
-            const ch = Math.floor(i / chuckArraySize);
+          const chunkedEvents: any[][] = events.reduce((all: any[][], one: any, i: number) => {
+            const ch = Math.floor(i / 15);
             all[ch] = ([] as any[]).concat((all[ch] || []), one);
             return all
           }, [])
@@ -407,85 +492,144 @@ export class TracksComponent implements OnInit, OnDestroy {
           let count = 0;
           let addedTrackCount = 0;
           const allCoordinates: number[][] = [];
+          const jumpHeatPoints: JumpHeatPoint[] = [];
+          const trackStartPoints: TrackStartPoint[] = [];
+          let jumpsWithCoordinates = 0;
+          let jumpsWithWeightMetrics = 0;
           const detectionCandidatesByEvent = new Map<string, TripDetectionInput>();
 
-          for (const eventsChunk of chunckedEvents) {
+          for (const eventsChunk of chunkedEvents) {
             if (this.promiseTime !== promiseTime) {
               return;
             }
 
-            const chunkCoordinates: number[][] = [];
-
             await Promise.all(eventsChunk.map(async (event: any) => {
-              this.logger.log(`[TracksComponent] Fetching activities and streams for event: ${event.getID()}, promiseTime: ${promiseTime}`);
-              event.addActivities(await this.eventService.getActivities(user, event.getID()).pipe(take(1)).toPromise())
-              return this.eventService.attachStreamsToEventWithActivities(user, event, [
-                DataLatitudeDegrees.type,
-                DataLongitudeDegrees.type,
-              ]).pipe(take(1)).toPromise()
-                .then((fullEvent: any) => {
-                  this.logger.log(`[TracksComponent] Attached streams for event: ${event.getID()}, promiseTime: ${promiseTime}`);
-                  if (this.promiseTime !== promiseTime) {
-                    return
-                  }
-                  const eventId = fullEvent?.getID?.() || event.getID();
-                  let hasVisibleTrackForEvent = false;
-                  const eventCoordinates: number[][] = [];
-                  fullEvent.getActivities()
-                    .filter((activity: any) => activity.hasPositionData())
-                    .filter((activity: any) => !activityTypes || activityTypes.length === 0 || activityTypes.includes(activity.type))
-                    .forEach((activity: any) => {
-                      const coordinates = activity.getPositionData()
-                        .filter((position: any) => position)
-                        .map((position: any) => {
-                          // Mapbox uses [lng, lat]
-                          const lng = Math.round(position.longitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
-                          const lat = Math.round(position.latitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
-                          return [lng, lat];
-                        })
-                        .filter((coordinate: number[]) =>
-                          Number.isFinite(coordinate[0])
-                          && Number.isFinite(coordinate[1])
-                          && Math.abs(coordinate[0]) <= 180
-                          && Math.abs(coordinate[1]) <= 90
-                        );
+              this.logger.log(`[TracksComponent] Fetching activities for event: ${event.getID()}, promiseTime: ${promiseTime}`);
+              event.addActivities(await this.eventService.getActivities(user, event.getID()).pipe(take(1)).toPromise());
+              let fullEvent = event;
+              try {
+                // Hydrate lat/long streams from original files without replacing activity objects.
+                const hydratedEvent = await this.eventService.attachStreamsToEventWithActivities(
+                  user,
+                  event,
+                  [
+                    DataLatitudeDegrees.type,
+                    DataLongitudeDegrees.type,
+                  ],
+                  true,
+                  false,
+                  'attach_streams_only',
+                  { metadataCacheTtlMs: TracksComponent.MY_TRACKS_METADATA_CACHE_TTL_MS },
+                ).pipe(take(1)).toPromise();
+                fullEvent = hydratedEvent || event;
+              } catch (error) {
+                this.logger.warn('[TracksComponent] Failed to hydrate activity streams from original files. Falling back to existing activities.', {
+                  eventId: event.getID?.(),
+                  error
+                });
+              }
+              this.logger.log(`[TracksComponent] Activities and streams ready for event: ${event.getID()}, promiseTime: ${promiseTime}`);
+              if (this.promiseTime !== promiseTime) {
+                return;
+              }
 
-                      if (coordinates.length > 1) {
-                        this.tracksMapManager.addTrackFromActivity(activity, coordinates);
-                        addedTrackCount++;
-                        hasVisibleTrackForEvent = true;
-                        coordinates.forEach((coordinate: number[]) => {
-                          chunkCoordinates.push(coordinate);
-                          allCoordinates.push(coordinate);
-                          eventCoordinates.push(coordinate);
-                        });
-                      }
+              const eventId = fullEvent?.getID?.() || event.getID();
+              if (eventId) {
+                this.eventsById.set(eventId, fullEvent || event);
+              }
+              let hasVisibleTrackForEvent = false;
+              const eventCoordinates: number[][] = [];
+              fullEvent.getActivities()
+                .filter((activity: any) => activity.hasPositionData())
+                .filter((activity: any) => !activityTypes || activityTypes.length === 0 || activityTypes.includes(activity.type))
+                .forEach((activity: any) => {
+                  const jumpStats = this.collectJumpHeatPointsFromActivity(activity, jumpHeatPoints);
+                  jumpsWithCoordinates += jumpStats.jumpsWithCoordinates;
+                  jumpsWithWeightMetrics += jumpStats.jumpsWithWeightMetrics;
+
+                  const coordinates = activity.getPositionData()
+                    .filter((position: any) => position)
+                    .map((position: any) => {
+                      // Mapbox uses [lng, lat]
+                      const lng = Math.round(position.longitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
+                      const lat = Math.round(position.latitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
+                      return [lng, lat];
                     })
+                    .filter((coordinate: number[]) =>
+                      Number.isFinite(coordinate[0])
+                      && Number.isFinite(coordinate[1])
+                      && Math.abs(coordinate[0]) <= 180
+                      && Math.abs(coordinate[1]) <= 90
+                    );
 
-                  if (hasVisibleTrackForEvent) {
-                    this.trackCoordinatesByEventId.set(eventId, eventCoordinates);
-                    const detectionInput = this.getTripDetectionInputFromEvent(fullEvent || event);
-                    if (detectionInput) {
-                      detectionCandidatesByEvent.set(detectionInput.eventId, detectionInput);
+                  if (coordinates.length > 1) {
+                    const startPoint = this.buildTrackStartPoint(
+                      activity,
+                      eventId,
+                      coordinates[0],
+                      fullEvent?.startDate ?? event?.startDate
+                    );
+                    if (startPoint) {
+                      trackStartPoints.push(startPoint);
                     }
+                    this.tracksMapManager.addTrackFromActivity(activity, coordinates);
+                    addedTrackCount++;
+                    hasVisibleTrackForEvent = true;
+                    coordinates.forEach((coordinate: number[]) => {
+                      allCoordinates.push(coordinate);
+                      eventCoordinates.push(coordinate);
+                    });
                   }
+                });
 
-                  count++;
-                  this.updateTotalProgress(Math.ceil((count / events.length) * 100))
-                })
-            }))
+              if (hasVisibleTrackForEvent) {
+                this.trackCoordinatesByEventId.set(eventId, eventCoordinates);
+                const detectionInput = this.getTripDetectionInputFromEvent(fullEvent || event);
+                if (detectionInput) {
+                  detectionCandidatesByEvent.set(detectionInput.eventId, detectionInput);
+                }
+              }
 
-            if (count < events.length && chunkCoordinates.length > 0) {
-              this.fitBoundsToTracks(chunkCoordinates);
-            }
+              count++;
+              this.updateTotalProgress(Math.ceil((count / events.length) * 100));
+            }));
+          }
+
+          // Ensure canceled/stale loads never commit map/UI state after a newer request started.
+          if (this.promiseTime !== promiseTime) {
+            this.logger.log('[TracksComponent] Skipping stale tracks load commit.', {
+              promiseTime,
+              currentPromiseTime: this.promiseTime,
+            });
+            return;
+          }
+
+          if (addedTrackCount === 0) {
+            this.tracksMapManager.clearAllTracks();
+          } else if (trackStartPoints.length > 0) {
+            this.tracksMapManager.setActivityStartPoints(trackStartPoints);
+            await this.waitForStartPointLayerReady();
+          } else {
+            this.tracksMapManager.clearActivityStartPoints();
           }
 
           if (allCoordinates.length > 0) {
+            await this.waitForMapRenderTick();
             this.fitBoundsToTracks(allCoordinates);
           }
-          if (addedTrackCount === 0) {
-            this.tracksMapManager.clearAllTracks();
+          if (jumpHeatPoints.length > 0) {
+            this.hasDetectedJumps.set(true);
+            this.tracksMapManager.setJumpHeatPoints(jumpHeatPoints);
+          } else {
+            this.hasDetectedJumps.set(false);
+            this.tracksMapManager.clearJumpHeatmap();
           }
+          this.logger.log('[TracksComponent] Jump heatmap collection summary.', {
+            jumpsWithCoordinates,
+            jumpsWithWeightMetrics,
+            renderableHeatPoints: jumpHeatPoints.length,
+            promiseTime
+          });
           this.logger.log('[TracksComponent] Prepared trip detection candidates.', {
             candidateCount: detectionCandidatesByEvent.size,
             promiseTime
@@ -544,6 +688,40 @@ export class TracksComponent implements OnInit, OnDestroy {
       [trip.bounds.west, trip.bounds.south],
       [trip.bounds.east, trip.bounds.north],
     ]);
+  }
+
+  public closeSelectedStartPointPopup(): void {
+    this.tracksMapManager.clearStartPointSelection();
+    this.selectedStartPoint.set(null);
+    this.selectedStartPointScreen.set(null);
+  }
+
+  public openSelectedStartPointEvent(): void {
+    const selected = this.selectedStartPoint();
+    const userId = this.user?.uid;
+    if (!selected?.eventId || !userId) {
+      this.logger.warn('[TracksComponent] Unable to open selected start-point event.', {
+        hasEventId: !!selected?.eventId,
+        hasUserId: !!userId
+      });
+      return;
+    }
+
+    this.router.navigate(['/user', userId, 'event', selected.eventId]);
+    this.closeSelectedStartPointPopup();
+  }
+
+  public resolveStartPointEvent(startPoint: TrackStartSelection | null): any | null {
+    if (!startPoint?.eventId) return null;
+    return this.eventsById.get(startPoint.eventId) || null;
+  }
+
+  public getStartPointPopupContent(startPoint: TrackStartSelection | null): MapEventPopupContent | null {
+    const event = this.resolveStartPointEvent(startPoint);
+    if (!event) {
+      return null;
+    }
+    return this.popupContentService.buildFromEvent(event);
   }
 
   private getTripDetectionInputFromEvent(event: any): TripDetectionInput | null {
@@ -628,6 +806,281 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.totalProgress.next(value);
   }
 
+  private collectJumpHeatPointsFromActivity(activity: any, jumpHeatPoints: JumpHeatPoint[]): JumpHeatCollectionStats {
+    let jumpsWithCoordinates = 0;
+    let jumpsWithWeightMetrics = 0;
+    const activityEvents = typeof activity?.getAllEvents === 'function' ? activity.getAllEvents() : [];
+    (activityEvents || []).forEach((activityEvent: any) => {
+      const jumpData = activityEvent instanceof DataJumpEvent ? activityEvent.jumpData : activityEvent?.jumpData;
+      const lat = this.getNumericJumpStatValue(jumpData?.position_lat);
+      const lng = this.getNumericJumpStatValue(jumpData?.position_long);
+      if (lat === null || lng === null) {
+        return;
+      }
+      if (Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+        return;
+      }
+      jumpsWithCoordinates++;
+
+      const hangTime = this.getNumericJumpStatValue(jumpData?.hang_time);
+      const distance = this.getNumericJumpStatValue(jumpData?.distance);
+      if (hangTime === null && distance === null) {
+        return;
+      }
+      jumpsWithWeightMetrics++;
+      jumpHeatPoints.push({
+        lng,
+        lat,
+        hangTime,
+        distance
+      });
+    });
+    return {
+      jumpsWithCoordinates,
+      jumpsWithWeightMetrics
+    };
+  }
+
+  private getNumericJumpStatValue(stat: any): number | null {
+    const value = stat?.getValue?.();
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+    return null;
+  }
+
+  private buildTrackStartPoint(
+    activity: any,
+    eventId: string,
+    startCoordinate: number[],
+    startDateInput: number | Date | null | undefined
+  ): TrackStartPoint | null {
+    if (!Array.isArray(startCoordinate) || startCoordinate.length < 2) return null;
+    const lng = Number(startCoordinate[0]);
+    const lat = Number(startCoordinate[1]);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+    if (Math.abs(lng) > 180 || Math.abs(lat) > 90) return null;
+
+    const activityId = activity?.getID?.();
+    if (!eventId || !activityId) return null;
+
+    let startDate: number | null = null;
+    if (typeof startDateInput === 'number' && Number.isFinite(startDateInput)) {
+      startDate = startDateInput;
+    } else if (startDateInput instanceof Date && Number.isFinite(startDateInput.getTime())) {
+      startDate = startDateInput.getTime();
+    }
+
+    return {
+      eventId: String(eventId),
+      activityId: String(activityId),
+      activityType: this.resolveActivityTypeLabel(activity),
+      activityTypeValue: activity?.type ?? null,
+      durationValue: this.getNumericActivityStatValue(activity?.getDuration?.()),
+      distanceValue: this.getNumericActivityStatValue(activity?.getDistance?.()),
+      startDate,
+      durationLabel: this.formatActivityDurationLabel(activity),
+      distanceLabel: this.formatActivityDistanceLabel(activity),
+      ...this.resolveActivityEffortMetric(activity),
+      lng,
+      lat
+    };
+  }
+
+  private resolveActivityTypeLabel(activity: any): string {
+    const rawType = activity?.type;
+    if (typeof rawType === 'string' && rawType.length > 0) return rawType;
+    if (typeof rawType === 'number' && ActivityTypes[rawType]) return String(ActivityTypes[rawType]);
+    return 'Activity';
+  }
+
+  private formatActivityDurationLabel(activity: any): string {
+    const durationStat = activity?.getDuration?.();
+    if (!durationStat?.getDisplayValue) return '-';
+    try {
+      const value = durationStat.getDisplayValue(false, false);
+      if (value === undefined || value === null || value === '') return '-';
+      return String(value);
+    } catch {
+      try {
+        const value = durationStat.getDisplayValue();
+        if (value === undefined || value === null || value === '') return '-';
+        return String(value);
+      } catch {
+        return '-';
+      }
+    }
+  }
+
+  private formatActivityDistanceLabel(activity: any): string {
+    const distanceStat = activity?.getDistance?.();
+    if (!distanceStat?.getDisplayValue) return '-';
+    const value = distanceStat.getDisplayValue();
+    const unit = distanceStat.getDisplayUnit?.();
+    if (value === undefined || value === null || value === '') return '-';
+    return `${value}${unit ? ` ${unit}` : ''}`.trim();
+  }
+
+  private getNumericActivityStatValue(stat: any): number | null {
+    const value = stat?.getValue?.();
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+      return value;
+    }
+    return null;
+  }
+
+  private resolveActivityEffortMetric(activity: any): Pick<TrackStartPoint, 'effortLabel' | 'effortDisplayLabel' | 'effortStatType'> {
+    const preferredType = resolvePreferredSpeedDerivedAverageTypeForActivity(activity?.type);
+    const candidateTypes = [
+      preferredType,
+      ...resolvePreferredSpeedDerivedAverageTypesForActivity(activity?.type),
+      DataSpeedAvg.type,
+      DataPaceAvg.type,
+      DataSwimPaceAvg.type,
+    ].filter((type): type is string => typeof type === 'string' && type.length > 0);
+
+    const orderedTypes = [...new Set(candidateTypes).values()];
+    const unitSettings = typeof this.userSettingsQuery.unitSettings === 'function'
+      ? this.userSettingsQuery.unitSettings()
+      : undefined;
+
+    for (const statType of orderedTypes) {
+      const stat = activity?.getStat?.(statType);
+      const display = resolvePrimaryUnitAwareDisplayStat(stat, unitSettings, statType);
+      if (!display || !display.value) {
+        continue;
+      }
+      return {
+        effortLabel: this.isPaceDerivedStatType(statType) ? 'Pace' : 'Speed',
+        effortDisplayLabel: `${display.value}${display.unit ? ` ${display.unit}` : ''}`.trim(),
+        effortStatType: display.type || statType,
+      };
+    }
+
+    const fallbackType = preferredType || DataSpeedAvg.type;
+    return {
+      effortLabel: this.isPaceDerivedStatType(fallbackType) ? 'Pace' : 'Speed',
+      effortDisplayLabel: '-',
+      effortStatType: fallbackType,
+    };
+  }
+
+  private isPaceDerivedStatType(statType: string | null | undefined): boolean {
+    return typeof statType === 'string' && statType.toLowerCase().includes('pace');
+  }
+
+  private bindStartPointPopupMapListeners(map: any): void {
+    this.unbindStartPointPopupMapListeners();
+    if (!map?.on) return;
+    this.startPointPopupRepositionHandler = () => {
+      if (!this.selectedStartPoint()) return;
+      this.zone.run(() => this.updateSelectedStartPointScreenPosition());
+    };
+
+    ['move', 'zoom', 'rotate', 'pitch', 'resize'].forEach((eventName) => {
+      map.on(eventName, this.startPointPopupRepositionHandler);
+    });
+  }
+
+  private unbindStartPointPopupMapListeners(): void {
+    if (!this.startPointPopupRepositionHandler) return;
+    const map = this.tracksMapManager.getMap();
+    if (map?.off) {
+      ['move', 'zoom', 'rotate', 'pitch', 'resize'].forEach((eventName) => {
+        map.off(eventName, this.startPointPopupRepositionHandler);
+      });
+    }
+    this.startPointPopupRepositionHandler = null;
+  }
+
+  private updateSelectedStartPointScreenPosition(): void {
+    const selected = this.selectedStartPoint();
+    const map = this.tracksMapManager.getMap();
+    if (!selected || !map?.project) {
+      this.selectedStartPointScreen.set(null);
+      return;
+    }
+
+    const projected = map.project([selected.lng, selected.lat]);
+    const x = Math.round(Number(projected?.x));
+    const y = Math.round(Number(projected?.y));
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      this.selectedStartPointScreen.set(null);
+      return;
+    }
+    const position = resolvePopupAnchorPosition({ x, y }, this.mapDiv?.nativeElement, {
+      preferredWidthPx: TracksComponent.START_POINT_POPUP_WIDTH_ESTIMATE_PX,
+      preferredHeightPx: TracksComponent.START_POINT_POPUP_HEIGHT_ESTIMATE_PX,
+      marginPx: TracksComponent.START_POINT_POPUP_MARGIN_PX,
+      offsetPx: TracksComponent.START_POINT_POPUP_OFFSET_PX,
+      minWidthPx: 170,
+      minHeightPx: 120,
+      preferAbove: true,
+    });
+    if (!position) {
+      this.selectedStartPointScreen.set(null);
+      return;
+    }
+    this.selectedStartPointScreen.set(position);
+    this.scheduleStartPointPopupViewportCorrection();
+  }
+
+  private scheduleStartPointPopupViewportCorrection(): void {
+    if (this.pendingStartPointPopupCorrectionRaf !== null || typeof requestAnimationFrame !== 'function') {
+      return;
+    }
+
+    this.pendingStartPointPopupCorrectionRaf = requestAnimationFrame(() => {
+      this.pendingStartPointPopupCorrectionRaf = null;
+      this.correctStartPointPopupPositionWithMeasuredSize();
+    });
+  }
+
+  private correctStartPointPopupPositionWithMeasuredSize(): void {
+    const current = this.selectedStartPointScreen();
+    const mapElement = this.mapDiv?.nativeElement;
+    const popupElement = this.trackStartPopupAnchor?.nativeElement;
+    if (!this.selectedStartPoint() || !current || !mapElement || !popupElement) {
+      return;
+    }
+
+    const corrected = correctPopupPositionToViewport(
+      current,
+      mapElement,
+      popupElement,
+      TracksComponent.START_POINT_POPUP_MARGIN_PX
+    );
+    if (corrected) {
+      this.selectedStartPointScreen.set(corrected);
+    }
+  }
+
+  private centerMapOnStartPoint(selection: TrackStartSelection): void {
+    if (!selection) return;
+    const map = this.tracksMapManager.getMap();
+    if (!map?.easeTo) return;
+    const target: [number, number] = [selection.lng, selection.lat];
+    const MIN_ZOOM_ON_SELECT = 11;
+    const currentZoom = typeof map.getZoom === 'function' ? map.getZoom() : 0;
+    const targetZoom = Math.max(currentZoom, MIN_ZOOM_ON_SELECT);
+    this.zone.runOutsideAngular(() => {
+      try {
+        map.easeTo({
+          center: target,
+          zoom: targetZoom,
+          animate: true,
+          duration: 480,
+          essential: true
+        });
+      } catch (error) {
+        this.logger.warn('[TracksComponent] Failed to pan/zoom map to selected start point.', {
+          selection,
+          error
+        });
+      }
+    });
+  }
+
   // Refactored helpers
   private isStyleLoaded(): boolean {
     return this.mapSignal() && this.mapSignal().isStyleLoaded();
@@ -645,59 +1098,69 @@ export class TracksComponent implements OnInit, OnDestroy {
 
     return window.innerWidth >= 641;
   }
-}
 
-class TerrainControl {
-  private map: any;
-  private container: HTMLElement | undefined;
-  private icon: HTMLElement | undefined;
-
-  constructor(private is3D: boolean, private onToggle: (val: boolean) => void) { }
-
-  onAdd(map: any) {
-    this.map = map;
-    this.container = document.createElement('div');
-    this.container.className = 'mapboxgl-ctrl mapboxgl-ctrl-group';
-    const btn = document.createElement('button');
-    btn.className = 'mapboxgl-ctrl-icon mapboxgl-ctrl-terrain';
-    btn.type = 'button';
-    btn.title = 'Toggle 3D Terrain';
-    btn.style.display = 'block';
-
-    this.icon = document.createElement('span');
-    this.icon.className = 'material-symbols-rounded';
-    this.icon.style.fontSize = '20px';
-    this.icon.style.lineHeight = '29px';
-    this.icon.innerText = 'landscape';
-
-    // Set initial state
-    if (this.is3D) {
-      this.icon.style.color = '#4264fb';
+  private waitForMapRenderTick(): Promise<void> {
+    const map = this.tracksMapManager.getMap();
+    if (!map?.once) {
+      return Promise.resolve();
     }
 
-    btn.appendChild(this.icon);
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
 
-    btn.onclick = () => {
-      const was3D = !!map.getTerrain();
-      const isNow3D = !was3D;
-      this.onToggle(isNow3D);
-    };
+      try {
+        map.once('render', done);
+      } catch {
+        done();
+        return;
+      }
 
-    this.container.appendChild(btn);
-    return this.container;
+      setTimeout(done, 40);
+    });
   }
 
-  onRemove() {
-    this.container?.parentNode?.removeChild(this.container);
-    this.map = undefined;
-  }
-
-  public set3DState(is3D: boolean) {
-    this.is3D = is3D;
-    if (this.icon) {
-      this.icon.style.color = is3D ? '#4264fb' : '';
+  private waitForStartPointLayerReady(timeoutMs: number = 240): Promise<void> {
+    const map = this.tracksMapManager.getMap();
+    const layerId = 'track-start-layer';
+    if (!map?.getLayer) {
+      return Promise.resolve();
     }
+    if (map.getLayer(layerId)) {
+      return this.waitForMapRenderTick();
+    }
+
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const cleanup = () => {
+        if (!map?.off) return;
+        map.off('styledata', checkReady);
+        map.off('render', checkReady);
+        map.off('idle', checkReady);
+      };
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve();
+      };
+      const checkReady = () => {
+        if (map.getLayer?.(layerId)) {
+          done();
+        }
+      };
+
+      if (map?.on) {
+        map.on('styledata', checkReady);
+        map.on('render', checkReady);
+        map.on('idle', checkReady);
+      }
+      checkReady();
+      setTimeout(done, timeoutMs);
+    });
   }
-
-
 }

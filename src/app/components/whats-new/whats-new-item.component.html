@@ -4,8 +4,8 @@
 </ng-template>
 
 <ng-template #metadata let-includeDate="includeDate">
-    <span *ngIf="includeDate" class="header-date">{{ post().date.toDate() | date:'mediumDate' }}</span>
     <span *ngIf="post().version" class="version-tag">{{ post().version }}</span>
+    <span *ngIf="includeDate" class="header-date">{{ post().date.toDate() | date:'mediumDate' }}</span>
     <span class="unpublished-tag" *ngIf="!post().published">Draft</span>
 </ng-template>
 
@@ -30,16 +30,16 @@
 <mat-expansion-panel *ngIf="displayMode() === 'full'" [expanded]="expanded()" class="changelog-panel">
     <mat-expansion-panel-header>
         <mat-panel-title>
-            <div class="header-left">
-                <ng-container *ngTemplateOutlet="statusDot"></ng-container>
-                <span class="post-title">{{ post().title }}</span>
+            <div class="header-stack">
+                <div class="header-left header-top">
+                    <ng-container *ngTemplateOutlet="statusDot"></ng-container>
+                    <span class="post-title">{{ post().title }}</span>
+                </div>
+                <div class="header-right header-bottom">
+                    <ng-container *ngTemplateOutlet="metadata; context: { includeDate: true }"></ng-container>
+                </div>
             </div>
         </mat-panel-title>
-        <mat-panel-description>
-            <div class="header-right">
-                <ng-container *ngTemplateOutlet="metadata; context: { includeDate: true }"></ng-container>
-            </div>
-        </mat-panel-description>
     </mat-expansion-panel-header>
 
     <div class="panel-content">

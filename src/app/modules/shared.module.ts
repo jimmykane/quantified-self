@@ -25,6 +25,11 @@ import { BottomSheetHeaderComponent } from '../components/shared/bottom-sheet-he
 import { PeekPanelComponent } from '../components/shared/peek-panel/peek-panel.component';
 import { MaterialPillTabsComponent } from '../components/shared/material-pill-tabs/material-pill-tabs.component';
 import { MaterialPillTabDirective } from '../components/shared/material-pill-tabs/material-pill-tab.directive';
+import { EventSectionHeaderComponent } from '../components/event/section-header/event.section-header.component';
+import { SummaryPrimaryInfoComponent } from '../components/shared/summary-primary-info/summary-primary-info.component';
+import { HeroMetricsComponent } from '../components/shared/hero-metrics/hero-metrics.component';
+import { MapActivityPopupComponent } from '../components/shared/map-activity-popup/map-activity-popup.component';
+import { MapLayersActionsComponent } from '../components/map/map-layers-actions/map-layers-actions.component';
 
 @NgModule({
     imports: [
@@ -54,6 +59,11 @@ import { MaterialPillTabDirective } from '../components/shared/material-pill-tab
         PeekPanelComponent,
         MaterialPillTabsComponent,
         MaterialPillTabDirective,
+        EventSectionHeaderComponent,
+        SummaryPrimaryInfoComponent,
+        HeroMetricsComponent,
+        MapActivityPopupComponent,
+        MapLayersActionsComponent,
     ],
     providers: [],
     exports: [
@@ -81,6 +91,11 @@ import { MaterialPillTabDirective } from '../components/shared/material-pill-tab
         PeekPanelComponent,
         MaterialPillTabsComponent,
         MaterialPillTabDirective,
+        EventSectionHeaderComponent,
+        SummaryPrimaryInfoComponent,
+        HeroMetricsComponent,
+        MapActivityPopupComponent,
+        MapLayersActionsComponent,
     ]
 })
 

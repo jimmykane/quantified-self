@@ -3,40 +3,75 @@ import {
   ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
+  ElementRef,
   Input,
   NgZone,
   OnChanges,
+  OnDestroy,
+  OnInit,
   SimpleChanges,
   ViewChild,
-  OnInit,
+  effect,
   signal,
-  computed,
 } from '@angular/core';
-import { GoogleMap } from '@angular/google-maps';
-import { EventInterface } from '@sports-alliance/sports-lib';
-import { MapTypes } from '@sports-alliance/sports-lib';
-import { DataPositionInterface } from '@sports-alliance/sports-lib';
-import { DataStartPosition } from '@sports-alliance/sports-lib';
+import { DatePipe } from '@angular/common';
+import { Router } from '@angular/router';
+import {
+  ActivityTypes,
+  AppThemes,
+  ActivityInterface,
+  DataDistance,
+  DataLatitudeDegrees,
+  DataLongitudeDegrees,
+  DataPaceAvg,
+  DataPositionInterface,
+  DataSpeedAvg,
+  DataStartPosition,
+  DataSwimPaceAvg,
+  DataDuration,
+  EventInterface,
+  User,
+} from '@sports-alliance/sports-lib';
 import { MapAbstractDirective } from '../map/map-abstract.directive';
 import { LoggerService } from '../../services/logger.service';
-import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
-import { ActivityTypes, ActivityTypesHelper } from '@sports-alliance/sports-lib';
-import { DatePipe } from '@angular/common';
-import { User } from '@sports-alliance/sports-lib';
 import { AppEventService } from '../../services/app.event.service';
-import { AppUserService } from '../../services/app.user.service';
-import { GoogleMapsLoaderService } from '../../services/google-maps-loader.service';
-import { MarkerFactoryService } from '../../services/map/marker-factory.service';
-import { MatSnackBar } from '@angular/material/snack-bar';
-
+import { MapboxLoaderService } from '../../services/mapbox-loader.service';
+import { MapStyleService } from '../../services/map-style.service';
+import { MapboxStyleSynchronizer } from '../../services/map/mapbox-style-synchronizer';
+import { MapStyleName } from '../../services/map/map-style.types';
+import {
+  MapEventPopupContent,
+  MapEventPopupContentService
+} from '../../services/map/map-event-popup-content.service';
+import {
+  bindLayerClickOnce,
+  LayerBindingRegistry,
+  removeLayerIfExists,
+  removeSourceIfExists,
+  setPaintIfLayerExists,
+  unbindLayerClicks,
+  upsertGeoJsonSource
+} from '../../services/map/mapbox-layer.utils';
+import { attachStyleReloadHandler, isStyleReady, runWhenStyleReady } from '../../services/map/mapbox-style-ready.utils';
+import { firstValueFrom } from 'rxjs';
 import { take } from 'rxjs/operators';
-import { ActivityInterface } from '@sports-alliance/sports-lib';
-import { DataLatitudeDegrees } from '@sports-alliance/sports-lib';
-import { DataLongitudeDegrees } from '@sports-alliance/sports-lib';
-import { environment } from '../../../environments/environment';
-import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
-import { inject } from '@angular/core';
+import {
+  buildReadableActivityMarkerPaint,
+  resolveThemedActivityColor
+} from '../../services/map/map-activity-color.utils';
+
+interface EventPointFeature {
+  type: 'Feature';
+  geometry: {
+    type: 'Point';
+    coordinates: [number, number];
+  };
+  properties: {
+    eventId: string;
+    color: string;
+  };
+}
 
 @Component({
   selector: 'app-events-map',
@@ -46,500 +81,875 @@ import { inject } from '@angular/core';
   providers: [DatePipe],
   standalone: false
 })
-export class EventsMapComponent extends MapAbstractDirective implements OnChanges, AfterViewInit, OnInit {
-  @ViewChild(GoogleMap) googleMap: GoogleMap;
-  @Input() events: EventInterface[];
-  @Input() type: MapTypes;
-  @Input() user: User;
-  @Input() clusterMarkers: boolean;
+export class EventsMapComponent extends MapAbstractDirective implements OnChanges, AfterViewInit, OnInit, OnDestroy {
+  private static readonly EVENTS_SOURCE_ID = 'events-map-events-source';
+  private static readonly EVENTS_UNCLUSTERED_LAYER_ID = 'events-map-events-unclustered';
+  private static readonly EVENTS_CLUSTER_LAYER_ID = 'events-map-events-clusters';
+  private static readonly EVENTS_CLUSTER_COUNT_LAYER_ID = 'events-map-events-cluster-count';
+  private static readonly SELECTED_TRACKS_SOURCE_ID = 'events-map-selected-event-tracks-source';
+  private static readonly SELECTED_TRACKS_LAYER_ID = 'events-map-selected-event-tracks-layer';
 
-  public latLngArray: google.maps.LatLng[] = [];
-  public markers: google.maps.marker.AdvancedMarkerElement[] = [];
+  @ViewChild('mapDiv', { static: false }) mapDiv?: ElementRef<HTMLDivElement>;
+  @Input() events: EventInterface[] = [];
+  @Input() user?: User;
+  @Input() clusterMarkers = true;
+
+  @Input() set mapStyle(value: MapStyleName | undefined) {
+    this.mapStyleSignal.set(this.mapStyleService.normalizeStyle(value));
+  }
+
+  public get mapStyle(): MapStyleName {
+    return this.mapStyleSignal();
+  }
+
   public noMapData = false;
-  public selectedEvent: EventInterface;
-  public selectedEventPositionsByActivity: { activity: ActivityInterface, color: string, positions: DataPositionInterface[] }[];
+  public selectedEvent?: EventInterface;
+  public selectedEventPopupContent: MapEventPopupContent | null = null;
+  public selectedEventPositionsByActivity: Array<{
+    activity: ActivityInterface;
+    color: string;
+    positions: DataPositionInterface[];
+  }> = [];
+  public apiLoaded = signal(false);
 
-  public mapCenter = signal<google.maps.LatLngLiteral>({ lat: 0, lng: 0 }, {
-    equal: (a, b) => a.lat === b.lat && a.lng === b.lng
-  });
-  public mapZoom = signal(3);
-  public mapTypeId = signal<google.maps.MapTypeId>('roadmap' as any);
-  public apiLoaded = signal(false); // Map options
-  public mapOptions = computed<google.maps.MapOptions>(() => ({
-    controlSize: 32,
-    disableDefaultUI: true,
-    backgroundColor: 'transparent',
-    gestureHandling: 'cooperative',
-    mapTypeControl: false,
-    mapTypeControlOptions: {
-      mapTypeIds: ['roadmap', 'hybrid', 'terrain']
-    },
-    mapId: environment.googleMapsMapId,
-    colorScheme: this.mapColorScheme(),
-    clickableIcons: false
-  }));
+  private readonly mapStyleSignal = signal<MapStyleName>('default');
+  private mapInstance = signal<any | null>(null);
+  private mapStyleSynchronizer = signal<MapboxStyleSynchronizer | undefined>(undefined);
+  private mapboxgl: any;
 
-  onZoomChanged() {
-    if (this.googleMap) {
-      const newZoom = this.googleMap.getZoom();
-      if (newZoom !== undefined && newZoom !== this.mapZoom()) {
-        this.mapZoom.set(newZoom);
-      }
-    }
-  }
-
-  onCenterChanged() {
-    if (this.googleMap) {
-      const center = this.googleMap.getCenter();
-      if (center) {
-        const newCenter = { lat: center.lat(), lng: center.lng() };
-        const currentCenter = this.mapCenter();
-        if (newCenter.lat !== currentCenter.lat || newCenter.lng !== currentCenter.lng) {
-          this.mapCenter.set(newCenter);
-        }
-      }
-    }
-  }
-
-  private nativeMap: google.maps.Map;
-  private markerClusterer: MarkerClusterer;
-  private markerActivityTypes = new Map<google.maps.marker.AdvancedMarkerElement, ActivityTypes>();
-  private mapDataRunId = 0;
-  private readonly markerChunkThreshold = 250;
-  private readonly markerChunkSize = 80;
+  private styleLoadHandlerCleanup: (() => void) | null = null;
+  private styleReadyHandlerCleanup: (() => void) | null = null;
+  private layerClickBindings: LayerBindingRegistry = [];
+  private eventsById = new Map<string, EventInterface>();
+  private currentSourceClusterMode: boolean | null = null;
+  private pendingEventsFitBounds = true;
+  private lastPopupDebugFingerprint: string | null = null;
+  private activeHydrationSequence = 0;
+  private hydrationInFlightEventId: string | null = null;
+  private hydratedEventId: string | null = null;
 
   constructor(
     private zone: NgZone,
     private changeDetectorRef: ChangeDetectorRef,
     private eventColorService: AppEventColorService,
     private eventService: AppEventService,
-    private mapsLoader: GoogleMapsLoaderService,
-    private markerFactory: MarkerFactoryService,
-    private snackBar: MatSnackBar,
-    protected logger: LoggerService) {
+    private mapboxLoader: MapboxLoaderService,
+    private mapStyleService: MapStyleService,
+    private popupContentService: MapEventPopupContentService,
+    private router: Router,
+    protected logger: LoggerService
+  ) {
     super(changeDetectorRef, logger);
-  }
 
-  private userSettingsQuery = inject(AppUserSettingsQueryService);
+    effect(() => {
+      const map = this.mapInstance();
+      const synchronizer = this.mapStyleSynchronizer();
+      const theme = this.appTheme();
+      const mapStyle = this.mapStyleSignal();
 
-  // Class property to hold the loaded class
-  // Class property to hold the loaded class
-  private AdvancedMarkerElement: typeof google.maps.marker.AdvancedMarkerElement | null = null;
-
-  async changeMapType(mapType: google.maps.MapTypeId) {
-    if (!this.user) return;
-    this.mapTypeId.set(mapType);
-
-    // Safe persist via service
-    this.userSettingsQuery.updateMapSettings({ mapType: mapType as any });
-  }
-
-  async ngOnInit(): Promise<void> {
-    const mapsLib = await this.mapsLoader.importLibrary('maps');
-    const markerLib = await this.mapsLoader.importLibrary('marker');
-
-    this.AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
-
-    this.AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
-
-    const mapSettings = this.userSettingsQuery.mapSettings();
-    if (mapSettings?.mapType) {
-      this.mapTypeId.set(mapSettings.mapType as any);
-    }
-
-    this.apiLoaded.set(true);
-    this.changeDetectorRef.markForCheck();
-    if (this.nativeMap) {
-      void this.initMapData();
-    }
-  }
-
-  ngAfterViewInit() {
-    // Initialize will happen via mapInitialized event
-  }
-
-  onMapReady(map: google.maps.Map) {
-    const mapReadyStart = performance.now();
-    this.zone.runOutsideAngular(() => {
-      this.nativeMap = map;
-
-      // Set map type
-      if (this.type) {
-        this.mapTypeId.set(this.type as any as google.maps.MapTypeId);
-      }
-
-      if (this.apiLoaded()) {
-        void this.initMapData();
-      }
-    });
-    this.logger.info('[perf] events_map_on_map_ready', {
-      durationMs: Number((performance.now() - mapReadyStart).toFixed(2)),
-      events: this.events?.length || 0,
-      clusterMarkers: !!this.clusterMarkers,
-    });
-    this.changeDetectorRef.detectChanges();
-  }
-
-  ngOnChanges(changes: SimpleChanges): void {
-    if (!this.nativeMap || !this.apiLoaded()) return;
-
-    this.zone.runOutsideAngular(() => {
-      void this.initMapData();
-    });
-  }
-
-  private initMapData() {
-    if (!this.nativeMap) return;
-    const runId = ++this.mapDataRunId;
-    const initStart = performance.now();
-    const inputEvents = this.events?.length || 0;
-
-    // Clear existing markers unconditionally
-    if (this.markers) {
-      this.markers.forEach(m => m.map = null);
-    }
-    if (this.markerClusterer) {
-      this.markerClusterer.clearMarkers();
-    }
-    this.markerActivityTypes.clear();
-    this.markers = []; // Ensure markers array is reset
-    this.noMapData = false;
-
-    // Create and add markers
-    if (this.events?.length) {
-      const markerCreationStart = performance.now();
-      const useChunkedMarkerBuild = this.events.length >= this.markerChunkThreshold;
-
-      if (useChunkedMarkerBuild) {
-        this.logger.info('[perf] events_map_create_markers_deferred_start', {
-          inputEvents,
-          chunkSize: this.markerChunkSize,
-        });
-        void this.initMapDataChunked(runId, this.events, initStart, markerCreationStart, inputEvents);
+      if (!map || !synchronizer) {
         return;
       }
 
-      this.markers = this.getMarkersFromEvents(this.events);
-      this.noMapData = this.markers.length === 0;
-      this.logger.info('[perf] events_map_create_markers', {
-        durationMs: Number((performance.now() - markerCreationStart).toFixed(2)),
-        inputEvents,
-        markers: this.markers.length,
-        mode: 'sync',
-      });
-      this.renderMarkersAndBounds(this.events, initStart, inputEvents);
+      synchronizer.update(this.mapStyleService.resolve(mapStyle, theme));
+      this.renderMapData();
+      this.changeDetectorRef.markForCheck();
+    });
+  }
+
+  ngOnInit(): void {
+    this.mapStyleSignal.set(this.mapStyleService.normalizeStyle(this.mapStyleSignal()));
+  }
+
+  async ngAfterViewInit(): Promise<void> {
+    await this.initializeMap();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes.events) {
+      this.pendingEventsFitBounds = true;
+    }
+
+    if (!this.mapInstance()) {
       return;
     }
 
-    this.logger.info('[perf] events_map_init_total', {
-      durationMs: Number((performance.now() - initStart).toFixed(2)),
-      inputEvents,
-      markers: this.markers?.length || 0,
-      clusterMarkers: !!this.clusterMarkers,
-    });
-    this.noMapData = true;
+    this.renderMapData();
   }
 
-  private async initMapDataChunked(runId: number, events: EventInterface[], initStart: number, markerCreationStart: number, inputEvents: number): Promise<void> {
-    const markers = await this.getMarkersFromEventsChunked(events, runId);
-    if (runId !== this.mapDataRunId) {
-      this.logger.info('[perf] events_map_create_markers_cancelled', {
-        inputEvents,
-        runId,
-      });
+  ngOnDestroy(): void {
+    const map = this.mapInstance();
+    this.styleLoadHandlerCleanup?.();
+    this.styleLoadHandlerCleanup = null;
+    this.styleReadyHandlerCleanup?.();
+    this.styleReadyHandlerCleanup = null;
+    unbindLayerClicks(map, this.layerClickBindings);
+
+    if (map?.remove) {
+      map.remove();
+    }
+
+    this.mapInstance.set(null);
+    this.mapStyleSynchronizer.set(undefined);
+  }
+
+  public clearSelectedEvent(): void {
+    this.activeHydrationSequence += 1;
+    this.hydrationInFlightEventId = null;
+    this.hydratedEventId = null;
+    this.selectedEvent = undefined;
+    this.selectedEventPopupContent = null;
+    this.selectedEventPositionsByActivity = [];
+    this.renderSelectedEventTracks();
+
+    if (this.events?.length) {
+      this.fitBoundsToEvents(false);
+    }
+
+    this.changeDetectorRef.markForCheck();
+  }
+
+  public openSelectedEvent(): void {
+    const eventId = this.selectedEvent?.getID?.();
+    const userId = this.user?.uid;
+    if (!eventId || !userId) {
       return;
     }
-    this.markers = markers;
-    this.noMapData = this.markers.length === 0;
-    this.logger.info('[perf] events_map_create_markers', {
-      durationMs: Number((performance.now() - markerCreationStart).toFixed(2)),
-      inputEvents,
-      markers: this.markers.length,
-      mode: 'chunked',
-      chunkSize: this.markerChunkSize,
-    });
-    this.renderMarkersAndBounds(events, initStart, inputEvents);
+
+    void this.router.navigate(['/user', userId, 'event', eventId]);
+    this.clearSelectedEvent();
   }
 
-  private renderMarkersAndBounds(events: EventInterface[], initStart: number, inputEvents: number): void {
-    // for AdvancedMarkerElement, setting map via constructor is enough, or set properties.
-    // But standard way is map. But we might use clusterer.
-    // If using clusterer, we add to clusterer. If not, we add to map.
-    if (!this.clusterMarkers) {
-      const attachStart = performance.now();
-      this.markers.forEach(marker => marker.map = this.nativeMap);
-      this.logger.info('[perf] events_map_attach_markers', {
-        durationMs: Number((performance.now() - attachStart).toFixed(2)),
-        markers: this.markers.length,
-      });
+  public getSelectedEventPopupContent(event: EventInterface | null | undefined): MapEventPopupContent {
+    return this.popupContentService.buildFromEvent(event);
+  }
+
+  private async initializeMap(): Promise<void> {
+    if (!this.mapDiv?.nativeElement || this.mapInstance()) {
+      return;
     }
+
+    try {
+      const resolvedStyle = this.mapStyleService.resolve(this.mapStyleSignal(), this.appTheme());
+      const initialCamera = this.resolveInitialCamera();
+      const initialBounds = this.resolveInitialBounds();
+      const mapOptions: any = {
+        style: resolvedStyle.styleUrl,
+      };
+
+      if (initialBounds) {
+        mapOptions.bounds = initialBounds;
+        mapOptions.fitBoundsOptions = {
+          padding: 80,
+          duration: 0,
+          animate: false,
+        };
+      } else {
+        mapOptions.zoom = initialCamera.zoom;
+        mapOptions.center = initialCamera.center;
+      }
+
+      if (this.mapStyleService.isStandard(resolvedStyle.styleUrl) && resolvedStyle.preset) {
+        mapOptions.config = { basemap: { lightPreset: resolvedStyle.preset } };
+      }
+
+      const map = await this.mapboxLoader.createMap(this.mapDiv.nativeElement, mapOptions);
+      this.mapboxgl = await this.mapboxLoader.loadMapbox();
+
+      this.mapInstance.set(map);
+      this.mapStyleSynchronizer.set(this.mapStyleService.createSynchronizer(map));
+
+      this.styleLoadHandlerCleanup = attachStyleReloadHandler(
+        map,
+        () => {
+          this.zone.run(() => {
+            this.currentSourceClusterMode = null;
+            this.renderMapData();
+          });
+        },
+        'events-map-component'
+      );
+
+      this.styleReadyHandlerCleanup?.();
+      this.styleReadyHandlerCleanup = runWhenStyleReady(
+        map,
+        () => {
+          this.zone.run(() => {
+            this.apiLoaded.set(true);
+            this.renderMapData();
+            this.changeDetectorRef.markForCheck();
+          });
+        }
+      );
+
+      map.on('load', () => {
+        this.zone.run(() => {
+          this.apiLoaded.set(true);
+          this.renderMapData();
+          this.changeDetectorRef.markForCheck();
+        });
+      });
+    } catch (error) {
+      this.logger.error('[EventsMapComponent] Failed to initialize Mapbox map.', error);
+      this.noMapData = true;
+      this.apiLoaded.set(true);
+      this.changeDetectorRef.markForCheck();
+    }
+  }
+
+  private renderMapData(): void {
+    const map = this.mapInstance();
+    if (!map || !isStyleReady(map)) {
+      return;
+    }
+
+    this.renderEventLayers();
+    this.renderSelectedEventTracks();
+  }
+
+  private renderEventLayers(): void {
+    const map = this.mapInstance();
+    if (!map) {
+      return;
+    }
+
+    const pointFeatures = this.buildEventPointFeatures();
+    if (!pointFeatures.length) {
+      this.noMapData = true;
+      this.clearEventLayersAndSource();
+      this.changeDetectorRef.markForCheck();
+      return;
+    }
+
+    this.noMapData = false;
+
+    const sourceData: { type: 'FeatureCollection'; features: EventPointFeature[] } = {
+      type: 'FeatureCollection',
+      features: pointFeatures,
+    };
+
+    this.ensureEventsSource(sourceData);
+
+    ensureEventPointLayers(
+      map,
+      this.clusterMarkers,
+      EventsMapComponent.EVENTS_UNCLUSTERED_LAYER_ID,
+      EventsMapComponent.EVENTS_CLUSTER_LAYER_ID,
+      EventsMapComponent.EVENTS_CLUSTER_COUNT_LAYER_ID,
+      EventsMapComponent.EVENTS_SOURCE_ID,
+      this.mapStyleService,
+      this.appTheme(),
+    );
+
+    this.bindEventLayerInteractions();
+
+    if (this.pendingEventsFitBounds && !this.selectedEvent) {
+      this.fitBoundsToPointFeatures(pointFeatures, false);
+      this.pendingEventsFitBounds = false;
+    }
+
+    this.changeDetectorRef.markForCheck();
+  }
+
+  private ensureEventsSource(sourceData: { type: 'FeatureCollection'; features: EventPointFeature[] }): void {
+    const map = this.mapInstance();
+    if (!map) {
+      return;
+    }
+
+    const shouldCluster = this.clusterMarkers === true;
+    if (this.currentSourceClusterMode !== null && this.currentSourceClusterMode !== shouldCluster) {
+      this.clearEventLayersAndSource();
+      this.currentSourceClusterMode = null;
+    }
+
+    upsertGeoJsonSource(map, EventsMapComponent.EVENTS_SOURCE_ID, sourceData, shouldCluster
+      ? {
+        cluster: true,
+        clusterRadius: 50,
+        clusterMaxZoom: 14,
+      }
+      : {}
+    );
+    this.currentSourceClusterMode = shouldCluster;
+  }
+
+  private bindEventLayerInteractions(): void {
+    const map = this.mapInstance();
+    if (!map) {
+      return;
+    }
+
+    unbindLayerClicks(map, this.layerClickBindings);
+
+    bindLayerClickOnce(
+      map,
+      this.layerClickBindings,
+      EventsMapComponent.EVENTS_UNCLUSTERED_LAYER_ID,
+      (event) => {
+        const eventId = String(event?.features?.[0]?.properties?.eventId || '');
+        if (!eventId) {
+          return;
+        }
+        this.zone.run(() => {
+          this.onEventPointClick(eventId);
+        });
+      }
+    );
 
     if (this.clusterMarkers) {
-      const clusterStart = performance.now();
-      if (!this.markerClusterer) {
-        this.markerClusterer = new MarkerClusterer({
-          map: this.nativeMap,
-          markers: this.markers,
-          renderer: {
-            render: ({ count, position, markers }) => {
-              // Calculate prevailing activity type group
-              const groupCounts = new Map<string, number>();
-              let maxCount = 0;
-              let prevailingGroup: string | null = null;
+      bindLayerClickOnce(
+        map,
+        this.layerClickBindings,
+        EventsMapComponent.EVENTS_CLUSTER_LAYER_ID,
+        (event) => {
+          const feature = event?.features?.[0];
+          const clusterId = feature?.properties?.cluster_id;
+          const coordinates = feature?.geometry?.coordinates;
 
-              if (markers) {
-                for (const marker of markers) {
-                  if (marker instanceof google.maps.marker.AdvancedMarkerElement) {
-                    const activityType = this.markerActivityTypes.get(marker);
-                    if (activityType !== undefined) {
-                      const group = ActivityTypesHelper.getActivityGroupForActivityType(activityType);
-                      const currentCount = (groupCounts.get(group) || 0) + 1;
-                      groupCounts.set(group, currentCount);
-
-                      if (currentCount > maxCount) {
-                        maxCount = currentCount;
-                        prevailingGroup = group;
-                      }
-                    }
-                  }
-                }
-              }
-
-              let clusterColor: string | undefined;
-              if (prevailingGroup) {
-                // We can't easily get color by group name directly from service if it only takes ActivityType enum.
-                // But we can find an ActivityType that belongs to this group.
-                // Or better, we can modify/extend AppEventColorService or helper usage.
-                // Actually, usage in marker loop was:
-                // this.eventColorService.getColorForActivityTypeByActivityTypeGroup(type)
-                // So we just need ONE type that maps to this group.
-                // Let's find one.
-                // Simpler appproach: Iterate types, count group. Store ONE representative type for the max group.
-
-                // Re-doing simple loop for representative type
-                const groupCountsMap = new Map<string, number>();
-                const groupRepresentativeType = new Map<string, ActivityTypes>();
-
-                let maxVal = 0;
-                let maxGroup = '';
-
-                for (const marker of markers) {
-                  if (marker instanceof google.maps.marker.AdvancedMarkerElement) {
-                    const activityType = this.markerActivityTypes.get(marker);
-                    if (activityType !== undefined) {
-                      const group = ActivityTypesHelper.getActivityGroupForActivityType(activityType);
-                      const val = (groupCountsMap.get(group) || 0) + 1;
-                      groupCountsMap.set(group, val);
-                      groupRepresentativeType.set(group, activityType); // Update representative (any is fine)
-
-                      if (val > maxVal) {
-                        maxVal = val;
-                        maxGroup = group;
-                      }
-                    }
-                  }
-                }
-
-                if (maxGroup && groupRepresentativeType.has(maxGroup)) {
-                  clusterColor = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(groupRepresentativeType.get(maxGroup)!);
-                }
-              }
-
-              return new google.maps.marker.AdvancedMarkerElement({
-                position,
-                content: this.markerFactory.createClusterMarker(count, clusterColor),
-                zIndex: Number(google.maps.Marker.MAX_ZINDEX) + count,
-              });
-            }
-          },
-          onClusterClick: (event, cluster, map) => {
-            if (cluster.bounds) {
-              map.fitBounds(cluster.bounds, 100);
-            }
+          if (!Number.isFinite(clusterId) || !Array.isArray(coordinates)) {
+            return;
           }
-        });
-      } else {
-        this.markerClusterer.addMarkers(this.markers);
-      }
-      this.logger.info('[perf] events_map_cluster_markers', {
-        durationMs: Number((performance.now() - clusterStart).toFixed(2)),
-        markers: this.markers.length,
-        createdClusterer: !!this.markerClusterer,
-      });
-    }
 
-    // Fit bounds to show all events
-    const startPositions = this.getStartPositionsFromEvents(events);
-    if (startPositions.length > 0) {
-      const fitStart = performance.now();
-      this.nativeMap.fitBounds(this.getBounds(startPositions), 100);
-      this.logger.info('[perf] events_map_fit_bounds', {
-        durationMs: Number((performance.now() - fitStart).toFixed(2)),
-        positions: startPositions.length,
-      });
-    }
+          const source = map.getSource?.(EventsMapComponent.EVENTS_SOURCE_ID);
+          if (!source || typeof source.getClusterExpansionZoom !== 'function') {
+            return;
+          }
 
-    this.logger.info('[perf] events_map_init_total', {
-      durationMs: Number((performance.now() - initStart).toFixed(2)),
-      inputEvents,
-      markers: this.markers?.length || 0,
-      clusterMarkers: !!this.clusterMarkers,
-    });
+          source.getClusterExpansionZoom(clusterId, (error: any, zoom: number) => {
+            if (error) {
+              this.logger.warn('[EventsMapComponent] Failed to resolve cluster expansion zoom.', error);
+              return;
+            }
+            map.easeTo?.({
+              center: coordinates,
+              zoom: Math.min(zoom, 17),
+            });
+          });
+        }
+      );
+    }
   }
 
+  private buildEventPointFeatures(): EventPointFeature[] {
+    this.eventsById.clear();
 
-  getStartPositionsFromEvents(events: EventInterface[]): DataPositionInterface[] {
-    return events.reduce((positionsArray, event) => {
-      const eventStartPositionStat = <DataStartPosition>event.getStat(DataStartPosition.type);
-      if (eventStartPositionStat) {
-        positionsArray.push(eventStartPositionStat.getValue());
+    return (this.events || []).reduce<EventPointFeature[]>((features, event) => {
+      const eventId = event?.getID?.();
+      if (!eventId) {
+        return features;
       }
-      return positionsArray;
+
+      const coordinates = this.resolveEventStartCoordinates(event);
+      if (!coordinates) {
+        return features;
+      }
+
+      const activityType = this.resolvePrimaryEventActivityType(event);
+
+      const color = this.resolveMarkerColor(activityType);
+
+      this.eventsById.set(eventId, event);
+      features.push({
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates,
+        },
+        properties: {
+          eventId,
+          color,
+        },
+      });
+
+      return features;
     }, []);
   }
 
-  getPolylinePath(positions: DataPositionInterface[]): google.maps.LatLngLiteral[] {
-    return positions.map(pos => ({
-      lat: pos.latitudeDegrees,
-      lng: pos.longitudeDegrees
-    }));
+  private resolveMarkerColor(activityType: ActivityTypes): string {
+    return resolveThemedActivityColor(
+      activityType,
+      this.appTheme(),
+      this.eventColorService,
+      this.mapStyleService,
+    ).adjustedColor;
   }
 
-  getPolylineOptions(color: string): google.maps.PolylineOptions {
+  private resolvePrimaryEventActivityType(event: EventInterface): ActivityTypes {
+    const activityTypes = event.getActivityTypesAsArray?.() || [];
+    if (activityTypes.length > 1) {
+      return ActivityTypes.Multisport;
+    }
+    return this.normalizeActivityType(activityTypes[0]);
+  }
+
+  private normalizeActivityType(value: unknown): ActivityTypes {
+    if (typeof value === 'string' && value.trim().length > 0) {
+      const normalized = value.trim().toLowerCase();
+      const matched = Object.values(ActivityTypes).find((candidate) =>
+        typeof candidate === 'string' && candidate.toLowerCase() === normalized
+      );
+      if (matched) {
+        return matched as ActivityTypes;
+      }
+    }
+    return ActivityTypes.unknown;
+  }
+
+  private onEventPointClick(eventId: string): void {
+    const event = this.eventsById.get(eventId);
+    if (!event || !this.user) {
+      return;
+    }
+
+    const isSameSelection = this.selectedEvent?.getID?.() === eventId;
+    if (isSameSelection && (this.hydrationInFlightEventId === eventId || this.hydratedEventId === eventId)) {
+      this.logPopupStatSnapshot('click:selected:duplicate', event);
+      if (this.selectedEventPositionsByActivity.length > 0) {
+        this.fitBoundsToSelectedTracks(false);
+      }
+      return;
+    }
+
+    this.activeHydrationSequence += 1;
+    const requestSequence = this.activeHydrationSequence;
+    this.hydrationInFlightEventId = eventId;
+    this.hydratedEventId = null;
+    this.lastPopupDebugFingerprint = null;
+    const popupContent = this.popupContentService.buildFromEvent(event);
+    this.logPopupStatSnapshot('click:selected', event, popupContent);
+    this.logPopupStatSnapshot('popup:build', event, popupContent);
+    this.selectedEventPopupContent = popupContent;
+    this.selectedEvent = event;
+    this.selectedEventPositionsByActivity = [];
+    this.renderSelectedEventTracks();
+    this.changeDetectorRef.markForCheck();
+    void this.hydrateSelectedEventTracks(eventId, requestSequence, event);
+  }
+
+  private async hydrateSelectedEventTracks(
+    eventId: string,
+    requestSequence: number,
+    fallbackEvent: EventInterface
+  ): Promise<void> {
+    const user = this.user;
+    if (!user) {
+      return;
+    }
+
+    try {
+      const hydratedEvent = await firstValueFrom(
+        this.eventService.getEventActivitiesAndSomeStreams(
+          user,
+          eventId,
+          [DataLatitudeDegrees.type, DataLongitudeDegrees.type]
+        ).pipe(take(1))
+      );
+
+      if (requestSequence !== this.activeHydrationSequence) {
+        return;
+      }
+
+      const activities = hydratedEvent?.getActivities?.() || [];
+      this.selectedEventPositionsByActivity = activities.reduce<Array<{
+        activity: ActivityInterface;
+        color: string;
+        positions: DataPositionInterface[];
+      }>>((result, activity) => {
+        const positions = activity.getSquashedPositionData?.() || [];
+        if (!positions.length) {
+          return result;
+        }
+
+        result.push({
+          activity,
+          color: this.eventColorService.getActivityColor(activities, activity),
+          positions,
+        });
+        return result;
+      }, []);
+
+      this.selectedEvent = hydratedEvent || fallbackEvent;
+      this.hydrationInFlightEventId = null;
+      this.hydratedEventId = eventId;
+      this.renderSelectedEventTracks();
+      if (this.selectedEventPositionsByActivity.length > 0) {
+        this.fitBoundsToSelectedTracks(false);
+      }
+      this.changeDetectorRef.markForCheck();
+    } catch (error) {
+      if (requestSequence !== this.activeHydrationSequence) {
+        return;
+      }
+      this.hydrationInFlightEventId = null;
+      this.logger.error('[EventsMapComponent] Failed to hydrate selected event streams.', {
+        eventId,
+        error,
+      });
+      this.changeDetectorRef.markForCheck();
+    }
+  }
+
+  private renderSelectedEventTracks(): void {
+    const map = this.mapInstance();
+    if (!map || !isStyleReady(map)) {
+      return;
+    }
+
+    const lineFeatures = this.selectedEventPositionsByActivity
+      .map((item) => {
+        const coordinates = (item.positions || [])
+          .filter((position) => Number.isFinite(position?.longitudeDegrees) && Number.isFinite(position?.latitudeDegrees))
+          .map((position) => [position.longitudeDegrees, position.latitudeDegrees] as [number, number]);
+
+        if (coordinates.length <= 1) {
+          return null;
+        }
+
+        return {
+          type: 'Feature',
+          properties: {
+            color: this.mapStyleService.adjustColorForTheme(item.color || '#2ca3ff', this.appTheme()),
+          },
+          geometry: {
+            type: 'LineString',
+            coordinates,
+          },
+        };
+      })
+      .filter((feature): feature is {
+        type: 'Feature';
+        properties: { color: string };
+        geometry: { type: 'LineString'; coordinates: [number, number][] };
+      } => !!feature);
+
+    if (!lineFeatures.length) {
+      removeLayerIfExists(map, EventsMapComponent.SELECTED_TRACKS_LAYER_ID);
+      removeSourceIfExists(map, EventsMapComponent.SELECTED_TRACKS_SOURCE_ID);
+      return;
+    }
+
+    upsertGeoJsonSource(map, EventsMapComponent.SELECTED_TRACKS_SOURCE_ID, {
+      type: 'FeatureCollection',
+      features: lineFeatures,
+    });
+
+    if (!map.getLayer?.(EventsMapComponent.SELECTED_TRACKS_LAYER_ID)) {
+      map.addLayer?.({
+        id: EventsMapComponent.SELECTED_TRACKS_LAYER_ID,
+        type: 'line',
+        source: EventsMapComponent.SELECTED_TRACKS_SOURCE_ID,
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+        paint: {
+          'line-color': ['coalesce', ['get', 'color'], '#2ca3ff'],
+          'line-width': 3,
+          'line-opacity': 1,
+          'line-emissive-strength': 1,
+        },
+      });
+    }
+
+    setPaintIfLayerExists(map, EventsMapComponent.SELECTED_TRACKS_LAYER_ID, {
+      'line-color': ['coalesce', ['get', 'color'], '#2ca3ff'],
+      'line-width': 3,
+      'line-opacity': 1,
+      'line-emissive-strength': 1,
+    });
+  }
+
+  private clearEventLayersAndSource(): void {
+    const map = this.mapInstance();
+    if (!map) {
+      return;
+    }
+
+    unbindLayerClicks(map, this.layerClickBindings);
+
+    removeLayerIfExists(map, EventsMapComponent.EVENTS_CLUSTER_COUNT_LAYER_ID);
+    removeLayerIfExists(map, EventsMapComponent.EVENTS_CLUSTER_LAYER_ID);
+    removeLayerIfExists(map, EventsMapComponent.EVENTS_UNCLUSTERED_LAYER_ID);
+    removeSourceIfExists(map, EventsMapComponent.EVENTS_SOURCE_ID);
+  }
+
+  private fitBoundsToEvents(animate: boolean): void {
+    const pointFeatures = this.buildEventPointFeatures();
+    this.fitBoundsToPointFeatures(pointFeatures, animate);
+  }
+
+  private fitBoundsToPointFeatures(pointFeatures: EventPointFeature[], animate: boolean): void {
+    if (!this.mapboxgl) {
+      return;
+    }
+
+    const bounds = new this.mapboxgl.LngLatBounds();
+    let hasPoints = false;
+
+    pointFeatures.forEach((feature) => {
+      bounds.extend(feature.geometry.coordinates);
+      hasPoints = true;
+    });
+
+    if (!hasPoints) {
+      return;
+    }
+
+    this.mapInstance()?.fitBounds?.(bounds, {
+      padding: 80,
+      animate,
+    });
+  }
+
+  private fitBoundsToSelectedTracks(animate: boolean): void {
+    if (!this.mapboxgl) {
+      return;
+    }
+
+    const bounds = new this.mapboxgl.LngLatBounds();
+    let hasPoints = false;
+
+    this.selectedEventPositionsByActivity.forEach((positionsByActivity) => {
+      (positionsByActivity.positions || []).forEach((position) => {
+        if (!Number.isFinite(position?.longitudeDegrees) || !Number.isFinite(position?.latitudeDegrees)) {
+          return;
+        }
+
+        bounds.extend([position.longitudeDegrees, position.latitudeDegrees]);
+        hasPoints = true;
+      });
+    });
+
+    if (!hasPoints) {
+      return;
+    }
+
+    this.mapInstance()?.fitBounds?.(bounds, {
+      padding: 80,
+      animate,
+    });
+  }
+
+  private resolveInitialCamera(): { center: [number, number]; zoom: number } {
+    const firstCoordinates = (this.events || [])
+      .map((event) => this.resolveEventStartCoordinates(event))
+      .find((coordinates): coordinates is [number, number] => Array.isArray(coordinates));
+
+    if (firstCoordinates) {
+      return {
+        center: firstCoordinates,
+        zoom: 10,
+      };
+    }
+
     return {
-      strokeColor: color,
-      strokeWeight: 3,
-      strokeOpacity: 1
+      center: [0, 0],
+      zoom: 2,
     };
   }
 
-  private getMarkersFromEvents(events: EventInterface[]): google.maps.marker.AdvancedMarkerElement[] {
-    const buildStart = performance.now();
-    const markers = events.reduce((markersArray: google.maps.marker.AdvancedMarkerElement[], event: EventInterface) => {
-      const marker = this.createMarkerForEvent(event);
-      if (marker) {
-        markersArray.push(marker);
-      }
-      return markersArray;
-    }, []);
-    this.logger.info('[perf] events_map_get_markers_from_events', {
-      durationMs: Number((performance.now() - buildStart).toFixed(2)),
-      inputEvents: events?.length || 0,
-      markers: markers.length,
-      mode: 'sync',
-    });
-    return markers;
-  }
+  private resolveInitialBounds(): [[number, number], [number, number]] | null {
+    const coordinates = (this.events || [])
+      .map((event) => this.resolveEventStartCoordinates(event))
+      .filter((coordinate): coordinate is [number, number] => Array.isArray(coordinate));
 
-  private async getMarkersFromEventsChunked(events: EventInterface[], runId: number): Promise<google.maps.marker.AdvancedMarkerElement[]> {
-    const buildStart = performance.now();
-    const markers: google.maps.marker.AdvancedMarkerElement[] = [];
-
-    for (let index = 0; index < events.length; index += this.markerChunkSize) {
-      if (runId !== this.mapDataRunId) {
-        return [];
-      }
-      const chunk = events.slice(index, index + this.markerChunkSize);
-      for (const event of chunk) {
-        const marker = this.createMarkerForEvent(event);
-        if (marker) {
-          markers.push(marker);
-        }
-      }
-      if (index + this.markerChunkSize < events.length) {
-        await this.yieldToMainThread();
-      }
-    }
-
-    this.logger.info('[perf] events_map_get_markers_from_events', {
-      durationMs: Number((performance.now() - buildStart).toFixed(2)),
-      inputEvents: events?.length || 0,
-      markers: markers.length,
-      mode: 'chunked',
-      chunkSize: this.markerChunkSize,
-    });
-    return markers;
-  }
-
-  private createMarkerForEvent(event: EventInterface): google.maps.marker.AdvancedMarkerElement | null {
-    const eventStartPositionStat = <DataStartPosition>event.getStat(DataStartPosition.type);
-    if (!eventStartPositionStat || !this.AdvancedMarkerElement) {
+    if (coordinates.length < 2) {
       return null;
     }
-    const location = eventStartPositionStat.getValue();
-    const activityTypes = event.getActivityTypesAsArray();
-    const activityType = activityTypes.length > 1 ? ActivityTypes.Multisport : activityTypes[0] as unknown as ActivityTypes;
-    const color = this.eventColorService.getColorForActivityTypeByActivityTypeGroup(activityType);
 
-    const marker = new this.AdvancedMarkerElement({
-      position: { lat: location.latitudeDegrees, lng: location.longitudeDegrees },
-      title: `${event.getActivityTypesAsString()} for ${event.getDuration().getDisplayValue(false, false)} and ${event.getDistance().getDisplayValue()}`,
-      content: this.markerFactory.createEventMarker(color)
+    let minLongitude = Number.POSITIVE_INFINITY;
+    let minLatitude = Number.POSITIVE_INFINITY;
+    let maxLongitude = Number.NEGATIVE_INFINITY;
+    let maxLatitude = Number.NEGATIVE_INFINITY;
+
+    coordinates.forEach(([longitudeDegrees, latitudeDegrees]) => {
+      if (longitudeDegrees < minLongitude) minLongitude = longitudeDegrees;
+      if (longitudeDegrees > maxLongitude) maxLongitude = longitudeDegrees;
+      if (latitudeDegrees < minLatitude) minLatitude = latitudeDegrees;
+      if (latitudeDegrees > maxLatitude) maxLatitude = latitudeDegrees;
     });
 
-    // Store activity type for this marker
-    this.markerActivityTypes.set(marker, activityType);
-    this.bindMarkerClick(marker, event);
-
-    return marker;
+    return [
+      [minLongitude, minLatitude],
+      [maxLongitude, maxLatitude],
+    ];
   }
 
-  private bindMarkerClick(marker: google.maps.marker.AdvancedMarkerElement, event: EventInterface): void {
-    marker.addListener('gmp-click', async () => {
-      this.loading();
-      this.selectedEventPositionsByActivity = [];
+  private resolveEventStartCoordinates(event: EventInterface): [number, number] | null {
+    const startPositionStat = event.getStat(DataStartPosition.type) as DataStartPosition;
+    const location = startPositionStat?.getValue?.();
+    if (!Number.isFinite(location?.longitudeDegrees) || !Number.isFinite(location?.latitudeDegrees)) {
+      return null;
+    }
+    return [location.longitudeDegrees, location.latitudeDegrees];
+  }
 
-      try {
-        // Use attachStreamsToEventWithActivities to get event with activities + streams
-        // This handles original file parsing on the fly if needed
-        const types = [DataLatitudeDegrees.type, DataLongitudeDegrees.type];
+  private logPopupStatSnapshot(
+    stage: string,
+    event: EventInterface | null | undefined,
+    popupContent?: MapEventPopupContent
+  ): void {
+    if (!event) {
+      this.logger.info('[EventsMapPopupDebug] snapshot', { stage, hasEvent: false });
+      return;
+    }
 
-        // We only need one emission
-        const populatedEvent = await this.eventService.attachStreamsToEventWithActivities(
-          this.user,
-          event,
-          types
-        ).pipe(take(1)).toPromise();
+    const speedStat = event.getStat?.(DataSpeedAvg.type);
+    const paceStat = event.getStat?.(DataPaceAvg.type);
+    const swimPaceStat = event.getStat?.(DataSwimPaceAvg.type);
+    const durationStat = event.getDuration?.() || event.getStat?.(DataDuration.type);
+    const distanceStat = event.getDistance?.() || event.getStat?.(DataDistance.type);
+    const activityTypes = event.getActivityTypesAsArray?.() || [];
+    const fingerprintPayload = {
+      stage,
+      eventId: event.getID?.(),
+      activityTypes,
+      duration: this.toStatDebugValue(durationStat),
+      distance: this.toStatDebugValue(distanceStat),
+      speed: this.toStatDebugValue(speedStat),
+      pace: this.toStatDebugValue(paceStat),
+      swimPace: this.toStatDebugValue(swimPaceStat),
+      popupEffort: popupContent?.metrics?.[2]?.value || null,
+      popupEffortUnit: popupContent?.metrics?.[2]?.label || null,
+      popupMetrics: popupContent?.metrics || null,
+    };
+    const fingerprint = JSON.stringify(fingerprintPayload);
+    if (stage === 'popup:build' && this.lastPopupDebugFingerprint === fingerprint) {
+      return;
+    }
 
-        if (!populatedEvent) {
-          return;
-        }
+    this.lastPopupDebugFingerprint = fingerprint;
+    this.logger.info('[EventsMapPopupDebug] snapshot', fingerprintPayload);
+  }
 
-        const activities = populatedEvent.getActivities();
-        if (!activities || activities.length === 0) {
-          return;
-        }
+  private toStatDebugValue(stat: any): string {
+    if (!stat) {
+      return '--';
+    }
 
-        for (const activity of activities) {
-          this.selectedEventPositionsByActivity.push({
-            activity: activity,
-            color: this.eventColorService.getActivityColor(activities, activity),
-            positions: activity.getSquashedPositionData()
-          });
-        }
+    const displayValue = stat.getDisplayValue?.();
+    const displayUnit = stat.getDisplayUnit?.();
+    const value = displayValue !== undefined && displayValue !== null ? String(displayValue) : '';
+    const unit = displayUnit !== undefined && displayUnit !== null ? String(displayUnit) : '';
+    return `${value}${unit ? ` ${unit}` : ''}`.trim() || '--';
+  }
+}
 
-        const allPositions = this.selectedEventPositionsByActivity.reduce((accu, positionByActivity) => {
-          return accu.concat(positionByActivity.positions);
-        }, []);
+function ensureEventPointLayers(
+  map: any,
+  clustered: boolean,
+  unclusteredLayerId: string,
+  clusterLayerId: string,
+  clusterCountLayerId: string,
+  sourceId: string,
+  mapStyleService: MapStyleService,
+  theme: AppThemes,
+): void {
+  if (!map) {
+    return;
+  }
 
-        if (allPositions.length > 0) {
-          this.nativeMap.fitBounds(this.getBounds(allPositions), 100);
-        }
-
-        this.selectedEvent = populatedEvent;
-      } catch (error) {
-        this.logger.error('[EventsMapComponent] Failed to hydrate event tracks from original files', {
-          eventID: event.getID?.(),
-          error,
-        });
-        this.snackBar.open('Could not load event track data', undefined, { duration: 3000 });
-      } finally {
-        this.loaded();
-      }
+  if (!map.getLayer?.(unclusteredLayerId)) {
+    map.addLayer?.({
+      id: unclusteredLayerId,
+      type: 'circle',
+      source: sourceId,
+      filter: ['!', ['has', 'point_count']],
+      paint: buildReadableActivityMarkerPaint({
+        colorExpression: ['coalesce', ['get', 'color'], '#2ca3ff'],
+        radiusExpression: 6,
+        strokeWidthExpression: 2.2,
+      }),
     });
   }
 
-  private yieldToMainThread(): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, 0));
+  setPaintIfLayerExists(map, unclusteredLayerId, buildReadableActivityMarkerPaint({
+    colorExpression: ['coalesce', ['get', 'color'], '#2ca3ff'],
+    radiusExpression: 6,
+    strokeWidthExpression: 2.2,
+  }));
+
+  if (!clustered) {
+    removeLayerIfExists(map, clusterCountLayerId);
+    removeLayerIfExists(map, clusterLayerId);
+    return;
   }
+
+  const clusterStepColors = [
+    '#50b5ff',
+    '#3288d8',
+    '#2266a5',
+    '#1a4f7d',
+  ].map((color) => mapStyleService.adjustColorForTheme(color, theme) || color);
+  const clusterTextColor = theme === AppThemes.Dark ? '#101828' : '#ffffff';
+
+  if (!map.getLayer?.(clusterLayerId)) {
+    map.addLayer?.({
+      id: clusterLayerId,
+      type: 'circle',
+      source: sourceId,
+      filter: ['has', 'point_count'],
+      paint: {
+        'circle-color': [
+          'step',
+          ['get', 'point_count'],
+          clusterStepColors[0],
+          20,
+          clusterStepColors[1],
+          50,
+          clusterStepColors[2],
+          100,
+          clusterStepColors[3],
+        ],
+        'circle-radius': [
+          'step',
+          ['get', 'point_count'],
+          16,
+          20,
+          20,
+          50,
+          24,
+          100,
+          28,
+        ],
+        'circle-opacity': 0.9,
+      },
+    });
+  }
+
+  if (!map.getLayer?.(clusterCountLayerId)) {
+    map.addLayer?.({
+      id: clusterCountLayerId,
+      type: 'symbol',
+      source: sourceId,
+      filter: ['has', 'point_count'],
+      layout: {
+        'text-field': ['get', 'point_count_abbreviated'],
+        'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
+        'text-size': 12,
+      },
+      paint: {
+        'text-color': clusterTextColor,
+      },
+    });
+  }
+
+  setPaintIfLayerExists(map, clusterLayerId, {
+    'circle-color': [
+      'step',
+      ['get', 'point_count'],
+      clusterStepColors[0],
+      20,
+      clusterStepColors[1],
+      50,
+      clusterStepColors[2],
+      100,
+      clusterStepColors[3],
+    ],
+  });
+
+  setPaintIfLayerExists(map, clusterCountLayerId, {
+    'text-color': clusterTextColor,
+  });
 }

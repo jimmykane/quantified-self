@@ -23,7 +23,6 @@ import { ChartsXYComponent } from '../components/charts/xy/charts.xy.component';
 import { ChartsColumnsComponent } from '../components/charts/columns/charts.columns.component';
 import { EventTableActionsComponent } from '../components/event-table/actions/event.table.actions.component';
 import { ChartsPieComponent } from '../components/charts/pie/charts.pie.component';
-import { GoogleMapsModule } from '@angular/google-maps';
 
 @NgModule({
     imports: [
@@ -31,7 +30,6 @@ import { GoogleMapsModule } from '@angular/google-maps';
         SharedModule,
         MaterialModule,
         DashboardRoutingModule,
-        GoogleMapsModule,
     ],
     exports: [],
     declarations: [
