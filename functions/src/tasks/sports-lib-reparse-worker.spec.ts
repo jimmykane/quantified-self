@@ -58,6 +58,7 @@ import { processSportsLibReparseTask } from './sports-lib-reparse-worker';
 describe('processSportsLibReparseTask', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        delete process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS;
         hoisted.hasPaidOrGraceAccess.mockResolvedValue(true);
         hoisted.reparseEventFromOriginalFiles.mockResolvedValue({
             status: 'completed',
@@ -134,5 +135,49 @@ describe('processSportsLibReparseTask', () => {
             status: 'failed',
             lastError: 'parse failed',
         }), { merge: true });
+    });
+
+    it('should fail with access denied when include-free-users flag is disabled', async () => {
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '9.0.99',
+            }),
+        });
+        hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
+
+        await expect((processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } })).rejects.toThrow('USER_NO_PAID_ACCESS');
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+            status: 'failed',
+            reason: 'USER_NO_PAID_ACCESS',
+            lastError: 'USER_NO_PAID_ACCESS',
+        }));
+    });
+
+    it('should include free users when include-free-users flag is enabled', async () => {
+        process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS = 'true';
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '9.0.99',
+            }),
+        });
+        hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
+
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+
+        expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalled();
+        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', {
+            targetSportsLibVersion: '9.0.99',
+        });
     });
 });

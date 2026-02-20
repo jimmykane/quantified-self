@@ -46,12 +46,14 @@ function getCurrentSettings(): {
     scanLimit: number;
     enqueueLimit: number;
     uidAllowlist: Set<string> | null;
+    includeFreeUsers: boolean;
 } {
     return {
         enabled: parseBooleanEnv(process.env.SPORTS_LIB_REPARSE_ENABLED, false),
         scanLimit: parsePositiveIntEnv(process.env.SPORTS_LIB_REPARSE_SCAN_LIMIT, DEFAULT_SCAN_LIMIT),
         enqueueLimit: parsePositiveIntEnv(process.env.SPORTS_LIB_REPARSE_ENQUEUE_LIMIT, DEFAULT_ENQUEUE_LIMIT),
         uidAllowlist: parseUIDAllowlist(process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST),
+        includeFreeUsers: parseBooleanEnv(process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS, false),
     };
 }
 
@@ -122,14 +124,16 @@ export const scheduleSportsLibReparseScan = onSchedule({
             return;
         }
 
-        let accessPromise = eligibilityCache.get(uid);
-        if (!accessPromise) {
-            accessPromise = hasPaidOrGraceAccess(uid);
-            eligibilityCache.set(uid, accessPromise);
-        }
-        const hasAccess = await accessPromise;
-        if (!hasAccess) {
-            return;
+        if (!settings.includeFreeUsers) {
+            let accessPromise = eligibilityCache.get(uid);
+            if (!accessPromise) {
+                accessPromise = hasPaidOrGraceAccess(uid);
+                eligibilityCache.set(uid, accessPromise);
+            }
+            const hasAccess = await accessPromise;
+            if (!hasAccess) {
+                return;
+            }
         }
 
         const sourceFiles = extractSourceFiles(eventDoc.data() as Record<string, unknown>);

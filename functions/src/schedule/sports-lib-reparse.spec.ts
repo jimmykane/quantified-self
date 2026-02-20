@@ -211,6 +211,7 @@ describe('scheduleSportsLibReparseScan', () => {
         process.env.SPORTS_LIB_REPARSE_SCAN_LIMIT = '200';
         process.env.SPORTS_LIB_REPARSE_ENQUEUE_LIMIT = '100';
         delete process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST;
+        delete process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS;
         hoisted.checkpointGet.mockResolvedValue({ data: () => ({ cursorEventPath: null }) });
         hoisted.jobGet.mockResolvedValue({ exists: false, data: () => ({}) });
         hoisted.shouldEventBeReparsed.mockResolvedValue(true);
@@ -412,5 +413,16 @@ describe('scheduleSportsLibReparseScan', () => {
         await (scheduleSportsLibReparseScan as any)({});
 
         expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+    });
+
+    it('should include free users when include-free-users flag is enabled', async () => {
+        process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS = 'true';
+        hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
+        hoisted.globalEventsDocs.push(createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
     });
 });

@@ -29,6 +29,13 @@ function getErrorMessage(error: unknown): string {
     return `${error}`;
 }
 
+function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
+    if (value === undefined) {
+        return fallback;
+    }
+    return value.trim().toLowerCase() === 'true';
+}
+
 export const processSportsLibReparseTask = onTaskDispatched({
     retryConfig: CLOUD_TASK_RETRY_CONFIG,
     memory: '1GiB',
@@ -37,6 +44,7 @@ export const processSportsLibReparseTask = onTaskDispatched({
 }, async (request) => {
     const payload = request.data as SportsLibReparseTaskPayload;
     const jobId = payload?.jobId;
+    const includeFreeUsers = parseBooleanEnv(process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS, false);
 
     if (!jobId) {
         throw new Error('Missing jobId in sports-lib reparse task payload.');
@@ -64,9 +72,11 @@ export const processSportsLibReparseTask = onTaskDispatched({
     }, { merge: true });
 
     try {
-        const hasAccess = await hasPaidOrGraceAccess(job.uid);
-        if (!hasAccess) {
-            throw new Error(ACCESS_DENIED_ERROR);
+        if (!includeFreeUsers) {
+            const hasAccess = await hasPaidOrGraceAccess(job.uid);
+            if (!hasAccess) {
+                throw new Error(ACCESS_DENIED_ERROR);
+            }
         }
 
         const reparseResult = await reparseEventFromOriginalFiles(job.uid, job.eventId, {

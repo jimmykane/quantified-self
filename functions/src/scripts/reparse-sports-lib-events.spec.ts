@@ -161,6 +161,7 @@ describe('reparse-sports-lib-events script', () => {
         hoisted.adminApps.length = 0;
         hoisted.resetGlobalCollectionState();
         delete process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST;
+        delete process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS;
 
         hoisted.shouldEventBeReparsed.mockResolvedValue(true);
         hoisted.hasPaidOrGraceAccess.mockResolvedValue(true);
@@ -177,6 +178,7 @@ describe('reparse-sports-lib-events script', () => {
         const options = parseScriptOptions([]);
         expect(options.execute).toBe(false);
         expect(options.limit).toBe(200);
+        expect(options.includeFreeUsers).toBe(false);
     });
 
     it('parseScriptOptions should parse limit and start-after values', () => {
@@ -188,6 +190,12 @@ describe('reparse-sports-lib-events script', () => {
     it('parseScriptOptions should fallback to default limit when value is invalid', () => {
         const options = parseScriptOptions(['--limit', 'not-a-number']);
         expect(options.limit).toBe(200);
+    });
+
+    it('parseScriptOptions should read include-free-users env flag', () => {
+        process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS = 'true';
+        const options = parseScriptOptions([]);
+        expect(options.includeFreeUsers).toBe(true);
     });
 
     it('parseScriptOptions should apply precedence --uid > --uids > env', () => {
@@ -351,6 +359,17 @@ describe('reparse-sports-lib-events script', () => {
         expect(summary.skippedNoAccess).toBe(1);
         expect(summary.completed).toBe(0);
         expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+    });
+
+    it('should include free users when include-free-users flag is enabled', async () => {
+        process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS = 'true';
+        hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
+        hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+
+        const summary = await runSportsLibReparseScript(['--execute', '--uids', 'u1']);
+        expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalled();
+        expect(summary.skippedNoAccess).toBe(0);
+        expect(summary.completed).toBe(1);
     });
 
     it('should not initialize firebase app when one already exists', async () => {

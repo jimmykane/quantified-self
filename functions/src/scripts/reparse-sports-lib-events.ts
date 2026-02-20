@@ -18,6 +18,7 @@ interface ScriptOptions {
     uids?: string[];
     limit: number;
     startAfter?: string;
+    includeFreeUsers: boolean;
 }
 
 export interface ScriptSummary {
@@ -50,6 +51,13 @@ function readArgValue(argv: string[], key: string): string | undefined {
     return argv[index + 1];
 }
 
+function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
+    if (value === undefined) {
+        return fallback;
+    }
+    return value.trim().toLowerCase() === 'true';
+}
+
 export function parseScriptOptions(argv: string[]): ScriptOptions {
     const execute = argv.includes('--execute');
     const uid = readArgValue(argv, '--uid');
@@ -58,6 +66,7 @@ export function parseScriptOptions(argv: string[]): ScriptOptions {
     const effectiveUIDAllowlist = uid ? null : (cliUIDAllowlist || envUIDAllowlist);
     const limit = parseIntArg(readArgValue(argv, '--limit'), 200);
     const startAfter = readArgValue(argv, '--start-after');
+    const includeFreeUsers = parseBooleanEnv(process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS, false);
 
     return {
         execute,
@@ -65,6 +74,7 @@ export function parseScriptOptions(argv: string[]): ScriptOptions {
         uids: effectiveUIDAllowlist ? Array.from(effectiveUIDAllowlist) : undefined,
         limit,
         startAfter,
+        includeFreeUsers,
     };
 }
 
@@ -148,15 +158,17 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
             continue;
         }
 
-        let hasAccessPromise = accessCache.get(uid);
-        if (!hasAccessPromise) {
-            hasAccessPromise = hasPaidOrGraceAccess(uid);
-            accessCache.set(uid, hasAccessPromise);
-        }
-        const hasAccess = await hasAccessPromise;
-        if (!hasAccess) {
-            summary.skippedNoAccess++;
-            continue;
+        if (!options.includeFreeUsers) {
+            let hasAccessPromise = accessCache.get(uid);
+            if (!hasAccessPromise) {
+                hasAccessPromise = hasPaidOrGraceAccess(uid);
+                accessCache.set(uid, hasAccessPromise);
+            }
+            const hasAccess = await hasAccessPromise;
+            if (!hasAccess) {
+                summary.skippedNoAccess++;
+                continue;
+            }
         }
 
         const sourceFiles = extractSourceFiles(eventDoc.data() as Record<string, unknown>);
