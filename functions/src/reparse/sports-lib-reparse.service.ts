@@ -485,6 +485,12 @@ export function applyPreservedFields(parsedEvent: EventInterface, existingEventD
     if (Object.prototype.hasOwnProperty.call(existingAny, 'notes')) {
         parsedAny.notes = existingAny.notes;
     }
+    if (Object.prototype.hasOwnProperty.call(existingAny, 'rpe')) {
+        parsedAny.rpe = existingAny.rpe;
+    }
+    if (Object.prototype.hasOwnProperty.call(existingAny, 'feeling')) {
+        parsedAny.feeling = existingAny.feeling;
+    }
 }
 
 export function mapActivityIdentity(

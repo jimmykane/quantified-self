@@ -82,7 +82,7 @@ If `processing.sportsLibVersion` exists but is not valid semver, the run aborts 
 - Strictness: if any source file parse fails, the event fails that run
 - Multiple source files are merged into one final event
 - Preserved from old event only:
-  - `description`, `privacy`, `notes`
+  - `description`, `privacy`, `notes`, `rpe`, `feeling`
 - Activity identity handling:
   - preserve activity IDs by index
   - preserve creator name when present
