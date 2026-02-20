@@ -16,10 +16,7 @@ import { FirestoreEventJSON, OriginalFileMetaData } from '../shared/app-event.in
 import { createParsingOptions } from '../shared/parsing-options';
 import { FirestoreAdapter, LogAdapter, EventWriter } from '../shared/event-writer';
 import { ProcessingMetaData } from '../shared/processing-metadata.interface';
-import {
-    SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
-    SPORTS_LIB_REPARSE_TARGET_VERSION,
-} from './sports-lib-reparse.config';
+import { SPORTS_LIB_REPARSE_TARGET_VERSION } from './sports-lib-reparse.config';
 
 export const SPORTS_LIB_REPARSE_CHECKPOINT_PATH = 'systemJobs/sportsLibReparse';
 export const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
