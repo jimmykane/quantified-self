@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SPORTS_LIB_REPARSE_TARGET_VERSION } from '../reparse/sports-lib-reparse.config';
+
+const TARGET_SPORTS_LIB_VERSION = SPORTS_LIB_REPARSE_TARGET_VERSION;
 
 vi.mock('firebase-functions/v2/scheduler', () => ({
     onSchedule: (_opts: unknown, handler: any) => handler,
@@ -10,7 +13,7 @@ const hoisted = vi.hoisted(() => {
     const extractSourceFiles = vi.fn();
     const buildSportsLibReparseJobId = vi.fn();
     const writeReparseStatus = vi.fn();
-    const resolveTargetSportsLibVersion = vi.fn(() => '9.1.2');
+    const resolveTargetSportsLibVersion = vi.fn();
     const parseUIDAllowlist = vi.fn((input?: string) => {
         if (!input) return null;
         const values = input.split(',').map(v => v.trim()).filter(Boolean);
@@ -221,6 +224,7 @@ describe('scheduleSportsLibReparseScan', () => {
         hoisted.runtimeDefaults.enqueueLimit = 100;
         hoisted.runtimeDefaults.uidAllowlist = null;
         hoisted.runtimeDefaults.includeFreeUsers = false;
+        hoisted.resolveTargetSportsLibVersion.mockReturnValue(TARGET_SPORTS_LIB_VERSION);
         hoisted.checkpointGet.mockResolvedValue({ data: () => ({ cursorEventPath: null }) });
         hoisted.jobGet.mockResolvedValue({ exists: false, data: () => ({}) });
         hoisted.shouldEventBeReparsed.mockResolvedValue(true);
@@ -244,7 +248,7 @@ describe('scheduleSportsLibReparseScan', () => {
             uid: 'u1',
             eventId: 'e1',
             status: 'pending',
-            targetSportsLibVersion: '9.1.2',
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
         }), { merge: true });
     });
 
@@ -350,7 +354,7 @@ describe('scheduleSportsLibReparseScan', () => {
             'u1',
             'e1',
             { originalFile: { path: 'x.fit' } },
-            { status: 'skipped', reason: 'NO_ORIGINAL_FILES', targetSportsLibVersion: '9.1.2' },
+            { status: 'skipped', reason: 'NO_ORIGINAL_FILES', targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION },
         ));
 
         await (scheduleSportsLibReparseScan as any)({});

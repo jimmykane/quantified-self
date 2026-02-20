@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { gzipSync } from 'node:zlib';
+import { SPORTS_LIB_REPARSE_TARGET_VERSION } from './sports-lib-reparse.config';
+
+const TARGET_SPORTS_LIB_VERSION = SPORTS_LIB_REPARSE_TARGET_VERSION;
+const LOWER_SPORTS_LIB_VERSION = '0.0.0';
+const HIGHER_SPORTS_LIB_VERSION = '9999.0.0';
 
 const hoisted = vi.hoisted(() => {
     const mockGetUser = vi.fn();
@@ -179,7 +184,7 @@ describe('sports-lib-reparse.service', () => {
     });
 
     it('resolveTargetSportsLibVersion should return hardcoded target version', () => {
-        expect(resolveTargetSportsLibVersion()).toBe('9.1.2');
+        expect(resolveTargetSportsLibVersion()).toBe(TARGET_SPORTS_LIB_VERSION);
     });
 
     it('parseUIDAllowlist should parse and sanitize comma-separated values', () => {
@@ -412,7 +417,7 @@ describe('sports-lib-reparse.service', () => {
             parsedEvent,
             {},
             [{ id: 'a1', data: () => ({}) } as any],
-            '9.1.2',
+            TARGET_SPORTS_LIB_VERSION,
         );
 
         expect(result.staleActivitiesDeleted).toBe(0);
@@ -433,7 +438,7 @@ describe('sports-lib-reparse.service', () => {
             path: 'users/u1/events/e-matching',
             collection: vi.fn(() => ({
                 doc: vi.fn(() => ({
-                    get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ sportsLibVersion: '9.1.2' }) }),
+                    get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ sportsLibVersion: TARGET_SPORTS_LIB_VERSION }) }),
                 })),
             })),
         } as any;
@@ -441,7 +446,7 @@ describe('sports-lib-reparse.service', () => {
             path: 'users/u1/events/e-lower',
             collection: vi.fn(() => ({
                 doc: vi.fn(() => ({
-                    get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ sportsLibVersion: '9.0.0' }) }),
+                    get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ sportsLibVersion: LOWER_SPORTS_LIB_VERSION }) }),
                 })),
             })),
         } as any;
@@ -449,7 +454,7 @@ describe('sports-lib-reparse.service', () => {
             path: 'users/u1/events/e-higher',
             collection: vi.fn(() => ({
                 doc: vi.fn(() => ({
-                    get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ sportsLibVersion: '9.2.0' }) }),
+                    get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ sportsLibVersion: HIGHER_SPORTS_LIB_VERSION }) }),
                 })),
             })),
         } as any;
@@ -470,12 +475,12 @@ describe('sports-lib-reparse.service', () => {
             })),
         } as any;
 
-        await expect(shouldEventBeReparsed(missingProcessingRef, '9.1.2')).resolves.toBe(true);
-        await expect(shouldEventBeReparsed(missingVersionRef, '9.1.2')).resolves.toBe(true);
-        await expect(shouldEventBeReparsed(matchingRef, '9.1.2')).resolves.toBe(false);
-        await expect(shouldEventBeReparsed(lowerRef, '9.1.2')).resolves.toBe(true);
-        await expect(shouldEventBeReparsed(higherRef, '9.1.2')).resolves.toBe(false);
-        await expect(shouldEventBeReparsed(malformedVersionRef, '9.1.2'))
+        await expect(shouldEventBeReparsed(missingProcessingRef, TARGET_SPORTS_LIB_VERSION)).resolves.toBe(true);
+        await expect(shouldEventBeReparsed(missingVersionRef, TARGET_SPORTS_LIB_VERSION)).resolves.toBe(true);
+        await expect(shouldEventBeReparsed(matchingRef, TARGET_SPORTS_LIB_VERSION)).resolves.toBe(false);
+        await expect(shouldEventBeReparsed(lowerRef, TARGET_SPORTS_LIB_VERSION)).resolves.toBe(true);
+        await expect(shouldEventBeReparsed(higherRef, TARGET_SPORTS_LIB_VERSION)).resolves.toBe(false);
+        await expect(shouldEventBeReparsed(malformedVersionRef, TARGET_SPORTS_LIB_VERSION))
             .rejects
             .toThrow('Invalid stored sports-lib version "unknown" at users/u1/events/e-malformed');
         await expect(shouldEventBeReparsed(matchingRef, 'not-semver'))
@@ -493,21 +498,21 @@ describe('sports-lib-reparse.service', () => {
 
         await writeReparseStatus('u1', 'e1', {
             status: 'completed',
-            targetSportsLibVersion: '9.1.2',
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
             checkedAt: 'ts' as any,
         });
 
         expect(hoisted.mockDoc).toHaveBeenCalledWith('users/u1/events/e1/metaData/reparseStatus');
         expect(set).toHaveBeenCalledWith(expect.objectContaining({
             status: 'completed',
-            targetSportsLibVersion: '9.1.2',
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
         }), { merge: true });
     });
 
     it('buildSportsLibReparseJobId should be deterministic and version-sensitive', () => {
-        const first = buildSportsLibReparseJobId('u1', 'e1', '9.1.2');
-        const second = buildSportsLibReparseJobId('u1', 'e1', '9.1.2');
-        const differentVersion = buildSportsLibReparseJobId('u1', 'e1', '9.1.3');
+        const first = buildSportsLibReparseJobId('u1', 'e1', TARGET_SPORTS_LIB_VERSION);
+        const second = buildSportsLibReparseJobId('u1', 'e1', TARGET_SPORTS_LIB_VERSION);
+        const differentVersion = buildSportsLibReparseJobId('u1', 'e1', `${TARGET_SPORTS_LIB_VERSION}-different`);
 
         expect(first).toBe(second);
         expect(first).not.toBe(differentVersion);
@@ -553,7 +558,7 @@ describe('sports-lib-reparse.service', () => {
         const result = await reparseEventFromOriginalFiles('u1', 'e1', {
             eventData: {},
             activityDocs: [],
-            targetSportsLibVersion: '9.1.2',
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
         });
 
         expect(result.status).toBe('skipped');
@@ -575,7 +580,7 @@ describe('sports-lib-reparse.service', () => {
                 { id: 'a-old-1', data: () => ({ creator: { name: 'creator-1' } }) } as any,
                 { id: 'a-old-2', data: () => ({ creator: { name: 'creator-2' } }) } as any,
             ],
-            targetSportsLibVersion: '9.1.2',
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
         });
 
         expect(result.status).toBe('completed');

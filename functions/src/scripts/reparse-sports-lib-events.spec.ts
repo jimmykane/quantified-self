@@ -1,11 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { SPORTS_LIB_REPARSE_TARGET_VERSION } from '../reparse/sports-lib-reparse.config';
+
+const TARGET_SPORTS_LIB_VERSION = SPORTS_LIB_REPARSE_TARGET_VERSION;
 
 const hoisted = vi.hoisted(() => {
     const shouldEventBeReparsed = vi.fn();
     const hasPaidOrGraceAccess = vi.fn();
     const extractSourceFiles = vi.fn();
     const reparseEventFromOriginalFiles = vi.fn();
-    const resolveTargetSportsLibVersion = vi.fn(() => '9.1.2');
+    const resolveTargetSportsLibVersion = vi.fn();
     const parseUIDAllowlist = vi.fn((input?: string) => {
         if (!input) return null;
         const values = input.split(',').map(v => v.trim()).filter(Boolean);
@@ -186,6 +189,7 @@ describe('reparse-sports-lib-events script', () => {
         hoisted.runtimeDefaults.enqueueLimit = 100;
         hoisted.runtimeDefaults.includeFreeUsers = false;
         hoisted.runtimeDefaults.uidAllowlist = null;
+        hoisted.resolveTargetSportsLibVersion.mockReturnValue(TARGET_SPORTS_LIB_VERSION);
 
         hoisted.shouldEventBeReparsed.mockResolvedValue(true);
         hoisted.hasPaidOrGraceAccess.mockResolvedValue(true);
@@ -333,7 +337,7 @@ describe('reparse-sports-lib-events script', () => {
     it('should abort the run when candidate evaluation throws', async () => {
         hoisted.globalDocs.push(makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
         hoisted.shouldEventBeReparsed.mockRejectedValue(
-            new Error('Invalid stored sports-lib version "unknown" at users/u1/events/e1. Target version: 9.1.2'),
+            new Error(`Invalid stored sports-lib version "unknown" at users/u1/events/e1. Target version: ${TARGET_SPORTS_LIB_VERSION}`),
         );
 
         await expect(runSportsLibReparseScript(['--execute']))
@@ -350,8 +354,8 @@ describe('reparse-sports-lib-events script', () => {
         const summary = await runSportsLibReparseScript(['--execute', '--uids', 'u1,u2']);
         expect(summary.dryRun).toBe(false);
         expect(summary.completed).toBe(2);
-        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', { targetSportsLibVersion: '9.1.2' });
-        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u2', 'e2', { targetSportsLibVersion: '9.1.2' });
+        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', { targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u2', 'e2', { targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
     });
 
     it('should write skipped status when execute mode finds no source files', async () => {
@@ -363,7 +367,7 @@ describe('reparse-sports-lib-events script', () => {
         expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             status: 'skipped',
             reason: 'NO_ORIGINAL_FILES',
-            targetSportsLibVersion: '9.1.2',
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
         }));
     });
 
@@ -374,7 +378,7 @@ describe('reparse-sports-lib-events script', () => {
         expect(summary.completed).toBe(1);
         expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             status: 'completed',
-            targetSportsLibVersion: '9.1.2',
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
             lastError: '',
         }));
     });
