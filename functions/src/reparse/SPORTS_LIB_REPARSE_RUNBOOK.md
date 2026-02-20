@@ -123,31 +123,32 @@ npm run reparse-sports-lib-events
 
 ### Dry-run one user only
 ```bash
-npm run reparse-sports-lib-events -- --uid=<uid> --limit=100
+npm run reparse-sports-lib-events -- --uid <uid> --limit 100
 ```
 
 ### Dry-run multiple users
 ```bash
-npm run reparse-sports-lib-events -- --uids=<uid1,uid2,uid3> --limit=200
+npm run reparse-sports-lib-events -- --uids <uid1,uid2,uid3> --limit 200
 ```
 
 ### Execute writes (single user)
 ```bash
-npm run reparse-sports-lib-events -- --execute --uid=<uid> --limit=50
+npm run reparse-sports-lib-events -- --execute --uid <uid> --limit 50
 ```
 
 ### Execute writes (multiple users)
 ```bash
-npm run reparse-sports-lib-events -- --execute --uids=<uid1,uid2> --limit=200
+npm run reparse-sports-lib-events -- --execute --uids <uid1,uid2> --limit 200
 ```
 
 ### Start-after cursor (single UID or global mode)
 ```bash
-npm run reparse-sports-lib-events -- --uid=<uid> --start-after=<eventId> --limit=100
+npm run reparse-sports-lib-events -- --uid <uid> --start-after <eventId> --limit 100
 ```
 
 Notes:
 - In multi-UID mode (`--uids`), `--start-after` is ignored.
+- CLI args currently support `--flag value` format only. `--flag=value` is not parsed.
 - Precedence for UID scope:
   1. `--uid`
   2. `--uids`
@@ -155,7 +156,7 @@ Notes:
 
 ### Include free users in local script
 ```bash
-SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS=true npm run reparse-sports-lib-events -- --execute --uids=<uid1,uid2>
+SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS=true npm run reparse-sports-lib-events -- --execute --uids <uid1,uid2>
 ```
 
 ## Scheduler / Worker Operation
