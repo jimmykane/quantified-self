@@ -14,6 +14,8 @@ import {
     hasPaidOrGraceAccess,
     parseUidAndEventIdFromEventPath,
     resolveTargetSportsLibVersion,
+    resolveTargetSportsLibVersionCode,
+    sportsLibVersionToCode,
     shouldEventBeReparsed,
     writeReparseStatus,
 } from '../reparse/sports-lib-reparse.service';
@@ -67,6 +69,13 @@ function shouldSkipBecauseNoOriginalFilesForTarget(
         && statusDocData.targetSportsLibVersion === targetSportsLibVersion;
 }
 
+function getProcessingVersionCode(value: unknown): number | null {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return null;
+    }
+    return value;
+}
+
 export const scheduleSportsLibReparseScan = onSchedule({
     region: FUNCTIONS_MANIFEST.scheduleSportsLibReparseScan.region,
     schedule: 'every 10 minutes',
@@ -79,10 +88,12 @@ export const scheduleSportsLibReparseScan = onSchedule({
 
     const db = admin.firestore();
     const targetSportsLibVersion = resolveTargetSportsLibVersion();
+    const targetSportsLibVersionCode = resolveTargetSportsLibVersionCode();
     const checkpointRef = db.doc(SPORTS_LIB_REPARSE_CHECKPOINT_PATH);
     const checkpointSnapshot = await checkpointRef.get();
     const checkpointData = checkpointSnapshot.data() as SportsLibReparseCheckpoint | undefined;
-    const cursorEventPath = checkpointData?.cursorEventPath || null;
+    const cursorProcessingDocPath = checkpointData?.cursorProcessingDocPath || null;
+    const cursorProcessingVersionCode = getProcessingVersionCode(checkpointData?.cursorProcessingVersionCode);
 
     await checkpointRef.set({
         lastPassStartedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -92,10 +103,15 @@ export const scheduleSportsLibReparseScan = onSchedule({
     const eligibilityCache = new Map<string, Promise<boolean>>();
     let scannedCount = 0;
     let enqueuedCount = 0;
-    let lastEventPath: string | null = null;
+    let lastProcessingDocPath: string | null = null;
+    let lastProcessingVersionCode: number | null = null;
 
-    const processEventDoc = async (eventDoc: admin.firestore.QueryDocumentSnapshot): Promise<void> => {
-        const parsed = parseUidAndEventIdFromEventPath(eventDoc.ref.path);
+    const processEventData = async (
+        eventRef: admin.firestore.DocumentReference,
+        eventData: Record<string, unknown>,
+        options?: { skipCandidateCheck?: boolean },
+    ): Promise<void> => {
+        const parsed = parseUidAndEventIdFromEventPath(eventRef.path);
         if (!parsed) {
             return;
         }
@@ -105,12 +121,22 @@ export const scheduleSportsLibReparseScan = onSchedule({
             return;
         }
 
-        const needsReparse = await shouldEventBeReparsed(eventDoc.ref, targetSportsLibVersion);
-        if (!needsReparse) {
-            return;
+        if (!options?.skipCandidateCheck) {
+            try {
+                const needsReparse = await shouldEventBeReparsed(eventRef, targetSportsLibVersion);
+                if (!needsReparse) {
+                    return;
+                }
+            } catch (error) {
+                logger.warn('[sports-lib-reparse] Invalid processing metadata; skipping event candidate.', {
+                    eventPath: eventRef.path,
+                    error: toErrorMessage(error),
+                });
+                return;
+            }
         }
 
-        const statusSnapshot = await eventDoc.ref.collection('metaData').doc(SPORTS_LIB_REPARSE_STATUS_DOC_ID).get();
+        const statusSnapshot = await eventRef.collection('metaData').doc(SPORTS_LIB_REPARSE_STATUS_DOC_ID).get();
         if (shouldSkipBecauseNoOriginalFilesForTarget(statusSnapshot.data() as Record<string, unknown> | undefined, targetSportsLibVersion)) {
             return;
         }
@@ -127,7 +153,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
             }
         }
 
-        const sourceFiles = extractSourceFiles(eventDoc.data() as Record<string, unknown>);
+        const sourceFiles = extractSourceFiles(eventData);
         if (sourceFiles.length === 0) {
             await writeReparseStatus(uid, eventId, {
                 status: 'skipped',
@@ -150,7 +176,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
         const basePayload: SportsLibReparseJob = {
             uid,
             eventId,
-            eventPath: eventDoc.ref.path,
+            eventPath: eventRef.path,
             targetSportsLibVersion,
             status: 'pending',
             attemptCount: existingJob.data()?.attemptCount || 0,
@@ -212,9 +238,8 @@ export const scheduleSportsLibReparseScan = onSchedule({
             let lastProcessedDocId: string | null = null;
             for (const eventDoc of userSnapshot.docs) {
                 scannedCount++;
-                lastEventPath = eventDoc.ref.path;
                 lastProcessedDocId = eventDoc.id;
-                await processEventDoc(eventDoc);
+                await processEventData(eventDoc.ref, eventDoc.data() as Record<string, unknown>);
             }
 
             if (userSnapshot.size < remainingScan) {
@@ -243,37 +268,97 @@ export const scheduleSportsLibReparseScan = onSchedule({
         return;
     }
 
-    let query = db.collectionGroup('events')
+    let query = db.collectionGroup('processing')
+        .where('sportsLibVersionCode', '<', targetSportsLibVersionCode)
+        .orderBy('sportsLibVersionCode', 'asc')
         .orderBy(admin.firestore.FieldPath.documentId())
         .limit(settings.scanLimit);
 
-    if (cursorEventPath) {
-        query = query.startAfter(db.doc(cursorEventPath));
+    if (cursorProcessingDocPath && cursorProcessingVersionCode !== null) {
+        query = query.startAfter(cursorProcessingVersionCode, db.doc(cursorProcessingDocPath));
     }
 
-    const eventsSnapshot = await query.get();
-    if (eventsSnapshot.empty) {
+    const processingSnapshot = await query.get();
+    if (processingSnapshot.empty) {
         await checkpointRef.set({
-            cursorEventPath: null,
+            cursorProcessingDocPath: null,
+            cursorProcessingVersionCode: null,
             lastScanAt: admin.firestore.FieldValue.serverTimestamp(),
             lastPassCompletedAt: admin.firestore.FieldValue.serverTimestamp(),
             lastScanCount: 0,
             lastEnqueuedCount: 0,
             targetSportsLibVersion,
         }, { merge: true });
-        logger.info('[sports-lib-reparse] No events found for scan.');
+        logger.info('[sports-lib-reparse] No processing metadata candidates found for scan.');
         return;
     }
 
-    for (const eventDoc of eventsSnapshot.docs) {
+    for (const processingDoc of processingSnapshot.docs) {
         scannedCount++;
-        lastEventPath = eventDoc.ref.path;
-        await processEventDoc(eventDoc);
+        lastProcessingDocPath = processingDoc.ref.path;
+        const processingData = processingDoc.data() as Record<string, unknown>;
+        const processingVersion = `${processingData.sportsLibVersion ?? ''}`;
+        const processingVersionCode = getProcessingVersionCode(processingData.sportsLibVersionCode);
+        if (!processingVersion || processingVersionCode === null) {
+            logger.warn('[sports-lib-reparse] Invalid processing metadata; skipping doc.', {
+                processingDocPath: processingDoc.ref.path,
+                sportsLibVersion: processingData.sportsLibVersion,
+                sportsLibVersionCode: processingData.sportsLibVersionCode,
+            });
+            continue;
+        }
+
+        let computedVersionCode: number;
+        try {
+            computedVersionCode = sportsLibVersionToCode(processingVersion);
+        } catch (error) {
+            logger.warn('[sports-lib-reparse] Invalid processing metadata; skipping doc.', {
+                processingDocPath: processingDoc.ref.path,
+                sportsLibVersion: processingVersion,
+                sportsLibVersionCode: processingVersionCode,
+                error: toErrorMessage(error),
+            });
+            continue;
+        }
+        if (computedVersionCode !== processingVersionCode) {
+            logger.warn('[sports-lib-reparse] Mismatched processing metadata version/code; skipping doc.', {
+                processingDocPath: processingDoc.ref.path,
+                sportsLibVersion: processingVersion,
+                sportsLibVersionCode: processingVersionCode,
+                computedVersionCode,
+            });
+            continue;
+        }
+
+        lastProcessingVersionCode = processingVersionCode;
+        const eventRef = processingDoc.ref.parent.parent;
+        if (!eventRef) {
+            logger.warn('[sports-lib-reparse] Could not resolve parent event from processing metadata path.', {
+                processingDocPath: processingDoc.ref.path,
+            });
+            continue;
+        }
+
+        if (processingVersionCode >= targetSportsLibVersionCode) {
+            continue;
+        }
+
+        const eventSnapshot = await eventRef.get();
+        if (!eventSnapshot.exists) {
+            logger.warn('[sports-lib-reparse] Skipping stale processing metadata because parent event is missing.', {
+                processingDocPath: processingDoc.ref.path,
+                eventPath: eventRef.path,
+            });
+            continue;
+        }
+        await processEventData(eventRef, eventSnapshot.data() as Record<string, unknown>, { skipCandidateCheck: true });
     }
 
-    const passCompleted = eventsSnapshot.size < settings.scanLimit;
+    const passCompleted = processingSnapshot.size < settings.scanLimit;
     await checkpointRef.set({
-        cursorEventPath: passCompleted ? null : lastEventPath,
+        cursorProcessingDocPath: passCompleted ? null : lastProcessingDocPath,
+        cursorProcessingVersionCode: passCompleted ? null : lastProcessingVersionCode,
+        ...(passCompleted ? { cursorEventPath: null } : {}),
         lastScanAt: admin.firestore.FieldValue.serverTimestamp(),
         lastScanCount: scannedCount,
         lastEnqueuedCount: enqueuedCount,
@@ -284,6 +369,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
     logger.info('[sports-lib-reparse] Scan complete', {
         scannedCount,
         enqueuedCount,
-        nextCursor: passCompleted ? null : lastEventPath,
+        nextCursorProcessingDocPath: passCompleted ? null : lastProcessingDocPath,
+        nextCursorProcessingVersionCode: passCompleted ? null : lastProcessingVersionCode,
     });
 });

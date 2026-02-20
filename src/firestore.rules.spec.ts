@@ -223,6 +223,7 @@ describe('Firestore Security Rules', () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await assertSucceeds(db.collection(`users/${userId}/events/${eventId}/metaData`).doc('processing').set({
                     sportsLibVersion: '8.0.9',
+                    sportsLibVersionCode: 8000009,
                     processedAt: new Date(),
                 }));
             });
@@ -238,6 +239,7 @@ describe('Firestore Security Rules', () => {
                 const db = testEnv.authenticatedContext(otherId).firestore();
                 await assertFails(db.collection(`users/${userId}/events/${eventId}/metaData`).doc('processing').set({
                     sportsLibVersion: '8.0.9',
+                    sportsLibVersionCode: 8000009,
                     processedAt: new Date(),
                 }));
             });
@@ -246,8 +248,17 @@ describe('Firestore Security Rules', () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await assertFails(db.collection(`users/${userId}/events/${eventId}/metaData`).doc('processing').set({
                     sportsLibVersion: '8.0.9',
+                    sportsLibVersionCode: 8000009,
                     processedAt: new Date(),
                     extraField: true,
+                }));
+            });
+
+            it('should deny processing metadata when sportsLibVersionCode is missing', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection(`users/${userId}/events/${eventId}/metaData`).doc('processing').set({
+                    sportsLibVersion: '8.0.9',
+                    processedAt: new Date(),
                 }));
             });
         });

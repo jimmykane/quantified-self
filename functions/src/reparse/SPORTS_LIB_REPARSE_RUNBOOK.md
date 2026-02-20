@@ -1,250 +1,268 @@
 # Sports-Lib Reparse Runbook
 
 ## Purpose
-This pipeline reparses existing events and activities from their stored original files so data can be upgraded to a fixed target sports-lib parser version.
+This pipeline reparses existing events and activities from stored original files so event/activity data is upgraded to a fixed sports-lib target version.
 
-Current target version source of truth:
-- `SPORTS_LIB_REPARSE_TARGET_VERSION = '9.1.4'`
+Target version source of truth:
+- `SPORTS_LIB_REPARSE_TARGET_VERSION`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
-An event is a candidate when:
-- `users/{uid}/events/{eventId}/metaData/processing` is missing, or
-- `processing.sportsLibVersion` is missing, or
-- `processing.sportsLibVersion < '9.1.4'` (semver comparison)
+## Candidate Discovery Model
 
-If `processing.sportsLibVersion` exists but is not valid semver, the run aborts (strict data-integrity behavior).
+### Global mode (production path)
+Global discovery is query-first on processing metadata:
+- query: `collectionGroup('processing')`
+- filter: `where('sportsLibVersionCode', '<', targetSportsLibVersionCode)`
+- order: `orderBy('sportsLibVersionCode', 'asc').orderBy('__name__', 'asc')`
+
+For each processing doc hit:
+1. Derive identity from parent path only (`users/{uid}/events/{eventId}` from `processingRef.parent.parent`).
+2. Load the parent event.
+3. Enqueue reparse job if still eligible.
+
+Identity hardening rule:
+- never trust `uid`/`eventId` fields in processing payloads
+- always derive from document path
+
+Malformed processing metadata policy:
+- invalid or inconsistent processing metadata is skipped and logged
+- scheduler/script run continues
+
+### UID override mode (safe testing)
+When `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist` is set, scheduler switches to per-user event scans:
+- query: `users/{uid}/events`
+- still applies normal entitlement checks unless `includeFreeUsers=true`
+
+### Missing processing docs
+Missing `metaData/processing` docs are not visible to the global processing query. Use the backfill script to create them before full rollout.
 
 ## Components
 
 ### 1. Scheduler scanner
 - Function: `scheduleSportsLibReparseScan`
 - File: `functions/src/schedule/sports-lib-reparse.ts`
-- Frequency: hourly (`every 1 hours`)
+- Frequency: `every 10 minutes`
 - Region: `europe-west2`
-- Cloud Tasks queue: `processSportsLibReparseTask`
-- Responsibility:
-  - find candidate events
-  - write/update job docs
-  - enqueue Cloud Tasks (`processSportsLibReparseTask`)
+- Queue: `processSportsLibReparseTask`
+
+Responsibilities:
+- discover candidates
+- create/update `sportsLibReparseJobs/{jobId}`
+- enqueue Cloud Tasks for worker execution
 
 ### 2. Task worker
 - Function: `processSportsLibReparseTask`
 - File: `functions/src/tasks/sports-lib-reparse-worker.ts`
-- Responsibility:
-  - process one job (`jobId`) at a time
-  - strict parse original files
-  - rewrite event + activities
-  - update status + job state
 
-### 3. Local direct script
-- Script entry: `npm run reparse-sports-lib-events`
+Responsibilities:
+- process one job at a time
+- strict original-file parse
+- rewrite event + activities
+- update per-event status + job state
+
+### 3. Local direct reparse script
+- Command: `npm run reparse-sports-lib-events`
 - File: `functions/src/scripts/reparse-sports-lib-events.ts`
-- Responsibility:
-  - run discovery and reparse directly (no queue required)
-  - default is dry-run (omit `--execute`)
+
+Behavior:
+- dry-run by default
+- `--execute` enables writes
+- global mode uses processing-query discovery (same as scheduler)
+- scoped mode (`--uid` / `--uids`) uses per-user event traversal
+
+### 4. Backfill script (one-time / periodic maintenance)
+- Command: `npm run backfill-sports-lib-processing-code`
+- File: `functions/src/scripts/backfill-sports-lib-processing-code.ts`
+
+Behavior:
+- creates missing processing docs with sentinel version/code
+- patches missing or mismatched `sportsLibVersionCode`
+- logs + skips malformed versions (does not abort)
+- dry-run by default
 
 ## Data Model
 
 ### Checkpoint doc
 - Path: `systemJobs/sportsLibReparse`
-- Key fields:
-  - `cursorEventPath`
-  - `overrideCursorByUid`
-  - `lastPassStartedAt`, `lastPassCompletedAt`
-  - `lastScanAt`, `lastScanCount`, `lastEnqueuedCount`
-  - `targetSportsLibVersion`
+
+Fields used:
+- `cursorProcessingDocPath`
+- `cursorProcessingVersionCode`
+- `overrideCursorByUid`
+- `lastPassStartedAt`, `lastPassCompletedAt`
+- `lastScanAt`, `lastScanCount`, `lastEnqueuedCount`
+- `targetSportsLibVersion`
 
 ### Job docs
 - Collection: `sportsLibReparseJobs/{jobId}`
 - `jobId` is deterministic from `uid + eventId + targetSportsLibVersion`
-- Key fields:
-  - `status` (`pending|processing|completed|failed`)
-  - `attemptCount`, `lastError`
-  - `enqueuedAt`, `processedAt`, `expireAt`
-- TTL:
-  - `TTL_CONFIG.SPORTS_LIB_REPARSE_JOBS_IN_DAYS` (currently `30`)
+
+Key fields:
+- `status` (`pending|processing|completed|failed`)
+- `attemptCount`, `lastError`
+- `enqueuedAt`, `processedAt`, `expireAt`
+
+TTL:
+- `TTL_CONFIG.SPORTS_LIB_REPARSE_JOBS_IN_DAYS` (currently `30`)
 
 ### Per-event status doc
 - Path: `users/{uid}/events/{eventId}/metaData/reparseStatus`
-- Used for outcomes like:
-  - `status=completed`
-  - `status=skipped, reason=NO_ORIGINAL_FILES`
-  - `status=failed, reason=REPARSE_FAILED|USER_NO_PAID_ACCESS`
 
-### Per-event processing metadata
+Common outcomes:
+- `status=completed`
+- `status=skipped, reason=NO_ORIGINAL_FILES`
+- `status=failed, reason=REPARSE_FAILED|USER_NO_PAID_ACCESS`
+
+### Processing metadata doc
 - Path: `users/{uid}/events/{eventId}/metaData/processing`
-- Updated with:
-  - `sportsLibVersion='9.1.4'`
-  - `processedAt=serverTimestamp`
 
-## Parse and Write Rules
-- Supported source types: `fit`, `gpx`, `tcx`, `json`, `sml`, including `.gz`
-- Strictness: if any source file parse fails, the event fails that run
-- Multiple source files are merged into one final event
-- Preserved from old event only:
-  - `description`, `privacy`, `notes`, `rpe`, `feeling`
-- Activity identity handling:
-  - preserve activity IDs by index
-  - preserve creator name when present
-- Stale activities are deleted
+Expected fields:
+- `sportsLibVersion: string`
+- `sportsLibVersionCode: number`
+- `processedAt`
 
-### Bucket Fallback + Auto-Heal
-To handle legacy/wrong bucket metadata safely, the worker now uses explicit bucket candidates and heals metadata automatically when fallback succeeds.
+Notes:
+- this doc is user-writable by product decision
+- users can influence only their own eligibility by modifying it
 
-Explicit bucket constants in code:
+## Parse + Write Rules
+- Supported source types: `fit`, `gpx`, `tcx`, `json`, `sml` (also `.gz` variants)
+- Strictness: if any source file parse fails, event fails for that run
+- Multiple source files are merged into one final parsed event
+
+Preserved user-editable fields:
+- `description`
+- `privacy`
+- `notes`
+- `rpe`
+- `feeling`
+
+Activity identity strategy:
+- preserve activity IDs by index
+- preserve creator name when present
+- delete stale old activities not present in new parsed set
+
+## Bucket Fallback + Auto-Heal
+To handle legacy or incorrect bucket metadata safely, reparse download tries multiple bucket candidates and auto-heals metadata when fallback succeeds.
+
+Code constants:
 - `SPORTS_LIB_PRIMARY_BUCKET = 'quantified-self-io'`
 - `SPORTS_LIB_LEGACY_APPSPOT_BUCKET = 'quantified-self-io.appspot.com'`
-- File: `functions/src/reparse/sports-lib-reparse.service.ts`
 
-Download candidate order for each original file:
-1. metadata bucket (`originalFile.bucket` / `originalFiles[].bucket`) if present
-2. explicit primary bucket: `quantified-self-io`
-3. explicit legacy bucket: `quantified-self-io.appspot.com`
-4. runtime default Admin bucket (`admin.storage().bucket().name`)
-5. appspot/non-appspot variants of the above (deduped)
+Download candidate order:
+1. metadata bucket from source-file metadata (if present)
+2. explicit primary bucket
+3. explicit legacy appspot bucket
+4. runtime Admin default bucket (`admin.storage().bucket().name`)
+5. appspot/non-appspot variants of candidates above (deduped)
 
-Behavior:
-- Fallback is used only for object-not-found errors.
-- If file download succeeds from a fallback bucket, the event is reparsed normally.
-- During the same reparse write, source metadata is auto-healed:
-  - `originalFile.bucket` and matching `originalFiles[].bucket` are rewritten to the resolved bucket.
-- This means repeated task retries should naturally converge metadata to the working bucket.
+If fallback bucket is used successfully:
+- reparse continues
+- source metadata bucket fields are rewritten to resolved bucket in same write path
 
-## Access / Eligibility Behavior
-Default behavior (`SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.includeFreeUsers=false`):
+## Access / Entitlement Behavior
+Default (`includeFreeUsers=false`):
 - only paid/grace users are processed (`basic|pro|active_grace`)
-- this applies to scheduler, local script, and worker
 
-Include-free behavior (`SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.includeFreeUsers=true`):
+Include-free mode (`includeFreeUsers=true`):
 - entitlement checks are skipped
-- all candidate users/events are eligible (subject to other filters/limits)
+- all candidate users/events are eligible
 
-## Runtime Controls
-Tracked code defaults live in:
+Applies to scheduler, worker, and local script.
+
+## Runtime Controls (Code Constants)
+File:
 - `functions/src/reparse/sports-lib-reparse.config.ts`
-- constant: `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS`
 
-These defaults are strict constants (no env overrides):
+Constant:
+- `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS`
 
+Fields:
 - `enabled`
-  - scheduler on/off
-  - default: `false`
 - `scanLimit`
-  - scheduler scanned events per run
-  - default: `200`
 - `enqueueLimit`
-  - scheduler max enqueued jobs per run
-  - default: `100`
 - `uidAllowlist`
-  - array of UIDs in code
-  - when set, scheduler switches to user-scoped scan mode
-  - script uses it when `--uid/--uids` are not given
 - `includeFreeUsers`
-  - `true` to include free users
-  - default: `false`
 
-## Local Script Usage
+## Required Firestore Index
+Global processing-query discovery requires:
+- collection group: `processing`
+- fields: `sportsLibVersionCode ASC`, `__name__ ASC`
+
+Defined in:
+- `firestore.indexes.json`
+
+## Local Commands
 Run from `functions/`.
 
-### Dry-run all candidates (default)
+### Reparse script
+Dry-run global:
 ```bash
 npm run reparse-sports-lib-events
 ```
 
-### Dry-run one user only
+Dry-run scoped:
 ```bash
 npm run reparse-sports-lib-events -- --uid <uid> --limit 100
+npm run reparse-sports-lib-events -- --uids <uid1,uid2> --limit 200
 ```
 
-### Dry-run multiple users
+Execute:
 ```bash
-npm run reparse-sports-lib-events -- --uids <uid1,uid2,uid3> --limit 200
+npm run reparse-sports-lib-events -- --execute --uid <uid> --limit 100
 ```
 
-### Execute writes (single user)
+Global cursor start-after (event path or processing path):
 ```bash
-npm run reparse-sports-lib-events -- --execute --uid <uid> --limit 50
-```
-
-### Execute writes (multiple users)
-```bash
-npm run reparse-sports-lib-events -- --execute --uids <uid1,uid2> --limit 200
-```
-
-### Start-after cursor (single UID or global mode)
-```bash
-npm run reparse-sports-lib-events -- --uid <uid> --start-after <eventId> --limit 100
+npm run reparse-sports-lib-events -- --start-after users/<uid>/events/<eventId> --limit 200
+npm run reparse-sports-lib-events -- --start-after users/<uid>/events/<eventId>/metaData/processing --limit 200
 ```
 
 Notes:
-- In multi-UID mode (`--uids`), `--start-after` is ignored.
-- CLI args support both `--flag value` and `--flag=value` formats.
-- Precedence for UID scope:
-  1. `--uid`
-  2. `--uids`
-  3. `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist`
+- `--uids` mode ignores `--start-after`
+- supports both `--arg value` and `--arg=value`
 
-### Include free users in local script
-```bash
-npm run reparse-sports-lib-events -- --execute --uids <uid1,uid2>
-```
-Set `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.includeFreeUsers = true` in code before running.
-
-## One-off Bucket Metadata Repair Script
-Run from `functions/`.
-
+### Backfill script
 Dry-run:
 ```bash
-npm run fix-original-file-bucket -- --limit 50000
+npm run backfill-sports-lib-processing-code -- --limit 1000
 ```
 
-Execute writes:
+Execute:
 ```bash
-npm run fix-original-file-bucket -- --execute --limit 50000
+npm run backfill-sports-lib-processing-code -- --execute --limit 1000
 ```
 
-Single UID:
+Scoped:
 ```bash
-npm run fix-original-file-bucket -- --execute --uid <uid> --limit 2000
+npm run backfill-sports-lib-processing-code -- --execute --uid <uid> --limit 2000
+npm run backfill-sports-lib-processing-code -- --execute --uids <uid1,uid2> --limit 2000
 ```
 
-Notes:
-- Default wrong bucket is `quantified-self-io.appspot.com`.
-- Default target bucket is `quantified-self-io`.
-- By default, script verifies object exists in target bucket before rewriting metadata.
-- Use `--skip-target-check` only for controlled/manual recovery cases.
+## Rollout Order
+1. Deploy Firestore index and wait until READY.
+2. Deploy code that writes `sportsLibVersionCode` in ingestion/reparse/frontend paths.
+3. Run backfill script dry-run, then execute in batches.
+4. Enable scheduler with conservative limits and optional UID allowlist.
+5. Expand scope by removing allowlist and increasing limits.
 
-## Scheduler / Worker Operation
+## Observability
+Check:
+- scheduler checkpoint: `systemJobs/sportsLibReparse`
+- job outcomes: `sportsLibReparseJobs`
+- per-event status: `metaData/reparseStatus`
+- per-event processing metadata: `metaData/processing`
 
-### Safe rollout pattern
-1. Deploy with scheduler disabled:
-   - `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enabled = false`
-2. Run local dry-runs against test UIDs.
-3. Run local execute for test UIDs.
-4. Enable scheduler with low limits and UID allowlist in code:
-   - `enabled = true`
-   - `uidAllowlist = ['<test_uid1>', '<test_uid2>']`
-   - low `scanLimit` / `enqueueLimit`
-5. Remove allowlist for full population when stable.
+Admin dashboard queue cards:
+- `Cloud Tasks` (total)
+- `Cloud Tasks (Workout)`
+- `Cloud Tasks (Reparse)`
 
-### Include free users in scheduler+worker
-Set `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.includeFreeUsers = true` and deploy.
-This affects both `scheduleSportsLibReparseScan` and `processSportsLibReparseTask`.
+## Exports / Entry Points
+Functions exports in `functions/src/index.ts`:
+- `scheduleSportsLibReparseScan`
+- `processSportsLibReparseTask`
 
-## Observability / Checks
-- Check scheduler progress in `systemJobs/sportsLibReparse`
-- Check job outcomes in `sportsLibReparseJobs`
-- Check per-event status in `metaData/reparseStatus`
-- Check final parser version in `metaData/processing.sportsLibVersion`
-- Admin dashboard queue cards:
-  - `Cloud Tasks` (total across queues)
-  - `Cloud Tasks (Workout)` (queue `processWorkoutTask`)
-  - `Cloud Tasks (Reparse)` (queue `processSportsLibReparseTask`)
-
-## Exports and Entry Points
-- Exported in `functions/src/index.ts`:
-  - `scheduleSportsLibReparseScan`
-  - `processSportsLibReparseTask`
-- Local command in `functions/package.json`:
-  - `"reparse-sports-lib-events": "ts-node -r dotenv/config src/scripts/reparse-sports-lib-events.ts"`
-  - `"fix-original-file-bucket": "ts-node -r dotenv/config src/scripts/fix-original-file-bucket.ts"`
+Local npm commands in `functions/package.json`:
+- `reparse-sports-lib-events`
+- `backfill-sports-lib-processing-code`

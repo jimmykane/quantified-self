@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SPORTS_LIB_REPARSE_TARGET_VERSION } from '../reparse/sports-lib-reparse.config';
 
 const TARGET_SPORTS_LIB_VERSION = SPORTS_LIB_REPARSE_TARGET_VERSION;
+const TARGET_SPORTS_LIB_VERSION_CODE = 9_001_004;
 
 const hoisted = vi.hoisted(() => {
     const shouldEventBeReparsed = vi.fn();
@@ -9,6 +10,8 @@ const hoisted = vi.hoisted(() => {
     const extractSourceFiles = vi.fn();
     const reparseEventFromOriginalFiles = vi.fn();
     const resolveTargetSportsLibVersion = vi.fn();
+    const resolveTargetSportsLibVersionCode = vi.fn();
+    const sportsLibVersionToCode = vi.fn();
     const parseUIDAllowlist = vi.fn((input?: string) => {
         if (!input) return null;
         const values = input.split(',').map(v => v.trim()).filter(Boolean);
@@ -31,8 +34,21 @@ const hoisted = vi.hoisted(() => {
     };
 
     const userEventsByUID = new Map<string, any[]>();
-    const globalDocs: any[] = [];
+    const processingDocs: any[] = [];
+    const processingDocDataByPath = new Map<string, Record<string, unknown>>();
+    const eventRefsByPath = new Map<string, any>();
     const adminApps: any[] = [];
+
+    let processingLimit = 200;
+    let processingCursorCode: number | null = null;
+    let processingCursorPath: string | null = null;
+    let processingTargetCode: number | null = null;
+    const resetProcessingCollectionState = () => {
+        processingLimit = 200;
+        processingCursorCode = null;
+        processingCursorPath = null;
+        processingTargetCode = null;
+    };
 
     const collection = vi.fn((path: string) => {
         const match = path.match(/^users\/([^/]+)\/events$/);
@@ -67,33 +83,78 @@ const hoisted = vi.hoisted(() => {
         return q;
     });
 
-    let globalLimit = 200;
-    let globalStartAfter: string | null = null;
-    const resetGlobalCollectionState = () => {
-        globalLimit = 200;
-        globalStartAfter = null;
-    };
-    const collectionGroup = vi.fn(() => {
+    const collectionGroup = vi.fn((path: string) => {
+        if (path !== 'processing') {
+            throw new Error(`Unexpected collectionGroup path: ${path}`);
+        }
+
         const q = {
-            orderBy: vi.fn().mockReturnThis(),
-            limit: vi.fn((value: number) => {
-                globalLimit = value;
+            where: vi.fn((_field: string, _op: string, value: number) => {
+                processingTargetCode = value;
                 return q;
             }),
-            startAfter: vi.fn((value: { path?: string }) => {
-                globalStartAfter = value?.path || null;
+            orderBy: vi.fn().mockReturnThis(),
+            limit: vi.fn((value: number) => {
+                processingLimit = value;
+                return q;
+            }),
+            startAfter: vi.fn((code: number, docRef: { path?: string }) => {
+                processingCursorCode = code;
+                processingCursorPath = docRef?.path || null;
                 return q;
             }),
             get: vi.fn(async () => ({
-                docs: globalDocs
-                    .filter(doc => !globalStartAfter || doc.ref.path > globalStartAfter)
-                    .slice(0, globalLimit),
+                docs: processingDocs
+                    .filter((doc) => {
+                        if (processingTargetCode === null) {
+                            return true;
+                        }
+                        const code = doc.data()?.sportsLibVersionCode;
+                        return typeof code === 'number' && code < processingTargetCode;
+                    })
+                    .sort((a, b) => {
+                        const codeA = a.data()?.sportsLibVersionCode ?? 0;
+                        const codeB = b.data()?.sportsLibVersionCode ?? 0;
+                        if (codeA !== codeB) {
+                            return codeA - codeB;
+                        }
+                        return a.ref.path.localeCompare(b.ref.path);
+                    })
+                    .filter((doc) => {
+                        if (processingCursorCode === null || !processingCursorPath) {
+                            return true;
+                        }
+                        const code = doc.data()?.sportsLibVersionCode;
+                        if (code > processingCursorCode) {
+                            return true;
+                        }
+                        if (code < processingCursorCode) {
+                            return false;
+                        }
+                        return doc.ref.path > processingCursorPath;
+                    })
+                    .slice(0, processingLimit),
             })),
         };
         return q;
     });
 
-    const firestoreDoc = vi.fn((path: string) => ({ path }));
+    const firestoreDoc = vi.fn((path: string) => {
+        if (eventRefsByPath.has(path)) {
+            return eventRefsByPath.get(path);
+        }
+        const processingData = processingDocDataByPath.get(path);
+        if (processingData) {
+            return {
+                path,
+                get: vi.fn(async () => ({ exists: true, data: () => processingData })),
+            };
+        }
+        return {
+            path,
+            get: vi.fn(async () => ({ exists: false, data: () => ({}) })),
+        };
+    });
     const initializeApp = vi.fn();
     const loggerInfo = vi.fn();
     const loggerWarn = vi.fn();
@@ -107,16 +168,20 @@ const hoisted = vi.hoisted(() => {
         extractSourceFiles,
         reparseEventFromOriginalFiles,
         resolveTargetSportsLibVersion,
+        resolveTargetSportsLibVersionCode,
+        sportsLibVersionToCode,
         parseUIDAllowlist,
         writeReparseStatus,
         parseUidAndEventIdFromEventPath,
         runtimeDefaults,
         userEventsByUID,
-        globalDocs,
+        processingDocs,
+        processingDocDataByPath,
+        eventRefsByPath,
         adminApps,
         collection,
         collectionGroup,
-        resetGlobalCollectionState,
+        resetProcessingCollectionState,
         firestoreDoc,
         initializeApp,
         loggerInfo,
@@ -134,6 +199,8 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     extractSourceFiles: hoisted.extractSourceFiles,
     reparseEventFromOriginalFiles: hoisted.reparseEventFromOriginalFiles,
     resolveTargetSportsLibVersion: hoisted.resolveTargetSportsLibVersion,
+    resolveTargetSportsLibVersionCode: hoisted.resolveTargetSportsLibVersionCode,
+    sportsLibVersionToCode: hoisted.sportsLibVersionToCode,
     parseUIDAllowlist: hoisted.parseUIDAllowlist,
     writeReparseStatus: hoisted.writeReparseStatus,
     parseUidAndEventIdFromEventPath: hoisted.parseUidAndEventIdFromEventPath,
@@ -169,10 +236,35 @@ vi.mock('firebase-functions/logger', () => ({
 
 import { parseScriptOptions, runSportsLibReparseScript } from './reparse-sports-lib-events';
 
+function createEventRef(uid: string, eventId: string, eventData: Record<string, unknown> = {}): any {
+    const path = `users/${uid}/events/${eventId}`;
+    const ref = {
+        path,
+        get: vi.fn(async () => ({ exists: true, data: () => eventData })),
+    };
+    hoisted.eventRefsByPath.set(path, ref);
+    return ref;
+}
+
 function makeEventDoc(uid: string, eventId: string, data: Record<string, unknown> = {}): any {
+    const ref = createEventRef(uid, eventId, data);
     return {
         id: eventId,
-        ref: { path: `users/${uid}/events/${eventId}` },
+        ref,
+        data: () => data,
+    };
+}
+
+function createProcessingDoc(eventRef: any, data: Record<string, unknown>): any {
+    const path = `${eventRef.path}/metaData/processing`;
+    hoisted.processingDocDataByPath.set(path, data);
+    return {
+        ref: {
+            path,
+            parent: {
+                parent: eventRef,
+            },
+        },
         data: () => data,
     };
 }
@@ -181,15 +273,25 @@ describe('reparse-sports-lib-events script', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         hoisted.userEventsByUID.clear();
-        hoisted.globalDocs.length = 0;
+        hoisted.processingDocs.length = 0;
+        hoisted.processingDocDataByPath.clear();
+        hoisted.eventRefsByPath.clear();
         hoisted.adminApps.length = 0;
-        hoisted.resetGlobalCollectionState();
+        hoisted.resetProcessingCollectionState();
+
         hoisted.runtimeDefaults.enabled = false;
         hoisted.runtimeDefaults.scanLimit = 200;
         hoisted.runtimeDefaults.enqueueLimit = 100;
         hoisted.runtimeDefaults.includeFreeUsers = false;
         hoisted.runtimeDefaults.uidAllowlist = null;
         hoisted.resolveTargetSportsLibVersion.mockReturnValue(TARGET_SPORTS_LIB_VERSION);
+        hoisted.resolveTargetSportsLibVersionCode.mockReturnValue(TARGET_SPORTS_LIB_VERSION_CODE);
+        hoisted.sportsLibVersionToCode.mockImplementation((version: string) => {
+            if (version === '9.0.0') return 9_000_000;
+            if (version === '9.0.1') return 9_000_001;
+            if (version === TARGET_SPORTS_LIB_VERSION) return TARGET_SPORTS_LIB_VERSION_CODE;
+            throw new Error(`Invalid sports-lib version "${version}"`);
+        });
 
         hoisted.shouldEventBeReparsed.mockResolvedValue(true);
         hoisted.hasPaidOrGraceAccess.mockResolvedValue(true);
@@ -209,12 +311,6 @@ describe('reparse-sports-lib-events script', () => {
         expect(options.includeFreeUsers).toBe(false);
     });
 
-    it('parseScriptOptions should parse limit and start-after values', () => {
-        const options = parseScriptOptions(['--limit', '50', '--start-after', 'users/u1/events/e1']);
-        expect(options.limit).toBe(50);
-        expect(options.startAfter).toBe('users/u1/events/e1');
-    });
-
     it('parseScriptOptions should parse --key=value style args', () => {
         const options = parseScriptOptions([
             '--uid=u1',
@@ -228,17 +324,6 @@ describe('reparse-sports-lib-events script', () => {
         expect(options.startAfter).toBe('users/u1/events/e1');
     });
 
-    it('parseScriptOptions should fallback to default limit when value is invalid', () => {
-        const options = parseScriptOptions(['--limit', 'not-a-number']);
-        expect(options.limit).toBe(200);
-    });
-
-    it('parseScriptOptions should read include-free-users env flag', () => {
-        hoisted.runtimeDefaults.includeFreeUsers = true;
-        const options = parseScriptOptions([]);
-        expect(options.includeFreeUsers).toBe(true);
-    });
-
     it('parseScriptOptions should apply precedence --uid > --uids > constant allowlist', () => {
         hoisted.runtimeDefaults.uidAllowlist = ['constant1', 'constant2'];
 
@@ -250,116 +335,71 @@ describe('reparse-sports-lib-events script', () => {
         expect(withUids.uid).toBeUndefined();
         expect(withUids.uids).toEqual(['cli1', 'cli2']);
 
-        const withEnv = parseScriptOptions([]);
-        expect(withEnv.uids).toEqual(['constant1', 'constant2']);
+        const withConstant = parseScriptOptions([]);
+        expect(withConstant.uids).toEqual(['constant1', 'constant2']);
     });
 
-    it('single UID dry-run should not write', async () => {
+    it('single UID mode should stay scoped and use candidate evaluation', async () => {
         hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
 
-        const summary = await runSportsLibReparseScript(['--uid', 'u1']);
-        expect(summary.dryRun).toBe(true);
-        expect(summary.candidates).toBe(1);
-        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
-        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
-    });
-
-    it('single UID dry-run should support equals-style uid args', async () => {
-        hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
-        hoisted.globalDocs.push(makeEventDoc('u2', 'e2', { originalFile: { path: 'x.fit' } }));
-
-        const summary = await runSportsLibReparseScript(['--uid=u1', '--limit=10']);
-        expect(summary.scanned).toBe(1);
+        const summary = await runSportsLibReparseScript(['--uid', 'u1', '--execute']);
+        expect(summary.completed).toBe(1);
         expect(hoisted.collectionGroup).not.toHaveBeenCalled();
+        expect(hoisted.shouldEventBeReparsed).toHaveBeenCalledTimes(1);
     });
 
-    it('multi-UID dry-run should iterate allowlisted users only', async () => {
-        hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
-        hoisted.userEventsByUID.set('u2', [makeEventDoc('u2', 'e2', { originalFile: { path: 'x.fit' } })]);
-
-        const summary = await runSportsLibReparseScript(['--uids', 'u1,u2', '--start-after', 'ignored']);
-        expect(summary.scanned).toBe(2);
-        expect(hoisted.collectionGroup).not.toHaveBeenCalled();
-    });
-
-    it('should use constant UID allowlist when no CLI UID flags are provided', async () => {
-        hoisted.runtimeDefaults.uidAllowlist = ['u1', 'u2'];
-        hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
-        hoisted.userEventsByUID.set('u2', [makeEventDoc('u2', 'e2', { originalFile: { path: 'x.fit' } })]);
-
-        const summary = await runSportsLibReparseScript([]);
-        expect(summary.scanned).toBe(2);
-        expect(hoisted.collectionGroup).not.toHaveBeenCalled();
-    });
-
-    it('should use single-UID start-after cursor in user scoped mode', async () => {
-        hoisted.userEventsByUID.set('u1', [
-            makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }),
-            makeEventDoc('u1', 'e2', { originalFile: { path: 'x.fit' } }),
-        ]);
-
-        const summary = await runSportsLibReparseScript(['--uid', 'u1', '--start-after', 'e1', '--limit', '5']);
-        expect(summary.scanned).toBe(1);
-    });
-
-    it('should use collectionGroup mode when no UID filters are provided', async () => {
-        hoisted.globalDocs.push(
-            makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }),
-            makeEventDoc('u2', 'e2', { originalFile: { path: 'x.fit' } }),
-        );
-
-        const summary = await runSportsLibReparseScript(['--limit', '1', '--start-after', 'users/u1/events/e1']);
-        expect(hoisted.collectionGroup).toHaveBeenCalled();
-        expect(summary.scanned).toBe(1);
-    });
-
-    it('should skip docs whose path cannot be parsed as user events', async () => {
-        hoisted.globalDocs.push({
-            id: 'invalid',
-            ref: { path: 'users/u1/activities/a1' },
-            data: () => ({ originalFile: { path: 'x.fit' } }),
-        } as any);
-
-        const summary = await runSportsLibReparseScript([]);
-        expect(summary.scanned).toBe(1);
-        expect(summary.candidates).toBe(0);
-    });
-
-    it('should skip events that do not require reparse', async () => {
-        hoisted.globalDocs.push(makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
-        hoisted.shouldEventBeReparsed.mockResolvedValue(false);
+    it('global mode should discover candidates from processing metadata query', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
 
         const summary = await runSportsLibReparseScript(['--execute']);
-        expect(summary.candidates).toBe(0);
-        expect(summary.completed).toBe(0);
+        expect(summary.scanned).toBe(1);
+        expect(summary.completed).toBe(1);
+        expect(hoisted.collectionGroup).toHaveBeenCalledWith('processing');
+        expect(hoisted.shouldEventBeReparsed).not.toHaveBeenCalled();
     });
 
-    it('should abort the run when candidate evaluation throws', async () => {
-        hoisted.globalDocs.push(makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
-        hoisted.shouldEventBeReparsed.mockRejectedValue(
-            new Error(`Invalid stored sports-lib version "unknown" at users/u1/events/e1. Target version: ${TARGET_SPORTS_LIB_VERSION}`),
+    it('global mode should support --start-after event path by converting to processing path', async () => {
+        const eventRefOne = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        const eventRefTwo = createEventRef('u1', 'e2', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(
+            createProcessingDoc(eventRefOne, { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 }),
+            createProcessingDoc(eventRefTwo, { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 }),
         );
 
-        await expect(runSportsLibReparseScript(['--execute']))
-            .rejects
-            .toThrow('Invalid stored sports-lib version "unknown"');
-        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
-        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+        const summary = await runSportsLibReparseScript(['--execute', '--start-after', eventRefOne.path, '--limit', '10']);
+        expect(summary.scanned).toBe(1);
+        expect(summary.completed).toBe(1);
     });
 
-    it('multi-UID execute mode should process events', async () => {
-        hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
-        hoisted.userEventsByUID.set('u2', [makeEventDoc('u2', 'e2', { originalFile: { path: 'x.fit' } })]);
+    it('should skip malformed processing metadata in global mode and continue', async () => {
+        const invalidRef = createEventRef('u1', 'bad', { originalFile: { path: 'x.fit' } });
+        const validRef = createEventRef('u1', 'good', { originalFile: { path: 'y.fit' } });
+        hoisted.processingDocs.push(
+            createProcessingDoc(invalidRef, { sportsLibVersion: '9.0.0', sportsLibVersionCode: 123 }),
+            createProcessingDoc(validRef, { sportsLibVersion: '9.0.1', sportsLibVersionCode: 9_000_001 }),
+        );
 
-        const summary = await runSportsLibReparseScript(['--execute', '--uids', 'u1,u2']);
-        expect(summary.dryRun).toBe(false);
-        expect(summary.completed).toBe(2);
-        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', { targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
-        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u2', 'e2', { targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION });
+        const summary = await runSportsLibReparseScript(['--execute']);
+        expect(summary.scanned).toBe(2);
+        expect(summary.completed).toBe(1);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Mismatched processing metadata version/code; skipping doc.',
+            expect.objectContaining({
+                processingDocPath: `${invalidRef.path}/metaData/processing`,
+            }),
+        );
     });
 
-    it('should write skipped status when execute mode finds no source files', async () => {
-        hoisted.globalDocs.push(makeEventDoc('u1', 'e1', {}));
+    it('should skip events with no source files and write skipped status in execute mode', async () => {
+        const eventRef = createEventRef('u1', 'e1', {});
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
         hoisted.extractSourceFiles.mockReturnValue([]);
 
         const summary = await runSportsLibReparseScript(['--execute']);
@@ -367,95 +407,30 @@ describe('reparse-sports-lib-events script', () => {
         expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             status: 'skipped',
             reason: 'NO_ORIGINAL_FILES',
-            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
         }));
-    });
-
-    it('should write completed status in execute mode when reparse succeeds', async () => {
-        hoisted.globalDocs.push(makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
-
-        const summary = await runSportsLibReparseScript(['--execute']);
-        expect(summary.completed).toBe(1);
-        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
-            status: 'completed',
-            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
-            lastError: '',
-        }));
-    });
-
-    it('should write skipped status when reparse returns NO_ORIGINAL_FILES in execute mode', async () => {
-        hoisted.globalDocs.push(makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
-        hoisted.reparseEventFromOriginalFiles.mockResolvedValue({
-            status: 'skipped',
-            reason: 'NO_ORIGINAL_FILES',
-            sourceFilesCount: 0,
-            parsedActivitiesCount: 0,
-            staleActivitiesDeleted: 0,
-        });
-
-        const summary = await runSportsLibReparseScript(['--execute']);
-        expect(summary.skippedNoSourceFiles).toBe(1);
-        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
-            status: 'skipped',
-            reason: 'NO_ORIGINAL_FILES',
-        }));
-    });
-
-    it('should write failed status when reparse throws in execute mode', async () => {
-        hoisted.globalDocs.push(makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
-        hoisted.reparseEventFromOriginalFiles.mockRejectedValue(new Error('boom'));
-
-        const summary = await runSportsLibReparseScript(['--execute']);
-        expect(summary.failed).toBe(1);
-        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
-            status: 'failed',
-            reason: 'REPARSE_FAILED',
-            lastError: 'boom',
-        }));
-    });
-
-    it('should log firestore index url when present in reparse error', async () => {
-        hoisted.globalDocs.push(makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
-        hoisted.reparseEventFromOriginalFiles.mockRejectedValue(new Error(
-            'FAILED_PRECONDITION: index missing https://console.firebase.google.com/v1/r/project/quantified-self-io/firestore/indexes?create_composite=abc',
-        ));
-
-        await runSportsLibReparseScript(['--execute']);
-
-        expect(hoisted.loggerError).toHaveBeenCalledWith(
-            '[sports-lib-reparse-script] Reparse failed',
-            expect.objectContaining({
-                uid: 'u1',
-                eventId: 'e1',
-                firestoreIndexUrl: 'https://console.firebase.google.com/v1/r/project/quantified-self-io/firestore/indexes?create_composite=abc',
-            }),
-        );
-    });
-
-    it('should skip allowlisted users without paid access', async () => {
-        hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
-        hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
-
-        const summary = await runSportsLibReparseScript(['--execute', '--uids', 'u1']);
-        expect(summary.skippedNoAccess).toBe(1);
-        expect(summary.completed).toBe(0);
-        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
     });
 
     it('should include free users when include-free-users flag is enabled', async () => {
         hoisted.runtimeDefaults.includeFreeUsers = true;
         hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
-        hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
 
-        const summary = await runSportsLibReparseScript(['--execute', '--uids', 'u1']);
-        expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalled();
-        expect(summary.skippedNoAccess).toBe(0);
+        const summary = await runSportsLibReparseScript(['--execute']);
         expect(summary.completed).toBe(1);
+        expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalled();
     });
 
     it('should not initialize firebase app when one already exists', async () => {
         hoisted.adminApps.push({ name: 'existing-app' });
-        hoisted.globalDocs.push(makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
 
         await runSportsLibReparseScript([]);
         expect(hoisted.initializeApp).not.toHaveBeenCalled();

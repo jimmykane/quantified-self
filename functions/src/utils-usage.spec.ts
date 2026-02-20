@@ -194,6 +194,7 @@ describe('utils higher-level helpers', () => {
             expect(processingCall).toBeTruthy();
             expect(processingCall[1]).toEqual(expect.objectContaining({
                 sportsLibVersion: SPORTS_LIB_VERSION,
+                sportsLibVersionCode: expect.any(Number),
                 processedAt: 'SERVER_TIMESTAMP',
             }));
         });

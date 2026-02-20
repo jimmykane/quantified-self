@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SPORTS_LIB_REPARSE_TARGET_VERSION } from '../reparse/sports-lib-reparse.config';
 
 const TARGET_SPORTS_LIB_VERSION = SPORTS_LIB_REPARSE_TARGET_VERSION;
+const TARGET_SPORTS_LIB_VERSION_CODE = 9_001_004;
 
 vi.mock('firebase-functions/v2/scheduler', () => ({
     onSchedule: (_opts: unknown, handler: any) => handler,
@@ -14,13 +15,13 @@ const hoisted = vi.hoisted(() => {
     const buildSportsLibReparseJobId = vi.fn();
     const writeReparseStatus = vi.fn();
     const resolveTargetSportsLibVersion = vi.fn();
-    const parseUIDAllowlist = vi.fn((input?: string) => {
-        if (!input) return null;
-        const values = input.split(',').map(v => v.trim()).filter(Boolean);
-        return values.length ? new Set(values) : null;
-    });
+    const resolveTargetSportsLibVersionCode = vi.fn();
+    const sportsLibVersionToCode = vi.fn();
     const parseUidAndEventIdFromEventPath = vi.fn((path: string) => {
         const parts = path.split('/');
+        if (parts.length !== 4 || parts[0] !== 'users' || parts[2] !== 'events') {
+            return null;
+        }
         return { uid: parts[1], eventId: parts[3] };
     });
     const runtimeDefaults = {
@@ -34,19 +35,108 @@ const hoisted = vi.hoisted(() => {
     const enqueueSportsLibReparseTask = vi.fn();
     const getExpireAtTimestamp = vi.fn(() => 'EXPIRE_TS');
 
+    const loggerInfo = vi.fn();
+    const loggerWarn = vi.fn();
+    const loggerError = vi.fn();
+
     const checkpointSet = vi.fn().mockResolvedValue(undefined);
     const checkpointGet = vi.fn();
 
+    const existingJobsById = new Map<string, Record<string, unknown>>();
     const jobSet = vi.fn().mockResolvedValue(undefined);
-    const jobGet = vi.fn().mockResolvedValue({ exists: false, data: () => ({}) });
-    const jobsCollection = { doc: vi.fn(() => ({ get: jobGet, set: jobSet })) };
 
-    const globalEventsDocs: any[] = [];
+    const processingDocs: any[] = [];
     const userEventsByUID = new Map<string, any[]>();
+    const eventRefsByPath = new Map<string, any>();
+
+    let processingLimitValue = 100;
+    let processingCursorCode: number | null = null;
+    let processingCursorDocPath: string | null = null;
+    let processingTargetCode: number | null = null;
+    const resetProcessingQueryState = () => {
+        processingLimitValue = 100;
+        processingCursorCode = null;
+        processingCursorDocPath = null;
+        processingTargetCode = null;
+    };
+
+    const collectionGroup = vi.fn((path: string) => {
+        if (path !== 'processing') {
+            throw new Error(`Unexpected collectionGroup path: ${path}`);
+        }
+        const q = {
+            where: vi.fn((_field: string, _op: string, value: number) => {
+                processingTargetCode = value;
+                return q;
+            }),
+            orderBy: vi.fn().mockReturnThis(),
+            limit: vi.fn((value: number) => {
+                processingLimitValue = value;
+                return q;
+            }),
+            startAfter: vi.fn((code: number, docRef: { path?: string }) => {
+                processingCursorCode = code;
+                processingCursorDocPath = docRef?.path || null;
+                return q;
+            }),
+            get: vi.fn(async () => {
+                const docs = processingDocs
+                    .filter((doc) => {
+                        if (processingTargetCode === null) {
+                            return true;
+                        }
+                        const code = doc.data()?.sportsLibVersionCode;
+                        return typeof code === 'number' && code < processingTargetCode;
+                    })
+                    .sort((a, b) => {
+                        const codeA = a.data()?.sportsLibVersionCode ?? 0;
+                        const codeB = b.data()?.sportsLibVersionCode ?? 0;
+                        if (codeA !== codeB) {
+                            return codeA - codeB;
+                        }
+                        return a.ref.path.localeCompare(b.ref.path);
+                    })
+                    .filter((doc) => {
+                        if (processingCursorCode === null || !processingCursorDocPath) {
+                            return true;
+                        }
+                        const code = doc.data()?.sportsLibVersionCode;
+                        if (code > processingCursorCode) {
+                            return true;
+                        }
+                        if (code < processingCursorCode) {
+                            return false;
+                        }
+                        return doc.ref.path > processingCursorDocPath;
+                    })
+                    .slice(0, processingLimitValue);
+
+                return {
+                    empty: docs.length === 0,
+                    size: docs.length,
+                    docs,
+                };
+            }),
+        };
+        return q;
+    });
 
     const collection = vi.fn((path: string) => {
         if (path === 'sportsLibReparseJobs') {
-            return jobsCollection;
+            return {
+                doc: vi.fn((jobId: string) => ({
+                    get: vi.fn(async () => {
+                        const existing = existingJobsById.get(jobId);
+                        return {
+                            exists: !!existing,
+                            data: () => existing || {},
+                        };
+                    }),
+                    set: vi.fn(async (payload: Record<string, unknown>, options: Record<string, unknown>) => {
+                        jobSet(jobId, payload, options);
+                    }),
+                })),
+            };
         }
 
         const userEventsMatch = path.match(/^users\/([^/]+)\/events$/);
@@ -78,45 +168,14 @@ const hoisted = vi.hoisted(() => {
             return q;
         }
 
-        return jobsCollection;
-    });
-
-    let globalCursorPath: string | null = null;
-    let globalLimitValue = 100;
-    const resetGlobalQueryState = () => {
-        globalCursorPath = null;
-        globalLimitValue = 100;
-    };
-    const collectionGroup = vi.fn(() => {
-        const q = {
-            orderBy: vi.fn().mockReturnThis(),
-            limit: vi.fn((value: number) => {
-                globalLimitValue = value;
-                return q;
-            }),
-            startAfter: vi.fn((value: { path?: string }) => {
-                globalCursorPath = value?.path || null;
-                return q;
-            }),
-            get: vi.fn(async () => {
-                const docs = globalEventsDocs
-                    .filter(doc => !globalCursorPath || doc.ref.path > globalCursorPath)
-                    .slice(0, globalLimitValue);
-                return {
-                    empty: docs.length === 0,
-                    size: docs.length,
-                    docs,
-                };
-            }),
-        };
-        return q;
+        throw new Error(`Unexpected collection path: ${path}`);
     });
 
     const firestoreDoc = vi.fn((path: string) => {
         if (path === 'systemJobs/sportsLibReparse') {
             return { get: checkpointGet, set: checkpointSet };
         }
-        return { path };
+        return eventRefsByPath.get(path) || { path };
     });
 
     const serverTimestamp = vi.fn(() => 'SERVER_TIMESTAMP');
@@ -129,20 +188,25 @@ const hoisted = vi.hoisted(() => {
         buildSportsLibReparseJobId,
         writeReparseStatus,
         resolveTargetSportsLibVersion,
-        parseUIDAllowlist,
+        resolveTargetSportsLibVersionCode,
+        sportsLibVersionToCode,
         parseUidAndEventIdFromEventPath,
         runtimeDefaults,
         enqueueSportsLibReparseTask,
         getExpireAtTimestamp,
+        loggerInfo,
+        loggerWarn,
+        loggerError,
         checkpointSet,
         checkpointGet,
+        existingJobsById,
         jobSet,
-        jobGet,
-        globalEventsDocs,
+        processingDocs,
         userEventsByUID,
+        eventRefsByPath,
         collection,
         collectionGroup,
-        resetGlobalQueryState,
+        resetProcessingQueryState,
         firestoreDoc,
         serverTimestamp,
         deleteField,
@@ -161,7 +225,8 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     buildSportsLibReparseJobId: hoisted.buildSportsLibReparseJobId,
     writeReparseStatus: hoisted.writeReparseStatus,
     resolveTargetSportsLibVersion: hoisted.resolveTargetSportsLibVersion,
-    parseUIDAllowlist: hoisted.parseUIDAllowlist,
+    resolveTargetSportsLibVersionCode: hoisted.resolveTargetSportsLibVersionCode,
+    sportsLibVersionToCode: hoisted.sportsLibVersionToCode,
     parseUidAndEventIdFromEventPath: hoisted.parseUidAndEventIdFromEventPath,
 }));
 
@@ -172,6 +237,12 @@ vi.mock('../shared/cloud-tasks', () => ({
 vi.mock('../shared/ttl-config', () => ({
     TTL_CONFIG: { SPORTS_LIB_REPARSE_JOBS_IN_DAYS: 30 },
     getExpireAtTimestamp: hoisted.getExpireAtTimestamp,
+}));
+
+vi.mock('firebase-functions/logger', () => ({
+    info: hoisted.loggerInfo,
+    warn: hoisted.loggerWarn,
+    error: hoisted.loggerError,
 }));
 
 vi.mock('firebase-admin', () => {
@@ -195,19 +266,62 @@ vi.mock('firebase-admin', () => {
 
 import { scheduleSportsLibReparseScan } from './sports-lib-reparse';
 
-function createEventDoc(uid: string, eventId: string, data: Record<string, unknown> = {}, reparseStatusData?: Record<string, unknown>): any {
-    return {
-        id: eventId,
-        ref: {
-            path: `users/${uid}/events/${eventId}`,
-            collection: vi.fn(() => ({
+function createEventRef(
+    uid: string,
+    eventId: string,
+    eventData: Record<string, unknown> = {},
+    reparseStatusData?: Record<string, unknown>,
+): any {
+    const path = `users/${uid}/events/${eventId}`;
+    const ref = {
+        path,
+        get: vi.fn(async () => ({
+            exists: true,
+            data: () => eventData,
+        })),
+        collection: vi.fn((collectionName: string) => {
+            if (collectionName !== 'metaData') {
+                return { doc: vi.fn(() => ({ get: vi.fn() })) };
+            }
+            return {
                 doc: vi.fn((docId: string) => {
                     if (docId === 'reparseStatus') {
-                        return { get: vi.fn().mockResolvedValue({ data: () => reparseStatusData || {} }) };
+                        return {
+                            get: vi.fn(async () => ({ data: () => reparseStatusData || {} })),
+                        };
                     }
-                    return { get: vi.fn().mockResolvedValue({ exists: false, data: () => ({}) }) };
+                    return {
+                        get: vi.fn(async () => ({ exists: false, data: () => ({}) })),
+                    };
                 }),
-            })),
+            };
+        }),
+    };
+    hoisted.eventRefsByPath.set(path, ref);
+    return ref;
+}
+
+function createEventDoc(
+    uid: string,
+    eventId: string,
+    eventData: Record<string, unknown> = {},
+    reparseStatusData?: Record<string, unknown>,
+): any {
+    const ref = createEventRef(uid, eventId, eventData, reparseStatusData);
+    return {
+        id: eventId,
+        ref,
+        data: () => eventData,
+    };
+}
+
+function createProcessingDoc(eventRef: any, data: Record<string, unknown>): any {
+    return {
+        ref: {
+            path: `${eventRef.path}/metaData/processing`,
+            parent: {
+                parent: eventRef,
+            },
         },
         data: () => data,
     };
@@ -216,21 +330,31 @@ function createEventDoc(uid: string, eventId: string, data: Record<string, unkno
 describe('scheduleSportsLibReparseScan', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        hoisted.globalEventsDocs.length = 0;
+        hoisted.processingDocs.length = 0;
         hoisted.userEventsByUID.clear();
-        hoisted.resetGlobalQueryState();
+        hoisted.eventRefsByPath.clear();
+        hoisted.existingJobsById.clear();
+        hoisted.resetProcessingQueryState();
+
         hoisted.runtimeDefaults.enabled = true;
         hoisted.runtimeDefaults.scanLimit = 200;
         hoisted.runtimeDefaults.enqueueLimit = 100;
         hoisted.runtimeDefaults.uidAllowlist = null;
         hoisted.runtimeDefaults.includeFreeUsers = false;
+
         hoisted.resolveTargetSportsLibVersion.mockReturnValue(TARGET_SPORTS_LIB_VERSION);
-        hoisted.checkpointGet.mockResolvedValue({ data: () => ({ cursorEventPath: null }) });
-        hoisted.jobGet.mockResolvedValue({ exists: false, data: () => ({}) });
+        hoisted.resolveTargetSportsLibVersionCode.mockReturnValue(TARGET_SPORTS_LIB_VERSION_CODE);
+        hoisted.sportsLibVersionToCode.mockImplementation((version: string) => {
+            if (version === '9.0.0') return 9_000_000;
+            if (version === '9.0.1') return 9_000_001;
+            if (version === TARGET_SPORTS_LIB_VERSION) return TARGET_SPORTS_LIB_VERSION_CODE;
+            throw new Error(`Invalid sports-lib version "${version}"`);
+        });
+        hoisted.checkpointGet.mockResolvedValue({ data: () => ({ cursorProcessingDocPath: null, cursorProcessingVersionCode: null }) });
+        hoisted.buildSportsLibReparseJobId.mockReturnValue('job-1');
         hoisted.shouldEventBeReparsed.mockResolvedValue(true);
         hoisted.hasPaidOrGraceAccess.mockResolvedValue(true);
         hoisted.extractSourceFiles.mockReturnValue([{ path: 'users/u1/events/e1/original.fit' }]);
-        hoisted.buildSportsLibReparseJobId.mockReturnValue('job-1');
     });
 
     it('should short-circuit when runtime flag is disabled', async () => {
@@ -239,46 +363,94 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(hoisted.collectionGroup).not.toHaveBeenCalled();
     });
 
-    it('should enqueue candidate jobs in global mode', async () => {
-        hoisted.globalEventsDocs.push(createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
+    it('should enqueue candidate jobs from processing collectionGroup in global mode', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+
         await (scheduleSportsLibReparseScan as any)({});
 
+        expect(hoisted.collectionGroup).toHaveBeenCalledWith('processing');
+        expect(hoisted.shouldEventBeReparsed).not.toHaveBeenCalled();
         expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
-        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
-            uid: 'u1',
-            eventId: 'e1',
-            status: 'pending',
-            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
-        }), { merge: true });
+        expect(hoisted.hasPaidOrGraceAccess).toHaveBeenCalledWith('u1');
     });
 
-    it('should apply cursor startAfter in global mode', async () => {
+    it('should apply tuple cursor startAfter in global mode', async () => {
         hoisted.runtimeDefaults.scanLimit = 1;
-        hoisted.checkpointGet.mockResolvedValue({ data: () => ({ cursorEventPath: 'users/u1/events/e1' }) });
-        hoisted.globalEventsDocs.push(createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
-        hoisted.globalEventsDocs.push(createEventDoc('u1', 'e2', { originalFile: { path: 'x.fit' } }));
+        const eventRefOne = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        const eventRefTwo = createEventRef('u1', 'e2', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(
+            createProcessingDoc(eventRefOne, { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 }),
+            createProcessingDoc(eventRefTwo, { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 }),
+        );
+        hoisted.checkpointGet.mockResolvedValue({
+            data: () => ({
+                cursorProcessingDocPath: `${eventRefOne.path}/metaData/processing`,
+                cursorProcessingVersionCode: 9_000_000,
+            }),
+        });
 
         await (scheduleSportsLibReparseScan as any)({});
 
         const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
-        expect(finalCheckpointPayload.cursorEventPath).toBe('users/u1/events/e2');
+        expect(finalCheckpointPayload.cursorProcessingDocPath).toBe(`${eventRefTwo.path}/metaData/processing`);
+        expect(finalCheckpointPayload.cursorProcessingVersionCode).toBe(9_000_000);
     });
 
-    it('should mark pass complete when global scan returns no events', async () => {
-        hoisted.globalEventsDocs.length = 0;
-
+    it('should mark pass complete when processing scan returns no docs', async () => {
         await (scheduleSportsLibReparseScan as any)({});
 
         const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
-        expect(finalCheckpointPayload.cursorEventPath).toBeNull();
+        expect(finalCheckpointPayload.cursorProcessingDocPath).toBeNull();
+        expect(finalCheckpointPayload.cursorProcessingVersionCode).toBeNull();
         expect(finalCheckpointPayload.lastPassCompletedAt).toBe('SERVER_TIMESTAMP');
         expect(finalCheckpointPayload.lastScanCount).toBe(0);
         expect(finalCheckpointPayload.lastEnqueuedCount).toBe(0);
     });
 
+    it('should skip malformed processing metadata and continue scanning', async () => {
+        const malformedRef = createEventRef('u1', 'bad', { originalFile: { path: 'x.fit' } });
+        const validRef = createEventRef('u1', 'good', { originalFile: { path: 'y.fit' } });
+        hoisted.processingDocs.push(
+            createProcessingDoc(malformedRef, { sportsLibVersion: '9.0.0', sportsLibVersionCode: 123 }),
+            createProcessingDoc(validRef, { sportsLibVersion: '9.0.1', sportsLibVersionCode: 9_000_001 }),
+        );
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledTimes(1);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Mismatched processing metadata version/code; skipping doc.',
+            expect.objectContaining({
+                processingDocPath: `${malformedRef.path}/metaData/processing`,
+            }),
+        );
+    });
+
+    it('should process only allowlisted users in override mode', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+        hoisted.userEventsByUID.set('u2', [createEventDoc('u2', 'e2', { originalFile: { path: 'x.fit' } })]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.collectionGroup).not.toHaveBeenCalled();
+        expect(hoisted.shouldEventBeReparsed).toHaveBeenCalledTimes(1);
+        expect(hoisted.hasPaidOrGraceAccess).toHaveBeenCalledWith('u1');
+        expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalledWith('u2');
+    });
+
     it('should mark missing-source events as skipped', async () => {
-        hoisted.globalEventsDocs.push(createEventDoc('u1', 'e1', {}));
+        const eventRef = createEventRef('u1', 'e1', {});
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
         hoisted.extractSourceFiles.mockReturnValue([]);
+
         await (scheduleSportsLibReparseScan as any)({});
 
         expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
@@ -288,152 +460,13 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
     });
 
-    it('should skip event processing when candidate check returns false', async () => {
-        hoisted.globalEventsDocs.push(createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
-        hoisted.shouldEventBeReparsed.mockResolvedValue(false);
-
-        await (scheduleSportsLibReparseScan as any)({});
-
-        expect(hoisted.extractSourceFiles).not.toHaveBeenCalled();
-        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
-    });
-
-    it('should skip enqueue when existing job is already pending', async () => {
-        hoisted.globalEventsDocs.push(createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
-        hoisted.jobGet.mockResolvedValue({ exists: true, data: () => ({ status: 'pending' }) });
-
-        await (scheduleSportsLibReparseScan as any)({});
-
-        expect(hoisted.jobSet).not.toHaveBeenCalled();
-        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
-    });
-
-    it('should stop enqueueing once enqueue limit is reached', async () => {
-        hoisted.runtimeDefaults.enqueueLimit = 1;
-        hoisted.buildSportsLibReparseJobId.mockImplementation((_uid: string, eventId: string) => `job-${eventId}`);
-        hoisted.globalEventsDocs.push(
-            createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }),
-            createEventDoc('u1', 'e2', { originalFile: { path: 'x.fit' } }),
-        );
-
-        await (scheduleSportsLibReparseScan as any)({});
-
-        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledTimes(1);
-    });
-
-    it('should re-enqueue when existing job is failed', async () => {
-        hoisted.globalEventsDocs.push(createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
-        hoisted.jobGet.mockResolvedValue({
-            exists: true,
-            data: () => ({ status: 'failed', attemptCount: 3, createdAt: 'old-created' }),
-        });
-
-        await (scheduleSportsLibReparseScan as any)({});
-
-        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
-            attemptCount: 3,
-            status: 'pending',
-        }), { merge: true });
-        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
-    });
-
-    it('should mark job as failed when task enqueue fails', async () => {
-        hoisted.globalEventsDocs.push(createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
-        hoisted.enqueueSportsLibReparseTask.mockRejectedValueOnce(new Error('enqueue-failed'));
-
-        await expect((scheduleSportsLibReparseScan as any)({})).rejects.toThrow('enqueue-failed');
-
-        expect(hoisted.jobSet).toHaveBeenLastCalledWith(expect.objectContaining({
-            status: 'failed',
-            lastError: 'enqueue-failed',
-        }), { merge: true });
-    });
-
-    it('should skip events already marked NO_ORIGINAL_FILES for the same target', async () => {
-        hoisted.globalEventsDocs.push(createEventDoc(
-            'u1',
-            'e1',
-            { originalFile: { path: 'x.fit' } },
-            { status: 'skipped', reason: 'NO_ORIGINAL_FILES', targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION },
-        ));
-
-        await (scheduleSportsLibReparseScan as any)({});
-
-        expect(hoisted.extractSourceFiles).not.toHaveBeenCalled();
-        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
-    });
-
-    it('should process only allowlisted users in override mode', async () => {
-        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
-        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
-        hoisted.userEventsByUID.set('u2', [createEventDoc('u2', 'e2', { originalFile: { path: 'y.fit' } })]);
-
-        await (scheduleSportsLibReparseScan as any)({});
-
-        expect(hoisted.collectionGroup).not.toHaveBeenCalled();
-        expect(hoisted.hasPaidOrGraceAccess).toHaveBeenCalledWith('u1');
-        expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalledWith('u2');
-    });
-
-    it('should carry previous cursor for unscanned allowlisted UIDs when scan cap is exhausted', async () => {
-        hoisted.runtimeDefaults.uidAllowlist = ['u1', 'u2'];
-        hoisted.runtimeDefaults.scanLimit = 1;
-        hoisted.checkpointGet.mockResolvedValue({ data: () => ({ overrideCursorByUid: { u2: 'prev-u2' } }) });
-        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
-        hoisted.userEventsByUID.set('u2', [createEventDoc('u2', 'e2', { originalFile: { path: 'x.fit' } })]);
-
-        await (scheduleSportsLibReparseScan as any)({});
-
-        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
-        expect(finalCheckpointPayload.overrideCursorByUid).toEqual({ u1: 'e1', u2: 'prev-u2' });
-        expect(hoisted.hasPaidOrGraceAccess).toHaveBeenCalledWith('u1');
-        expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalledWith('u2');
-        expect(finalCheckpointPayload.lastPassCompletedAt).toBeUndefined();
-    });
-
-    it('should progress per-UID override cursor when page is full', async () => {
-        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
-        hoisted.runtimeDefaults.scanLimit = 1;
-        hoisted.userEventsByUID.set('u1', [
-            createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }),
-            createEventDoc('u1', 'e2', { originalFile: { path: 'x.fit' } }),
-        ]);
-
-        await (scheduleSportsLibReparseScan as any)({});
-
-        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
-        expect(finalCheckpointPayload.overrideCursorByUid).toEqual({ u1: 'e1' });
-        expect(finalCheckpointPayload.lastPassCompletedAt).toBeUndefined();
-    });
-
-    it('should reset per-UID override cursor when UID scan finishes', async () => {
-        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
-        hoisted.checkpointGet.mockResolvedValue({ data: () => ({ overrideCursorByUid: { u1: 'e1' } }) });
-        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e2', { originalFile: { path: 'x.fit' } })]);
-        hoisted.runtimeDefaults.scanLimit = 10;
-
-        await (scheduleSportsLibReparseScan as any)({});
-
-        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
-        expect(finalCheckpointPayload.overrideCursorByUid).toEqual({ u1: null });
-        expect(finalCheckpointPayload.lastPassCompletedAt).toBe('SERVER_TIMESTAMP');
-    });
-
-    it('should reset per-UID cursor to null when allowlisted UID has no events in current page', async () => {
-        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
-        hoisted.checkpointGet.mockResolvedValue({ data: () => ({ overrideCursorByUid: { u1: 'stale-cursor' } }) });
-        hoisted.userEventsByUID.set('u1', []);
-
-        await (scheduleSportsLibReparseScan as any)({});
-
-        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
-        expect(finalCheckpointPayload.overrideCursorByUid).toEqual({ u1: null });
-    });
-
-    it('should enforce eligibility in override mode', async () => {
-        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
-        hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
-        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+    it('should skip enqueue when existing job is pending', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.existingJobsById.set('job-1', { status: 'pending' });
 
         await (scheduleSportsLibReparseScan as any)({});
 
@@ -443,11 +476,34 @@ describe('scheduleSportsLibReparseScan', () => {
     it('should include free users when include-free-users flag is enabled', async () => {
         hoisted.runtimeDefaults.includeFreeUsers = true;
         hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
-        hoisted.globalEventsDocs.push(createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
 
         await (scheduleSportsLibReparseScan as any)({});
 
         expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalled();
         expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
+    });
+
+    it('should mark job as failed when task enqueue fails', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.enqueueSportsLibReparseTask.mockRejectedValueOnce(new Error('enqueue-failed'));
+
+        await expect((scheduleSportsLibReparseScan as any)({})).rejects.toThrow('enqueue-failed');
+        expect(hoisted.jobSet).toHaveBeenCalledWith(
+            'job-1',
+            expect.objectContaining({
+                status: 'failed',
+                lastError: 'enqueue-failed',
+            }),
+            { merge: true },
+        );
     });
 });

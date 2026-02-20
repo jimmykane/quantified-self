@@ -70,6 +70,30 @@ export interface GetEventsOnceResult {
  */
 export type StreamHydrationMode = 'attach_streams_only' | 'replace_activities';
 
+const SPORTS_LIB_VERSION_CODE_FACTOR_MINOR = 1000;
+const SPORTS_LIB_VERSION_CODE_FACTOR_MAJOR = 1000000;
+
+function resolveSportsLibVersionCode(version: string): number {
+  const match = version.trim().match(/^v?(\d+)\.(\d+)\.(\d+)/);
+  if (!match) {
+    return 0;
+  }
+
+  const major = Number.parseInt(match[1], 10);
+  const minor = Number.parseInt(match[2], 10);
+  const patch = Number.parseInt(match[3], 10);
+  if (!Number.isFinite(major) || !Number.isFinite(minor) || !Number.isFinite(patch)) {
+    return 0;
+  }
+  if (major > 999 || minor > 999 || patch > 999) {
+    return 0;
+  }
+
+  return (major * SPORTS_LIB_VERSION_CODE_FACTOR_MAJOR)
+    + (minor * SPORTS_LIB_VERSION_CODE_FACTOR_MINOR)
+    + patch;
+}
+
 
 @Injectable({
   providedIn: 'root',
@@ -713,6 +737,7 @@ export class AppEventService implements OnDestroy {
     const processingDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID as string, 'metaData', 'processing'));
     const processingPayload = {
       sportsLibVersion: SPORTS_LIB_VERSION,
+      sportsLibVersionCode: resolveSportsLibVersionCode(SPORTS_LIB_VERSION),
       processedAt: serverTimestamp(),
     };
     await runInInjectionContext(this.injector, () => setDoc(processingDoc, processingPayload));

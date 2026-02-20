@@ -664,6 +664,7 @@ describe('AppEventService', () => {
         expect(doc).toHaveBeenCalledWith(expect.anything(), 'users', 'user1', 'events', '1', 'metaData', 'processing');
         expect(setDoc).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
             sportsLibVersion: expect.any(String),
+            sportsLibVersionCode: expect.any(Number),
             processedAt: expect.anything(),
         }));
     });

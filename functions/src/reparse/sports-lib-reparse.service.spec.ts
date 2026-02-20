@@ -126,6 +126,8 @@ import {
     parseUIDAllowlist,
     parseUidAndEventIdFromEventPath,
     resolveTargetSportsLibVersion,
+    resolveTargetSportsLibVersionCode,
+    sportsLibVersionToCode,
     shouldEventBeReparsed,
     writeReparseStatus,
     buildSportsLibReparseJobId,
@@ -205,6 +207,15 @@ describe('sports-lib-reparse.service', () => {
 
     it('resolveTargetSportsLibVersion should return hardcoded target version', () => {
         expect(resolveTargetSportsLibVersion()).toBe(TARGET_SPORTS_LIB_VERSION);
+    });
+
+    it('resolveTargetSportsLibVersionCode should return encoded hardcoded target version', () => {
+        expect(resolveTargetSportsLibVersionCode()).toBe(sportsLibVersionToCode(TARGET_SPORTS_LIB_VERSION));
+    });
+
+    it('sportsLibVersionToCode should encode valid semver and reject invalid versions', () => {
+        expect(sportsLibVersionToCode('9.1.4')).toBe(9001004);
+        expect(() => sportsLibVersionToCode('not-a-version')).toThrow('Invalid sports-lib version');
     });
 
     it('parseUIDAllowlist should parse and sanitize comma-separated values', () => {
@@ -609,11 +620,11 @@ describe('sports-lib-reparse.service', () => {
     });
 
     it('persistReparsedEvent should delete stale activities and write processing metadata', async () => {
-        const setCalls: string[] = [];
+        const setCalls: Array<{ path: string; payload?: Record<string, unknown> }> = [];
         hoisted.mockDoc.mockImplementation((path: string) => ({
             path,
-            set: vi.fn(async () => {
-                setCalls.push(path);
+            set: vi.fn(async (payload: Record<string, unknown>) => {
+                setCalls.push({ path, payload });
             }),
             get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
         }));
@@ -638,7 +649,13 @@ describe('sports-lib-reparse.service', () => {
         expect(result.staleActivitiesDeleted).toBe(1);
         expect(hoisted.mockBatchDelete).toHaveBeenCalledTimes(1);
         expect(hoisted.mockBatchCommit).toHaveBeenCalledTimes(1);
-        expect(setCalls.some(path => path.includes('/metaData/processing'))).toBe(true);
+        const processingCall = setCalls.find(call => call.path.includes('/metaData/processing'));
+        expect(processingCall).toBeTruthy();
+        expect(processingCall?.payload).toEqual(expect.objectContaining({
+            sportsLibVersion: '9.0.99',
+            sportsLibVersionCode: sportsLibVersionToCode('9.0.99'),
+            processedAt: 'SERVER_TIMESTAMP',
+        }));
         expect(hoisted.mockWriteAllEventData).toHaveBeenCalled();
     });
 

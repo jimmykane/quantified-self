@@ -34,7 +34,13 @@ export type SportsLibReparseJobStatus = 'pending' | 'processing' | 'completed' |
 
 export interface SportsLibReparseCheckpoint {
     cursorEventPath?: string | null;
+    cursorProcessingDocPath?: string | null;
+    cursorProcessingVersionCode?: number | null;
     overrideCursorByUid?: Record<string, string | null>;
+    overrideProcessingCursorByUid?: Record<string, {
+        docPath: string;
+        sportsLibVersionCode: number;
+    } | null>;
     lastScanAt?: unknown;
     lastPassStartedAt?: unknown;
     lastPassCompletedAt?: unknown;
@@ -264,6 +270,27 @@ export function parseUidAndEventIdFromEventPath(path: string): { uid: string; ev
 
 export function resolveTargetSportsLibVersion(): string {
     return SPORTS_LIB_REPARSE_TARGET_VERSION;
+}
+
+const SPORTS_LIB_VERSION_CODE_FACTOR_MINOR = 1_000;
+const SPORTS_LIB_VERSION_CODE_FACTOR_MAJOR = 1_000_000;
+
+export function sportsLibVersionToCode(version: string): number {
+    const parsedVersion = semver.parse(version);
+    if (!parsedVersion) {
+        throw new Error(`[sports-lib-reparse] Invalid sports-lib version "${version}"`);
+    }
+    if (parsedVersion.major > 999 || parsedVersion.minor > 999 || parsedVersion.patch > 999) {
+        throw new Error(`[sports-lib-reparse] sports-lib version "${version}" exceeds encoding bounds`);
+    }
+
+    return (parsedVersion.major * SPORTS_LIB_VERSION_CODE_FACTOR_MAJOR)
+        + (parsedVersion.minor * SPORTS_LIB_VERSION_CODE_FACTOR_MINOR)
+        + parsedVersion.patch;
+}
+
+export function resolveTargetSportsLibVersionCode(): number {
+    return sportsLibVersionToCode(resolveTargetSportsLibVersion());
 }
 
 export function parseUIDAllowlist(input?: string | null): Set<string> | null {
@@ -597,6 +624,7 @@ export async function persistReparsedEvent(
 
     const processingMetaData: ProcessingMetaData = {
         sportsLibVersion: targetSportsLibVersion,
+        sportsLibVersionCode: sportsLibVersionToCode(targetSportsLibVersion),
         processedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
     await admin.firestore().doc(`users/${uid}/events/${eventId}/metaData/processing`).set(processingMetaData, { merge: true });
