@@ -506,4 +506,60 @@ describe('scheduleSportsLibReparseScan', () => {
             { merge: true },
         );
     });
+
+    it('should not advance processing cursor past docs skipped due enqueue limit cap', async () => {
+        hoisted.runtimeDefaults.scanLimit = 2;
+        hoisted.runtimeDefaults.enqueueLimit = 1;
+        hoisted.buildSportsLibReparseJobId.mockImplementation((_uid: string, eventId: string) => `job-${eventId}`);
+
+        const firstEventRef = createEventRef('u1', 'e1', { originalFile: { path: 'first.fit' } });
+        const secondEventRef = createEventRef('u1', 'e2', { originalFile: { path: 'second.fit' } });
+        hoisted.processingDocs.push(
+            createProcessingDoc(firstEventRef, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+            createProcessingDoc(secondEventRef, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+        );
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledTimes(1);
+        expect(finalCheckpointPayload.cursorProcessingDocPath).toBe(`${firstEventRef.path}/metaData/processing`);
+        expect(finalCheckpointPayload.lastScanCount).toBe(1);
+        expect(finalCheckpointPayload.lastEnqueuedCount).toBe(1);
+    });
+
+    it('should persist resumable cursor tuple when full malformed processing page is scanned', async () => {
+        hoisted.runtimeDefaults.scanLimit = 2;
+        hoisted.runtimeDefaults.enqueueLimit = 100;
+
+        const malformedOneRef = createEventRef('u1', 'bad1', { originalFile: { path: 'bad1.fit' } });
+        const malformedTwoRef = createEventRef('u1', 'bad2', { originalFile: { path: 'bad2.fit' } });
+        const validLaterRef = createEventRef('u1', 'good3', { originalFile: { path: 'good3.fit' } });
+        hoisted.processingDocs.push(
+            createProcessingDoc(malformedOneRef, {
+                sportsLibVersionCode: 9_000_000,
+            }),
+            createProcessingDoc(malformedTwoRef, {
+                sportsLibVersionCode: 9_000_001,
+            }),
+            createProcessingDoc(validLaterRef, {
+                sportsLibVersion: '9.0.2',
+                sportsLibVersionCode: 9_000_002,
+            }),
+        );
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(finalCheckpointPayload.cursorProcessingDocPath).toBe(`${malformedTwoRef.path}/metaData/processing`);
+        expect(finalCheckpointPayload.cursorProcessingVersionCode).toBe(9_000_001);
+        expect(finalCheckpointPayload.lastPassCompletedAt).toBeUndefined();
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+    });
 });

@@ -105,6 +105,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
     let enqueuedCount = 0;
     let lastProcessingDocPath: string | null = null;
     let lastProcessingVersionCode: number | null = null;
+    const hasReachedEnqueueLimit = (): boolean => enqueuedCount >= settings.enqueueLimit;
 
     const processEventData = async (
         eventRef: admin.firestore.DocumentReference,
@@ -216,6 +217,11 @@ export const scheduleSportsLibReparseScan = onSchedule({
             const remainingScan = settings.scanLimit - scannedCount;
             const previousCursor = previousCursorByUID[uid] || null;
 
+            if (hasReachedEnqueueLimit()) {
+                nextCursorByUID[uid] = previousCursor;
+                continue;
+            }
+
             if (remainingScan <= 0) {
                 nextCursorByUID[uid] = previousCursor;
                 continue;
@@ -237,12 +243,17 @@ export const scheduleSportsLibReparseScan = onSchedule({
 
             let lastProcessedDocId: string | null = null;
             for (const eventDoc of userSnapshot.docs) {
+                if (hasReachedEnqueueLimit()) {
+                    break;
+                }
                 scannedCount++;
                 lastProcessedDocId = eventDoc.id;
                 await processEventData(eventDoc.ref, eventDoc.data() as Record<string, unknown>);
             }
 
-            if (userSnapshot.size < remainingScan) {
+            if (hasReachedEnqueueLimit()) {
+                nextCursorByUID[uid] = lastProcessedDocId || previousCursor;
+            } else if (userSnapshot.size < remainingScan) {
                 nextCursorByUID[uid] = null;
             } else {
                 nextCursorByUID[uid] = lastProcessedDocId;
@@ -293,12 +304,24 @@ export const scheduleSportsLibReparseScan = onSchedule({
         return;
     }
 
+    let stoppedByEnqueueLimit = false;
     for (const processingDoc of processingSnapshot.docs) {
+        if (hasReachedEnqueueLimit()) {
+            stoppedByEnqueueLimit = true;
+            break;
+        }
         scannedCount++;
-        lastProcessingDocPath = processingDoc.ref.path;
         const processingData = processingDoc.data() as Record<string, unknown>;
         const processingVersion = `${processingData.sportsLibVersion ?? ''}`;
         const processingVersionCode = getProcessingVersionCode(processingData.sportsLibVersionCode);
+
+        // Persist cursor progression based on the sortable query tuple to avoid rescanning
+        // full malformed pages (e.g. missing/invalid sportsLibVersion payload).
+        if (processingVersionCode !== null) {
+            lastProcessingDocPath = processingDoc.ref.path;
+            lastProcessingVersionCode = processingVersionCode;
+        }
+
         if (!processingVersion || processingVersionCode === null) {
             logger.warn('[sports-lib-reparse] Invalid processing metadata; skipping doc.', {
                 processingDocPath: processingDoc.ref.path,
@@ -330,7 +353,6 @@ export const scheduleSportsLibReparseScan = onSchedule({
             continue;
         }
 
-        lastProcessingVersionCode = processingVersionCode;
         const eventRef = processingDoc.ref.parent.parent;
         if (!eventRef) {
             logger.warn('[sports-lib-reparse] Could not resolve parent event from processing metadata path.', {
@@ -354,10 +376,11 @@ export const scheduleSportsLibReparseScan = onSchedule({
         await processEventData(eventRef, eventSnapshot.data() as Record<string, unknown>, { skipCandidateCheck: true });
     }
 
-    const passCompleted = processingSnapshot.size < settings.scanLimit;
+    const passCompleted = !stoppedByEnqueueLimit && processingSnapshot.size < settings.scanLimit;
+    const canPersistCursor = !passCompleted && lastProcessingDocPath && lastProcessingVersionCode !== null;
     await checkpointRef.set({
-        cursorProcessingDocPath: passCompleted ? null : lastProcessingDocPath,
-        cursorProcessingVersionCode: passCompleted ? null : lastProcessingVersionCode,
+        cursorProcessingDocPath: canPersistCursor ? lastProcessingDocPath : null,
+        cursorProcessingVersionCode: canPersistCursor ? lastProcessingVersionCode : null,
         ...(passCompleted ? { cursorEventPath: null } : {}),
         lastScanAt: admin.firestore.FieldValue.serverTimestamp(),
         lastScanCount: scannedCount,
