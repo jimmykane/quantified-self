@@ -308,54 +308,6 @@ describe('EventWriter', () => {
             expect(mockLogger.error).toHaveBeenCalled();
         });
 
-        it('should log document path and undefined fields when Firestore rejects undefined values', async () => {
-            const firestoreUndefinedError = new Error(
-                'Value for argument "data" is not a valid Firestore document. Cannot use "undefined" as a Firestore value.'
-            );
-            const conditionalFailingAdapter: FirestoreAdapter = {
-                setDoc: vi.fn().mockImplementation(async (path: string[]) => {
-                    if (path[2] === 'events') {
-                        throw firestoreUndefinedError;
-                    }
-                    return undefined;
-                }),
-                createBlob: vi.fn((data) => data),
-                generateID: vi.fn().mockReturnValue('generated-id'),
-            };
-            const writerWithLogger = new EventWriter(conditionalFailingAdapter, undefined, undefined, mockLogger);
-
-            eventMock.toJSON.mockReturnValue({
-                id: 'event-1',
-                activities: [],
-                events: {
-                    6: {
-                        'Jump Event': {
-                            jumpData: {
-                                height: undefined,
-                            },
-                        },
-                    },
-                },
-            });
-
-            let errorMessage = '';
-            try {
-                await writerWithLogger.writeAllEventData('user-1', eventMock);
-            } catch (error) {
-                errorMessage = (error as Error).message;
-            }
-
-            expect(errorMessage).toContain('Firestore write failed for users/user-1/events/event-1');
-            expect(errorMessage).toContain('events.6.Jump Event.jumpData.height');
-            expect(mockLogger.error).toHaveBeenCalledWith(
-                'Firestore write payload contains undefined values',
-                expect.objectContaining({
-                    documentPath: 'users/user-1/events/event-1',
-                    undefinedFieldPaths: expect.arrayContaining(['events.6.Jump Event.jumpData.height']),
-                })
-            );
-        });
-
         it('should use default console logger when no logger is provided', async () => {
             // Spy on console methods
             const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => { });
@@ -370,3 +322,4 @@ describe('EventWriter', () => {
         });
     });
 });
+

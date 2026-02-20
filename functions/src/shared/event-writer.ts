@@ -38,51 +38,6 @@ export interface OriginalFile {
     originalFilename?: string;
 }
 
-function collectUndefinedPaths(
-    value: unknown,
-    maxPaths: number = 20,
-): string[] {
-    const paths: string[] = [];
-    const visited = new WeakSet<object>();
-
-    const walk = (node: unknown, currentPath: string): void => {
-        if (paths.length >= maxPaths) {
-            return;
-        }
-
-        if (node === undefined) {
-            paths.push(currentPath || '<root>');
-            return;
-        }
-
-        if (node === null || typeof node !== 'object') {
-            return;
-        }
-
-        const nodeObject = node as object;
-        if (visited.has(nodeObject)) {
-            return;
-        }
-        visited.add(nodeObject);
-
-        if (Array.isArray(node)) {
-            node.forEach((item, index) => {
-                const nextPath = currentPath ? `${currentPath}[${index}]` : `[${index}]`;
-                walk(item, nextPath);
-            });
-            return;
-        }
-
-        Object.entries(node as Record<string, unknown>).forEach(([key, child]) => {
-            const nextPath = currentPath ? `${currentPath}.${key}` : key;
-            walk(child, nextPath);
-        });
-    };
-
-    walk(value, '');
-    return paths;
-}
-
 export class EventWriter {
     private logger: LogAdapter;
 
@@ -155,8 +110,13 @@ export class EventWriter {
                 }
 
 
-                const activityPath = ['users', userID, 'activities', <string>activity.getID()];
-                writePromises.push(this.writeDocWithContext(activityPath, activityJSON));
+                writePromises.push(
+                    this.adapter.setDoc(
+                        // New path: users/{userID}/activities/{activityID}
+                        ['users', userID, 'activities', <string>activity.getID()],
+                        activityJSON
+                    )
+                );
             }
             this.logger.info(`Prepared ${activities.length} activity writes in ${Date.now() - startActivities}ms`);
 
@@ -230,8 +190,9 @@ export class EventWriter {
                 }
             }
 
-            const eventPath = ['users', userID, 'events', <string>event.getID()];
-            writePromises.push(this.writeDocWithContext(eventPath, eventJSON));
+            writePromises.push(
+                this.adapter.setDoc(['users', userID, 'events', <string>event.getID()], eventJSON)
+            );
 
             this.logger.info(`Starting Promise.all for ${writePromises.length} writes...`);
             const startWrites = Date.now();
@@ -244,29 +205,5 @@ export class EventWriter {
             throw new Error('Could not write event data: ' + error.message);
         }
     }
-
-    private async writeDocWithContext(path: string[], data: unknown): Promise<void> {
-        try {
-            await this.adapter.setDoc(path, data);
-        } catch (e) {
-            const error = e as Error;
-            const documentPath = path.join('/');
-            const undefinedPaths = collectUndefinedPaths(data);
-            if (undefinedPaths.length > 0) {
-                this.logger.error('Firestore write payload contains undefined values', {
-                    documentPath,
-                    undefinedFieldPaths: undefinedPaths,
-                });
-            }
-            this.logger.error('Firestore write failed for document', {
-                documentPath,
-                errorMessage: error?.message || `${error}`,
-            });
-
-            const undefinedSuffix = undefinedPaths.length > 0
-                ? ` Undefined field paths: ${undefinedPaths.join(', ')}.`
-                : '';
-            throw new Error(`Firestore write failed for ${documentPath}: ${error.message}.${undefinedSuffix}`);
-        }
-    }
 }
+
