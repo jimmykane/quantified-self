@@ -397,6 +397,7 @@ export async function hasProAccess(userID: string): Promise<boolean> {
 // Re-export Cloud Tasks utilities from shared module for backward compatibility
 export {
   getCloudTaskQueueDepth,
+  getCloudTaskQueueDepthForQueue,
   enqueueWorkoutTask,
   resetCloudTaskQueueDepthCache,
 } from './shared/cloud-tasks';

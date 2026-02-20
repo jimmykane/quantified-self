@@ -31,6 +31,30 @@
             </div>
             <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">active/scheduled in GCP</span>
         </div>
+        <div class="glass-card app-stat-card status-info"
+            matTooltip="Tasks currently in flight or scheduled in the workout ingestion Cloud Tasks queue.">
+            <div class="app-stat-header">
+                <mat-icon>fitness_center</mat-icon>
+                <span>Cloud Tasks (Workout)</span>
+            </div>
+            <div class="app-stat-value" *ngIf="!loading">{{ stats?.cloudTasks?.queues?.workout?.pending ?? 0 }}</div>
+            <div class="app-spinner-mini" *ngIf="loading">
+                <mat-spinner diameter="24"></mat-spinner>
+            </div>
+            <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">queue: workout</span>
+        </div>
+        <div class="glass-card app-stat-card status-info"
+            matTooltip="Tasks currently in flight or scheduled in the sports-lib reparse Cloud Tasks queue.">
+            <div class="app-stat-header">
+                <mat-icon>autorenew</mat-icon>
+                <span>Cloud Tasks (Reparse)</span>
+            </div>
+            <div class="app-stat-value" *ngIf="!loading">{{ stats?.cloudTasks?.queues?.sportsLibReparse?.pending ?? 0 }}</div>
+            <div class="app-spinner-mini" *ngIf="loading">
+                <mat-spinner diameter="24"></mat-spinner>
+            </div>
+            <span class="stat-subtitle" style="font-size: 0.75rem; opacity: 0.8;">queue: reparse</span>
+        </div>
         <div class="glass-card app-stat-card status-success">
             <div class="app-stat-header">
                 <mat-icon>check_circle</mat-icon>

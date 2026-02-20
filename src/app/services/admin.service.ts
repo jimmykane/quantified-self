@@ -61,6 +61,16 @@ export interface QueueStats {
     stuck: number;
     cloudTasks?: {
         pending: number;
+        queues?: {
+            workout?: {
+                queueId: string;
+                pending: number;
+            };
+            sportsLibReparse?: {
+                queueId: string;
+                pending: number;
+            };
+        };
     };
     providers: {
         name: string;

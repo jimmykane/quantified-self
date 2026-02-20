@@ -16,19 +16,19 @@ import { FirestoreEventJSON, OriginalFileMetaData } from '../shared/app-event.in
 import { createParsingOptions } from '../shared/parsing-options';
 import { FirestoreAdapter, LogAdapter, EventWriter } from '../shared/event-writer';
 import { ProcessingMetaData } from '../shared/processing-metadata.interface';
+import {
+    SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
+    SPORTS_LIB_REPARSE_TARGET_VERSION,
+} from './sports-lib-reparse.config';
 
 export const SPORTS_LIB_REPARSE_CHECKPOINT_PATH = 'systemJobs/sportsLibReparse';
 export const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 export const SPORTS_LIB_REPARSE_STATUS_DOC_ID = 'reparseStatus';
 export const SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES = 'NO_ORIGINAL_FILES';
-export const SPORTS_LIB_REPARSE_TARGET_VERSION = '9.1.2';
-export const SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS = {
-    enabled: false,
-    scanLimit: 200,
-    enqueueLimit: 100,
-    includeFreeUsers: false,
-    uidAllowlist: null as string[] | null,
-} as const;
+export {
+    SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
+    SPORTS_LIB_REPARSE_TARGET_VERSION,
+} from './sports-lib-reparse.config';
 
 export type SportsLibReparseJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 

@@ -24,7 +24,9 @@ vi.mock('../config', () => ({
         cloudtasks: {
             projectId: 'test-project',
             location: 'test-location',
-            queue: 'test-queue',
+            workoutQueue: 'processWorkoutTask',
+            sportsLibReparseQueue: 'processSportsLibReparseTask',
+            queue: 'processWorkoutTask',
             serviceAccountEmail: 'sa@test.com',
         }
     }
@@ -48,6 +50,12 @@ describe('enqueueSportsLibReparseTask', () => {
 
     it('should enqueue reparse task with deterministic name and payload', async () => {
         await enqueueSportsLibReparseTask('job-abc-123');
+
+        expect(hoisted.mockCloudTasksClient.queuePath).toHaveBeenCalledWith(
+            'test-project',
+            'test-location',
+            'processSportsLibReparseTask'
+        );
 
         expect(hoisted.mockCloudTasksClient.createTask).toHaveBeenCalledWith({
             parent: 'projects/p/locations/l/queues/q',

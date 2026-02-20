@@ -5,7 +5,7 @@ This pipeline reparses existing events and activities from their stored original
 
 Current target version source of truth:
 - `SPORTS_LIB_REPARSE_TARGET_VERSION = '9.1.2'`
-- File: `functions/src/reparse/sports-lib-reparse.service.ts`
+- File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
 An event is a candidate when:
 - `users/{uid}/events/{eventId}/metaData/processing` is missing, or
@@ -18,6 +18,7 @@ An event is a candidate when:
 - File: `functions/src/schedule/sports-lib-reparse.ts`
 - Frequency: hourly (`every 1 hours`)
 - Region: `europe-west2`
+- Cloud Tasks queue: `processSportsLibReparseTask`
 - Responsibility:
   - find candidate events
   - write/update job docs
@@ -95,7 +96,7 @@ Include-free behavior (`SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.includeFreeUsers=tru
 
 ## Runtime Controls
 Tracked code defaults live in:
-- `functions/src/reparse/sports-lib-reparse.service.ts`
+- `functions/src/reparse/sports-lib-reparse.config.ts`
 - constant: `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS`
 
 These defaults are strict constants (no env overrides):
@@ -186,6 +187,10 @@ This affects both `scheduleSportsLibReparseScan` and `processSportsLibReparseTas
 - Check job outcomes in `sportsLibReparseJobs`
 - Check per-event status in `metaData/reparseStatus`
 - Check final parser version in `metaData/processing.sportsLibVersion`
+- Admin dashboard queue cards:
+  - `Cloud Tasks` (total across queues)
+  - `Cloud Tasks (Workout)` (queue `processWorkoutTask`)
+  - `Cloud Tasks (Reparse)` (queue `processSportsLibReparseTask`)
 
 ## Exports and Entry Points
 - Exported in `functions/src/index.ts`:

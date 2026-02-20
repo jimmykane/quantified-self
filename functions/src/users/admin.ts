@@ -6,11 +6,12 @@ import { getStripe } from '../stripe/client';
 import { CloudBillingClient } from '@google-cloud/billing';
 import { BudgetServiceClient } from '@google-cloud/billing-budgets';
 import { BigQuery } from '@google-cloud/bigquery';
-import { getCloudTaskQueueDepth } from '../utils';
+import { getCloudTaskQueueDepthForQueue } from '../utils';
 import { GARMIN_API_TOKENS_COLLECTION_NAME, GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../garmin/constants';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME, SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME, COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
+import { config } from '../config';
 
 /**
  * Normalizes error messages by replacing dynamic values (numbers, IDs) with placeholders.
@@ -423,10 +424,18 @@ export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
 
     try {
         const db = admin.firestore();
-        const cloudTaskDepth = await getCloudTaskQueueDepth().catch(e => {
-            logger.error('Error getting Cloud Task depth:', e);
-            return 0;
-        });
+        const { workoutQueue, sportsLibReparseQueue } = config.cloudtasks;
+        const [workoutCloudTaskDepth, sportsLibReparseCloudTaskDepth] = await Promise.all([
+            getCloudTaskQueueDepthForQueue(workoutQueue).catch(e => {
+                logger.error(`Error getting Cloud Task depth for queue ${workoutQueue}:`, e);
+                return 0;
+            }),
+            getCloudTaskQueueDepthForQueue(sportsLibReparseQueue).catch(e => {
+                logger.error(`Error getting Cloud Task depth for queue ${sportsLibReparseQueue}:`, e);
+                return 0;
+            }),
+        ]);
+        const totalCloudTaskDepth = workoutCloudTaskDepth + sportsLibReparseCloudTaskDepth;
         let totalPending = 0;
         let totalSucceeded = 0;
         let totalStuck = 0;
@@ -554,7 +563,17 @@ export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
             succeeded: totalSucceeded,
             stuck: totalStuck,
             cloudTasks: {
-                pending: cloudTaskDepth
+                pending: totalCloudTaskDepth,
+                queues: {
+                    workout: {
+                        queueId: workoutQueue,
+                        pending: workoutCloudTaskDepth,
+                    },
+                    sportsLibReparse: {
+                        queueId: sportsLibReparseQueue,
+                        pending: sportsLibReparseCloudTaskDepth,
+                    },
+                },
             },
             providers,
             dlq,

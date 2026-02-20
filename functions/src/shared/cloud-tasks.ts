@@ -24,14 +24,14 @@ function getCloudTasksClient(): v2beta3.CloudTasksClient {
 
 // Cache for queue depth to reduce API calls
 const CACHE_TTL_MS = 60 * 1000; // 1 minute
-let cachedQueueDepth: { count: number; timestamp: number } | null = null;
+const cachedQueueDepthByQueue = new Map<string, { count: number; timestamp: number }>();
 
 /**
  * Resets the Cloud Task queue depth cache.
  * Note: This is primarily used for unit testing.
  */
 export function resetCloudTaskQueueDepthCache(): void {
-    cachedQueueDepth = null;
+    cachedQueueDepthByQueue.clear();
 }
 
 /**
@@ -43,22 +43,23 @@ export function resetCloudTasksClient(): void {
 }
 
 /**
- * Get the current depth (number of tasks) in the Cloud Tasks queue.
+ * Get the current depth (number of tasks) in the specified Cloud Tasks queue.
  * Uses caching to reduce API calls unless forceRefresh is true.
  */
-export async function getCloudTaskQueueDepth(forceRefresh = false): Promise<number> {
-    if (!forceRefresh && cachedQueueDepth && (Date.now() - cachedQueueDepth.timestamp < CACHE_TTL_MS)) {
-        return cachedQueueDepth.count;
+export async function getCloudTaskQueueDepthForQueue(queueId: string, forceRefresh = false): Promise<number> {
+    const cached = cachedQueueDepthByQueue.get(queueId);
+    if (!forceRefresh && cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+        return cached.count;
     }
 
     const client = getCloudTasksClient();
-    const { projectId, location, queue } = config.cloudtasks;
+    const { projectId, location } = config.cloudtasks;
 
     if (!projectId) {
         throw new Error('Project ID is not defined in config');
     }
 
-    const name = client.queuePath(projectId, location, queue);
+    const name = client.queuePath(projectId, location, queueId);
 
     const [response] = await client.getQueue({
         name,
@@ -68,8 +69,16 @@ export async function getCloudTaskQueueDepth(forceRefresh = false): Promise<numb
     });
 
     const tasksCount = Number(response.stats?.tasksCount || 0);
-    cachedQueueDepth = { count: tasksCount, timestamp: Date.now() };
+    cachedQueueDepthByQueue.set(queueId, { count: tasksCount, timestamp: Date.now() });
     return tasksCount;
+}
+
+/**
+ * Get the current depth (number of tasks) in the workout Cloud Tasks queue.
+ * Uses caching to reduce API calls unless forceRefresh is true.
+ */
+export async function getCloudTaskQueueDepth(forceRefresh = false): Promise<number> {
+    return getCloudTaskQueueDepthForQueue(config.cloudtasks.workoutQueue, forceRefresh);
 }
 
 /**
@@ -83,14 +92,14 @@ export async function enqueueWorkoutTask(
     scheduleDelaySeconds?: number
 ): Promise<void> {
     const client = getCloudTasksClient();
-    const { projectId, location, queue, serviceAccountEmail } = config.cloudtasks;
+    const { projectId, location, workoutQueue, serviceAccountEmail } = config.cloudtasks;
 
     if (!projectId) {
         throw new Error('Project ID is not defined in config');
     }
 
-    const url = `https://${location}-${projectId}.cloudfunctions.net/${queue}`;
-    const parent = client.queuePath(projectId, location, queue);
+    const url = `https://${location}-${projectId}.cloudfunctions.net/processWorkoutTask`;
+    const parent = client.queuePath(projectId, location, workoutQueue);
 
     // Deterministic task name for deduplication
     // Sanitize serviceName to allow only letters, numbers, hyphens, or underscores
@@ -119,12 +128,12 @@ export async function enqueueWorkoutTask(
  */
 export async function enqueueSportsLibReparseTask(jobId: string, scheduleDelaySeconds?: number): Promise<void> {
     const client = getCloudTasksClient();
-    const { projectId, location, queue, serviceAccountEmail } = config.cloudtasks;
+    const { projectId, location, sportsLibReparseQueue, serviceAccountEmail } = config.cloudtasks;
     if (!projectId) {
         throw new Error('Project ID is not defined in config');
     }
 
-    const parent = client.queuePath(projectId, location, queue);
+    const parent = client.queuePath(projectId, location, sportsLibReparseQueue);
     const url = `https://${location}-${projectId}.cloudfunctions.net/processSportsLibReparseTask`;
     const safeJobId = jobId.replace(/[^a-zA-Z0-9-_]/g, '-');
     const taskName = `${parent}/tasks/reparse-${safeJobId}`;

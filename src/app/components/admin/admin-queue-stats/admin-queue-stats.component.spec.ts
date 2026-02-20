@@ -102,7 +102,13 @@ describe('AdminQueueStatsComponent', () => {
                     },
                     topErrors: []
                 },
-                cloudTasks: { pending: 1, succeeded: 2, failed: 0 },
+                cloudTasks: {
+                    pending: 1,
+                    queues: {
+                        workout: { queueId: 'processWorkoutTask', pending: 1 },
+                        sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 0 }
+                    }
+                },
                 dlq: { total: 0, byContext: [], byProvider: [] }
             };
 
@@ -132,7 +138,13 @@ describe('AdminQueueStatsComponent', () => {
                     },
                     topErrors: []
                 },
-                cloudTasks: { pending: 2, succeeded: 5, failed: 1 },
+                cloudTasks: {
+                    pending: 2,
+                    queues: {
+                        workout: { queueId: 'processWorkoutTask', pending: 2 },
+                        sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 0 }
+                    }
+                },
                 dlq: { total: 0, byContext: [], byProvider: [] }
             };
 
@@ -145,6 +157,52 @@ describe('AdminQueueStatsComponent', () => {
             expect(mockEchartsService.setOption).toHaveBeenCalled();
             const optionArg = mockEchartsService.setOption.mock.calls[0][1];
             expect(optionArg.series[0].data).toEqual([5, 3, 2]);
+        });
+    });
+
+    describe('Cloud Tasks Queue Breakdown', () => {
+        it('should render workout and reparse queue pending values', () => {
+            component.loading = false;
+            component.stats = {
+                pending: 1,
+                succeeded: 1,
+                stuck: 0,
+                providers: [],
+                cloudTasks: {
+                    pending: 50,
+                    queues: {
+                        workout: { queueId: 'processWorkoutTask', pending: 42 },
+                        sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 8 }
+                    }
+                }
+            };
+
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).toContain('Cloud Tasks (Workout)');
+            expect(host.textContent).toContain('Cloud Tasks (Reparse)');
+            expect(host.textContent).toContain('42');
+            expect(host.textContent).toContain('8');
+        });
+
+        it('should render zero for missing queue breakdown data', () => {
+            component.loading = false;
+            component.stats = {
+                pending: 1,
+                succeeded: 1,
+                stuck: 0,
+                providers: [],
+                cloudTasks: {
+                    pending: 7
+                }
+            };
+
+            fixture.detectChanges();
+            const queueValues = Array.from(
+                fixture.nativeElement.querySelectorAll('.app-stat-card.status-info .app-stat-value')
+            ).map((node: Element) => node.textContent?.trim() || '');
+
+            expect(queueValues).toEqual(expect.arrayContaining(['7', '0', '0']));
         });
     });
 });
