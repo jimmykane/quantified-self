@@ -187,6 +187,19 @@ describe('reparse-sports-lib-events script', () => {
         expect(options.startAfter).toBe('users/u1/events/e1');
     });
 
+    it('parseScriptOptions should parse --key=value style args', () => {
+        const options = parseScriptOptions([
+            '--uid=u1',
+            '--uids=u2,u3',
+            '--limit=75',
+            '--start-after=users/u1/events/e1',
+        ]);
+        expect(options.uid).toBe('u1');
+        expect(options.uids).toBeUndefined();
+        expect(options.limit).toBe(75);
+        expect(options.startAfter).toBe('users/u1/events/e1');
+    });
+
     it('parseScriptOptions should fallback to default limit when value is invalid', () => {
         const options = parseScriptOptions(['--limit', 'not-a-number']);
         expect(options.limit).toBe(200);
@@ -221,6 +234,15 @@ describe('reparse-sports-lib-events script', () => {
         expect(summary.candidates).toBe(1);
         expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
         expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+    });
+
+    it('single UID dry-run should support equals-style uid args', async () => {
+        hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+        hoisted.globalDocs.push(makeEventDoc('u2', 'e2', { originalFile: { path: 'x.fit' } }));
+
+        const summary = await runSportsLibReparseScript(['--uid=u1', '--limit=10']);
+        expect(summary.scanned).toBe(1);
+        expect(hoisted.collectionGroup).not.toHaveBeenCalled();
     });
 
     it('multi-UID dry-run should iterate allowlisted users only', async () => {

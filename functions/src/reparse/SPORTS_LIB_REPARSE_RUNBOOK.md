@@ -148,7 +148,7 @@ npm run reparse-sports-lib-events -- --uid <uid> --start-after <eventId> --limit
 
 Notes:
 - In multi-UID mode (`--uids`), `--start-after` is ignored.
-- CLI args currently support `--flag value` format only. `--flag=value` is not parsed.
+- CLI args support both `--flag value` and `--flag=value` formats.
 - Precedence for UID scope:
   1. `--uid`
   2. `--uids`

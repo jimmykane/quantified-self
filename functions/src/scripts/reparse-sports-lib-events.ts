@@ -44,11 +44,17 @@ function parseIntArg(value: string | undefined, fallback: number): number {
 }
 
 function readArgValue(argv: string[], key: string): string | undefined {
-    const index = argv.indexOf(key);
-    if (index === -1) {
-        return undefined;
+    const equalsPrefix = `${key}=`;
+    for (let i = 0; i < argv.length; i++) {
+        const token = argv[i];
+        if (token === key) {
+            return argv[i + 1];
+        }
+        if (token.startsWith(equalsPrefix)) {
+            return token.slice(equalsPrefix.length);
+        }
     }
-    return argv[index + 1];
+    return undefined;
 }
 
 function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
