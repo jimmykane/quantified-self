@@ -19,6 +19,7 @@ import {
 } from '../reparse/sports-lib-reparse.service';
 import { enqueueSportsLibReparseTask } from '../shared/cloud-tasks';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
+import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 
 const DEFAULT_SCAN_LIMIT = 200;
 const DEFAULT_ENQUEUE_LIMIT = 100;
@@ -77,7 +78,7 @@ function shouldSkipBecauseNoOriginalFilesForTarget(
 }
 
 export const scheduleSportsLibReparseScan = onSchedule({
-    region: 'europe-west2',
+    region: FUNCTIONS_MANIFEST.scheduleSportsLibReparseScan.region,
     schedule: 'every 1 hours',
 }, async (_event) => {
     const settings = getCurrentSettings();

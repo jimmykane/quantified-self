@@ -11,6 +11,7 @@ import {
     writeReparseStatus,
 } from '../reparse/sports-lib-reparse.service';
 import { CLOUD_TASK_RETRY_CONFIG } from '../shared/queue-config';
+import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 
 interface SportsLibReparseTaskPayload {
     jobId: string;
@@ -40,7 +41,7 @@ export const processSportsLibReparseTask = onTaskDispatched({
     retryConfig: CLOUD_TASK_RETRY_CONFIG,
     memory: '1GiB',
     timeoutSeconds: 540,
-    region: 'europe-west2',
+    region: FUNCTIONS_MANIFEST.processSportsLibReparseTask.region,
 }, async (request) => {
     const payload = request.data as SportsLibReparseTaskPayload;
     const jobId = payload?.jobId;
