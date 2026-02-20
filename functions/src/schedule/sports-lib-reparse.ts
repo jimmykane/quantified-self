@@ -78,7 +78,7 @@ function getProcessingVersionCode(value: unknown): number | null {
 
 export const scheduleSportsLibReparseScan = onSchedule({
     region: FUNCTIONS_MANIFEST.scheduleSportsLibReparseScan.region,
-    schedule: 'every 10 minutes',
+    schedule: 'every 1 hours',
 }, async (_event) => {
     const settings = getCurrentSettings();
     if (!settings.enabled) {
