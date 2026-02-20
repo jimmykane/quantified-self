@@ -4,13 +4,13 @@
 This pipeline reparses existing events and activities from their stored original files so data can be upgraded to a fixed target sports-lib parser version.
 
 Current target version source of truth:
-- `SPORTS_LIB_REPARSE_TARGET_VERSION = '9.1.2'`
+- `SPORTS_LIB_REPARSE_TARGET_VERSION = '9.1.4'`
 - File: `functions/src/reparse/sports-lib-reparse.config.ts`
 
 An event is a candidate when:
 - `users/{uid}/events/{eventId}/metaData/processing` is missing, or
 - `processing.sportsLibVersion` is missing, or
-- `processing.sportsLibVersion < '9.1.2'` (semver comparison)
+- `processing.sportsLibVersion < '9.1.4'` (semver comparison)
 
 If `processing.sportsLibVersion` exists but is not valid semver, the run aborts (strict data-integrity behavior).
 
@@ -74,7 +74,7 @@ If `processing.sportsLibVersion` exists but is not valid semver, the run aborts 
 ### Per-event processing metadata
 - Path: `users/{uid}/events/{eventId}/metaData/processing`
 - Updated with:
-  - `sportsLibVersion='9.1.2'`
+  - `sportsLibVersion='9.1.4'`
   - `processedAt=serverTimestamp`
 
 ## Parse and Write Rules
@@ -87,6 +87,28 @@ If `processing.sportsLibVersion` exists but is not valid semver, the run aborts 
   - preserve activity IDs by index
   - preserve creator name when present
 - Stale activities are deleted
+
+### Bucket Fallback + Auto-Heal
+To handle legacy/wrong bucket metadata safely, the worker now uses explicit bucket candidates and heals metadata automatically when fallback succeeds.
+
+Explicit bucket constants in code:
+- `SPORTS_LIB_PRIMARY_BUCKET = 'quantified-self-io'`
+- `SPORTS_LIB_LEGACY_APPSPOT_BUCKET = 'quantified-self-io.appspot.com'`
+- File: `functions/src/reparse/sports-lib-reparse.service.ts`
+
+Download candidate order for each original file:
+1. metadata bucket (`originalFile.bucket` / `originalFiles[].bucket`) if present
+2. explicit primary bucket: `quantified-self-io`
+3. explicit legacy bucket: `quantified-self-io.appspot.com`
+4. runtime default Admin bucket (`admin.storage().bucket().name`)
+5. appspot/non-appspot variants of the above (deduped)
+
+Behavior:
+- Fallback is used only for object-not-found errors.
+- If file download succeeds from a fallback bucket, the event is reparsed normally.
+- During the same reparse write, source metadata is auto-healed:
+  - `originalFile.bucket` and matching `originalFiles[].bucket` are rewritten to the resolved bucket.
+- This means repeated task retries should naturally converge metadata to the working bucket.
 
 ## Access / Eligibility Behavior
 Default behavior (`SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.includeFreeUsers=false`):
@@ -168,6 +190,30 @@ npm run reparse-sports-lib-events -- --execute --uids <uid1,uid2>
 ```
 Set `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.includeFreeUsers = true` in code before running.
 
+## One-off Bucket Metadata Repair Script
+Run from `functions/`.
+
+Dry-run:
+```bash
+npm run fix-original-file-bucket -- --limit 50000
+```
+
+Execute writes:
+```bash
+npm run fix-original-file-bucket -- --execute --limit 50000
+```
+
+Single UID:
+```bash
+npm run fix-original-file-bucket -- --execute --uid <uid> --limit 2000
+```
+
+Notes:
+- Default wrong bucket is `quantified-self-io.appspot.com`.
+- Default target bucket is `quantified-self-io`.
+- By default, script verifies object exists in target bucket before rewriting metadata.
+- Use `--skip-target-check` only for controlled/manual recovery cases.
+
 ## Scheduler / Worker Operation
 
 ### Safe rollout pattern
@@ -201,3 +247,4 @@ This affects both `scheduleSportsLibReparseScan` and `processSportsLibReparseTas
   - `processSportsLibReparseTask`
 - Local command in `functions/package.json`:
   - `"reparse-sports-lib-events": "ts-node -r dotenv/config src/scripts/reparse-sports-lib-events.ts"`
+  - `"fix-original-file-bucket": "ts-node -r dotenv/config src/scripts/fix-original-file-bucket.ts"`

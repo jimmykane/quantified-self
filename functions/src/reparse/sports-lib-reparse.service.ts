@@ -23,6 +23,8 @@ export const SPORTS_LIB_REPARSE_CHECKPOINT_PATH = 'systemJobs/sportsLibReparse';
 export const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 export const SPORTS_LIB_REPARSE_STATUS_DOC_ID = 'reparseStatus';
 export const SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES = 'NO_ORIGINAL_FILES';
+export const SPORTS_LIB_PRIMARY_BUCKET = 'quantified-self-io';
+export const SPORTS_LIB_LEGACY_APPSPOT_BUCKET = 'quantified-self-io.appspot.com';
 export {
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
     SPORTS_LIB_REPARSE_TARGET_VERSION,
@@ -76,6 +78,20 @@ export interface ParseFromSourceResult {
     finalEvent: EventInterface;
     parsedEvents: EventInterface[];
     sourceFilesCount: number;
+    resolvedSourceBuckets: ResolvedSourceBucketInfo[];
+}
+
+interface ResolvedSourceBucketInfo {
+    path: string;
+    metadataBucket?: string;
+    resolvedBucket: string;
+    usedFallbackBucket: boolean;
+}
+
+interface DownloadSourceResult {
+    rawBytes: Buffer;
+    resolvedBucket: string;
+    usedFallbackBucket: boolean;
 }
 
 export interface ReparseExecutionResult {
@@ -128,6 +144,107 @@ function bufferToArrayBuffer(buffer: Buffer): ArrayBuffer {
 
 function decodeText(buffer: Buffer): string {
     return new TextDecoder().decode(bufferToArrayBuffer(buffer));
+}
+
+function normalizeBucketName(bucketName?: string): string | null {
+    if (!bucketName) {
+        return null;
+    }
+    const normalized = bucketName.trim();
+    return normalized.length > 0 ? normalized : null;
+}
+
+function getAppspotVariant(bucketName: string): string {
+    if (bucketName.endsWith('.appspot.com')) {
+        return bucketName.replace(/\.appspot\.com$/, '');
+    }
+    return `${bucketName}.appspot.com`;
+}
+
+function pushBucketCandidate(candidates: string[], bucketName?: string | null): void {
+    const normalized = normalizeBucketName(bucketName || undefined);
+    if (!normalized) {
+        return;
+    }
+    if (!candidates.includes(normalized)) {
+        candidates.push(normalized);
+    }
+}
+
+function resolveBucketCandidates(metadataBucket?: string): string[] {
+    const candidates: string[] = [];
+    pushBucketCandidate(candidates, metadataBucket);
+    pushBucketCandidate(candidates, SPORTS_LIB_PRIMARY_BUCKET);
+    pushBucketCandidate(candidates, SPORTS_LIB_LEGACY_APPSPOT_BUCKET);
+
+    try {
+        const defaultBucketName = admin.storage().bucket().name;
+        pushBucketCandidate(candidates, defaultBucketName);
+    } catch (_error) {
+        // Ignore and continue with explicit metadata bucket candidates.
+    }
+
+    const baseCandidates = [...candidates];
+    for (const bucketName of baseCandidates) {
+        pushBucketCandidate(candidates, getAppspotVariant(bucketName));
+    }
+
+    return candidates;
+}
+
+function isObjectNotFoundError(error: unknown): boolean {
+    const code = (error as { code?: unknown })?.code;
+    if (typeof code === 'number' && code === 404) {
+        return true;
+    }
+    if (typeof code === 'string') {
+        const normalizedCode = code.toLowerCase();
+        if (
+            normalizedCode === '404'
+            || normalizedCode === 'not_found'
+            || normalizedCode === 'storage/object-not-found'
+        ) {
+            return true;
+        }
+    }
+
+    const message = ((error as { message?: unknown })?.message || '').toString().toLowerCase();
+    return message.includes('no such object') || message.includes('not found');
+}
+
+async function downloadSourceBytesWithBucketFallback(sourceFile: SourceFileMeta): Promise<DownloadSourceResult> {
+    const bucketCandidates = resolveBucketCandidates(sourceFile.bucket);
+
+    let lastNotFoundReason = '';
+
+    for (const bucketName of bucketCandidates) {
+        try {
+            const [rawBytes] = await admin.storage().bucket(bucketName).file(sourceFile.path).download();
+            if (sourceFile.bucket && bucketName !== sourceFile.bucket) {
+                logger.warn('[sports-lib-reparse] Source file loaded from fallback bucket', {
+                    path: sourceFile.path,
+                    metadataBucket: sourceFile.bucket,
+                    resolvedBucket: bucketName,
+                });
+            }
+            return {
+                rawBytes,
+                resolvedBucket: bucketName,
+                usedFallbackBucket: !!sourceFile.bucket && sourceFile.bucket !== bucketName,
+            };
+        } catch (error) {
+            if (isObjectNotFoundError(error)) {
+                lastNotFoundReason = (error as Error)?.message || `${error}`;
+                continue;
+            }
+            throw error;
+        }
+    }
+
+    throw new Error(
+        `No such object in any candidate bucket (${bucketCandidates.join(', ')}) for ${sourceFile.path}. `
+        + `Last error: ${lastNotFoundReason || 'No such object'}`,
+    );
 }
 
 function ensureEventPath(path: string): { uid: string; eventId: string } | null {
@@ -226,11 +343,20 @@ export function extractSourceFiles(eventDoc: FirestoreEventJSON | Record<string,
 export async function parseFromOriginalFilesStrict(sourceFiles: SourceFileMeta[]): Promise<ParseFromSourceResult> {
     const parsedEvents: EventInterface[] = [];
     const failedFiles: { path: string; reason: string }[] = [];
+    const resolvedSourceBuckets: ResolvedSourceBucketInfo[] = [];
 
     for (const sourceFile of sourceFiles) {
         try {
-            const bucket = sourceFile.bucket ? admin.storage().bucket(sourceFile.bucket) : admin.storage().bucket();
-            const [rawBytes] = await bucket.file(sourceFile.path).download();
+            const downloadResult = await downloadSourceBytesWithBucketFallback(sourceFile);
+            if (downloadResult.resolvedBucket) {
+                resolvedSourceBuckets.push({
+                    path: sourceFile.path,
+                    metadataBucket: sourceFile.bucket,
+                    resolvedBucket: downloadResult.resolvedBucket,
+                    usedFallbackBucket: downloadResult.usedFallbackBucket,
+                });
+            }
+            const rawBytes = downloadResult.rawBytes;
             const fileBytes = isGzip(sourceFile.path) ? gunzipSync(rawBytes) : rawBytes;
             const extension = normalizeExtension(sourceFile.path);
             const options = createParsingOptions();
@@ -274,6 +400,75 @@ export async function parseFromOriginalFilesStrict(sourceFiles: SourceFileMeta[]
         finalEvent,
         parsedEvents,
         sourceFilesCount: sourceFiles.length,
+        resolvedSourceBuckets,
+    };
+}
+
+export function applyAutoHealedSourceBucketMetadata(
+    existingEventDoc: FirestoreEventJSON | Record<string, unknown>,
+    resolvedSourceBuckets: ResolvedSourceBucketInfo[],
+): { eventData: FirestoreEventJSON | Record<string, unknown>; healedEntries: number } {
+    const pathToResolvedBucket = new Map<string, string>();
+    for (const resolved of resolvedSourceBuckets) {
+        if (!resolved.path || !resolved.resolvedBucket) {
+            continue;
+        }
+        if (
+            resolved.usedFallbackBucket
+            || !resolved.metadataBucket
+            || resolved.metadataBucket !== resolved.resolvedBucket
+        ) {
+            pathToResolvedBucket.set(resolved.path, resolved.resolvedBucket);
+        }
+    }
+
+    if (pathToResolvedBucket.size === 0) {
+        return { eventData: existingEventDoc, healedEntries: 0 };
+    }
+
+    const eventAny = existingEventDoc as Record<string, unknown>;
+    const nextEvent: Record<string, unknown> = { ...eventAny };
+    let healedEntries = 0;
+
+    const originalFile = eventAny['originalFile'] as Record<string, unknown> | undefined;
+    if (originalFile && typeof originalFile['path'] === 'string') {
+        const resolvedBucket = pathToResolvedBucket.get(originalFile['path'] as string);
+        if (resolvedBucket && originalFile['bucket'] !== resolvedBucket) {
+            nextEvent['originalFile'] = {
+                ...originalFile,
+                bucket: resolvedBucket,
+            };
+            healedEntries++;
+        }
+    }
+
+    const originalFiles = Array.isArray(eventAny['originalFiles']) ? eventAny['originalFiles'] as Record<string, unknown>[] : null;
+    if (originalFiles) {
+        let changed = false;
+        const rewrittenOriginalFiles = originalFiles.map((sourceFile) => {
+            if (!sourceFile || typeof sourceFile !== 'object') {
+                return sourceFile;
+            }
+            const sourcePath = typeof sourceFile['path'] === 'string' ? sourceFile['path'] as string : '';
+            const resolvedBucket = sourcePath ? pathToResolvedBucket.get(sourcePath) : undefined;
+            if (!resolvedBucket || sourceFile['bucket'] === resolvedBucket) {
+                return sourceFile;
+            }
+            changed = true;
+            healedEntries++;
+            return {
+                ...sourceFile,
+                bucket: resolvedBucket,
+            };
+        });
+        if (changed) {
+            nextEvent['originalFiles'] = rewrittenOriginalFiles;
+        }
+    }
+
+    return {
+        eventData: nextEvent as FirestoreEventJSON | Record<string, unknown>,
+        healedEntries,
     };
 }
 
@@ -520,9 +715,20 @@ export async function reparseEventFromOriginalFiles(
     }
 
     const parseResult = await parseFromOriginalFilesStrict(sourceFiles);
+    const autoHealResult = applyAutoHealedSourceBucketMetadata(
+        eventAndActivities.eventData,
+        parseResult.resolvedSourceBuckets,
+    );
+    if (autoHealResult.healedEntries > 0) {
+        logger.warn('[sports-lib-reparse] Auto-healed original-file bucket metadata', {
+            uid,
+            eventId,
+            healedEntries: autoHealResult.healedEntries,
+        });
+    }
     const reparsedEvent = parseResult.finalEvent;
     reparsedEvent.setID(eventId);
-    applyPreservedFields(reparsedEvent, eventAndActivities.eventData);
+    applyPreservedFields(reparsedEvent, autoHealResult.eventData);
     mapActivityIdentity(reparsedEvent, eventAndActivities.activityDocs);
     EventUtilities.reGenerateStatsForEvent(reparsedEvent);
 
@@ -530,7 +736,7 @@ export async function reparseEventFromOriginalFiles(
         uid,
         eventId,
         reparsedEvent,
-        eventAndActivities.eventData,
+        autoHealResult.eventData,
         eventAndActivities.activityDocs,
         targetSportsLibVersion,
     );
