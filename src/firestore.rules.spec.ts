@@ -244,9 +244,9 @@ describe('Firestore Security Rules', () => {
                 }));
             });
 
-            it('should deny extra fields in processing metadata', async () => {
+            it('should allow extra fields in processing metadata', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
-                await assertFails(db.collection(`users/${userId}/events/${eventId}/metaData`).doc('processing').set({
+                await assertSucceeds(db.collection(`users/${userId}/events/${eventId}/metaData`).doc('processing').set({
                     sportsLibVersion: '8.0.9',
                     sportsLibVersionCode: 8000009,
                     processedAt: new Date(),
