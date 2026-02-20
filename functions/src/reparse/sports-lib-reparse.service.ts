@@ -16,17 +16,18 @@ import { FirestoreEventJSON, OriginalFileMetaData } from '../shared/app-event.in
 import { createParsingOptions } from '../shared/parsing-options';
 import { FirestoreAdapter, LogAdapter, EventWriter } from '../shared/event-writer';
 import { ProcessingMetaData } from '../shared/processing-metadata.interface';
-import { SPORTS_LIB_VERSION } from '../shared/sports-lib-version.node';
 
 export const SPORTS_LIB_REPARSE_CHECKPOINT_PATH = 'systemJobs/sportsLibReparse';
 export const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 export const SPORTS_LIB_REPARSE_STATUS_DOC_ID = 'reparseStatus';
 export const SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES = 'NO_ORIGINAL_FILES';
+export const SPORTS_LIB_REPARSE_TARGET_VERSION = '9.1.2';
 
 export type SportsLibReparseJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 export interface SportsLibReparseCheckpoint {
     cursorEventPath?: string | null;
+    overrideCursorByUid?: Record<string, string | null>;
     lastScanAt?: unknown;
     lastPassStartedAt?: unknown;
     lastPassCompletedAt?: unknown;
@@ -140,7 +141,18 @@ export function parseUidAndEventIdFromEventPath(path: string): { uid: string; ev
 }
 
 export function resolveTargetSportsLibVersion(): string {
-    return SPORTS_LIB_VERSION;
+    return SPORTS_LIB_REPARSE_TARGET_VERSION;
+}
+
+export function parseUIDAllowlist(input?: string | null): Set<string> | null {
+    if (!input) {
+        return null;
+    }
+    const values = input
+        .split(',')
+        .map(value => value.trim())
+        .filter(Boolean);
+    return values.length > 0 ? new Set(values) : null;
 }
 
 function isGracePeriodActive(gracePeriodUntil?: number): boolean {

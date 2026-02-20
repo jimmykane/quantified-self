@@ -11,6 +11,7 @@ import {
     buildSportsLibReparseJobId,
     extractSourceFiles,
     hasPaidOrGraceAccess,
+    parseUIDAllowlist,
     parseUidAndEventIdFromEventPath,
     resolveTargetSportsLibVersion,
     shouldEventBeReparsed,
@@ -44,11 +45,13 @@ function getCurrentSettings(): {
     enabled: boolean;
     scanLimit: number;
     enqueueLimit: number;
+    uidAllowlist: Set<string> | null;
 } {
     return {
         enabled: parseBooleanEnv(process.env.SPORTS_LIB_REPARSE_ENABLED, false),
         scanLimit: parsePositiveIntEnv(process.env.SPORTS_LIB_REPARSE_SCAN_LIMIT, DEFAULT_SCAN_LIMIT),
         enqueueLimit: parsePositiveIntEnv(process.env.SPORTS_LIB_REPARSE_ENQUEUE_LIMIT, DEFAULT_ENQUEUE_LIMIT),
+        uidAllowlist: parseUIDAllowlist(process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST),
     };
 }
 
@@ -93,55 +96,30 @@ export const scheduleSportsLibReparseScan = onSchedule({
         targetSportsLibVersion,
     }, { merge: true });
 
-    let query = db.collectionGroup('events')
-        .orderBy(admin.firestore.FieldPath.documentId())
-        .limit(settings.scanLimit);
-
-    if (cursorEventPath) {
-        query = query.startAfter(db.doc(cursorEventPath));
-    }
-
-    const eventsSnapshot = await query.get();
-    if (eventsSnapshot.empty) {
-        await checkpointRef.set({
-            cursorEventPath: null,
-            lastScanAt: admin.firestore.FieldValue.serverTimestamp(),
-            lastPassCompletedAt: admin.firestore.FieldValue.serverTimestamp(),
-            lastScanCount: 0,
-            lastEnqueuedCount: 0,
-            targetSportsLibVersion,
-        }, { merge: true });
-        logger.info('[sports-lib-reparse] No events found for scan.');
-        return;
-    }
-
     const eligibilityCache = new Map<string, Promise<boolean>>();
     let scannedCount = 0;
     let enqueuedCount = 0;
     let lastEventPath: string | null = null;
 
-    for (const eventDoc of eventsSnapshot.docs) {
-        scannedCount++;
-        lastEventPath = eventDoc.ref.path;
-
-        if (enqueuedCount >= settings.enqueueLimit) {
-            continue;
-        }
-
+    const processEventDoc = async (eventDoc: admin.firestore.QueryDocumentSnapshot): Promise<void> => {
         const parsed = parseUidAndEventIdFromEventPath(eventDoc.ref.path);
         if (!parsed) {
-            continue;
+            return;
         }
         const { uid, eventId } = parsed;
 
+        if (enqueuedCount >= settings.enqueueLimit) {
+            return;
+        }
+
         const needsReparse = await shouldEventBeReparsed(eventDoc.ref, targetSportsLibVersion);
         if (!needsReparse) {
-            continue;
+            return;
         }
 
         const statusSnapshot = await eventDoc.ref.collection('metaData').doc(SPORTS_LIB_REPARSE_STATUS_DOC_ID).get();
         if (shouldSkipBecauseNoOriginalFilesForTarget(statusSnapshot.data() as Record<string, unknown> | undefined, targetSportsLibVersion)) {
-            continue;
+            return;
         }
 
         let accessPromise = eligibilityCache.get(uid);
@@ -151,7 +129,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
         }
         const hasAccess = await accessPromise;
         if (!hasAccess) {
-            continue;
+            return;
         }
 
         const sourceFiles = extractSourceFiles(eventDoc.data() as Record<string, unknown>);
@@ -162,7 +140,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
                 targetSportsLibVersion,
                 checkedAt: admin.firestore.FieldValue.serverTimestamp(),
             });
-            continue;
+            return;
         }
 
         const jobId = buildSportsLibReparseJobId(uid, eventId, targetSportsLibVersion);
@@ -171,7 +149,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
         const existingStatus = toSafeString(existingJob.data()?.status);
 
         if (existingJob.exists && (existingStatus === 'pending' || existingStatus === 'processing' || existingStatus === 'completed')) {
-            continue;
+            return;
         }
 
         const basePayload: SportsLibReparseJob = {
@@ -195,6 +173,96 @@ export const scheduleSportsLibReparseScan = onSchedule({
 
         await enqueueSportsLibReparseTask(jobId);
         enqueuedCount++;
+    };
+
+    if (settings.uidAllowlist && settings.uidAllowlist.size > 0) {
+        const overrideUIDs = Array.from(settings.uidAllowlist);
+        const previousCursorByUID = checkpointData?.overrideCursorByUid || {};
+        const nextCursorByUID: Record<string, string | null> = {};
+
+        for (const uid of overrideUIDs) {
+            const remainingScan = settings.scanLimit - scannedCount;
+            const previousCursor = previousCursorByUID[uid] || null;
+
+            if (remainingScan <= 0) {
+                nextCursorByUID[uid] = previousCursor;
+                continue;
+            }
+
+            let userQuery = db.collection(`users/${uid}/events`)
+                .orderBy(admin.firestore.FieldPath.documentId())
+                .limit(remainingScan);
+
+            if (previousCursor) {
+                userQuery = userQuery.startAfter(previousCursor);
+            }
+
+            const userSnapshot = await userQuery.get();
+            if (userSnapshot.empty) {
+                nextCursorByUID[uid] = null;
+                continue;
+            }
+
+            let lastProcessedDocId: string | null = null;
+            for (const eventDoc of userSnapshot.docs) {
+                scannedCount++;
+                lastEventPath = eventDoc.ref.path;
+                lastProcessedDocId = eventDoc.id;
+                await processEventDoc(eventDoc);
+            }
+
+            if (userSnapshot.size < remainingScan) {
+                nextCursorByUID[uid] = null;
+            } else {
+                nextCursorByUID[uid] = lastProcessedDocId;
+            }
+        }
+
+        const completedAllUIDPasses = Object.values(nextCursorByUID).every(cursor => !cursor);
+        await checkpointRef.set({
+            overrideCursorByUid: nextCursorByUID,
+            lastScanAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastScanCount: scannedCount,
+            lastEnqueuedCount: enqueuedCount,
+            targetSportsLibVersion,
+            ...(completedAllUIDPasses ? { lastPassCompletedAt: admin.firestore.FieldValue.serverTimestamp() } : {}),
+        }, { merge: true });
+
+        logger.info('[sports-lib-reparse] Override scan complete', {
+            scannedCount,
+            enqueuedCount,
+            overrideUIDsCount: overrideUIDs.length,
+            nextCursorByUID,
+        });
+        return;
+    }
+
+    let query = db.collectionGroup('events')
+        .orderBy(admin.firestore.FieldPath.documentId())
+        .limit(settings.scanLimit);
+
+    if (cursorEventPath) {
+        query = query.startAfter(db.doc(cursorEventPath));
+    }
+
+    const eventsSnapshot = await query.get();
+    if (eventsSnapshot.empty) {
+        await checkpointRef.set({
+            cursorEventPath: null,
+            lastScanAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastPassCompletedAt: admin.firestore.FieldValue.serverTimestamp(),
+            lastScanCount: 0,
+            lastEnqueuedCount: 0,
+            targetSportsLibVersion,
+        }, { merge: true });
+        logger.info('[sports-lib-reparse] No events found for scan.');
+        return;
+    }
+
+    for (const eventDoc of eventsSnapshot.docs) {
+        scannedCount++;
+        lastEventPath = eventDoc.ref.path;
+        await processEventDoc(eventDoc);
     }
 
     const passCompleted = eventsSnapshot.size < settings.scanLimit;

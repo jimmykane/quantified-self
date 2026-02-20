@@ -5,27 +5,83 @@ const hoisted = vi.hoisted(() => {
     const hasPaidOrGraceAccess = vi.fn();
     const extractSourceFiles = vi.fn();
     const reparseEventFromOriginalFiles = vi.fn();
-    const resolveTargetSportsLibVersion = vi.fn(() => '9.0.99');
+    const resolveTargetSportsLibVersion = vi.fn(() => '9.1.2');
+    const parseUIDAllowlist = vi.fn((input?: string) => {
+        if (!input) return null;
+        const values = input.split(',').map(v => v.trim()).filter(Boolean);
+        return values.length ? new Set(values) : null;
+    });
     const writeReparseStatus = vi.fn();
     const parseUidAndEventIdFromEventPath = vi.fn((path: string) => {
         const parts = path.split('/');
+        if (parts.length !== 4 || parts[0] !== 'users' || parts[2] !== 'events') {
+            return null;
+        }
         return { uid: parts[1], eventId: parts[3] };
     });
 
-    const collectionGet = vi.fn();
-    const collectionGroupGet = vi.fn();
-    const collection = vi.fn(() => ({
-        orderBy: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        startAfter: vi.fn().mockReturnThis(),
-        get: collectionGet,
-    }));
-    const collectionGroup = vi.fn(() => ({
-        orderBy: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        startAfter: vi.fn().mockReturnThis(),
-        get: collectionGroupGet,
-    }));
+    const userEventsByUID = new Map<string, any[]>();
+    const globalDocs: any[] = [];
+    const adminApps: any[] = [];
+
+    const collection = vi.fn((path: string) => {
+        const match = path.match(/^users\/([^/]+)\/events$/);
+        if (!match) {
+            return {
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockReturnThis(),
+                startAfter: vi.fn().mockReturnThis(),
+                get: vi.fn().mockResolvedValue({ docs: [] }),
+            };
+        }
+
+        const uid = match[1];
+        let limitValue = 200;
+        let startAfterId: string | null = null;
+        const q = {
+            orderBy: vi.fn().mockReturnThis(),
+            limit: vi.fn((value: number) => {
+                limitValue = value;
+                return q;
+            }),
+            startAfter: vi.fn((value: string) => {
+                startAfterId = value;
+                return q;
+            }),
+            get: vi.fn(async () => {
+                const docs = userEventsByUID.get(uid) || [];
+                const startIndex = startAfterId ? docs.findIndex(doc => doc.id === startAfterId) + 1 : 0;
+                return { docs: docs.slice(startIndex, startIndex + limitValue) };
+            }),
+        };
+        return q;
+    });
+
+    let globalLimit = 200;
+    let globalStartAfter: string | null = null;
+    const resetGlobalCollectionState = () => {
+        globalLimit = 200;
+        globalStartAfter = null;
+    };
+    const collectionGroup = vi.fn(() => {
+        const q = {
+            orderBy: vi.fn().mockReturnThis(),
+            limit: vi.fn((value: number) => {
+                globalLimit = value;
+                return q;
+            }),
+            startAfter: vi.fn((value: { path?: string }) => {
+                globalStartAfter = value?.path || null;
+                return q;
+            }),
+            get: vi.fn(async () => ({
+                docs: globalDocs
+                    .filter(doc => !globalStartAfter || doc.ref.path > globalStartAfter)
+                    .slice(0, globalLimit),
+            })),
+        };
+        return q;
+    });
 
     const firestoreDoc = vi.fn((path: string) => ({ path }));
     const initializeApp = vi.fn();
@@ -38,12 +94,15 @@ const hoisted = vi.hoisted(() => {
         extractSourceFiles,
         reparseEventFromOriginalFiles,
         resolveTargetSportsLibVersion,
+        parseUIDAllowlist,
         writeReparseStatus,
         parseUidAndEventIdFromEventPath,
-        collectionGet,
-        collectionGroupGet,
+        userEventsByUID,
+        globalDocs,
+        adminApps,
         collection,
         collectionGroup,
+        resetGlobalCollectionState,
         firestoreDoc,
         initializeApp,
         serverTimestamp,
@@ -57,6 +116,7 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     extractSourceFiles: hoisted.extractSourceFiles,
     reparseEventFromOriginalFiles: hoisted.reparseEventFromOriginalFiles,
     resolveTargetSportsLibVersion: hoisted.resolveTargetSportsLibVersion,
+    parseUIDAllowlist: hoisted.parseUIDAllowlist,
     writeReparseStatus: hoisted.writeReparseStatus,
     parseUidAndEventIdFromEventPath: hoisted.parseUidAndEventIdFromEventPath,
 }));
@@ -77,7 +137,7 @@ vi.mock('firebase-admin', () => {
     });
 
     return {
-        apps: [],
+        apps: hoisted.adminApps,
         initializeApp: hoisted.initializeApp,
         firestore: firestoreFn,
     };
@@ -85,9 +145,10 @@ vi.mock('firebase-admin', () => {
 
 import { parseScriptOptions, runSportsLibReparseScript } from './reparse-sports-lib-events';
 
-function makeEventDoc(path: string, data: Record<string, unknown> = {}): any {
+function makeEventDoc(uid: string, eventId: string, data: Record<string, unknown> = {}): any {
     return {
-        ref: { path },
+        id: eventId,
+        ref: { path: `users/${uid}/events/${eventId}` },
         data: () => data,
     };
 }
@@ -95,6 +156,12 @@ function makeEventDoc(path: string, data: Record<string, unknown> = {}): any {
 describe('reparse-sports-lib-events script', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        hoisted.userEventsByUID.clear();
+        hoisted.globalDocs.length = 0;
+        hoisted.adminApps.length = 0;
+        hoisted.resetGlobalCollectionState();
+        delete process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST;
+
         hoisted.shouldEventBeReparsed.mockResolvedValue(true);
         hoisted.hasPaidOrGraceAccess.mockResolvedValue(true);
         hoisted.extractSourceFiles.mockReturnValue([{ path: 'users/u1/events/e1/original.fit' }]);
@@ -104,13 +171,6 @@ describe('reparse-sports-lib-events script', () => {
             parsedActivitiesCount: 1,
             staleActivitiesDeleted: 0,
         });
-
-        hoisted.collectionGet.mockResolvedValue({
-            docs: [makeEventDoc('users/u1/events/e1', { originalFile: { path: 'x.fit' } })],
-        });
-        hoisted.collectionGroupGet.mockResolvedValue({
-            docs: [makeEventDoc('users/u1/events/e1', { originalFile: { path: 'x.fit' } })],
-        });
     });
 
     it('parseScriptOptions should default to dry-run', () => {
@@ -119,37 +179,185 @@ describe('reparse-sports-lib-events script', () => {
         expect(options.limit).toBe(200);
     });
 
-    it('runSportsLibReparseScript should not write in dry-run mode', async () => {
+    it('parseScriptOptions should parse limit and start-after values', () => {
+        const options = parseScriptOptions(['--limit', '50', '--start-after', 'users/u1/events/e1']);
+        expect(options.limit).toBe(50);
+        expect(options.startAfter).toBe('users/u1/events/e1');
+    });
+
+    it('parseScriptOptions should fallback to default limit when value is invalid', () => {
+        const options = parseScriptOptions(['--limit', 'not-a-number']);
+        expect(options.limit).toBe(200);
+    });
+
+    it('parseScriptOptions should apply precedence --uid > --uids > env', () => {
+        process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST = 'env1,env2';
+
+        const withUid = parseScriptOptions(['--uid', 'single', '--uids', 'cli1,cli2']);
+        expect(withUid.uid).toBe('single');
+        expect(withUid.uids).toBeUndefined();
+
+        const withUids = parseScriptOptions(['--uids', 'cli1,cli2']);
+        expect(withUids.uid).toBeUndefined();
+        expect(withUids.uids).toEqual(['cli1', 'cli2']);
+
+        const withEnv = parseScriptOptions([]);
+        expect(withEnv.uids).toEqual(['env1', 'env2']);
+    });
+
+    it('single UID dry-run should not write', async () => {
+        hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+
         const summary = await runSportsLibReparseScript(['--uid', 'u1']);
         expect(summary.dryRun).toBe(true);
         expect(summary.candidates).toBe(1);
-        expect(summary.completed).toBe(0);
         expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
         expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
     });
 
-    it('runSportsLibReparseScript should execute reparse when --execute is provided', async () => {
-        const summary = await runSportsLibReparseScript(['--execute', '--uid', 'u1']);
+    it('multi-UID dry-run should iterate allowlisted users only', async () => {
+        hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+        hoisted.userEventsByUID.set('u2', [makeEventDoc('u2', 'e2', { originalFile: { path: 'x.fit' } })]);
+
+        const summary = await runSportsLibReparseScript(['--uids', 'u1,u2', '--start-after', 'ignored']);
+        expect(summary.scanned).toBe(2);
+        expect(hoisted.collectionGroup).not.toHaveBeenCalled();
+    });
+
+    it('should use env UID allowlist when no CLI UID flags are provided', async () => {
+        process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST = 'u1,u2';
+        hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+        hoisted.userEventsByUID.set('u2', [makeEventDoc('u2', 'e2', { originalFile: { path: 'x.fit' } })]);
+
+        const summary = await runSportsLibReparseScript([]);
+        expect(summary.scanned).toBe(2);
+        expect(hoisted.collectionGroup).not.toHaveBeenCalled();
+    });
+
+    it('should use single-UID start-after cursor in user scoped mode', async () => {
+        hoisted.userEventsByUID.set('u1', [
+            makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }),
+            makeEventDoc('u1', 'e2', { originalFile: { path: 'x.fit' } }),
+        ]);
+
+        const summary = await runSportsLibReparseScript(['--uid', 'u1', '--start-after', 'e1', '--limit', '5']);
+        expect(summary.scanned).toBe(1);
+    });
+
+    it('should use collectionGroup mode when no UID filters are provided', async () => {
+        hoisted.globalDocs.push(
+            makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }),
+            makeEventDoc('u2', 'e2', { originalFile: { path: 'x.fit' } }),
+        );
+
+        const summary = await runSportsLibReparseScript(['--limit', '1', '--start-after', 'users/u1/events/e1']);
+        expect(hoisted.collectionGroup).toHaveBeenCalled();
+        expect(summary.scanned).toBe(1);
+    });
+
+    it('should skip docs whose path cannot be parsed as user events', async () => {
+        hoisted.globalDocs.push({
+            id: 'invalid',
+            ref: { path: 'users/u1/activities/a1' },
+            data: () => ({ originalFile: { path: 'x.fit' } }),
+        } as any);
+
+        const summary = await runSportsLibReparseScript([]);
+        expect(summary.scanned).toBe(1);
+        expect(summary.candidates).toBe(0);
+    });
+
+    it('should skip events that do not require reparse', async () => {
+        hoisted.globalDocs.push(makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
+        hoisted.shouldEventBeReparsed.mockResolvedValue(false);
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+        expect(summary.candidates).toBe(0);
+        expect(summary.completed).toBe(0);
+    });
+
+    it('multi-UID execute mode should process events', async () => {
+        hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+        hoisted.userEventsByUID.set('u2', [makeEventDoc('u2', 'e2', { originalFile: { path: 'x.fit' } })]);
+
+        const summary = await runSportsLibReparseScript(['--execute', '--uids', 'u1,u2']);
         expect(summary.dryRun).toBe(false);
-        expect(summary.completed).toBe(1);
-        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', {
-            targetSportsLibVersion: '9.0.99',
-        });
+        expect(summary.completed).toBe(2);
+        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', { targetSportsLibVersion: '9.1.2' });
+        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u2', 'e2', { targetSportsLibVersion: '9.1.2' });
+    });
+
+    it('should write skipped status when execute mode finds no source files', async () => {
+        hoisted.globalDocs.push(makeEventDoc('u1', 'e1', {}));
+        hoisted.extractSourceFiles.mockReturnValue([]);
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+        expect(summary.skippedNoSourceFiles).toBe(1);
         expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
-            status: 'completed',
+            status: 'skipped',
+            reason: 'NO_ORIGINAL_FILES',
+            targetSportsLibVersion: '9.1.2',
         }));
     });
 
-    it('runSportsLibReparseScript should mark missing-source events as skipped when executing', async () => {
-        hoisted.extractSourceFiles.mockReturnValue([]);
+    it('should write completed status in execute mode when reparse succeeds', async () => {
+        hoisted.globalDocs.push(makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
 
-        const summary = await runSportsLibReparseScript(['--execute', '--uid', 'u1']);
+        const summary = await runSportsLibReparseScript(['--execute']);
+        expect(summary.completed).toBe(1);
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+            status: 'completed',
+            targetSportsLibVersion: '9.1.2',
+            lastError: '',
+        }));
+    });
 
+    it('should write skipped status when reparse returns NO_ORIGINAL_FILES in execute mode', async () => {
+        hoisted.globalDocs.push(makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
+        hoisted.reparseEventFromOriginalFiles.mockResolvedValue({
+            status: 'skipped',
+            reason: 'NO_ORIGINAL_FILES',
+            sourceFilesCount: 0,
+            parsedActivitiesCount: 0,
+            staleActivitiesDeleted: 0,
+        });
+
+        const summary = await runSportsLibReparseScript(['--execute']);
         expect(summary.skippedNoSourceFiles).toBe(1);
         expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             status: 'skipped',
             reason: 'NO_ORIGINAL_FILES',
         }));
+    });
+
+    it('should write failed status when reparse throws in execute mode', async () => {
+        hoisted.globalDocs.push(makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
+        hoisted.reparseEventFromOriginalFiles.mockRejectedValue(new Error('boom'));
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+        expect(summary.failed).toBe(1);
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+            status: 'failed',
+            reason: 'REPARSE_FAILED',
+            lastError: 'boom',
+        }));
+    });
+
+    it('should skip allowlisted users without paid access', async () => {
+        hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
+        hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+
+        const summary = await runSportsLibReparseScript(['--execute', '--uids', 'u1']);
+        expect(summary.skippedNoAccess).toBe(1);
+        expect(summary.completed).toBe(0);
         expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+    });
+
+    it('should not initialize firebase app when one already exists', async () => {
+        hoisted.adminApps.push({ name: 'existing-app' });
+        hoisted.globalDocs.push(makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
+
+        await runSportsLibReparseScript([]);
+        expect(hoisted.initializeApp).not.toHaveBeenCalled();
     });
 });

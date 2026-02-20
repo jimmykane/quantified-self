@@ -10,7 +10,12 @@ const hoisted = vi.hoisted(() => {
     const extractSourceFiles = vi.fn();
     const buildSportsLibReparseJobId = vi.fn();
     const writeReparseStatus = vi.fn();
-    const resolveTargetSportsLibVersion = vi.fn(() => '9.0.99');
+    const resolveTargetSportsLibVersion = vi.fn(() => '9.1.2');
+    const parseUIDAllowlist = vi.fn((input?: string) => {
+        if (!input) return null;
+        const values = input.split(',').map(v => v.trim()).filter(Boolean);
+        return values.length ? new Set(values) : null;
+    });
     const parseUidAndEventIdFromEventPath = vi.fn((path: string) => {
         const parts = path.split('/');
         return { uid: parts[1], eventId: parts[3] };
@@ -20,24 +25,82 @@ const hoisted = vi.hoisted(() => {
     const getExpireAtTimestamp = vi.fn(() => 'EXPIRE_TS');
 
     const checkpointSet = vi.fn().mockResolvedValue(undefined);
-    const checkpointGet = vi.fn().mockResolvedValue({ data: () => ({ cursorEventPath: null }) });
+    const checkpointGet = vi.fn();
 
     const jobSet = vi.fn().mockResolvedValue(undefined);
     const jobGet = vi.fn().mockResolvedValue({ exists: false, data: () => ({}) });
-    const jobDoc = { get: jobGet, set: jobSet };
-    const jobsCollection = { doc: vi.fn(() => jobDoc) };
+    const jobsCollection = { doc: vi.fn(() => ({ get: jobGet, set: jobSet })) };
 
-    const mockEventsDocs: any[] = [];
-    const eventsQuery = {
-        orderBy: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        startAfter: vi.fn().mockReturnThis(),
-        get: vi.fn(async () => ({
-            empty: mockEventsDocs.length === 0,
-            size: mockEventsDocs.length,
-            docs: mockEventsDocs,
-        })),
+    const globalEventsDocs: any[] = [];
+    const userEventsByUID = new Map<string, any[]>();
+
+    const collection = vi.fn((path: string) => {
+        if (path === 'sportsLibReparseJobs') {
+            return jobsCollection;
+        }
+
+        const userEventsMatch = path.match(/^users\/([^/]+)\/events$/);
+        if (userEventsMatch) {
+            const uid = userEventsMatch[1];
+            let cursorId: string | null = null;
+            let limitValue = 100;
+            const q = {
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn((value: number) => {
+                    limitValue = value;
+                    return q;
+                }),
+                startAfter: vi.fn((value: string) => {
+                    cursorId = value;
+                    return q;
+                }),
+                get: vi.fn(async () => {
+                    const allDocs = userEventsByUID.get(uid) || [];
+                    const cursorIndex = cursorId ? allDocs.findIndex(doc => doc.id === cursorId) + 1 : 0;
+                    const docs = allDocs.slice(cursorIndex, cursorIndex + limitValue);
+                    return {
+                        empty: docs.length === 0,
+                        size: docs.length,
+                        docs,
+                    };
+                }),
+            };
+            return q;
+        }
+
+        return jobsCollection;
+    });
+
+    let globalCursorPath: string | null = null;
+    let globalLimitValue = 100;
+    const resetGlobalQueryState = () => {
+        globalCursorPath = null;
+        globalLimitValue = 100;
     };
+    const collectionGroup = vi.fn(() => {
+        const q = {
+            orderBy: vi.fn().mockReturnThis(),
+            limit: vi.fn((value: number) => {
+                globalLimitValue = value;
+                return q;
+            }),
+            startAfter: vi.fn((value: { path?: string }) => {
+                globalCursorPath = value?.path || null;
+                return q;
+            }),
+            get: vi.fn(async () => {
+                const docs = globalEventsDocs
+                    .filter(doc => !globalCursorPath || doc.ref.path > globalCursorPath)
+                    .slice(0, globalLimitValue);
+                return {
+                    empty: docs.length === 0,
+                    size: docs.length,
+                    docs,
+                };
+            }),
+        };
+        return q;
+    });
 
     const firestoreDoc = vi.fn((path: string) => {
         if (path === 'systemJobs/sportsLibReparse') {
@@ -46,14 +109,6 @@ const hoisted = vi.hoisted(() => {
         return { path };
     });
 
-    const collection = vi.fn((name: string) => {
-        if (name === 'sportsLibReparseJobs') {
-            return jobsCollection;
-        }
-        return jobsCollection;
-    });
-
-    const collectionGroup = vi.fn(() => eventsQuery);
     const serverTimestamp = vi.fn(() => 'SERVER_TIMESTAMP');
     const deleteField = vi.fn(() => 'DELETE_FIELD');
 
@@ -64,6 +119,7 @@ const hoisted = vi.hoisted(() => {
         buildSportsLibReparseJobId,
         writeReparseStatus,
         resolveTargetSportsLibVersion,
+        parseUIDAllowlist,
         parseUidAndEventIdFromEventPath,
         enqueueSportsLibReparseTask,
         getExpireAtTimestamp,
@@ -71,11 +127,12 @@ const hoisted = vi.hoisted(() => {
         checkpointGet,
         jobSet,
         jobGet,
-        mockEventsDocs,
-        eventsQuery,
-        firestoreDoc,
+        globalEventsDocs,
+        userEventsByUID,
         collection,
         collectionGroup,
+        resetGlobalQueryState,
+        firestoreDoc,
         serverTimestamp,
         deleteField,
     };
@@ -92,6 +149,7 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
     buildSportsLibReparseJobId: hoisted.buildSportsLibReparseJobId,
     writeReparseStatus: hoisted.writeReparseStatus,
     resolveTargetSportsLibVersion: hoisted.resolveTargetSportsLibVersion,
+    parseUIDAllowlist: hoisted.parseUIDAllowlist,
     parseUidAndEventIdFromEventPath: hoisted.parseUidAndEventIdFromEventPath,
 }));
 
@@ -117,7 +175,7 @@ vi.mock('firebase-admin', () => {
         },
         FieldPath: {
             documentId: () => '__name__',
-        }
+        },
     });
 
     return { firestore: firestoreFn };
@@ -125,25 +183,17 @@ vi.mock('firebase-admin', () => {
 
 import { scheduleSportsLibReparseScan } from './sports-lib-reparse';
 
-function createEventDoc(path: string, data: Record<string, unknown> = {}): any {
+function createEventDoc(uid: string, eventId: string, data: Record<string, unknown> = {}, reparseStatusData?: Record<string, unknown>): any {
     return {
+        id: eventId,
         ref: {
-            path,
+            path: `users/${uid}/events/${eventId}`,
             collection: vi.fn(() => ({
                 doc: vi.fn((docId: string) => {
-                    if (docId === 'processing') {
-                        return {
-                            get: vi.fn().mockResolvedValue({ exists: false, data: () => ({}) }),
-                        };
-                    }
                     if (docId === 'reparseStatus') {
-                        return {
-                            get: vi.fn().mockResolvedValue({ exists: false, data: () => ({}) }),
-                        };
+                        return { get: vi.fn().mockResolvedValue({ data: () => reparseStatusData || {} }) };
                     }
-                    return {
-                        get: vi.fn().mockResolvedValue({ exists: false, data: () => ({}) }),
-                    };
+                    return { get: vi.fn().mockResolvedValue({ exists: false, data: () => ({}) }) };
                 }),
             })),
         },
@@ -154,10 +204,15 @@ function createEventDoc(path: string, data: Record<string, unknown> = {}): any {
 describe('scheduleSportsLibReparseScan', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        hoisted.mockEventsDocs.length = 0;
+        hoisted.globalEventsDocs.length = 0;
+        hoisted.userEventsByUID.clear();
+        hoisted.resetGlobalQueryState();
         process.env.SPORTS_LIB_REPARSE_ENABLED = 'true';
         process.env.SPORTS_LIB_REPARSE_SCAN_LIMIT = '200';
         process.env.SPORTS_LIB_REPARSE_ENQUEUE_LIMIT = '100';
+        delete process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST;
+        hoisted.checkpointGet.mockResolvedValue({ data: () => ({ cursorEventPath: null }) });
+        hoisted.jobGet.mockResolvedValue({ exists: false, data: () => ({}) });
         hoisted.shouldEventBeReparsed.mockResolvedValue(true);
         hoisted.hasPaidOrGraceAccess.mockResolvedValue(true);
         hoisted.extractSourceFiles.mockReturnValue([{ path: 'users/u1/events/e1/original.fit' }]);
@@ -170,9 +225,8 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(hoisted.collectionGroup).not.toHaveBeenCalled();
     });
 
-    it('should enqueue candidate jobs for eligible users', async () => {
-        hoisted.mockEventsDocs.push(createEventDoc('users/u1/events/e1', { originalFile: { path: 'x.fit' } }));
-
+    it('should enqueue candidate jobs in global mode', async () => {
+        hoisted.globalEventsDocs.push(createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
         await (scheduleSportsLibReparseScan as any)({});
 
         expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
@@ -180,14 +234,37 @@ describe('scheduleSportsLibReparseScan', () => {
             uid: 'u1',
             eventId: 'e1',
             status: 'pending',
-            targetSportsLibVersion: '9.0.99',
+            targetSportsLibVersion: '9.1.2',
         }), { merge: true });
     });
 
-    it('should mark events without source metadata as skipped', async () => {
-        hoisted.mockEventsDocs.push(createEventDoc('users/u1/events/e1', {}));
-        hoisted.extractSourceFiles.mockReturnValue([]);
+    it('should apply cursor startAfter in global mode', async () => {
+        process.env.SPORTS_LIB_REPARSE_SCAN_LIMIT = '1';
+        hoisted.checkpointGet.mockResolvedValue({ data: () => ({ cursorEventPath: 'users/u1/events/e1' }) });
+        hoisted.globalEventsDocs.push(createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
+        hoisted.globalEventsDocs.push(createEventDoc('u1', 'e2', { originalFile: { path: 'x.fit' } }));
 
+        await (scheduleSportsLibReparseScan as any)({});
+
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(finalCheckpointPayload.cursorEventPath).toBe('users/u1/events/e2');
+    });
+
+    it('should mark pass complete when global scan returns no events', async () => {
+        hoisted.globalEventsDocs.length = 0;
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(finalCheckpointPayload.cursorEventPath).toBeNull();
+        expect(finalCheckpointPayload.lastPassCompletedAt).toBe('SERVER_TIMESTAMP');
+        expect(finalCheckpointPayload.lastScanCount).toBe(0);
+        expect(finalCheckpointPayload.lastEnqueuedCount).toBe(0);
+    });
+
+    it('should mark missing-source events as skipped', async () => {
+        hoisted.globalEventsDocs.push(createEventDoc('u1', 'e1', {}));
+        hoisted.extractSourceFiles.mockReturnValue([]);
         await (scheduleSportsLibReparseScan as any)({});
 
         expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
@@ -197,17 +274,143 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
     });
 
-    it('should write checkpoint summary at the end of a pass', async () => {
-        hoisted.mockEventsDocs.push(createEventDoc('users/u1/events/e1', { originalFile: { path: 'x.fit' } }));
+    it('should skip event processing when candidate check returns false', async () => {
+        hoisted.globalEventsDocs.push(createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
+        hoisted.shouldEventBeReparsed.mockResolvedValue(false);
 
         await (scheduleSportsLibReparseScan as any)({});
 
-        const lastCheckpointSetCall = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1];
-        expect(lastCheckpointSetCall[0]).toEqual(expect.objectContaining({
-            cursorEventPath: null,
-            lastScanCount: 1,
-            lastEnqueuedCount: 1,
-            targetSportsLibVersion: '9.0.99',
-        }));
+        expect(hoisted.extractSourceFiles).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+    });
+
+    it('should skip enqueue when existing job is already pending', async () => {
+        hoisted.globalEventsDocs.push(createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
+        hoisted.jobGet.mockResolvedValue({ exists: true, data: () => ({ status: 'pending' }) });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.jobSet).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+    });
+
+    it('should stop enqueueing once enqueue limit is reached', async () => {
+        process.env.SPORTS_LIB_REPARSE_ENQUEUE_LIMIT = '1';
+        hoisted.buildSportsLibReparseJobId.mockImplementation((_uid: string, eventId: string) => `job-${eventId}`);
+        hoisted.globalEventsDocs.push(
+            createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }),
+            createEventDoc('u1', 'e2', { originalFile: { path: 'x.fit' } }),
+        );
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledTimes(1);
+    });
+
+    it('should re-enqueue when existing job is failed', async () => {
+        hoisted.globalEventsDocs.push(createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({ status: 'failed', attemptCount: 3, createdAt: 'old-created' }),
+        });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
+            attemptCount: 3,
+            status: 'pending',
+        }), { merge: true });
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
+    });
+
+    it('should skip events already marked NO_ORIGINAL_FILES for the same target', async () => {
+        hoisted.globalEventsDocs.push(createEventDoc(
+            'u1',
+            'e1',
+            { originalFile: { path: 'x.fit' } },
+            { status: 'skipped', reason: 'NO_ORIGINAL_FILES', targetSportsLibVersion: '9.1.2' },
+        ));
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.extractSourceFiles).not.toHaveBeenCalled();
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+    });
+
+    it('should process only allowlisted users in override mode', async () => {
+        process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST = 'u1';
+        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+        hoisted.userEventsByUID.set('u2', [createEventDoc('u2', 'e2', { originalFile: { path: 'y.fit' } })]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.collectionGroup).not.toHaveBeenCalled();
+        expect(hoisted.hasPaidOrGraceAccess).toHaveBeenCalledWith('u1');
+        expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalledWith('u2');
+    });
+
+    it('should carry previous cursor for unscanned allowlisted UIDs when scan cap is exhausted', async () => {
+        process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST = 'u1,u2';
+        process.env.SPORTS_LIB_REPARSE_SCAN_LIMIT = '1';
+        hoisted.checkpointGet.mockResolvedValue({ data: () => ({ overrideCursorByUid: { u2: 'prev-u2' } }) });
+        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+        hoisted.userEventsByUID.set('u2', [createEventDoc('u2', 'e2', { originalFile: { path: 'x.fit' } })]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(finalCheckpointPayload.overrideCursorByUid).toEqual({ u1: 'e1', u2: 'prev-u2' });
+        expect(hoisted.hasPaidOrGraceAccess).toHaveBeenCalledWith('u1');
+        expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalledWith('u2');
+        expect(finalCheckpointPayload.lastPassCompletedAt).toBeUndefined();
+    });
+
+    it('should progress per-UID override cursor when page is full', async () => {
+        process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST = 'u1';
+        process.env.SPORTS_LIB_REPARSE_SCAN_LIMIT = '1';
+        hoisted.userEventsByUID.set('u1', [
+            createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }),
+            createEventDoc('u1', 'e2', { originalFile: { path: 'x.fit' } }),
+        ]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(finalCheckpointPayload.overrideCursorByUid).toEqual({ u1: 'e1' });
+        expect(finalCheckpointPayload.lastPassCompletedAt).toBeUndefined();
+    });
+
+    it('should reset per-UID override cursor when UID scan finishes', async () => {
+        process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST = 'u1';
+        hoisted.checkpointGet.mockResolvedValue({ data: () => ({ overrideCursorByUid: { u1: 'e1' } }) });
+        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e2', { originalFile: { path: 'x.fit' } })]);
+        process.env.SPORTS_LIB_REPARSE_SCAN_LIMIT = '10';
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(finalCheckpointPayload.overrideCursorByUid).toEqual({ u1: null });
+        expect(finalCheckpointPayload.lastPassCompletedAt).toBe('SERVER_TIMESTAMP');
+    });
+
+    it('should reset per-UID cursor to null when allowlisted UID has no events in current page', async () => {
+        process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST = 'u1';
+        hoisted.checkpointGet.mockResolvedValue({ data: () => ({ overrideCursorByUid: { u1: 'stale-cursor' } }) });
+        hoisted.userEventsByUID.set('u1', []);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(finalCheckpointPayload.overrideCursorByUid).toEqual({ u1: null });
+    });
+
+    it('should enforce eligibility in override mode', async () => {
+        process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST = 'u1';
+        hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
+        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
     });
 });

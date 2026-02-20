@@ -4,6 +4,7 @@ import {
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
     extractSourceFiles,
     hasPaidOrGraceAccess,
+    parseUIDAllowlist,
     parseUidAndEventIdFromEventPath,
     reparseEventFromOriginalFiles,
     resolveTargetSportsLibVersion,
@@ -14,6 +15,7 @@ import {
 interface ScriptOptions {
     execute: boolean;
     uid?: string;
+    uids?: string[];
     limit: number;
     startAfter?: string;
 }
@@ -51,12 +53,16 @@ function readArgValue(argv: string[], key: string): string | undefined {
 export function parseScriptOptions(argv: string[]): ScriptOptions {
     const execute = argv.includes('--execute');
     const uid = readArgValue(argv, '--uid');
+    const cliUIDAllowlist = parseUIDAllowlist(readArgValue(argv, '--uids'));
+    const envUIDAllowlist = parseUIDAllowlist(process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST);
+    const effectiveUIDAllowlist = uid ? null : (cliUIDAllowlist || envUIDAllowlist);
     const limit = parseIntArg(readArgValue(argv, '--limit'), 200);
     const startAfter = readArgValue(argv, '--start-after');
 
     return {
         execute,
         uid,
+        uids: effectiveUIDAllowlist ? Array.from(effectiveUIDAllowlist) : undefined,
         limit,
         startAfter,
     };
@@ -73,6 +79,29 @@ async function getEventsToInspect(options: ScriptOptions): Promise<admin.firesto
         }
         const snapshot = await userQuery.get();
         return snapshot.docs;
+    }
+
+    if (options.uids && options.uids.length > 0) {
+        if (options.startAfter) {
+            logger.warn('[sports-lib-reparse-script] Ignoring --start-after in multi-UID mode.');
+        }
+
+        const docs: admin.firestore.QueryDocumentSnapshot[] = [];
+        let remainingLimit = options.limit;
+
+        for (const uid of options.uids) {
+            if (remainingLimit <= 0) {
+                break;
+            }
+            const snapshot = await db.collection(`users/${uid}/events`)
+                .orderBy(admin.firestore.FieldPath.documentId())
+                .limit(remainingLimit)
+                .get();
+            docs.push(...snapshot.docs);
+            remainingLimit -= snapshot.docs.length;
+        }
+
+        return docs;
     }
 
     let groupQuery = db.collectionGroup('events')

@@ -107,6 +107,15 @@ import {
     mapActivityIdentity,
     extractSourceFiles,
     persistReparsedEvent,
+    parseUIDAllowlist,
+    parseUidAndEventIdFromEventPath,
+    resolveTargetSportsLibVersion,
+    shouldEventBeReparsed,
+    writeReparseStatus,
+    buildSportsLibReparseJobId,
+    getEventAndActivitiesForReparse,
+    reparseEventFromOriginalFiles,
+    SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
 } from './sports-lib-reparse.service';
 
 function makeCollectionQuery(docs: any[] = []) {
@@ -169,6 +178,24 @@ describe('sports-lib-reparse.service', () => {
         await expect(hasPaidOrGraceAccess('u1')).resolves.toBe(true);
     });
 
+    it('resolveTargetSportsLibVersion should return hardcoded target version', () => {
+        expect(resolveTargetSportsLibVersion()).toBe('9.1.2');
+    });
+
+    it('parseUIDAllowlist should parse and sanitize comma-separated values', () => {
+        expect(parseUIDAllowlist(undefined)).toBeNull();
+        expect(parseUIDAllowlist('')).toBeNull();
+        expect(parseUIDAllowlist('   ')).toBeNull();
+        expect(Array.from(parseUIDAllowlist(' u1, u2 ,,u3 ') || [])).toEqual(['u1', 'u2', 'u3']);
+        expect(Array.from(parseUIDAllowlist('u1,u1') || [])).toEqual(['u1']);
+    });
+
+    it('parseUidAndEventIdFromEventPath should parse valid paths and reject invalid ones', () => {
+        expect(parseUidAndEventIdFromEventPath('users/u1/events/e1')).toEqual({ uid: 'u1', eventId: 'e1' });
+        expect(parseUidAndEventIdFromEventPath('users/u1/activities/a1')).toBeNull();
+        expect(parseUidAndEventIdFromEventPath('invalid')).toBeNull();
+    });
+
     it('hasPaidOrGraceAccess should return true for active grace claim', async () => {
         hoisted.mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free', gracePeriodUntil: Date.now() + 10_000 } });
         await expect(hasPaidOrGraceAccess('u1')).resolves.toBe(true);
@@ -187,6 +214,28 @@ describe('sports-lib-reparse.service', () => {
 
     it('hasPaidOrGraceAccess should return false for free without grace/subscription', async () => {
         hoisted.mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
+        await expect(hasPaidOrGraceAccess('u1')).resolves.toBe(false);
+    });
+
+    it('hasPaidOrGraceAccess should fallback to system grace when auth user is missing', async () => {
+        hoisted.mockGetUser.mockRejectedValue({ code: 'auth/user-not-found' });
+        hoisted.mockDoc.mockImplementation((path: string) => ({
+            get: vi.fn().mockResolvedValue(path === 'users/u1/system/status'
+                ? { exists: true, data: () => ({ gracePeriodUntil: { toMillis: () => Date.now() + 60_000 } }) }
+                : { exists: true, data: () => ({}) }),
+            set: vi.fn().mockResolvedValue(undefined),
+        }));
+
+        await expect(hasPaidOrGraceAccess('u1')).resolves.toBe(true);
+    });
+
+    it('hasPaidOrGraceAccess should return false on auth errors when no fallback grants access', async () => {
+        hoisted.mockGetUser.mockRejectedValue({ code: 'auth/internal-error' });
+        hoisted.mockDoc.mockImplementation(() => ({
+            get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+            set: vi.fn().mockResolvedValue(undefined),
+        }));
+
         await expect(hasPaidOrGraceAccess('u1')).resolves.toBe(false);
     });
 
@@ -209,6 +258,33 @@ describe('sports-lib-reparse.service', () => {
         ])).rejects.toThrow('bad-fit');
     });
 
+    it('parseFromOriginalFilesStrict should parse all supported extensions and merge multiple events', async () => {
+        await parseFromOriginalFilesStrict([
+            { path: 'a.fit' },
+            { path: 'a.gpx' },
+            { path: 'a.tcx' },
+            { path: 'a.json' },
+            { path: 'a.sml' },
+        ]);
+
+        expect(hoisted.fitImporter.getFromArrayBuffer).toHaveBeenCalledTimes(1);
+        expect(hoisted.gpxImporter.getFromString).toHaveBeenCalledTimes(1);
+        expect(hoisted.tcxImporter.getFromXML).toHaveBeenCalledTimes(1);
+        expect(hoisted.suuntoJSONImporter.getFromJSONString).toHaveBeenCalledTimes(1);
+        expect(hoisted.suuntoSMLImporter.getFromXML).toHaveBeenCalledTimes(1);
+        expect(hoisted.mergeEvents).toHaveBeenCalledTimes(1);
+    });
+
+    it('parseFromOriginalFilesStrict should fail for unsupported extensions', async () => {
+        await expect(parseFromOriginalFilesStrict([
+            { path: 'unsupported.zip' }
+        ])).rejects.toThrow('Unsupported original file extension');
+    });
+
+    it('parseFromOriginalFilesStrict should fail when no source files are provided', async () => {
+        await expect(parseFromOriginalFilesStrict([])).rejects.toThrow('No source files produced a parsed event');
+    });
+
     it('extractSourceFiles should prefer originalFiles and normalize metadata', () => {
         const sourceFiles = extractSourceFiles({
             originalFiles: [
@@ -219,6 +295,27 @@ describe('sports-lib-reparse.service', () => {
         expect(sourceFiles).toHaveLength(1);
         expect(sourceFiles[0].path).toBe('a.fit');
         expect(sourceFiles[0].bucket).toBe('b');
+    });
+
+    it('extractSourceFiles should filter invalid originalFiles entries', () => {
+        const sourceFiles = extractSourceFiles({
+            originalFiles: [{ bucket: 'missing-path' }],
+            originalFile: { path: 'legacy.fit', bucket: 'legacy-bucket' },
+        });
+
+        expect(sourceFiles).toEqual([]);
+    });
+
+    it('extractSourceFiles should fall back to originalFile when originalFiles is absent', () => {
+        const sourceFiles = extractSourceFiles({
+            originalFile: { path: 'legacy.fit', bucket: 'legacy-bucket' },
+        });
+
+        expect(sourceFiles).toHaveLength(1);
+        expect(sourceFiles[0]).toEqual(expect.objectContaining({
+            path: 'legacy.fit',
+            bucket: 'legacy-bucket',
+        }));
     });
 
     it('applyPreservedFields should keep only description/privacy/notes', () => {
@@ -253,6 +350,22 @@ describe('sports-lib-reparse.service', () => {
         expect(activityTwo.creator.name).toBe('old2');
     });
 
+    it('mapActivityIdentity should ignore missing existing docs and blank creator names', () => {
+        const activityOne = { setID: vi.fn(), creator: { name: 'keep-me' } };
+        const activityTwo = { setID: vi.fn() };
+        const parsedEvent = {
+            getActivities: () => [activityOne, activityTwo]
+        } as any;
+
+        mapActivityIdentity(parsedEvent, [
+            { id: 'a1', data: () => ({ creator: { name: '   ' } }) } as any,
+        ]);
+
+        expect(activityOne.setID).toHaveBeenCalledWith('a1');
+        expect(activityOne.creator.name).toBe('keep-me');
+        expect(activityTwo.setID).not.toHaveBeenCalled();
+    });
+
     it('persistReparsedEvent should delete stale activities and write processing metadata', async () => {
         const setCalls: string[] = [];
         hoisted.mockDoc.mockImplementation((path: string) => ({
@@ -284,6 +397,194 @@ describe('sports-lib-reparse.service', () => {
         expect(hoisted.mockBatchDelete).toHaveBeenCalledTimes(1);
         expect(hoisted.mockBatchCommit).toHaveBeenCalledTimes(1);
         expect(setCalls.some(path => path.includes('/metaData/processing'))).toBe(true);
+        expect(hoisted.mockWriteAllEventData).toHaveBeenCalled();
+    });
+
+    it('persistReparsedEvent should avoid batch delete when there are no stale activities', async () => {
+        const parsedEvent = {
+            setID: vi.fn(),
+            getActivities: vi.fn(() => [{ getID: () => 'a1' }]),
+        } as any;
+
+        const result = await persistReparsedEvent(
+            'u1',
+            'e1',
+            parsedEvent,
+            {},
+            [{ id: 'a1', data: () => ({}) } as any],
+            '9.1.2',
+        );
+
+        expect(result.staleActivitiesDeleted).toBe(0);
+        expect(hoisted.mockBatchDelete).not.toHaveBeenCalled();
+        expect(hoisted.mockBatchCommit).not.toHaveBeenCalled();
+    });
+
+    it('shouldEventBeReparsed should check processing metadata version', async () => {
+        const missingProcessingRef = {
+            collection: vi.fn(() => ({
+                doc: vi.fn(() => ({
+                    get: vi.fn().mockResolvedValue({ exists: false, data: () => ({}) }),
+                })),
+            })),
+        } as any;
+        const matchingRef = {
+            collection: vi.fn(() => ({
+                doc: vi.fn(() => ({
+                    get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ sportsLibVersion: '9.1.2' }) }),
+                })),
+            })),
+        } as any;
+        const mismatchingRef = {
+            collection: vi.fn(() => ({
+                doc: vi.fn(() => ({
+                    get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ sportsLibVersion: '9.0.0' }) }),
+                })),
+            })),
+        } as any;
+
+        await expect(shouldEventBeReparsed(missingProcessingRef, '9.1.2')).resolves.toBe(true);
+        await expect(shouldEventBeReparsed(matchingRef, '9.1.2')).resolves.toBe(false);
+        await expect(shouldEventBeReparsed(mismatchingRef, '9.1.2')).resolves.toBe(true);
+    });
+
+    it('writeReparseStatus should write merged status payload to event metadata doc', async () => {
+        const set = vi.fn().mockResolvedValue(undefined);
+        hoisted.mockDoc.mockImplementation((path: string) => ({
+            path,
+            set,
+            get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+        }));
+
+        await writeReparseStatus('u1', 'e1', {
+            status: 'completed',
+            targetSportsLibVersion: '9.1.2',
+            checkedAt: 'ts' as any,
+        });
+
+        expect(hoisted.mockDoc).toHaveBeenCalledWith('users/u1/events/e1/metaData/reparseStatus');
+        expect(set).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'completed',
+            targetSportsLibVersion: '9.1.2',
+        }), { merge: true });
+    });
+
+    it('buildSportsLibReparseJobId should be deterministic and version-sensitive', () => {
+        const first = buildSportsLibReparseJobId('u1', 'e1', '9.1.2');
+        const second = buildSportsLibReparseJobId('u1', 'e1', '9.1.2');
+        const differentVersion = buildSportsLibReparseJobId('u1', 'e1', '9.1.3');
+
+        expect(first).toBe(second);
+        expect(first).not.toBe(differentVersion);
+    });
+
+    it('getEventAndActivitiesForReparse should throw when event is missing', async () => {
+        hoisted.mockDoc.mockImplementation((path: string) => ({
+            path,
+            get: vi.fn().mockResolvedValue(path === 'users/u1/events/e404'
+                ? { exists: false, data: () => ({}) }
+                : { exists: true, data: () => ({}) }),
+            set: vi.fn().mockResolvedValue(undefined),
+        }));
+
+        await expect(getEventAndActivitiesForReparse('u1', 'e404')).rejects.toThrow('Event e404 was not found for user u1');
+    });
+
+    it('getEventAndActivitiesForReparse should return event and activity docs', async () => {
+        hoisted.mockDoc.mockImplementation((path: string) => ({
+            path,
+            get: vi.fn().mockResolvedValue(path === 'users/u1/events/e1'
+                ? { exists: true, data: () => ({ id: 'event-data' }) }
+                : { exists: true, data: () => ({}) }),
+            set: vi.fn().mockResolvedValue(undefined),
+        }));
+        hoisted.mockCollection.mockImplementation((path: string) => {
+            if (path === 'users/u1/activities') {
+                return {
+                    where: vi.fn().mockReturnThis(),
+                    orderBy: vi.fn().mockReturnThis(),
+                    get: vi.fn().mockResolvedValue({ docs: [{ id: 'a1' }] }),
+                };
+            }
+            return makeCollectionQuery([]);
+        });
+
+        const result = await getEventAndActivitiesForReparse('u1', 'e1');
+        expect(result.eventRef.path).toBe('users/u1/events/e1');
+        expect(result.activityDocs).toHaveLength(1);
+    });
+
+    it('reparseEventFromOriginalFiles should skip when event has no source files', async () => {
+        const result = await reparseEventFromOriginalFiles('u1', 'e1', {
+            eventData: {},
+            activityDocs: [],
+            targetSportsLibVersion: '9.1.2',
+        });
+
+        expect(result.status).toBe('skipped');
+        expect(result.reason).toBe(SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES);
+    });
+
+    it('reparseEventFromOriginalFiles should parse, preserve fields, and persist', async () => {
+        const parsedEvent = makeEvent();
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+
+        const result = await reparseEventFromOriginalFiles('u1', 'e1', {
+            eventData: {
+                originalFile: { path: 'users/u1/events/e1/original.fit' },
+                description: 'keep-desc',
+                privacy: 'private',
+                notes: 'keep-notes',
+            },
+            activityDocs: [
+                { id: 'a-old-1', data: () => ({ creator: { name: 'creator-1' } }) } as any,
+                { id: 'a-old-2', data: () => ({ creator: { name: 'creator-2' } }) } as any,
+            ],
+            targetSportsLibVersion: '9.1.2',
+        });
+
+        expect(result.status).toBe('completed');
+        expect(result.sourceFilesCount).toBe(1);
+        expect(result.parsedActivitiesCount).toBe(2);
+        expect(hoisted.reGenerateStatsForEvent).toHaveBeenCalledWith(parsedEvent);
+        expect(hoisted.mockWriteAllEventData).toHaveBeenCalled();
+    });
+
+    it('reparseEventFromOriginalFiles should fetch event and activities when options are omitted', async () => {
+        const parsedEvent = makeEvent();
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+        hoisted.mockDoc.mockImplementation((path: string) => ({
+            path,
+            get: vi.fn().mockResolvedValue(path === 'users/u1/events/e1'
+                ? {
+                    exists: true,
+                    data: () => ({
+                        originalFile: { path: 'users/u1/events/e1/original.fit' },
+                        description: 'desc',
+                    }),
+                }
+                : { exists: true, data: () => ({}) }),
+            set: vi.fn().mockResolvedValue(undefined),
+        }));
+        hoisted.mockCollection.mockImplementation((path: string) => {
+            if (path === 'users/u1/activities') {
+                return {
+                    where: vi.fn().mockReturnThis(),
+                    orderBy: vi.fn().mockReturnThis(),
+                    get: vi.fn().mockResolvedValue({
+                        docs: [
+                            { id: 'a-old-1', data: () => ({ creator: { name: 'creator-1' } }) },
+                            { id: 'a-old-2', data: () => ({ creator: { name: 'creator-2' } }) },
+                        ],
+                    }),
+                };
+            }
+            return makeCollectionQuery([]);
+        });
+
+        const result = await reparseEventFromOriginalFiles('u1', 'e1');
+        expect(result.status).toBe('completed');
+        expect(result.parsedActivitiesCount).toBe(2);
         expect(hoisted.mockWriteAllEventData).toHaveBeenCalled();
     });
 });
