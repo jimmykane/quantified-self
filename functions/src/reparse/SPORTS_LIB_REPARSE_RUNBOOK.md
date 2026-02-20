@@ -9,7 +9,10 @@ Current target version source of truth:
 
 An event is a candidate when:
 - `users/{uid}/events/{eventId}/metaData/processing` is missing, or
-- `processing.sportsLibVersion !== '9.1.2'`
+- `processing.sportsLibVersion` is missing, or
+- `processing.sportsLibVersion < '9.1.2'` (semver comparison)
+
+If `processing.sportsLibVersion` exists but is not valid semver, the run aborts (strict data-integrity behavior).
 
 ## Components
 

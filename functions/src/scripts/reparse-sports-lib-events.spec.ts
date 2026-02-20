@@ -330,6 +330,19 @@ describe('reparse-sports-lib-events script', () => {
         expect(summary.completed).toBe(0);
     });
 
+    it('should abort the run when candidate evaluation throws', async () => {
+        hoisted.globalDocs.push(makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
+        hoisted.shouldEventBeReparsed.mockRejectedValue(
+            new Error('Invalid stored sports-lib version "unknown" at users/u1/events/e1. Target version: 9.1.2'),
+        );
+
+        await expect(runSportsLibReparseScript(['--execute']))
+            .rejects
+            .toThrow('Invalid stored sports-lib version "unknown"');
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.writeReparseStatus).not.toHaveBeenCalled();
+    });
+
     it('multi-UID execute mode should process events', async () => {
         hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
         hoisted.userEventsByUID.set('u2', [makeEventDoc('u2', 'e2', { originalFile: { path: 'x.fit' } })]);

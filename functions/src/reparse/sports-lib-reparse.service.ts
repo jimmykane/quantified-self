@@ -3,6 +3,7 @@ import * as logger from 'firebase-functions/logger';
 import { gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import * as xmldom from 'xmldom';
+import semver from 'semver';
 import {
     EventImporterFIT,
     EventImporterGPX,
@@ -406,12 +407,30 @@ export async function shouldEventBeReparsed(
     eventRef: admin.firestore.DocumentReference,
     targetSportsLibVersion: string,
 ): Promise<boolean> {
+    const validatedTargetVersion = semver.valid(targetSportsLibVersion);
+    if (!validatedTargetVersion) {
+        throw new Error(`[sports-lib-reparse] Invalid target sports-lib version "${targetSportsLibVersion}"`);
+    }
+
     const processingDoc = await eventRef.collection('metaData').doc('processing').get();
     if (!processingDoc.exists) {
         return true;
     }
-    const version = processingDoc.data()?.sportsLibVersion;
-    return version !== targetSportsLibVersion;
+
+    const rawVersion = processingDoc.data()?.sportsLibVersion;
+    if (!rawVersion) {
+        return true;
+    }
+
+    const storedVersion = semver.valid(`${rawVersion}`);
+    if (!storedVersion) {
+        throw new Error(
+            `[sports-lib-reparse] Invalid stored sports-lib version "${rawVersion}" at ${eventRef.path}. ` +
+            `Target version: ${validatedTargetVersion}`,
+        );
+    }
+
+    return semver.lt(storedVersion, validatedTargetVersion);
 }
 
 export async function writeReparseStatus(

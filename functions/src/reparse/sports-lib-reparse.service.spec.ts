@@ -420,8 +420,9 @@ describe('sports-lib-reparse.service', () => {
         expect(hoisted.mockBatchCommit).not.toHaveBeenCalled();
     });
 
-    it('shouldEventBeReparsed should check processing metadata version', async () => {
+    it('shouldEventBeReparsed should apply semver-based candidate logic', async () => {
         const missingProcessingRef = {
+            path: 'users/u1/events/e-missing-doc',
             collection: vi.fn(() => ({
                 doc: vi.fn(() => ({
                     get: vi.fn().mockResolvedValue({ exists: false, data: () => ({}) }),
@@ -429,23 +430,57 @@ describe('sports-lib-reparse.service', () => {
             })),
         } as any;
         const matchingRef = {
+            path: 'users/u1/events/e-matching',
             collection: vi.fn(() => ({
                 doc: vi.fn(() => ({
                     get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ sportsLibVersion: '9.1.2' }) }),
                 })),
             })),
         } as any;
-        const mismatchingRef = {
+        const lowerRef = {
+            path: 'users/u1/events/e-lower',
             collection: vi.fn(() => ({
                 doc: vi.fn(() => ({
                     get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ sportsLibVersion: '9.0.0' }) }),
                 })),
             })),
         } as any;
+        const higherRef = {
+            path: 'users/u1/events/e-higher',
+            collection: vi.fn(() => ({
+                doc: vi.fn(() => ({
+                    get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ sportsLibVersion: '9.2.0' }) }),
+                })),
+            })),
+        } as any;
+        const missingVersionRef = {
+            path: 'users/u1/events/e-missing-version',
+            collection: vi.fn(() => ({
+                doc: vi.fn(() => ({
+                    get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
+                })),
+            })),
+        } as any;
+        const malformedVersionRef = {
+            path: 'users/u1/events/e-malformed',
+            collection: vi.fn(() => ({
+                doc: vi.fn(() => ({
+                    get: vi.fn().mockResolvedValue({ exists: true, data: () => ({ sportsLibVersion: 'unknown' }) }),
+                })),
+            })),
+        } as any;
 
         await expect(shouldEventBeReparsed(missingProcessingRef, '9.1.2')).resolves.toBe(true);
+        await expect(shouldEventBeReparsed(missingVersionRef, '9.1.2')).resolves.toBe(true);
         await expect(shouldEventBeReparsed(matchingRef, '9.1.2')).resolves.toBe(false);
-        await expect(shouldEventBeReparsed(mismatchingRef, '9.1.2')).resolves.toBe(true);
+        await expect(shouldEventBeReparsed(lowerRef, '9.1.2')).resolves.toBe(true);
+        await expect(shouldEventBeReparsed(higherRef, '9.1.2')).resolves.toBe(false);
+        await expect(shouldEventBeReparsed(malformedVersionRef, '9.1.2'))
+            .rejects
+            .toThrow('Invalid stored sports-lib version "unknown" at users/u1/events/e-malformed');
+        await expect(shouldEventBeReparsed(matchingRef, 'not-semver'))
+            .rejects
+            .toThrow('Invalid target sports-lib version "not-semver"');
     });
 
     it('writeReparseStatus should write merged status payload to event metadata doc', async () => {
