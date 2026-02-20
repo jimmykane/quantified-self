@@ -4,6 +4,7 @@ import * as logger from 'firebase-functions/logger';
 import {
     SPORTS_LIB_REPARSE_CHECKPOINT_PATH,
     SPORTS_LIB_REPARSE_JOBS_COLLECTION,
+    SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
     SPORTS_LIB_REPARSE_STATUS_DOC_ID,
     SportsLibReparseCheckpoint,
@@ -11,7 +12,6 @@ import {
     buildSportsLibReparseJobId,
     extractSourceFiles,
     hasPaidOrGraceAccess,
-    parseUIDAllowlist,
     parseUidAndEventIdFromEventPath,
     resolveTargetSportsLibVersion,
     shouldEventBeReparsed,
@@ -21,27 +21,6 @@ import { enqueueSportsLibReparseTask } from '../shared/cloud-tasks';
 import { getExpireAtTimestamp, TTL_CONFIG } from '../shared/ttl-config';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 
-const DEFAULT_SCAN_LIMIT = 200;
-const DEFAULT_ENQUEUE_LIMIT = 100;
-
-function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
-    if (value === undefined) {
-        return fallback;
-    }
-    return value.trim().toLowerCase() === 'true';
-}
-
-function parsePositiveIntEnv(value: string | undefined, fallback: number): number {
-    if (!value) {
-        return fallback;
-    }
-    const parsed = Number.parseInt(value, 10);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-        return fallback;
-    }
-    return parsed;
-}
-
 function getCurrentSettings(): {
     enabled: boolean;
     scanLimit: number;
@@ -49,12 +28,16 @@ function getCurrentSettings(): {
     uidAllowlist: Set<string> | null;
     includeFreeUsers: boolean;
 } {
+    const constantUIDAllowlist = SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist
+        && SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist.length > 0
+        ? new Set(SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist)
+        : null;
     return {
-        enabled: parseBooleanEnv(process.env.SPORTS_LIB_REPARSE_ENABLED, false),
-        scanLimit: parsePositiveIntEnv(process.env.SPORTS_LIB_REPARSE_SCAN_LIMIT, DEFAULT_SCAN_LIMIT),
-        enqueueLimit: parsePositiveIntEnv(process.env.SPORTS_LIB_REPARSE_ENQUEUE_LIMIT, DEFAULT_ENQUEUE_LIMIT),
-        uidAllowlist: parseUIDAllowlist(process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST),
-        includeFreeUsers: parseBooleanEnv(process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS, false),
+        enabled: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enabled,
+        scanLimit: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.scanLimit,
+        enqueueLimit: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enqueueLimit,
+        uidAllowlist: constantUIDAllowlist,
+        includeFreeUsers: SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.includeFreeUsers,
     };
 }
 
@@ -83,7 +66,7 @@ export const scheduleSportsLibReparseScan = onSchedule({
 }, async (_event) => {
     const settings = getCurrentSettings();
     if (!settings.enabled) {
-        logger.info('[sports-lib-reparse] Scheduler disabled (SPORTS_LIB_REPARSE_ENABLED=false).');
+        logger.info('[sports-lib-reparse] Scheduler disabled (SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enabled=false).');
         return;
     }
 

@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import {
     SPORTS_LIB_REPARSE_JOBS_COLLECTION,
+    SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
     SportsLibReparseJob,
     hasPaidOrGraceAccess,
@@ -30,13 +31,6 @@ function getErrorMessage(error: unknown): string {
     return `${error}`;
 }
 
-function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
-    if (value === undefined) {
-        return fallback;
-    }
-    return value.trim().toLowerCase() === 'true';
-}
-
 export const processSportsLibReparseTask = onTaskDispatched({
     retryConfig: CLOUD_TASK_RETRY_CONFIG,
     memory: '1GiB',
@@ -45,7 +39,7 @@ export const processSportsLibReparseTask = onTaskDispatched({
 }, async (request) => {
     const payload = request.data as SportsLibReparseTaskPayload;
     const jobId = payload?.jobId;
-    const includeFreeUsers = parseBooleanEnv(process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS, false);
+    const includeFreeUsers = SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.includeFreeUsers;
 
     if (!jobId) {
         throw new Error('Missing jobId in sports-lib reparse task payload.');

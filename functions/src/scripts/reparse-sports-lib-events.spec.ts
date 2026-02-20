@@ -19,6 +19,13 @@ const hoisted = vi.hoisted(() => {
         }
         return { uid: parts[1], eventId: parts[3] };
     });
+    const runtimeDefaults = {
+        enabled: false,
+        scanLimit: 200,
+        enqueueLimit: 100,
+        includeFreeUsers: false,
+        uidAllowlist: null as string[] | null,
+    };
 
     const userEventsByUID = new Map<string, any[]>();
     const globalDocs: any[] = [];
@@ -97,6 +104,7 @@ const hoisted = vi.hoisted(() => {
         parseUIDAllowlist,
         writeReparseStatus,
         parseUidAndEventIdFromEventPath,
+        runtimeDefaults,
         userEventsByUID,
         globalDocs,
         adminApps,
@@ -110,6 +118,7 @@ const hoisted = vi.hoisted(() => {
 });
 
 vi.mock('../reparse/sports-lib-reparse.service', () => ({
+    SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS: hoisted.runtimeDefaults,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES: 'NO_ORIGINAL_FILES',
     shouldEventBeReparsed: hoisted.shouldEventBeReparsed,
     hasPaidOrGraceAccess: hoisted.hasPaidOrGraceAccess,
@@ -160,8 +169,11 @@ describe('reparse-sports-lib-events script', () => {
         hoisted.globalDocs.length = 0;
         hoisted.adminApps.length = 0;
         hoisted.resetGlobalCollectionState();
-        delete process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST;
-        delete process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS;
+        hoisted.runtimeDefaults.enabled = false;
+        hoisted.runtimeDefaults.scanLimit = 200;
+        hoisted.runtimeDefaults.enqueueLimit = 100;
+        hoisted.runtimeDefaults.includeFreeUsers = false;
+        hoisted.runtimeDefaults.uidAllowlist = null;
 
         hoisted.shouldEventBeReparsed.mockResolvedValue(true);
         hoisted.hasPaidOrGraceAccess.mockResolvedValue(true);
@@ -206,13 +218,13 @@ describe('reparse-sports-lib-events script', () => {
     });
 
     it('parseScriptOptions should read include-free-users env flag', () => {
-        process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS = 'true';
+        hoisted.runtimeDefaults.includeFreeUsers = true;
         const options = parseScriptOptions([]);
         expect(options.includeFreeUsers).toBe(true);
     });
 
-    it('parseScriptOptions should apply precedence --uid > --uids > env', () => {
-        process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST = 'env1,env2';
+    it('parseScriptOptions should apply precedence --uid > --uids > constant allowlist', () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['constant1', 'constant2'];
 
         const withUid = parseScriptOptions(['--uid', 'single', '--uids', 'cli1,cli2']);
         expect(withUid.uid).toBe('single');
@@ -223,7 +235,7 @@ describe('reparse-sports-lib-events script', () => {
         expect(withUids.uids).toEqual(['cli1', 'cli2']);
 
         const withEnv = parseScriptOptions([]);
-        expect(withEnv.uids).toEqual(['env1', 'env2']);
+        expect(withEnv.uids).toEqual(['constant1', 'constant2']);
     });
 
     it('single UID dry-run should not write', async () => {
@@ -254,8 +266,8 @@ describe('reparse-sports-lib-events script', () => {
         expect(hoisted.collectionGroup).not.toHaveBeenCalled();
     });
 
-    it('should use env UID allowlist when no CLI UID flags are provided', async () => {
-        process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST = 'u1,u2';
+    it('should use constant UID allowlist when no CLI UID flags are provided', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1', 'u2'];
         hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
         hoisted.userEventsByUID.set('u2', [makeEventDoc('u2', 'e2', { originalFile: { path: 'x.fit' } })]);
 
@@ -384,7 +396,7 @@ describe('reparse-sports-lib-events script', () => {
     });
 
     it('should include free users when include-free-users flag is enabled', async () => {
-        process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS = 'true';
+        hoisted.runtimeDefaults.includeFreeUsers = true;
         hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
         hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
 

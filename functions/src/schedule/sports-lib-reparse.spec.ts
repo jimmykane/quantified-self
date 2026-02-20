@@ -20,6 +20,13 @@ const hoisted = vi.hoisted(() => {
         const parts = path.split('/');
         return { uid: parts[1], eventId: parts[3] };
     });
+    const runtimeDefaults = {
+        enabled: false,
+        scanLimit: 200,
+        enqueueLimit: 100,
+        includeFreeUsers: false,
+        uidAllowlist: null as string[] | null,
+    };
 
     const enqueueSportsLibReparseTask = vi.fn();
     const getExpireAtTimestamp = vi.fn(() => 'EXPIRE_TS');
@@ -121,6 +128,7 @@ const hoisted = vi.hoisted(() => {
         resolveTargetSportsLibVersion,
         parseUIDAllowlist,
         parseUidAndEventIdFromEventPath,
+        runtimeDefaults,
         enqueueSportsLibReparseTask,
         getExpireAtTimestamp,
         checkpointSet,
@@ -141,6 +149,7 @@ const hoisted = vi.hoisted(() => {
 vi.mock('../reparse/sports-lib-reparse.service', () => ({
     SPORTS_LIB_REPARSE_CHECKPOINT_PATH: 'systemJobs/sportsLibReparse',
     SPORTS_LIB_REPARSE_JOBS_COLLECTION: 'sportsLibReparseJobs',
+    SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS: hoisted.runtimeDefaults,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES: 'NO_ORIGINAL_FILES',
     SPORTS_LIB_REPARSE_STATUS_DOC_ID: 'reparseStatus',
     shouldEventBeReparsed: hoisted.shouldEventBeReparsed,
@@ -207,11 +216,11 @@ describe('scheduleSportsLibReparseScan', () => {
         hoisted.globalEventsDocs.length = 0;
         hoisted.userEventsByUID.clear();
         hoisted.resetGlobalQueryState();
-        process.env.SPORTS_LIB_REPARSE_ENABLED = 'true';
-        process.env.SPORTS_LIB_REPARSE_SCAN_LIMIT = '200';
-        process.env.SPORTS_LIB_REPARSE_ENQUEUE_LIMIT = '100';
-        delete process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST;
-        delete process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS;
+        hoisted.runtimeDefaults.enabled = true;
+        hoisted.runtimeDefaults.scanLimit = 200;
+        hoisted.runtimeDefaults.enqueueLimit = 100;
+        hoisted.runtimeDefaults.uidAllowlist = null;
+        hoisted.runtimeDefaults.includeFreeUsers = false;
         hoisted.checkpointGet.mockResolvedValue({ data: () => ({ cursorEventPath: null }) });
         hoisted.jobGet.mockResolvedValue({ exists: false, data: () => ({}) });
         hoisted.shouldEventBeReparsed.mockResolvedValue(true);
@@ -221,7 +230,7 @@ describe('scheduleSportsLibReparseScan', () => {
     });
 
     it('should short-circuit when runtime flag is disabled', async () => {
-        process.env.SPORTS_LIB_REPARSE_ENABLED = 'false';
+        hoisted.runtimeDefaults.enabled = false;
         await (scheduleSportsLibReparseScan as any)({});
         expect(hoisted.collectionGroup).not.toHaveBeenCalled();
     });
@@ -240,7 +249,7 @@ describe('scheduleSportsLibReparseScan', () => {
     });
 
     it('should apply cursor startAfter in global mode', async () => {
-        process.env.SPORTS_LIB_REPARSE_SCAN_LIMIT = '1';
+        hoisted.runtimeDefaults.scanLimit = 1;
         hoisted.checkpointGet.mockResolvedValue({ data: () => ({ cursorEventPath: 'users/u1/events/e1' }) });
         hoisted.globalEventsDocs.push(createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
         hoisted.globalEventsDocs.push(createEventDoc('u1', 'e2', { originalFile: { path: 'x.fit' } }));
@@ -296,7 +305,7 @@ describe('scheduleSportsLibReparseScan', () => {
     });
 
     it('should stop enqueueing once enqueue limit is reached', async () => {
-        process.env.SPORTS_LIB_REPARSE_ENQUEUE_LIMIT = '1';
+        hoisted.runtimeDefaults.enqueueLimit = 1;
         hoisted.buildSportsLibReparseJobId.mockImplementation((_uid: string, eventId: string) => `job-${eventId}`);
         hoisted.globalEventsDocs.push(
             createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }),
@@ -339,7 +348,7 @@ describe('scheduleSportsLibReparseScan', () => {
     });
 
     it('should process only allowlisted users in override mode', async () => {
-        process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST = 'u1';
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
         hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
         hoisted.userEventsByUID.set('u2', [createEventDoc('u2', 'e2', { originalFile: { path: 'y.fit' } })]);
 
@@ -351,8 +360,8 @@ describe('scheduleSportsLibReparseScan', () => {
     });
 
     it('should carry previous cursor for unscanned allowlisted UIDs when scan cap is exhausted', async () => {
-        process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST = 'u1,u2';
-        process.env.SPORTS_LIB_REPARSE_SCAN_LIMIT = '1';
+        hoisted.runtimeDefaults.uidAllowlist = ['u1', 'u2'];
+        hoisted.runtimeDefaults.scanLimit = 1;
         hoisted.checkpointGet.mockResolvedValue({ data: () => ({ overrideCursorByUid: { u2: 'prev-u2' } }) });
         hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
         hoisted.userEventsByUID.set('u2', [createEventDoc('u2', 'e2', { originalFile: { path: 'x.fit' } })]);
@@ -367,8 +376,8 @@ describe('scheduleSportsLibReparseScan', () => {
     });
 
     it('should progress per-UID override cursor when page is full', async () => {
-        process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST = 'u1';
-        process.env.SPORTS_LIB_REPARSE_SCAN_LIMIT = '1';
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.runtimeDefaults.scanLimit = 1;
         hoisted.userEventsByUID.set('u1', [
             createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }),
             createEventDoc('u1', 'e2', { originalFile: { path: 'x.fit' } }),
@@ -382,10 +391,10 @@ describe('scheduleSportsLibReparseScan', () => {
     });
 
     it('should reset per-UID override cursor when UID scan finishes', async () => {
-        process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST = 'u1';
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
         hoisted.checkpointGet.mockResolvedValue({ data: () => ({ overrideCursorByUid: { u1: 'e1' } }) });
         hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e2', { originalFile: { path: 'x.fit' } })]);
-        process.env.SPORTS_LIB_REPARSE_SCAN_LIMIT = '10';
+        hoisted.runtimeDefaults.scanLimit = 10;
 
         await (scheduleSportsLibReparseScan as any)({});
 
@@ -395,7 +404,7 @@ describe('scheduleSportsLibReparseScan', () => {
     });
 
     it('should reset per-UID cursor to null when allowlisted UID has no events in current page', async () => {
-        process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST = 'u1';
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
         hoisted.checkpointGet.mockResolvedValue({ data: () => ({ overrideCursorByUid: { u1: 'stale-cursor' } }) });
         hoisted.userEventsByUID.set('u1', []);
 
@@ -406,7 +415,7 @@ describe('scheduleSportsLibReparseScan', () => {
     });
 
     it('should enforce eligibility in override mode', async () => {
-        process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST = 'u1';
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
         hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
         hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
 
@@ -416,7 +425,7 @@ describe('scheduleSportsLibReparseScan', () => {
     });
 
     it('should include free users when include-free-users flag is enabled', async () => {
-        process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS = 'true';
+        hoisted.runtimeDefaults.includeFreeUsers = true;
         hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
         hoisted.globalEventsDocs.push(createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
 

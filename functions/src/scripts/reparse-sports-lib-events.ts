@@ -1,6 +1,7 @@
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
 import {
+    SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES,
     extractSourceFiles,
     hasPaidOrGraceAccess,
@@ -57,22 +58,18 @@ function readArgValue(argv: string[], key: string): string | undefined {
     return undefined;
 }
 
-function parseBooleanEnv(value: string | undefined, fallback: boolean): boolean {
-    if (value === undefined) {
-        return fallback;
-    }
-    return value.trim().toLowerCase() === 'true';
-}
-
 export function parseScriptOptions(argv: string[]): ScriptOptions {
     const execute = argv.includes('--execute');
     const uid = readArgValue(argv, '--uid');
     const cliUIDAllowlist = parseUIDAllowlist(readArgValue(argv, '--uids'));
-    const envUIDAllowlist = parseUIDAllowlist(process.env.SPORTS_LIB_REPARSE_UID_ALLOWLIST);
-    const effectiveUIDAllowlist = uid ? null : (cliUIDAllowlist || envUIDAllowlist);
-    const limit = parseIntArg(readArgValue(argv, '--limit'), 200);
+    const constantUIDAllowlist = SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist
+        && SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist.length > 0
+        ? new Set(SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist)
+        : null;
+    const effectiveUIDAllowlist = uid ? null : (cliUIDAllowlist || constantUIDAllowlist);
+    const limit = parseIntArg(readArgValue(argv, '--limit'), SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.scanLimit);
     const startAfter = readArgValue(argv, '--start-after');
-    const includeFreeUsers = parseBooleanEnv(process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS, false);
+    const includeFreeUsers = SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.includeFreeUsers;
 
     return {
         execute,

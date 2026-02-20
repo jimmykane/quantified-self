@@ -85,31 +85,35 @@ An event is a candidate when:
 - Stale activities are deleted
 
 ## Access / Eligibility Behavior
-Default behavior (`SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS=false`):
+Default behavior (`SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.includeFreeUsers=false`):
 - only paid/grace users are processed (`basic|pro|active_grace`)
 - this applies to scheduler, local script, and worker
 
-Include-free behavior (`SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS=true`):
+Include-free behavior (`SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.includeFreeUsers=true`):
 - entitlement checks are skipped
 - all candidate users/events are eligible (subject to other filters/limits)
 
 ## Runtime Controls
-All are env-driven and read at runtime:
+Tracked code defaults live in:
+- `functions/src/reparse/sports-lib-reparse.service.ts`
+- constant: `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS`
 
-- `SPORTS_LIB_REPARSE_ENABLED`
+These defaults are strict constants (no env overrides):
+
+- `enabled`
   - scheduler on/off
   - default: `false`
-- `SPORTS_LIB_REPARSE_SCAN_LIMIT`
+- `scanLimit`
   - scheduler scanned events per run
   - default: `200`
-- `SPORTS_LIB_REPARSE_ENQUEUE_LIMIT`
+- `enqueueLimit`
   - scheduler max enqueued jobs per run
   - default: `100`
-- `SPORTS_LIB_REPARSE_UID_ALLOWLIST`
-  - comma-separated UIDs
+- `uidAllowlist`
+  - array of UIDs in code
   - when set, scheduler switches to user-scoped scan mode
   - script uses it when `--uid/--uids` are not given
-- `SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS`
+- `includeFreeUsers`
   - `true` to include free users
   - default: `false`
 
@@ -152,33 +156,30 @@ Notes:
 - Precedence for UID scope:
   1. `--uid`
   2. `--uids`
-  3. `SPORTS_LIB_REPARSE_UID_ALLOWLIST`
+  3. `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.uidAllowlist`
 
 ### Include free users in local script
 ```bash
-SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS=true npm run reparse-sports-lib-events -- --execute --uids <uid1,uid2>
+npm run reparse-sports-lib-events -- --execute --uids <uid1,uid2>
 ```
+Set `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.includeFreeUsers = true` in code before running.
 
 ## Scheduler / Worker Operation
 
 ### Safe rollout pattern
 1. Deploy with scheduler disabled:
-   - `SPORTS_LIB_REPARSE_ENABLED=false`
+   - `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.enabled = false`
 2. Run local dry-runs against test UIDs.
 3. Run local execute for test UIDs.
-4. Enable scheduler with low limits and UID allowlist:
-   - `SPORTS_LIB_REPARSE_ENABLED=true`
-   - `SPORTS_LIB_REPARSE_UID_ALLOWLIST=<test_uid1,test_uid2>`
-   - low `SCAN_LIMIT`/`ENQUEUE_LIMIT`
+4. Enable scheduler with low limits and UID allowlist in code:
+   - `enabled = true`
+   - `uidAllowlist = ['<test_uid1>', '<test_uid2>']`
+   - low `scanLimit` / `enqueueLimit`
 5. Remove allowlist for full population when stable.
 
 ### Include free users in scheduler+worker
-Set this env for deployed Functions runtime:
-- `SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS=true`
-
-This must be visible to both:
-- `scheduleSportsLibReparseScan`
-- `processSportsLibReparseTask`
+Set `SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS.includeFreeUsers = true` and deploy.
+This affects both `scheduleSportsLibReparseScan` and `processSportsLibReparseTask`.
 
 ## Observability / Checks
 - Check scheduler progress in `systemJobs/sportsLibReparse`

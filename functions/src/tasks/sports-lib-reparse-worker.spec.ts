@@ -9,6 +9,13 @@ const hoisted = vi.hoisted(() => {
     const reparseEventFromOriginalFiles = vi.fn();
     const writeReparseStatus = vi.fn();
     const resolveTargetSportsLibVersion = vi.fn(() => '9.0.99');
+    const runtimeDefaults = {
+        enabled: false,
+        scanLimit: 200,
+        enqueueLimit: 100,
+        includeFreeUsers: false,
+        uidAllowlist: null as string[] | null,
+    };
 
     const jobGet = vi.fn();
     const jobSet = vi.fn().mockResolvedValue(undefined);
@@ -23,6 +30,7 @@ const hoisted = vi.hoisted(() => {
         reparseEventFromOriginalFiles,
         writeReparseStatus,
         resolveTargetSportsLibVersion,
+        runtimeDefaults,
         jobGet,
         jobSet,
         collection,
@@ -33,6 +41,7 @@ const hoisted = vi.hoisted(() => {
 
 vi.mock('../reparse/sports-lib-reparse.service', () => ({
     SPORTS_LIB_REPARSE_JOBS_COLLECTION: 'sportsLibReparseJobs',
+    SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS: hoisted.runtimeDefaults,
     SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES: 'NO_ORIGINAL_FILES',
     hasPaidOrGraceAccess: hoisted.hasPaidOrGraceAccess,
     reparseEventFromOriginalFiles: hoisted.reparseEventFromOriginalFiles,
@@ -58,7 +67,11 @@ import { processSportsLibReparseTask } from './sports-lib-reparse-worker';
 describe('processSportsLibReparseTask', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        delete process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS;
+        hoisted.runtimeDefaults.enabled = false;
+        hoisted.runtimeDefaults.scanLimit = 200;
+        hoisted.runtimeDefaults.enqueueLimit = 100;
+        hoisted.runtimeDefaults.includeFreeUsers = false;
+        hoisted.runtimeDefaults.uidAllowlist = null;
         hoisted.hasPaidOrGraceAccess.mockResolvedValue(true);
         hoisted.reparseEventFromOriginalFiles.mockResolvedValue({
             status: 'completed',
@@ -160,7 +173,7 @@ describe('processSportsLibReparseTask', () => {
     });
 
     it('should include free users when include-free-users flag is enabled', async () => {
-        process.env.SPORTS_LIB_REPARSE_INCLUDE_FREE_USERS = 'true';
+        hoisted.runtimeDefaults.includeFreeUsers = true;
         hoisted.jobGet.mockResolvedValue({
             exists: true,
             data: () => ({
