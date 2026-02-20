@@ -102,6 +102,69 @@ export async function enqueueWorkoutTask(
 
     const payload = { data: { queueItemId, serviceName } };
 
+    await enqueueTaskWithRetry({
+        parent,
+        taskName,
+        payload,
+        serviceAccountEmail,
+        url,
+        scheduleDelaySeconds,
+        alreadyExistsLogMessage: `[Dispatcher] Task already exists for ${serviceName}:${queueItemId}, skipping`,
+        failedLogPrefix: `[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`,
+    });
+}
+
+/**
+ * Enqueue a single sports-lib reparse job task.
+ */
+export async function enqueueSportsLibReparseTask(jobId: string, scheduleDelaySeconds?: number): Promise<void> {
+    const client = getCloudTasksClient();
+    const { projectId, location, queue, serviceAccountEmail } = config.cloudtasks;
+    if (!projectId) {
+        throw new Error('Project ID is not defined in config');
+    }
+
+    const parent = client.queuePath(projectId, location, queue);
+    const url = `https://${location}-${projectId}.cloudfunctions.net/processSportsLibReparseTask`;
+    const safeJobId = jobId.replace(/[^a-zA-Z0-9-_]/g, '-');
+    const taskName = `${parent}/tasks/reparse-${safeJobId}`;
+    const payload = { data: { jobId } };
+
+    await enqueueTaskWithRetry({
+        parent,
+        taskName,
+        payload,
+        serviceAccountEmail,
+        url,
+        scheduleDelaySeconds,
+        alreadyExistsLogMessage: `[ReparseDispatcher] Task already exists for job ${jobId}, skipping`,
+        failedLogPrefix: `[ReparseDispatcher] Failed to enqueue task for job ${jobId}:`,
+    });
+}
+
+interface EnqueueTaskParams {
+    parent: string;
+    taskName: string;
+    payload: unknown;
+    serviceAccountEmail: string;
+    url: string;
+    scheduleDelaySeconds?: number;
+    alreadyExistsLogMessage: string;
+    failedLogPrefix: string;
+}
+
+async function enqueueTaskWithRetry(params: EnqueueTaskParams): Promise<void> {
+    const {
+        parent,
+        taskName,
+        payload,
+        serviceAccountEmail,
+        url,
+        scheduleDelaySeconds,
+        alreadyExistsLogMessage,
+        failedLogPrefix,
+    } = params;
+
     const task: any = {
         name: taskName,
         httpRequest: {
@@ -117,8 +180,6 @@ export async function enqueueWorkoutTask(
         },
     };
 
-    // Add minimum delay to give Firestore time to propagate writes (race condition fix).
-    // If scheduleDelaySeconds is provided, use the max of it and 1 second.
     const minDelaySeconds = Math.max(scheduleDelaySeconds ?? 1, 1);
     task.scheduleTime = {
         seconds: Math.floor(Date.now() / 1000) + minDelaySeconds
@@ -129,35 +190,29 @@ export async function enqueueWorkoutTask(
 
     while (attempt < MAX_RETRIES) {
         try {
-            // Get the current client instance (may be new if reset occurred)
             const currentClient = getCloudTasksClient();
             const [response] = await currentClient.createTask({ parent, task });
             logger.info(`[Dispatcher] Enqueued task: ${response.name}`);
             return;
         } catch (error: any) {
-            if ((error as any).code === 6) { // ALREADY_EXISTS (GRPC code 6)
-                logger.info(`[Dispatcher] Task already exists for ${serviceName}:${queueItemId}, skipping`);
+            if ((error as any).code === 6) {
+                logger.info(alreadyExistsLogMessage);
                 return;
             }
 
-            // Check for retryable errors: UNAVAILABLE (14) or ECONNRESET
             const isRetryable = (error.code === 14) ||
                 (error.message && (error.message.includes('ECONNRESET') || error.message.includes('Unavailable')));
 
             if (isRetryable && attempt < MAX_RETRIES - 1) {
                 logger.warn(`[Dispatcher] Transient error enqueueing task (attempt ${attempt + 1}/${MAX_RETRIES}): ${error.message}. Resetting client and retrying...`);
-
-                // Force client reset
                 _cloudTasksClient = null;
-
                 attempt++;
-                // Exponential backoff: 1s, 2s, 4s...
                 const delayMs = 1000 * Math.pow(2, attempt - 1);
                 await new Promise(resolve => setTimeout(resolve, delayMs));
                 continue;
             }
 
-            logger.error(`[Dispatcher] Failed to enqueue task for ${serviceName}:${queueItemId}:`, error);
+            logger.error(failedLogPrefix, error);
             throw error;
         }
     }

@@ -130,13 +130,14 @@ export { restoreUserClaims, linkExistingStripeCustomer } from './stripe/claims';
 export { onSubscriptionUpdated } from './stripe/subscriptions';
 export { enforceSubscriptionLimits } from './schedule/enforce-subscription-limits';
 export { checkSubscriptionNotifications } from './schedule/notifications';
+export { scheduleSportsLibReparseScan } from './schedule/sports-lib-reparse';
 export { cleanupUserAccounts } from './users/cleanup';
 export { deleteSelf } from './user/user';
 export { listUsers, getQueueStats, getUserCount, setMaintenanceMode, getMaintenanceStatus, impersonateUser, getFinancialStats } from './users/admin';
 
 // Tasks
 export { processWorkoutTask } from './tasks/workout-processor';
+export { processSportsLibReparseTask } from './tasks/sports-lib-reparse-worker';
 
 // Stripe Cleanup
 export { cleanupStripeCustomer } from './stripe/cleanup';
-
