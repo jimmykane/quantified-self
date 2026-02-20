@@ -7,6 +7,7 @@ const {
     mockAuth,
     mockOnCall,
     mockCollection,
+    mockDoc,
     mockFirestore,
     mockRemoteConfig,
     mockStripeClient,
@@ -25,10 +26,12 @@ const {
     const mockOnCall = vi.fn((_options: unknown, handler: unknown) => handler);
 
     const mockCollection = vi.fn() as any;
+    const mockDoc = vi.fn();
     const mockGetAll = vi.fn();
     const mockFirestore = vi.fn(() => ({
         collection: mockCollection,
         collectionGroup: mockCollection,
+        doc: mockDoc,
         getAll: mockGetAll
     }));
 
@@ -66,6 +69,7 @@ const {
         mockAuth,
         mockOnCall,
         mockCollection,
+        mockDoc,
         mockFirestore,
         mockRemoteConfig,
         mockStripeClient,
@@ -659,6 +663,20 @@ describe('getQueueStats Cloud Function', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        mockDoc.mockReturnValue({
+            get: vi.fn().mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    targetSportsLibVersion: '9.1.4',
+                    lastScanCount: 200,
+                    lastEnqueuedCount: 100,
+                    overrideCursorByUid: {
+                        u1: 'e1',
+                        u2: null
+                    }
+                })
+            })
+        });
         request = {
             auth: {
                 uid: 'admin-uid',
@@ -761,6 +779,22 @@ describe('getQueueStats Cloud Function', () => {
                 },
             },
         });
+        expect(result.reparse).toEqual(expect.objectContaining({
+            queuePending: 8,
+            targetSportsLibVersion: '9.1.4',
+            jobs: {
+                total: 5,
+                pending: 5,
+                processing: 5,
+                completed: 5,
+                failed: 5,
+            },
+            checkpoint: expect.objectContaining({
+                lastScanCount: 200,
+                lastEnqueuedCount: 100,
+                overrideUsersInProgress: 1,
+            }),
+        }));
     });
 
     it('should handle single-queue Cloud Task depth error and return 0 for that queue', async () => {

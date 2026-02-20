@@ -205,4 +205,110 @@ describe('AdminQueueStatsComponent', () => {
             expect(queueValues).toEqual(expect.arrayContaining(['7', '0', '0']));
         });
     });
+
+    describe('Reparse Section', () => {
+        it('should render reparse job and checkpoint cards', () => {
+            component.loading = false;
+            component.stats = {
+                pending: 1,
+                succeeded: 1,
+                stuck: 0,
+                providers: [],
+                cloudTasks: {
+                    pending: 3,
+                    queues: {
+                        workout: { queueId: 'processWorkoutTask', pending: 1 },
+                        sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 2 }
+                    }
+                },
+                reparse: {
+                    queuePending: 2,
+                    targetSportsLibVersion: '9.1.4',
+                    jobs: {
+                        total: 10,
+                        pending: 3,
+                        processing: 2,
+                        completed: 4,
+                        failed: 1
+                    },
+                    checkpoint: {
+                        cursorEventPath: null,
+                        lastScanAt: new Date('2026-02-20T14:00:00Z'),
+                        lastPassStartedAt: new Date('2026-02-20T13:50:00Z'),
+                        lastPassCompletedAt: new Date('2026-02-20T13:59:00Z'),
+                        lastScanCount: 200,
+                        lastEnqueuedCount: 100,
+                        overrideUsersInProgress: 1
+                    },
+                    recentFailures: []
+                }
+            };
+
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).toContain('Sports-lib Reparse');
+            expect(host.textContent).toContain('Reparse Jobs (Pending)');
+            expect(host.textContent).toContain('Reparse Jobs (Processing)');
+            expect(host.textContent).toContain('Reparse Jobs (Completed)');
+            expect(host.textContent).toContain('Reparse Jobs (Failed)');
+            expect(host.textContent).toContain('9.1.4');
+            expect(host.textContent).toContain('200');
+            expect(host.textContent).toContain('100');
+        });
+
+        it('should render reparse failures table rows when failures are present', () => {
+            component.loading = false;
+            component.stats = {
+                pending: 1,
+                succeeded: 1,
+                stuck: 0,
+                providers: [],
+                cloudTasks: {
+                    pending: 2,
+                    queues: {
+                        workout: { queueId: 'processWorkoutTask', pending: 1 },
+                        sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 1 }
+                    }
+                },
+                reparse: {
+                    queuePending: 1,
+                    targetSportsLibVersion: '9.1.4',
+                    jobs: {
+                        total: 1,
+                        pending: 0,
+                        processing: 0,
+                        completed: 0,
+                        failed: 1
+                    },
+                    checkpoint: {
+                        cursorEventPath: null,
+                        lastScanAt: null,
+                        lastPassStartedAt: null,
+                        lastPassCompletedAt: null,
+                        lastScanCount: 0,
+                        lastEnqueuedCount: 0,
+                        overrideUsersInProgress: 0
+                    },
+                    recentFailures: [
+                        {
+                            jobId: 'job1',
+                            uid: 'uid-1',
+                            eventId: 'event-1',
+                            attemptCount: 2,
+                            lastError: 'Parse failed',
+                            updatedAt: new Date('2026-02-20T14:30:00Z'),
+                            targetSportsLibVersion: '9.1.4'
+                        }
+                    ]
+                }
+            };
+
+            fixture.detectChanges();
+            const host: HTMLElement = fixture.nativeElement;
+            expect(host.textContent).toContain('Recent Reparse Failures');
+            expect(host.textContent).toContain('uid-1');
+            expect(host.textContent).toContain('event-1');
+            expect(host.textContent).toContain('Parse failed');
+        });
+    });
 });
