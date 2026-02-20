@@ -29,6 +29,16 @@ const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
 const SPORTS_LIB_REPARSE_CHECKPOINT_DOC_PATH = 'systemJobs/sportsLibReparse';
 const SPORTS_LIB_REPARSE_FAILURE_PREVIEW_LIMIT = 10;
 
+interface SportsLibReparseJobDocData {
+    uid?: string;
+    eventId?: string;
+    status?: string;
+    attemptCount?: number;
+    lastError?: string;
+    updatedAt?: unknown;
+    targetSportsLibVersion?: string;
+}
+
 function toSafeNumber(value: unknown, fallback: number = 0): number {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
@@ -499,17 +509,23 @@ export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
             });
         const recentReparseFailures = (recentReparseJobsSnapshot?.docs || [])
             .map(doc => ({
-                id: doc.id,
-                ...doc.data(),
+                data: doc.data() as SportsLibReparseJobDocData,
+                jobId: doc.id,
+                uid: '',
+                eventId: '',
+                attemptCount: 0,
+                lastError: '',
+                updatedAt: null as unknown,
+                targetSportsLibVersion: '',
             }))
-            .map(doc => ({
-                jobId: `${doc.id || ''}`,
-                uid: `${doc.uid || ''}`,
-                eventId: `${doc.eventId || ''}`,
-                attemptCount: toSafeNumber(doc.attemptCount),
-                lastError: `${doc.lastError || ''}`,
-                updatedAt: doc.updatedAt || null,
-                targetSportsLibVersion: `${doc.targetSportsLibVersion || ''}`,
+            .map(entry => ({
+                jobId: entry.jobId,
+                uid: `${entry.data.uid || ''}`,
+                eventId: `${entry.data.eventId || ''}`,
+                attemptCount: toSafeNumber(entry.data.attemptCount),
+                lastError: `${entry.data.lastError || ''}`,
+                updatedAt: entry.data.updatedAt || null,
+                targetSportsLibVersion: `${entry.data.targetSportsLibVersion || ''}`,
             }));
 
         let totalPending = 0;
