@@ -53,9 +53,6 @@
       (is3DChange)="onMyTracks3DToggle($event)"
       (showJumpHeatmapChange)="onShowJumpHeatmapToggle($event)">
     </app-map-layers-actions>
-    @if (isLoading()) {
-    <mat-spinner diameter="24"></mat-spinner>
-    }
   </div>
 
   @if (hasEvaluatedTripDetection() && detectedTrips().length > 0) {

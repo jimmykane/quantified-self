@@ -85,6 +85,7 @@ export class TracksMapManager {
     private startSelectionHandler: ((selection: TrackStartSelection | null) => void) | null = null;
     private selectedTrackStartPointId: string | null = null;
     private hoveredTrackStartPointId: string | null = null;
+    private trackRenderEpoch = 0;
 
     constructor(
         private zone: NgZone,
@@ -267,6 +268,7 @@ export class TracksMapManager {
 
     public addTrackFromActivity(activity: any, coordinates: number[][]) {
         if (!this.map || !coordinates || coordinates.length <= 1) return;
+        const renderEpoch = this.trackRenderEpoch;
 
         const validCoordinates = coordinates
             .filter((coordinate) =>
@@ -352,7 +354,12 @@ export class TracksMapManager {
 
             } catch (error: any) {
                 if (error?.message?.includes('Style is not done loading')) {
-                    this.map.once('style.load', () => this.addTrackFromActivity(activity, coordinates));
+                    this.map.once('style.load', () => {
+                        if (this.trackRenderEpoch !== renderEpoch) {
+                            return;
+                        }
+                        this.addTrackFromActivity(activity, coordinates);
+                    });
                 } else {
                     this.logger.warn('Failed to add track layer:', error);
                 }
@@ -361,24 +368,28 @@ export class TracksMapManager {
     }
 
     public clearAllTracks() {
-        if (!this.map) return;
+        this.trackRenderEpoch += 1;
 
-        this.zone.runOutsideAngular(() => {
-            const layers = this.activeLayerIds.filter(id => id.startsWith('track-layer-'));
-            const sources = this.activeLayerIds.filter(id => id.startsWith('track-source-'));
+        if (this.map) {
+            this.zone.runOutsideAngular(() => {
+                const layers = this.activeLayerIds.filter(id => id.startsWith('track-layer-'));
+                const sources = this.activeLayerIds.filter(id => id.startsWith('track-source-'));
 
-            layers.forEach(id => {
-                removeLayerIfExists(this.map, id);
+                layers.forEach(id => {
+                    removeLayerIfExists(this.map, id);
+                });
+
+                sources.forEach(id => {
+                    removeSourceIfExists(this.map, id);
+                });
+
+                this.activeLayerIds = [];
             });
-
-            sources.forEach(id => {
-                removeSourceIfExists(this.map, id);
-            });
-
+        } else {
             this.activeLayerIds = [];
-            this.trackLayerBaseColors.clear();
-            this.tracksByActivityId.clear();
-        });
+        }
+        this.trackLayerBaseColors.clear();
+        this.tracksByActivityId.clear();
         this.clearActivityStartPoints();
     }
 
