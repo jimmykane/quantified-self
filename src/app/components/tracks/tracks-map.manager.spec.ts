@@ -199,6 +199,27 @@ describe('TracksMapManager', () => {
             expect(mockMap.addSource).toHaveBeenCalledTimes(2);
             expect(mockMap.addLayer).toHaveBeenCalledTimes(6);
         });
+
+        it('should ignore deferred style.load track re-add after tracks are cleared', () => {
+            const mockActivity = {
+                getID: () => '123',
+                type: 'running'
+            };
+            const coordinates = [[0, 0], [1, 1]];
+
+            mockMap.addSource.mockImplementationOnce(() => {
+                throw new Error('Style is not done loading');
+            });
+
+            manager.addTrackFromActivity(mockActivity, coordinates);
+            expect(mockMap.once).toHaveBeenCalledWith('style.load', expect.any(Function));
+
+            const deferredRetry = mockMap.once.mock.calls[0][1] as () => void;
+            manager.clearAllTracks();
+            deferredRetry();
+
+            expect(mockMap.addSource).toHaveBeenCalledTimes(1);
+        });
     });
 
     describe('jump heatmap', () => {

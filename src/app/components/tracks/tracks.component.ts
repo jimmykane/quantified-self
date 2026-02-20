@@ -6,7 +6,7 @@ import { AppEventService } from '../../services/app.event.service';
 import { take, debounceTime, filter } from 'rxjs/operators';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
-import { Subject, Subscription } from 'rxjs';
+import { Subject, Subscription, firstValueFrom } from 'rxjs';
 import { DateRanges, ActivityTypes, DataPaceAvg, DataSpeedAvg, DataSwimPaceAvg } from '@sports-alliance/sports-lib';
 import { DataStartPosition } from '@sports-alliance/sports-lib';
 import { DataPositionInterface } from '@sports-alliance/sports-lib';
@@ -71,6 +71,11 @@ interface JumpHeatCollectionStats {
   jumpsWithWeightMetrics: number;
 }
 
+interface PreparedTrackPolyline {
+  activity: any;
+  coordinates: number[][];
+}
+
 @Component({
   selector: 'app-tracks',
   templateUrl: './tracks.component.html',
@@ -112,14 +117,13 @@ export class TracksComponent implements OnInit, OnDestroy {
   private eventsById = new Map<string, any>();
 
   private eventsSubscription: Subscription = new Subscription();
-  private trackLoadingSubscription: Subscription = new Subscription();
 
   private mapSynchronizer = signal<MapboxStyleSynchronizer | undefined>(undefined);
   private platformId!: object;
   private startPointPopupRepositionHandler: (() => void) | null = null;
   private pendingStartPointPopupCorrectionRaf: number | null = null;
 
-  private promiseTime!: number;
+  private promiseTime = 0;
   private analyticsService = inject(AppAnalyticsService);
   private userSettingsQuery = inject(AppUserSettingsQueryService);
   private logger = inject(LoggerService);
@@ -356,11 +360,6 @@ export class TracksComponent implements OnInit, OnDestroy {
       activityTypes: event.activityTypes
     });
 
-    // Manually clean legacy subscription if it exists, though effect handles fresh load
-    if (this.trackLoadingSubscription) {
-      this.trackLoadingSubscription.unsubscribe();
-    }
-
     this.analyticsService.logEvent('my_tracks_search', { method: DateRanges[event.dateRange] });
   }
 
@@ -384,9 +383,6 @@ export class TracksComponent implements OnInit, OnDestroy {
       this.eventsSubscription.unsubscribe();
       // No need to re-initialize eventsSubscription here, as it's a parent for all component-level subscriptions
       // and will be fully disposed on ngOnDestroy.
-    }
-    if (this.trackLoadingSubscription) {
-      this.trackLoadingSubscription.unsubscribe();
     }
   }
 
@@ -413,8 +409,34 @@ export class TracksComponent implements OnInit, OnDestroy {
     }
   }
 
+  private isCurrentLoad(promiseTime: number): boolean {
+    return this.promiseTime === promiseTime;
+  }
 
+  private async getEventsForTracksLoad(
+    user: AppUserInterface,
+    where: { fieldPath: string | any, opStr: WhereFilterOp, value: any }[],
+    promiseTime: number
+  ): Promise<any[]> {
+    const eventServiceWithOnce = this.eventService as any;
+    if (typeof eventServiceWithOnce.getEventsOnceBy === 'function') {
+      const events = await firstValueFrom(
+        this.eventService.getEventsOnceBy(user, where, 'startDate', true, 0, { preferCache: false })
+      );
+      this.logger.log(`[TracksComponent] eventService.getEventsOnceBy returned ${events?.length || 0} events for promiseTime: ${promiseTime}`);
+      return events || [];
+    }
 
+    this.logger.warn('[TracksComponent] getEventsOnceBy is unavailable. Falling back to getEventsBy with take(1).');
+    const events = await firstValueFrom(
+      this.eventService.getEventsBy(user, where, 'startDate', true, 0).pipe(
+        debounceTime(300),
+        take(1),
+      )
+    );
+    this.logger.log(`[TracksComponent] eventService.getEventsBy fallback emitted ${events?.length || 0} events for promiseTime: ${promiseTime}`);
+    return events || [];
+  }
 
   private async loadTracksMapForUserByDateRange(user: AppUserInterface | undefined, dateRange: DateRanges, activityTypes?: ActivityTypes[]) {
     if (!user) {
@@ -427,20 +449,19 @@ export class TracksComponent implements OnInit, OnDestroy {
       userId: (user as any).uid || (user as any).id || 'unknown'
     });
     this.hasTrackBoundsBeenApplied = true;
-    const promiseTime = new Date().getTime();
-    this.promiseTime = promiseTime
+    const promiseTime = ++this.promiseTime;
     this.hasEvaluatedTripDetection.set(false);
     this.detectedTrips.set([]);
     this.detectedTripsPanelExpanded.set(false);
     this.hasDetectedJumps.set(false);
-    this.trackCoordinatesByEventId.clear();
-    this.eventsById.clear();
+    this.trackCoordinatesByEventId = new Map<string, number[][]>();
+    this.eventsById = new Map<string, any>();
     this.closeSelectedStartPointPopup();
+    this.tracksMapManager.clearAllTracks();
     this.tracksMapManager.clearJumpHeatmap();
-    this.tracksMapManager.clearActivityStartPoints();
     this.clearProgressAndOpenBottomSheet();
     const dates = getDatesForDateRange(dateRange, user.settings?.unitSettings?.startOfTheWeek || 1);
-    const where = []
+    const where: { fieldPath: string | any, opStr: WhereFilterOp, value: any }[] = [];
     if (dates.startDate) {
       where.push({
         fieldPath: 'startDate',
@@ -458,191 +479,201 @@ export class TracksComponent implements OnInit, OnDestroy {
 
     this.logger.log(`[TracksComponent] Initializing fetch from event service for dateRange: ${DateRanges[dateRange]}, activityTypes: ${activityTypes?.[0] || 'all'}, promiseTime: ${promiseTime}`);
 
-    this.trackLoadingSubscription = this.eventService.getEventsBy(user, where, 'startDate', true, 0)
-      .pipe(
-        debounceTime(300),
-        take(1), // Fix: Avoid double emission (cache + server) and prevent memory leaks if subscription is not cleared
-      )
-      .subscribe(async (events) => {
-        this.logger.log(`[TracksComponent] eventService.getEventsBy emitted ${events?.length || 0} events for promiseTime: ${promiseTime}`);
-        try {
-          events = (events || []).filter((event) => !event.isMerge).filter((event) => event.getStat(DataStartPosition.type));
-          if (!events || !events.length) {
-            if (this.promiseTime !== promiseTime) {
-              return;
-            }
-            this.tracksMapManager.clearAllTracks();
-            this.hasDetectedJumps.set(false);
-            this.hasEvaluatedTripDetection.set(true);
-            this.clearProgressAndCloseBottomSheet();
-            return;
-          }
+    try {
+      let events = await this.getEventsForTracksLoad(user, where, promiseTime);
 
-          const chunkedEvents: any[][] = events.reduce((all: any[][], one: any, i: number) => {
-            const ch = Math.floor(i / 15);
-            all[ch] = ([] as any[]).concat((all[ch] || []), one);
-            return all
-          }, [])
+      if (!this.isCurrentLoad(promiseTime)) {
+        return;
+      }
 
-          this.updateBufferProgress(100);
-
-          if (this.promiseTime !== promiseTime) {
-            return;
-          }
-          let count = 0;
-          let addedTrackCount = 0;
-          const allCoordinates: number[][] = [];
-          const jumpHeatPoints: JumpHeatPoint[] = [];
-          const trackStartPoints: TrackStartPoint[] = [];
-          let jumpsWithCoordinates = 0;
-          let jumpsWithWeightMetrics = 0;
-          const detectionCandidatesByEvent = new Map<string, TripDetectionInput>();
-
-          for (const eventsChunk of chunkedEvents) {
-            if (this.promiseTime !== promiseTime) {
-              return;
-            }
-
-            await Promise.all(eventsChunk.map(async (event: any) => {
-              this.logger.log(`[TracksComponent] Fetching activities for event: ${event.getID()}, promiseTime: ${promiseTime}`);
-              event.addActivities(await this.eventService.getActivities(user, event.getID()).pipe(take(1)).toPromise());
-              let fullEvent = event;
-              try {
-                // Hydrate lat/long streams from original files without replacing activity objects.
-                const hydratedEvent = await this.eventService.attachStreamsToEventWithActivities(
-                  user,
-                  event,
-                  [
-                    DataLatitudeDegrees.type,
-                    DataLongitudeDegrees.type,
-                  ],
-                  true,
-                  false,
-                  'attach_streams_only',
-                  { metadataCacheTtlMs: TracksComponent.MY_TRACKS_METADATA_CACHE_TTL_MS },
-                ).pipe(take(1)).toPromise();
-                fullEvent = hydratedEvent || event;
-              } catch (error) {
-                this.logger.warn('[TracksComponent] Failed to hydrate activity streams from original files. Falling back to existing activities.', {
-                  eventId: event.getID?.(),
-                  error
-                });
-              }
-              this.logger.log(`[TracksComponent] Activities and streams ready for event: ${event.getID()}, promiseTime: ${promiseTime}`);
-              if (this.promiseTime !== promiseTime) {
-                return;
-              }
-
-              const eventId = fullEvent?.getID?.() || event.getID();
-              if (eventId) {
-                this.eventsById.set(eventId, fullEvent || event);
-              }
-              let hasVisibleTrackForEvent = false;
-              const eventCoordinates: number[][] = [];
-              fullEvent.getActivities()
-                .filter((activity: any) => activity.hasPositionData())
-                .filter((activity: any) => !activityTypes || activityTypes.length === 0 || activityTypes.includes(activity.type))
-                .forEach((activity: any) => {
-                  const jumpStats = this.collectJumpHeatPointsFromActivity(activity, jumpHeatPoints);
-                  jumpsWithCoordinates += jumpStats.jumpsWithCoordinates;
-                  jumpsWithWeightMetrics += jumpStats.jumpsWithWeightMetrics;
-
-                  const coordinates = activity.getPositionData()
-                    .filter((position: any) => position)
-                    .map((position: any) => {
-                      // Mapbox uses [lng, lat]
-                      const lng = Math.round(position.longitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
-                      const lat = Math.round(position.latitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
-                      return [lng, lat];
-                    })
-                    .filter((coordinate: number[]) =>
-                      Number.isFinite(coordinate[0])
-                      && Number.isFinite(coordinate[1])
-                      && Math.abs(coordinate[0]) <= 180
-                      && Math.abs(coordinate[1]) <= 90
-                    );
-
-                  if (coordinates.length > 1) {
-                    const startPoint = this.buildTrackStartPoint(
-                      activity,
-                      eventId,
-                      coordinates[0],
-                      fullEvent?.startDate ?? event?.startDate
-                    );
-                    if (startPoint) {
-                      trackStartPoints.push(startPoint);
-                    }
-                    this.tracksMapManager.addTrackFromActivity(activity, coordinates);
-                    addedTrackCount++;
-                    hasVisibleTrackForEvent = true;
-                    coordinates.forEach((coordinate: number[]) => {
-                      allCoordinates.push(coordinate);
-                      eventCoordinates.push(coordinate);
-                    });
-                  }
-                });
-
-              if (hasVisibleTrackForEvent) {
-                this.trackCoordinatesByEventId.set(eventId, eventCoordinates);
-                const detectionInput = this.getTripDetectionInputFromEvent(fullEvent || event);
-                if (detectionInput) {
-                  detectionCandidatesByEvent.set(detectionInput.eventId, detectionInput);
-                }
-              }
-
-              count++;
-              this.updateTotalProgress(Math.ceil((count / events.length) * 100));
-            }));
-          }
-
-          // Ensure canceled/stale loads never commit map/UI state after a newer request started.
-          if (this.promiseTime !== promiseTime) {
-            this.logger.log('[TracksComponent] Skipping stale tracks load commit.', {
-              promiseTime,
-              currentPromiseTime: this.promiseTime,
-            });
-            return;
-          }
-
-          if (addedTrackCount === 0) {
-            this.tracksMapManager.clearAllTracks();
-          } else if (trackStartPoints.length > 0) {
-            this.tracksMapManager.setActivityStartPoints(trackStartPoints);
-            await this.waitForStartPointLayerReady();
-          } else {
-            this.tracksMapManager.clearActivityStartPoints();
-          }
-
-          if (allCoordinates.length > 0) {
-            await this.waitForMapRenderTick();
-            this.fitBoundsToTracks(allCoordinates);
-          }
-          if (jumpHeatPoints.length > 0) {
-            this.hasDetectedJumps.set(true);
-            this.tracksMapManager.setJumpHeatPoints(jumpHeatPoints);
-          } else {
-            this.hasDetectedJumps.set(false);
-            this.tracksMapManager.clearJumpHeatmap();
-          }
-          this.logger.log('[TracksComponent] Jump heatmap collection summary.', {
-            jumpsWithCoordinates,
-            jumpsWithWeightMetrics,
-            renderableHeatPoints: jumpHeatPoints.length,
-            promiseTime
-          });
-          this.logger.log('[TracksComponent] Prepared trip detection candidates.', {
-            candidateCount: detectionCandidatesByEvent.size,
-            promiseTime
-          });
-          await this.updateDetectedTripsForCurrentLoad(Array.from(detectionCandidatesByEvent.values()), promiseTime);
-        } catch (e) {
-          this.logger.error('Error loading tracks', e);
-        } finally {
-          if (this.promiseTime === promiseTime) {
-            this.clearProgressAndCloseBottomSheet();
-          }
+      events = (events || []).filter((event) => !event.isMerge).filter((event) => event.getStat(DataStartPosition.type));
+      if (!events || !events.length) {
+        if (!this.isCurrentLoad(promiseTime)) {
+          return;
         }
+        this.tracksMapManager.clearAllTracks();
+        this.hasDetectedJumps.set(false);
+        this.hasEvaluatedTripDetection.set(true);
+        return;
+      }
+
+      const chunkedEvents: any[][] = events.reduce((all: any[][], one: any, i: number) => {
+        const ch = Math.floor(i / 15);
+        all[ch] = ([] as any[]).concat((all[ch] || []), one);
+        return all
+      }, [])
+
+      this.updateBufferProgress(100);
+
+      if (!this.isCurrentLoad(promiseTime)) {
+        return;
+      }
+      let count = 0;
+      let addedTrackCount = 0;
+      const allCoordinates: number[][] = [];
+      const jumpHeatPoints: JumpHeatPoint[] = [];
+      const trackStartPoints: TrackStartPoint[] = [];
+      const preparedTracks: PreparedTrackPolyline[] = [];
+      const stagedTrackCoordinatesByEventId = new Map<string, number[][]>();
+      const stagedEventsById = new Map<string, any>();
+      let jumpsWithCoordinates = 0;
+      let jumpsWithWeightMetrics = 0;
+      const detectionCandidatesByEvent = new Map<string, TripDetectionInput>();
+
+      for (const eventsChunk of chunkedEvents) {
+        if (!this.isCurrentLoad(promiseTime)) {
+          return;
+        }
+
+        await Promise.all(eventsChunk.map(async (event: any) => {
+          if (!this.isCurrentLoad(promiseTime)) {
+            return;
+          }
+
+          this.logger.log(`[TracksComponent] Fetching activities for event: ${event.getID()}, promiseTime: ${promiseTime}`);
+          event.addActivities(await firstValueFrom(this.eventService.getActivities(user, event.getID()).pipe(take(1))));
+          let fullEvent = event;
+          try {
+            // Hydrate lat/long streams from original files without replacing activity objects.
+            const hydratedEvent = await firstValueFrom(this.eventService.attachStreamsToEventWithActivities(
+              user,
+              event,
+              [
+                DataLatitudeDegrees.type,
+                DataLongitudeDegrees.type,
+              ],
+              true,
+              false,
+              'attach_streams_only',
+              { metadataCacheTtlMs: TracksComponent.MY_TRACKS_METADATA_CACHE_TTL_MS },
+            ).pipe(take(1)));
+            fullEvent = hydratedEvent || event;
+          } catch (error) {
+            this.logger.warn('[TracksComponent] Failed to hydrate activity streams from original files. Falling back to existing activities.', {
+              eventId: event.getID?.(),
+              error
+            });
+          }
+          this.logger.log(`[TracksComponent] Activities and streams ready for event: ${event.getID()}, promiseTime: ${promiseTime}`);
+          if (!this.isCurrentLoad(promiseTime)) {
+            return;
+          }
+
+          const eventId = fullEvent?.getID?.() || event.getID();
+          if (eventId) {
+            stagedEventsById.set(eventId, fullEvent || event);
+          }
+          let hasVisibleTrackForEvent = false;
+          const eventCoordinates: number[][] = [];
+          const activities = typeof fullEvent?.getActivities === 'function' ? fullEvent.getActivities() : [];
+          activities
+            .filter((activity: any) => activity.hasPositionData())
+            .filter((activity: any) => !activityTypes || activityTypes.length === 0 || activityTypes.includes(activity.type))
+            .forEach((activity: any) => {
+              const jumpStats = this.collectJumpHeatPointsFromActivity(activity, jumpHeatPoints);
+              jumpsWithCoordinates += jumpStats.jumpsWithCoordinates;
+              jumpsWithWeightMetrics += jumpStats.jumpsWithWeightMetrics;
+
+              const coordinates = activity.getPositionData()
+                .filter((position: any) => position)
+                .map((position: any) => {
+                  // Mapbox uses [lng, lat]
+                  const lng = Math.round(position.longitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
+                  const lat = Math.round(position.latitudeDegrees * Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES)) / Math.pow(10, GNSS_DEGREES_PRECISION_NUMBER_OF_DECIMAL_PLACES);
+                  return [lng, lat];
+                })
+                .filter((coordinate: number[]) =>
+                  Number.isFinite(coordinate[0])
+                  && Number.isFinite(coordinate[1])
+                  && Math.abs(coordinate[0]) <= 180
+                  && Math.abs(coordinate[1]) <= 90
+                );
+
+              if (coordinates.length > 1) {
+                const startPoint = this.buildTrackStartPoint(
+                  activity,
+                  eventId,
+                  coordinates[0],
+                  fullEvent?.startDate ?? event?.startDate
+                );
+                if (startPoint) {
+                  trackStartPoints.push(startPoint);
+                }
+                preparedTracks.push({ activity, coordinates });
+                addedTrackCount++;
+                hasVisibleTrackForEvent = true;
+                coordinates.forEach((coordinate: number[]) => {
+                  allCoordinates.push(coordinate);
+                  eventCoordinates.push(coordinate);
+                });
+              }
+            });
+
+          if (hasVisibleTrackForEvent && eventId) {
+            stagedTrackCoordinatesByEventId.set(eventId, eventCoordinates);
+            const detectionInput = this.getTripDetectionInputFromEvent(fullEvent || event);
+            if (detectionInput) {
+              detectionCandidatesByEvent.set(detectionInput.eventId, detectionInput);
+            }
+          }
+
+          count++;
+          this.updateTotalProgress(Math.ceil((count / events.length) * 100));
+        }));
+      }
+
+      // Ensure canceled/stale loads never commit map/UI state after a newer request started.
+      if (!this.isCurrentLoad(promiseTime)) {
+        this.logger.log('[TracksComponent] Skipping stale tracks load commit.', {
+          promiseTime,
+          currentPromiseTime: this.promiseTime,
+        });
+        return;
+      }
+
+      this.trackCoordinatesByEventId = stagedTrackCoordinatesByEventId;
+      this.eventsById = stagedEventsById;
+
+      this.tracksMapManager.clearAllTracks();
+      if (addedTrackCount > 0) {
+        preparedTracks.forEach((track) => this.tracksMapManager.addTrackFromActivity(track.activity, track.coordinates));
+        if (trackStartPoints.length > 0) {
+          this.tracksMapManager.setActivityStartPoints(trackStartPoints);
+          await this.waitForStartPointLayerReady();
+        } else {
+          this.tracksMapManager.clearActivityStartPoints();
+        }
+      }
+
+      if (allCoordinates.length > 0) {
+        await this.waitForMapRenderTick();
+        this.fitBoundsToTracks(allCoordinates);
+      }
+      if (jumpHeatPoints.length > 0) {
+        this.hasDetectedJumps.set(true);
+        this.tracksMapManager.setJumpHeatPoints(jumpHeatPoints);
+      } else {
+        this.hasDetectedJumps.set(false);
+        this.tracksMapManager.clearJumpHeatmap();
+      }
+      this.logger.log('[TracksComponent] Jump heatmap collection summary.', {
+        jumpsWithCoordinates,
+        jumpsWithWeightMetrics,
+        renderableHeatPoints: jumpHeatPoints.length,
+        promiseTime
       });
+      this.logger.log('[TracksComponent] Prepared trip detection candidates.', {
+        candidateCount: detectionCandidatesByEvent.size,
+        promiseTime
+      });
+      await this.updateDetectedTripsForCurrentLoad(Array.from(detectionCandidatesByEvent.values()), promiseTime);
+    } catch (e) {
+      this.logger.error('Error loading tracks', e);
+    } finally {
+      if (this.isCurrentLoad(promiseTime)) {
+        this.clearProgressAndCloseBottomSheet();
+      }
+    }
   }
 
   private clearAllPolylines() {

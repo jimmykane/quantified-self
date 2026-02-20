@@ -166,6 +166,7 @@ describe('TracksComponent', () => {
 
     mockEventService = {
       getEventsBy: vi.fn().mockReturnValue(of([])),
+      getEventsOnceBy: vi.fn().mockImplementation((...args: any[]) => mockEventService.getEventsBy(...args)),
       getActivities: vi.fn().mockReturnValue(of([])),
       attachStreamsToEventWithActivities: vi.fn().mockImplementation((_user: unknown, event: any) => of(event))
     };
