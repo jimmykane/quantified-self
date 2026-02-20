@@ -333,6 +333,18 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
     });
 
+    it('should mark job as failed when task enqueue fails', async () => {
+        hoisted.globalEventsDocs.push(createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
+        hoisted.enqueueSportsLibReparseTask.mockRejectedValueOnce(new Error('enqueue-failed'));
+
+        await expect((scheduleSportsLibReparseScan as any)({})).rejects.toThrow('enqueue-failed');
+
+        expect(hoisted.jobSet).toHaveBeenLastCalledWith(expect.objectContaining({
+            status: 'failed',
+            lastError: 'enqueue-failed',
+        }), { merge: true });
+    });
+
     it('should skip events already marked NO_ORIGINAL_FILES for the same target', async () => {
         hoisted.globalEventsDocs.push(createEventDoc(
             'u1',

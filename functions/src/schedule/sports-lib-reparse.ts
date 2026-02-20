@@ -48,6 +48,13 @@ function toSafeString(value: unknown): string {
     return `${value}`;
 }
 
+function toErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
+    return `${error}`;
+}
+
 function shouldSkipBecauseNoOriginalFilesForTarget(
     statusDocData: Record<string, unknown> | undefined,
     targetSportsLibVersion: string,
@@ -159,8 +166,19 @@ export const scheduleSportsLibReparseScan = onSchedule({
             processedAt: admin.firestore.FieldValue.delete(),
         }, { merge: true });
 
-        await enqueueSportsLibReparseTask(jobId);
-        enqueuedCount++;
+        try {
+            await enqueueSportsLibReparseTask(jobId);
+            enqueuedCount++;
+        } catch (error) {
+            const errorMessage = toErrorMessage(error);
+            await jobRef.set({
+                status: 'failed',
+                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                lastError: errorMessage,
+                enqueuedAt: admin.firestore.FieldValue.delete(),
+            }, { merge: true });
+            throw error;
+        }
     };
 
     if (settings.uidAllowlist && settings.uidAllowlist.size > 0) {
