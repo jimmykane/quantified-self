@@ -438,6 +438,8 @@ export async function getEventAndActivitiesForReparse(uid: string, eventId: stri
         throw new Error(`Event ${eventId} was not found for user ${uid}`);
     }
 
+    // Firestore needs a composite index for `where(eventID == ...) + orderBy(startDate)`.
+    // Alternative: query only by eventID and sort in memory to avoid that index.
     const activitiesSnapshot = await admin.firestore()
         .collection(`users/${uid}/activities`)
         .where('eventID', '==', eventId)
