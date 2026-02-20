@@ -92,6 +92,9 @@ const hoisted = vi.hoisted(() => {
 
     const firestoreDoc = vi.fn((path: string) => ({ path }));
     const initializeApp = vi.fn();
+    const loggerInfo = vi.fn();
+    const loggerWarn = vi.fn();
+    const loggerError = vi.fn();
 
     const serverTimestamp = vi.fn(() => 'SERVER_TIMESTAMP');
 
@@ -113,6 +116,9 @@ const hoisted = vi.hoisted(() => {
         resetGlobalCollectionState,
         firestoreDoc,
         initializeApp,
+        loggerInfo,
+        loggerWarn,
+        loggerError,
         serverTimestamp,
     };
 });
@@ -151,6 +157,12 @@ vi.mock('firebase-admin', () => {
         firestore: firestoreFn,
     };
 });
+
+vi.mock('firebase-functions/logger', () => ({
+    info: hoisted.loggerInfo,
+    warn: hoisted.loggerWarn,
+    error: hoisted.loggerError,
+}));
 
 import { parseScriptOptions, runSportsLibReparseScript } from './reparse-sports-lib-events';
 
@@ -383,6 +395,24 @@ describe('reparse-sports-lib-events script', () => {
             reason: 'REPARSE_FAILED',
             lastError: 'boom',
         }));
+    });
+
+    it('should log firestore index url when present in reparse error', async () => {
+        hoisted.globalDocs.push(makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }));
+        hoisted.reparseEventFromOriginalFiles.mockRejectedValue(new Error(
+            'FAILED_PRECONDITION: index missing https://console.firebase.google.com/v1/r/project/quantified-self-io/firestore/indexes?create_composite=abc',
+        ));
+
+        await runSportsLibReparseScript(['--execute']);
+
+        expect(hoisted.loggerError).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Reparse failed',
+            expect.objectContaining({
+                uid: 'u1',
+                eventId: 'e1',
+                firestoreIndexUrl: 'https://console.firebase.google.com/v1/r/project/quantified-self-io/firestore/indexes?create_composite=abc',
+            }),
+        );
     });
 
     it('should skip allowlisted users without paid access', async () => {

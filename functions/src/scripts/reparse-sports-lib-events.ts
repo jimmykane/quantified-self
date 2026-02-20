@@ -33,6 +33,11 @@ export interface ScriptSummary {
     failed: number;
 }
 
+function extractFirestoreIndexUrl(errorMessage: string): string | undefined {
+    const match = errorMessage.match(/https:\/\/console\.firebase\.google\.com\/\S+/);
+    return match?.[0];
+}
+
 function parseIntArg(value: string | undefined, fallback: number): number {
     if (!value) {
         return fallback;
@@ -217,12 +222,20 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
             }
         } catch (error) {
             summary.failed++;
+            const errorMessage = (error as Error)?.message || `${error}`;
+            const firestoreIndexUrl = extractFirestoreIndexUrl(errorMessage);
+            logger.error('[sports-lib-reparse-script] Reparse failed', {
+                uid,
+                eventId,
+                errorMessage,
+                ...(firestoreIndexUrl ? { firestoreIndexUrl } : {}),
+            });
             await writeReparseStatus(uid, eventId, {
                 status: 'failed',
                 reason: 'REPARSE_FAILED',
                 targetSportsLibVersion,
                 checkedAt: admin.firestore.FieldValue.serverTimestamp(),
-                lastError: (error as Error)?.message || `${error}`,
+                lastError: errorMessage,
             });
         }
     }
