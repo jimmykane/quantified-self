@@ -420,7 +420,7 @@ export async function writeReparseStatus(
 }
 
 export function buildSportsLibReparseJobId(uid: string, eventId: string, targetSportsLibVersion: string): string {
-    return createHash('sha1').update(`${uid}:${eventId}:${targetSportsLibVersion}`).digest('hex');
+    return createHash('sha256').update(`${uid}:${eventId}:${targetSportsLibVersion}`).digest('hex');
 }
 
 export async function getEventAndActivitiesForReparse(uid: string, eventId: string): Promise<{
