@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => {
         getBytes: vi.fn(),
         batchSet: vi.fn(),
         batchCommit: vi.fn(),
+        eventWriterInstances: [] as Array<{ storageAdapter: unknown, bucketName: unknown }>,
     };
 });
 
@@ -66,7 +67,7 @@ vi.mock('@angular/fire/storage', async (importOriginal) => {
     const actual = await importOriginal<typeof import('@angular/fire/storage')>();
     return {
         ...actual,
-        ref: vi.fn(),
+        ref: vi.fn((_storage: unknown, path: string) => ({ bucket: 'quantified-self-io', fullPath: path })),
         getBytes: mocks.getBytes,
         uploadBytes: vi.fn(),
         getMetadata: vi.fn(),
@@ -97,6 +98,9 @@ vi.mock('../utils/event-json-sanitizer', () => ({
 vi.mock('../../../functions/src/shared/event-writer', () => {
     return {
         EventWriter: class {
+            constructor(_adapter: unknown, storageAdapter?: unknown, bucketName?: unknown) {
+                mocks.eventWriterInstances.push({ storageAdapter, bucketName });
+            }
             writeAllEventData = mocks.writeAllEventData;
         },
         FirestoreAdapter: {},
@@ -129,6 +133,7 @@ describe('AppEventService', () => {
     };
 
     beforeEach(() => {
+        mocks.eventWriterInstances.length = 0;
         TestBed.configureTestingModule({
             providers: [
                 AppEventService,
@@ -661,6 +666,22 @@ describe('AppEventService', () => {
             sportsLibVersion: expect.any(String),
             processedAt: expect.anything(),
         }));
+    });
+
+    it('should resolve bucket metadata from active Storage instance', async () => {
+        const mockEvent = {
+            getID: () => '1',
+            startDate: new Date(),
+            getActivities: () => [],
+            setID: vi.fn()
+        } as any;
+        const user = { uid: 'user1' } as any;
+
+        await service.writeAllEventData(user, mockEvent);
+
+        const writerInstance = mocks.eventWriterInstances.at(-1);
+        expect(writerInstance).toBeTruthy();
+        expect((writerInstance!.storageAdapter as { getBucketName: () => string }).getBucketName()).toBe('quantified-self-io');
     });
 
     describe('ID generation with zero bucketing', () => {

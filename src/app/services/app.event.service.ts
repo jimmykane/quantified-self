@@ -690,6 +690,8 @@ export class AppEventService implements OnDestroy {
       }
     };
 
+    const storageBucketName = this.resolveStorageBucketName();
+
     const storageAdapter: StorageAdapter = {
       uploadFile: async (path: string, data: any) => {
         const fileRef = runInInjectionContext(this.injector, () => ref(this.storage, path));
@@ -701,8 +703,7 @@ export class AppEventService implements OnDestroy {
         await runInInjectionContext(this.injector, () => uploadBytes(fileRef, payload));
       },
       getBucketName: () => {
-        // Return the Firebase Storage bucket name from config
-        return 'quantified-self-io.appspot.com';
+        return storageBucketName;
       }
     }
 
@@ -715,6 +716,27 @@ export class AppEventService implements OnDestroy {
       processedAt: serverTimestamp(),
     };
     await runInInjectionContext(this.injector, () => setDoc(processingDoc, processingPayload));
+  }
+
+  private resolveStorageBucketName(): string {
+    const bucketFromStorageRef = runInInjectionContext(this.injector, () => {
+      const probeRef = ref(this.storage, '__bucket_probe__');
+      return (probeRef as { bucket?: unknown }).bucket;
+    });
+
+    const normalizedProbeBucket = typeof bucketFromStorageRef === 'string' ? bucketFromStorageRef.trim() : '';
+    if (normalizedProbeBucket) {
+      return normalizedProbeBucket;
+    }
+
+    const configuredBucket = (this.storage as { app?: { options?: { storageBucket?: string } } })
+      ?.app?.options?.storageBucket?.trim();
+    if (configuredBucket) {
+      return configuredBucket;
+    }
+
+    this.logger.warn('[AppEventService] Could not resolve Firebase Storage bucket from runtime; omitting bucket metadata.');
+    return '';
   }
 
   public async setEvent(user: User, event: EventInterface) {
