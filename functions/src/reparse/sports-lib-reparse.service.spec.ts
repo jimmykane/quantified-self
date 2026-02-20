@@ -540,10 +540,17 @@ describe('sports-lib-reparse.service', () => {
         }));
         hoisted.mockCollection.mockImplementation((path: string) => {
             if (path === 'users/u1/activities') {
+                const where = vi.fn().mockReturnValue({
+                    get: vi.fn().mockResolvedValue({
+                        docs: [
+                            { id: 'a-no-date', data: () => ({}) },
+                            { id: 'a-late', data: () => ({ startDate: new Date('2020-01-02T00:00:00Z') }) },
+                            { id: 'a-early', data: () => ({ startDate: new Date('2020-01-01T00:00:00Z') }) },
+                        ],
+                    }),
+                });
                 return {
-                    where: vi.fn().mockReturnThis(),
-                    orderBy: vi.fn().mockReturnThis(),
-                    get: vi.fn().mockResolvedValue({ docs: [{ id: 'a1' }] }),
+                    where,
                 };
             }
             return makeCollectionQuery([]);
@@ -551,7 +558,7 @@ describe('sports-lib-reparse.service', () => {
 
         const result = await getEventAndActivitiesForReparse('u1', 'e1');
         expect(result.eventRef.path).toBe('users/u1/events/e1');
-        expect(result.activityDocs).toHaveLength(1);
+        expect(result.activityDocs.map(doc => doc.id)).toEqual(['a-early', 'a-late', 'a-no-date']);
     });
 
     it('reparseEventFromOriginalFiles should skip when event has no source files', async () => {
@@ -609,13 +616,13 @@ describe('sports-lib-reparse.service', () => {
         hoisted.mockCollection.mockImplementation((path: string) => {
             if (path === 'users/u1/activities') {
                 return {
-                    where: vi.fn().mockReturnThis(),
-                    orderBy: vi.fn().mockReturnThis(),
-                    get: vi.fn().mockResolvedValue({
-                        docs: [
-                            { id: 'a-old-1', data: () => ({ creator: { name: 'creator-1' } }) },
-                            { id: 'a-old-2', data: () => ({ creator: { name: 'creator-2' } }) },
-                        ],
+                    where: vi.fn().mockReturnValue({
+                        get: vi.fn().mockResolvedValue({
+                            docs: [
+                                { id: 'a-old-2', data: () => ({ creator: { name: 'creator-2' }, startDate: new Date('2020-01-02T00:00:00Z') }) },
+                                { id: 'a-old-1', data: () => ({ creator: { name: 'creator-1' }, startDate: new Date('2020-01-01T00:00:00Z') }) },
+                            ],
+                        }),
                     }),
                 };
             }

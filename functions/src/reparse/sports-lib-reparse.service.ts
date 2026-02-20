@@ -457,18 +457,37 @@ export async function getEventAndActivitiesForReparse(uid: string, eventId: stri
         throw new Error(`Event ${eventId} was not found for user ${uid}`);
     }
 
-    // Firestore needs a composite index for `where(eventID == ...) + orderBy(startDate)`.
-    // Alternative: query only by eventID and sort in memory to avoid that index.
     const activitiesSnapshot = await admin.firestore()
         .collection(`users/${uid}/activities`)
         .where('eventID', '==', eventId)
-        .orderBy('startDate', 'asc')
         .get();
+    // Keep deterministic identity mapping without relying on a composite index.
+    // We intentionally include docs missing startDate (legacy/malformed records),
+    // then place them after dated docs for stable index-based ID preservation.
+    const sortedActivityDocs = [...activitiesSnapshot.docs].sort((a, b) => {
+        const aStart = toDateOrUndefined(a.data()?.startDate)?.getTime();
+        const bStart = toDateOrUndefined(b.data()?.startDate)?.getTime();
+        const aHasStart = typeof aStart === 'number';
+        const bHasStart = typeof bStart === 'number';
+        if (aHasStart && bHasStart) {
+            if (aStart !== bStart) {
+                return (aStart as number) - (bStart as number);
+            }
+            return a.id.localeCompare(b.id);
+        }
+        if (aHasStart) {
+            return -1;
+        }
+        if (bHasStart) {
+            return 1;
+        }
+        return a.id.localeCompare(b.id);
+    });
 
     return {
         eventRef,
         eventData: eventDoc.data() as FirestoreEventJSON,
-        activityDocs: activitiesSnapshot.docs,
+        activityDocs: sortedActivityDocs,
     };
 }
 
