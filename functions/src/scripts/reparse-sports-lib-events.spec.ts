@@ -324,6 +324,13 @@ describe('reparse-sports-lib-events script', () => {
         expect(options.startAfter).toBe('users/u1/events/e1');
     });
 
+    it('parseScriptOptions should fallback to default limit when limit is invalid', () => {
+        const withZero = parseScriptOptions(['--limit', '0']);
+        const withText = parseScriptOptions(['--limit', 'abc']);
+        expect(withZero.limit).toBe(200);
+        expect(withText.limit).toBe(200);
+    });
+
     it('parseScriptOptions should apply precedence --uid > --uids > constant allowlist', () => {
         hoisted.runtimeDefaults.uidAllowlist = ['constant1', 'constant2'];
 
@@ -346,6 +353,77 @@ describe('reparse-sports-lib-events script', () => {
         expect(summary.completed).toBe(1);
         expect(hoisted.collectionGroup).not.toHaveBeenCalled();
         expect(hoisted.shouldEventBeReparsed).toHaveBeenCalledTimes(1);
+    });
+
+    it('single UID mode should respect --start-after', async () => {
+        hoisted.userEventsByUID.set('u1', [
+            makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }),
+            makeEventDoc('u1', 'e2', { originalFile: { path: 'x.fit' } }),
+        ]);
+
+        const summary = await runSportsLibReparseScript(['--uid', 'u1', '--start-after', 'e1']);
+        expect(summary.scanned).toBe(1);
+        expect(summary.candidates).toBe(1);
+    });
+
+    it('multi-UID mode should ignore --start-after and respect global limit', async () => {
+        hoisted.userEventsByUID.set('u1', [
+            makeEventDoc('u1', 'a1', { originalFile: { path: 'x.fit' } }),
+            makeEventDoc('u1', 'a2', { originalFile: { path: 'x.fit' } }),
+        ]);
+        hoisted.userEventsByUID.set('u2', [
+            makeEventDoc('u2', 'b1', { originalFile: { path: 'x.fit' } }),
+            makeEventDoc('u2', 'b2', { originalFile: { path: 'x.fit' } }),
+        ]);
+
+        const summary = await runSportsLibReparseScript([
+            '--uids',
+            'u1,u2',
+            '--limit',
+            '3',
+            '--start-after',
+            'ignored',
+        ]);
+        expect(summary.scanned).toBe(3);
+        expect(summary.candidates).toBe(3);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith('[sports-lib-reparse-script] Ignoring --start-after in multi-UID mode.');
+    });
+
+    it('scoped mode should skip docs whose path is not parseable as users/{uid}/events/{eventId}', async () => {
+        hoisted.userEventsByUID.set('u1', [{
+            id: 'bad',
+            ref: { path: 'bad/path' },
+            data: () => ({ originalFile: { path: 'x.fit' } }),
+        }]);
+
+        const summary = await runSportsLibReparseScript(['--uid', 'u1']);
+        expect(summary.scanned).toBe(1);
+        expect(summary.candidates).toBe(0);
+        expect(hoisted.shouldEventBeReparsed).not.toHaveBeenCalled();
+    });
+
+    it('scoped mode should skip event when shouldEventBeReparsed throws', async () => {
+        hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+        hoisted.shouldEventBeReparsed.mockRejectedValueOnce(new Error('bad processing metadata'));
+
+        const summary = await runSportsLibReparseScript(['--uid', 'u1']);
+        expect(summary.scanned).toBe(1);
+        expect(summary.candidates).toBe(0);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Invalid processing metadata; skipping event.',
+            expect.objectContaining({
+                eventPath: 'users/u1/events/e1',
+            }),
+        );
+    });
+
+    it('scoped mode should skip event when shouldEventBeReparsed returns false', async () => {
+        hoisted.userEventsByUID.set('u1', [makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+        hoisted.shouldEventBeReparsed.mockResolvedValueOnce(false);
+
+        const summary = await runSportsLibReparseScript(['--uid', 'u1']);
+        expect(summary.scanned).toBe(1);
+        expect(summary.candidates).toBe(0);
     });
 
     it('global mode should discover candidates from processing metadata query', async () => {
@@ -375,6 +453,51 @@ describe('reparse-sports-lib-events script', () => {
         expect(summary.completed).toBe(1);
     });
 
+    it('global mode should accept --start-after as processing path directly', async () => {
+        const eventRefOne = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        const eventRefTwo = createEventRef('u1', 'e2', { originalFile: { path: 'x.fit' } });
+        const processingOne = createProcessingDoc(eventRefOne, { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 });
+        const processingTwo = createProcessingDoc(eventRefTwo, { sportsLibVersion: '9.0.0', sportsLibVersionCode: 9_000_000 });
+        hoisted.processingDocs.push(processingOne, processingTwo);
+
+        const summary = await runSportsLibReparseScript([
+            '--execute',
+            '--start-after',
+            `${eventRefOne.path}/metaData/processing`,
+            '--limit',
+            '10',
+        ]);
+        expect(summary.scanned).toBe(1);
+        expect(summary.completed).toBe(1);
+    });
+
+    it('global mode should warn when --start-after is not event path or processing path', async () => {
+        await runSportsLibReparseScript(['--start-after', 'invalid-start-after']);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Ignoring --start-after. Expected event path or processing metadata path.',
+            expect.objectContaining({ startAfter: 'invalid-start-after' }),
+        );
+    });
+
+    it('global mode should warn when --start-after processing doc does not exist', async () => {
+        await runSportsLibReparseScript(['--start-after', 'users/u1/events/e1/metaData/processing']);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Ignoring --start-after because processing doc was not found.',
+            expect.objectContaining({ processingStartAfterPath: 'users/u1/events/e1/metaData/processing' }),
+        );
+    });
+
+    it('global mode should warn when --start-after processing doc has invalid version code', async () => {
+        hoisted.processingDocDataByPath.set('users/u1/events/e1/metaData/processing', {
+            sportsLibVersionCode: 'bad-code',
+        });
+        await runSportsLibReparseScript(['--start-after', 'users/u1/events/e1/metaData/processing']);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Ignoring --start-after because processing metadata has invalid sportsLibVersionCode.',
+            expect.objectContaining({ processingStartAfterPath: 'users/u1/events/e1/metaData/processing' }),
+        );
+    });
+
     it('should skip malformed processing metadata in global mode and continue', async () => {
         const invalidRef = createEventRef('u1', 'bad', { originalFile: { path: 'x.fit' } });
         const validRef = createEventRef('u1', 'good', { originalFile: { path: 'y.fit' } });
@@ -394,6 +517,113 @@ describe('reparse-sports-lib-events script', () => {
         );
     });
 
+    it('global mode should skip invalid processing doc shape and continue', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: 123,
+            sportsLibVersionCode: 1,
+        }));
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+        expect(summary.scanned).toBe(1);
+        expect(summary.completed).toBe(0);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Invalid processing metadata; skipping doc.',
+            expect.objectContaining({
+                processingDocPath: `${eventRef.path}/metaData/processing`,
+            }),
+        );
+    });
+
+    it('global mode should skip when semver conversion throws and continue', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: 'unknown',
+            sportsLibVersionCode: 1,
+        }));
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+        expect(summary.scanned).toBe(1);
+        expect(summary.completed).toBe(0);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Invalid processing metadata; skipping doc.',
+            expect.objectContaining({
+                processingDocPath: `${eventRef.path}/metaData/processing`,
+            }),
+        );
+    });
+
+    it('global mode should skip processing docs without parent event reference', async () => {
+        hoisted.processingDocs.push({
+            ref: {
+                path: 'users/u1/events/e1/metaData/processing',
+                parent: { parent: null },
+            },
+            data: () => ({
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+        });
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+        expect(summary.scanned).toBe(1);
+        expect(summary.completed).toBe(0);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Could not resolve parent event from processing metadata path.',
+            expect.objectContaining({ processingDocPath: 'users/u1/events/e1/metaData/processing' }),
+        );
+    });
+
+    it('global mode should skip processing docs whose parent path cannot be parsed', async () => {
+        const invalidEventRef = {
+            path: 'invalid/path',
+            get: vi.fn(async () => ({ exists: true, data: () => ({ originalFile: { path: 'x.fit' } }) })),
+        };
+        hoisted.processingDocs.push({
+            ref: {
+                path: 'invalid/path/metaData/processing',
+                parent: { parent: invalidEventRef },
+            },
+            data: () => ({
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+        });
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+        expect(summary.scanned).toBe(1);
+        expect(summary.completed).toBe(0);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Could not parse UID/eventID from processing metadata parent path.',
+            expect.objectContaining({ eventPath: 'invalid/path' }),
+        );
+    });
+
+    it('global mode should skip stale processing docs when parent event is missing', async () => {
+        const missingEventRef = {
+            path: 'users/u1/events/missing',
+            get: vi.fn(async () => ({ exists: false, data: () => ({}) })),
+        };
+        hoisted.processingDocs.push({
+            ref: {
+                path: 'users/u1/events/missing/metaData/processing',
+                parent: { parent: missingEventRef },
+            },
+            data: () => ({
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+        });
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+        expect(summary.scanned).toBe(1);
+        expect(summary.completed).toBe(0);
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Skipping stale processing metadata because parent event is missing.',
+            expect.objectContaining({ eventPath: 'users/u1/events/missing' }),
+        );
+    });
+
     it('should skip events with no source files and write skipped status in execute mode', async () => {
         const eventRef = createEventRef('u1', 'e1', {});
         hoisted.processingDocs.push(createProcessingDoc(eventRef, {
@@ -408,6 +638,68 @@ describe('reparse-sports-lib-events script', () => {
             status: 'skipped',
             reason: 'NO_ORIGINAL_FILES',
         }));
+    });
+
+    it('should count skippedNoAccess when include-free-users is disabled', async () => {
+        hoisted.hasPaidOrGraceAccess.mockResolvedValue(false);
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+        expect(summary.skippedNoAccess).toBe(1);
+        expect(summary.candidates).toBe(0);
+    });
+
+    it('should handle execute path when reparse returns skipped because no original files', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.reparseEventFromOriginalFiles.mockResolvedValueOnce({
+            status: 'skipped',
+            reason: 'NO_ORIGINAL_FILES',
+            sourceFilesCount: 0,
+            parsedActivitiesCount: 0,
+            staleActivitiesDeleted: 0,
+        });
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+        expect(summary.skippedNoSourceFiles).toBe(1);
+        expect(summary.completed).toBe(0);
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+            status: 'skipped',
+            reason: 'NO_ORIGINAL_FILES',
+        }));
+    });
+
+    it('should handle execute path when reparse throws and include firestore index URL in logs', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.reparseEventFromOriginalFiles.mockRejectedValueOnce(new Error(
+            'Missing index. Create: https://console.firebase.google.com/project/test/firestore/indexes?create_composite=abc',
+        ));
+
+        const summary = await runSportsLibReparseScript(['--execute']);
+        expect(summary.failed).toBe(1);
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+            status: 'failed',
+            reason: 'REPARSE_FAILED',
+        }));
+        expect(hoisted.loggerError).toHaveBeenCalledWith(
+            '[sports-lib-reparse-script] Reparse failed',
+            expect.objectContaining({
+                uid: 'u1',
+                eventId: 'e1',
+                firestoreIndexUrl: 'https://console.firebase.google.com/project/test/firestore/indexes?create_composite=abc',
+            }),
+        );
     });
 
     it('should include free users when include-free-users flag is enabled', async () => {
