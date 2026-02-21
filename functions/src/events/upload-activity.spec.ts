@@ -131,11 +131,11 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
 
 vi.mock('../../../src/shared/functions-manifest', () => ({
   FUNCTIONS_MANIFEST: {
-    uploadActivityFromFit: { name: 'uploadActivityFromFit', region: 'europe-west2' },
+    uploadActivity: { name: 'uploadActivity', region: 'europe-west2' },
   },
 }));
 
-import { uploadActivityFromFit } from './upload-activity-from-fit';
+import { uploadActivity } from './upload-activity';
 
 function makeRequest(overrides?: {
   method?: string;
@@ -174,7 +174,7 @@ function makeParsedEvent() {
   };
 }
 
-describe('uploadActivityFromFit', () => {
+describe('uploadActivity', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -199,14 +199,14 @@ describe('uploadActivityFromFit', () => {
 
   it('should reject non-POST methods', async () => {
     const response = makeResponse();
-    await uploadActivityFromFit(makeRequest({ method: 'GET' }) as any, response as any);
+    await uploadActivity(makeRequest({ method: 'GET' }) as any, response as any);
 
     expect(response.status).toHaveBeenCalledWith(405);
   });
 
   it('should reject missing auth header', async () => {
     const response = makeResponse();
-    await uploadActivityFromFit(makeRequest({
+    await uploadActivity(makeRequest({
       headers: { 'X-Firebase-AppCheck': 'app-check' },
     }) as any, response as any);
 
@@ -215,7 +215,7 @@ describe('uploadActivityFromFit', () => {
 
   it('should reject missing app check header', async () => {
     const response = makeResponse();
-    await uploadActivityFromFit(makeRequest({
+    await uploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token' },
     }) as any, response as any);
 
@@ -224,7 +224,7 @@ describe('uploadActivityFromFit', () => {
 
   it('should reject unsupported extension', async () => {
     const response = makeResponse();
-    await uploadActivityFromFit(makeRequest({
+    await uploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
@@ -237,7 +237,7 @@ describe('uploadActivityFromFit', () => {
 
   it('should infer extension from filename when extension header is missing', async () => {
     const response = makeResponse();
-    await uploadActivityFromFit(makeRequest({
+    await uploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
@@ -252,7 +252,7 @@ describe('uploadActivityFromFit', () => {
 
   it('should reject empty payload', async () => {
     const response = makeResponse();
-    await uploadActivityFromFit(makeRequest({
+    await uploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
       rawBody: Buffer.alloc(0),
     }) as any, response as any);
@@ -262,7 +262,7 @@ describe('uploadActivityFromFit', () => {
 
   it('should reject payloads larger than 10MB', async () => {
     const response = makeResponse();
-    await uploadActivityFromFit(makeRequest({
+    await uploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
       rawBody: Buffer.alloc((10 * 1024 * 1024) + 1),
     }) as any, response as any);
@@ -273,7 +273,7 @@ describe('uploadActivityFromFit', () => {
   it('should enforce free upload limits', async () => {
     hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: 10 }) });
     const response = makeResponse();
-    await uploadActivityFromFit(makeRequest({
+    await uploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
     }) as any, response as any);
 
@@ -286,7 +286,7 @@ describe('uploadActivityFromFit', () => {
     hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: 99 }) });
 
     const response = makeResponse();
-    await uploadActivityFromFit(makeRequest({
+    await uploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
     }) as any, response as any);
 
@@ -302,7 +302,7 @@ describe('uploadActivityFromFit', () => {
     hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: 250 }) });
 
     const response = makeResponse();
-    await uploadActivityFromFit(makeRequest({
+    await uploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
     }) as any, response as any);
 
@@ -316,7 +316,7 @@ describe('uploadActivityFromFit', () => {
   it('should map FIT parser failures to 400', async () => {
     hoisted.mockFITImporter.getFromArrayBuffer.mockRejectedValueOnce(new Error('bad fit'));
     const response = makeResponse();
-    await uploadActivityFromFit(makeRequest({
+    await uploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
     }) as any, response as any);
 
@@ -326,7 +326,7 @@ describe('uploadActivityFromFit', () => {
   it('should return 500 on persistence failures', async () => {
     hoisted.mockWriteAllEventData.mockRejectedValueOnce(new Error('write failed'));
     const response = makeResponse();
-    await uploadActivityFromFit(makeRequest({
+    await uploadActivity(makeRequest({
       headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
     }) as any, response as any);
 
@@ -335,7 +335,7 @@ describe('uploadActivityFromFit', () => {
 
   it('should persist parsed FIT and return response', async () => {
     const response = makeResponse();
-    await uploadActivityFromFit(makeRequest({
+    await uploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
@@ -372,7 +372,7 @@ describe('uploadActivityFromFit', () => {
     const response = makeResponse();
     const payload = gzipSync(Buffer.from('<gpx><trk/></gpx>'));
 
-    await uploadActivityFromFit(makeRequest({
+    await uploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',
@@ -398,7 +398,7 @@ describe('uploadActivityFromFit', () => {
     hoisted.mockSuuntoJSONImporter.getFromJSONString.mockRejectedValueOnce(new Error('bad json'));
 
     const response = makeResponse();
-    await uploadActivityFromFit(makeRequest({
+    await uploadActivity(makeRequest({
       headers: {
         Authorization: 'Bearer token',
         'X-Firebase-AppCheck': 'app-check',

@@ -124,7 +124,7 @@ function maybeDecompressPayloadForParsing(payload: Buffer, resolvedExtension: st
   try {
     return gunzipSync(payload);
   } catch (error) {
-    logger.warn('[uploadActivityFromFit] Gzip decompression failed', error);
+    logger.warn('[uploadActivity] Gzip decompression failed', error);
     throw new HttpStatusError(400, 'Could not decompress uploaded payload.');
   }
 }
@@ -159,7 +159,7 @@ async function verifyFirebaseUserIDFromAuthorizationHeader(
     const decodedToken = await admin.auth().verifyIdToken(token);
     return decodedToken.uid;
   } catch (error) {
-    logger.warn('[uploadActivityFromFit] Firebase ID token verification failed', error);
+    logger.warn('[uploadActivity] Firebase ID token verification failed', error);
     throw new HttpStatusError(401, 'Unauthenticated request.');
   }
 }
@@ -172,7 +172,7 @@ async function verifyAppCheckHeader(appCheckHeader?: string): Promise<void> {
   try {
     await admin.appCheck().verifyToken(appCheckHeader);
   } catch (error) {
-    logger.warn('[uploadActivityFromFit] App Check verification failed', error);
+    logger.warn('[uploadActivity] App Check verification failed', error);
     throw new HttpStatusError(401, 'Invalid App Check token.');
   }
 }
@@ -259,8 +259,8 @@ async function persistProcessingMetadata(userID: string, eventID: string): Promi
     .set(processingPayload, { merge: true });
 }
 
-export const uploadActivityFromFit = onRequest({
-  region: FUNCTIONS_MANIFEST.uploadActivityFromFit.region,
+export const uploadActivity = onRequest({
+  region: FUNCTIONS_MANIFEST.uploadActivity.region,
   timeoutSeconds: 300,
   maxInstances: 20,
   cors: ALLOWED_CORS_ORIGINS,
@@ -301,7 +301,7 @@ export const uploadActivityFromFit = onRequest({
       if (error instanceof HttpStatusError) {
         throw error;
       }
-      logger.warn('[uploadActivityFromFit] Activity parsing failed', error);
+      logger.warn('[uploadActivity] Activity parsing failed', error);
       throw new HttpStatusError(400, 'Could not parse uploaded payload.');
     }
 
@@ -343,7 +343,7 @@ export const uploadActivityFromFit = onRequest({
       return;
     }
 
-    logger.error('[uploadActivityFromFit] Upload failed', error);
+    logger.error('[uploadActivity] Upload failed', error);
     response.status(500).json({ error: 'Could not upload activity.' });
   }
 });

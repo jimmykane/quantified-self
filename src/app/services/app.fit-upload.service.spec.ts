@@ -73,7 +73,7 @@ describe('AppFitUploadService', () => {
     expect(authMock.currentUser.getIdToken).toHaveBeenCalledWith(true);
     expect(hoisted.mockGetAppCheckToken).toHaveBeenCalledWith(appCheckMock, false);
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://europe-west2-quantified-self-io.cloudfunctions.net/uploadActivityFromFit',
+      'https://europe-west2-quantified-self-io.cloudfunctions.net/uploadActivity',
       expect.objectContaining({
         method: 'POST',
         body: payload,

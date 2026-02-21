@@ -46,7 +46,7 @@ export const FUNCTIONS_MANIFEST = {
     processSportsLibReparseTask: { name: 'processSportsLibReparseTask', region: 'europe-west2' },
 
     // Upload/Reprocess Functions
-    uploadActivityFromFit: { name: 'uploadActivityFromFit', region: 'europe-west2' },
+    uploadActivity: { name: 'uploadActivity', region: 'europe-west2' },
     reprocessEvent: { name: 'reprocessEvent', region: 'europe-west2' },
     mergeEvents: { name: 'mergeEvents', region: 'europe-west2' },
 } as const;

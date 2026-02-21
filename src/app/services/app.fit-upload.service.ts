@@ -49,7 +49,7 @@ export class AppFitUploadService {
             throw new Error('File extension is required.');
         }
 
-        const config = FUNCTIONS_MANIFEST.uploadActivityFromFit;
+        const config = FUNCTIONS_MANIFEST.uploadActivity;
         const functionURL = `https://${config.region}-${projectID}.cloudfunctions.net/${config.name}`;
 
         const headers = new Headers({
