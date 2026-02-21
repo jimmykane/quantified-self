@@ -43,7 +43,7 @@
     "backfill-sports-lib-processing-code": "ts-node -r dotenv/config src/scripts/backfill-sports-lib-processing-code.ts"
   },
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "devDependencies": {
     "@types/bs58": "^4.0.1",
