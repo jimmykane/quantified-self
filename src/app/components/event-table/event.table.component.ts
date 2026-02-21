@@ -27,7 +27,7 @@ import { SelectionModel } from '@angular/cdk/collections';
 import { DatePipe } from '@angular/common';
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { User } from '@sports-alliance/sports-lib';
-import { debounceTime, take, map } from 'rxjs/operators';
+import { debounceTime, map } from 'rxjs/operators';
 import { firstValueFrom, race, Subject, Subscription } from 'rxjs';
 import { rowsAnimation, expandCollapse } from '../../animations/animations';
 import { DataActivityTypes } from '@sports-alliance/sports-lib';
@@ -45,9 +45,9 @@ import { AppFileService } from '../../services/app.file.service';
 import { LoggerService } from '../../services/logger.service';
 import { AppProcessingService } from '../../services/app.processing.service';
 import { AppEventUtilities } from '../../utils/app.event.utilities';
-import { Firestore, doc, collection } from '@angular/fire/firestore';
 import { AppBenchmarkFlowService } from '../../services/app.benchmark-flow.service';
 import { MergeOptionsDialogComponent } from './merge-options-dialog/merge-options-dialog.component';
+import { AppEventMergeService, MergeType } from '../../services/app.event-merge.service';
 
 @Component({
   selector: 'app-event-table',
@@ -88,10 +88,10 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
 
   private searchSubject: Subject<string> = new Subject();
   private analyticsService = inject(AppAnalyticsService);
-  private firestore = inject(Firestore);
 
   constructor(private snackBar: MatSnackBar,
     private eventService: AppEventService,
+    private eventMergeService: AppEventMergeService,
     private userService: AppUserService,
     changeDetector: ChangeDetectorRef,
     private eventColorService: AppEventColorService,
@@ -100,7 +100,6 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     private router: Router, private datePipe: DatePipe,
     private logger: LoggerService,
     private processingService: AppProcessingService,
-    private appEventUtilities: AppEventUtilities,
     private breakpointObserver: BreakpointObserver,
     private benchmarkFlow: AppBenchmarkFlowService) {
     super(changeDetector);
@@ -299,129 +298,46 @@ export class EventTableComponent extends DataTableAbstractDirective implements O
     }
     dialogRef.disableClose = true;
     dialogRef.componentInstance.isMerging = true;
-    const mergeAsBenchmark = mergeSelection === 'benchmark';
+    const mergeType = mergeSelection as MergeType;
 
     // Show loading
     this.loading();
     // Remove all subscriptions
     this.unsubscribeFromAll();
-    // First fetch them complete
-    const promises: Promise<EventInterface>[] = [];
-    this.selection.selected.forEach((selected) => {
-      const obs = this.eventService.getEventActivitiesAndAllStreams(this.user, selected.Event.getID());
-      if (obs) {
-        promises.push(firstValueFrom(obs.pipe(
-          take(1),
-          map(e => {
-            if (e && !(e as any).getStartDate) {
-              (e as any).getStartDate = () => e.startDate || new Date();
-            }
-            return e;
-          })
-        )) as Promise<EventInterface>);
-      }
-    });
+
+    const eventIDs = this.selection.selected
+      .map((selected) => selected?.Event?.getID?.())
+      .filter((eventID): eventID is string => !!eventID);
+
     // Now we can clear the selection
     this.selection.clear();
 
-    // 1. Fetch Events
-    let events: any[];
-    try {
-      events = (await Promise.all(promises)).filter(Boolean);
-    } catch (e: any) {
-      this.logger.error('Merge failed during event fetch', e);
-      this.loaded();
-      this.snackBar.open(e.message || 'Error loading events for merge', 'Close', { duration: 5000, panelClass: ['error-snackbar'] });
-      return;
-    }
-    if (events.length < 2) {
+    if (eventIDs.length < 2) {
       this.loaded();
       this.snackBar.open('Not enough events to merge', undefined, { duration: 3000 });
+      dialogRef.disableClose = false;
+      dialogRef.componentInstance.isMerging = false;
       return;
     }
 
-    // 2. Collect Original Files from source events
-    const validOriginalFiles: { data: any, extension: string, startDate: Date }[] = [];
-
-
-    // We need to fetch the actual file data for each event
-    // The 'events' array contains full Event objects, hopefully with originalFile metadata from getEventActivitiesAndAllStreams -> getEventAndActivities logic
-
-    const fileFetchPromises: Promise<void>[] = [];
-
-    for (const evt of events) {
-      // Check for array
-      if (evt.originalFiles && Array.isArray(evt.originalFiles)) {
-        for (const fileMeta of evt.originalFiles) {
-          fileFetchPromises.push((async () => {
-            try {
-              const buffer = await this.eventService.downloadFile(fileMeta.path);
-              const ext = this.fileService.getExtensionFromPath(fileMeta.path);
-              const eventStartDate = this.fileService.toDate(evt.startDate);
-              validOriginalFiles.push({ data: buffer, extension: ext, startDate: fileMeta.startDate || eventStartDate || new Date() });
-            } catch (e) {
-              this.logger.error('Failed to download source file for merge', fileMeta, e);
-            }
-          })());
-        }
-      }
-      // Check for single legacy
-      else if (evt.originalFile && evt.originalFile.path) {
-        fileFetchPromises.push((async () => {
-          try {
-            const buffer = await this.eventService.downloadFile(evt.originalFile.path);
-            const ext = this.fileService.getExtensionFromPath(evt.originalFile.path);
-            const eventStartDate = this.fileService.toDate(evt.startDate);
-            validOriginalFiles.push({ data: buffer, extension: ext, startDate: evt.originalFile.startDate || eventStartDate || new Date() });
-          } catch (e) {
-            this.logger.error('Failed to download source file for merge', evt.originalFile, e);
-          }
-        })());
-      }
-    }
-
     try {
-      if (fileFetchPromises.length > 0) {
-        await Promise.all(fileFetchPromises);
-      }
-    } catch (e) {
-      this.logger.warn('Error fetching some original files, proceeding with merge anyway', e);
-    }
-
-    events.forEach((e) => {
-      if (e && !(e as any).getStartDate) {
-        (e as any).getStartDate = () => e.startDate || new Date();
-      }
-    });
-
-    const mergedEvent = this.appEventUtilities.mergeEventsWithId(
-      events,
-      () => doc(collection(this.firestore, 'users')).id
-    ) as AppEventInterface;
-    mergedEvent.isMerge = mergeAsBenchmark;
-
-    try {
-      // Pass the collected files to the writer
-      // Note: writeAllEventData signature updated to accept array
-      this.logger.log('[EventTable] Merging event. Source events:', events);
-      this.logger.log('[EventTable] Valid original files to write:', validOriginalFiles);
-      await this.eventService.writeAllEventData(this.user, mergedEvent, validOriginalFiles);
+      const result = await this.eventMergeService.mergeEvents(eventIDs, mergeType);
 
       this.analyticsService.logEvent('merge_events');
-      await this.router.navigate(['/user', this.user.uid, 'event', mergedEvent.getID()], {});
+      await this.router.navigate(['/user', this.user.uid, 'event', result.eventId], {});
       dialogRef.close(true);
       this.snackBar.open('Events merged', undefined, {
         duration: 2000,
       });
-    } catch (e) {
-      this.logger.captureException(e, {
+    } catch (error) {
+      this.logger.captureException(error, {
         extra: {
-          data_event: mergedEvent.toJSON(),
-          activities: mergedEvent.getActivities().map(activity => activity.toJSON()),
+          eventIDs,
+          mergeType,
         }
       });
       this.loaded();
-      this.snackBar.open('Could not merge events', undefined, {
+      this.snackBar.open(this.eventMergeService.getMergeErrorMessage(error), undefined, {
         duration: 5000,
       });
       dialogRef.disableClose = false;

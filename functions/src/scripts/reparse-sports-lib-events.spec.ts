@@ -727,6 +727,10 @@ describe('reparse-sports-lib-events script', () => {
         const summary = await runSportsLibReparseScript(['--execute']);
         expect(summary.completed).toBe(1);
         expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalled();
+        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', {
+            mode: 'reimport',
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+        });
     });
 
     it('should not initialize firebase app when one already exists', async () => {

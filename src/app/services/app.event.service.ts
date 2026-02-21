@@ -2,7 +2,7 @@ import { inject, Injectable, Injector, OnDestroy, runInInjectionContext } from '
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, of, throwError, zip } from 'rxjs';
-import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, CollectionReference, Query, QuerySnapshot, DocumentData, getCountFromServer } from '@angular/fire/firestore';
+import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer } from '@angular/fire/firestore';
 import { catchError, map, switchMap, take, distinctUntilChanged, tap } from 'rxjs/operators';
 import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
@@ -18,11 +18,11 @@ import {
 } from '@sports-alliance/sports-lib';
 import { EventExporterGPX } from '@sports-alliance/sports-lib';
 
-import { EventWriter, FirestoreAdapter, StorageAdapter, OriginalFile } from '../../../functions/src/shared/event-writer';
+import { EventWriter, FirestoreAdapter } from '../../../functions/src/shared/event-writer';
+import { sanitizeEventFirestoreWritePayload } from '../../../functions/src/shared/firestore-write-sanitizer';
 import { generateActivityID, generateEventID } from '../../../functions/src/shared/id-generator';
 import { createParsingOptions } from '../../../functions/src/shared/parsing-options';
 import { Bytes, serverTimestamp } from 'firebase/firestore';
-import { Storage, ref, uploadBytes } from '@angular/fire/storage';
 import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
 import { EventImporterFIT } from '@sports-alliance/sports-lib';
 import { EventImporterTCX } from '@sports-alliance/sports-lib';
@@ -40,7 +40,6 @@ import { AppEventInterface } from '../../../functions/src/shared/app-event.inter
 import { AppEventUtilities } from '../utils/app.event.utilities';
 import { LoggerService } from './logger.service';
 import { AppFileService } from './app.file.service';
-import { BrowserCompatibilityService } from './browser.compatibility.service';
 import { AppCacheService } from './app.cache.service';
 import { BenchmarkEventAdapter } from './benchmark-event.adapter';
 import { SPORTS_LIB_VERSION } from '../constants/sports-lib-version.browser';
@@ -101,7 +100,6 @@ function resolveSportsLibVersionCode(version: string): number {
 export class AppEventService implements OnDestroy {
 
   private firestore = inject(Firestore);
-  private storage = inject(Storage);
   private injector = inject(Injector);
   private fileService = inject(AppFileService);
   private logger = inject(LoggerService);
@@ -624,7 +622,7 @@ export class AppEventService implements OnDestroy {
     );
   }
 
-  public async writeAllEventData(user: User, event: AppEventInterface, originalFiles?: OriginalFile[] | OriginalFile) {
+  public async writeAllEventData(user: User, event: AppEventInterface) {
     // 0. Ensure deterministic IDs to prevent duplicates
     // Frontend uploads use thresholdMs=0 for exact timestamps (no bucketing)
     // Backend sync services use default 100ms bucketing for cross-device deduplication
@@ -652,56 +650,6 @@ export class AppEventService implements OnDestroy {
       }
     }
 
-    // 3. Process and Compress Original Files if needed
-    if (originalFiles) {
-      const files = Array.isArray(originalFiles) ? originalFiles : [originalFiles];
-      const textExtensions = ['gpx', 'tcx', 'json', 'sml'];
-      for (const file of files) {
-        // Normalize extension: strip .gz if present to check if it's a text-based file
-        const extension = file.extension.toLowerCase();
-        const baseExtension = extension.endsWith('.gz') ? extension.slice(0, -3) : (extension === 'gz' ? '' : extension);
-
-        if (textExtensions.includes(baseExtension)) {
-          try {
-            // Check if already compressed to avoid double compression
-            const isBinary = file.data instanceof ArrayBuffer || file.data instanceof Uint8Array || file.data instanceof Blob;
-            let isAlreadyCompressed = false;
-            if (isBinary) {
-              const buffer = file.data instanceof Blob ? await file.data.arrayBuffer() : (file.data instanceof Uint8Array ? file.data.buffer : file.data);
-              const bytes = new Uint8Array(buffer as ArrayBuffer);
-              isAlreadyCompressed = bytes.length > 2 && bytes[0] === 0x1F && bytes[1] === 0x8B;
-            }
-
-            if (!isAlreadyCompressed) {
-              this.logger.log(`[AppEventService] Compressing ${baseExtension} file`);
-              if (!this.injector.get(BrowserCompatibilityService).checkCompressionSupport()) {
-                this.logger.warn(`[AppEventService] Compression skipped: unsupported browser`);
-                continue;
-              }
-              const stream = new Response(file.data as any).body.pipeThrough(new CompressionStream('gzip'));
-              file.data = await new Response(stream).arrayBuffer();
-            }
-            file.extension = `${baseExtension}.gz`; // Ensure it always ends with .gz
-          } catch (e) {
-            this.logger.error(`[AppEventService] Compression failed for file, uploading uncompressed`, e);
-          }
-          // Check compressed size - 10MB limit (outside try-catch so errors propagate)
-          const compressedSize = file.data instanceof ArrayBuffer ? file.data.byteLength : (file.data as Blob).size;
-          if (compressedSize > 10 * 1024 * 1024) {
-            throw new Error(`File is too large after compression (${(compressedSize / 1024 / 1024).toFixed(1)}MB). Maximum size is 10MB.`);
-          }
-        } else {
-          // Non-compressible file (e.g. FIT) - check raw size
-          const rawSize = file.data instanceof ArrayBuffer ? file.data.byteLength :
-            (file.data instanceof Blob ? file.data.size :
-              (typeof file.data === 'string' ? file.data.length : 0));
-          if (rawSize > 10 * 1024 * 1024) {
-            throw new Error(`File is too large (${(rawSize / 1024 / 1024).toFixed(1)}MB). Maximum size is 10MB.`);
-          }
-        }
-      }
-    }
-
     const adapter: FirestoreAdapter = {
       setDoc: (path: string[], data: any) => {
         return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, ...path as [string, ...string[]]), data));
@@ -714,25 +662,8 @@ export class AppEventService implements OnDestroy {
       }
     };
 
-    const storageBucketName = this.resolveStorageBucketName();
-
-    const storageAdapter: StorageAdapter = {
-      uploadFile: async (path: string, data: any) => {
-        const fileRef = runInInjectionContext(this.injector, () => ref(this.storage, path));
-        // data can be Blob, Uint8Array or ArrayBuffer. If string, convert to Blob.
-        let payload = data;
-        if (typeof data === 'string') {
-          payload = new Blob([data], { type: 'text/plain' });
-        }
-        await runInInjectionContext(this.injector, () => uploadBytes(fileRef, payload));
-      },
-      getBucketName: () => {
-        return storageBucketName;
-      }
-    }
-
-    const writer = new EventWriter(adapter, storageAdapter);
-    await writer.writeAllEventData(user.uid, event, originalFiles);
+    const writer = new EventWriter(adapter);
+    await writer.writeAllEventData(user.uid, event);
 
     const processingDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID as string, 'metaData', 'processing'));
     const processingPayload = {
@@ -741,27 +672,6 @@ export class AppEventService implements OnDestroy {
       processedAt: serverTimestamp(),
     };
     await runInInjectionContext(this.injector, () => setDoc(processingDoc, processingPayload));
-  }
-
-  private resolveStorageBucketName(): string {
-    const bucketFromStorageRef = runInInjectionContext(this.injector, () => {
-      const probeRef = ref(this.storage, '__bucket_probe__');
-      return (probeRef as { bucket?: unknown }).bucket;
-    });
-
-    const normalizedProbeBucket = typeof bucketFromStorageRef === 'string' ? bucketFromStorageRef.trim() : '';
-    if (normalizedProbeBucket) {
-      return normalizedProbeBucket;
-    }
-
-    const configuredBucket = (this.storage as { app?: { options?: { storageBucket?: string } } })
-      ?.app?.options?.storageBucket?.trim();
-    if (configuredBucket) {
-      return configuredBucket;
-    }
-
-    this.logger.warn('[AppEventService] Could not resolve Firebase Storage bucket from runtime; omitting bucket metadata.');
-    return '';
   }
 
   public async setEvent(user: User, event: EventInterface) {
@@ -793,7 +703,16 @@ export class AppEventService implements OnDestroy {
 
   public async updateEventProperties(user: User, eventID: string, propertiesToUpdate: any) {
     // @todo check if properties are allowed on object via it's JSON export interface keys
-    return runInInjectionContext(this.injector, () => updateDoc(doc(this.firestore, 'users', user.uid, 'events', eventID), propertiesToUpdate));
+    // Mandatory shared write policy: sanitize ad-hoc event patch payloads before updateDoc.
+    let sanitizedProperties = propertiesToUpdate;
+    if (propertiesToUpdate && typeof propertiesToUpdate === 'object' && !Array.isArray(propertiesToUpdate)) {
+      sanitizedProperties = sanitizeEventFirestoreWritePayload(propertiesToUpdate as Record<string, unknown>);
+    }
+
+    return runInInjectionContext(
+      this.injector,
+      () => updateDoc(doc(this.firestore, 'users', user.uid, 'events', eventID), sanitizedProperties)
+    );
   }
 
   /**
@@ -806,25 +725,6 @@ export class AppEventService implements OnDestroy {
   public async deleteAllEventData(user: User, eventID: string): Promise<boolean> {
     await runInInjectionContext(this.injector, () => deleteDoc(doc(this.firestore, 'users', user.uid, 'events', eventID)));
     return true;
-  }
-
-  public async deleteAllActivityData(user: User, eventID: string, activityID: string): Promise<boolean> {
-    // @todo add try catch etc
-    await this.deleteAllStreams(user, eventID, activityID);
-    await runInInjectionContext(this.injector, () => deleteDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID)));
-
-    return true;
-  }
-
-  public deleteStream(user: User, eventID, activityID, streamType: string) {
-    return runInInjectionContext(this.injector, () => deleteDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID, 'streams', streamType)));
-  }
-
-  public async deleteAllStreams(user: User, eventID: string, activityID: string): Promise<number> {
-    const streamsCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'activities', activityID, 'streams'));
-    const numberOfStreamsDeleted = await this.deleteAllDocsFromCollections([streamsCollection]);
-
-    return numberOfStreamsDeleted
   }
 
   public async getEventAsJSONBloB(user: User, event: AppEventInterface): Promise<Blob> {
@@ -1497,32 +1397,6 @@ export class AppEventService implements OnDestroy {
   }
   */
 
-  // From https://github.com/angular/angularfire2/issues/1400
-  private async deleteAllDocsFromCollections(collections: CollectionReference[]) {
-    let totalDeleteCount = 0;
-    const batchSize = 500;
-    // Iterate collections
-    for (const coll of collections) {
-      const snaps = await runInInjectionContext(this.injector, () => getDocs(coll)); // Read all
-      // Batch delete
-      const chunks = this.chunkArray(snaps.docs, batchSize);
-      for (const chunk of chunks) {
-        const batch = runInInjectionContext(this.injector, () => writeBatch(this.firestore));
-        chunk.forEach(doc => batch.delete(doc.ref));
-        await batch.commit();
-        totalDeleteCount += chunk.length;
-      }
-    }
-    return totalDeleteCount;
-  }
-
-  private chunkArray(myArray, chunk_size) {
-    const results = [];
-    while (myArray.length) {
-      results.push(myArray.splice(0, chunk_size));
-    }
-    return results;
-  }
   /**
    * Uses Firestore Aggregation Queries to count events efficiently.
    *

@@ -336,6 +336,29 @@ describe('EventActionsComponent', () => {
 
             expect(mockEventReprocessService.regenerateEventStatistics).not.toHaveBeenCalled();
             expect(mockProcessingService.addJob).not.toHaveBeenCalled();
+            expect(component.isReprocessing).toBe(false);
+        });
+
+        it('should prevent concurrent regenerate requests while one is in progress', async () => {
+            let resolveRegenerate: ((value: unknown) => void) | undefined;
+            mockEventReprocessService.regenerateEventStatistics.mockReturnValueOnce(
+                new Promise((resolve) => {
+                    resolveRegenerate = resolve;
+                }),
+            );
+
+            const firstCall = component.reGenerateStatistics();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            await component.reGenerateStatistics();
+
+            expect(mockEventReprocessService.regenerateEventStatistics).toHaveBeenCalledTimes(1);
+            expect(component.isReprocessing).toBe(true);
+
+            resolveRegenerate?.({ event: null });
+            await firstCall;
+            expect(component.isReprocessing).toBe(false);
         });
 
         it('should fail processing job and show snackbar on regenerate failure', async () => {
@@ -375,6 +398,7 @@ describe('EventActionsComponent', () => {
             await component.reImportActivityFromFile();
 
             expect(mockEventReprocessService.reimportEventFromOriginalFiles).not.toHaveBeenCalled();
+            expect(component.isReprocessing).toBe(false);
         });
 
         it('should not call reimport when original file metadata is missing', async () => {
@@ -384,6 +408,29 @@ describe('EventActionsComponent', () => {
             await component.reImportActivityFromFile();
 
             expect(mockEventReprocessService.reimportEventFromOriginalFiles).not.toHaveBeenCalled();
+        });
+
+        it('should prevent concurrent reimport requests while one is in progress', async () => {
+            (component.event as any).originalFile = { path: 'path/to/file.fit' };
+            let resolveReimport: ((value: unknown) => void) | undefined;
+            mockEventReprocessService.reimportEventFromOriginalFiles.mockReturnValueOnce(
+                new Promise((resolve) => {
+                    resolveReimport = resolve;
+                }),
+            );
+
+            const firstCall = component.reImportActivityFromFile();
+            await Promise.resolve();
+            await Promise.resolve();
+
+            await component.reImportActivityFromFile();
+
+            expect(mockEventReprocessService.reimportEventFromOriginalFiles).toHaveBeenCalledTimes(1);
+            expect(component.isReprocessing).toBe(true);
+
+            resolveReimport?.({ event: null });
+            await firstCall;
+            expect(component.isReprocessing).toBe(false);
         });
     });
 

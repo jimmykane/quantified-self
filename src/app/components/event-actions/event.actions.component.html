@@ -17,7 +17,7 @@
   </button>
   }
   <mat-divider></mat-divider>
-  <button mat-menu-item class="regenerate-stat-item" (click)="reGenerateStatistics()">
+  <button mat-menu-item class="regenerate-stat-item" (click)="reGenerateStatistics()" [disabled]="isReprocessing">
     <mat-icon>autorenew</mat-icon>
     <span class="menu-item-with-tooltip">Regenerate activity statistics using Sports-Lib <mat-icon class="toolTip"
         matTooltip="This will re-calculate statistics like distance, ascent, descent etc...">info</mat-icon>
@@ -26,7 +26,7 @@
   <div class="menu-item-tooltip-wrapper" [matTooltip]="getReimportDisabledReason()"
     [matTooltipDisabled]="canReimportFromOriginalFile()">
     <button mat-menu-item class="reimport-stat-item" (click)="reImportActivityFromFile()"
-      [disabled]="!canReimportFromOriginalFile()">
+      [disabled]="isReprocessing || !canReimportFromOriginalFile()">
       <mat-icon>upload_file</mat-icon>
       <span>Reimport activity from file</span>
     </button>

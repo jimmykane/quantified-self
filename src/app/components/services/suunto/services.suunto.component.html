@@ -154,7 +154,7 @@
             }
           </mat-form-field>
           <div class="qs-form-actions" style="display: flex; gap: 8px;">
-            <button mat-flat-button color="primary" [disabled]="isLoading || isDownloading || isImporting"
+            <button mat-flat-button color="primary" [disabled]="isLoading || isDownloading"
               (click)="onSubmit()">
               @if (isDownloading) {
               <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
@@ -164,18 +164,6 @@
               Download
               }
             </button>
-            @if (user) {
-            <button mat-flat-button color="accent" [disabled]="isLoading || isDownloading || isImporting"
-              (click)="onImportAndOpen()">
-              @if (isImporting) {
-              <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
-                color="primary"></mat-spinner>
-              Importing...
-              } @else {
-              Import
-              }
-            </button>
-            }
           </div>
         </form>
       </div>

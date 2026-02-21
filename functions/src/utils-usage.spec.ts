@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { UsageLimitExceededError, checkEventUsageLimit, hasProAccess, getUserRoleAndGracePeriod, setEvent, determineRedirectURI, setAccessControlHeadersOnResponse } from './utils';
+import { UsageLimitExceededError, checkEventUsageLimit, hasBasicAccess, hasProAccess, getUserRoleAndGracePeriod, setEvent, determineRedirectURI, setAccessControlHeadersOnResponse } from './utils';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 
@@ -148,6 +148,23 @@ describe('utils higher-level helpers', () => {
         it('returns true for active grace period', async () => {
             hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'free', gracePeriodUntil: Date.now() + 5000 } });
             await expect(hasProAccess('u1')).resolves.toBe(true);
+        });
+    });
+
+    describe('hasBasicAccess', () => {
+        it('returns true for basic role', async () => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'basic' } });
+            await expect(hasBasicAccess('u1')).resolves.toBe(true);
+        });
+
+        it('returns true for active grace period', async () => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'free', gracePeriodUntil: Date.now() + 5000 } });
+            await expect(hasBasicAccess('u1')).resolves.toBe(true);
+        });
+
+        it('returns false for free users without grace', async () => {
+            hoisted.getUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
+            await expect(hasBasicAccess('u1')).resolves.toBe(false);
         });
     });
 

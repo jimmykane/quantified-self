@@ -2,7 +2,9 @@ rules_version = '2';
 service firebase.storage {
   match /b/quantified-self-io/o {
     match /users/{userId}/{allPaths=**} {
-      allow read, write: if request.auth.uid == userId && (request.method != 'create' || request.resource.size < 10 * 1024 * 1024);
+      // Client apps can read their own stored originals, but uploads/writes are backend-only.
+      allow read: if request.auth.uid == userId;
+      allow write: if false;
     }
   }
 }

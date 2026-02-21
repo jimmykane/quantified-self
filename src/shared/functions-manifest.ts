@@ -44,6 +44,11 @@ export const FUNCTIONS_MANIFEST = {
     // Reparse Functions
     scheduleSportsLibReparseScan: { name: 'scheduleSportsLibReparseScan', region: 'europe-west2' },
     processSportsLibReparseTask: { name: 'processSportsLibReparseTask', region: 'europe-west2' },
+
+    // Upload/Reprocess Functions
+    uploadActivity: { name: 'uploadActivity', region: 'europe-west2' },
+    reprocessEvent: { name: 'reprocessEvent', region: 'europe-west2' },
+    mergeEvents: { name: 'mergeEvents', region: 'europe-west2' },
 } as const;
 
 export type FunctionName = keyof typeof FUNCTIONS_MANIFEST;

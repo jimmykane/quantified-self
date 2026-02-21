@@ -114,6 +114,7 @@ describe('processSportsLibReparseTask', () => {
 
         expect(hoisted.hasPaidOrGraceAccess).toHaveBeenCalledWith('u1');
         expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', {
+            mode: 'reimport',
             targetSportsLibVersion: '9.0.99',
         });
         expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
@@ -190,6 +191,7 @@ describe('processSportsLibReparseTask', () => {
 
         expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalled();
         expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', {
+            mode: 'reimport',
             targetSportsLibVersion: '9.0.99',
         });
     });

@@ -1,319 +1,302 @@
-import { ComponentFixture, TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { UploadActivitiesComponent } from './upload-activities.component';
+import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppEventService } from '../../../services/app.event.service';
-import { AppFileService } from '../../../services/app.file.service';
+import { AppFitUploadService } from '../../../services/app.fit-upload.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppProcessingService } from '../../../services/app.processing.service';
 import { LoggerService } from '../../../services/logger.service';
-import { Router } from '@angular/router';
-import { AppAuthService } from '../../../authentication/app.auth.service';
-import { MatDialog } from '@angular/material/dialog';
+import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { Overlay } from '@angular/cdk/overlay';
-import { NO_ERRORS_SCHEMA, LOCALE_ID } from '@angular/core';
-import { User } from '@sports-alliance/sports-lib';
-import { of } from 'rxjs';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { MatDialog } from '@angular/material/dialog';
+import { Router } from '@angular/router';
+import { UPLOAD_STATUS } from '../upload-status/upload.status';
 
 describe('UploadActivitiesComponent', () => {
-    let component: UploadActivitiesComponent;
-    let fixture: ComponentFixture<UploadActivitiesComponent>;
+  let component: UploadActivitiesComponent;
+  let fixture: ComponentFixture<UploadActivitiesComponent>;
 
-    let mockEventService: any;
-    let mockFileService: any;
-    let mockUserService: any;
-    let mockAnalyticsService: any;
-    let mockProcessingService: any;
-    let mockLogger: any;
-    let mockRouter: any;
-    let mockDialog: any;
-    let mockSnackBar: any;
-    let mockBottomSheet: any;
-    let mockOverlay: any;
-    let mockAuthService: any;
+  let authServiceMock: any;
+  let eventServiceMock: any;
+  let fitUploadServiceMock: any;
+  let userServiceMock: any;
+  let analyticsServiceMock: any;
+  let processingServiceMock: any;
+  let browserCompatibilityServiceMock: any;
+  let loggerMock: any;
+  let snackBarMock: any;
 
-    const mockUser = new User('testUser');
+  beforeEach(async () => {
+    authServiceMock = {
+      getUser: vi.fn().mockResolvedValue({ uid: 'u1' }),
+    };
+    eventServiceMock = {
+      getEventCount: vi.fn().mockResolvedValue(5),
+    };
+    fitUploadServiceMock = {
+      uploadActivityFile: vi.fn().mockResolvedValue({
+        eventId: 'event-1',
+        activitiesCount: 1,
+        uploadLimit: 10,
+        uploadCountAfterWrite: 6,
+      }),
+    };
+    userServiceMock = {
+      hasProAccessSignal: vi.fn().mockReturnValue(false),
+      getSubscriptionRole: vi.fn().mockResolvedValue('free'),
+    };
+    analyticsServiceMock = {
+      logEvent: vi.fn(),
+    };
+    processingServiceMock = {
+      addJob: vi.fn().mockReturnValue('job-id'),
+      updateJob: vi.fn(),
+      completeJob: vi.fn(),
+      failJob: vi.fn(),
+    };
+    browserCompatibilityServiceMock = {
+      checkCompressionSupport: vi.fn().mockReturnValue(true),
+    };
+    loggerMock = {
+      log: vi.fn(),
+      error: vi.fn(),
+    };
+    snackBarMock = { open: vi.fn() };
 
-    beforeEach(async () => {
-        mockEventService = {
-            writeAllEventData: vi.fn().mockResolvedValue(undefined),
-            getEventCount: vi.fn().mockResolvedValue(5)
-        };
+    await TestBed.configureTestingModule({
+      declarations: [UploadActivitiesComponent],
+      providers: [
+        { provide: AppAuthService, useValue: authServiceMock },
+        { provide: AppEventService, useValue: eventServiceMock },
+        { provide: AppFitUploadService, useValue: fitUploadServiceMock },
+        { provide: AppUserService, useValue: userServiceMock },
+        { provide: AppAnalyticsService, useValue: analyticsServiceMock },
+        { provide: AppProcessingService, useValue: processingServiceMock },
+        { provide: BrowserCompatibilityService, useValue: browserCompatibilityServiceMock },
+        { provide: LoggerService, useValue: loggerMock },
+        { provide: MatSnackBar, useValue: snackBarMock },
+        { provide: MatDialog, useValue: { open: vi.fn() } },
+        { provide: Router, useValue: { navigate: vi.fn() } },
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
+    }).compileComponents();
 
-        mockFileService = {
-            decompressIfNeeded: vi.fn().mockImplementation((buffer) => Promise.resolve(buffer))
-        };
+    fixture = TestBed.createComponent(UploadActivitiesComponent);
+    component = fixture.componentInstance;
+  });
 
-        mockUserService = {
-            isPro: vi.fn().mockResolvedValue(false),
-            getSubscriptionRole: vi.fn().mockResolvedValue('free')
-        };
+  function mockFileReaderResult(result: ArrayBuffer): void {
+    const mockFileReader = {
+      result,
+      onload: null as any,
+      onerror: null as any,
+      readAsArrayBuffer: vi.fn().mockImplementation(function () {
+        this.onload?.();
+      }),
+    };
 
-        mockAnalyticsService = {
-            logEvent: vi.fn()
-        };
+    vi.spyOn(globalThis as any, 'FileReader').mockImplementation(() => mockFileReader);
+  }
 
-        mockProcessingService = {
-            addJob: vi.fn().mockReturnValue('job-id'),
-            updateJob: vi.fn(),
-            completeJob: vi.fn(),
-            failJob: vi.fn()
-        };
+  function makeUploadFile(name: string, extension: string) {
+    return {
+      file: new File(['abc'], name),
+      name,
+      extension,
+      filename: name.replace(/\.[^/.]+$/, ''),
+      status: UPLOAD_STATUS.PROCESSING,
+    } as any;
+  }
 
-        mockLogger = {
-            log: vi.fn(),
-            error: vi.fn(),
-            captureMessage: vi.fn()
-        };
+  function mockFileReaderError(): void {
+    const mockFileReader = {
+      result: null as any,
+      onload: null as any,
+      onerror: null as any,
+      readAsArrayBuffer: vi.fn().mockImplementation(function () {
+        this.onerror?.();
+      }),
+    };
 
-        mockRouter = { navigate: vi.fn() };
-        mockDialog = { open: vi.fn() };
-        mockSnackBar = { open: vi.fn() };
-        mockBottomSheet = { open: vi.fn() };
-        mockOverlay = {};
-        mockAuthService = {
-            user$: of(mockUser),
-            getUser: vi.fn().mockResolvedValue(mockUser)
-        };
+    vi.spyOn(globalThis as any, 'FileReader').mockImplementation(() => mockFileReader);
+  }
 
-        await TestBed.configureTestingModule({
-            declarations: [UploadActivitiesComponent],
-            providers: [
-                { provide: AppEventService, useValue: mockEventService },
-                { provide: AppFileService, useValue: mockFileService },
-                { provide: AppUserService, useValue: mockUserService },
-                { provide: AppAnalyticsService, useValue: mockAnalyticsService },
-                { provide: AppProcessingService, useValue: mockProcessingService },
-                { provide: LoggerService, useValue: mockLogger },
-                { provide: Router, useValue: mockRouter },
-                { provide: MatDialog, useValue: mockDialog },
-                { provide: MatSnackBar, useValue: mockSnackBar },
-                { provide: MatBottomSheet, useValue: mockBottomSheet },
-                { provide: Overlay, useValue: mockOverlay },
-                { provide: AppAuthService, useValue: mockAuthService },
-                { provide: LOCALE_ID, useValue: 'en-US' }
-            ],
-            schemas: [NO_ERRORS_SCHEMA]
-        }).compileComponents();
+  it('should initialize user and upload limits on init', async () => {
+    await component.ngOnInit();
 
-        fixture = TestBed.createComponent(UploadActivitiesComponent);
-        component = fixture.componentInstance;
-        component.user = mockUser;
-    });
+    expect(authServiceMock.getUser).toHaveBeenCalled();
+    expect(eventServiceMock.getEventCount).toHaveBeenCalledWith({ uid: 'u1' });
+    expect(component.uploadCount).toBe(5);
+    expect(component.uploadLimit).toBe(10);
+  });
 
-    it('should create', () => {
-        expect(component).toBeTruthy();
-    });
+  it('should skip upload count checks for pro users', async () => {
+    component.user = { uid: 'u1' } as any;
+    userServiceMock.hasProAccessSignal.mockReturnValueOnce(true);
 
-    describe('Gzipped File Upload Decompression', () => {
-        it('should call decompressIfNeeded for ArrayBuffer data', async () => {
-            const mockBuffer = new ArrayBuffer(100);
-            const mockFile = {
-                file: new Blob([mockBuffer]),
-                extension: 'json',
-                filename: 'test'
-            };
+    await component.calculateRemainingUploads();
 
-            // Mock FileReader
-            const mockFileReader = {
-                result: mockBuffer,
-                onload: null as any,
-                readAsArrayBuffer: vi.fn().mockImplementation(function () {
-                    setTimeout(() => this.onload?.(), 0);
-                })
-            };
-            vi.spyOn(global, 'FileReader').mockImplementation(() => mockFileReader as any);
+    expect(eventServiceMock.getEventCount).not.toHaveBeenCalled();
+    expect(component.uploadCount).toBeNull();
+    expect(component.uploadLimit).toBeNull();
+  });
 
-            try {
-                await component.processAndUploadFile(mockFile);
-            } catch (e) {
-                // Expected to fail due to mocking complexity, but we can verify decompression was called
-            }
+  it('should reject unsupported files', async () => {
+    await expect(component.processAndUploadFile(makeUploadFile('activity.csv', 'csv')))
+      .rejects.toThrow('Only FIT, GPX, TCX, JSON, and SML files are supported.');
+  });
 
-            // Verify decompressIfNeeded was called with the buffer
-            expect(mockFileService.decompressIfNeeded).toHaveBeenCalled();
-        });
+  it('should upload fit files through AppFitUploadService', async () => {
+    component.user = { uid: 'u1' } as any;
+    mockFileReaderResult(new Uint8Array([1, 2, 3]).buffer);
 
-        it('should decompress .json.gz files before parsing', async () => {
-            const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00]).buffer;
-            const decompressedData = new TextEncoder().encode('{"test": true}').buffer;
+    const result = await component.processAndUploadFile(makeUploadFile('run.fit', 'fit'));
 
-            mockFileService.decompressIfNeeded.mockResolvedValue(decompressedData);
+    expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('upload_file', { method: 'fit' });
+    expect(fitUploadServiceMock.uploadActivityFile).toHaveBeenCalledWith(
+      new Uint8Array([1, 2, 3]).buffer,
+      'fit',
+      'run.fit',
+    );
+    expect(result.eventId).toBe('event-1');
+  });
 
-            const mockFile = {
-                file: new Blob([gzippedData]),
-                extension: 'json',
-                filename: 'activity'
-            };
+  it('should gzip text files and upload with .gz extension', async () => {
+    component.user = { uid: 'u1' } as any;
+    mockFileReaderResult(new Uint8Array([1, 2, 3, 4]).buffer);
 
-            // We can't fully test the parsing flow without complex mocks,
-            // but we verify decompressIfNeeded is configured correctly
-            expect(mockFileService.decompressIfNeeded).toBeDefined();
-        });
+    const compressedBytes = new Uint8Array([0x1f, 0x8b, 0x08]).buffer;
+    vi.spyOn(component as any, 'gzipPayload').mockResolvedValue(compressedBytes);
 
-        it('should decompress .gpx.gz files before parsing', async () => {
-            const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00]).buffer;
-            const decompressedData = new TextEncoder().encode('<?xml version="1.0"?><gpx></gpx>').buffer;
+    await component.processAndUploadFile(makeUploadFile('run.gpx', 'gpx'));
 
-            mockFileService.decompressIfNeeded.mockResolvedValue(decompressedData);
+    expect(browserCompatibilityServiceMock.checkCompressionSupport).toHaveBeenCalled();
+    expect(fitUploadServiceMock.uploadActivityFile).toHaveBeenCalledWith(
+      compressedBytes,
+      'gpx.gz',
+      'run.gpx',
+    );
+  });
 
-            expect(mockFileService.decompressIfNeeded).toBeDefined();
-        });
+  it('should keep already gzipped text payloads without recompressing', async () => {
+    component.user = { uid: 'u1' } as any;
+    mockFileReaderResult(new Uint8Array([0x1f, 0x8b, 0x08, 0x00]).buffer);
+    const gzipSpy = vi.spyOn(component as any, 'gzipPayload');
 
-        it('should decompress .tcx.gz files before parsing', async () => {
-            const gzippedData = new Uint8Array([0x1F, 0x8B, 0x08, 0x00]).buffer;
-            const decompressedData = new TextEncoder().encode('<?xml version="1.0"?><tcx></tcx>').buffer;
+    await component.processAndUploadFile(makeUploadFile('run.gpx', 'gpx'));
 
-            mockFileService.decompressIfNeeded.mockResolvedValue(decompressedData);
+    expect(gzipSpy).not.toHaveBeenCalled();
+    expect(fitUploadServiceMock.uploadActivityFile).toHaveBeenCalledWith(
+      new Uint8Array([0x1f, 0x8b, 0x08, 0x00]).buffer,
+      'gpx.gz',
+      'run.gpx',
+    );
+  });
 
-            expect(mockFileService.decompressIfNeeded).toBeDefined();
-        });
+  it('should upload text payload without gzip when compression is unsupported', async () => {
+    component.user = { uid: 'u1' } as any;
+    browserCompatibilityServiceMock.checkCompressionSupport.mockReturnValue(false);
+    mockFileReaderResult(new Uint8Array([1, 2, 3, 4]).buffer);
+    const gzipSpy = vi.spyOn(component as any, 'gzipPayload');
 
-        it('should NOT call decompressIfNeeded for non-ArrayBuffer data', () => {
-            // When file is read as text (legacy path), decompression shouldn't apply
-            const textData = '{"test": true}';
-            // This tests the conditional: if (fileReaderResult instanceof ArrayBuffer)
-            expect(typeof textData).toBe('string');
-            // ArrayBuffer check would be false for string
-            expect(textData.constructor.name).not.toBe('ArrayBuffer');
-        });
-    });
+    await component.processAndUploadFile(makeUploadFile('run.gpx', 'gpx'));
 
-    describe('File Extension Handling', () => {
-        it('should use normalized extension from UploadAbstractDirective', () => {
-            // The extension is pre-normalized in UploadAbstractDirective.getFiles()
-            // so .json.gz becomes .json by the time it reaches processAndUploadFile
-            const mockFile = {
-                file: new Blob([]),
-                extension: 'json', // Already normalized
-                filename: 'activity'
-            };
+    expect(gzipSpy).not.toHaveBeenCalled();
+    expect(fitUploadServiceMock.uploadActivityFile).toHaveBeenCalledWith(
+      new Uint8Array([1, 2, 3, 4]).buffer,
+      'gpx',
+      'run.gpx',
+    );
+  });
 
-            expect(mockFile.extension).toBe('json');
-        });
+  it('should show snackbar when upload fails', async () => {
+    component.user = { uid: 'u1' } as any;
+    fitUploadServiceMock.uploadActivityFile.mockRejectedValueOnce(new Error('Upload failed'));
+    mockFileReaderResult(new Uint8Array([1]).buffer);
 
-        it('should handle all supported text extensions', () => {
-            const textExtensions = ['json', 'gpx', 'tcx', 'sml'];
-            textExtensions.forEach(ext => {
-                expect(['json', 'gpx', 'tcx', 'sml'].includes(ext)).toBe(true);
-            });
-        });
+    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit')))
+      .rejects.toThrow('Upload failed');
 
-        it('should treat FIT files as binary (not text)', () => {
-            const mockFile = {
-                extension: 'fit',
-                filename: 'activity'
-            };
-            // FIT files are handled via EventImporterFIT.getFromArrayBuffer
-            expect(mockFile.extension).toBe('fit');
-        });
-    });
+    expect(snackBarMock.open).toHaveBeenCalled();
+  });
 
-    describe('Error Handling', () => {
-        it('should show snackbar on parsing error', () => {
-            // Cannot easily test without full component integration
-            // but we verify the snackbar service is injected
-            expect(mockSnackBar.open).toBeDefined();
-        });
+  it('should show snackbar when file reader fails before upload starts', async () => {
+    component.user = { uid: 'u1' } as any;
+    mockFileReaderError();
 
-        it('should log analytics event on upload', () => {
-            expect(mockAnalyticsService.logEvent).toBeDefined();
-        });
-    });
+    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit')))
+      .rejects
+      .toThrow('Could not read file.');
 
-    describe('Edge Cases', () => {
-        it('should handle empty filename', () => {
-            const mockFile = {
-                file: new Blob([]),
-                extension: 'json',
-                filename: ''
-            };
-            expect(mockFile.filename).toBe('');
-        });
+    expect(fitUploadServiceMock.uploadActivityFile).not.toHaveBeenCalled();
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Could not upload run.fit, reason: Could not read file.',
+      'OK',
+      { duration: 4000 },
+    );
+  });
 
-        it('should handle unicode filename', () => {
-            const mockFile = {
-                file: new Blob([]),
-                extension: 'json',
-                filename: '活动_运动_2024'
-            };
-            expect(mockFile.filename).toBe('活动_运动_2024');
-        });
+  it('should translate generic server upload errors into friendly snackbar message', async () => {
+    component.user = { uid: 'u1' } as any;
+    fitUploadServiceMock.uploadActivityFile.mockRejectedValueOnce(new Error('Upload failed (500).'));
+    mockFileReaderResult(new Uint8Array([1]).buffer);
 
-        it('should handle filename with special characters', () => {
-            const mockFile = {
-                file: new Blob([]),
-                extension: 'gpx',
-                filename: "activity (1) - copy's backup"
-            };
-            expect(mockFile.filename).toContain("'");
-        });
+    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit')))
+      .rejects.toThrow('Upload failed (500).');
 
-        it('should handle very long filename', () => {
-            const mockFile = {
-                file: new Blob([]),
-                extension: 'tcx',
-                filename: 'a'.repeat(255)
-            };
-            expect(mockFile.filename.length).toBe(255);
-        });
-    });
-});
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Could not upload run.fit, reason: Upload failed because the server is temporarily unavailable. Please try again shortly.',
+      'OK',
+      { duration: 4000 },
+    );
+  });
 
-describe('UploadActivitiesComponent - Concurrent Uploads', () => {
-    let mockFileService: any;
+  it('should translate upload status 429 into tier limit snackbar message', async () => {
+    component.user = { uid: 'u1' } as any;
+    fitUploadServiceMock.uploadActivityFile.mockRejectedValueOnce(new Error('Upload failed (429).'));
+    mockFileReaderResult(new Uint8Array([1]).buffer);
 
-    beforeEach(() => {
-        mockFileService = {
-            decompressIfNeeded: vi.fn().mockImplementation((buffer) => {
-                return new Promise(resolve => {
-                    setTimeout(() => resolve(buffer), 10);
-                });
-            })
-        };
-    });
+    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit')))
+      .rejects.toThrow('Upload failed (429).');
 
-    it('should handle multiple concurrent decompression calls', async () => {
-        const buffers = [
-            new ArrayBuffer(10),
-            new ArrayBuffer(20),
-            new ArrayBuffer(30)
-        ];
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Could not upload run.fit, reason: Upload limit reached for your current plan.',
+      'OK',
+      { duration: 4000 },
+    );
+  });
 
-        const results = await Promise.all(
-            buffers.map(b => mockFileService.decompressIfNeeded(b))
-        );
+  it('should translate upload status 401 into re-auth snackbar message', async () => {
+    component.user = { uid: 'u1' } as any;
+    fitUploadServiceMock.uploadActivityFile.mockRejectedValueOnce(new Error('Upload failed (401).'));
+    mockFileReaderResult(new Uint8Array([1]).buffer);
 
-        expect(results.length).toBe(3);
-        expect(mockFileService.decompressIfNeeded).toHaveBeenCalledTimes(3);
-    });
+    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit')))
+      .rejects.toThrow('Upload failed (401).');
 
-    it('should maintain order with concurrent uploads', async () => {
-        const order: number[] = [];
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Could not upload run.fit, reason: Upload is not authorized. Please sign in again.',
+      'OK',
+      { duration: 4000 },
+    );
+  });
 
-        const createDelayedDecompress = (id: number, delay: number) => {
-            return new Promise<number>(resolve => {
-                setTimeout(() => {
-                    order.push(id);
-                    resolve(id);
-                }, delay);
-            });
-        };
+  it('should translate upload status 400 into invalid file snackbar message', async () => {
+    component.user = { uid: 'u1' } as any;
+    fitUploadServiceMock.uploadActivityFile.mockRejectedValueOnce(new Error('Upload failed (400).'));
+    mockFileReaderResult(new Uint8Array([1]).buffer);
 
-        // Simulate out-of-order completion
-        const promises = [
-            createDelayedDecompress(1, 30),
-            createDelayedDecompress(2, 10),
-            createDelayedDecompress(3, 20)
-        ];
+    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit')))
+      .rejects.toThrow('Upload failed (400).');
 
-        const results = await Promise.all(promises);
-
-        // Results should be in original order (1, 2, 3)
-        expect(results).toEqual([1, 2, 3]);
-        // But completion order was different (2, 3, 1)
-        expect(order).toEqual([2, 3, 1]);
-    });
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Could not upload run.fit, reason: Could not process uploaded file. Check file format and try again.',
+      'OK',
+      { duration: 4000 },
+    );
+  });
 });

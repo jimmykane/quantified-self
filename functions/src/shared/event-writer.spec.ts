@@ -1,6 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventWriter, FirestoreAdapter, LogAdapter } from './event-writer';
 
+function containsKeyRecursively(value: unknown, targetKey: string): boolean {
+    if (value === null || value === undefined) {
+        return false;
+    }
+
+    if (Array.isArray(value)) {
+        return value.some(item => containsKeyRecursively(item, targetKey));
+    }
+
+    if (typeof value !== 'object') {
+        return false;
+    }
+
+    const record = value as Record<string, unknown>;
+    if (Object.prototype.hasOwnProperty.call(record, targetKey)) {
+        return true;
+    }
+
+    return Object.values(record).some(item => containsKeyRecursively(item, targetKey));
+}
+
 
 
 
@@ -194,6 +215,17 @@ describe('EventWriter', () => {
     });
 
     it('should strip streams from activity document', async () => {
+        activityMock.toJSON.mockReturnValue({
+            id: 'activity-1',
+            streams: [{ type: 'Power', values: [100, 200] }],
+            laps: [{ split: 1, streams: [{ type: 'Pace', values: [1, 2] }] }],
+            nested: {
+                deep: {
+                    streams: [{ type: 'HR', values: [150, 151] }],
+                },
+            },
+        });
+
         await writer.writeAllEventData('user-1', eventMock);
         const setDocFn = adapter.setDoc as any;
 
@@ -204,13 +236,19 @@ describe('EventWriter', () => {
 
         expect(activityCall).toBeTruthy();
         const activityData = activityCall[1];
-        expect(activityData).not.toHaveProperty('streams');
+        expect(containsKeyRecursively(activityData, 'streams')).toBe(false);
         expect(activityData.id).toBe('activity-1');
     });
 
     it('should strip activities from event document', async () => {
         // Ensure the mock returns activities initially so we can verify they are removed
-        eventMock.toJSON.mockReturnValue({ id: 'event-1', activities: [{ id: 'activity-1' }] });
+        eventMock.toJSON.mockReturnValue({
+            id: 'event-1',
+            activities: [{ id: 'activity-1' }],
+            details: {
+                streams: [{ type: 'Power', values: [100, 200] }],
+            },
+        });
 
         await writer.writeAllEventData('user-1', eventMock);
         const setDocFn = adapter.setDoc as any;
@@ -223,6 +261,7 @@ describe('EventWriter', () => {
         expect(eventCall).toBeTruthy();
         const eventData = eventCall[1];
         expect(eventData).not.toHaveProperty('activities');
+        expect(containsKeyRecursively(eventData, 'streams')).toBe(false);
         expect(eventData.id).toBe('event-1');
     });
 
