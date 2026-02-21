@@ -25,6 +25,7 @@ export const SPORTS_LIB_REPARSE_STATUS_DOC_ID = 'reparseStatus';
 export const SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES = 'NO_ORIGINAL_FILES';
 export const SPORTS_LIB_PRIMARY_BUCKET = 'quantified-self-io';
 export const SPORTS_LIB_LEGACY_APPSPOT_BUCKET = 'quantified-self-io.appspot.com';
+const MERGE_TYPE_VALUES = new Set(['benchmark', 'multi']);
 export {
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
     SPORTS_LIB_REPARSE_TARGET_VERSION,
@@ -503,6 +504,16 @@ export function applyPreservedFields(parsedEvent: EventInterface, existingEventD
     const parsedAny = parsedEvent as any;
     const existingAny = existingEventDoc as any;
 
+    if (Object.prototype.hasOwnProperty.call(existingAny, 'isMerge') && typeof existingAny.isMerge === 'boolean') {
+        parsedAny.isMerge = existingAny.isMerge;
+    }
+    if (
+        Object.prototype.hasOwnProperty.call(existingAny, 'mergeType')
+        && typeof existingAny.mergeType === 'string'
+        && MERGE_TYPE_VALUES.has(existingAny.mergeType)
+    ) {
+        parsedAny.mergeType = existingAny.mergeType;
+    }
     if (Object.prototype.hasOwnProperty.call(existingAny, 'description')) {
         parsedAny.description = existingAny.description;
     }

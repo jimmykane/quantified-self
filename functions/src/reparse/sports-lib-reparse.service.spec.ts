@@ -556,6 +556,8 @@ describe('sports-lib-reparse.service', () => {
     it('applyPreservedFields should keep editable user fields', () => {
         const event: any = {};
         applyPreservedFields(event, {
+            isMerge: false,
+            mergeType: 'multi',
             description: 'desc',
             privacy: 'private',
             notes: 'notes',
@@ -563,12 +565,25 @@ describe('sports-lib-reparse.service', () => {
             feeling: 3,
             name: 'new-name',
         });
+        expect(event.isMerge).toBe(false);
+        expect(event.mergeType).toBe('multi');
         expect(event.description).toBe('desc');
         expect(event.privacy).toBe('private');
         expect(event.notes).toBe('notes');
         expect(event.rpe).toBe(7);
         expect(event.feeling).toBe(3);
         expect(event.name).toBeUndefined();
+    });
+
+    it('applyPreservedFields should not override isMerge when existing value is not boolean', () => {
+        const event: any = { isMerge: true, mergeType: 'benchmark' };
+        applyPreservedFields(event, {
+            isMerge: 'nope',
+            mergeType: 'invalid',
+        } as any);
+
+        expect(event.isMerge).toBe(true);
+        expect(event.mergeType).toBe('benchmark');
     });
 
     it('mapActivityIdentity should preserve IDs and creator names by index', () => {
@@ -988,6 +1003,31 @@ describe('sports-lib-reparse.service', () => {
         expect(persistedEvent.notes).toBe('keep-notes');
         expect(persistedEvent.rpe).toBe(9);
         expect(persistedEvent.feeling).toBe(2);
+    });
+
+    it('reparseEventFromOriginalFiles should preserve isMerge=false for multi-file events', async () => {
+        const mergedEvent = makeEvent({ isMerge: true });
+        hoisted.mergeEvents.mockReturnValueOnce(mergedEvent);
+        hoisted.fitImporter.getFromArrayBuffer
+            .mockResolvedValueOnce(makeEvent({ isMerge: false }))
+            .mockResolvedValueOnce(makeEvent({ isMerge: false }));
+
+        const result = await reparseEventFromOriginalFiles('u1', 'e1', {
+            eventData: {
+                isMerge: false,
+                originalFiles: [
+                    { path: 'users/u1/events/e1/first.fit' },
+                    { path: 'users/u1/events/e1/second.fit' },
+                ],
+            },
+            activityDocs: [],
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+        });
+
+        expect(result.status).toBe('completed');
+        expect(hoisted.mergeEvents).toHaveBeenCalledTimes(1);
+        const persistedEvent = hoisted.mockWriteAllEventData.mock.calls[0]?.[1] as Record<string, unknown>;
+        expect(persistedEvent.isMerge).toBe(false);
     });
 
     it('reparseEventFromOriginalFiles should auto-heal source bucket metadata after fallback read', async () => {
