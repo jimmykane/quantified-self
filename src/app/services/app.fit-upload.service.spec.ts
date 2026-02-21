@@ -105,6 +105,18 @@ describe('AppFitUploadService', () => {
     await expect(service.uploadFitFile(new Uint8Array([1]).buffer)).rejects.toThrow('Upload limit reached.');
   });
 
+  it('should provide a friendly message when backend returns non-JSON 500 response', async () => {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: vi.fn().mockRejectedValue(new SyntaxError('Unexpected token < in JSON at position 0')),
+    });
+
+    await expect(service.uploadFitFile(new Uint8Array([1]).buffer)).rejects.toThrow(
+      'Upload service is temporarily unavailable. Please try again shortly.',
+    );
+  });
+
   it('should throw when app check token cannot be retrieved', async () => {
     hoisted.mockGetAppCheckToken.mockResolvedValueOnce({ token: '' });
 

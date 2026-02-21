@@ -11,6 +11,22 @@ export interface UploadActivityFromFitResponse {
     uploadCountAfterWrite: number | null;
 }
 
+function mapFallbackUploadErrorMessage(statusCode: number): string {
+    if (statusCode >= 500) {
+        return 'Upload service is temporarily unavailable. Please try again shortly.';
+    }
+    if (statusCode === 429) {
+        return 'Upload limit reached for your current plan.';
+    }
+    if (statusCode === 401) {
+        return 'Upload is not authorized. Please sign in again.';
+    }
+    if (statusCode === 400) {
+        return 'Could not process uploaded file. Check file format and try again.';
+    }
+    return `Upload failed (${statusCode}).`;
+}
+
 @Injectable({
     providedIn: 'root'
 })
@@ -78,8 +94,7 @@ export class AppFitUploadService {
 
         if (!response.ok) {
             const backendMessage = payload?.error ? `${payload.error}` : '';
-            const statusMessage = `Upload failed (${response.status}).`;
-            throw new Error(backendMessage || statusMessage);
+            throw new Error(backendMessage || mapFallbackUploadErrorMessage(response.status));
         }
 
         return payload as UploadActivityFromFitResponse;

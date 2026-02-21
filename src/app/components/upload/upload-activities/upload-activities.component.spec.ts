@@ -179,4 +179,19 @@ describe('UploadActivitiesComponent', () => {
 
     expect(snackBarMock.open).toHaveBeenCalled();
   });
+
+  it('should translate generic server upload errors into friendly snackbar message', async () => {
+    component.user = { uid: 'u1' } as any;
+    fitUploadServiceMock.uploadActivityFile.mockRejectedValueOnce(new Error('Upload failed (500).'));
+    mockFileReaderResult(new Uint8Array([1]).buffer);
+
+    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit')))
+      .rejects.toThrow('Upload failed (500).');
+
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Could not upload run.fit, reason: Upload failed because the server is temporarily unavailable. Please try again shortly.',
+      'OK',
+      { duration: 4000 },
+    );
+  });
 });

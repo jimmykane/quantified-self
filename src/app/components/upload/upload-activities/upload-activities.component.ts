@@ -119,7 +119,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
           this.logger.log('[UploadActivitiesComponent] Uploaded event', uploadResult.eventId);
           resolve({ eventId: uploadResult.eventId });
         } catch (error: unknown) {
-          const message = error instanceof Error ? error.message : 'Unknown upload error.';
+          const message = this.getUploadErrorMessage(error);
           this.snackBar.open(`Could not upload ${file.name}, reason: ${message}`, 'OK', { duration: 4000 });
           reject(error);
         }
@@ -133,5 +133,29 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
 
       fileReader.readAsArrayBuffer(file.file);
     });
+  }
+
+  private getUploadErrorMessage(error: unknown): string {
+    const rawMessage = error instanceof Error ? error.message : 'Unknown upload error.';
+    const genericStatusMatch = rawMessage.match(/^Upload failed \((\d{3})\)\.?$/);
+    if (!genericStatusMatch) {
+      return rawMessage;
+    }
+
+    const status = Number(genericStatusMatch[1]);
+    if (status >= 500) {
+      return 'Upload failed because the server is temporarily unavailable. Please try again shortly.';
+    }
+    if (status === 429) {
+      return 'Upload limit reached for your current plan.';
+    }
+    if (status === 401) {
+      return 'Upload is not authorized. Please sign in again.';
+    }
+    if (status === 400) {
+      return 'Could not process uploaded file. Check file format and try again.';
+    }
+
+    return rawMessage;
   }
 }
