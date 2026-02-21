@@ -355,6 +355,19 @@ describe('reparse-sports-lib-events script', () => {
         expect(hoisted.shouldEventBeReparsed).toHaveBeenCalledTimes(1);
     });
 
+    it('single UID mode should support --uid=<uid> and --limit=<n> in execution path', async () => {
+        hoisted.userEventsByUID.set('u1', [
+            makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }),
+            makeEventDoc('u1', 'e2', { originalFile: { path: 'x.fit' } }),
+        ]);
+
+        const summary = await runSportsLibReparseScript(['--uid=u1', '--limit=1', '--execute']);
+        expect(summary.scanned).toBe(1);
+        expect(summary.completed).toBe(1);
+        expect(hoisted.collectionGroup).not.toHaveBeenCalled();
+        expect(hoisted.shouldEventBeReparsed).toHaveBeenCalledTimes(1);
+    });
+
     it('single UID mode should respect --start-after', async () => {
         hoisted.userEventsByUID.set('u1', [
             makeEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }),

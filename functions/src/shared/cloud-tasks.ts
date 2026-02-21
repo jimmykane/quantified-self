@@ -126,7 +126,7 @@ export async function enqueueWorkoutTask(
 /**
  * Enqueue a single sports-lib reparse job task.
  */
-export async function enqueueSportsLibReparseTask(jobId: string, scheduleDelaySeconds?: number): Promise<void> {
+export async function enqueueSportsLibReparseTask(jobId: string, scheduleDelaySeconds?: number): Promise<boolean> {
     const client = getCloudTasksClient();
     const { projectId, location, sportsLibReparseQueue, serviceAccountEmail } = config.cloudtasks;
     if (!projectId) {
@@ -139,7 +139,7 @@ export async function enqueueSportsLibReparseTask(jobId: string, scheduleDelaySe
     const taskName = `${parent}/tasks/reparse-${safeJobId}`;
     const payload = { data: { jobId } };
 
-    await enqueueTaskWithRetry({
+    return enqueueTaskWithRetry({
         parent,
         taskName,
         payload,
@@ -162,7 +162,7 @@ interface EnqueueTaskParams {
     failedLogPrefix: string;
 }
 
-async function enqueueTaskWithRetry(params: EnqueueTaskParams): Promise<void> {
+async function enqueueTaskWithRetry(params: EnqueueTaskParams): Promise<boolean> {
     const {
         parent,
         taskName,
@@ -202,11 +202,11 @@ async function enqueueTaskWithRetry(params: EnqueueTaskParams): Promise<void> {
             const currentClient = getCloudTasksClient();
             const [response] = await currentClient.createTask({ parent, task });
             logger.info(`[Dispatcher] Enqueued task: ${response.name}`);
-            return;
+            return true;
         } catch (error: any) {
             if ((error as any).code === 6) {
                 logger.info(alreadyExistsLogMessage);
-                return;
+                return false;
             }
 
             const isRetryable = (error.code === 14) ||
@@ -225,4 +225,6 @@ async function enqueueTaskWithRetry(params: EnqueueTaskParams): Promise<void> {
             throw error;
         }
     }
+
+    throw new Error('[Dispatcher] Failed to enqueue task after retry loop exhausted.');
 }

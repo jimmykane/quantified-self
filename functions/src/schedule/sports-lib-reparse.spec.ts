@@ -355,6 +355,7 @@ describe('scheduleSportsLibReparseScan', () => {
         hoisted.shouldEventBeReparsed.mockResolvedValue(true);
         hoisted.hasPaidOrGraceAccess.mockResolvedValue(true);
         hoisted.extractSourceFiles.mockReturnValue([{ path: 'users/u1/events/e1/original.fit' }]);
+        hoisted.enqueueSportsLibReparseTask.mockResolvedValue(true);
     });
 
     it('should short-circuit when runtime flag is disabled', async () => {
@@ -531,6 +532,36 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledTimes(1);
         expect(finalCheckpointPayload.cursorProcessingDocPath).toBe(`${firstEventRef.path}/metaData/processing`);
         expect(finalCheckpointPayload.lastScanCount).toBe(1);
+        expect(finalCheckpointPayload.lastEnqueuedCount).toBe(1);
+    });
+
+    it('should not count already-existing Cloud Tasks against enqueue limit', async () => {
+        hoisted.runtimeDefaults.scanLimit = 2;
+        hoisted.runtimeDefaults.enqueueLimit = 1;
+        hoisted.buildSportsLibReparseJobId.mockImplementation((_uid: string, eventId: string) => `job-${eventId}`);
+        hoisted.enqueueSportsLibReparseTask
+            .mockResolvedValueOnce(false)
+            .mockResolvedValueOnce(true);
+
+        const firstEventRef = createEventRef('u1', 'e1', { originalFile: { path: 'first.fit' } });
+        const secondEventRef = createEventRef('u1', 'e2', { originalFile: { path: 'second.fit' } });
+        hoisted.processingDocs.push(
+            createProcessingDoc(firstEventRef, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+            createProcessingDoc(secondEventRef, {
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+        );
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledTimes(2);
+        expect(finalCheckpointPayload.cursorProcessingDocPath).toBe(`${secondEventRef.path}/metaData/processing`);
+        expect(finalCheckpointPayload.lastScanCount).toBe(2);
         expect(finalCheckpointPayload.lastEnqueuedCount).toBe(1);
     });
 

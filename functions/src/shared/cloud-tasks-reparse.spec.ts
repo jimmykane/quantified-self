@@ -49,7 +49,7 @@ describe('enqueueSportsLibReparseTask', () => {
     });
 
     it('should enqueue reparse task with deterministic name and payload', async () => {
-        await enqueueSportsLibReparseTask('job-abc-123');
+        await expect(enqueueSportsLibReparseTask('job-abc-123')).resolves.toBe(true);
 
         expect(hoisted.mockCloudTasksClient.queuePath).toHaveBeenCalledWith(
             'test-project',
@@ -78,6 +78,6 @@ describe('enqueueSportsLibReparseTask', () => {
         err.code = 6;
         hoisted.mockCloudTasksClient.createTask.mockRejectedValue(err);
 
-        await expect(enqueueSportsLibReparseTask('job-abc-123')).resolves.toBeUndefined();
+        await expect(enqueueSportsLibReparseTask('job-abc-123')).resolves.toBe(false);
     });
 });

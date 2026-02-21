@@ -194,8 +194,10 @@ export const scheduleSportsLibReparseScan = onSchedule({
         }, { merge: true });
 
         try {
-            await enqueueSportsLibReparseTask(jobId);
-            enqueuedCount++;
+            const taskCreated = await enqueueSportsLibReparseTask(jobId);
+            if (taskCreated) {
+                enqueuedCount++;
+            }
         } catch (error) {
             const errorMessage = toErrorMessage(error);
             await jobRef.set({
