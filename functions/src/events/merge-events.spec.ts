@@ -559,6 +559,10 @@ describe('mergeEvents', () => {
     expect(mergedEvent.isMerge).toBe(false);
     expect(mergedEvent.mergeType).toBe('multi');
     expect(mergedEvent.description).toBe('');
+    expect(hoisted.mockDocSet).toHaveBeenCalledWith({
+      isMerge: false,
+      mergeType: 'multi',
+    }, { merge: true });
   });
 
   it('should map source event parse failures to internal HttpsError', async () => {

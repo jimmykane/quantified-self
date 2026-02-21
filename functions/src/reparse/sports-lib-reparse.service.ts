@@ -109,6 +109,8 @@ export interface ReparseExecutionResult {
     staleActivitiesDeleted: number;
 }
 
+type MergeType = 'benchmark' | 'multi';
+
 function toDateOrUndefined(value: unknown): Date | undefined {
     if (!value) {
         return undefined;
@@ -602,6 +604,27 @@ async function deleteStaleActivities(
     return deleted;
 }
 
+function extractPreservedMergeMetadata(existingEventDoc: FirestoreEventJSON | Record<string, unknown>): {
+    isMerge?: boolean;
+    mergeType?: MergeType;
+} {
+    const existingAny = existingEventDoc as Record<string, unknown>;
+    const preserved: { isMerge?: boolean; mergeType?: MergeType } = {};
+
+    if (Object.prototype.hasOwnProperty.call(existingAny, 'isMerge') && typeof existingAny.isMerge === 'boolean') {
+        preserved.isMerge = existingAny.isMerge;
+    }
+    if (
+        Object.prototype.hasOwnProperty.call(existingAny, 'mergeType')
+        && typeof existingAny.mergeType === 'string'
+        && MERGE_TYPE_VALUES.has(existingAny.mergeType)
+    ) {
+        preserved.mergeType = existingAny.mergeType as MergeType;
+    }
+
+    return preserved;
+}
+
 export async function persistReparsedEvent(
     uid: string,
     eventId: string,
@@ -623,6 +646,11 @@ export async function persistReparsedEvent(
 
     const writer = new EventWriter(getFirestoreAdapter(), undefined, undefined, getWriterLogAdapter());
     await writer.writeAllEventData(uid, parsedEvent as any);
+
+    const mergeMetadata = extractPreservedMergeMetadata(existingEventDoc);
+    if (Object.keys(mergeMetadata).length > 0) {
+        await admin.firestore().doc(`users/${uid}/events/${eventId}`).set(mergeMetadata, { merge: true });
+    }
 
     const newActivityIDs = new Set<string>();
     parsedEvent.getActivities().forEach(activity => {

@@ -635,11 +635,11 @@ describe('sports-lib-reparse.service', () => {
     });
 
     it('persistReparsedEvent should delete stale activities and write processing metadata', async () => {
-        const setCalls: Array<{ path: string; payload?: Record<string, unknown> }> = [];
+        const setCalls: Array<{ path: string; payload?: Record<string, unknown>; options?: Record<string, unknown> }> = [];
         hoisted.mockDoc.mockImplementation((path: string) => ({
             path,
-            set: vi.fn(async (payload: Record<string, unknown>) => {
-                setCalls.push({ path, payload });
+            set: vi.fn(async (payload: Record<string, unknown>, options?: Record<string, unknown>) => {
+                setCalls.push({ path, payload, options });
             }),
             get: vi.fn().mockResolvedValue({ exists: true, data: () => ({}) }),
         }));
@@ -653,7 +653,7 @@ describe('sports-lib-reparse.service', () => {
             'u1',
             'e1',
             parsedEvent,
-            { originalFiles: [{ path: 'orig.fit' }] },
+            { originalFiles: [{ path: 'orig.fit' }], isMerge: false, mergeType: 'multi' },
             [
                 { id: 'a1', data: () => ({}) } as any,
                 { id: 'a2', data: () => ({}) } as any,
@@ -671,6 +671,12 @@ describe('sports-lib-reparse.service', () => {
             sportsLibVersionCode: sportsLibVersionToCode('9.0.99'),
             processedAt: 'SERVER_TIMESTAMP',
         }));
+        const mergeMetadataCall = setCalls.find(call => call.path === 'users/u1/events/e1');
+        expect(mergeMetadataCall?.payload).toEqual(expect.objectContaining({
+            isMerge: false,
+            mergeType: 'multi',
+        }));
+        expect(mergeMetadataCall?.options).toEqual({ merge: true });
         expect(hoisted.mockWriteAllEventData).toHaveBeenCalled();
     });
 

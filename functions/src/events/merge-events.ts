@@ -478,6 +478,10 @@ export const mergeEvents = onCall({
 
     const writer = new EventWriter(getFirestoreAdapter(), getStorageAdapter());
     await writer.writeAllEventData(userID, mergedEvent as any, originalFiles);
+    await admin.firestore().doc(`users/${userID}/events/${mergedEventID}`).set({
+      isMerge: mergeType === 'benchmark',
+      mergeType,
+    }, { merge: true });
     await persistProcessingMetadata(userID, mergedEventID);
 
     return {
