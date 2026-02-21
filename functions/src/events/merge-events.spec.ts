@@ -223,6 +223,32 @@ vi.mock('../../../src/shared/functions-manifest', () => ({
 
 import { mergeEvents } from './merge-events';
 
+function hasNestedStreamsKey(value: unknown, isRoot: boolean = true): boolean {
+  if (value === null || value === undefined) {
+    return false;
+  }
+
+  if (Array.isArray(value)) {
+    return value.some(item => hasNestedStreamsKey(item, false));
+  }
+
+  if (typeof value !== 'object') {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const [key, child] of Object.entries(record)) {
+    if (key === 'streams' && !isRoot) {
+      return true;
+    }
+    if (hasNestedStreamsKey(child, false)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function seedTwoEvents(): void {
   hoisted.state.eventDocs.set('users/u1/events/e1', {
     startDate: new Date('2026-01-10T10:00:00.000Z'),
@@ -407,7 +433,7 @@ describe('mergeEvents', () => {
     });
   });
 
-  it('should inject default activity parsing fields for stream-stripped docs', async () => {
+  it('should strip nested streams and inject stream-less parser defaults', async () => {
     hoisted.state.activitiesByEventID.set('e1', [
       {
         id: 'a1',
@@ -415,6 +441,12 @@ describe('mergeEvents', () => {
           startDate: new Date('2026-01-10T10:00:00.000Z'),
           creator: { name: 'Garmin' },
           streams: [{ type: 'Power', values: [100, 200, 150] }],
+          laps: [{ split: 1, streams: [{ type: 'Pace', values: [1, 2] }] }],
+          nested: {
+            details: {
+              streams: [{ type: 'HeartRate', values: [150, 151] }],
+            },
+          },
         },
       },
     ]);
@@ -429,10 +461,11 @@ describe('mergeEvents', () => {
     const firstCallPayload = hoisted.mockEventImporterJSON.getActivityFromJSON.mock.calls[0][0];
     expect(firstCallPayload).toMatchObject({
       stats: {},
-      laps: [],
+      laps: [{ split: 1 }],
       streams: [],
       intensityZones: [],
       events: [],
     });
+    expect(hasNestedStreamsKey(firstCallPayload)).toBe(false);
   });
 });

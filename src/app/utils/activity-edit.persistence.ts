@@ -1,4 +1,5 @@
 import { ActivityInterface, EventInterface } from '@sports-alliance/sports-lib';
+import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../functions/src/shared/firestore-write-sanitizer';
 
 export interface ActivityEditWritePayload {
   activityData: any;
@@ -6,10 +7,9 @@ export interface ActivityEditWritePayload {
 }
 
 export function buildActivityWriteData(userID: string, event: EventInterface, activity: ActivityInterface): any {
-  const activityData = activity.toJSON() as any;
-
-  // Activity documents should not persist streams; they come from source files/rehydration.
-  delete activityData.streams;
+  const activityData = sanitizeActivityFirestoreWritePayload(
+    activity.toJSON() as Record<string, unknown>
+  ) as any;
 
   activityData.eventID = event.getID();
   activityData.userID = userID;
@@ -21,12 +21,10 @@ export function buildActivityWriteData(userID: string, event: EventInterface, ac
 }
 
 export function buildEventWriteData(event: EventInterface): any {
-  const eventData = event.toJSON() as any;
+  const eventData = sanitizeEventFirestoreWritePayload(
+    event.toJSON() as Record<string, unknown>
+  ) as any;
   const eventAny = event as any;
-
-  // Event documents should not persist embedded activities.
-  // Activities (and their streams) live in /users/{uid}/activities and stream files.
-  delete eventData.activities;
 
   // Preserve original file metadata across partial updates.
   if (eventAny.originalFiles) {

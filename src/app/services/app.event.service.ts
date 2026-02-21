@@ -19,6 +19,7 @@ import {
 import { EventExporterGPX } from '@sports-alliance/sports-lib';
 
 import { EventWriter, FirestoreAdapter, StorageAdapter, OriginalFile } from '../../../functions/src/shared/event-writer';
+import { sanitizeEventFirestoreWritePayload } from '../../../functions/src/shared/firestore-write-sanitizer';
 import { generateActivityID, generateEventID } from '../../../functions/src/shared/id-generator';
 import { createParsingOptions } from '../../../functions/src/shared/parsing-options';
 import { Bytes, serverTimestamp } from 'firebase/firestore';
@@ -793,7 +794,15 @@ export class AppEventService implements OnDestroy {
 
   public async updateEventProperties(user: User, eventID: string, propertiesToUpdate: any) {
     // @todo check if properties are allowed on object via it's JSON export interface keys
-    return runInInjectionContext(this.injector, () => updateDoc(doc(this.firestore, 'users', user.uid, 'events', eventID), propertiesToUpdate));
+    let sanitizedProperties = propertiesToUpdate;
+    if (propertiesToUpdate && typeof propertiesToUpdate === 'object' && !Array.isArray(propertiesToUpdate)) {
+      sanitizedProperties = sanitizeEventFirestoreWritePayload(propertiesToUpdate as Record<string, unknown>);
+    }
+
+    return runInInjectionContext(
+      this.injector,
+      () => updateDoc(doc(this.firestore, 'users', user.uid, 'events', eventID), sanitizedProperties)
+    );
   }
 
   /**

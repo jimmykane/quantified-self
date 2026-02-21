@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { Firestore, doc, docData, collection, collectionData, deleteDoc, setDoc, writeBatch } from '@angular/fire/firestore';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc, setDoc, updateDoc, writeBatch } from '@angular/fire/firestore';
 import { Storage } from '@angular/fire/storage';
 import { Auth } from '@angular/fire/auth';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -40,6 +40,24 @@ const mocks = vi.hoisted(() => {
     };
 });
 
+function hasStreamsKey(value: unknown): boolean {
+    if (value === null || value === undefined) {
+        return false;
+    }
+    if (Array.isArray(value)) {
+        return value.some(hasStreamsKey);
+    }
+    if (typeof value !== 'object') {
+        return false;
+    }
+
+    const record = value as Record<string, unknown>;
+    if (Object.prototype.hasOwnProperty.call(record, 'streams')) {
+        return true;
+    }
+    return Object.values(record).some(hasStreamsKey);
+}
+
 // Mock @angular/fire/firestore
 vi.mock('@angular/fire/firestore', async (importOriginal) => {
     const actual = await importOriginal<typeof import('@angular/fire/firestore')>();
@@ -53,6 +71,7 @@ vi.mock('@angular/fire/firestore', async (importOriginal) => {
         where: vi.fn(),
         deleteDoc: vi.fn(),
         setDoc: vi.fn(),
+        updateDoc: vi.fn(),
         writeBatch: vi.fn(() => ({
             set: mocks.batchSet,
             commit: mocks.batchCommit,
@@ -598,6 +617,29 @@ describe('AppEventService', () => {
             }),
             { merge: true }
         );
+    });
+
+    it('should sanitize updateEventProperties payload by stripping streams and top-level activities', async () => {
+        const user = { uid: 'user1' } as any;
+        const payload = {
+            name: 'Updated event name',
+            activities: [{ id: 'activity1' }],
+            details: {
+                streams: [{ type: 'Power', values: [100, 200] }],
+                nested: [{ streams: [{ type: 'Pace', values: [1, 2, 3] }] }],
+            },
+        };
+
+        (doc as Mock).mockReturnValue({});
+        (updateDoc as Mock).mockResolvedValue(undefined);
+
+        await service.updateEventProperties(user, 'event1', payload);
+
+        expect(updateDoc).toHaveBeenCalledTimes(1);
+        const writtenPayload = (updateDoc as Mock).mock.calls[0][1];
+        expect(writtenPayload.name).toBe('Updated event name');
+        expect(writtenPayload.activities).toBeUndefined();
+        expect(hasStreamsKey(writtenPayload)).toBe(false);
     });
 
     it('should atomically write activity and event in writeActivityAndEventData', async () => {

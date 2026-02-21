@@ -1,4 +1,5 @@
 import { AppEventInterface, FirestoreActivityJSON, FirestoreEventJSON } from './app-event.interface';
+import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from './firestore-write-sanitizer';
 
 /**
  * Logger adapter interface for cross-environment compatibility.
@@ -142,8 +143,9 @@ export class EventWriter {
                     activity.setID(this.adapter.generateID());
                 }
 
-                const activityJSON = activity.toJSON() as unknown as FirestoreActivityJSON;
-                delete (activityJSON as Record<string, unknown>).streams;
+                const activityJSON = sanitizeActivityFirestoreWritePayload(
+                    activity.toJSON() as unknown as Record<string, unknown>
+                ) as FirestoreActivityJSON;
 
                 // Write Activity
                 // Add flat structure metadata for Firestore querying
@@ -161,8 +163,9 @@ export class EventWriter {
             this.logger.info(`Prepared ${activities.length} activity writes in ${Date.now() - startActivities}ms`);
 
             // Write Event
-            const eventJSON = event.toJSON() as unknown as FirestoreEventJSON;
-            delete (eventJSON as Record<string, unknown>).activities;
+            const eventJSON = sanitizeEventFirestoreWritePayload(
+                event.toJSON() as unknown as Record<string, unknown>
+            ) as FirestoreEventJSON;
 
             // Normalize input to array or single
             let filesToUpload: { data: unknown, extension: string, startDate: Date, originalFilename?: string }[] = [];
