@@ -89,7 +89,10 @@ service cloud.firestore {
           match /activities/{activityID} {
             // New Flat Activities Collection
             allow read: if resource.data.privacy == 'public';
-            allow read, write: if request.auth.uid == userID;
+            allow read, create, delete: if request.auth.uid == userID;
+            allow update: if request.auth.uid == userID 
+              && (!('eventID' in request.resource.data.diff(resource.data).affectedKeys()) 
+                  || request.resource.data.eventID == resource.data.eventID);
           }
 
         match /meta/{document=**} {
