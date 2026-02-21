@@ -406,4 +406,33 @@ describe('mergeEvents', () => {
       uploadCountAfterWrite: 1,
     });
   });
+
+  it('should inject default activity parsing fields for stream-stripped docs', async () => {
+    hoisted.state.activitiesByEventID.set('e1', [
+      {
+        id: 'a1',
+        data: {
+          startDate: new Date('2026-01-10T10:00:00.000Z'),
+          creator: { name: 'Garmin' },
+          streams: [{ type: 'Power', values: [100, 200, 150] }],
+        },
+      },
+    ]);
+
+    await mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as any);
+
+    expect(hoisted.mockEventImporterJSON.getActivityFromJSON).toHaveBeenCalledTimes(2);
+    const firstCallPayload = hoisted.mockEventImporterJSON.getActivityFromJSON.mock.calls[0][0];
+    expect(firstCallPayload).toMatchObject({
+      stats: {},
+      laps: [],
+      streams: [],
+      intensityZones: [],
+      events: [],
+    });
+  });
 });

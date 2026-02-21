@@ -245,12 +245,43 @@ function sortActivityDocs(
   });
 }
 
+function ensureArray<T = unknown>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
+}
+
+function ensureObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  return value as Record<string, unknown>;
+}
+
 function toActivityJSON(snapshot: Pick<admin.firestore.QueryDocumentSnapshot, 'data'>): ActivityJSONInterface {
   const activityJSON = { ...(snapshot.data() as Record<string, unknown>) };
   delete activityJSON.eventID;
   delete activityJSON.userID;
   delete activityJSON.eventStartDate;
+
+  // Activity docs are persisted without streams; sports-lib JSON import expects these fields.
+  activityJSON.stats = ensureObject(activityJSON.stats);
+  activityJSON.laps = ensureArray(activityJSON.laps);
+  // Merge path is intentionally stream-less; never hydrate streams here.
+  activityJSON.streams = [];
+  activityJSON.intensityZones = ensureArray(activityJSON.intensityZones);
+  activityJSON.events = ensureArray(activityJSON.events);
+
   return activityJSON as unknown as ActivityJSONInterface;
+}
+
+function serializeError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    };
+  }
+  return { value: `${error}` };
 }
 
 function clearGeneratedMergeDescription(event: EventInterface): void {
@@ -463,7 +494,7 @@ export const mergeEvents = onCall({
       userID,
       eventIDs,
       mergeType,
-      error,
+      error: serializeError(error),
     });
     throw new HttpsError('internal', 'Could not merge events.');
   }
