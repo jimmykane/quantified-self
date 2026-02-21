@@ -794,6 +794,7 @@ export class AppEventService implements OnDestroy {
 
   public async updateEventProperties(user: User, eventID: string, propertiesToUpdate: any) {
     // @todo check if properties are allowed on object via it's JSON export interface keys
+    // Mandatory shared write policy: sanitize ad-hoc event patch payloads before updateDoc.
     let sanitizedProperties = propertiesToUpdate;
     if (propertiesToUpdate && typeof propertiesToUpdate === 'object' && !Array.isArray(propertiesToUpdate)) {
       sanitizedProperties = sanitizeEventFirestoreWritePayload(propertiesToUpdate as Record<string, unknown>);

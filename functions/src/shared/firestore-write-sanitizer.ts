@@ -3,6 +3,12 @@
  *
  * This helper must be used for every event/activity write path so stream
  * payloads never get persisted in Firestore documents.
+ *
+ * Policy:
+ * - Activity/event payloads written to Firestore must not contain `streams`.
+ * - Event documents written to Firestore must not contain top-level `activities`.
+ * - Do not duplicate ad-hoc `delete payload.streams` / `delete payload.activities`;
+ *   always use these helper exports at the final write boundary.
  */
 
 /**
@@ -44,6 +50,7 @@ export function stripStreamsRecursivelyInPlace(value: unknown): void {
 
 /**
  * Returns a sanitized activity write payload with every nested `streams` field removed.
+ * Use this right before persisting activity payloads.
  */
 export function sanitizeActivityFirestoreWritePayload(activityJson: Record<string, unknown>): Record<string, unknown> {
   const sanitizedPayload: Record<string, unknown> = { ...activityJson };
@@ -54,6 +61,7 @@ export function sanitizeActivityFirestoreWritePayload(activityJson: Record<strin
 /**
  * Returns a sanitized event write payload with every nested `streams` field removed
  * and denormalized `activities` removed from the top-level event document.
+ * Use this right before persisting event payloads.
  */
 export function sanitizeEventFirestoreWritePayload(eventJson: Record<string, unknown>): Record<string, unknown> {
   const sanitizedPayload: Record<string, unknown> = { ...eventJson };

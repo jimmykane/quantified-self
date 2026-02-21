@@ -7,6 +7,7 @@ export interface ActivityEditWritePayload {
 }
 
 export function buildActivityWriteData(userID: string, event: EventInterface, activity: ActivityInterface): any {
+  // Mandatory shared write policy: sanitize at the payload boundary before Firestore writes.
   const activityData = sanitizeActivityFirestoreWritePayload(
     activity.toJSON() as Record<string, unknown>
   ) as any;
@@ -21,6 +22,7 @@ export function buildActivityWriteData(userID: string, event: EventInterface, ac
 }
 
 export function buildEventWriteData(event: EventInterface): any {
+  // Mandatory shared write policy: sanitize at the payload boundary before Firestore writes.
   const eventData = sanitizeEventFirestoreWritePayload(
     event.toJSON() as Record<string, unknown>
   ) as any;

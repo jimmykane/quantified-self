@@ -38,3 +38,9 @@ These are baseline rules that apply across the repository unless a deeper `AGENT
 - Handle nullable values defensively due to loose strictness.
 - Avoid `any` casts, especially around Firestore/external payloads.
 - Use `BrowserCompatibilityService` for modern API checks before use.
+
+## Event/Activity Firestore Writes
+- Always sanitize event/activity Firestore payloads with shared helpers from `functions/src/shared/firestore-write-sanitizer.ts`.
+- Never persist `streams` inside event/activity Firestore documents.
+- Never persist top-level `activities` inside event Firestore documents.
+- For patch updates (`updateDoc`) on events, sanitize patch objects before write.

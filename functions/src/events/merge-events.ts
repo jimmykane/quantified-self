@@ -259,6 +259,7 @@ function ensureObject(value: unknown): Record<string, unknown> {
 
 function toActivityJSON(snapshot: Pick<admin.firestore.QueryDocumentSnapshot, 'data'>): ActivityJSONInterface {
   const activityJSON = { ...(snapshot.data() as Record<string, unknown>) };
+  // Mandatory shared write policy: sanitize reconstructed activity payloads before parse defaults.
   stripStreamsRecursivelyInPlace(activityJSON);
   delete activityJSON.eventID;
   delete activityJSON.userID;

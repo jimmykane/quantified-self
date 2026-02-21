@@ -143,6 +143,7 @@ export class EventWriter {
                     activity.setID(this.adapter.generateID());
                 }
 
+                // Mandatory shared write policy: all activity payloads are sanitized via helper.
                 const activityJSON = sanitizeActivityFirestoreWritePayload(
                     activity.toJSON() as unknown as Record<string, unknown>
                 ) as FirestoreActivityJSON;
@@ -163,6 +164,7 @@ export class EventWriter {
             this.logger.info(`Prepared ${activities.length} activity writes in ${Date.now() - startActivities}ms`);
 
             // Write Event
+            // Mandatory shared write policy: all event payloads are sanitized via helper.
             const eventJSON = sanitizeEventFirestoreWritePayload(
                 event.toJSON() as unknown as Record<string, unknown>
             ) as FirestoreEventJSON;
