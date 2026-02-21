@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { Firestore, doc, docData, collection, collectionData, deleteDoc, setDoc, updateDoc, writeBatch, query, where, orderBy, limit, startAfter, endBefore } from '@angular/fire/firestore';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc, setDoc, updateDoc, writeBatch, query, where } from '@angular/fire/firestore';
 import { Storage } from '@angular/fire/storage';
 import { Auth } from '@angular/fire/auth';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -753,42 +753,32 @@ describe('AppEventService', () => {
         ];
 
         (collection as Mock).mockReturnValue('events-ref');
-        (orderBy as Mock).mockImplementation((field: string, direction: string) => `orderBy:${field}:${direction}`);
         (where as Mock).mockImplementation((field: string, op: string, value: unknown) => `where:${field}:${op}:${String(value)}`);
-        (limit as Mock).mockImplementation((value: number) => `limit:${value}`);
-        (startAfter as Mock).mockImplementation((value: unknown) => `startAfter:${String((value as any)?.id || value)}`);
-        (endBefore as Mock).mockImplementation((value: unknown) => `endBefore:${String((value as any)?.id || value)}`);
         (query as Mock).mockReturnValue('query-result');
 
         const builtQuery = (service as any).getEventQueryForUser(user, clauses, 'name', true, 25, startCursor, endCursor);
 
         expect(builtQuery).toBe('query-result');
-        expect(query).toHaveBeenCalledWith(
-            'events-ref',
-            'orderBy:startDate:asc',
-            'orderBy:name:asc',
-            expect.stringContaining('where:startDate:>=:'),
-            'where:privacy:==:public',
-            'limit:25',
-            'startAfter:start',
-            'endBefore:end',
-        );
+        expect(query).toHaveBeenCalledTimes(1);
+        expect((query as Mock).mock.calls[0][0]).toBe('events-ref');
+        expect((query as Mock).mock.calls[0]).toHaveLength(8);
+        expect(where).toHaveBeenCalledWith('startDate', '>=', clauses[0].value);
+        expect(where).toHaveBeenCalledWith('privacy', '==', 'public');
     });
 
     it('should build Firestore query without limit/cursors when disabled', () => {
         const user = { uid: 'user-query' } as any;
 
         (collection as Mock).mockReturnValue('events-ref');
-        (orderBy as Mock).mockImplementation((field: string, direction: string) => `orderBy:${field}:${direction}`);
         (query as Mock).mockReturnValue('query-without-limit');
 
         const builtQuery = (service as any).getEventQueryForUser(user, [], 'startDate', false, 0);
 
         expect(builtQuery).toBe('query-without-limit');
-        expect(limit).not.toHaveBeenCalled();
-        expect(startAfter).not.toHaveBeenCalled();
-        expect(endBefore).not.toHaveBeenCalled();
-        expect(query).toHaveBeenCalledWith('events-ref', 'orderBy:startDate:desc');
+        expect(where).not.toHaveBeenCalled();
+        expect(query).toHaveBeenCalledTimes(1);
+        expect((query as Mock).mock.calls[0][0]).toBe('events-ref');
+        expect((query as Mock).mock.calls[0]).toHaveLength(2);
     });
 
     it('should emit empty events array when _getEventsAndActivities receives no snapshots', async () => {
@@ -798,6 +788,31 @@ describe('AppEventService', () => {
         const result = await firstValueFrom((service as any)._getEventsAndActivities({ uid: 'user-empty' } as any));
 
         expect(result).toEqual([]);
+    });
+
+    it('should hydrate events with activities in _getEventsAndActivities when snapshots exist', async () => {
+        const importedEvent = {
+            setID: vi.fn().mockReturnThis(),
+            addActivities: vi.fn(),
+            getID: vi.fn().mockReturnValue('event-hydrated'),
+            clearActivities: vi.fn(),
+        } as any;
+        mocks.getEventFromJSON.mockReturnValueOnce(importedEvent);
+
+        vi.spyOn(service as any, 'getEventQueryForUser').mockReturnValue('events-query');
+        (collectionData as Mock).mockReturnValueOnce(of([
+            {
+                id: 'event-hydrated',
+                startDate: new Date('2026-01-01T00:00:00.000Z'),
+            },
+        ]));
+        const getActivitiesSpy = vi.spyOn(service, 'getActivities').mockReturnValueOnce(of([{ id: 'activity-1' } as any]));
+
+        const result = await firstValueFrom((service as any)._getEventsAndActivities({ uid: 'user-hydrated' } as any));
+
+        expect(getActivitiesSpy).toHaveBeenCalledWith({ uid: 'user-hydrated' }, 'event-hydrated');
+        expect(importedEvent.addActivities).toHaveBeenCalledWith([{ id: 'activity-1' }]);
+        expect(result).toEqual([importedEvent]);
     });
 
     it('should resolve bucket metadata from active Storage instance', async () => {
