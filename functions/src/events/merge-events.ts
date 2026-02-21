@@ -387,7 +387,7 @@ async function downloadOriginalFilesForMerge(sourceFiles: SourceFileMeta[]): Pro
         originalFilename: sourceFile.originalFilename,
       });
     } catch (error) {
-      logger.warn('[mergeEvent] Failed to load source file for merge', {
+      logger.warn('[mergeEvents] Failed to load source file for merge', {
         path: sourceFile.path,
         bucket: sourceFile.bucket,
         error,
@@ -399,8 +399,8 @@ async function downloadOriginalFilesForMerge(sourceFiles: SourceFileMeta[]): Pro
   return originalFiles;
 }
 
-export const mergeEvent = onCall({
-  region: FUNCTIONS_MANIFEST.mergeEvent.region,
+export const mergeEvents = onCall({
+  region: FUNCTIONS_MANIFEST.mergeEvents.region,
   cors: ALLOWED_CORS_ORIGINS,
   timeoutSeconds: 540,
   maxInstances: 20,
@@ -459,7 +459,7 @@ export const mergeEvent = onCall({
       throw error;
     }
 
-    logger.error('[mergeEvent] Failed to merge events', {
+    logger.error('[mergeEvents] Failed to merge events', {
       userID,
       eventIDs,
       mergeType,

@@ -217,11 +217,11 @@ vi.mock('../reparse/sports-lib-reparse.service', () => ({
 
 vi.mock('../../../src/shared/functions-manifest', () => ({
   FUNCTIONS_MANIFEST: {
-    mergeEvent: { name: 'mergeEvent', region: 'europe-west2' },
+    mergeEvents: { name: 'mergeEvents', region: 'europe-west2' },
   },
 }));
 
-import { mergeEvent } from './merge-event';
+import { mergeEvents } from './merge-events';
 
 function seedTwoEvents(): void {
   hoisted.state.eventDocs.set('users/u1/events/e1', {
@@ -271,7 +271,7 @@ function seedTwoEvents(): void {
   hoisted.state.fileBytesByPath.set('users/u1/events/e2/original.gpx.gz', Buffer.from([0x03, 0x04]));
 }
 
-describe('mergeEvent', () => {
+describe('mergeEvents', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -290,7 +290,7 @@ describe('mergeEvent', () => {
   });
 
   it('should reject unauthenticated requests', async () => {
-    await expect(mergeEvent({
+    await expect(mergeEvents({
       auth: null,
       app: { appId: 'app-id' },
       data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
@@ -298,7 +298,7 @@ describe('mergeEvent', () => {
   });
 
   it('should reject requests without app check', async () => {
-    await expect(mergeEvent({
+    await expect(mergeEvents({
       auth: { uid: 'u1' },
       app: undefined,
       data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
@@ -306,25 +306,25 @@ describe('mergeEvent', () => {
   });
 
   it('should validate payload', async () => {
-    await expect(mergeEvent({
+    await expect(mergeEvents({
       auth: { uid: 'u1' },
       app: { appId: 'app-id' },
       data: { eventIds: ['e1'], mergeType: 'benchmark' },
     } as any)).rejects.toMatchObject({ code: 'invalid-argument' });
 
-    await expect(mergeEvent({
+    await expect(mergeEvents({
       auth: { uid: 'u1' },
       app: { appId: 'app-id' },
       data: { eventIds: ['e1', 'e1'], mergeType: 'benchmark' },
     } as any)).rejects.toMatchObject({ code: 'invalid-argument' });
 
-    await expect(mergeEvent({
+    await expect(mergeEvents({
       auth: { uid: 'u1' },
       app: { appId: 'app-id' },
       data: { eventIds: Array.from({ length: 11 }).map((_, index) => `e${index}`), mergeType: 'benchmark' },
     } as any)).rejects.toMatchObject({ code: 'invalid-argument' });
 
-    await expect(mergeEvent({
+    await expect(mergeEvents({
       auth: { uid: 'u1' },
       app: { appId: 'app-id' },
       data: { eventIds: ['e1', 'e2'], mergeType: 'invalid' },
@@ -334,7 +334,7 @@ describe('mergeEvent', () => {
   it('should enforce ownership by user-scoped event paths', async () => {
     hoisted.state.eventDocs.delete('users/u1/events/e2');
 
-    await expect(mergeEvent({
+    await expect(mergeEvents({
       auth: { uid: 'u1' },
       app: { appId: 'app-id' },
       data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
@@ -346,7 +346,7 @@ describe('mergeEvent', () => {
   it('should enforce free/basic upload limits and bypass for pro/grace', async () => {
     hoisted.state.eventCount = 10;
 
-    await expect(mergeEvent({
+    await expect(mergeEvents({
       auth: { uid: 'u1' },
       app: { appId: 'app-id' },
       data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
@@ -354,14 +354,14 @@ describe('mergeEvent', () => {
 
     hoisted.mockHasBasicAccess.mockResolvedValue(true);
     hoisted.state.eventCount = 100;
-    await expect(mergeEvent({
+    await expect(mergeEvents({
       auth: { uid: 'u1' },
       app: { appId: 'app-id' },
       data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
     } as any)).rejects.toMatchObject({ code: 'resource-exhausted' });
 
     hoisted.mockHasProAccess.mockResolvedValue(true);
-    await expect(mergeEvent({
+    await expect(mergeEvents({
       auth: { uid: 'u1' },
       app: { appId: 'app-id' },
       data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
@@ -371,7 +371,7 @@ describe('mergeEvent', () => {
   it('should fail whole merge when a source file is missing', async () => {
     hoisted.state.missingFilePaths.add('users/u1/events/e2/original.gpx.gz');
 
-    await expect(mergeEvent({
+    await expect(mergeEvents({
       auth: { uid: 'u1' },
       app: { appId: 'app-id' },
       data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
@@ -381,7 +381,7 @@ describe('mergeEvent', () => {
   });
 
   it('should merge events and return normalized payload', async () => {
-    const result = await mergeEvent({
+    const result = await mergeEvents({
       auth: { uid: 'u1' },
       app: { appId: 'app-id' },
       data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },

@@ -43,7 +43,7 @@ export class AppEventMergeService {
       const response = await this.functionsService.call<
         { eventIds: string[]; mergeType: MergeType },
         MergeEventResponse
-      >('mergeEvent', { eventIds, mergeType });
+      >('mergeEvents', { eventIds, mergeType });
       return response.data;
     } catch (error) {
       throw this.mapFunctionError(error);

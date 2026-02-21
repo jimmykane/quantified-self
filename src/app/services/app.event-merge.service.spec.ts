@@ -33,10 +33,10 @@ describe('AppEventMergeService', () => {
     service = TestBed.inject(AppEventMergeService);
   });
 
-  it('should call mergeEvent callable with eventIds and mergeType', async () => {
+  it('should call mergeEvents callable with eventIds and mergeType', async () => {
     const result = await service.mergeEvents(['e1', 'e2'], 'benchmark');
 
-    expect(functionsServiceMock.call).toHaveBeenCalledWith('mergeEvent', {
+    expect(functionsServiceMock.call).toHaveBeenCalledWith('mergeEvents', {
       eventIds: ['e1', 'e2'],
       mergeType: 'benchmark',
     });
