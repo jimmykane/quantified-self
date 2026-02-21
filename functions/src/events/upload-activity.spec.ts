@@ -12,6 +12,7 @@ const hoisted = vi.hoisted(() => {
   const mockGenerateActivityID = vi.fn();
   const mockHasProAccess = vi.fn();
   const mockHasBasicAccess = vi.fn();
+  const mockEnforceAppCheckFlag = { value: true };
   const mockFITImporter = { getFromArrayBuffer: vi.fn() };
   const mockGPXImporter = { getFromString: vi.fn() };
   const mockTCXImporter = { getFromXML: vi.fn() };
@@ -31,6 +32,7 @@ const hoisted = vi.hoisted(() => {
     mockGenerateActivityID,
     mockHasProAccess,
     mockHasBasicAccess,
+    mockEnforceAppCheckFlag,
     mockFITImporter,
     mockGPXImporter,
     mockTCXImporter,
@@ -99,6 +101,9 @@ vi.mock('firebase-admin', () => {
 
 vi.mock('../utils', () => ({
   ALLOWED_CORS_ORIGINS: [],
+  get ENFORCE_APP_CHECK() {
+    return hoisted.mockEnforceAppCheckFlag.value;
+  },
   hasProAccess: (...args: unknown[]) => hoisted.mockHasProAccess(...args),
   hasBasicAccess: (...args: unknown[]) => hoisted.mockHasBasicAccess(...args),
 }));
@@ -188,6 +193,7 @@ describe('uploadActivity', () => {
     hoisted.mockGenerateActivityID.mockResolvedValue('activity-1');
     hoisted.mockHasProAccess.mockResolvedValue(false);
     hoisted.mockHasBasicAccess.mockResolvedValue(false);
+    hoisted.mockEnforceAppCheckFlag.value = true;
 
     hoisted.mockFITImporter.getFromArrayBuffer.mockResolvedValue(makeParsedEvent());
     hoisted.mockGPXImporter.getFromString.mockResolvedValue(makeParsedEvent());
@@ -220,6 +226,17 @@ describe('uploadActivity', () => {
     }) as any, response as any);
 
     expect(response.status).toHaveBeenCalledWith(401);
+  });
+
+  it('should allow missing app check header when enforcement is disabled', async () => {
+    hoisted.mockEnforceAppCheckFlag.value = false;
+    const response = makeResponse();
+    await uploadActivity(makeRequest({
+      headers: { Authorization: 'Bearer token' },
+    }) as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(hoisted.mockVerifyAppCheckToken).not.toHaveBeenCalled();
   });
 
   it('should reject unsupported extension', async () => {

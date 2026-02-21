@@ -13,7 +13,7 @@ import { basename } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import * as xmldom from 'xmldom';
 
-import { ALLOWED_CORS_ORIGINS, hasBasicAccess, hasProAccess } from '../utils';
+import { ALLOWED_CORS_ORIGINS, ENFORCE_APP_CHECK, hasBasicAccess, hasProAccess } from '../utils';
 import { createParsingOptions } from '../shared/parsing-options';
 import { EventWriter, FirestoreAdapter, StorageAdapter, OriginalFile } from '../shared/event-writer';
 import { generateActivityID, generateEventID } from '../shared/id-generator';
@@ -165,6 +165,10 @@ async function verifyFirebaseUserIDFromAuthorizationHeader(
 }
 
 async function verifyAppCheckHeader(appCheckHeader?: string): Promise<void> {
+  if (!ENFORCE_APP_CHECK) {
+    return;
+  }
+
   if (!appCheckHeader) {
     throw new HttpStatusError(401, 'Missing App Check token.');
   }
