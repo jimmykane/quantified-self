@@ -1,22 +1,17 @@
 import { Component, OnInit } from '@angular/core';
 import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
-import { firstValueFrom } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { Router, ActivatedRoute } from '@angular/router';
-import { LoggerService } from '../../../services/logger.service';
+import { ActivatedRoute } from '@angular/router';
 import { AppFileService } from '../../../services/app.file.service';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
-import { EventImporterFIT } from '@sports-alliance/sports-lib';
-import { environment } from '../../../../environments/environment';
 import { ServiceNames, Auth2ServiceTokenInterface, Auth1ServiceTokenInterface, UserServiceMetaInterface } from '@sports-alliance/sports-lib';
 import { ServicesAbstractComponentDirective } from '../services-abstract-component.directive';
 import { AppFunctionsService } from '../../../services/app.functions.service';
-import { createParsingOptions } from '../../../../../functions/src/shared/parsing-options';
 
 
 @Component({
@@ -30,7 +25,6 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
 
   public serviceName = ServiceNames.SuuntoApp;
   public isDownloading = false;
-  public isImporting = false;
   clicks = 0;
 
   get suuntoServiceMeta(): UserServiceMetaInterface & { uploadedActivitiesCount?: number } | undefined {
@@ -78,25 +72,16 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
     return !(this.suuntoAppLinkFormGroup.get(field)?.valid && this.suuntoAppLinkFormGroup.get(field)?.touched);
   }
 
-  async onImportAndOpen() {
-    return this.onSubmit(true);
-  }
-
-  async onSubmit(shouldImportAndOpen?: boolean) {
+  async onSubmit() {
     if (!this.suuntoAppLinkFormGroup.valid) {
       this.validateAllFormFields(this.suuntoAppLinkFormGroup);
       return;
     }
 
-    if (this.isDownloading || this.isImporting) {
+    if (this.isDownloading) {
       return false;
     }
-
-    if (shouldImportAndOpen) {
-      this.isImporting = true;
-    } else {
-      this.isDownloading = true;
-    }
+    this.isDownloading = true;
 
     try {
 
@@ -120,23 +105,12 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
       }
       const result = bytes.buffer;
 
-      if (!shouldImportAndOpen) {
-        this.fileService.downloadFile(new Blob([new Uint8Array(result)]), activityID, 'fit');
-        // .subscribe(response => this.downLoadFile(response, "application/ms-excel"));
-        this.snackBar.open('Activity download started', undefined, {
-          duration: 2000,
-        });
-        this.analyticsService.logEvent('downloaded_fit_file', { method: ServiceNames.SuuntoApp });
-      } else {
-        const newEvent = await EventImporterFIT.getFromArrayBuffer(result, createParsingOptions());
-        await this.eventService.writeAllEventData(this.user, newEvent, {
-          data: result,
-          extension: 'fit',
-          startDate: newEvent.startDate
-        });
-        this.analyticsService.logEvent('imported_fit_file', { method: ServiceNames.SuuntoApp });
-        await this.router.navigate(['/user', this.user.uid, 'event', newEvent.getID()], {});
-      }
+      this.fileService.downloadFile(new Blob([new Uint8Array(result)]), activityID, 'fit');
+      // .subscribe(response => this.downLoadFile(response, "application/ms-excel"));
+      this.snackBar.open('Activity download started', undefined, {
+        duration: 2000,
+      });
+      this.analyticsService.logEvent('downloaded_fit_file', { method: ServiceNames.SuuntoApp });
     } catch (e) {
       this.snackBar.open('Could not open activity. Make sure that the activity is public by opening the link in a new browser tab', undefined, {
         duration: 5000,
@@ -144,7 +118,6 @@ export class ServicesSuuntoComponent extends ServicesAbstractComponentDirective 
       this.logger.error(e);
     } finally {
       this.isDownloading = false;
-      this.isImporting = false;
     }
   }
 

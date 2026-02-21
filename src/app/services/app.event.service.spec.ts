@@ -222,21 +222,20 @@ describe('AppEventService', () => {
         expect(service).toBeTruthy();
     });
 
-    it('should skip compression if browser not supported', async () => {
-        mockCompatibility.checkCompressionSupport.mockReturnValue(false);
+    it('should call EventWriter without a storage adapter for frontend writes', async () => {
         const mockEvent = {
             getID: () => '1',
             startDate: new Date(),
             getActivities: () => [],
             setID: vi.fn()
         } as any;
-        const originalFiles = [{ extension: 'gpx', data: 'content', startDate: new Date() }] as any;
 
-        await service.writeAllEventData({ uid: 'user1' } as any, mockEvent, originalFiles);
+        await service.writeAllEventData({ uid: 'user1' } as any, mockEvent);
 
-        expect(globalThis.CompressionStream).not.toHaveBeenCalled();
-        expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('Compression skipped'));
-        expect(mocks.writeAllEventData).toHaveBeenCalled();
+        const writerInstance = mocks.eventWriterInstances.at(-1);
+        expect(writerInstance).toBeTruthy();
+        expect(writerInstance!.storageAdapter).toBeUndefined();
+        expect(writerInstance!.bucketName).toBeUndefined();
     });
 
     it('should get event and activities correctly', async () => {
@@ -815,22 +814,6 @@ describe('AppEventService', () => {
         expect(result).toEqual([importedEvent]);
     });
 
-    it('should resolve bucket metadata from active Storage instance', async () => {
-        const mockEvent = {
-            getID: () => '1',
-            startDate: new Date(),
-            getActivities: () => [],
-            setID: vi.fn()
-        } as any;
-        const user = { uid: 'user1' } as any;
-
-        await service.writeAllEventData(user, mockEvent);
-
-        const writerInstance = mocks.eventWriterInstances.at(-1);
-        expect(writerInstance).toBeTruthy();
-        expect((writerInstance!.storageAdapter as { getBucketName: () => string }).getBucketName()).toBe('quantified-self-io');
-    });
-
     describe('ID generation with zero bucketing', () => {
         it('should call generateEventID with thresholdMs=0 for frontend uploads', async () => {
             // Mock generateEventID to track calls
@@ -930,48 +913,6 @@ describe('AppEventService', () => {
         });
     });
 
-    // Note: Testing compressed file size rejection would require complex mocking
-    // of the Response/CompressionStream chain. The size check is verified to work
-    // by the implementation in app.event.service.ts lines 347-350.
-
-
-    it('should reject non-compressible files larger than 10MB', async () => {
-        const largeBuffer = new ArrayBuffer(11 * 1024 * 1024);
-        const mockEvent = {
-            getID: () => '1',
-            startDate: new Date(),
-            getActivities: () => [],
-            setID: vi.fn()
-        } as any;
-        // FIT is non-compressible
-        const originalFiles = [{ extension: 'fit', data: largeBuffer, startDate: new Date() }] as any;
-
-        await expect(service.writeAllEventData({ uid: 'user1' } as any, mockEvent, originalFiles))
-            .rejects.toThrow('File is too large');
-    });
-
-    it('should allow compressed files under 10MB', async () => {
-        // Mock Response to return a small compressed buffer (5MB)
-        const smallBuffer = new ArrayBuffer(5 * 1024 * 1024);
-        // @ts-expect-error - JSDOM Response mocked for compression test
-        globalThis.Response = vi.fn().mockImplementation(() => ({
-            body: {
-                pipeThrough: vi.fn().mockReturnValue({}),
-            },
-            arrayBuffer: vi.fn().mockResolvedValue(smallBuffer)
-        }));
-
-        const mockEvent = {
-            getID: () => '1',
-            startDate: new Date(),
-            getActivities: () => [],
-            setID: vi.fn()
-        } as any;
-        const originalFiles = [{ extension: 'gpx', data: new ArrayBuffer(100), startDate: new Date() }] as any;
-
-        await expect(service.writeAllEventData({ uid: 'user1' } as any, mockEvent, originalFiles))
-            .resolves.not.toThrow();
-    });
     // ... existing tests ...
 
     describe('downloadFile', () => {
