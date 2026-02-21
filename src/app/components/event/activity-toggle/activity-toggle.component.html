@@ -24,7 +24,4 @@
     <span><b>{{activity().getDistance().getDisplayValue()}}</b>{{activity().getDistance().getDisplayUnit()}}</span>
   </mat-card-subtitle>
   }
-  @if (user() && isOwner() && showActions()) {
-  <app-activity-actions [user]="user()!" [event]="event()" [activity]="activity()" align="end"></app-activity-actions>
-  }
 </mat-card-header>
