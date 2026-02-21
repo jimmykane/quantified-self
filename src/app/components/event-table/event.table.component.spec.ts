@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { EventTableComponent } from './event.table.component';
+import { SimpleChange } from '@angular/core';
+import { EventTableComponent, MatPaginatorIntlFireStore } from './event.table.component';
 import { AppEventService } from '../../services/app.event.service';
 import { AppEventMergeService } from '../../services/app.event-merge.service';
 import { AppUserService } from '../../services/app.user.service';
@@ -14,7 +15,7 @@ import { AppAnalyticsService } from '../../services/app.analytics.service';
 import { DatePipe } from '@angular/common';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of, Subject, delay } from 'rxjs';
-import { User, EventInterface, DataPace, DataGradeAdjustedPace, DataSpeedAvg } from '@sports-alliance/sports-lib';
+import { User, EventInterface, DataPace, DataGradeAdjustedPace, DataSpeedAvg, ActivityTypes } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Analytics } from '@angular/fire/analytics';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
@@ -91,6 +92,7 @@ describe('EventTableComponent', () => {
     let mockFileService: any;
     let mockProcessingService: any;
     let mockEventMergeService: any;
+    let mockAnalyticsService: any;
 
     const mockUser = new User('testUser');
     mockUser.settings = {
@@ -180,13 +182,16 @@ describe('EventTableComponent', () => {
             failJob: vi.fn(),
             removeJob: vi.fn()
         };
+        mockAnalyticsService = {
+            logEvent: vi.fn(),
+        };
 
         await TestBed.configureTestingModule({
             imports: [NoopAnimationsModule],
             declarations: [EventTableComponent],
             providers: [
                 { provide: Analytics, useValue: {} },
-                { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
+                { provide: AppAnalyticsService, useValue: mockAnalyticsService },
                 { provide: AppEventService, useValue: mockEventService },
                 { provide: AppEventMergeService, useValue: mockEventMergeService },
                 { provide: AppUserService, useValue: mockUserService },
@@ -232,9 +237,65 @@ describe('EventTableComponent', () => {
         expect(component).toBeTruthy();
     });
 
+    it('should call loading and return early in ngOnChanges when events are missing', () => {
+        const loadingSpy = vi.spyOn(component as any, 'loading');
+        component.events = null as any;
+
+        component.ngOnChanges({
+            events: new SimpleChange([], null, false),
+        } as any);
+
+        expect(loadingSpy).toHaveBeenCalled();
+    });
+
+    it('should update selected columns and page size on user/showActions changes', () => {
+        const updateDisplayedColumnsSpy = vi.spyOn(component as any, 'updateDisplayedColumns');
+        component.user.settings.dashboardSettings.tableSettings.selectedColumns = ['Name', 'Start Date'];
+        component.user.settings.dashboardSettings.tableSettings.eventsPerPage = 25;
+
+        component.ngOnChanges({
+            user: new SimpleChange(null, component.user, false),
+            showActions: new SimpleChange(false, true, false),
+        } as any);
+
+        expect(component.selectedColumns).toEqual(['Name', 'Start Date']);
+        expect(component.paginator._changePageSize).toHaveBeenCalledWith(25);
+        expect(updateDisplayedColumnsSpy).toHaveBeenCalled();
+    });
+
     it('should initialize data source with events', () => {
         component.ngAfterViewInit();
         expect(component.data.data.length).toBe(3);
+    });
+
+    it('should process rows with multisport fallback color and skip null events', () => {
+        const multiEvent = new MockEvent('multi');
+        (multiEvent as any).getActivityTypesAsArray = () => ['Running', 'Cycling'];
+        (multiEvent as any).getActivityTypesAsString = () => 'Running,Cycling';
+        (multiEvent as any).getStat = (_type: string) => ({ getValue: () => ['Running', 'Cycling'] });
+        component.events = [null as any, multiEvent as any];
+
+        (component as any).processChanges('spec_multisport');
+
+        expect(component.data.data.length).toBe(1);
+        expect(mockColorService.getColorForActivityTypeByActivityTypeGroup)
+            .toHaveBeenCalledWith(ActivityTypes.Multisport);
+    });
+
+    it('should unsubscribe tracked subscriptions on destroy', () => {
+        const deleteSub = { unsubscribe: vi.fn() } as any;
+        const sortSub = { unsubscribe: vi.fn() } as any;
+        const breakpointSub = { unsubscribe: vi.fn() } as any;
+
+        (component as any).deleteConfirmationSubscription = deleteSub;
+        (component as any).sortSubscription = sortSub;
+        (component as any).breakpointSubscription = breakpointSub;
+
+        component.ngOnDestroy();
+
+        expect(deleteSub.unsubscribe).toHaveBeenCalledTimes(1);
+        expect(sortSub.unsubscribe).toHaveBeenCalledTimes(1);
+        expect(breakpointSub.unsubscribe).toHaveBeenCalledTimes(1);
     });
 
     it('should call mergeSelection', async () => {
@@ -250,6 +311,59 @@ describe('EventTableComponent', () => {
         expect(mockRouter.navigate).toHaveBeenCalled();
     });
 
+    it('should show snackbar when trying to merge fewer than two events', async () => {
+        component.selection.clear();
+
+        await component.mergeSelection(new Event('click'));
+
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Select at least two events to merge', undefined, { duration: 2000 });
+        expect(mockEventMergeService.mergeEvents).not.toHaveBeenCalled();
+    });
+
+    it('should abort merge when dialog closes without selection', async () => {
+        const e1 = new MockEvent('event1');
+        const e2 = new MockEvent('event2');
+        component.selection.select({ 'Event': e1 } as any);
+        component.selection.select({ 'Event': e2 } as any);
+        mockDialog.open.mockReturnValueOnce({
+            componentInstance: { mergeRequested: of(null), isMerging: false },
+            afterClosed: () => of(null),
+            disableClose: false,
+            close: vi.fn(),
+        });
+
+        await component.mergeSelection(new Event('click'));
+
+        expect(mockEventMergeService.mergeEvents).not.toHaveBeenCalled();
+    });
+
+    it('should show snackbar when selected rows do not contain at least two valid event IDs', async () => {
+        component.selection.select({ Event: { getID: () => undefined } } as any);
+        component.selection.select({ Event: { getID: () => 'event2' } } as any);
+
+        await component.mergeSelection(new Event('click'));
+
+        expect(mockEventMergeService.mergeEvents).not.toHaveBeenCalled();
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Not enough events to merge', undefined, { duration: 3000 });
+    });
+
+    it('should pass multi merge mode to backend service', async () => {
+        const e1 = new MockEvent('event1');
+        const e2 = new MockEvent('event2');
+        component.selection.select({ 'Event': e1 } as any);
+        component.selection.select({ 'Event': e2 } as any);
+        mockDialog.open.mockReturnValueOnce({
+            componentInstance: { mergeRequested: of('multi'), isMerging: false },
+            afterClosed: () => of(null),
+            disableClose: false,
+            close: vi.fn(),
+        });
+
+        await component.mergeSelection(new Event('click'));
+
+        expect(mockEventMergeService.mergeEvents).toHaveBeenCalledWith(['event1', 'event2'], 'multi');
+    });
+
     it('should show mapped error message when backend merge fails', async () => {
         const e1 = new MockEvent('event1');
         const e2 = new MockEvent('event2');
@@ -261,6 +375,45 @@ describe('EventTableComponent', () => {
         await component.mergeSelection(new Event('click'));
 
         expect(mockSnackBar.open).toHaveBeenCalledWith('Mapped merge error', undefined, { duration: 5000 });
+    });
+
+    describe('deleteSelection', () => {
+        it('should abort delete when confirmation dialog is cancelled', async () => {
+            const e1 = new MockEvent('event1');
+            component.selection.select({ Event: e1 } as any);
+            mockDialog.open.mockReturnValueOnce({
+                afterClosed: () => of(false),
+            });
+
+            await component.deleteSelection();
+            await Promise.resolve();
+
+            expect(mockEventService.deleteAllEventData).not.toHaveBeenCalled();
+        });
+
+        it('should delete selected events and refresh local table when confirmed', async () => {
+            const e1 = new MockEvent('event1');
+            const e2 = new MockEvent('event2');
+            component.events = [e1 as any, e2 as any, new MockEvent('event3') as any];
+            component.selection.select({ Event: e1 } as any);
+            component.selection.select({ Event: e2 } as any);
+            const processChangesSpy = vi.spyOn(component as any, 'processChanges');
+
+            mockDialog.open.mockReturnValueOnce({
+                afterClosed: () => of(true),
+            });
+
+            await component.deleteSelection();
+            await Promise.resolve();
+
+            expect(mockEventService.deleteAllEventData).toHaveBeenCalledTimes(2);
+            expect(mockEventService.deleteAllEventData).toHaveBeenCalledWith(component.user, 'event1');
+            expect(mockEventService.deleteAllEventData).toHaveBeenCalledWith(component.user, 'event2');
+            expect(component.events.map((event: any) => event.getID())).toEqual(['event3']);
+            expect(processChangesSpy).toHaveBeenCalledWith('after_delete_selection');
+            expect(mockAnalyticsService.logEvent).toHaveBeenCalledWith('delete_events');
+            expect(mockSnackBar.open).toHaveBeenCalledWith('Events deleted', undefined, { duration: 2000 });
+        });
     });
 
     describe('downloadOriginals', () => {
@@ -558,5 +711,12 @@ describe('EventTableComponent', () => {
 
             expect(mockDialog.open).toHaveBeenCalled();
         });
+    });
+
+    it('should expose custom paginator labels', () => {
+        const intl = new MatPaginatorIntlFireStore();
+        expect(intl.itemsPerPageLabel).toBe('Items');
+        expect(intl.nextPageLabel).toBe('Next');
+        expect(intl.previousPageLabel).toBe('Previous');
     });
 });

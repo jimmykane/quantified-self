@@ -89,6 +89,27 @@ describe('AppFitUploadService', () => {
     expect(result.eventId).toBe('event-1');
   });
 
+  it('should normalize extension casing and omit blank original filename', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({
+        eventId: 'event-1',
+        activitiesCount: 1,
+        uploadLimit: 10,
+        uploadCountAfterWrite: 1,
+      }),
+    });
+
+    const payload = new Uint8Array([1, 2, 3]).buffer;
+    await service.uploadActivityFile(payload, '  GPX.GZ  ', '   ');
+
+    const fetchOptions = fetchMock.mock.calls[0][1];
+    const headers = fetchOptions.headers as Headers;
+    expect(headers.get('X-File-Extension')).toBe('gpx.gz');
+    expect(headers.get('X-Original-Filename')).toBeNull();
+  });
+
   it('should throw when user is not authenticated', async () => {
     authMock.currentUser = null;
 
@@ -117,10 +138,56 @@ describe('AppFitUploadService', () => {
     );
   });
 
+  it('should provide friendly fallback messages for non-JSON 401/429/400 responses', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: vi.fn().mockRejectedValue(new SyntaxError('not json')),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        json: vi.fn().mockRejectedValue(new SyntaxError('not json')),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: vi.fn().mockRejectedValue(new SyntaxError('not json')),
+      });
+
+    await expect(service.uploadFitFile(new Uint8Array([1]).buffer)).rejects.toThrow('sign in again');
+    await expect(service.uploadFitFile(new Uint8Array([1]).buffer)).rejects.toThrow('Upload limit reached');
+    await expect(service.uploadFitFile(new Uint8Array([1]).buffer)).rejects.toThrow('Could not process uploaded file');
+  });
+
   it('should throw when app check token cannot be retrieved', async () => {
     hoisted.mockGetAppCheckToken.mockResolvedValueOnce({ token: '' });
 
     await expect(service.uploadFitFile(new Uint8Array([1]).buffer)).rejects.toThrow('App Check');
+  });
+
+  it('should throw when app check service is not configured', async () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        AppFitUploadService,
+        { provide: Auth, useValue: authMock },
+        { provide: FirebaseApp, useValue: appMock },
+      ],
+    });
+    const serviceWithoutAppCheck = TestBed.inject(AppFitUploadService);
+
+    await expect(serviceWithoutAppCheck.uploadFitFile(new Uint8Array([1]).buffer))
+      .rejects
+      .toThrow('App Check is not configured');
+  });
+
+  it('should throw when firebase project id is missing', async () => {
+    appMock.options.projectId = '';
+    await expect(service.uploadFitFile(new Uint8Array([1]).buffer))
+      .rejects
+      .toThrow('project ID');
   });
 
   it('should throw when extension is empty for uploadActivityFile', async () => {

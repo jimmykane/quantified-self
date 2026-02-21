@@ -112,6 +112,19 @@ describe('UploadActivitiesComponent', () => {
     } as any;
   }
 
+  function mockFileReaderError(): void {
+    const mockFileReader = {
+      result: null as any,
+      onload: null as any,
+      onerror: null as any,
+      readAsArrayBuffer: vi.fn().mockImplementation(function () {
+        this.onerror?.();
+      }),
+    };
+
+    vi.spyOn(globalThis as any, 'FileReader').mockImplementation(() => mockFileReader);
+  }
+
   it('should initialize user and upload limits on init', async () => {
     await component.ngOnInit();
 
@@ -169,6 +182,37 @@ describe('UploadActivitiesComponent', () => {
     );
   });
 
+  it('should keep already gzipped text payloads without recompressing', async () => {
+    component.user = { uid: 'u1' } as any;
+    mockFileReaderResult(new Uint8Array([0x1f, 0x8b, 0x08, 0x00]).buffer);
+    const gzipSpy = vi.spyOn(component as any, 'gzipPayload');
+
+    await component.processAndUploadFile(makeUploadFile('run.gpx', 'gpx'));
+
+    expect(gzipSpy).not.toHaveBeenCalled();
+    expect(fitUploadServiceMock.uploadActivityFile).toHaveBeenCalledWith(
+      new Uint8Array([0x1f, 0x8b, 0x08, 0x00]).buffer,
+      'gpx.gz',
+      'run.gpx',
+    );
+  });
+
+  it('should upload text payload without gzip when compression is unsupported', async () => {
+    component.user = { uid: 'u1' } as any;
+    browserCompatibilityServiceMock.checkCompressionSupport.mockReturnValue(false);
+    mockFileReaderResult(new Uint8Array([1, 2, 3, 4]).buffer);
+    const gzipSpy = vi.spyOn(component as any, 'gzipPayload');
+
+    await component.processAndUploadFile(makeUploadFile('run.gpx', 'gpx'));
+
+    expect(gzipSpy).not.toHaveBeenCalled();
+    expect(fitUploadServiceMock.uploadActivityFile).toHaveBeenCalledWith(
+      new Uint8Array([1, 2, 3, 4]).buffer,
+      'gpx',
+      'run.gpx',
+    );
+  });
+
   it('should show snackbar when upload fails', async () => {
     component.user = { uid: 'u1' } as any;
     fitUploadServiceMock.uploadActivityFile.mockRejectedValueOnce(new Error('Upload failed'));
@@ -178,6 +222,22 @@ describe('UploadActivitiesComponent', () => {
       .rejects.toThrow('Upload failed');
 
     expect(snackBarMock.open).toHaveBeenCalled();
+  });
+
+  it('should show snackbar when file reader fails before upload starts', async () => {
+    component.user = { uid: 'u1' } as any;
+    mockFileReaderError();
+
+    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit')))
+      .rejects
+      .toThrow('Could not read file.');
+
+    expect(fitUploadServiceMock.uploadActivityFile).not.toHaveBeenCalled();
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Could not upload run.fit, reason: Could not read file.',
+      'OK',
+      { duration: 4000 },
+    );
   });
 
   it('should translate generic server upload errors into friendly snackbar message', async () => {
@@ -190,6 +250,51 @@ describe('UploadActivitiesComponent', () => {
 
     expect(snackBarMock.open).toHaveBeenCalledWith(
       'Could not upload run.fit, reason: Upload failed because the server is temporarily unavailable. Please try again shortly.',
+      'OK',
+      { duration: 4000 },
+    );
+  });
+
+  it('should translate upload status 429 into tier limit snackbar message', async () => {
+    component.user = { uid: 'u1' } as any;
+    fitUploadServiceMock.uploadActivityFile.mockRejectedValueOnce(new Error('Upload failed (429).'));
+    mockFileReaderResult(new Uint8Array([1]).buffer);
+
+    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit')))
+      .rejects.toThrow('Upload failed (429).');
+
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Could not upload run.fit, reason: Upload limit reached for your current plan.',
+      'OK',
+      { duration: 4000 },
+    );
+  });
+
+  it('should translate upload status 401 into re-auth snackbar message', async () => {
+    component.user = { uid: 'u1' } as any;
+    fitUploadServiceMock.uploadActivityFile.mockRejectedValueOnce(new Error('Upload failed (401).'));
+    mockFileReaderResult(new Uint8Array([1]).buffer);
+
+    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit')))
+      .rejects.toThrow('Upload failed (401).');
+
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Could not upload run.fit, reason: Upload is not authorized. Please sign in again.',
+      'OK',
+      { duration: 4000 },
+    );
+  });
+
+  it('should translate upload status 400 into invalid file snackbar message', async () => {
+    component.user = { uid: 'u1' } as any;
+    fitUploadServiceMock.uploadActivityFile.mockRejectedValueOnce(new Error('Upload failed (400).'));
+    mockFileReaderResult(new Uint8Array([1]).buffer);
+
+    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit')))
+      .rejects.toThrow('Upload failed (400).');
+
+    expect(snackBarMock.open).toHaveBeenCalledWith(
+      'Could not upload run.fit, reason: Could not process uploaded file. Check file format and try again.',
       'OK',
       { duration: 4000 },
     );

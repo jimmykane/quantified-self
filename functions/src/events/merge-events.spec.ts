@@ -6,7 +6,12 @@ const hoisted = vi.hoisted(() => {
     eventDocs: new Map<string, Record<string, unknown>>(),
     activitiesByEventID: new Map<string, Array<{ id: string; data: Record<string, unknown> }>>(),
     fileBytesByPath: new Map<string, Buffer>(),
+    fileBytesByBucketAndPath: new Map<string, Buffer>(),
+    downloadErrorByBucketAndPath: new Map<string, Error & { code?: unknown }>(),
+    downloadAttempts: [] as string[],
     missingFilePaths: new Set<string>(),
+    throwOnDefaultBucketLookup: false,
+    exerciseWriterAdaptersOnce: false,
   };
 
   const mockHasProAccess = vi.fn();
@@ -15,6 +20,7 @@ const hoisted = vi.hoisted(() => {
   const mockWriteAllEventData = vi.fn();
   const mockSportsLibVersionToCode = vi.fn(() => 9001004);
   const mockServerTimestamp = vi.fn(() => 'SERVER_TIMESTAMP');
+  const mockStorageSave = vi.fn();
 
   function makeEvent(json: Record<string, unknown>) {
     const eventState = {
@@ -77,17 +83,19 @@ const hoisted = vi.hoisted(() => {
     return mergedEvent;
   });
 
-  return {
-    state,
-    mockHasProAccess,
-    mockHasBasicAccess,
-    mockDocSet,
-    mockWriteAllEventData,
-    mockSportsLibVersionToCode,
-    mockServerTimestamp,
-    mockEventImporterJSON,
-    mockMergeEvents,
-  };
+    return {
+      state,
+      mockHasProAccess,
+      mockHasBasicAccess,
+      mockDocSet,
+      mockWriteAllEventData,
+      mockSportsLibVersionToCode,
+      mockServerTimestamp,
+      mockStorageSave,
+      mockEventImporterJSON,
+      mockMergeEvents,
+      makeEvent,
+    };
 });
 
 vi.mock('firebase-functions/v2/https', () => ({
@@ -169,18 +177,33 @@ vi.mock('firebase-admin', () => {
     firestore: firestoreFn,
     storage: () => ({
       bucket: (bucketName?: string) => ({
-        name: bucketName || 'quantified-self-io',
+        name: (() => {
+          if (!bucketName && hoisted.state.throwOnDefaultBucketLookup) {
+            throw new Error('default bucket lookup failed');
+          }
+          return bucketName || 'quantified-self-io';
+        })(),
         file: (path: string) => ({
           download: async () => {
+            const resolvedBucket = bucketName || 'quantified-self-io';
+            const scopedKey = `${resolvedBucket}:${path}`;
+            hoisted.state.downloadAttempts.push(scopedKey);
+
+            const scopedError = hoisted.state.downloadErrorByBucketAndPath.get(scopedKey);
+            if (scopedError) {
+              throw scopedError;
+            }
             if (hoisted.state.missingFilePaths.has(path)) {
               const error = new Error('No such object');
               (error as Error & { code?: number }).code = 404;
               throw error;
             }
-            const bytes = hoisted.state.fileBytesByPath.get(path) || Buffer.from('default-file-content');
+            const bytes = hoisted.state.fileBytesByBucketAndPath.get(scopedKey)
+              || hoisted.state.fileBytesByPath.get(path)
+              || Buffer.from('default-file-content');
             return [bytes];
           },
-          save: vi.fn(),
+          save: hoisted.mockStorageSave,
         }),
       }),
     }),
@@ -206,8 +229,15 @@ vi.mock('../utils', () => ({
 }));
 
 vi.mock('../shared/event-writer', () => ({
-  EventWriter: vi.fn(() => ({
-    writeAllEventData: (...args: unknown[]) => hoisted.mockWriteAllEventData(...args),
+  EventWriter: vi.fn((firestoreAdapter: any, storageAdapter: any) => ({
+    writeAllEventData: async (...args: unknown[]) => {
+      if (hoisted.state.exerciseWriterAdaptersOnce) {
+        hoisted.state.exerciseWriterAdaptersOnce = false;
+        await firestoreAdapter.setDoc(['users', `${args[0]}`, 'events', 'adapter-probe'], { probe: true });
+        await storageAdapter.uploadFile('users/probe/events/adapter-probe/original.fit', Buffer.from([0x09]));
+      }
+      return hoisted.mockWriteAllEventData(...args);
+    },
   })),
 }));
 
@@ -305,12 +335,18 @@ describe('mergeEvents', () => {
     hoisted.state.eventDocs.clear();
     hoisted.state.activitiesByEventID.clear();
     hoisted.state.fileBytesByPath.clear();
+    hoisted.state.fileBytesByBucketAndPath.clear();
+    hoisted.state.downloadErrorByBucketAndPath.clear();
+    hoisted.state.downloadAttempts = [];
     hoisted.state.missingFilePaths.clear();
+    hoisted.state.throwOnDefaultBucketLookup = false;
+    hoisted.state.exerciseWriterAdaptersOnce = false;
 
     hoisted.mockHasProAccess.mockResolvedValue(false);
     hoisted.mockHasBasicAccess.mockResolvedValue(false);
     hoisted.mockDocSet.mockResolvedValue(undefined);
     hoisted.mockWriteAllEventData.mockResolvedValue(undefined);
+    hoisted.mockStorageSave.mockResolvedValue(undefined);
 
     seedTwoEvents();
   });
@@ -354,6 +390,12 @@ describe('mergeEvents', () => {
       auth: { uid: 'u1' },
       app: { appId: 'app-id' },
       data: { eventIds: ['e1', 'e2'], mergeType: 'invalid' },
+    } as any)).rejects.toMatchObject({ code: 'invalid-argument' });
+
+    await expect(mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: 'e1,e2', mergeType: 'benchmark' },
     } as any)).rejects.toMatchObject({ code: 'invalid-argument' });
   });
 
@@ -467,5 +509,206 @@ describe('mergeEvents', () => {
       events: [],
     });
     expect(hasNestedStreamsKey(firstCallPayload)).toBe(false);
+  });
+
+  it('should support legacy originalFile metadata fallback', async () => {
+    hoisted.state.eventDocs.set('users/u1/events/e2', {
+      startDate: new Date('2026-01-11T10:00:00.000Z'),
+      description: 'Evening run',
+      originalFile: {
+        path: 'users/u1/events/e2/original.tcx',
+        bucket: 'quantified-self-io',
+        startDate: new Date('2026-01-11T10:00:00.000Z'),
+      },
+    });
+    hoisted.state.fileBytesByPath.set('users/u1/events/e2/original.tcx', Buffer.from([0x04, 0x05]));
+
+    await mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as any);
+
+    const writeArgs = hoisted.mockWriteAllEventData.mock.calls[0];
+    expect(writeArgs[2]).toHaveLength(2);
+    expect(writeArgs[2][1]).toMatchObject({ extension: 'tcx' });
+  });
+
+  it('should return failed-precondition when selected event has no original source files', async () => {
+    hoisted.state.eventDocs.set('users/u1/events/e2', {
+      startDate: new Date('2026-01-11T10:00:00.000Z'),
+      description: 'Evening run',
+    });
+
+    await expect(mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as any)).rejects.toMatchObject({ code: 'failed-precondition' });
+  });
+
+  it('should parse and persist multi merges with isMerge=false', async () => {
+    await mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'multi' },
+    } as any);
+
+    const writeArgs = hoisted.mockWriteAllEventData.mock.calls[0];
+    const mergedEvent = writeArgs[1] as { isMerge?: boolean; description?: string };
+    expect(mergedEvent.isMerge).toBe(false);
+    expect(mergedEvent.description).toBe('');
+  });
+
+  it('should map source event parse failures to internal HttpsError', async () => {
+    hoisted.mockEventImporterJSON.getEventFromJSON.mockImplementationOnce(() => {
+      throw new Error('parse failure');
+    });
+
+    await expect(mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as any)).rejects.toMatchObject({ code: 'internal' });
+  });
+
+  it('should map unexpected merge failures to internal HttpsError', async () => {
+    hoisted.mockMergeEvents.mockImplementationOnce(() => {
+      throw new Error('unexpected merge crash');
+    });
+
+    await expect(mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as any)).rejects.toMatchObject({ code: 'internal' });
+  });
+
+  it('should trim event IDs and parse timestamp-like source dates', async () => {
+    hoisted.state.eventDocs.set('users/u1/events/e1', {
+      startDate: { seconds: 1768046400, nanoseconds: 123000000 },
+      originalFiles: [
+        {
+          path: 'users/u1/events/e1/original.fit',
+          bucket: '  ',
+          startDate: { toMillis: () => 1768046400000 },
+          originalFilename: 'run.fit',
+        },
+      ],
+    });
+    hoisted.state.eventDocs.set('users/u1/events/e2', {
+      startDate: { toDate: () => new Date('2026-01-11T10:00:00.000Z') },
+      originalFiles: [
+        {
+          path: 'users/u1/events/e2/original.json.gz',
+          bucket: 'quantified-self-io',
+          startDate: { toDate: () => new Date('2026-01-11T10:00:00.000Z') },
+          originalFilename: 'run.json',
+        },
+      ],
+    });
+    hoisted.state.activitiesByEventID.set('e1', [
+      { id: 'a1', data: { startDate: '2026-01-10T10:00:00.000Z', creator: { name: 'Garmin' } } },
+    ]);
+    hoisted.state.activitiesByEventID.set('e2', [
+      { id: 'a2', data: { startDate: 1768132800000, creator: { name: 'Suunto' } } },
+    ]);
+    hoisted.state.fileBytesByPath.set('users/u1/events/e2/original.json.gz', Buffer.from([0x07]));
+
+    await mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: [' e1 ', ' e2 '], mergeType: 'benchmark' },
+    } as any);
+
+    const writeArgs = hoisted.mockWriteAllEventData.mock.calls[0];
+    expect(writeArgs[2][0].startDate).toBeInstanceOf(Date);
+    expect(writeArgs[2][0].originalFilename).toBe('run.fit');
+    expect(writeArgs[2][1]).toMatchObject({ extension: 'json.gz', originalFilename: 'run.json' });
+  });
+
+  it('should fallback across candidate buckets on object-not-found errors', async () => {
+    hoisted.state.eventDocs.set('users/u1/events/e1', {
+      startDate: new Date('2026-01-10T10:00:00.000Z'),
+      originalFiles: [{
+        path: 'users/u1/events/e1/original.fit',
+        bucket: 'custom-bucket',
+        startDate: new Date('2026-01-10T10:00:00.000Z'),
+      }],
+    });
+
+    const notFoundError = new Error('No such object');
+    (notFoundError as Error & { code?: string }).code = 'storage/object-not-found';
+    hoisted.state.downloadErrorByBucketAndPath.set('custom-bucket:users/u1/events/e1/original.fit', notFoundError as Error & { code?: unknown });
+    hoisted.state.fileBytesByBucketAndPath.set('quantified-self-io:users/u1/events/e1/original.fit', Buffer.from([0xaa]));
+
+    await mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as any);
+
+    expect(hoisted.state.downloadAttempts).toContain('custom-bucket:users/u1/events/e1/original.fit');
+    expect(hoisted.state.downloadAttempts).toContain('quantified-self-io:users/u1/events/e1/original.fit');
+  });
+
+  it('should map non-not-found storage errors to failed-precondition', async () => {
+    const permissionError = new Error('Permission denied');
+    (permissionError as Error & { code?: string }).code = 'permission-denied';
+    hoisted.state.downloadErrorByBucketAndPath.set('quantified-self-io:users/u1/events/e1/original.fit', permissionError as Error & { code?: unknown });
+
+    await expect(mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as any)).rejects.toMatchObject({ code: 'failed-precondition' });
+  });
+
+  it('should clear generated merge description even without setDescription helper', async () => {
+    hoisted.mockMergeEvents.mockImplementationOnce((events: any[]) => {
+      const mergedEvent = hoisted.makeEvent({ description: 'A merge of 2 or more activities auto generated' });
+      delete (mergedEvent as any).setDescription;
+      mergedEvent.clearActivities();
+      mergedEvent.addActivities(events.flatMap((event) => event.getActivities()));
+      return mergedEvent;
+    });
+
+    await mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as any);
+
+    const mergedEvent = hoisted.mockWriteAllEventData.mock.calls[0][1] as { description?: string };
+    expect(mergedEvent.description).toBe('');
+  });
+
+  it('should assign activities property when source event lacks addActivities API', async () => {
+    const sourceEvent = hoisted.makeEvent({ description: 'Legacy source event' });
+    delete (sourceEvent as any).addActivities;
+    delete (sourceEvent as any).clearActivities;
+    hoisted.mockEventImporterJSON.getEventFromJSON.mockImplementationOnce(() => sourceEvent);
+
+    await mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as any);
+
+    expect(Array.isArray((sourceEvent as any).activities)).toBe(true);
+    expect((sourceEvent as any).activities.length).toBeGreaterThan(0);
+  });
+
+  it('should exercise writer adapters for firestore and storage writes', async () => {
+    hoisted.state.exerciseWriterAdaptersOnce = true;
+
+    await mergeEvents({
+      auth: { uid: 'u1' },
+      app: { appId: 'app-id' },
+      data: { eventIds: ['e1', 'e2'], mergeType: 'benchmark' },
+    } as any);
+
+    expect(hoisted.mockDocSet).toHaveBeenCalledWith({ probe: true });
+    expect(hoisted.mockStorageSave).toHaveBeenCalled();
   });
 });

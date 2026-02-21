@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { Firestore, doc, docData, collection, collectionData, deleteDoc, setDoc, updateDoc, writeBatch } from '@angular/fire/firestore';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc, setDoc, updateDoc, writeBatch, query, where, orderBy, limit, startAfter, endBefore } from '@angular/fire/firestore';
 import { Storage } from '@angular/fire/storage';
 import { Auth } from '@angular/fire/auth';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -642,6 +642,29 @@ describe('AppEventService', () => {
         expect(hasStreamsKey(writtenPayload)).toBe(false);
     });
 
+    it('should keep primitive update payloads unchanged in updateEventProperties', async () => {
+        const user = { uid: 'user1' } as any;
+        (doc as Mock).mockReturnValue({});
+        (updateDoc as Mock).mockResolvedValue(undefined);
+
+        await service.updateEventProperties(user, 'event1', 'deviceName');
+
+        expect(updateDoc).toHaveBeenCalledTimes(1);
+        expect((updateDoc as Mock).mock.calls[0][1]).toBe('deviceName');
+    });
+
+    it('should keep array update payloads unchanged in updateEventProperties', async () => {
+        const user = { uid: 'user1' } as any;
+        const patch = ['invalid-array-patch'];
+        (doc as Mock).mockReturnValue({});
+        (updateDoc as Mock).mockResolvedValue(undefined);
+
+        await service.updateEventProperties(user, 'event1', patch as any);
+
+        expect(updateDoc).toHaveBeenCalledTimes(1);
+        expect((updateDoc as Mock).mock.calls[0][1]).toEqual(patch);
+    });
+
     it('should atomically write activity and event in writeActivityAndEventData', async () => {
         const user = { uid: 'user1' } as any;
         const event = {
@@ -709,6 +732,72 @@ describe('AppEventService', () => {
             sportsLibVersionCode: expect.any(Number),
             processedAt: expect.anything(),
         }));
+    });
+
+    it('should return event count from Firestore aggregate query', async () => {
+        const user = { uid: 'user-count' } as any;
+        mocks.getCountFromServer.mockResolvedValueOnce({ data: () => ({ count: 42 }) });
+
+        const count = await service.getEventCount(user);
+
+        expect(count).toBe(42);
+    });
+
+    it('should build Firestore query with startDate precedence, filters, and cursors', () => {
+        const user = { uid: 'user-query' } as any;
+        const startCursor = { id: 'start' } as any;
+        const endCursor = { id: 'end' } as any;
+        const clauses = [
+            { fieldPath: 'startDate', opStr: '>=', value: new Date('2026-01-01T00:00:00.000Z') },
+            { fieldPath: 'privacy', opStr: '==', value: 'public' },
+        ];
+
+        (collection as Mock).mockReturnValue('events-ref');
+        (orderBy as Mock).mockImplementation((field: string, direction: string) => `orderBy:${field}:${direction}`);
+        (where as Mock).mockImplementation((field: string, op: string, value: unknown) => `where:${field}:${op}:${String(value)}`);
+        (limit as Mock).mockImplementation((value: number) => `limit:${value}`);
+        (startAfter as Mock).mockImplementation((value: unknown) => `startAfter:${String((value as any)?.id || value)}`);
+        (endBefore as Mock).mockImplementation((value: unknown) => `endBefore:${String((value as any)?.id || value)}`);
+        (query as Mock).mockReturnValue('query-result');
+
+        const builtQuery = (service as any).getEventQueryForUser(user, clauses, 'name', true, 25, startCursor, endCursor);
+
+        expect(builtQuery).toBe('query-result');
+        expect(query).toHaveBeenCalledWith(
+            'events-ref',
+            'orderBy:startDate:asc',
+            'orderBy:name:asc',
+            expect.stringContaining('where:startDate:>=:'),
+            'where:privacy:==:public',
+            'limit:25',
+            'startAfter:start',
+            'endBefore:end',
+        );
+    });
+
+    it('should build Firestore query without limit/cursors when disabled', () => {
+        const user = { uid: 'user-query' } as any;
+
+        (collection as Mock).mockReturnValue('events-ref');
+        (orderBy as Mock).mockImplementation((field: string, direction: string) => `orderBy:${field}:${direction}`);
+        (query as Mock).mockReturnValue('query-without-limit');
+
+        const builtQuery = (service as any).getEventQueryForUser(user, [], 'startDate', false, 0);
+
+        expect(builtQuery).toBe('query-without-limit');
+        expect(limit).not.toHaveBeenCalled();
+        expect(startAfter).not.toHaveBeenCalled();
+        expect(endBefore).not.toHaveBeenCalled();
+        expect(query).toHaveBeenCalledWith('events-ref', 'orderBy:startDate:desc');
+    });
+
+    it('should emit empty events array when _getEventsAndActivities receives no snapshots', async () => {
+        vi.spyOn(service as any, 'getEventQueryForUser').mockReturnValue('events-query');
+        (collectionData as Mock).mockReturnValue(of([]));
+
+        const result = await firstValueFrom((service as any)._getEventsAndActivities({ uid: 'user-empty' } as any));
+
+        expect(result).toEqual([]);
     });
 
     it('should resolve bucket metadata from active Storage instance', async () => {

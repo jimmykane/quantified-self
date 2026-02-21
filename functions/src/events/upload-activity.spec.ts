@@ -223,6 +223,33 @@ describe('uploadActivity', () => {
     expect(response.status).toHaveBeenCalledWith(401);
   });
 
+  it('should reject empty bearer token', async () => {
+    const response = makeResponse();
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer   ',
+        'X-Firebase-AppCheck': 'app-check',
+      },
+    }) as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(401);
+    expect(response.json).toHaveBeenCalledWith({ error: 'Missing Firebase ID token.' });
+  });
+
+  it('should reject invalid firebase auth tokens', async () => {
+    hoisted.mockVerifyIdToken.mockRejectedValueOnce(new Error('invalid token'));
+    const response = makeResponse();
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+      },
+    }) as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(401);
+    expect(response.json).toHaveBeenCalledWith({ error: 'Unauthenticated request.' });
+  });
+
   it('should reject missing app check header', async () => {
     const response = makeResponse();
     await uploadActivity(makeRequest({
@@ -230,6 +257,20 @@ describe('uploadActivity', () => {
     }) as any, response as any);
 
     expect(response.status).toHaveBeenCalledWith(401);
+  });
+
+  it('should reject invalid app check token', async () => {
+    hoisted.mockVerifyAppCheckToken.mockRejectedValueOnce(new Error('invalid app check'));
+    const response = makeResponse();
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+      },
+    }) as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(401);
+    expect(response.json).toHaveBeenCalledWith({ error: 'Invalid App Check token.' });
   });
 
   it('should allow missing app check header when enforcement is disabled', async () => {
@@ -269,6 +310,50 @@ describe('uploadActivity', () => {
 
     expect(response.status).toHaveBeenCalledWith(200);
     expect(hoisted.mockFITImporter.getFromArrayBuffer).toHaveBeenCalledTimes(1);
+  });
+
+  it('should infer fit.gz from filename when extension header is missing', async () => {
+    const response = makeResponse();
+    const fitBytes = Buffer.from([0x0e, 0x10, 0x01, 0x02, 0x03]);
+    const gzippedFit = gzipSync(fitBytes);
+
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': undefined,
+        'X-Original-Filename': 'run.fit.gz',
+      },
+      rawBody: gzippedFit,
+    }) as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(hoisted.mockFITImporter.getFromArrayBuffer).toHaveBeenCalledTimes(1);
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledWith(
+      'user-1',
+      expect.anything(),
+      expect.objectContaining({
+        extension: 'fit.gz',
+        originalFilename: 'run.fit.gz',
+      }),
+    );
+  });
+
+  it('should normalize dotted uppercase extension headers', async () => {
+    const response = makeResponse();
+    const payload = gzipSync(Buffer.from('<gpx><trk/></gpx>'));
+
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': '.GPX.GZ',
+      },
+      rawBody: payload,
+    }) as any, response as any);
+
+    expect(hoisted.mockGPXImporter.getFromString).toHaveBeenCalledTimes(1);
+    expect(response.status).toHaveBeenCalledWith(200);
   });
 
   it('should reject empty payload', async () => {
@@ -412,6 +497,52 @@ describe('uploadActivity', () => {
         originalFilename: 'morning.gpx',
       }),
     );
+    expect(response.status).toHaveBeenCalledWith(200);
+  });
+
+  it('should parse TCX payloads through TCX importer', async () => {
+    const response = makeResponse();
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'tcx',
+      },
+      rawBody: Buffer.from('<TrainingCenterDatabase></TrainingCenterDatabase>'),
+    }) as any, response as any);
+
+    expect(hoisted.mockTCXImporter.getFromXML).toHaveBeenCalledTimes(1);
+    expect(response.status).toHaveBeenCalledWith(200);
+  });
+
+  it('should parse Suunto JSON payloads without fallback when primary parser succeeds', async () => {
+    const response = makeResponse();
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'json',
+      },
+      rawBody: Buffer.from('{"activity":"ok"}'),
+    }) as any, response as any);
+
+    expect(hoisted.mockSuuntoJSONImporter.getFromJSONString).toHaveBeenCalledTimes(1);
+    expect(hoisted.mockSuuntoSMLImporter.getFromJSONString).not.toHaveBeenCalled();
+    expect(response.status).toHaveBeenCalledWith(200);
+  });
+
+  it('should parse SML payloads through SML importer', async () => {
+    const response = makeResponse();
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'sml',
+      },
+      rawBody: Buffer.from('<sml><entry/></sml>'),
+    }) as any, response as any);
+
+    expect(hoisted.mockSuuntoSMLImporter.getFromXML).toHaveBeenCalledTimes(1);
     expect(response.status).toHaveBeenCalledWith(200);
   });
 
