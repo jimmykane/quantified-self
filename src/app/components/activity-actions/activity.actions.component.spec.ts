@@ -1,7 +1,6 @@
 
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivityActionsComponent } from './activity.actions.component';
-import { AppEventService } from '../../services/app.event.service';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatMenuModule } from '@angular/material/menu';
@@ -11,14 +10,12 @@ import { MatButtonModule } from '@angular/material/button';
 import { ChangeDetectorRef } from '@angular/core';
 import { AppEventReprocessService, ReprocessError } from '../../services/app.event-reprocess.service';
 import { AppProcessingService } from '../../services/app.processing.service';
-import { RouterTestingModule } from '@angular/router/testing';
 import { of } from 'rxjs';
 import { vi, describe, beforeEach, it, expect } from 'vitest';
 
 describe('ActivityActionsComponent', () => {
     let component: ActivityActionsComponent;
     let fixture: ComponentFixture<ActivityActionsComponent>;
-    let eventServiceMock: any;
     let eventReprocessServiceMock: any;
     let processingServiceMock: any;
     let dialogMock: any;
@@ -44,13 +41,6 @@ describe('ActivityActionsComponent', () => {
         eventMock = {
             getID: () => 'event-1',
             getActivities: () => [activityMock],
-            removeActivity: vi.fn(),
-        };
-
-        // Mock AppEventService
-        eventServiceMock = {
-            writeAllEventData: vi.fn().mockResolvedValue(true),
-            deleteAllActivityData: vi.fn().mockResolvedValue(true),
         };
         eventReprocessServiceMock = {
             regenerateActivityStatistics: vi.fn().mockResolvedValue({
@@ -74,14 +64,12 @@ describe('ActivityActionsComponent', () => {
             imports: [
                 MatDialogModule,
                 MatSnackBarModule,
-                RouterTestingModule,
                 MatMenuModule,
                 MatIconModule,
                 MatDividerModule,
                 MatButtonModule
             ],
             providers: [
-                { provide: AppEventService, useValue: eventServiceMock },
                 { provide: AppEventReprocessService, useValue: eventReprocessServiceMock },
                 { provide: AppProcessingService, useValue: processingServiceMock },
                 { provide: MatDialog, useValue: dialogMock },

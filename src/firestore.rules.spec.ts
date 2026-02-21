@@ -332,6 +332,18 @@ describe('Firestore Security Rules', () => {
             }));
         });
 
+        it('should deny user from deleting their own activity', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/activities`).doc(activityId).set({
+                    type: 'Running',
+                    eventID: 'original_event'
+                });
+            });
+
+            await assertFails(db.collection(`users/${userId}/activities`).doc(activityId).delete());
+        });
+
         it('should allow user to update their own activity without changing eventID', async () => {
             const db = testEnv.authenticatedContext(userId).firestore();
 

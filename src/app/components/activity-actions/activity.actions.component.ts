@@ -1,13 +1,10 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnDestroy, OnInit } from '@angular/core';
-import { Router } from '@angular/router';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, Input, OnInit } from '@angular/core';
 import { EventInterface } from '@sports-alliance/sports-lib';
-import { AppEventService } from '../../services/app.event.service';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { ActivityFormComponent } from '../activity-form/activity.form.component';
 import { User } from '@sports-alliance/sports-lib';
-import { EventUtilities } from '@sports-alliance/sports-lib';
 import { firstValueFrom } from 'rxjs';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
 import { DataDistance } from '@sports-alliance/sports-lib';
@@ -27,19 +24,15 @@ import { AppProcessingService } from '../../services/app.processing.service';
   providers: [],
   standalone: false
 })
-export class ActivityActionsComponent implements OnInit, OnDestroy {
+export class ActivityActionsComponent implements OnInit {
   @Input() event: EventInterface;
   @Input() user: User;
   @Input() activity: ActivityInterface;
 
-  private deleteConfirmationSubscription: any;
-
   constructor(
-    private eventService: AppEventService,
     private eventReprocessService: AppEventReprocessService,
     private processingService: AppProcessingService,
     private changeDetectorRef: ChangeDetectorRef,
-    private router: Router,
     private snackBar: MatSnackBar,
     public dialog: MatDialog) {
   }
@@ -113,30 +106,6 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
     }
   }
 
-  async deleteActivity() {
-    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
-      data: {
-        title: 'Are you sure you want to delete?',
-        message: 'All data will be permanently deleted. This operation cannot be undone.',
-        confirmLabel: 'Delete',
-        cancelLabel: 'Cancel',
-        confirmColor: 'warn',
-      } as ConfirmationDialogData,
-    });
-    this.deleteConfirmationSubscription = dialogRef.afterClosed().subscribe(async (result) => {
-      if (!result) {
-        return;
-      }
-      this.event.removeActivity(this.activity);
-      await this.eventService.deleteAllActivityData(this.user, this.event.getID(), this.activity.getID());
-      EventUtilities.reGenerateStatsForEvent(this.event);
-      await this.eventService.writeAllEventData(this.user, this.event);
-      this.snackBar.open('Activity deleted', undefined, {
-        duration: 2000,
-      });
-    });
-  }
-
   cropActivity() {
     // @todo: Implement crop activity
   }
@@ -200,9 +169,4 @@ export class ActivityActionsComponent implements OnInit, OnDestroy {
     return confirmed === true;
   }
 
-  ngOnDestroy(): void {
-    if (this.deleteConfirmationSubscription) {
-      this.deleteConfirmationSubscription.unsubscribe()
-    }
-  }
 }

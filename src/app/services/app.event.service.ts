@@ -2,7 +2,7 @@ import { inject, Injectable, Injector, OnDestroy, runInInjectionContext } from '
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, of, throwError, zip } from 'rxjs';
-import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, CollectionReference, Query, QuerySnapshot, DocumentData, getCountFromServer } from '@angular/fire/firestore';
+import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer } from '@angular/fire/firestore';
 import { catchError, map, switchMap, take, distinctUntilChanged, tap } from 'rxjs/operators';
 import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
@@ -808,25 +808,6 @@ export class AppEventService implements OnDestroy {
     return true;
   }
 
-  public async deleteAllActivityData(user: User, eventID: string, activityID: string): Promise<boolean> {
-    // @todo add try catch etc
-    await this.deleteAllStreams(user, eventID, activityID);
-    await runInInjectionContext(this.injector, () => deleteDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID)));
-
-    return true;
-  }
-
-  public deleteStream(user: User, eventID, activityID, streamType: string) {
-    return runInInjectionContext(this.injector, () => deleteDoc(doc(this.firestore, 'users', user.uid, 'activities', activityID, 'streams', streamType)));
-  }
-
-  public async deleteAllStreams(user: User, eventID: string, activityID: string): Promise<number> {
-    const streamsCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'activities', activityID, 'streams'));
-    const numberOfStreamsDeleted = await this.deleteAllDocsFromCollections([streamsCollection]);
-
-    return numberOfStreamsDeleted
-  }
-
   public async getEventAsJSONBloB(user: User, event: AppEventInterface): Promise<Blob> {
     const populatedEvent = await this.attachStreamsToEventWithActivities(user, event, undefined, false).pipe(take(1)).toPromise();
     const jsonString = await new EventExporterJSON().getAsString(populatedEvent);
@@ -1497,32 +1478,6 @@ export class AppEventService implements OnDestroy {
   }
   */
 
-  // From https://github.com/angular/angularfire2/issues/1400
-  private async deleteAllDocsFromCollections(collections: CollectionReference[]) {
-    let totalDeleteCount = 0;
-    const batchSize = 500;
-    // Iterate collections
-    for (const coll of collections) {
-      const snaps = await runInInjectionContext(this.injector, () => getDocs(coll)); // Read all
-      // Batch delete
-      const chunks = this.chunkArray(snaps.docs, batchSize);
-      for (const chunk of chunks) {
-        const batch = runInInjectionContext(this.injector, () => writeBatch(this.firestore));
-        chunk.forEach(doc => batch.delete(doc.ref));
-        await batch.commit();
-        totalDeleteCount += chunk.length;
-      }
-    }
-    return totalDeleteCount;
-  }
-
-  private chunkArray(myArray, chunk_size) {
-    const results = [];
-    while (myArray.length) {
-      results.push(myArray.splice(0, chunk_size));
-    }
-    return results;
-  }
   /**
    * Uses Firestore Aggregation Queries to count events efficiently.
    *
