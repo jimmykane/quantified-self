@@ -24,6 +24,9 @@ import { USAGE_LIMITS } from '../shared/limits';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+// Protect against gzip zip-bombs: input is capped at 10MB, but decompressed output
+// could otherwise expand to hundreds of MB/GB and OOM the function instance.
+const MAX_DECOMPRESSED_UPLOAD_BYTES = 50 * 1024 * 1024;
 const SUPPORTED_BASE_EXTENSIONS = new Set(['fit', 'gpx', 'tcx', 'json', 'sml']);
 
 class HttpStatusError extends Error {
@@ -120,7 +123,7 @@ function maybeDecompressPayloadForParsing(payload: Buffer, resolvedExtension: st
   }
 
   try {
-    return gunzipSync(payload);
+    return gunzipSync(payload, { maxOutputLength: MAX_DECOMPRESSED_UPLOAD_BYTES });
   } catch (error) {
     logger.warn('[uploadActivity] Gzip decompression failed', error);
     throw new HttpStatusError(400, 'Could not decompress uploaded payload.');

@@ -596,6 +596,24 @@ describe('uploadActivity', () => {
     expect(hoisted.mockFITImporter.getFromArrayBuffer).not.toHaveBeenCalled();
   });
 
+  it('should return 400 when gzip payload expands beyond decompression safety limit', async () => {
+    const response = makeResponse();
+    const compressedBomb = gzipSync(Buffer.alloc((50 * 1024 * 1024) + 1, 0x00));
+
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'fit',
+      },
+      rawBody: compressedBomb,
+    }) as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({ error: 'Could not decompress uploaded payload.' });
+    expect(hoisted.mockFITImporter.getFromArrayBuffer).not.toHaveBeenCalled();
+  });
+
   it('should fallback to SML parser when Suunto JSON parser fails', async () => {
     hoisted.mockSuuntoJSONImporter.getFromJSONString.mockRejectedValueOnce(new Error('bad json'));
 
