@@ -257,6 +257,8 @@ Admin dashboard queue cards:
 - `Cloud Tasks` (total)
 - `Cloud Tasks (Workout)`
 - `Cloud Tasks (Reparse)`
+- Shared dispatch semantics and `ALREADY_EXISTS` behavior:
+  `functions/src/shared/CLOUD_TASKS_DISPATCH_NOTES.md`
 
 ## Exports / Entry Points
 Functions exports in `functions/src/index.ts`:
