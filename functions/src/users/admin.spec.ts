@@ -7,6 +7,7 @@ const {
     mockAuth,
     mockOnCall,
     mockCollection,
+    mockDoc,
     mockFirestore,
     mockRemoteConfig,
     mockStripeClient,
@@ -16,6 +17,7 @@ const {
     mockGetTables,
     mockBigQueryQuery,
     mockGetCloudTaskQueueDepth,
+    mockGetCloudTaskQueueDepthForQueue,
     mockGetAll
 } = vi.hoisted(() => {
     const mockListUsers = vi.fn();
@@ -24,10 +26,12 @@ const {
     const mockOnCall = vi.fn((_options: unknown, handler: unknown) => handler);
 
     const mockCollection = vi.fn() as any;
+    const mockDoc = vi.fn();
     const mockGetAll = vi.fn();
     const mockFirestore = vi.fn(() => ({
         collection: mockCollection,
         collectionGroup: mockCollection,
+        doc: mockDoc,
         getAll: mockGetAll
     }));
 
@@ -49,6 +53,15 @@ const {
     const mockGetTables = vi.fn();
     const mockBigQueryQuery = vi.fn();
     const mockGetCloudTaskQueueDepth = vi.fn().mockResolvedValue(42);
+    const mockGetCloudTaskQueueDepthForQueue = vi.fn(async (queueId: string) => {
+        if (queueId === 'processWorkoutTask') {
+            return 42;
+        }
+        if (queueId === 'processSportsLibReparseTask') {
+            return 8;
+        }
+        return 0;
+    });
 
     return {
         mockListUsers,
@@ -56,6 +69,7 @@ const {
         mockAuth,
         mockOnCall,
         mockCollection,
+        mockDoc,
         mockFirestore,
         mockRemoteConfig,
         mockStripeClient,
@@ -65,6 +79,7 @@ const {
         mockGetTables,
         mockBigQueryQuery,
         mockGetCloudTaskQueueDepth,
+        mockGetCloudTaskQueueDepthForQueue,
         mockGetAll
     };
 });
@@ -127,7 +142,18 @@ vi.mock('firebase-functions/v2/https', () => ({
 vi.mock('../utils', () => ({
     ALLOWED_CORS_ORIGINS: ['*'],
     getCloudTaskQueueDepth: mockGetCloudTaskQueueDepth,
+    getCloudTaskQueueDepthForQueue: mockGetCloudTaskQueueDepthForQueue,
     enforceAppCheck: vi.fn() // No-op for tests
+}));
+
+vi.mock('../config', () => ({
+    config: {
+        cloudtasks: {
+            workoutQueue: 'processWorkoutTask',
+            sportsLibReparseQueue: 'processSportsLibReparseTask',
+            queue: 'processWorkoutTask',
+        },
+    },
 }));
 
 import { listUsers, getQueueStats, getUserCount, getMaintenanceStatus, setMaintenanceMode, impersonateUser, getFinancialStats } from './admin';
@@ -637,6 +663,20 @@ describe('getQueueStats Cloud Function', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        mockDoc.mockReturnValue({
+            get: vi.fn().mockResolvedValue({
+                exists: true,
+                data: () => ({
+                    targetSportsLibVersion: '9.1.4',
+                    lastScanCount: 200,
+                    lastEnqueuedCount: 100,
+                    overrideCursorByUid: {
+                        u1: 'e1',
+                        u2: null
+                    }
+                })
+            })
+        });
         request = {
             auth: {
                 uid: 'admin-uid',
@@ -725,14 +765,56 @@ describe('getQueueStats Cloud Function', () => {
             { provider: 'COROSAPIWorkoutQueue', count: 1 }
         ]));
 
-        // Check Cloud Tasks stat
-        expect(result.cloudTasks).toEqual({ pending: 42 });
+        // Check Cloud Tasks stats
+        expect(result.cloudTasks).toEqual({
+            pending: 50,
+            queues: {
+                workout: {
+                    queueId: 'processWorkoutTask',
+                    pending: 42,
+                },
+                sportsLibReparse: {
+                    queueId: 'processSportsLibReparseTask',
+                    pending: 8,
+                },
+            },
+        });
+        expect(result.reparse).toEqual(expect.objectContaining({
+            queuePending: 8,
+            targetSportsLibVersion: '9.1.4',
+            jobs: {
+                total: 5,
+                pending: 5,
+                processing: 5,
+                completed: 5,
+                failed: 5,
+            },
+            checkpoint: expect.objectContaining({
+                lastScanCount: 200,
+                lastEnqueuedCount: 100,
+                overrideUsersInProgress: 1,
+            }),
+        }));
     });
 
-    it('should handle Cloud Task depth error and return 0', async () => {
-        mockGetCloudTaskQueueDepth.mockRejectedValueOnce(new Error('Queue depth error'));
+    it('should handle single-queue Cloud Task depth error and return 0 for that queue', async () => {
+        mockGetCloudTaskQueueDepthForQueue
+            .mockResolvedValueOnce(42)
+            .mockRejectedValueOnce(new Error('Queue depth error'));
         const result = await (getQueueStats as any)(request);
-        expect(result.cloudTasks).toEqual({ pending: 0 });
+        expect(result.cloudTasks).toEqual({
+            pending: 42,
+            queues: {
+                workout: {
+                    queueId: 'processWorkoutTask',
+                    pending: 42,
+                },
+                sportsLibReparse: {
+                    queueId: 'processSportsLibReparseTask',
+                    pending: 0,
+                },
+            },
+        });
     });
 
     it('should return only basic statistics when includeAnalysis is false', async () => {

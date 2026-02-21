@@ -32,17 +32,17 @@ export function upsertGeoJsonSource(
 ): void {
   if (!map) return;
 
-  const source = map.getSource?.(sourceId);
+  let source = map.getSource?.(sourceId);
   if (!source) {
     map.addSource?.(sourceId, {
       type: 'geojson',
       data: feature,
       ...options,
     });
-    return;
+    source = map.getSource?.(sourceId);
   }
 
-  if (typeof source.setData === 'function') {
+  if (typeof source?.setData === 'function') {
     source.setData(feature);
   }
 }

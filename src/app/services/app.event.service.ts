@@ -70,6 +70,30 @@ export interface GetEventsOnceResult {
  */
 export type StreamHydrationMode = 'attach_streams_only' | 'replace_activities';
 
+const SPORTS_LIB_VERSION_CODE_FACTOR_MINOR = 1000;
+const SPORTS_LIB_VERSION_CODE_FACTOR_MAJOR = 1000000;
+
+function resolveSportsLibVersionCode(version: string): number {
+  const match = version.trim().match(/^v?(\d+)\.(\d+)\.(\d+)/);
+  if (!match) {
+    return 0;
+  }
+
+  const major = Number.parseInt(match[1], 10);
+  const minor = Number.parseInt(match[2], 10);
+  const patch = Number.parseInt(match[3], 10);
+  if (!Number.isFinite(major) || !Number.isFinite(minor) || !Number.isFinite(patch)) {
+    return 0;
+  }
+  if (major > 999 || minor > 999 || patch > 999) {
+    return 0;
+  }
+
+  return (major * SPORTS_LIB_VERSION_CODE_FACTOR_MAJOR)
+    + (minor * SPORTS_LIB_VERSION_CODE_FACTOR_MINOR)
+    + patch;
+}
+
 
 @Injectable({
   providedIn: 'root',
@@ -690,6 +714,8 @@ export class AppEventService implements OnDestroy {
       }
     };
 
+    const storageBucketName = this.resolveStorageBucketName();
+
     const storageAdapter: StorageAdapter = {
       uploadFile: async (path: string, data: any) => {
         const fileRef = runInInjectionContext(this.injector, () => ref(this.storage, path));
@@ -701,8 +727,7 @@ export class AppEventService implements OnDestroy {
         await runInInjectionContext(this.injector, () => uploadBytes(fileRef, payload));
       },
       getBucketName: () => {
-        // Return the Firebase Storage bucket name from config
-        return 'quantified-self-io.appspot.com';
+        return storageBucketName;
       }
     }
 
@@ -712,9 +737,31 @@ export class AppEventService implements OnDestroy {
     const processingDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID as string, 'metaData', 'processing'));
     const processingPayload = {
       sportsLibVersion: SPORTS_LIB_VERSION,
+      sportsLibVersionCode: resolveSportsLibVersionCode(SPORTS_LIB_VERSION),
       processedAt: serverTimestamp(),
     };
     await runInInjectionContext(this.injector, () => setDoc(processingDoc, processingPayload));
+  }
+
+  private resolveStorageBucketName(): string {
+    const bucketFromStorageRef = runInInjectionContext(this.injector, () => {
+      const probeRef = ref(this.storage, '__bucket_probe__');
+      return (probeRef as { bucket?: unknown }).bucket;
+    });
+
+    const normalizedProbeBucket = typeof bucketFromStorageRef === 'string' ? bucketFromStorageRef.trim() : '';
+    if (normalizedProbeBucket) {
+      return normalizedProbeBucket;
+    }
+
+    const configuredBucket = (this.storage as { app?: { options?: { storageBucket?: string } } })
+      ?.app?.options?.storageBucket?.trim();
+    if (configuredBucket) {
+      return configuredBucket;
+    }
+
+    this.logger.warn('[AppEventService] Could not resolve Firebase Storage bucket from runtime; omitting bucket metadata.');
+    return '';
   }
 
   public async setEvent(user: User, event: EventInterface) {

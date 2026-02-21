@@ -18,7 +18,6 @@ import { DatePipe } from '@angular/common';
 import { Router } from '@angular/router';
 import {
   ActivityTypes,
-  AppThemes,
   ActivityInterface,
   DataDistance,
   DataLatitudeDegrees,
@@ -337,8 +336,6 @@ export class EventsMapComponent extends MapAbstractDirective implements OnChange
       EventsMapComponent.EVENTS_CLUSTER_LAYER_ID,
       EventsMapComponent.EVENTS_CLUSTER_COUNT_LAYER_ID,
       EventsMapComponent.EVENTS_SOURCE_ID,
-      this.mapStyleService,
-      this.appTheme(),
     );
 
     this.bindEventLayerInteractions();
@@ -843,8 +840,6 @@ function ensureEventPointLayers(
   clusterLayerId: string,
   clusterCountLayerId: string,
   sourceId: string,
-  mapStyleService: MapStyleService,
-  theme: AppThemes,
 ): void {
   if (!map) {
     return;
@@ -881,8 +876,8 @@ function ensureEventPointLayers(
     '#3288d8',
     '#2266a5',
     '#1a4f7d',
-  ].map((color) => mapStyleService.adjustColorForTheme(color, theme) || color);
-  const clusterTextColor = theme === AppThemes.Dark ? '#101828' : '#ffffff';
+  ];
+  const clusterTextColor = '#ffffff';
 
   if (!map.getLayer?.(clusterLayerId)) {
     map.addLayer?.({
@@ -914,6 +909,7 @@ function ensureEventPointLayers(
           28,
         ],
         'circle-opacity': 0.9,
+        'circle-emissive-strength': 1,
       },
     });
   }
@@ -947,6 +943,7 @@ function ensureEventPointLayers(
       100,
       clusterStepColors[3],
     ],
+    'circle-emissive-strength': 1,
   });
 
   setPaintIfLayerExists(map, clusterCountLayerId, {

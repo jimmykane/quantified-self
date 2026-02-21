@@ -1,0 +1,32 @@
+# Firebase Savings Opportunities
+
+## Sports-lib Reparse: Composite Index Cost vs Alternative
+
+### Current implementation
+- Code path: `/Users/dimitrios/Projects/quantified-self/functions/src/reparse/sports-lib-reparse.service.ts`
+- Query used during reparse activity mapping:
+  - `where('eventID', '==', eventId)`
+  - `orderBy('startDate', 'asc')`
+- This query pattern requires a Firestore composite index.
+
+### Why this index exists
+- We map reparsed activities to existing activity documents by stable order.
+- Ordering by `startDate` gives deterministic matching for `mapActivityIdentity`.
+
+### Cost impact
+- Composite indexes mostly add **storage** cost.
+- For this query shape (equality filter + ordering), cost impact is typically very low compared with document read/write costs.
+- In practical terms, this index is usually inexpensive, especially for moderate activity counts.
+
+### Savings alternative (if we want to remove this index)
+- Query only by `eventID` (no `orderBy`).
+- Sort the results in memory by `startDate` (and apply a deterministic tie-breaker, e.g. `doc.id`).
+- Benefit: removes need for this composite index.
+- Tradeoffs:
+  - More application logic.
+  - Must ensure sort stability and null/missing date handling.
+  - For large per-event activity sets, in-memory sort adds compute overhead.
+
+### Recommendation
+- Keep the index for now because it keeps server logic simple and predictable.
+- Revisit index removal only if index count/management becomes a maintenance issue.

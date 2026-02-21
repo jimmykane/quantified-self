@@ -520,6 +520,71 @@ describe('queue', () => {
 
             expect(utils.enqueueWorkoutTask).not.toHaveBeenCalled();
         });
+
+        it('can leave an item stuck when enqueue returns ALREADY_EXISTS-style success without a runnable task', async () => {
+            const utils = await import('./utils');
+            vi.mocked(utils.getCloudTaskQueueDepth).mockResolvedValue(0);
+            // Simulate enqueue swallowing ALREADY_EXISTS (same as cloud-tasks helper behavior).
+            vi.mocked(utils.enqueueWorkoutTask).mockResolvedValue(undefined);
+            const { dispatchQueueItemTasks } = await import('./queue');
+            const admin = await import('firebase-admin');
+
+            let persistedDispatchedAt: number | null = null;
+            let firstScan = true;
+
+            const mockDoc = {
+                id: 'stuck-doc',
+                ref: {
+                    update: vi.fn(async ({ dispatchedToCloudTask }: { dispatchedToCloudTask: number }) => {
+                        persistedDispatchedAt = dispatchedToCloudTask;
+                    }),
+                    parent: { id: 'col' },
+                    id: 'stuck-doc',
+                },
+                data: () => ({ dateCreated: Date.now(), dispatchedToCloudTask: persistedDispatchedAt }),
+            };
+
+            const firestore = admin.firestore();
+            vi.mocked(firestore.collection('any').get).mockImplementation(async () => {
+                // First scheduler pass sees the item as undispatched.
+                if (firstScan) {
+                    firstScan = false;
+                    return {
+                        docs: [mockDoc] as any,
+                        size: 1,
+                        empty: false,
+                        isEqual: vi.fn(),
+                    } as any;
+                }
+
+                // Second pass simulates Firestore query filter where dispatchedToCloudTask != null
+                // excludes this doc, so dispatcher never retries this item.
+                if (persistedDispatchedAt !== null) {
+                    return {
+                        docs: [],
+                        size: 0,
+                        empty: true,
+                        isEqual: vi.fn(),
+                    } as any;
+                }
+
+                return {
+                    docs: [mockDoc] as any,
+                    size: 1,
+                    empty: false,
+                    isEqual: vi.fn(),
+                } as any;
+            });
+
+            await dispatchQueueItemTasks(ServiceNames.GarminAPI);
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
+            expect(mockDoc.ref.update).toHaveBeenCalledWith({ dispatchedToCloudTask: expect.any(Number) });
+            expect(persistedDispatchedAt).not.toBeNull();
+
+            await dispatchQueueItemTasks(ServiceNames.GarminAPI);
+            // No second enqueue attempt after "successful" ALREADY_EXISTS-style first dispatch.
+            expect(utils.enqueueWorkoutTask).toHaveBeenCalledTimes(1);
+        });
     });
 
     describe('addToQueue deferred dispatch', () => {

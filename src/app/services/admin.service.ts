@@ -55,12 +55,58 @@ export interface DLQStats {
     byProvider: { provider: string; count: number }[];
 }
 
+export interface ReparseCheckpointStats {
+    cursorEventPath: string | null;
+    lastScanAt: unknown;
+    lastPassStartedAt: unknown;
+    lastPassCompletedAt: unknown;
+    lastScanCount: number;
+    lastEnqueuedCount: number;
+    overrideUsersInProgress: number;
+}
+
+export interface ReparseJobsStats {
+    total: number;
+    pending: number;
+    processing: number;
+    completed: number;
+    failed: number;
+}
+
+export interface ReparseFailurePreview {
+    jobId: string;
+    uid: string;
+    eventId: string;
+    attemptCount: number;
+    lastError: string;
+    updatedAt: unknown;
+    targetSportsLibVersion: string;
+}
+
+export interface ReparseStats {
+    queuePending: number;
+    targetSportsLibVersion: string;
+    jobs: ReparseJobsStats;
+    checkpoint: ReparseCheckpointStats;
+    recentFailures: ReparseFailurePreview[];
+}
+
 export interface QueueStats {
     pending: number;
     succeeded: number;
     stuck: number;
     cloudTasks?: {
         pending: number;
+        queues?: {
+            workout?: {
+                queueId: string;
+                pending: number;
+            };
+            sportsLibReparse?: {
+                queueId: string;
+                pending: number;
+            };
+        };
     };
     providers: {
         name: string;
@@ -70,6 +116,7 @@ export interface QueueStats {
         dead: number;
     }[];
     dlq?: DLQStats;
+    reparse?: ReparseStats;
     advanced?: {
         throughput: number;
         maxLagMs: number;

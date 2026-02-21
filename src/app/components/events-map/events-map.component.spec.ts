@@ -265,13 +265,19 @@ describe('EventsMapComponent', () => {
     expect(mockColorService.getColorForActivityTypeByActivityTypeGroup).toHaveBeenCalledWith(ActivityTypes.Cycling);
   });
 
-  it('applies theme-adjusted cluster colors', async () => {
+  it('uses stable cluster palette with emissive readability', async () => {
     await initMap();
 
-    expect(mockMapStyleService.adjustColorForTheme).toHaveBeenCalledWith('#50b5ff', AppThemes.Normal);
-    expect(mockMapStyleService.adjustColorForTheme).toHaveBeenCalledWith('#3288d8', AppThemes.Normal);
-    expect(mockMapStyleService.adjustColorForTheme).toHaveBeenCalledWith('#2266a5', AppThemes.Normal);
-    expect(mockMapStyleService.adjustColorForTheme).toHaveBeenCalledWith('#1a4f7d', AppThemes.Normal);
+    expect(map.setPaintProperty).toHaveBeenCalledWith(
+      EVENTS_CLUSTER_LAYER_ID,
+      'circle-color',
+      expect.arrayContaining(['step', ['get', 'point_count'], '#50b5ff'])
+    );
+    expect(map.setPaintProperty).toHaveBeenCalledWith(
+      EVENTS_CLUSTER_LAYER_ID,
+      'circle-emissive-strength',
+      1
+    );
   });
 
   it('hydrates selected event and renders selected track polylines on click', async () => {

@@ -5,6 +5,7 @@ COLLECTIONS=(
     "COROSAPIWorkoutQueue"
     "suuntoAppWorkoutQueue"
     "garminAPIActivityQueue"
+    "sportsLibReparseJobs"
     "failed_jobs"
     "mail"
     "orphaned_service_tokens"
