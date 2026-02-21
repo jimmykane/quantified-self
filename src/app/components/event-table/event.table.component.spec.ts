@@ -1,6 +1,7 @@
-import { ComponentFixture, TestBed, waitForAsync } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { EventTableComponent } from './event.table.component';
 import { AppEventService } from '../../services/app.event.service';
+import { AppEventMergeService } from '../../services/app.event-merge.service';
 import { AppUserService } from '../../services/app.user.service';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
@@ -16,9 +17,7 @@ import { of, Subject, delay } from 'rxjs';
 import { User, EventInterface, DataPace, DataGradeAdjustedPace, DataSpeedAvg } from '@sports-alliance/sports-lib';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { Analytics } from '@angular/fire/analytics';
-import { Firestore } from '@angular/fire/firestore';
 import { NoopAnimationsModule } from '@angular/platform-browser/animations';
-import { AppEventUtilities } from '../../utils/app.event.utilities';
 
 // Mock MatTableDataSource
 vi.mock('@angular/material/table', () => ({
@@ -91,6 +90,7 @@ describe('EventTableComponent', () => {
     let mockColorService: any;
     let mockFileService: any;
     let mockProcessingService: any;
+    let mockEventMergeService: any;
 
     const mockUser = new User('testUser');
     mockUser.settings = {
@@ -105,9 +105,11 @@ describe('EventTableComponent', () => {
     beforeEach(async () => {
         mockEventService = {
             deleteAllEventData: vi.fn().mockReturnValue(Promise.resolve(true)),
-            getEventActivitiesAndAllStreams: vi.fn().mockReturnValue(of(new MockEvent('event_mocked'))),
-            writeAllEventData: vi.fn().mockReturnValue(Promise.resolve()),
             downloadFile: vi.fn().mockReturnValue(Promise.resolve(new ArrayBuffer(8)))
+        };
+        mockEventMergeService = {
+            mergeEvents: vi.fn().mockResolvedValue({ eventId: 'merged-event' }),
+            getMergeErrorMessage: vi.fn().mockReturnValue('Could not merge events.'),
         };
 
         mockUserService = {
@@ -186,6 +188,7 @@ describe('EventTableComponent', () => {
                 { provide: Analytics, useValue: {} },
                 { provide: AppAnalyticsService, useValue: { logEvent: vi.fn() } },
                 { provide: AppEventService, useValue: mockEventService },
+                { provide: AppEventMergeService, useValue: mockEventMergeService },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: Router, useValue: mockRouter },
                 { provide: MatDialog, useValue: mockDialog },
@@ -194,8 +197,6 @@ describe('EventTableComponent', () => {
                 { provide: AppEventColorService, useValue: mockColorService },
                 { provide: AppFileService, useValue: mockFileService },
                 { provide: AppProcessingService, useValue: mockProcessingService },
-                { provide: Firestore, useValue: {} },
-                { provide: AppEventUtilities, useValue: { mergeEventsWithId: vi.fn() } },
                 DatePipe
             ],
             schemas: [NO_ERRORS_SCHEMA]
@@ -212,9 +213,6 @@ describe('EventTableComponent', () => {
             new MockEvent('event3') as any
         ];
 
-        // Ensure mock is set
-        mockEventService.getEventActivitiesAndAllStreams.mockReturnValue(of(new MockEvent('event_mocked')));
-
         // Mock ViewChildren
         component.sort = {
             sortChange: new Subject(),
@@ -228,10 +226,6 @@ describe('EventTableComponent', () => {
         } as any;
 
         fixture.detectChanges();
-
-        // Spy on AppEventUtilities.mergeEventsWithId
-        const appEventUtilities = TestBed.inject(AppEventUtilities);
-        vi.spyOn(appEventUtilities, 'mergeEventsWithId').mockReturnValue(new MockEvent('merged_event') as any);
     });
 
     it('should create', () => {
@@ -252,8 +246,21 @@ describe('EventTableComponent', () => {
 
         await component.mergeSelection(new Event('click'));
 
-        expect(mockEventService.getEventActivitiesAndAllStreams).toHaveBeenCalled();
+        expect(mockEventMergeService.mergeEvents).toHaveBeenCalledWith(['event1', 'event2'], 'benchmark');
         expect(mockRouter.navigate).toHaveBeenCalled();
+    });
+
+    it('should show mapped error message when backend merge fails', async () => {
+        const e1 = new MockEvent('event1');
+        const e2 = new MockEvent('event2');
+        component.selection.select({ 'Event': e1 } as any);
+        component.selection.select({ 'Event': e2 } as any);
+        mockEventMergeService.mergeEvents.mockRejectedValueOnce(new Error('boom'));
+        mockEventMergeService.getMergeErrorMessage.mockReturnValueOnce('Mapped merge error');
+
+        await component.mergeSelection(new Event('click'));
+
+        expect(mockSnackBar.open).toHaveBeenCalledWith('Mapped merge error', undefined, { duration: 5000 });
     });
 
     describe('downloadOriginals', () => {
@@ -421,130 +428,6 @@ describe('EventTableComponent', () => {
             expect(mockFileService.downloadFile).toHaveBeenCalled();
             expect(mockFileService.downloadAsZip).not.toHaveBeenCalled();
             expect(mockProcessingService.completeJob).toHaveBeenCalledWith(expect.any(String), 'Downloaded 1 file');
-        });
-    });
-
-    describe('mergeSelection - Compression Extension Handling', () => {
-        it('should use getExtensionFromPath to extract base extension from .gz files', async () => {
-            const e1 = new MockEvent('event1');
-            e1.originalFiles = [
-                { path: 'users/123/events/456/original.json.gz', startDate: new Date() }
-            ];
-            component.selection.select({ 'Event': e1 } as any);
-
-            // Update mock to handle .gz extension properly
-            mockFileService.getExtensionFromPath = vi.fn().mockImplementation((path) => {
-                const parts = path.split('.');
-                if (parts.length > 1) {
-                    let ext = parts.pop()?.toLowerCase();
-                    if (ext === 'gz' && parts.length > 1) {
-                        ext = parts.pop()?.toLowerCase();
-                    }
-                    return ext;
-                }
-                return 'fit';
-            });
-
-            // Trigger merge
-            try {
-                await component.mergeSelection(new Event('click'));
-            } catch (e) {
-                // May fail due to other mock limitations, but we can verify extension handling
-            }
-
-            // Verify fileService.getExtensionFromPath was used
-            expect(mockFileService.getExtensionFromPath).toBeDefined();
-        });
-
-        it('should correctly extract json extension from .json.gz path', () => {
-            mockFileService.getExtensionFromPath = vi.fn().mockImplementation((path) => {
-                const parts = path.split('.');
-                if (parts.length > 1) {
-                    let ext = parts.pop()?.toLowerCase();
-                    if (ext === 'gz' && parts.length > 1) {
-                        ext = parts.pop()?.toLowerCase();
-                    }
-                    return ext;
-                }
-                return 'fit';
-            });
-
-            expect(mockFileService.getExtensionFromPath('users/123/original.json.gz')).toBe('json');
-        });
-
-        it('should correctly extract gpx extension from .gpx.gz path', () => {
-            mockFileService.getExtensionFromPath = vi.fn().mockImplementation((path) => {
-                const parts = path.split('.');
-                if (parts.length > 1) {
-                    let ext = parts.pop()?.toLowerCase();
-                    if (ext === 'gz' && parts.length > 1) {
-                        ext = parts.pop()?.toLowerCase();
-                    }
-                    return ext;
-                }
-                return 'fit';
-            });
-
-            expect(mockFileService.getExtensionFromPath('users/123/original.gpx.gz')).toBe('gpx');
-        });
-
-        it('should correctly extract tcx extension from .tcx.gz path', () => {
-            mockFileService.getExtensionFromPath = vi.fn().mockImplementation((path) => {
-                const parts = path.split('.');
-                if (parts.length > 1) {
-                    let ext = parts.pop()?.toLowerCase();
-                    if (ext === 'gz' && parts.length > 1) {
-                        ext = parts.pop()?.toLowerCase();
-                    }
-                    return ext;
-                }
-                return 'fit';
-            });
-
-            expect(mockFileService.getExtensionFromPath('users/123/original.tcx.gz')).toBe('tcx');
-        });
-
-        it('should preserve fit extension (no .gz)', () => {
-            mockFileService.getExtensionFromPath = vi.fn().mockImplementation((path) => {
-                const parts = path.split('.');
-                if (parts.length > 1) {
-                    let ext = parts.pop()?.toLowerCase();
-                    if (ext === 'gz' && parts.length > 1) {
-                        ext = parts.pop()?.toLowerCase();
-                    }
-                    return ext;
-                }
-                return 'fit';
-            });
-
-            expect(mockFileService.getExtensionFromPath('users/123/original.fit')).toBe('fit');
-        });
-
-        it('should handle mixed compressed and uncompressed files in merge', async () => {
-            const e1 = new MockEvent('event1');
-            e1.originalFiles = [
-                { path: 'users/123/original_0.json.gz', startDate: new Date() },
-                { path: 'users/123/original_1.fit', startDate: new Date() },
-                { path: 'users/123/original_2.gpx.gz', startDate: new Date() }
-            ];
-            component.selection.select({ 'Event': e1 } as any);
-
-            mockFileService.getExtensionFromPath = vi.fn().mockImplementation((path) => {
-                const parts = path.split('.');
-                if (parts.length > 1) {
-                    let ext = parts.pop()?.toLowerCase();
-                    if (ext === 'gz' && parts.length > 1) {
-                        ext = parts.pop()?.toLowerCase();
-                    }
-                    return ext;
-                }
-                return 'fit';
-            });
-
-            // Verify the mock handles mixed files correctly
-            expect(mockFileService.getExtensionFromPath('users/123/original_0.json.gz')).toBe('json');
-            expect(mockFileService.getExtensionFromPath('users/123/original_1.fit')).toBe('fit');
-            expect(mockFileService.getExtensionFromPath('users/123/original_2.gpx.gz')).toBe('gpx');
         });
     });
 

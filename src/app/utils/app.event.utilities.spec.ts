@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AppEventUtilities } from './app.event.utilities';
 import { LoggerService } from '../services/logger.service';
 import { TestBed } from '@angular/core/testing';
-import { ActivityTypes, EventUtilities } from '@sports-alliance/sports-lib';
+import { ActivityTypes } from '@sports-alliance/sports-lib';
 
 describe('AppEventUtilities', () => {
     let mockActivity: any;
@@ -107,34 +107,6 @@ describe('AppEventUtilities', () => {
                 expect(() => service.enrich(mockActivity, ['Duration'])).not.toThrow();
                 expect(loggerMock.error).toHaveBeenCalled();
             });
-        });
-    });
-
-    describe('mergeEventsWithId', () => {
-        it('should clear generated merge description text', () => {
-            const mergedEvent = {
-                description: 'A merge of 2 or more activities ',
-                setID: vi.fn(),
-            };
-            vi.spyOn(EventUtilities, 'mergeEvents').mockReturnValue(mergedEvent as any);
-
-            const result = service.mergeEventsWithId([{} as any], () => 'merged-id');
-
-            expect(result).toBe(mergedEvent);
-            expect(mergedEvent.setID).toHaveBeenCalledWith('merged-id');
-            expect(mergedEvent.description).toBe('');
-        });
-
-        it('should keep non-generated descriptions unchanged', () => {
-            const mergedEvent = {
-                description: 'Evening ride with intervals',
-                setID: vi.fn(),
-            };
-            vi.spyOn(EventUtilities, 'mergeEvents').mockReturnValue(mergedEvent as any);
-
-            service.mergeEventsWithId([{} as any], () => 'merged-id');
-
-            expect(mergedEvent.description).toBe('Evening ride with intervals');
         });
     });
 
