@@ -25,7 +25,6 @@ import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const SUPPORTED_BASE_EXTENSIONS = new Set(['fit', 'gpx', 'tcx', 'json', 'sml']);
-const TEXT_BASE_EXTENSIONS = new Set(['gpx', 'tcx', 'json', 'sml']);
 
 class HttpStatusError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -106,16 +105,15 @@ function resolveStoredExtension(resolvedExtension: string, payload: Buffer): str
     return `${baseExtension}.gz`;
   }
 
-  if (TEXT_BASE_EXTENSIONS.has(baseExtension) && hasGzipMagic(payload)) {
+  if (hasGzipMagic(payload)) {
     return `${baseExtension}.gz`;
   }
   return baseExtension;
 }
 
 function maybeDecompressPayloadForParsing(payload: Buffer, resolvedExtension: string): Buffer {
-  const baseExtension = getBaseExtension(resolvedExtension);
   const shouldDecompress = resolvedExtension.endsWith('.gz')
-    || (baseExtension !== 'fit' && hasGzipMagic(payload));
+    || hasGzipMagic(payload);
 
   if (!shouldDecompress) {
     return payload;

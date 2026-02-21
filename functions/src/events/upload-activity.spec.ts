@@ -179,6 +179,10 @@ function makeParsedEvent() {
   };
 }
 
+function arrayBufferToBuffer(data: ArrayBuffer): Buffer {
+  return Buffer.from(new Uint8Array(data));
+}
+
 describe('uploadActivity', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -409,6 +413,56 @@ describe('uploadActivity', () => {
       }),
     );
     expect(response.status).toHaveBeenCalledWith(200);
+  });
+
+  it('should decompress gzip FIT payload even when extension is fit (no .gz suffix)', async () => {
+    const response = makeResponse();
+    const fitBytes = Buffer.from([0x0e, 0x10, 0x01, 0x02, 0x03]);
+    const gzippedFit = gzipSync(fitBytes);
+
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'fit',
+        'X-Original-Filename': 'run.fit',
+      },
+      rawBody: gzippedFit,
+    }) as any, response as any);
+
+    expect(hoisted.mockFITImporter.getFromArrayBuffer).toHaveBeenCalledTimes(1);
+    const parsedPayload = hoisted.mockFITImporter.getFromArrayBuffer.mock.calls[0][0] as ArrayBuffer;
+    expect(arrayBufferToBuffer(parsedPayload)).toEqual(fitBytes);
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledWith(
+      'user-1',
+      expect.anything(),
+      expect.objectContaining({
+        extension: 'fit.gz',
+        originalFilename: 'run.fit',
+      }),
+    );
+  });
+
+  it('should return 400 when fit payload has gzip magic but is not valid gzip data', async () => {
+    const response = makeResponse();
+    const invalidGzipLikeFit = Buffer.from([
+      0x1f, 0x8b, // gzip magic
+      0x08, 0x00, 0x00, 0x00, 0x00, 0x00, // looks like gzip header start
+      0xff, 0xff, 0x00, 0x01, // invalid/truncated payload
+    ]);
+
+    await uploadActivity(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'fit',
+      },
+      rawBody: invalidGzipLikeFit,
+    }) as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(400);
+    expect(response.json).toHaveBeenCalledWith({ error: 'Could not decompress uploaded payload.' });
+    expect(hoisted.mockFITImporter.getFromArrayBuffer).not.toHaveBeenCalled();
   });
 
   it('should fallback to SML parser when Suunto JSON parser fails', async () => {
