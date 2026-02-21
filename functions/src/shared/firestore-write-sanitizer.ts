@@ -12,6 +12,54 @@
  */
 type JsonObject = Record<string, unknown>;
 
+function isPlainObject(value: unknown): value is JsonObject {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function cloneWithoutStreams(value: unknown, visited: WeakMap<object, unknown>): unknown {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  if (value instanceof Date) {
+    return new Date(value.getTime());
+  }
+
+  const cached = visited.get(value);
+  if (cached) {
+    return cached;
+  }
+
+  if (Array.isArray(value)) {
+    const clonedArray: unknown[] = [];
+    visited.set(value, clonedArray);
+    for (const item of value) {
+      clonedArray.push(cloneWithoutStreams(item, visited));
+    }
+    return clonedArray;
+  }
+
+  if (!isPlainObject(value)) {
+    // Preserve class instances / SDK sentinels as-is.
+    return value;
+  }
+
+  const source = value as JsonObject;
+  const clonedObject: JsonObject = {};
+  visited.set(value, clonedObject);
+  for (const key of Object.keys(source)) {
+    if (key === 'streams') {
+      continue;
+    }
+    clonedObject[key] = cloneWithoutStreams(source[key], visited);
+  }
+  return clonedObject;
+}
+
 /**
  * Removes every key named `streams` from nested object/array structures.
  * Mutates the provided value in place.
@@ -54,8 +102,7 @@ export function stripStreamsRecursivelyInPlace(value: unknown): void {
  * Use this right before persisting activity payloads.
  */
 export function sanitizeActivityFirestoreWritePayload<T extends object>(activityJson: T): T & JsonObject {
-  const sanitizedPayload: JsonObject = { ...(activityJson as JsonObject) };
-  stripStreamsRecursivelyInPlace(sanitizedPayload);
+  const sanitizedPayload = cloneWithoutStreams(activityJson, new WeakMap<object, unknown>()) as JsonObject;
   return sanitizedPayload as T & JsonObject;
 }
 
@@ -65,8 +112,7 @@ export function sanitizeActivityFirestoreWritePayload<T extends object>(activity
  * Use this right before persisting event payloads.
  */
 export function sanitizeEventFirestoreWritePayload<T extends object>(eventJson: T): Omit<T, 'activities'> & JsonObject {
-  const sanitizedPayload: JsonObject = { ...(eventJson as JsonObject) };
-  stripStreamsRecursivelyInPlace(sanitizedPayload);
+  const sanitizedPayload = cloneWithoutStreams(eventJson, new WeakMap<object, unknown>()) as JsonObject;
   delete sanitizedPayload.activities;
   return sanitizedPayload as Omit<T, 'activities'> & JsonObject;
 }
