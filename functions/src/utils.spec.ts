@@ -478,6 +478,33 @@ describe('utils', () => {
             });
         });
 
+        describe('hasBasicAccess', () => {
+            it('should return true for basic users', async () => {
+                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'basic' } });
+                const { hasBasicAccess } = await getUtils();
+                await expect(hasBasicAccess('user1')).resolves.toBe(true);
+            });
+
+            it('should return true for users in active grace period', async () => {
+                const futureDate = Date.now() + 60000;
+                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free', gracePeriodUntil: futureDate } });
+                const { hasBasicAccess } = await getUtils();
+                await expect(hasBasicAccess('user1')).resolves.toBe(true);
+            });
+
+            it('should return false for free users without grace period', async () => {
+                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'free' } });
+                const { hasBasicAccess } = await getUtils();
+                await expect(hasBasicAccess('user1')).resolves.toBe(false);
+            });
+
+            it('should return false for pro users without grace period', async () => {
+                mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });
+                const { hasBasicAccess } = await getUtils();
+                await expect(hasBasicAccess('user1')).resolves.toBe(false);
+            });
+        });
+
         describe('getUserRoleAndGracePeriod', () => {
             it('should return pro for pro users', async () => {
                 mockGetUser.mockResolvedValue({ customClaims: { stripeRole: 'pro' } });

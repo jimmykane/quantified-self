@@ -126,6 +126,8 @@ export { getSuuntoFITFile } from './suunto/get-suunto-fit-file';
 
 // Events
 export { cleanupEventFile } from './events/cleanup';
+export { uploadActivityFromFit } from './events/upload-activity-from-fit';
+export { reprocessEvent } from './events/reprocess-event';
 export { restoreUserClaims, linkExistingStripeCustomer } from './stripe/claims';
 export { onSubscriptionUpdated } from './stripe/subscriptions';
 export { enforceSubscriptionLimits } from './schedule/enforce-subscription-limits';

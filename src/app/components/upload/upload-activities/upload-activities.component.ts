@@ -1,29 +1,13 @@
-import { Component, inject, OnInit, Input } from '@angular/core';
-import { Router } from '@angular/router';
-import { AppEventService } from '../../../services/app.event.service';
-import { AppFileService } from '../../../services/app.file.service';
-import { AppUserService } from '../../../services/app.user.service';
-import { MatDialog } from '@angular/material/dialog';
-import { MatSnackBar } from '@angular/material/snack-bar';
-import { EventInterface } from '@sports-alliance/sports-lib';
-import { EventImporterSuuntoJSON } from '@sports-alliance/sports-lib';
-import { EventImporterFIT } from '@sports-alliance/sports-lib';
-import { EventImporterTCX } from '@sports-alliance/sports-lib';
-import { EventImporterGPX } from '@sports-alliance/sports-lib';
-import { EventImporterSuuntoSML } from '@sports-alliance/sports-lib';
-import { AppAnalyticsService } from '../../../services/app.analytics.service';
-import { UploadAbstractDirective } from '../upload-abstract.directive';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { AppProcessingService } from '../../../services/app.processing.service';
+import { Component, inject, Input, OnInit } from '@angular/core';
 import { Overlay } from '@angular/cdk/overlay';
-import { USAGE_LIMITS } from '../../../../../functions/src/shared/limits';
-import { LoggerService } from '../../../services/logger.service';
-import { createParsingOptions } from '../../../../../functions/src/shared/parsing-options';
-
-
-import { EventJSONSanitizer } from '../../../utils/event-json-sanitizer';
+import { MatBottomSheet } from '@angular/material/bottom-sheet';
 
 import { AppAuthService } from '../../../authentication/app.auth.service';
+import { AppAnalyticsService } from '../../../services/app.analytics.service';
+import { AppEventService } from '../../../services/app.event.service';
+import { AppFitUploadService } from '../../../services/app.fit-upload.service';
+import { UploadAbstractDirective } from '../upload-abstract.directive';
+import { USAGE_LIMITS } from '../../../../../functions/src/shared/limits';
 
 @Component({
   selector: 'app-upload-activities',
@@ -37,9 +21,9 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
   protected bottomSheet = inject(MatBottomSheet);
   protected overlay = inject(Overlay);
   protected eventService = inject(AppEventService);
-  protected fileService = inject(AppFileService);
   protected analyticsService = inject(AppAnalyticsService);
   protected authService = inject(AppAuthService);
+  protected fitUploadService = inject(AppFitUploadService);
 
   public uploadCount: number | null = null;
   public uploadLimit: number | null = null;
@@ -60,114 +44,51 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
   async calculateRemainingUploads() {
     if (!this.user) return;
 
-    // Fetch Pro Access Status (Pro or Grace Period)
-    if (this.userService.hasProAccessSignal()) return;
+    if (this.userService.hasProAccessSignal()) {
+      this.uploadCount = null;
+      this.uploadLimit = null;
+      return;
+    }
 
-    // Fetch Count
     this.uploadCount = await this.eventService.getEventCount(this.user);
-
-    // Get Limit
     const role = await this.userService.getSubscriptionRole() || 'free';
     this.uploadLimit = USAGE_LIMITS[role] || USAGE_LIMITS['free'];
   }
 
-  processAndUploadFile(file: any): Promise<EventInterface> {
-    this.analyticsService.logEvent('upload_file', { method: file.extension });
+  processAndUploadFile(file: { file: File; extension: string; filename: string }): Promise<{ eventId: string }> {
+    this.analyticsService.logEvent('upload_file', { method: 'fit' });
     return new Promise((resolve, reject) => {
-      const fileReader = new FileReader;
+      if (file.extension !== 'fit') {
+        reject(new Error('Only FIT files are supported.'));
+        return;
+      }
+
+      const fileReader = new FileReader();
       fileReader.onload = async () => {
-        let newEvent;
-        let fileReaderResult = fileReader.result;
-
-        // Decompress if needed (gzip magic bytes check)
-        if (fileReaderResult instanceof ArrayBuffer) {
-          fileReaderResult = await this.fileService.decompressIfNeeded(fileReaderResult as ArrayBuffer);
-        }
-        const options = createParsingOptions();
         try {
-          if ((fileReaderResult instanceof ArrayBuffer) && file.extension === 'fit') {
-            newEvent = await EventImporterFIT.getFromArrayBuffer(fileReaderResult, options);
-          } else if (fileReaderResult instanceof ArrayBuffer) {
-            // Deciding based on normalized extension
-            const text = new TextDecoder().decode(fileReaderResult);
-            if (file.extension === 'json') {
-              let json;
-              try {
-                json = JSON.parse(text);
-              } catch (e: any) {
-                try {
-                  newEvent = await EventImporterSuuntoSML.getFromJSONString(text, options);
-                } catch (smlError) {
-                  throw e;
-                }
-              }
-
-              if (json) {
-                try {
-                  const { sanitizedJson, unknownTypes } = EventJSONSanitizer.sanitize(json);
-                  if (unknownTypes.length > 0) {
-                    this.logger.captureMessage('Unknown Data Types in Upload', { extra: { types: unknownTypes, file: file.filename } });
-                    this.snackBar.open(`Warning: Unknown data types removed: ${unknownTypes.join(', ')}`, 'OK', { duration: 5000 });
-                  }
-                  newEvent = await EventImporterSuuntoJSON.getFromJSONString(JSON.stringify(sanitizedJson), options);
-                } catch (e) {
-                  this.logger.warn('Failed to import JSON as Suunto App format, trying SML fallback', e);
-                  try {
-                    newEvent = await EventImporterSuuntoSML.getFromJSONString(text, options);
-                  } catch (smlError) {
-                    throw e;
-                  }
-                }
-              }
-            } else if (file.extension === 'sml') {
-              newEvent = await EventImporterSuuntoSML.getFromXML(text, options);
-            } else if (file.extension === 'tcx') {
-              newEvent = await EventImporterTCX.getFromXML((new DOMParser()).parseFromString(text, 'application/xml'), options);
-            } else if (file.extension === 'gpx') {
-              newEvent = await EventImporterGPX.getFromString(text, null, options);
-            } else {
-              reject(new Error('No compatible parser found'));
-              return;
-            }
-          } else {
-            reject(new Error('No compatible parser found'))
-            return;
+          const payload = fileReader.result;
+          if (!(payload instanceof ArrayBuffer)) {
+            throw new Error('Could not read FIT file payload.');
           }
-          // Sanitize the resulting EventInterface object? 
-          // If the importer worked, it means it didn't crash.
-          // However, if we didn't sanitize JSON inputs for other formats (like SML converted to JSON internally?), we might miss some.
-          // But the JSON importer is the one prone to "Class type ... not in store" if it walks the JSON directly.
-          // For now, handling the .json extension is the critical path requested.
 
-
-          if (!newEvent) {
-            throw new Error('Failed to parse event');
-          }
-          newEvent.name = file.filename;
-        } catch (e: any) {
-          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${e.message}`, 'OK', { duration: 2000 });
-          reject(e); // no-op here!
-          return;
-        }
-        try {
-          await this.eventService.writeAllEventData(this.user, newEvent, {
-            data: fileReaderResult as any, // ArrayBuffer or string
-            extension: file.extension,
-            startDate: newEvent.startDate,
-            originalFilename: file.filename
-          });
-          // Refresh count
+          const uploadResult = await this.fitUploadService.uploadFitFile(payload, `${file.filename}.${file.extension}`);
           await this.calculateRemainingUploads();
-        } catch (e: any) {
-          this.snackBar.open(`Could not upload ${file.filename}, reason: ${e.message}`);
-          reject(e);
-          return;
-        }
 
-        this.logger.log('Successfully uploaded event. ID:', newEvent.getID());
-        resolve(newEvent);
+          this.logger.log('[UploadActivitiesComponent] Uploaded FIT event', uploadResult.eventId);
+          resolve({ eventId: uploadResult.eventId });
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : 'Unknown upload error.';
+          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${message}`, 'OK', { duration: 4000 });
+          reject(error);
+        }
       };
-      // Always read as ArrayBuffer to allow for decompression if it's a .gz file
+
+      fileReader.onerror = () => {
+        const error = new Error('Could not read FIT file.');
+        this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${error.message}`, 'OK', { duration: 4000 });
+        reject(error);
+      };
+
       fileReader.readAsArrayBuffer(file.file);
     });
   }

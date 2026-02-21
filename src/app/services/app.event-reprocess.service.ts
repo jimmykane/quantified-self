@@ -1,9 +1,9 @@
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { ActivityUtilities, EventUtilities, User } from '@sports-alliance/sports-lib';
+import { EventUtilities, User } from '@sports-alliance/sports-lib';
 import { AppEventInterface } from '../../../functions/src/shared/app-event.interface';
 import { AppEventService } from './app.event.service';
-import { AppOriginalFileHydrationService } from './app.original-file-hydration.service';
+import { AppFunctionsService } from './app.functions.service';
 
 export type ReprocessPhase =
   | 'validating'
@@ -51,69 +51,31 @@ export class ReprocessError extends Error {
   }
 }
 
+type ReprocessMode = 'reimport' | 'regenerate';
+
+interface ReprocessEventFunctionResponse {
+  eventId: string;
+  mode: ReprocessMode;
+  status: 'completed' | 'skipped';
+  reason?: string;
+  sourceFilesCount: number;
+  parsedActivitiesCount: number;
+  staleActivitiesDeleted: number;
+}
+
 @Injectable({
   providedIn: 'root'
 })
 export class AppEventReprocessService {
   private eventService = inject(AppEventService);
-  private originalFileHydrationService = inject(AppOriginalFileHydrationService);
+  private functionsService = inject(AppFunctionsService);
 
   public async regenerateEventStatistics(
     user: User,
     event: AppEventInterface,
     options?: ReprocessOptions,
   ): Promise<ReprocessResult> {
-    this.notifyProgress(options, { phase: 'validating', progress: 5, details: 'Validating source files' });
-    const sourceFilesCount = this.getSourceFileCount(event);
-    if (sourceFilesCount === 0) {
-      throw new ReprocessError('NO_ORIGINAL_FILES', 'No original source file metadata found for this event.');
-    }
-
-    try {
-      this.notifyProgress(options, { phase: 'downloading', progress: 20, details: 'Loading source files' });
-      this.notifyProgress(options, { phase: 'parsing', progress: 40, details: 'Parsing activities' });
-      await firstValueFrom(
-        this.eventService.attachStreamsToEventWithActivities(
-          user,
-          event,
-          undefined,
-          true,
-          options?.skipEnrichment === true,
-          'replace_activities',
-        ),
-      );
-    } catch (e) {
-      throw new ReprocessError('PARSE_FAILED', 'Could not parse original source file(s).', e);
-    }
-
-    this.notifyProgress(options, { phase: 'regenerating_stats', progress: 65, details: 'Re-generating activity statistics' });
-    event.getActivities().forEach(activity => {
-      const previousStats = new Map(activity.getStats());
-      activity.clearStats();
-      ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity);
-      previousStats.forEach((stat, type) => {
-        if (!activity.getStat(type)) {
-          activity.addStat(stat);
-        }
-      });
-    });
-
-    EventUtilities.reGenerateStatsForEvent(event);
-
-    this.notifyProgress(options, { phase: 'persisting', progress: 90, details: 'Saving updated event' });
-    try {
-      await this.eventService.writeAllEventData(user, event);
-    } catch (e) {
-      throw new ReprocessError('PERSIST_FAILED', 'Could not persist re-generated event data.', e);
-    }
-
-    this.notifyProgress(options, { phase: 'done', progress: 100, details: 'Done' });
-    return {
-      event,
-      sourceFilesCount,
-      wasMultiFileSource: sourceFilesCount > 1,
-      preservedIsMerge: !!(event as any).isMerge,
-    };
+    return this.executeReprocess(user, event, 'regenerate', options);
   }
 
   public async regenerateActivityStatistics(
@@ -122,29 +84,7 @@ export class AppEventReprocessService {
     activityId: string,
     options?: ReprocessOptions,
   ): Promise<ReprocessResult> {
-    this.notifyProgress(options, { phase: 'validating', progress: 5, details: 'Validating source files' });
-    const sourceFilesCount = this.getSourceFileCount(event);
-    if (sourceFilesCount === 0) {
-      throw new ReprocessError('NO_ORIGINAL_FILES', 'No original source file metadata found for this event.');
-    }
-
-    try {
-      this.notifyProgress(options, { phase: 'downloading', progress: 20, details: 'Loading source files' });
-      this.notifyProgress(options, { phase: 'parsing', progress: 40, details: 'Parsing activities' });
-      await firstValueFrom(
-        this.eventService.attachStreamsToEventWithActivities(
-          user,
-          event,
-          undefined,
-          true,
-          options?.skipEnrichment === true,
-          'replace_activities',
-        ),
-      );
-    } catch (e) {
-      throw new ReprocessError('PARSE_FAILED', 'Could not parse original source file(s).', e);
-    }
-
+    const result = await this.executeReprocess(user, event, 'regenerate', options);
     const updatedActivity = event.getActivities().find(activity => activity.getID() === activityId);
     if (!updatedActivity) {
       throw new ReprocessError(
@@ -153,23 +93,9 @@ export class AppEventReprocessService {
       );
     }
 
-    this.notifyProgress(options, { phase: 'regenerating_stats', progress: 70, details: 'Re-generating event statistics' });
-    EventUtilities.reGenerateStatsForEvent(event);
-
-    this.notifyProgress(options, { phase: 'persisting', progress: 90, details: 'Saving updated event' });
-    try {
-      await this.eventService.writeAllEventData(user, event);
-    } catch (e) {
-      throw new ReprocessError('PERSIST_FAILED', 'Could not persist re-generated event data.', e);
-    }
-
-    this.notifyProgress(options, { phase: 'done', progress: 100, details: 'Done' });
     return {
-      event,
+      ...result,
       updatedActivityId: updatedActivity.getID(),
-      sourceFilesCount,
-      wasMultiFileSource: sourceFilesCount > 1,
-      preservedIsMerge: !!(event as any).isMerge,
     };
   }
 
@@ -178,73 +104,102 @@ export class AppEventReprocessService {
     event: AppEventInterface,
     options?: ReprocessOptions,
   ): Promise<ReprocessResult> {
-    this.notifyProgress(options, { phase: 'validating', progress: 5, details: 'Validating source files' });
-    const sourceFilesCount = this.getSourceFileCount(event);
-    if (sourceFilesCount === 0) {
+    return this.executeReprocess(user, event, 'reimport', options);
+  }
+
+  private async executeReprocess(
+    user: User,
+    event: AppEventInterface,
+    mode: ReprocessMode,
+    options?: ReprocessOptions,
+  ): Promise<ReprocessResult> {
+    const eventID = event.getID();
+    if (!eventID) {
+      throw new ReprocessError('PARSE_FAILED', 'Event ID is missing and cannot be reprocessed.');
+    }
+
+    const phases = this.getProgressPlan(mode);
+    phases.forEach(progress => this.notifyProgress(options, progress));
+
+    let functionResult: ReprocessEventFunctionResponse;
+    try {
+      const response = await this.functionsService.call<
+        { eventId: string; mode: ReprocessMode },
+        ReprocessEventFunctionResponse
+      >('reprocessEvent', { eventId: eventID, mode });
+      functionResult = response.data;
+    } catch (error) {
+      throw this.mapFunctionError(mode, error);
+    }
+
+    if (functionResult.status === 'skipped' && functionResult.reason === 'NO_ORIGINAL_FILES') {
       throw new ReprocessError('NO_ORIGINAL_FILES', 'No original source file metadata found for this event.');
     }
 
-    const originalIsMerge = !!(event as any).isMerge;
-    const eventAny = event as any;
-    const originalFiles = eventAny.originalFiles;
-    const originalFile = eventAny.originalFile;
-    this.notifyProgress(options, { phase: 'downloading', progress: 20, details: 'Downloading source files' });
-    this.notifyProgress(options, { phase: 'parsing', progress: 40, details: 'Parsing source files' });
-    const parseResult = await this.originalFileHydrationService.parseEventFromOriginalFiles(event, {
-      skipEnrichment: options?.skipEnrichment === true,
-      strictAllFilesRequired: true,
-      preserveActivityIdsFromEvent: true,
-      mergeMultipleFiles: true,
-    });
-
-    if (parseResult.failedFiles.length > 0) {
-      const details = parseResult.failedFiles.map(file => `${file.path}: ${file.reason}`).join('; ');
-      throw new ReprocessError('MULTI_FILE_INCOMPLETE', `Reimport aborted because one or more source files failed to parse. ${details}`);
+    const refreshedEvent = await firstValueFrom(this.eventService.getEventAndActivities(user, eventID));
+    if (!refreshedEvent) {
+      throw new ReprocessError('PERSIST_FAILED', 'Could not load updated event after reprocessing.');
     }
 
-    if (!parseResult.finalEvent) {
-      throw new ReprocessError('PARSE_FAILED', 'Could not parse original source file(s).');
-    }
-
-    this.notifyProgress(options, { phase: 'merging', progress: 60, details: 'Preparing reimported event data' });
-    const reimportedEvent = parseResult.finalEvent as AppEventInterface;
-    reimportedEvent.setID(event.getID());
-    (reimportedEvent as any).isMerge = originalIsMerge;
-    (reimportedEvent as any).originalFiles = originalFiles;
-    (reimportedEvent as any).originalFile = originalFile;
-
-    this.notifyProgress(options, { phase: 'regenerating_stats', progress: 75, details: 'Re-building event statistics' });
-    EventUtilities.reGenerateStatsForEvent(reimportedEvent);
-
-    this.notifyProgress(options, { phase: 'persisting', progress: 90, details: 'Saving reimported event' });
-    try {
-      await this.eventService.writeAllEventData(user, reimportedEvent);
-    } catch (e) {
-      throw new ReprocessError('PERSIST_FAILED', 'Could not persist reimported event data.', e);
-    }
-
-    event.clearActivities();
-    event.addActivities(reimportedEvent.getActivities());
-    (event as any).isMerge = originalIsMerge;
-    EventUtilities.reGenerateStatsForEvent(event);
-
+    this.syncEventReference(event, refreshedEvent);
     this.notifyProgress(options, { phase: 'done', progress: 100, details: 'Done' });
+
     return {
       event,
-      sourceFilesCount: parseResult.sourceFilesCount,
-      wasMultiFileSource: parseResult.sourceFilesCount > 1,
-      preservedIsMerge: originalIsMerge,
+      sourceFilesCount: functionResult.sourceFilesCount,
+      wasMultiFileSource: functionResult.sourceFilesCount > 1,
+      preservedIsMerge: !!(event as any).isMerge,
     };
+  }
+
+  private syncEventReference(targetEvent: AppEventInterface, sourceEvent: AppEventInterface): void {
+    targetEvent.clearActivities();
+    targetEvent.addActivities(sourceEvent.getActivities());
+
+    const targetAny = targetEvent as any;
+    const sourceAny = sourceEvent as any;
+    targetAny.originalFiles = sourceAny.originalFiles;
+    targetAny.originalFile = sourceAny.originalFile;
+    targetAny.isMerge = sourceAny.isMerge;
+
+    EventUtilities.reGenerateStatsForEvent(targetEvent);
+  }
+
+  private mapFunctionError(mode: ReprocessMode, error: unknown): ReprocessError {
+    const message = error instanceof Error ? error.message : `${error}`;
+    if (message.includes('NO_ORIGINAL_FILES')) {
+      return new ReprocessError('NO_ORIGINAL_FILES', 'No original source file metadata found for this event.', error);
+    }
+
+    if (mode === 'reimport') {
+      return new ReprocessError('MULTI_FILE_INCOMPLETE', 'Reimport failed because source files could not be processed.', error);
+    }
+
+    return new ReprocessError('PARSE_FAILED', 'Could not parse original source file(s).', error);
   }
 
   private notifyProgress(options: ReprocessOptions | undefined, progress: ReprocessProgress): void {
     options?.onProgress?.(progress);
   }
 
-  private getSourceFileCount(event: AppEventInterface): number {
-    if (event.originalFiles && event.originalFiles.length > 0) {
-      return event.originalFiles.length;
+  private getProgressPlan(mode: ReprocessMode): ReprocessProgress[] {
+    if (mode === 'reimport') {
+      return [
+        { phase: 'validating', progress: 5, details: 'Validating source files' },
+        { phase: 'downloading', progress: 20, details: 'Downloading source files' },
+        { phase: 'parsing', progress: 40, details: 'Parsing source files' },
+        { phase: 'merging', progress: 60, details: 'Merging parsed activities' },
+        { phase: 'regenerating_stats', progress: 75, details: 'Re-generating event statistics' },
+        { phase: 'persisting', progress: 90, details: 'Saving updated event' },
+      ];
     }
-    return event.originalFile?.path ? 1 : 0;
+
+    return [
+      { phase: 'validating', progress: 5, details: 'Validating source files' },
+      { phase: 'downloading', progress: 20, details: 'Loading source files' },
+      { phase: 'parsing', progress: 40, details: 'Parsing activities' },
+      { phase: 'regenerating_stats', progress: 70, details: 'Re-generating event statistics' },
+      { phase: 'persisting', progress: 90, details: 'Saving updated event' },
+    ];
   }
 }
