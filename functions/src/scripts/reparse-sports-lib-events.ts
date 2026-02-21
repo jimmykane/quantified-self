@@ -235,6 +235,7 @@ export async function runSportsLibReparseScript(argv: string[]): Promise<ScriptS
 
         try {
             const result = await reparseEventFromOriginalFiles(uid, eventId, {
+                mode: 'reimport',
                 targetSportsLibVersion,
             });
             if (result.status === 'skipped' && result.reason === SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES) {
