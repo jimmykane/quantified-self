@@ -1,6 +1,4 @@
 import { Component, inject, Input, OnInit } from '@angular/core';
-import { Overlay } from '@angular/cdk/overlay';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
 
 import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
@@ -23,8 +21,6 @@ const TEXT_COMPRESSIBLE_EXTENSIONS = new Set(['gpx', 'tcx', 'json', 'sml']);
 export class UploadActivitiesComponent extends UploadAbstractDirective implements OnInit {
   @Input() isHandset: boolean = false;
 
-  protected bottomSheet = inject(MatBottomSheet);
-  protected overlay = inject(Overlay);
   protected eventService = inject(AppEventService);
   protected analyticsService = inject(AppAnalyticsService);
   protected authService = inject(AppAuthService);

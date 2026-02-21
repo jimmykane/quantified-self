@@ -13,8 +13,6 @@ import { LoggerService } from '../../../services/logger.service';
 import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
-import { MatBottomSheet } from '@angular/material/bottom-sheet';
-import { Overlay } from '@angular/cdk/overlay';
 import { Router } from '@angular/router';
 import { UPLOAD_STATUS } from '../upload-status/upload.status';
 
@@ -82,8 +80,6 @@ describe('UploadActivitiesComponent', () => {
         { provide: LoggerService, useValue: loggerMock },
         { provide: MatSnackBar, useValue: snackBarMock },
         { provide: MatDialog, useValue: { open: vi.fn() } },
-        { provide: MatBottomSheet, useValue: { open: vi.fn() } },
-        { provide: Overlay, useValue: {} },
         { provide: Router, useValue: { navigate: vi.fn() } },
       ],
       schemas: [NO_ERRORS_SCHEMA],
