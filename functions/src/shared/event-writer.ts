@@ -144,18 +144,13 @@ export class EventWriter {
                 }
 
                 // Mandatory shared write policy: all activity payloads are sanitized via helper.
-                const activityJSON = sanitizeActivityFirestoreWritePayload(
-                    activity.toJSON() as unknown as Record<string, unknown>
-                ) as FirestoreActivityJSON;
-
-                // Write Activity
-                // Add flat structure metadata for Firestore querying
-                activityJSON.userID = userID;
-                activityJSON.eventID = event.getID() as string;
-                // Ensure eventStartDate is present for sorting
-                if (event.startDate) {
-                    activityJSON.eventStartDate = event.startDate;
-                }
+                const sanitizedActivityJSON = sanitizeActivityFirestoreWritePayload(activity.toJSON());
+                const activityJSON: FirestoreActivityJSON = {
+                    ...sanitizedActivityJSON,
+                    userID,
+                    eventID: event.getID() as string,
+                    ...(event.startDate ? { eventStartDate: event.startDate } : {}),
+                };
 
 
                 const activityPath = ['users', userID, 'activities', <string>activity.getID()];
@@ -166,7 +161,7 @@ export class EventWriter {
             // Write Event
             // Mandatory shared write policy: all event payloads are sanitized via helper.
             const eventJSON = sanitizeEventFirestoreWritePayload(
-                event.toJSON() as unknown as Record<string, unknown>
+                event.toJSON()
             ) as FirestoreEventJSON;
 
             // Normalize input to array or single

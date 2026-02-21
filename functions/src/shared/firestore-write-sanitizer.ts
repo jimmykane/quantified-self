@@ -10,6 +10,7 @@
  * - Do not duplicate ad-hoc `delete payload.streams` / `delete payload.activities`;
  *   always use these helper exports at the final write boundary.
  */
+type JsonObject = Record<string, unknown>;
 
 /**
  * Removes every key named `streams` from nested object/array structures.
@@ -52,10 +53,10 @@ export function stripStreamsRecursivelyInPlace(value: unknown): void {
  * Returns a sanitized activity write payload with every nested `streams` field removed.
  * Use this right before persisting activity payloads.
  */
-export function sanitizeActivityFirestoreWritePayload(activityJson: Record<string, unknown>): Record<string, unknown> {
-  const sanitizedPayload: Record<string, unknown> = { ...activityJson };
+export function sanitizeActivityFirestoreWritePayload<T extends object>(activityJson: T): T & JsonObject {
+  const sanitizedPayload: JsonObject = { ...(activityJson as JsonObject) };
   stripStreamsRecursivelyInPlace(sanitizedPayload);
-  return sanitizedPayload;
+  return sanitizedPayload as T & JsonObject;
 }
 
 /**
@@ -63,9 +64,9 @@ export function sanitizeActivityFirestoreWritePayload(activityJson: Record<strin
  * and denormalized `activities` removed from the top-level event document.
  * Use this right before persisting event payloads.
  */
-export function sanitizeEventFirestoreWritePayload(eventJson: Record<string, unknown>): Record<string, unknown> {
-  const sanitizedPayload: Record<string, unknown> = { ...eventJson };
+export function sanitizeEventFirestoreWritePayload<T extends object>(eventJson: T): Omit<T, 'activities'> & JsonObject {
+  const sanitizedPayload: JsonObject = { ...(eventJson as JsonObject) };
   stripStreamsRecursivelyInPlace(sanitizedPayload);
   delete sanitizedPayload.activities;
-  return sanitizedPayload;
+  return sanitizedPayload as Omit<T, 'activities'> & JsonObject;
 }

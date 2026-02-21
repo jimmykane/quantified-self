@@ -2,15 +2,15 @@ import { ActivityInterface, EventInterface } from '@sports-alliance/sports-lib';
 import { sanitizeActivityFirestoreWritePayload, sanitizeEventFirestoreWritePayload } from '../../../functions/src/shared/firestore-write-sanitizer';
 
 export interface ActivityEditWritePayload {
-  activityData: any;
-  eventData: any;
+  activityData: Record<string, unknown>;
+  eventData: Record<string, unknown>;
 }
 
-export function buildActivityWriteData(userID: string, event: EventInterface, activity: ActivityInterface): any {
+export function buildActivityWriteData(userID: string, event: EventInterface, activity: ActivityInterface): Record<string, unknown> {
   // Mandatory shared write policy: sanitize at the payload boundary before Firestore writes.
   const activityData = sanitizeActivityFirestoreWritePayload(
-    activity.toJSON() as Record<string, unknown>
-  ) as any;
+    activity.toJSON()
+  );
 
   activityData.eventID = event.getID();
   activityData.userID = userID;
@@ -21,11 +21,11 @@ export function buildActivityWriteData(userID: string, event: EventInterface, ac
   return activityData;
 }
 
-export function buildEventWriteData(event: EventInterface): any {
+export function buildEventWriteData(event: EventInterface): Record<string, unknown> {
   // Mandatory shared write policy: sanitize at the payload boundary before Firestore writes.
   const eventData = sanitizeEventFirestoreWritePayload(
-    event.toJSON() as Record<string, unknown>
-  ) as any;
+    event.toJSON()
+  );
   const eventAny = event as any;
 
   // Preserve original file metadata across partial updates.
