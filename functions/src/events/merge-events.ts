@@ -472,7 +472,8 @@ export const mergeEvents = onCall({
     const mergedEvent = EventUtilities.mergeEvents(sourceEvents);
     const mergedEventID = admin.firestore().collection('users').doc().id;
     mergedEvent.setID(mergedEventID);
-    (mergedEvent as { isMerge?: boolean }).isMerge = mergeType === 'benchmark';
+    (mergedEvent as { isMerge?: boolean; mergeType?: MergeType }).isMerge = mergeType === 'benchmark';
+    (mergedEvent as { isMerge?: boolean; mergeType?: MergeType }).mergeType = mergeType;
     clearGeneratedMergeDescription(mergedEvent);
 
     const writer = new EventWriter(getFirestoreAdapter(), getStorageAdapter());

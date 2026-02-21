@@ -555,8 +555,9 @@ describe('mergeEvents', () => {
     } as any);
 
     const writeArgs = hoisted.mockWriteAllEventData.mock.calls[0];
-    const mergedEvent = writeArgs[1] as { isMerge?: boolean; description?: string };
+    const mergedEvent = writeArgs[1] as { isMerge?: boolean; mergeType?: string; description?: string };
     expect(mergedEvent.isMerge).toBe(false);
+    expect(mergedEvent.mergeType).toBe('multi');
     expect(mergedEvent.description).toBe('');
   });
 
