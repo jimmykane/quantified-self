@@ -76,9 +76,8 @@ service cloud.firestore {
             // Restoring metaData inside events
             match /metaData/processing {
               allow read: if request.auth.uid == userID;
-              allow write: if request.auth.uid == userID
-                && request.resource.data.sportsLibVersion is string
-                && request.resource.data.sportsLibVersionCode is int;
+              // Processing metadata is server-owned (Cloud Functions/Admin SDK only).
+              allow write: if false;
             }
             match /metaData/{document=**} {
               allow read: if request.auth.uid == userID;

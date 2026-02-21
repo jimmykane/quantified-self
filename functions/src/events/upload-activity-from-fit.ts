@@ -1,8 +1,17 @@
 import { onRequest } from 'firebase-functions/v2/https';
 import * as logger from 'firebase-functions/logger';
 import * as admin from 'firebase-admin';
-import { EventImporterFIT } from '@sports-alliance/sports-lib';
+import {
+  EventImporterFIT,
+  EventImporterGPX,
+  EventImporterSuuntoJSON,
+  EventImporterSuuntoSML,
+  EventImporterTCX,
+  EventInterface,
+} from '@sports-alliance/sports-lib';
 import { basename } from 'node:path';
+import { gunzipSync } from 'node:zlib';
+import * as xmldom from 'xmldom';
 
 import { ALLOWED_CORS_ORIGINS, hasBasicAccess, hasProAccess } from '../utils';
 import { createParsingOptions } from '../shared/parsing-options';
@@ -15,6 +24,8 @@ import { USAGE_LIMITS } from '../shared/limits';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const SUPPORTED_BASE_EXTENSIONS = new Set(['fit', 'gpx', 'tcx', 'json', 'sml']);
+const TEXT_BASE_EXTENSIONS = new Set(['gpx', 'tcx', 'json', 'sml']);
 
 class HttpStatusError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -27,6 +38,97 @@ function toArrayBuffer(data: Buffer): ArrayBuffer {
   return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
 }
 
+function decodeText(data: Buffer): string {
+  return new TextDecoder().decode(toArrayBuffer(data));
+}
+
+function hasGzipMagic(data: Buffer): boolean {
+  return data.length > 2 && data[0] === 0x1f && data[1] === 0x8b;
+}
+
+function normalizeExtension(extension: string): string {
+  const normalized = extension.trim().toLowerCase();
+  return normalized.startsWith('.') ? normalized.slice(1) : normalized;
+}
+
+function getBaseExtension(extension: string): string {
+  return extension.endsWith('.gz') ? extension.slice(0, -3) : extension;
+}
+
+function resolveExtensionFromFilename(filename?: string): string | null {
+  if (!filename) {
+    return null;
+  }
+
+  const name = basename(filename).toLowerCase().trim();
+  if (!name.includes('.')) {
+    return null;
+  }
+
+  const parts = name.split('.').filter(Boolean);
+  if (parts.length < 2) {
+    return null;
+  }
+
+  const ext = parts[parts.length - 1];
+  if (ext === 'gz' && parts.length >= 3) {
+    return `${parts[parts.length - 2]}.gz`;
+  }
+  return ext;
+}
+
+function resolveUploadExtension(
+  extensionHeader?: string,
+  originalFilenameHeader?: string,
+): string {
+  const fromHeader = extensionHeader ? normalizeExtension(extensionHeader) : '';
+  const fromFilename = resolveExtensionFromFilename(originalFilenameHeader);
+  const resolved = fromHeader || (fromFilename ? normalizeExtension(fromFilename) : '');
+
+  if (!resolved) {
+    throw new HttpStatusError(400, 'File extension is required.');
+  }
+
+  const baseExtension = getBaseExtension(resolved);
+  if (!SUPPORTED_BASE_EXTENSIONS.has(baseExtension)) {
+    throw new HttpStatusError(400, `Unsupported file extension: ${baseExtension}. Supported: fit, gpx, tcx, json, sml.`);
+  }
+
+  if (resolved.endsWith('.gz')) {
+    return `${baseExtension}.gz`;
+  }
+  return baseExtension;
+}
+
+function resolveStoredExtension(resolvedExtension: string, payload: Buffer): string {
+  const baseExtension = getBaseExtension(resolvedExtension);
+  if (resolvedExtension.endsWith('.gz')) {
+    return `${baseExtension}.gz`;
+  }
+
+  if (TEXT_BASE_EXTENSIONS.has(baseExtension) && hasGzipMagic(payload)) {
+    return `${baseExtension}.gz`;
+  }
+  return baseExtension;
+}
+
+function maybeDecompressPayloadForParsing(payload: Buffer, resolvedExtension: string): Buffer {
+  const baseExtension = getBaseExtension(resolvedExtension);
+  const shouldDecompress = resolvedExtension.endsWith('.gz')
+    || (baseExtension !== 'fit' && hasGzipMagic(payload));
+
+  if (!shouldDecompress) {
+    return payload;
+  }
+
+  try {
+    return gunzipSync(payload);
+  } catch (error) {
+    logger.warn('[uploadActivityFromFit] Gzip decompression failed', error);
+    throw new HttpStatusError(400, 'Could not decompress uploaded payload.');
+  }
+}
+
 function resolveEventNameFromHeader(originalFilenameHeader?: string): string | null {
   if (!originalFilenameHeader) {
     return null;
@@ -37,7 +139,7 @@ function resolveEventNameFromHeader(originalFilenameHeader?: string): string | n
     return null;
   }
 
-  const noExtension = baseName.replace(/\.[^/.]+$/, '').trim();
+  const noExtension = baseName.replace(/\.(fit|gpx|tcx|json|sml)(\.gz)?$/i, '').trim();
   return noExtension || null;
 }
 
@@ -95,6 +197,37 @@ async function getEventCountForUser(userID: string): Promise<number> {
   return countSnapshot.data().count;
 }
 
+async function parseUploadedEvent(payload: Buffer, resolvedExtension: string): Promise<EventInterface> {
+  const parsingOptions = createParsingOptions();
+  const baseExtension = getBaseExtension(resolvedExtension);
+  const payloadForParsing = maybeDecompressPayloadForParsing(payload, resolvedExtension);
+
+  if (baseExtension === 'fit') {
+    return EventImporterFIT.getFromArrayBuffer(toArrayBuffer(payloadForParsing), parsingOptions);
+  }
+
+  const text = decodeText(payloadForParsing);
+  if (baseExtension === 'gpx') {
+    return EventImporterGPX.getFromString(text, xmldom.DOMParser, parsingOptions);
+  }
+  if (baseExtension === 'tcx') {
+    const xml = new xmldom.DOMParser().parseFromString(text, 'application/xml');
+    return EventImporterTCX.getFromXML(xml, parsingOptions);
+  }
+  if (baseExtension === 'json') {
+    try {
+      return await EventImporterSuuntoJSON.getFromJSONString(text, parsingOptions);
+    } catch (_jsonError) {
+      return await EventImporterSuuntoSML.getFromJSONString(text, parsingOptions);
+    }
+  }
+  if (baseExtension === 'sml') {
+    return EventImporterSuuntoSML.getFromXML(text, parsingOptions);
+  }
+
+  throw new HttpStatusError(400, `Unsupported file extension: ${baseExtension}.`);
+}
+
 function getFirestoreAdapter(): FirestoreAdapter {
   return {
     setDoc: async (path: string[], data: unknown) => {
@@ -140,6 +273,11 @@ export const uploadActivityFromFit = onRequest({
   try {
     const userID = await verifyFirebaseUserIDFromAuthorizationHeader(request.header('authorization'));
     await verifyAppCheckHeader(request.header('X-Firebase-AppCheck') || request.header('x-firebase-appcheck'));
+    const originalFilename = request.header('X-Original-Filename') || request.header('x-original-filename') || undefined;
+    const resolvedExtension = resolveUploadExtension(
+      request.header('X-File-Extension') || request.header('x-file-extension') || undefined,
+      originalFilename,
+    );
 
     const rawBody = request.rawBody;
     if (!rawBody || rawBody.length === 0) {
@@ -158,16 +296,19 @@ export const uploadActivityFromFit = onRequest({
 
     let event;
     try {
-      event = await EventImporterFIT.getFromArrayBuffer(toArrayBuffer(rawBody), createParsingOptions());
+      event = await parseUploadedEvent(rawBody, resolvedExtension);
     } catch (error) {
-      logger.warn('[uploadActivityFromFit] FIT parsing failed', error);
-      throw new HttpStatusError(400, 'Could not parse FIT payload.');
+      if (error instanceof HttpStatusError) {
+        throw error;
+      }
+      logger.warn('[uploadActivityFromFit] Activity parsing failed', error);
+      throw new HttpStatusError(400, 'Could not parse uploaded payload.');
     }
 
     const eventID = await generateEventID(userID, event.startDate, 0);
     event.setID(eventID);
 
-    const resolvedEventName = resolveEventNameFromHeader(request.header('X-Original-Filename') || undefined);
+    const resolvedEventName = resolveEventNameFromHeader(originalFilename);
     if (resolvedEventName) {
       event.name = resolvedEventName;
     }
@@ -181,9 +322,9 @@ export const uploadActivityFromFit = onRequest({
 
     const originalFile: OriginalFile = {
       data: rawBody,
-      extension: 'fit',
+      extension: resolveStoredExtension(resolvedExtension, rawBody),
       startDate: event.startDate,
-      originalFilename: request.header('X-Original-Filename') || undefined,
+      originalFilename,
     };
 
     const writer = new EventWriter(getFirestoreAdapter(), getStorageAdapter());
@@ -203,6 +344,6 @@ export const uploadActivityFromFit = onRequest({
     }
 
     logger.error('[uploadActivityFromFit] Upload failed', error);
-    response.status(500).json({ error: 'Could not upload FIT activity.' });
+    response.status(500).json({ error: 'Could not upload activity.' });
   }
 });

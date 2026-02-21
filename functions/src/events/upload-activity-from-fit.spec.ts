@@ -1,313 +1,414 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { gzipSync } from 'node:zlib';
 
 const hoisted = vi.hoisted(() => {
-    const mockVerifyIdToken = vi.fn();
-    const mockVerifyAppCheckToken = vi.fn();
-    const mockEventsCountGet = vi.fn();
-    const mockDocSet = vi.fn();
-    const mockStorageSave = vi.fn();
-    const mockWriteAllEventData = vi.fn();
-    const mockGenerateEventID = vi.fn();
-    const mockGenerateActivityID = vi.fn();
-    const mockHasProAccess = vi.fn();
-    const mockHasBasicAccess = vi.fn();
-    const mockFITImporter = { getFromArrayBuffer: vi.fn() };
-    const mockServerTimestamp = vi.fn(() => 'SERVER_TIMESTAMP');
-    const mockSportsLibVersionToCode = vi.fn(() => 9001004);
+  const mockVerifyIdToken = vi.fn();
+  const mockVerifyAppCheckToken = vi.fn();
+  const mockEventsCountGet = vi.fn();
+  const mockDocSet = vi.fn();
+  const mockStorageSave = vi.fn();
+  const mockWriteAllEventData = vi.fn();
+  const mockGenerateEventID = vi.fn();
+  const mockGenerateActivityID = vi.fn();
+  const mockHasProAccess = vi.fn();
+  const mockHasBasicAccess = vi.fn();
+  const mockFITImporter = { getFromArrayBuffer: vi.fn() };
+  const mockGPXImporter = { getFromString: vi.fn() };
+  const mockTCXImporter = { getFromXML: vi.fn() };
+  const mockSuuntoJSONImporter = { getFromJSONString: vi.fn() };
+  const mockSuuntoSMLImporter = { getFromXML: vi.fn(), getFromJSONString: vi.fn() };
+  const mockServerTimestamp = vi.fn(() => 'SERVER_TIMESTAMP');
+  const mockSportsLibVersionToCode = vi.fn(() => 9001004);
 
-    return {
-        mockVerifyIdToken,
-        mockVerifyAppCheckToken,
-        mockEventsCountGet,
-        mockDocSet,
-        mockStorageSave,
-        mockWriteAllEventData,
-        mockGenerateEventID,
-        mockGenerateActivityID,
-        mockHasProAccess,
-        mockHasBasicAccess,
-        mockFITImporter,
-        mockServerTimestamp,
-        mockSportsLibVersionToCode,
-    };
+  return {
+    mockVerifyIdToken,
+    mockVerifyAppCheckToken,
+    mockEventsCountGet,
+    mockDocSet,
+    mockStorageSave,
+    mockWriteAllEventData,
+    mockGenerateEventID,
+    mockGenerateActivityID,
+    mockHasProAccess,
+    mockHasBasicAccess,
+    mockFITImporter,
+    mockGPXImporter,
+    mockTCXImporter,
+    mockSuuntoJSONImporter,
+    mockSuuntoSMLImporter,
+    mockServerTimestamp,
+    mockSportsLibVersionToCode,
+  };
 });
 
 vi.mock('firebase-functions/v2/https', () => ({
-    onRequest: (_options: unknown, handler: unknown) => handler,
+  onRequest: (_options: unknown, handler: unknown) => handler,
 }));
 
 vi.mock('firebase-admin', () => {
-    const firestoreFn = vi.fn(() => ({
-        collection: (path: string) => {
-            if (path === 'users') {
+  const firestoreFn = vi.fn(() => ({
+    collection: (path: string) => {
+      if (path === 'users') {
+        return {
+          doc: () => ({
+            collection: (name: string) => {
+              if (name === 'events') {
                 return {
-                    doc: () => ({
-                        collection: (name: string) => {
-                            if (name === 'events') {
-                                return {
-                                    count: () => ({ get: hoisted.mockEventsCountGet }),
-                                };
-                            }
-                            return {};
-                        },
-                    }),
+                  count: () => ({ get: hoisted.mockEventsCountGet }),
                 };
-            }
-            if (path === 'tmp') {
-                return { doc: () => ({ id: 'tmp-generated-id' }) };
-            }
-            return { doc: () => ({}) };
-        },
-        doc: (_path: string) => ({
-            set: hoisted.mockDocSet,
-        }),
-    }));
-    Object.assign(firestoreFn, {
-        FieldValue: {
-            serverTimestamp: hoisted.mockServerTimestamp,
-        },
-    });
+              }
+              return {};
+            },
+          }),
+        };
+      }
+      if (path === 'tmp') {
+        return { doc: () => ({ id: 'tmp-generated-id' }) };
+      }
+      return { doc: () => ({}) };
+    },
+    doc: (_path: string) => ({
+      set: hoisted.mockDocSet,
+    }),
+  }));
 
-    return {
-        auth: () => ({
-            verifyIdToken: hoisted.mockVerifyIdToken,
+  Object.assign(firestoreFn, {
+    FieldValue: {
+      serverTimestamp: hoisted.mockServerTimestamp,
+    },
+  });
+
+  return {
+    auth: () => ({
+      verifyIdToken: hoisted.mockVerifyIdToken,
+    }),
+    appCheck: () => ({
+      verifyToken: hoisted.mockVerifyAppCheckToken,
+    }),
+    firestore: firestoreFn,
+    storage: () => ({
+      bucket: () => ({
+        name: 'test-bucket',
+        file: () => ({
+          save: hoisted.mockStorageSave,
         }),
-        appCheck: () => ({
-            verifyToken: hoisted.mockVerifyAppCheckToken,
-        }),
-        firestore: firestoreFn,
-        storage: () => ({
-            bucket: () => ({
-                name: 'test-bucket',
-                file: () => ({
-                    save: hoisted.mockStorageSave,
-                }),
-            }),
-        }),
-    };
+      }),
+    }),
+  };
 });
 
 vi.mock('../utils', () => ({
-    ALLOWED_CORS_ORIGINS: [],
-    hasProAccess: (...args: unknown[]) => hoisted.mockHasProAccess(...args),
-    hasBasicAccess: (...args: unknown[]) => hoisted.mockHasBasicAccess(...args),
+  ALLOWED_CORS_ORIGINS: [],
+  hasProAccess: (...args: unknown[]) => hoisted.mockHasProAccess(...args),
+  hasBasicAccess: (...args: unknown[]) => hoisted.mockHasBasicAccess(...args),
 }));
 
 vi.mock('../shared/event-writer', () => ({
-    EventWriter: vi.fn(() => ({
-        writeAllEventData: (...args: unknown[]) => hoisted.mockWriteAllEventData(...args),
-    })),
+  EventWriter: vi.fn(() => ({
+    writeAllEventData: (...args: unknown[]) => hoisted.mockWriteAllEventData(...args),
+  })),
 }));
 
 vi.mock('../shared/id-generator', () => ({
-    generateEventID: (...args: unknown[]) => hoisted.mockGenerateEventID(...args),
-    generateActivityID: (...args: unknown[]) => hoisted.mockGenerateActivityID(...args),
+  generateEventID: (...args: unknown[]) => hoisted.mockGenerateEventID(...args),
+  generateActivityID: (...args: unknown[]) => hoisted.mockGenerateActivityID(...args),
 }));
 
 vi.mock('@sports-alliance/sports-lib', () => ({
-    EventImporterFIT: hoisted.mockFITImporter,
-    ActivityParsingOptions: class ActivityParsingOptions {
-        constructor(_options: unknown) { }
-    },
+  EventImporterFIT: hoisted.mockFITImporter,
+  EventImporterGPX: hoisted.mockGPXImporter,
+  EventImporterTCX: hoisted.mockTCXImporter,
+  EventImporterSuuntoJSON: hoisted.mockSuuntoJSONImporter,
+  EventImporterSuuntoSML: hoisted.mockSuuntoSMLImporter,
+  ActivityParsingOptions: class ActivityParsingOptions {
+    constructor(_options: unknown) {}
+  },
 }));
 
 vi.mock('../reparse/sports-lib-reparse.service', () => ({
-    sportsLibVersionToCode: (...args: unknown[]) => hoisted.mockSportsLibVersionToCode(...args),
+  sportsLibVersionToCode: (...args: unknown[]) => hoisted.mockSportsLibVersionToCode(...args),
 }));
 
 vi.mock('../../../src/shared/functions-manifest', () => ({
-    FUNCTIONS_MANIFEST: {
-        uploadActivityFromFit: { name: 'uploadActivityFromFit', region: 'europe-west2' },
-    },
+  FUNCTIONS_MANIFEST: {
+    uploadActivityFromFit: { name: 'uploadActivityFromFit', region: 'europe-west2' },
+  },
 }));
 
 import { uploadActivityFromFit } from './upload-activity-from-fit';
 
 function makeRequest(overrides?: {
-    method?: string;
-    headers?: Record<string, string | undefined>;
-    rawBody?: Buffer;
+  method?: string;
+  headers?: Record<string, string | undefined>;
+  rawBody?: Buffer;
 }) {
-    const headers = Object.fromEntries(
-        Object.entries(overrides?.headers || {}).map(([key, value]) => [key.toLowerCase(), value]),
-    );
+  const mergedHeaders: Record<string, string | undefined> = {
+    'X-File-Extension': 'fit',
+    ...(overrides?.headers || {}),
+  };
 
-    return {
-        method: overrides?.method || 'POST',
-        rawBody: overrides?.rawBody ?? Buffer.from([0x01, 0x02, 0x03]),
-        header: (name: string) => headers[name.toLowerCase()],
-    };
+  const headers = Object.fromEntries(
+    Object.entries(mergedHeaders).map(([key, value]) => [key.toLowerCase(), value]),
+  );
+
+  return {
+    method: overrides?.method || 'POST',
+    rawBody: overrides?.rawBody ?? Buffer.from([0x01, 0x02, 0x03]),
+    header: (name: string) => headers[name.toLowerCase()],
+  };
 }
 
 function makeResponse() {
-    const json = vi.fn();
-    const status = vi.fn(() => ({ json }));
-    return { status, json };
+  const json = vi.fn();
+  const status = vi.fn(() => ({ json }));
+  return { status, json };
+}
+
+function makeParsedEvent() {
+  const activity = { getID: vi.fn(() => null), setID: vi.fn() };
+  return {
+    startDate: new Date('2026-01-10T10:00:00.000Z'),
+    name: '',
+    setID: vi.fn(),
+    getActivities: vi.fn(() => [activity]),
+  };
 }
 
 describe('uploadActivityFromFit', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
+  beforeEach(() => {
+    vi.clearAllMocks();
 
-        hoisted.mockVerifyIdToken.mockResolvedValue({ uid: 'user-1' });
-        hoisted.mockVerifyAppCheckToken.mockResolvedValue({ appId: 'app-id' });
-        hoisted.mockEventsCountGet.mockResolvedValue({ data: () => ({ count: 0 }) });
-        hoisted.mockWriteAllEventData.mockResolvedValue(undefined);
-        hoisted.mockDocSet.mockResolvedValue(undefined);
-        hoisted.mockStorageSave.mockResolvedValue(undefined);
-        hoisted.mockGenerateEventID.mockResolvedValue('event-1');
-        hoisted.mockGenerateActivityID.mockResolvedValue('activity-1');
-        hoisted.mockHasProAccess.mockResolvedValue(false);
-        hoisted.mockHasBasicAccess.mockResolvedValue(false);
+    hoisted.mockVerifyIdToken.mockResolvedValue({ uid: 'user-1' });
+    hoisted.mockVerifyAppCheckToken.mockResolvedValue({ appId: 'app-id' });
+    hoisted.mockEventsCountGet.mockResolvedValue({ data: () => ({ count: 0 }) });
+    hoisted.mockWriteAllEventData.mockResolvedValue(undefined);
+    hoisted.mockDocSet.mockResolvedValue(undefined);
+    hoisted.mockStorageSave.mockResolvedValue(undefined);
+    hoisted.mockGenerateEventID.mockResolvedValue('event-1');
+    hoisted.mockGenerateActivityID.mockResolvedValue('activity-1');
+    hoisted.mockHasProAccess.mockResolvedValue(false);
+    hoisted.mockHasBasicAccess.mockResolvedValue(false);
 
-        const activity = { getID: vi.fn(() => null), setID: vi.fn() };
-        hoisted.mockFITImporter.getFromArrayBuffer.mockResolvedValue({
-            startDate: new Date('2026-01-10T10:00:00.000Z'),
-            name: '',
-            setID: vi.fn(),
-            getActivities: vi.fn(() => [activity]),
-        });
-    });
+    hoisted.mockFITImporter.getFromArrayBuffer.mockResolvedValue(makeParsedEvent());
+    hoisted.mockGPXImporter.getFromString.mockResolvedValue(makeParsedEvent());
+    hoisted.mockTCXImporter.getFromXML.mockResolvedValue(makeParsedEvent());
+    hoisted.mockSuuntoJSONImporter.getFromJSONString.mockResolvedValue(makeParsedEvent());
+    hoisted.mockSuuntoSMLImporter.getFromXML.mockResolvedValue(makeParsedEvent());
+    hoisted.mockSuuntoSMLImporter.getFromJSONString.mockResolvedValue(makeParsedEvent());
+  });
 
-    it('should reject non-POST methods', async () => {
-        const response = makeResponse();
-        await uploadActivityFromFit(makeRequest({ method: 'GET' }) as any, response as any);
+  it('should reject non-POST methods', async () => {
+    const response = makeResponse();
+    await uploadActivityFromFit(makeRequest({ method: 'GET' }) as any, response as any);
 
-        expect(response.status).toHaveBeenCalledWith(405);
-    });
+    expect(response.status).toHaveBeenCalledWith(405);
+  });
 
-    it('should reject missing auth header', async () => {
-        const response = makeResponse();
-        await uploadActivityFromFit(makeRequest({
-            headers: { 'X-Firebase-AppCheck': 'app-check' },
-        }) as any, response as any);
+  it('should reject missing auth header', async () => {
+    const response = makeResponse();
+    await uploadActivityFromFit(makeRequest({
+      headers: { 'X-Firebase-AppCheck': 'app-check' },
+    }) as any, response as any);
 
-        expect(response.status).toHaveBeenCalledWith(401);
-    });
+    expect(response.status).toHaveBeenCalledWith(401);
+  });
 
-    it('should reject invalid app check header', async () => {
-        const response = makeResponse();
-        await uploadActivityFromFit(makeRequest({
-            headers: { Authorization: 'Bearer token' },
-        }) as any, response as any);
+  it('should reject missing app check header', async () => {
+    const response = makeResponse();
+    await uploadActivityFromFit(makeRequest({
+      headers: { Authorization: 'Bearer token' },
+    }) as any, response as any);
 
-        expect(response.status).toHaveBeenCalledWith(401);
-    });
+    expect(response.status).toHaveBeenCalledWith(401);
+  });
 
-    it('should reject empty payload', async () => {
-        const response = makeResponse();
-        await uploadActivityFromFit(makeRequest({
-            headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
-            rawBody: Buffer.alloc(0),
-        }) as any, response as any);
+  it('should reject unsupported extension', async () => {
+    const response = makeResponse();
+    await uploadActivityFromFit(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'pdf',
+      },
+    }) as any, response as any);
 
-        expect(response.status).toHaveBeenCalledWith(400);
-    });
+    expect(response.status).toHaveBeenCalledWith(400);
+  });
 
-    it('should reject payloads larger than 10MB', async () => {
-        const response = makeResponse();
-        await uploadActivityFromFit(makeRequest({
-            headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
-            rawBody: Buffer.alloc((10 * 1024 * 1024) + 1),
-        }) as any, response as any);
+  it('should infer extension from filename when extension header is missing', async () => {
+    const response = makeResponse();
+    await uploadActivityFromFit(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': undefined,
+        'X-Original-Filename': 'run.fit',
+      },
+    }) as any, response as any);
 
-        expect(response.status).toHaveBeenCalledWith(400);
-    });
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(hoisted.mockFITImporter.getFromArrayBuffer).toHaveBeenCalledTimes(1);
+  });
 
-    it('should enforce free upload limits', async () => {
-        hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: 10 }) });
-        const response = makeResponse();
-        await uploadActivityFromFit(makeRequest({
-            headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
-        }) as any, response as any);
+  it('should reject empty payload', async () => {
+    const response = makeResponse();
+    await uploadActivityFromFit(makeRequest({
+      headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
+      rawBody: Buffer.alloc(0),
+    }) as any, response as any);
 
-        expect(response.status).toHaveBeenCalledWith(429);
-        expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
-    });
+    expect(response.status).toHaveBeenCalledWith(400);
+  });
 
-    it('should allow basic users up to basic tier limit', async () => {
-        hoisted.mockHasBasicAccess.mockResolvedValueOnce(true);
-        hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: 99 }) });
+  it('should reject payloads larger than 10MB', async () => {
+    const response = makeResponse();
+    await uploadActivityFromFit(makeRequest({
+      headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
+      rawBody: Buffer.alloc((10 * 1024 * 1024) + 1),
+    }) as any, response as any);
 
-        const response = makeResponse();
-        await uploadActivityFromFit(makeRequest({
-            headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
-        }) as any, response as any);
+    expect(response.status).toHaveBeenCalledWith(400);
+  });
 
-        expect(response.status).toHaveBeenCalledWith(200);
-        expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
-            uploadLimit: 100,
-            uploadCountAfterWrite: 100,
-        }));
-    });
+  it('should enforce free upload limits', async () => {
+    hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: 10 }) });
+    const response = makeResponse();
+    await uploadActivityFromFit(makeRequest({
+      headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
+    }) as any, response as any);
 
-    it('should treat pro users as unlimited', async () => {
-        hoisted.mockHasProAccess.mockResolvedValueOnce(true);
-        hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: 250 }) });
+    expect(response.status).toHaveBeenCalledWith(429);
+    expect(hoisted.mockWriteAllEventData).not.toHaveBeenCalled();
+  });
 
-        const response = makeResponse();
-        await uploadActivityFromFit(makeRequest({
-            headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
-        }) as any, response as any);
+  it('should allow basic users up to basic tier limit', async () => {
+    hoisted.mockHasBasicAccess.mockResolvedValueOnce(true);
+    hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: 99 }) });
 
-        expect(response.status).toHaveBeenCalledWith(200);
-        expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
-            uploadLimit: null,
-            uploadCountAfterWrite: 251,
-        }));
-    });
+    const response = makeResponse();
+    await uploadActivityFromFit(makeRequest({
+      headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
+    }) as any, response as any);
 
-    it('should map FIT parser failures to 400', async () => {
-        hoisted.mockFITImporter.getFromArrayBuffer.mockRejectedValueOnce(new Error('bad fit'));
-        const response = makeResponse();
-        await uploadActivityFromFit(makeRequest({
-            headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
-        }) as any, response as any);
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      uploadLimit: 100,
+      uploadCountAfterWrite: 100,
+    }));
+  });
 
-        expect(response.status).toHaveBeenCalledWith(400);
-    });
+  it('should treat pro users as unlimited', async () => {
+    hoisted.mockHasProAccess.mockResolvedValueOnce(true);
+    hoisted.mockEventsCountGet.mockResolvedValueOnce({ data: () => ({ count: 250 }) });
 
-    it('should return 500 on persistence failures', async () => {
-        hoisted.mockWriteAllEventData.mockRejectedValueOnce(new Error('write failed'));
-        const response = makeResponse();
-        await uploadActivityFromFit(makeRequest({
-            headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
-        }) as any, response as any);
+    const response = makeResponse();
+    await uploadActivityFromFit(makeRequest({
+      headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
+    }) as any, response as any);
 
-        expect(response.status).toHaveBeenCalledWith(500);
-    });
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      uploadLimit: null,
+      uploadCountAfterWrite: 251,
+    }));
+  });
 
-    it('should persist parsed FIT and return response', async () => {
-        const response = makeResponse();
-        await uploadActivityFromFit(makeRequest({
-            headers: {
-                Authorization: 'Bearer token',
-                'X-Firebase-AppCheck': 'app-check',
-                'X-Original-Filename': 'run.fit',
-            },
-            rawBody: Buffer.from([1, 2, 3, 4]),
-        }) as any, response as any);
+  it('should map FIT parser failures to 400', async () => {
+    hoisted.mockFITImporter.getFromArrayBuffer.mockRejectedValueOnce(new Error('bad fit'));
+    const response = makeResponse();
+    await uploadActivityFromFit(makeRequest({
+      headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
+    }) as any, response as any);
 
-        expect(hoisted.mockGenerateEventID).toHaveBeenCalledWith(
-            'user-1',
-            new Date('2026-01-10T10:00:00.000Z'),
-            0,
-        );
-        expect(hoisted.mockGenerateActivityID).toHaveBeenCalledWith('event-1', 0);
-        expect(hoisted.mockWriteAllEventData).toHaveBeenCalledWith(
-            'user-1',
-            expect.anything(),
-            expect.objectContaining({
-                extension: 'fit',
-                originalFilename: 'run.fit',
-            }),
-        );
-        expect(response.status).toHaveBeenCalledWith(200);
-        expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
-            eventId: 'event-1',
-            activitiesCount: 1,
-            uploadLimit: 10,
-            uploadCountAfterWrite: 1,
-        }));
-    });
+    expect(response.status).toHaveBeenCalledWith(400);
+  });
+
+  it('should return 500 on persistence failures', async () => {
+    hoisted.mockWriteAllEventData.mockRejectedValueOnce(new Error('write failed'));
+    const response = makeResponse();
+    await uploadActivityFromFit(makeRequest({
+      headers: { Authorization: 'Bearer token', 'X-Firebase-AppCheck': 'app-check' },
+    }) as any, response as any);
+
+    expect(response.status).toHaveBeenCalledWith(500);
+  });
+
+  it('should persist parsed FIT and return response', async () => {
+    const response = makeResponse();
+    await uploadActivityFromFit(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-Original-Filename': 'run.fit',
+        'X-File-Extension': 'fit',
+      },
+      rawBody: Buffer.from([1, 2, 3, 4]),
+    }) as any, response as any);
+
+    expect(hoisted.mockGenerateEventID).toHaveBeenCalledWith(
+      'user-1',
+      new Date('2026-01-10T10:00:00.000Z'),
+      0,
+    );
+    expect(hoisted.mockGenerateActivityID).toHaveBeenCalledWith('event-1', 0);
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledWith(
+      'user-1',
+      expect.anything(),
+      expect.objectContaining({
+        extension: 'fit',
+        originalFilename: 'run.fit',
+      }),
+    );
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      eventId: 'event-1',
+      activitiesCount: 1,
+      uploadLimit: 10,
+      uploadCountAfterWrite: 1,
+    }));
+  });
+
+  it('should parse gzip GPX payload and persist compressed extension', async () => {
+    const response = makeResponse();
+    const payload = gzipSync(Buffer.from('<gpx><trk/></gpx>'));
+
+    await uploadActivityFromFit(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'gpx.gz',
+        'X-Original-Filename': 'morning.gpx',
+      },
+      rawBody: payload,
+    }) as any, response as any);
+
+    expect(hoisted.mockGPXImporter.getFromString).toHaveBeenCalledTimes(1);
+    expect(hoisted.mockWriteAllEventData).toHaveBeenCalledWith(
+      'user-1',
+      expect.anything(),
+      expect.objectContaining({
+        extension: 'gpx.gz',
+        originalFilename: 'morning.gpx',
+      }),
+    );
+    expect(response.status).toHaveBeenCalledWith(200);
+  });
+
+  it('should fallback to SML parser when Suunto JSON parser fails', async () => {
+    hoisted.mockSuuntoJSONImporter.getFromJSONString.mockRejectedValueOnce(new Error('bad json'));
+
+    const response = makeResponse();
+    await uploadActivityFromFit(makeRequest({
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Firebase-AppCheck': 'app-check',
+        'X-File-Extension': 'json',
+      },
+      rawBody: Buffer.from('{"foo":"bar"}'),
+    }) as any, response as any);
+
+    expect(hoisted.mockSuuntoJSONImporter.getFromJSONString).toHaveBeenCalledTimes(1);
+    expect(hoisted.mockSuuntoSMLImporter.getFromJSONString).toHaveBeenCalledTimes(1);
+    expect(response.status).toHaveBeenCalledWith(200);
+  });
 });

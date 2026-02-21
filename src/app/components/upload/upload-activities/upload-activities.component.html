@@ -20,5 +20,5 @@
   <mat-icon *ngIf="isHandset">upgrade</mat-icon>
   <span *ngIf="!isHandset">Upgrade to Pro</span>
 </a>
-<input #inputFile type="file" accept=".fit" multiple style="display: none;"
+<input #inputFile type="file" accept=".json, .tcx, .fit, .gpx, .sml" multiple style="display: none;"
   (change)="getFiles($event)" />

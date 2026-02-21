@@ -55,7 +55,7 @@ describe('AppFitUploadService', () => {
     service = TestBed.inject(AppFitUploadService);
   });
 
-  it('should upload FIT bytes with auth and app check headers', async () => {
+  it('should upload activity bytes with auth, app check, and extension headers', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       status: 200,
@@ -68,7 +68,7 @@ describe('AppFitUploadService', () => {
     });
 
     const payload = new Uint8Array([1, 2, 3]).buffer;
-    const result = await service.uploadFitFile(payload, 'run.fit');
+    const result = await service.uploadActivityFile(payload, 'gpx.gz', 'run.gpx');
 
     expect(authMock.currentUser.getIdToken).toHaveBeenCalledWith(true);
     expect(hoisted.mockGetAppCheckToken).toHaveBeenCalledWith(appCheckMock, false);
@@ -84,7 +84,8 @@ describe('AppFitUploadService', () => {
     const headers = fetchOptions.headers as Headers;
     expect(headers.get('Authorization')).toBe('Bearer id-token');
     expect(headers.get('X-Firebase-AppCheck')).toBe('app-check-token');
-    expect(headers.get('X-Original-Filename')).toBe('run.fit');
+    expect(headers.get('X-File-Extension')).toBe('gpx.gz');
+    expect(headers.get('X-Original-Filename')).toBe('run.gpx');
     expect(result.eventId).toBe('event-1');
   });
 
@@ -108,5 +109,9 @@ describe('AppFitUploadService', () => {
     hoisted.mockGetAppCheckToken.mockResolvedValueOnce({ token: '' });
 
     await expect(service.uploadFitFile(new Uint8Array([1]).buffer)).rejects.toThrow('App Check');
+  });
+
+  it('should throw when extension is empty for uploadActivityFile', async () => {
+    await expect(service.uploadActivityFile(new Uint8Array([1]).buffer, '')).rejects.toThrow('extension');
   });
 });

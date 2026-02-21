@@ -19,7 +19,11 @@ export class AppFitUploadService {
     private auth = inject(Auth);
     private appCheck = inject(AppCheck, { optional: true });
 
-    async uploadFitFile(fileBytes: ArrayBuffer, originalFilename?: string): Promise<UploadActivityFromFitResponse> {
+    async uploadActivityFile(
+        fileBytes: ArrayBuffer,
+        fileExtension: string,
+        originalFilename?: string,
+    ): Promise<UploadActivityFromFitResponse> {
         if (!this.auth.currentUser) {
             throw new Error('User must be authenticated to upload activities.');
         }
@@ -40,12 +44,18 @@ export class AppFitUploadService {
             throw new Error('Firebase project ID is not configured.');
         }
 
+        const normalizedExtension = fileExtension.trim().toLowerCase();
+        if (!normalizedExtension) {
+            throw new Error('File extension is required.');
+        }
+
         const config = FUNCTIONS_MANIFEST.uploadActivityFromFit;
         const functionURL = `https://${config.region}-${projectID}.cloudfunctions.net/${config.name}`;
 
         const headers = new Headers({
             'Authorization': `Bearer ${idToken}`,
             'X-Firebase-AppCheck': appCheckToken,
+            'X-File-Extension': normalizedExtension,
             'Content-Type': 'application/octet-stream',
         });
 
@@ -73,5 +83,9 @@ export class AppFitUploadService {
         }
 
         return payload as UploadActivityFromFitResponse;
+    }
+
+    async uploadFitFile(fileBytes: ArrayBuffer, originalFilename?: string): Promise<UploadActivityFromFitResponse> {
+        return this.uploadActivityFile(fileBytes, 'fit', originalFilename);
     }
 }

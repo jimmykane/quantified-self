@@ -10,11 +10,13 @@ import { AppUserService } from '../../../services/app.user.service';
 import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppProcessingService } from '../../../services/app.processing.service';
 import { LoggerService } from '../../../services/logger.service';
+import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
 import { MatBottomSheet } from '@angular/material/bottom-sheet';
 import { Overlay } from '@angular/cdk/overlay';
 import { Router } from '@angular/router';
+import { UPLOAD_STATUS } from '../upload-status/upload.status';
 
 describe('UploadActivitiesComponent', () => {
   let component: UploadActivitiesComponent;
@@ -26,6 +28,7 @@ describe('UploadActivitiesComponent', () => {
   let userServiceMock: any;
   let analyticsServiceMock: any;
   let processingServiceMock: any;
+  let browserCompatibilityServiceMock: any;
   let loggerMock: any;
   let snackBarMock: any;
 
@@ -37,7 +40,7 @@ describe('UploadActivitiesComponent', () => {
       getEventCount: vi.fn().mockResolvedValue(5),
     };
     fitUploadServiceMock = {
-      uploadFitFile: vi.fn().mockResolvedValue({
+      uploadActivityFile: vi.fn().mockResolvedValue({
         eventId: 'event-1',
         activitiesCount: 1,
         uploadLimit: 10,
@@ -57,6 +60,9 @@ describe('UploadActivitiesComponent', () => {
       completeJob: vi.fn(),
       failJob: vi.fn(),
     };
+    browserCompatibilityServiceMock = {
+      checkCompressionSupport: vi.fn().mockReturnValue(true),
+    };
     loggerMock = {
       log: vi.fn(),
       error: vi.fn(),
@@ -72,6 +78,7 @@ describe('UploadActivitiesComponent', () => {
         { provide: AppUserService, useValue: userServiceMock },
         { provide: AppAnalyticsService, useValue: analyticsServiceMock },
         { provide: AppProcessingService, useValue: processingServiceMock },
+        { provide: BrowserCompatibilityService, useValue: browserCompatibilityServiceMock },
         { provide: LoggerService, useValue: loggerMock },
         { provide: MatSnackBar, useValue: snackBarMock },
         { provide: MatDialog, useValue: { open: vi.fn() } },
@@ -85,6 +92,29 @@ describe('UploadActivitiesComponent', () => {
     fixture = TestBed.createComponent(UploadActivitiesComponent);
     component = fixture.componentInstance;
   });
+
+  function mockFileReaderResult(result: ArrayBuffer): void {
+    const mockFileReader = {
+      result,
+      onload: null as any,
+      onerror: null as any,
+      readAsArrayBuffer: vi.fn().mockImplementation(function () {
+        this.onload?.();
+      }),
+    };
+
+    vi.spyOn(globalThis as any, 'FileReader').mockImplementation(() => mockFileReader);
+  }
+
+  function makeUploadFile(name: string, extension: string) {
+    return {
+      file: new File(['abc'], name),
+      name,
+      extension,
+      filename: name.replace(/\.[^/.]+$/, ''),
+      status: UPLOAD_STATUS.PROCESSING,
+    } as any;
+  }
 
   it('should initialize user and upload limits on init', async () => {
     await component.ngOnInit();
@@ -106,60 +136,50 @@ describe('UploadActivitiesComponent', () => {
     expect(component.uploadLimit).toBeNull();
   });
 
-  it('should reject non-fit files', async () => {
-    await expect(component.processAndUploadFile({
-      file: new File(['abc'], 'activity.gpx'),
-      extension: 'gpx',
-      filename: 'activity',
-    })).rejects.toThrow('Only FIT files are supported.');
+  it('should reject unsupported files', async () => {
+    await expect(component.processAndUploadFile(makeUploadFile('activity.csv', 'csv')))
+      .rejects.toThrow('Only FIT, GPX, TCX, JSON, and SML files are supported.');
   });
 
   it('should upload fit files through AppFitUploadService', async () => {
     component.user = { uid: 'u1' } as any;
+    mockFileReaderResult(new Uint8Array([1, 2, 3]).buffer);
 
-    const mockFileReader = {
-      result: new Uint8Array([1, 2, 3]).buffer,
-      onload: null as any,
-      onerror: null as any,
-      readAsArrayBuffer: vi.fn().mockImplementation(function () {
-        this.onload?.();
-      }),
-    };
-    vi.spyOn(globalThis as any, 'FileReader').mockImplementation(() => mockFileReader);
-
-    const result = await component.processAndUploadFile({
-      file: new File(['abc'], 'run.fit'),
-      extension: 'fit',
-      filename: 'run',
-    });
+    const result = await component.processAndUploadFile(makeUploadFile('run.fit', 'fit'));
 
     expect(analyticsServiceMock.logEvent).toHaveBeenCalledWith('upload_file', { method: 'fit' });
-    expect(fitUploadServiceMock.uploadFitFile).toHaveBeenCalledWith(
+    expect(fitUploadServiceMock.uploadActivityFile).toHaveBeenCalledWith(
       new Uint8Array([1, 2, 3]).buffer,
+      'fit',
       'run.fit',
     );
     expect(result.eventId).toBe('event-1');
   });
 
+  it('should gzip text files and upload with .gz extension', async () => {
+    component.user = { uid: 'u1' } as any;
+    mockFileReaderResult(new Uint8Array([1, 2, 3, 4]).buffer);
+
+    const compressedBytes = new Uint8Array([0x1f, 0x8b, 0x08]).buffer;
+    vi.spyOn(component as any, 'gzipPayload').mockResolvedValue(compressedBytes);
+
+    await component.processAndUploadFile(makeUploadFile('run.gpx', 'gpx'));
+
+    expect(browserCompatibilityServiceMock.checkCompressionSupport).toHaveBeenCalled();
+    expect(fitUploadServiceMock.uploadActivityFile).toHaveBeenCalledWith(
+      compressedBytes,
+      'gpx.gz',
+      'run.gpx',
+    );
+  });
+
   it('should show snackbar when upload fails', async () => {
     component.user = { uid: 'u1' } as any;
-    fitUploadServiceMock.uploadFitFile.mockRejectedValueOnce(new Error('Upload failed'));
+    fitUploadServiceMock.uploadActivityFile.mockRejectedValueOnce(new Error('Upload failed'));
+    mockFileReaderResult(new Uint8Array([1]).buffer);
 
-    const mockFileReader = {
-      result: new Uint8Array([1]).buffer,
-      onload: null as any,
-      onerror: null as any,
-      readAsArrayBuffer: vi.fn().mockImplementation(function () {
-        this.onload?.();
-      }),
-    };
-    vi.spyOn(globalThis as any, 'FileReader').mockImplementation(() => mockFileReader);
-
-    await expect(component.processAndUploadFile({
-      file: new File(['abc'], 'run.fit'),
-      extension: 'fit',
-      filename: 'run',
-    })).rejects.toThrow('Upload failed');
+    await expect(component.processAndUploadFile(makeUploadFile('run.fit', 'fit')))
+      .rejects.toThrow('Upload failed');
 
     expect(snackBarMock.open).toHaveBeenCalled();
   });

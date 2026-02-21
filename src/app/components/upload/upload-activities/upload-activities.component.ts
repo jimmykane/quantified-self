@@ -7,7 +7,12 @@ import { AppAnalyticsService } from '../../../services/app.analytics.service';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppFitUploadService } from '../../../services/app.fit-upload.service';
 import { UploadAbstractDirective } from '../upload-abstract.directive';
+import { FileInterface } from '../file.interface';
 import { USAGE_LIMITS } from '../../../../../functions/src/shared/limits';
+import { BrowserCompatibilityService } from '../../../services/browser.compatibility.service';
+
+const SUPPORTED_UPLOAD_EXTENSIONS = new Set(['fit', 'gpx', 'tcx', 'json', 'sml']);
+const TEXT_COMPRESSIBLE_EXTENSIONS = new Set(['gpx', 'tcx', 'json', 'sml']);
 
 @Component({
   selector: 'app-upload-activities',
@@ -24,6 +29,7 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
   protected analyticsService = inject(AppAnalyticsService);
   protected authService = inject(AppAuthService);
   protected fitUploadService = inject(AppFitUploadService);
+  protected browserCompatibilityService = inject(BrowserCompatibilityService);
 
   public uploadCount: number | null = null;
   public uploadLimit: number | null = null;
@@ -55,11 +61,43 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
     this.uploadLimit = USAGE_LIMITS[role] || USAGE_LIMITS['free'];
   }
 
-  processAndUploadFile(file: { file: File; extension: string; filename: string }): Promise<{ eventId: string }> {
-    this.analyticsService.logEvent('upload_file', { method: 'fit' });
+  private hasGzipMagic(data: ArrayBuffer): boolean {
+    const bytes = new Uint8Array(data);
+    return bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+  }
+
+  private async gzipPayload(data: ArrayBuffer): Promise<ArrayBuffer> {
+    const sourceStream = new Response(data).body;
+    if (!sourceStream) {
+      throw new Error('Could not initialize compression stream.');
+    }
+    const compressedStream = sourceStream.pipeThrough(new CompressionStream('gzip'));
+    return new Response(compressedStream).arrayBuffer();
+  }
+
+  private async prepareUploadPayload(extension: string, payload: ArrayBuffer): Promise<{ bytes: ArrayBuffer; extension: string }> {
+    if (!TEXT_COMPRESSIBLE_EXTENSIONS.has(extension)) {
+      return { bytes: payload, extension };
+    }
+
+    if (this.hasGzipMagic(payload)) {
+      return { bytes: payload, extension: `${extension}.gz` };
+    }
+
+    if (!this.browserCompatibilityService.checkCompressionSupport()) {
+      return { bytes: payload, extension };
+    }
+
+    const compressed = await this.gzipPayload(payload);
+    return { bytes: compressed, extension: `${extension}.gz` };
+  }
+
+  processAndUploadFile(file: FileInterface): Promise<{ eventId: string }> {
+    const extension = file.extension.toLowerCase().trim();
+    this.analyticsService.logEvent('upload_file', { method: extension });
     return new Promise((resolve, reject) => {
-      if (file.extension !== 'fit') {
-        reject(new Error('Only FIT files are supported.'));
+      if (!SUPPORTED_UPLOAD_EXTENSIONS.has(extension)) {
+        reject(new Error('Only FIT, GPX, TCX, JSON, and SML files are supported.'));
         return;
       }
 
@@ -68,24 +106,32 @@ export class UploadActivitiesComponent extends UploadAbstractDirective implement
         try {
           const payload = fileReader.result;
           if (!(payload instanceof ArrayBuffer)) {
-            throw new Error('Could not read FIT file payload.');
+            throw new Error('Could not read file payload.');
           }
 
-          const uploadResult = await this.fitUploadService.uploadFitFile(payload, `${file.filename}.${file.extension}`);
+          const preparedUpload = await this.prepareUploadPayload(extension, payload);
+          const originalFilename = file.name && file.name.trim().length > 0
+            ? file.name
+            : `${file.filename}.${extension}`;
+          const uploadResult = await this.fitUploadService.uploadActivityFile(
+            preparedUpload.bytes,
+            preparedUpload.extension,
+            originalFilename,
+          );
           await this.calculateRemainingUploads();
 
-          this.logger.log('[UploadActivitiesComponent] Uploaded FIT event', uploadResult.eventId);
+          this.logger.log('[UploadActivitiesComponent] Uploaded event', uploadResult.eventId);
           resolve({ eventId: uploadResult.eventId });
         } catch (error: unknown) {
           const message = error instanceof Error ? error.message : 'Unknown upload error.';
-          this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${message}`, 'OK', { duration: 4000 });
+          this.snackBar.open(`Could not upload ${file.name}, reason: ${message}`, 'OK', { duration: 4000 });
           reject(error);
         }
       };
 
       fileReader.onerror = () => {
-        const error = new Error('Could not read FIT file.');
-        this.snackBar.open(`Could not upload ${file.filename}.${file.extension}, reason: ${error.message}`, 'OK', { duration: 4000 });
+        const error = new Error('Could not read file.');
+        this.snackBar.open(`Could not upload ${file.name}, reason: ${error.message}`, 'OK', { duration: 4000 });
         reject(error);
       };
 
