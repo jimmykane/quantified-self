@@ -30,7 +30,15 @@ describe('activity-edit.persistence', () => {
     const originalFile = originalFiles[0];
 
     const event = {
-      toJSON: () => ({ name: 'Event Name' }),
+      toJSON: () => ({
+        name: 'Event Name',
+        activities: [
+          {
+            id: 'a1',
+            streams: [{ type: 'Power', values: [100, 200] }],
+          },
+        ],
+      }),
       originalFiles,
       originalFile,
     } as any;
@@ -38,6 +46,7 @@ describe('activity-edit.persistence', () => {
     const result = buildEventWriteData(event);
 
     expect(result.name).toBe('Event Name');
+    expect(result.activities).toBeUndefined();
     expect(result.originalFiles).toBe(originalFiles);
     expect(result.originalFile).toBe(originalFile);
   });

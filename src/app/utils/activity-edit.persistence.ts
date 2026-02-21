@@ -24,6 +24,10 @@ export function buildEventWriteData(event: EventInterface): any {
   const eventData = event.toJSON() as any;
   const eventAny = event as any;
 
+  // Event documents should not persist embedded activities.
+  // Activities (and their streams) live in /users/{uid}/activities and stream files.
+  delete eventData.activities;
+
   // Preserve original file metadata across partial updates.
   if (eventAny.originalFiles) {
     eventData.originalFiles = eventAny.originalFiles;
