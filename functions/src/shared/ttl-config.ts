@@ -9,6 +9,7 @@ export const TTL_CONFIG = {
     QUEUE_ITEM_IN_DAYS: 7,
     ORPHANED_TOKEN_IN_DAYS: 90,
     FAILED_JOBS_IN_DAYS: 30,
+    SPORTS_LIB_REPARSE_JOBS_IN_DAYS: 30,
 } as const;
 
 

@@ -48,7 +48,19 @@ describe('AdminService', () => {
     });
 
     it('should call getQueueStats Cloud Function', async () => {
-        const mockStats = { pending: 5, succeeded: 10, failed: 2, providers: [] };
+        const mockStats = {
+            pending: 5,
+            succeeded: 10,
+            stuck: 2,
+            providers: [],
+            cloudTasks: {
+                pending: 12,
+                queues: {
+                    workout: { queueId: 'processWorkoutTask', pending: 10 },
+                    sportsLibReparse: { queueId: 'processSportsLibReparseTask', pending: 2 },
+                },
+            },
+        };
         functionsServiceMock.call.mockResolvedValue({ data: mockStats });
 
         const stats$ = service.getQueueStats();

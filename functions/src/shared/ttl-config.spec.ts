@@ -18,6 +18,7 @@ describe('TTL Configuration', () => {
     it('should have correct configuration values', () => {
         expect(TTL_CONFIG.MAIL_IN_DAYS).toBe(90);
         expect(TTL_CONFIG.QUEUE_ITEM_IN_DAYS).toBe(7);
+        expect(TTL_CONFIG.SPORTS_LIB_REPARSE_JOBS_IN_DAYS).toBe(30);
     });
 
     describe('getExpireAtTimestamp', () => {

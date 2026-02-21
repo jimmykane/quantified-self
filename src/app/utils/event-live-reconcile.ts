@@ -1,5 +1,6 @@
-import { ActivityInterface } from '@sports-alliance/sports-lib';
 import { AppEventInterface } from '../../../functions/src/shared/app-event.interface';
+
+type EventActivity = NonNullable<ReturnType<AppEventInterface['getActivities']>>[number];
 
 export interface EventLiveReconcileResult {
   reconciledEvent: AppEventInterface;
@@ -7,7 +8,7 @@ export interface EventLiveReconcileResult {
   needsFullReload: boolean;
 }
 
-function filterSelectedIDsByAvailableActivities(activities: ActivityInterface[], selectedActivityIDs: string[]): string[] {
+function filterSelectedIDsByAvailableActivities(activities: EventActivity[], selectedActivityIDs: string[]): string[] {
   if (!selectedActivityIDs?.length) {
     return [];
   }
@@ -15,7 +16,7 @@ function filterSelectedIDsByAvailableActivities(activities: ActivityInterface[],
   return selectedActivityIDs.filter((activityID) => availableIDs.has(activityID));
 }
 
-function preserveActivityStreams(sourceActivity: ActivityInterface, targetActivity: ActivityInterface): void {
+function preserveActivityStreams(sourceActivity: EventActivity, targetActivity: EventActivity): void {
   const sourceGetStreams = (sourceActivity as any)?.getAllStreams ?? (sourceActivity as any)?.getStreams;
   const targetClearStreams = (targetActivity as any)?.clearStreams;
   const targetAddStreams = (targetActivity as any)?.addStreams;

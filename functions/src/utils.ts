@@ -15,6 +15,7 @@ import { EventWriter, FirestoreAdapter, StorageAdapter, LogAdapter, OriginalFile
 import { generateIDFromParts as sharedGenerateIDFromParts, generateEventID as sharedGenerateEventID } from './shared/id-generator';
 import { SPORTS_LIB_VERSION } from './shared/sports-lib-version.node';
 import { ProcessingMetaData } from './shared/processing-metadata.interface';
+import { sportsLibVersionToCode } from './reparse/sports-lib-reparse.service';
 
 
 export function generateIDFromPartsOld(parts: string[]): string {
@@ -218,6 +219,7 @@ export async function setEvent(userID: string, eventID: string, event: EventInte
 
   const processingMetaData: ProcessingMetaData = {
     sportsLibVersion: SPORTS_LIB_VERSION,
+    sportsLibVersionCode: sportsLibVersionToCode(SPORTS_LIB_VERSION),
     processedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
 
@@ -397,6 +399,7 @@ export async function hasProAccess(userID: string): Promise<boolean> {
 // Re-export Cloud Tasks utilities from shared module for backward compatibility
 export {
   getCloudTaskQueueDepth,
+  getCloudTaskQueueDepthForQueue,
   enqueueWorkoutTask,
   resetCloudTaskQueueDepthCache,
 } from './shared/cloud-tasks';

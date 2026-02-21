@@ -77,8 +77,8 @@ service cloud.firestore {
             match /metaData/processing {
               allow read: if request.auth.uid == userID;
               allow write: if request.auth.uid == userID
-                && request.resource.data.keys().hasOnly(['sportsLibVersion', 'processedAt', 'functionsVersion'])
-                && request.resource.data.sportsLibVersion is string;
+                && request.resource.data.sportsLibVersion is string
+                && request.resource.data.sportsLibVersionCode is int;
             }
             match /metaData/{document=**} {
               allow read: if request.auth.uid == userID;
@@ -89,7 +89,10 @@ service cloud.firestore {
           match /activities/{activityID} {
             // New Flat Activities Collection
             allow read: if resource.data.privacy == 'public';
-            allow read, write: if request.auth.uid == userID;
+            allow read, create, delete: if request.auth.uid == userID;
+            allow update: if request.auth.uid == userID 
+              && (!('eventID' in request.resource.data.diff(resource.data).affectedKeys()) 
+                  || request.resource.data.eventID == resource.data.eventID);
           }
 
         match /meta/{document=**} {

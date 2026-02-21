@@ -23,6 +23,9 @@ interface GarminApiConfig {
 interface CloudTasksConfig {
     projectId: string | undefined;
     location: string;
+    workoutQueue: string;
+    sportsLibReparseQueue: string;
+    // Temporary compatibility alias for legacy callers.
     queue: string;
     serviceAccountEmail: string;
 }
@@ -69,10 +72,13 @@ export const config: AppConfig = {
         };
     },
     get cloudtasks() {
+        const workoutQueue = 'processWorkoutTask';
         return {
             projectId: process.env.GCLOUD_PROJECT || admin.instanceId().app.options.projectId,
             location: 'europe-west2',
-            queue: 'processWorkoutTask',
+            workoutQueue,
+            sportsLibReparseQueue: 'processSportsLibReparseTask',
+            queue: workoutQueue,
             serviceAccountEmail: `${process.env.GCLOUD_PROJECT || admin.instanceId().app.options.projectId}@appspot.gserviceaccount.com`,
         };
     },

@@ -223,6 +223,7 @@ describe('Firestore Security Rules', () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await assertSucceeds(db.collection(`users/${userId}/events/${eventId}/metaData`).doc('processing').set({
                     sportsLibVersion: '8.0.9',
+                    sportsLibVersionCode: 8000009,
                     processedAt: new Date(),
                 }));
             });
@@ -238,16 +239,26 @@ describe('Firestore Security Rules', () => {
                 const db = testEnv.authenticatedContext(otherId).firestore();
                 await assertFails(db.collection(`users/${userId}/events/${eventId}/metaData`).doc('processing').set({
                     sportsLibVersion: '8.0.9',
+                    sportsLibVersionCode: 8000009,
                     processedAt: new Date(),
                 }));
             });
 
-            it('should deny extra fields in processing metadata', async () => {
+            it('should allow extra fields in processing metadata', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertSucceeds(db.collection(`users/${userId}/events/${eventId}/metaData`).doc('processing').set({
+                    sportsLibVersion: '8.0.9',
+                    sportsLibVersionCode: 8000009,
+                    processedAt: new Date(),
+                    extraField: true,
+                }));
+            });
+
+            it('should deny processing metadata when sportsLibVersionCode is missing', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();
                 await assertFails(db.collection(`users/${userId}/events/${eventId}/metaData`).doc('processing').set({
                     sportsLibVersion: '8.0.9',
                     processedAt: new Date(),
-                    extraField: true,
                 }));
             });
         });
@@ -316,7 +327,43 @@ describe('Firestore Security Rules', () => {
             const db = testEnv.authenticatedContext(userId).firestore();
             await assertSucceeds(db.collection(`users/${userId}/activities`).doc(activityId).set({
                 type: 'Running',
-                distance: 5000
+                distance: 5000,
+                eventID: 'original_event'
+            }));
+        });
+
+        it('should allow user to update their own activity without changing eventID', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/activities`).doc(activityId).set({
+                    type: 'Running',
+                    eventID: 'original_event'
+                });
+            });
+
+            await assertSucceeds(db.collection(`users/${userId}/activities`).doc(activityId).update({
+                type: 'Cycling',
+                eventID: 'original_event'
+            }));
+
+            await assertSucceeds(db.collection(`users/${userId}/activities`).doc(activityId).update({
+                distance: 10000
+            }));
+        });
+
+        it('should deny user from updating eventID of their activity', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/activities`).doc(activityId).set({
+                    type: 'Running',
+                    eventID: 'original_event'
+                });
+            });
+
+            await assertFails(db.collection(`users/${userId}/activities`).doc(activityId).update({
+                eventID: 'hacked_event'
             }));
         });
 

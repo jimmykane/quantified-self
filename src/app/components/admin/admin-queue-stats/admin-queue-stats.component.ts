@@ -6,7 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatTableModule } from '@angular/material/table';
 
-import { QueueStats } from '../../../services/admin.service';
+import { QueueStats, ReparseFailurePreview } from '../../../services/admin.service';
 import { AppThemeService } from '../../../services/app.theme.service';
 import { AppThemes } from '@sports-alliance/sports-lib';
 import { Subject } from 'rxjs';
@@ -32,6 +32,7 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
     @Input() stats: QueueStats | null = null;
     @Input() loading = false;
     hasRetryData = false;
+    readonly reparseFailureColumns = ['uid', 'eventId', 'attemptCount', 'updatedAt', 'lastError'];
 
     @ViewChild('retryChart')
     set retryChartRef(ref: ElementRef<HTMLDivElement> | undefined) {
@@ -250,5 +251,33 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
             case 'coros': return 'assets/logos/coros.svg';
             default: return '';
         }
+    }
+
+    getReparseFailureRows(): ReparseFailurePreview[] {
+        return this.stats?.reparse?.recentFailures || [];
+    }
+
+    formatTimestamp(value: unknown): string {
+        if (!value) {
+            return 'N/A';
+        }
+        if (typeof (value as { toDate?: unknown }).toDate === 'function') {
+            const tsDate = (value as { toDate: () => Date }).toDate();
+            return tsDate.toLocaleString();
+        }
+        if (value instanceof Date) {
+            return value.toLocaleString();
+        }
+        if (typeof value === 'object' && value !== null && 'seconds' in (value as Record<string, unknown>)) {
+            const tsSeconds = Number((value as { seconds: unknown }).seconds);
+            if (!Number.isNaN(tsSeconds)) {
+                return new Date(tsSeconds * 1000).toLocaleString();
+            }
+        }
+        const date = new Date(`${value}`);
+        if (Number.isNaN(date.getTime())) {
+            return `${value}`;
+        }
+        return date.toLocaleString();
     }
 }

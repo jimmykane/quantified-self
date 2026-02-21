@@ -6,11 +6,13 @@ import { getStripe } from '../stripe/client';
 import { CloudBillingClient } from '@google-cloud/billing';
 import { BudgetServiceClient } from '@google-cloud/billing-budgets';
 import { BigQuery } from '@google-cloud/bigquery';
-import { getCloudTaskQueueDepth } from '../utils';
+import { getCloudTaskQueueDepthForQueue } from '../utils';
 import { GARMIN_API_TOKENS_COLLECTION_NAME, GARMIN_API_WORKOUT_QUEUE_COLLECTION_NAME } from '../garmin/constants';
 import { SUUNTOAPP_ACCESS_TOKENS_COLLECTION_NAME, SUUNTOAPP_WORKOUT_QUEUE_COLLECTION_NAME } from '../suunto/constants';
 import { COROSAPI_ACCESS_TOKENS_COLLECTION_NAME, COROSAPI_WORKOUT_QUEUE_COLLECTION_NAME } from '../coros/constants';
 import { FUNCTIONS_MANIFEST } from '../../../src/shared/functions-manifest';
+import { config } from '../config';
+import { SPORTS_LIB_REPARSE_TARGET_VERSION } from '../reparse/sports-lib-reparse.config';
 
 /**
  * Normalizes error messages by replacing dynamic values (numbers, IDs) with placeholders.
@@ -21,6 +23,25 @@ function normalizeError(error: string): string {
         .replace(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g, '#') // Replace UUIDs first
         .replace(/[0-9a-fA-F]{24,}/g, '#') // Replace long hex IDs
         .replace(/\d+/g, '#'); // Replace remaining numbers
+}
+
+const SPORTS_LIB_REPARSE_JOBS_COLLECTION = 'sportsLibReparseJobs';
+const SPORTS_LIB_REPARSE_CHECKPOINT_DOC_PATH = 'systemJobs/sportsLibReparse';
+const SPORTS_LIB_REPARSE_FAILURE_PREVIEW_LIMIT = 10;
+
+interface SportsLibReparseJobDocData {
+    uid?: string;
+    eventId?: string;
+    status?: string;
+    attemptCount?: number;
+    lastError?: string;
+    updatedAt?: unknown;
+    targetSportsLibVersion?: string;
+}
+
+function toSafeNumber(value: unknown, fallback: number = 0): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 interface ListUsersRequest {
@@ -423,10 +444,90 @@ export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
 
     try {
         const db = admin.firestore();
-        const cloudTaskDepth = await getCloudTaskQueueDepth().catch(e => {
-            logger.error('Error getting Cloud Task depth:', e);
-            return 0;
+        const { workoutQueue, sportsLibReparseQueue } = config.cloudtasks;
+        const [workoutCloudTaskDepth, sportsLibReparseCloudTaskDepth] = await Promise.all([
+            getCloudTaskQueueDepthForQueue(workoutQueue).catch(e => {
+                logger.error(`Error getting Cloud Task depth for queue ${workoutQueue}:`, e);
+                return 0;
+            }),
+            getCloudTaskQueueDepthForQueue(sportsLibReparseQueue).catch(e => {
+                logger.error(`Error getting Cloud Task depth for queue ${sportsLibReparseQueue}:`, e);
+                return 0;
+            }),
+        ]);
+        const totalCloudTaskDepth = workoutCloudTaskDepth + sportsLibReparseCloudTaskDepth;
+        const reparseJobsCollection = db.collection(SPORTS_LIB_REPARSE_JOBS_COLLECTION);
+
+        const [
+            reparseTotalJobs,
+            reparsePendingJobs,
+            reparseProcessingJobs,
+            reparseCompletedJobs,
+            reparseFailedJobs,
+        ] = await Promise.all([
+            reparseJobsCollection.count().get().catch(e => {
+                logger.error(`[admin/getQueueStats] Failed to count total reparse jobs:`, e);
+                return null;
+            }),
+            reparseJobsCollection.where('status', '==', 'pending').count().get().catch(e => {
+                logger.error(`[admin/getQueueStats] Failed to count pending reparse jobs:`, e);
+                return null;
+            }),
+            reparseJobsCollection.where('status', '==', 'processing').count().get().catch(e => {
+                logger.error(`[admin/getQueueStats] Failed to count processing reparse jobs:`, e);
+                return null;
+            }),
+            reparseJobsCollection.where('status', '==', 'completed').count().get().catch(e => {
+                logger.error(`[admin/getQueueStats] Failed to count completed reparse jobs:`, e);
+                return null;
+            }),
+            reparseJobsCollection.where('status', '==', 'failed').count().get().catch(e => {
+                logger.error(`[admin/getQueueStats] Failed to count failed reparse jobs:`, e);
+                return null;
+            }),
+        ]);
+
+        const checkpointSnapshot = await admin.firestore().doc(SPORTS_LIB_REPARSE_CHECKPOINT_DOC_PATH).get().catch(e => {
+            logger.error('[admin/getQueueStats] Failed to read sports-lib reparse checkpoint:', e);
+            return null;
         });
+        const checkpointData = checkpointSnapshot?.data() as Record<string, unknown> | undefined;
+        const checkpointOverrideCursors = checkpointData?.overrideCursorByUid;
+        const overrideCursorByUid = (checkpointOverrideCursors && typeof checkpointOverrideCursors === 'object')
+            ? (checkpointOverrideCursors as Record<string, string | null>)
+            : {};
+        const overrideUsersInProgress = Object.values(overrideCursorByUid).filter(cursor => !!cursor).length;
+
+        const recentReparseJobsSnapshot = await reparseJobsCollection
+            .where('status', '==', 'failed')
+            .orderBy('updatedAt', 'desc')
+            .limit(SPORTS_LIB_REPARSE_FAILURE_PREVIEW_LIMIT)
+            .get()
+            .catch(e => {
+                logger.error('[admin/getQueueStats] Failed to load recent reparse jobs:', e);
+                return null;
+            });
+        const recentReparseFailures = (recentReparseJobsSnapshot?.docs || [])
+            .map(doc => ({
+                data: doc.data() as SportsLibReparseJobDocData,
+                jobId: doc.id,
+                uid: '',
+                eventId: '',
+                attemptCount: 0,
+                lastError: '',
+                updatedAt: null as unknown,
+                targetSportsLibVersion: '',
+            }))
+            .map(entry => ({
+                jobId: entry.jobId,
+                uid: `${entry.data.uid || ''}`,
+                eventId: `${entry.data.eventId || ''}`,
+                attemptCount: toSafeNumber(entry.data.attemptCount),
+                lastError: `${entry.data.lastError || ''}`,
+                updatedAt: entry.data.updatedAt || null,
+                targetSportsLibVersion: `${entry.data.targetSportsLibVersion || ''}`,
+            }));
+
         let totalPending = 0;
         let totalSucceeded = 0;
         let totalStuck = 0;
@@ -554,7 +655,38 @@ export const getQueueStats = onAdminCall<{ includeAnalysis?: boolean }, any>({
             succeeded: totalSucceeded,
             stuck: totalStuck,
             cloudTasks: {
-                pending: cloudTaskDepth
+                pending: totalCloudTaskDepth,
+                queues: {
+                    workout: {
+                        queueId: workoutQueue,
+                        pending: workoutCloudTaskDepth,
+                    },
+                    sportsLibReparse: {
+                        queueId: sportsLibReparseQueue,
+                        pending: sportsLibReparseCloudTaskDepth,
+                    },
+                },
+            },
+            reparse: {
+                queuePending: sportsLibReparseCloudTaskDepth,
+                targetSportsLibVersion: `${checkpointData?.targetSportsLibVersion || SPORTS_LIB_REPARSE_TARGET_VERSION}`,
+                jobs: {
+                    total: reparseTotalJobs?.data().count || 0,
+                    pending: reparsePendingJobs?.data().count || 0,
+                    processing: reparseProcessingJobs?.data().count || 0,
+                    completed: reparseCompletedJobs?.data().count || 0,
+                    failed: reparseFailedJobs?.data().count || 0,
+                },
+                checkpoint: {
+                    cursorEventPath: checkpointData?.cursorEventPath || null,
+                    lastScanAt: checkpointData?.lastScanAt || null,
+                    lastPassStartedAt: checkpointData?.lastPassStartedAt || null,
+                    lastPassCompletedAt: checkpointData?.lastPassCompletedAt || null,
+                    lastScanCount: toSafeNumber(checkpointData?.lastScanCount),
+                    lastEnqueuedCount: toSafeNumber(checkpointData?.lastEnqueuedCount),
+                    overrideUsersInProgress,
+                },
+                recentFailures: recentReparseFailures,
             },
             providers,
             dlq,

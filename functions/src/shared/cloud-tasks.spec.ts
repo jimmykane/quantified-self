@@ -27,7 +27,9 @@ vi.mock('../config', () => ({
         cloudtasks: {
             projectId: 'test-project',
             location: 'test-location',
-            queue: 'test-queue',
+            workoutQueue: 'processWorkoutTask',
+            sportsLibReparseQueue: 'processSportsLibReparseTask',
+            queue: 'processWorkoutTask',
             serviceAccountEmail: 'sa@test.com'
         }
     }
@@ -65,11 +67,41 @@ describe('Cloud Tasks Utils', () => {
             const depth = await getCloudTaskQueueDepth();
 
             expect(depth).toBe(42);
-            expect(mockCloudTasksClient.queuePath).toHaveBeenCalledWith('test-project', 'test-location', 'test-queue');
+            expect(mockCloudTasksClient.queuePath).toHaveBeenCalledWith('test-project', 'test-location', 'processWorkoutTask');
             expect(mockCloudTasksClient.getQueue).toHaveBeenCalledWith({
                 name: 'projects/p/locations/l/queues/q',
                 readMask: { paths: ['stats'] }
             });
+        });
+
+        it('should return queue depth for a specific queue', async () => {
+            const { getCloudTaskQueueDepthForQueue } = await import('./cloud-tasks');
+
+            mockCloudTasksClient.getQueue.mockResolvedValue([
+                { stats: { tasksCount: '17' } }
+            ]);
+
+            const depth = await getCloudTaskQueueDepthForQueue('processSportsLibReparseTask');
+
+            expect(depth).toBe(17);
+            expect(mockCloudTasksClient.queuePath).toHaveBeenCalledWith('test-project', 'test-location', 'processSportsLibReparseTask');
+        });
+
+        it('should cache queue depth independently by queue id', async () => {
+            const { getCloudTaskQueueDepthForQueue } = await import('./cloud-tasks');
+
+            mockCloudTasksClient.getQueue
+                .mockResolvedValueOnce([{ stats: { tasksCount: '10' } }])
+                .mockResolvedValueOnce([{ stats: { tasksCount: '20' } }]);
+
+            const workoutDepth = await getCloudTaskQueueDepthForQueue('processWorkoutTask');
+            const reparseDepth = await getCloudTaskQueueDepthForQueue('processSportsLibReparseTask');
+            const workoutDepthCached = await getCloudTaskQueueDepthForQueue('processWorkoutTask');
+
+            expect(workoutDepth).toBe(10);
+            expect(reparseDepth).toBe(20);
+            expect(workoutDepthCached).toBe(10);
+            expect(mockCloudTasksClient.getQueue).toHaveBeenCalledTimes(2);
         });
 
         it('should use cached value if called multiple times within TTL', async () => {
@@ -224,7 +256,7 @@ describe('Cloud Tasks Utils', () => {
                 task: expect.objectContaining({
                     name: 'projects/p/locations/l/queues/q/tasks/garminAPI-item-123-1000',
                     httpRequest: expect.objectContaining({
-                        url: expect.stringContaining('test-location-test-project.cloudfunctions.net/test-queue'),
+                        url: expect.stringContaining('test-location-test-project.cloudfunctions.net/processWorkoutTask'),
                         httpMethod: 'POST',
                         body: expect.any(String),
                     })
