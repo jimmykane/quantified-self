@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import * as xmldom from 'xmldom';
 import semver from 'semver';
 import {
+    ActivityUtilities,
     EventImporterFIT,
     EventImporterGPX,
     EventImporterSuuntoJSON,
@@ -110,6 +111,7 @@ export interface ReparseExecutionResult {
 }
 
 type MergeType = 'benchmark' | 'multi';
+export type ReparseMode = 'reimport' | 'regenerate';
 
 function toDateOrUndefined(value: unknown): Date | undefined {
     if (!value) {
@@ -763,11 +765,13 @@ export async function reparseEventFromOriginalFiles(
     uid: string,
     eventId: string,
     options?: {
+        mode?: ReparseMode;
         targetSportsLibVersion?: string;
         eventData?: FirestoreEventJSON | Record<string, unknown>;
         activityDocs?: admin.firestore.QueryDocumentSnapshot[];
     },
 ): Promise<ReparseExecutionResult> {
+    const mode = options?.mode || 'reimport';
     const targetSportsLibVersion = options?.targetSportsLibVersion || resolveTargetSportsLibVersion();
     const eventAndActivities = options?.eventData && options?.activityDocs
         ? {
@@ -803,6 +807,28 @@ export async function reparseEventFromOriginalFiles(
     reparsedEvent.setID(eventId);
     applyPreservedFields(reparsedEvent, autoHealResult.eventData);
     mapActivityIdentity(reparsedEvent, eventAndActivities.activityDocs);
+    if (mode === 'regenerate') {
+        reparsedEvent.getActivities().forEach((activity) => {
+            const activityAny = activity as any;
+            if (
+                typeof activityAny.getStats !== 'function'
+                || typeof activityAny.clearStats !== 'function'
+                || typeof activityAny.addStat !== 'function'
+                || typeof activityAny.getStat !== 'function'
+            ) {
+                return;
+            }
+
+            const previousStats = new Map(activityAny.getStats());
+            activityAny.clearStats();
+            ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity as any);
+            previousStats.forEach((stat, type) => {
+                if (!activityAny.getStat(type)) {
+                    activityAny.addStat(stat);
+                }
+            });
+        });
+    }
     EventUtilities.reGenerateStatsForEvent(reparsedEvent);
 
     const persistResult = await persistReparsedEvent(

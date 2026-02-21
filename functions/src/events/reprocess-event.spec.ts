@@ -106,7 +106,7 @@ describe('reprocessEvent', () => {
             data: { eventId: 'event-1', mode: 'reimport' },
         } as any);
 
-        expect(hoisted.mockReparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'event-1');
+        expect(hoisted.mockReparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'event-1', { mode: 'reimport' });
         expect(result).toEqual({
             eventId: 'event-1',
             mode: 'reimport',
@@ -118,14 +118,14 @@ describe('reprocessEvent', () => {
         });
     });
 
-    it('should process regenerate mode using the same sports-lib pipeline', async () => {
+    it('should process regenerate mode with regenerate-specific reparse mode', async () => {
         const result = await reprocessEvent({
             auth: { uid: 'u1' },
             app: { appId: 'app-id' },
             data: { eventId: 'event-2', mode: 'regenerate' },
         } as any);
 
-        expect(hoisted.mockReparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'event-2');
+        expect(hoisted.mockReparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'event-2', { mode: 'regenerate' });
         expect(result.mode).toBe('regenerate');
     });
 

@@ -37,6 +37,7 @@ const hoisted = vi.hoisted(() => {
     const suuntoSMLImporter = { getFromXML: vi.fn() };
     const mergeEvents = vi.fn((events: any[]) => events[0]);
     const reGenerateStatsForEvent = vi.fn();
+    const generateMissingStreamsAndStatsForActivity = vi.fn();
 
     const serverTimestamp = vi.fn(() => 'SERVER_TIMESTAMP');
     const deleteField = vi.fn(() => 'DELETE_FIELD');
@@ -60,6 +61,7 @@ const hoisted = vi.hoisted(() => {
         suuntoSMLImporter,
         mergeEvents,
         reGenerateStatsForEvent,
+        generateMissingStreamsAndStatsForActivity,
         serverTimestamp,
         deleteField,
     };
@@ -101,6 +103,9 @@ vi.mock('@sports-alliance/sports-lib', () => ({
     EventImporterTCX: hoisted.tcxImporter,
     EventImporterSuuntoJSON: hoisted.suuntoJSONImporter,
     EventImporterSuuntoSML: hoisted.suuntoSMLImporter,
+    ActivityUtilities: {
+        generateMissingStreamsAndStatsForActivity: hoisted.generateMissingStreamsAndStatsForActivity,
+    },
     EventUtilities: {
         mergeEvents: hoisted.mergeEvents,
         reGenerateStatsForEvent: hoisted.reGenerateStatsForEvent,
@@ -198,6 +203,7 @@ describe('sports-lib-reparse.service', () => {
         hoisted.tcxImporter.getFromXML.mockResolvedValue(makeEvent());
         hoisted.suuntoJSONImporter.getFromJSONString.mockResolvedValue(makeEvent());
         hoisted.suuntoSMLImporter.getFromXML.mockResolvedValue(makeEvent());
+        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementation(() => { });
     });
 
     it('hasPaidOrGraceAccess should return true for basic claim', async () => {
@@ -1009,6 +1015,70 @@ describe('sports-lib-reparse.service', () => {
         expect(persistedEvent.notes).toBe('keep-notes');
         expect(persistedEvent.rpe).toBe(9);
         expect(persistedEvent.feeling).toBe(2);
+    });
+
+    it('reparseEventFromOriginalFiles should run activity-level sports-lib regeneration in regenerate mode', async () => {
+        const preservedStat = { getType: () => 'preserved' };
+        const generatedStat = { getType: () => 'generated' };
+        let activityStats = new Map<string, unknown>([['preserved', preservedStat]]);
+        const parsedActivity: any = {
+            getID: vi.fn(() => 'a1'),
+            setID: vi.fn(),
+            creator: { name: 'A' },
+            getStats: vi.fn(() => activityStats),
+            clearStats: vi.fn(() => {
+                activityStats = new Map<string, unknown>();
+            }),
+            getStat: vi.fn((type: string) => activityStats.get(type)),
+            addStat: vi.fn((stat: { getType?: () => string; type?: string }) => {
+                const type = typeof stat?.getType === 'function' ? stat.getType() : stat?.type;
+                if (type) {
+                    activityStats.set(type, stat);
+                }
+            }),
+        };
+        const parsedEvent = makeEvent({
+            getActivities: vi.fn(() => [parsedActivity]),
+        });
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+        hoisted.generateMissingStreamsAndStatsForActivity.mockImplementationOnce((activity: any) => {
+            activity.addStat(generatedStat);
+        });
+
+        const result = await reparseEventFromOriginalFiles('u1', 'e1', {
+            mode: 'regenerate',
+            eventData: {
+                originalFile: { path: 'users/u1/events/e1/original.fit' },
+            },
+            activityDocs: [
+                { id: 'a-old-1', data: () => ({ creator: { name: 'creator-1' } }) } as any,
+            ],
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+        });
+
+        expect(result.status).toBe('completed');
+        expect(parsedActivity.clearStats).toHaveBeenCalledTimes(1);
+        expect(hoisted.generateMissingStreamsAndStatsForActivity).toHaveBeenCalledTimes(1);
+        expect(parsedActivity.getStat).toHaveBeenCalledWith('preserved');
+        expect(activityStats.get('preserved')).toBe(preservedStat);
+        expect(activityStats.get('generated')).toBe(generatedStat);
+    });
+
+    it('reparseEventFromOriginalFiles should skip activity-level regeneration in reimport mode', async () => {
+        const parsedEvent = makeEvent();
+        hoisted.fitImporter.getFromArrayBuffer.mockResolvedValue(parsedEvent);
+
+        const result = await reparseEventFromOriginalFiles('u1', 'e1', {
+            mode: 'reimport',
+            eventData: {
+                originalFile: { path: 'users/u1/events/e1/original.fit' },
+            },
+            activityDocs: [],
+            targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+        });
+
+        expect(result.status).toBe('completed');
+        expect(hoisted.generateMissingStreamsAndStatsForActivity).not.toHaveBeenCalled();
     });
 
     it('reparseEventFromOriginalFiles should preserve isMerge=false for multi-file events', async () => {

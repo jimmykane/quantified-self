@@ -43,8 +43,7 @@ export const reprocessEvent = onCall({
   }
 
   try {
-    // Both modes use the same strict original-file parse + sports-lib stats regeneration pipeline.
-    const result = await reparseEventFromOriginalFiles(userID, eventId);
+    const result = await reparseEventFromOriginalFiles(userID, eventId, { mode });
     return {
       eventId,
       mode,
