@@ -56,6 +56,26 @@ describe('mapbox-layer.utils', () => {
     }));
   });
 
+  it('upsertGeoJsonSource sets data after creating a missing source when setData becomes available', () => {
+    const setData = vi.fn();
+    const map = {
+      getSource: vi
+        .fn()
+        .mockReturnValueOnce(null)
+        .mockReturnValueOnce({ setData }),
+      addSource: vi.fn(),
+    };
+    const feature = { type: 'FeatureCollection', features: [] };
+
+    upsertGeoJsonSource(map as any, 's1', feature);
+
+    expect(map.addSource).toHaveBeenCalledWith('s1', expect.objectContaining({
+      type: 'geojson',
+      data: feature,
+    }));
+    expect(setData).toHaveBeenCalledWith(feature);
+  });
+
   it('ensureLayer only adds when missing', () => {
     const existing = new Set<string>();
     const map = {
