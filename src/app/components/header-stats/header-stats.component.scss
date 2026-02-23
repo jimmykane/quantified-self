@@ -151,7 +151,7 @@ section.grid {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: minmax(0, 1fr);
-  column-gap: 8px;
+  column-gap: 2px;
 }
 
 .stat-values-row {
@@ -295,8 +295,8 @@ section.condensed {
 
   .stat-item {
     --stat-side-prefix-left: -19px;
-    padding: 8px 8px;
-    gap: 12px;
+    padding: 8px 10px;
+    gap: 11px;
     border-radius: 8px;
 
   }
