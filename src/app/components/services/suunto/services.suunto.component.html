@@ -125,50 +125,6 @@
       </div>
     </mat-card>
 
-    <!-- Download Card -->
-    <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess"
-      (click)="!hasProAccess && triggerUpsell()">
-      @if (!hasProAccess) {
-      <div class="lock-overlay">
-        <mat-icon class="lock-icon-large">lock</mat-icon>
-        <span class="pro-badge">PRO</span>
-      </div>
-      }
-      <mat-card-header>
-        <mat-card-subtitle class="tab-subtitle">
-          <mat-icon>cloud_download</mat-icon>
-          <span>Download FIT</span>
-        </mat-card-subtitle>
-      </mat-card-header>
-      <mat-divider></mat-divider>
-
-      <div class="feature-card-content">
-        <p class="feature-description" *ngIf="!hasProAccess">Download FIT files directly from Suunto links.</p>
-        <form style="width: 100%" [formGroup]="suuntoAppLinkFormGroup" (submit)="onSubmit()" autocomplete="off"
-          class="qs-form">
-          <mat-form-field appearance="outline">
-            <mat-label>App Link</mat-label>
-            <input matInput placeholder="https://..." formControlName="input">
-            @if (hasError('input')) {
-            <mat-error>Link Required</mat-error>
-            }
-          </mat-form-field>
-          <div class="qs-form-actions" style="display: flex; gap: 8px;">
-            <button mat-flat-button color="primary" [disabled]="isLoading || isDownloading"
-              (click)="onSubmit()">
-              @if (isDownloading) {
-              <mat-spinner diameter="20" style="display:inline-block; vertical-align: middle; margin-right: 8px;"
-                color="accent"></mat-spinner>
-              Downloading...
-              } @else {
-              Download
-              }
-            </button>
-          </div>
-        </form>
-      </div>
-    </mat-card>
-
     <!-- FIT Upload Card - No (click) handler to allow file input interaction -->
     <mat-card class="feature-card glass-card" [class.locked]="!hasProAccess" [class.unlocked]="hasProAccess">
       @if (!hasProAccess) {

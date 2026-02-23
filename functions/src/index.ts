@@ -119,7 +119,6 @@ export { refreshSuuntoAppRefreshTokens } from './suunto/tokens';
 export { refreshGarminAPIRefreshTokens } from './garmin/tokens';
 
 // Suunto Utils
-export { stWorkoutDownloadAsFit } from './suunto/st-workout-download-as-fit';
 export { importActivityToSuuntoApp } from './suunto/activities';
 export { importRouteToSuuntoApp } from './suunto/routes';
 export { getSuuntoFITFile } from './suunto/get-suunto-fit-file';
