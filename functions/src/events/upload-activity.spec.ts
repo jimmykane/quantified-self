@@ -2,6 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { gzipSync } from 'node:zlib';
 
 const hoisted = vi.hoisted(() => {
+  const capturedOnRequestOptions = { value: undefined as unknown };
+  const mockOnRequest = vi.fn((options: unknown, handler: unknown) => {
+    capturedOnRequestOptions.value = options;
+    return handler;
+  });
   const mockVerifyIdToken = vi.fn();
   const mockVerifyAppCheckToken = vi.fn();
   const mockEventsCountGet = vi.fn();
@@ -22,6 +27,8 @@ const hoisted = vi.hoisted(() => {
   const mockSportsLibVersionToCode = vi.fn(() => 9001004);
 
   return {
+    capturedOnRequestOptions,
+    mockOnRequest,
     mockVerifyIdToken,
     mockVerifyAppCheckToken,
     mockEventsCountGet,
@@ -44,7 +51,7 @@ const hoisted = vi.hoisted(() => {
 });
 
 vi.mock('firebase-functions/v2/https', () => ({
-  onRequest: (_options: unknown, handler: unknown) => handler,
+  onRequest: hoisted.mockOnRequest,
 }));
 
 vi.mock('firebase-admin', () => {
@@ -205,6 +212,14 @@ describe('uploadActivity', () => {
     hoisted.mockSuuntoJSONImporter.getFromJSONString.mockResolvedValue(makeParsedEvent());
     hoisted.mockSuuntoSMLImporter.getFromXML.mockResolvedValue(makeParsedEvent());
     hoisted.mockSuuntoSMLImporter.getFromJSONString.mockResolvedValue(makeParsedEvent());
+  });
+
+  it('should register with memory and concurrency limits to avoid upload OOM', () => {
+    expect(hoisted.capturedOnRequestOptions.value).toEqual(expect.objectContaining({
+      memory: '1GiB',
+      concurrency: 1,
+      timeoutSeconds: 300,
+    }));
   });
 
   it('should reject non-POST methods', async () => {
