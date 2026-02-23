@@ -320,10 +320,6 @@ export class TracksComponent implements OnInit, OnDestroy {
           showZoom: true
         });
         mapInstance.addControl(navControl, 'bottom-right');
-        mapInstance.addControl(new mapboxgl.ScaleControl({
-          maxWidth: 100,
-          unit: 'metric'
-        }), 'bottom-left');
 
         this.centerMapToStartingLocation(mapInstance);
         this.eventsSubscription.add(
