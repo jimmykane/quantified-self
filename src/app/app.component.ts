@@ -1,6 +1,4 @@
 import {
-  AfterViewChecked,
-  AfterViewInit,
   ChangeDetectorRef,
   Component,
   OnDestroy,
@@ -17,7 +15,6 @@ import { map } from 'rxjs/operators';
 import {
   NavigationEnd,
   Router,
-  RouterOutlet,
 } from '@angular/router';
 import { AppAuthService } from './authentication/app.auth.service';
 import { AppUserService } from './services/app.user.service';
@@ -34,6 +31,7 @@ import { AppThemeService } from './services/app.theme.service';
 import { AppWhatsNewService } from './services/app.whats-new.service';
 import { MatDialog } from '@angular/material/dialog';
 import { WhatsNewDialogComponent } from './components/whats-new/whats-new-dialog.component';
+import { RouteAnimationStateService } from './services/route-animation-state.service';
 
 @Component({
   selector: 'app-root',
@@ -57,7 +55,8 @@ export class AppComponent implements OnInit, OnDestroy {
   private routerEventSubscription!: Subscription;
   public authState: boolean | null = null;
   public isOnboardingRoute = false;
-  private isFirstLoad = true;
+  private routeAnimationStateService = inject(RouteAnimationStateService);
+  public routeAnimationState = this.routeAnimationStateService.animationState;
   public onboardingCompleted = true; // Default to true to avoid hiding chrome of non-authenticated users prematurely
   private remoteConfigService = inject(AppRemoteConfigService);
   public maintenanceMode = this.remoteConfigService.maintenanceMode;
@@ -102,8 +101,6 @@ export class AppComponent implements OnInit, OnDestroy {
     // Mark app as hydrated after Angular takes over (reveals SVG icons)
     afterNextRender(() => {
       document.body.classList.add('app-hydrated');
-      // Allow animations after initial render
-      setTimeout(() => this.isFirstLoad = false, 100);
     });
   }
 
@@ -243,13 +240,6 @@ export class AppComponent implements OnInit, OnDestroy {
     this.bannerHeight = height;
     this.hasBanner = nextHasBanner;
     this.changeDetectorRef.detectChanges();
-  }
-
-  prepareRoute(outlet: RouterOutlet) {
-    if (this.isFirstLoad) {
-      return null;
-    }
-    return outlet && outlet.activatedRouteData && outlet.activatedRouteData['animation'];
   }
 
   private scrollToTopAfterNavigation(): void {

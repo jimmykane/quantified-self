@@ -234,20 +234,6 @@ describe('AppComponent', () => {
         expect(component.isHomeRoute).toBe(false);
     });
 
-    it('prepareRoute should return Event animation after first load', () => {
-        (component as any).isFirstLoad = false;
-        const outlet = { activatedRouteData: { animation: 'Event' } } as any;
-
-        expect(component.prepareRoute(outlet)).toBe('Event');
-    });
-
-    it('prepareRoute should return non-Event animation after first load', () => {
-        (component as any).isFirstLoad = false;
-        const outlet = { activatedRouteData: { animation: 'Dashboard' } } as any;
-
-        expect(component.prepareRoute(outlet)).toBe('Dashboard');
-    });
-
     it('should reset scroll to top on NavigationEnd', () => {
         const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => { });
         fixture.detectChanges();
