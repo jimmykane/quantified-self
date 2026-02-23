@@ -606,6 +606,36 @@ export class AppEventService implements OnDestroy {
     )
   }
 
+  /**
+   * One-shot activities fetch for flows that do not require realtime updates.
+   */
+  public getActivitiesOnceByEvent(user: User, eventID: string): Observable<ActivityInterface[]> {
+    this.logger.log(`[AppEventService] getActivitiesOnceByEvent called for event: ${eventID}`);
+    const activitiesCollection = runInInjectionContext(this.injector, () => collection(this.firestore, 'users', user.uid, 'activities'));
+    const q = runInInjectionContext(this.injector, () => query(activitiesCollection, where('eventID', '==', eventID)));
+    const queryStart = performance.now();
+
+    return from(runInInjectionContext(this.injector, () => getDocs(q))).pipe(
+      tap((querySnapshot) => {
+        this.logger.info('[perf] app_event_service_get_activities_once_get_docs', {
+          durationMs: Number((performance.now() - queryStart).toFixed(2)),
+          snapshots: querySnapshot?.size || 0,
+          fromCache: querySnapshot?.metadata?.fromCache,
+          hasPendingWrites: querySnapshot?.metadata?.hasPendingWrites,
+          userID: user.uid,
+          eventID,
+        });
+      }),
+      map((querySnapshot) => {
+        const activitySnapshots = querySnapshot.docs.map((queryDocumentSnapshot) => ({
+          ...(queryDocumentSnapshot.data() as Record<string, unknown>),
+          id: queryDocumentSnapshot.id,
+        }));
+        return this.parseActivitiesFromSnapshots(eventID, activitySnapshots);
+      }),
+    );
+  }
+
   public getEventMetaData(user: User, eventID: string, serviceName: ServiceNames): Observable<EventMetaDataInterface> {
     const metaDataDoc = runInInjectionContext(this.injector, () => doc(this.firestore, 'users', user.uid, 'events', eventID, 'metaData', serviceName));
     return runInInjectionContext(this.injector, () => docData(metaDataDoc)).pipe(

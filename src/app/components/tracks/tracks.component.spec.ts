@@ -170,6 +170,7 @@ describe('TracksComponent', () => {
       getEventsBy: vi.fn().mockReturnValue(of([])),
       getEventsOnceBy: vi.fn().mockImplementation((...args: any[]) => mockEventService.getEventsBy(...args)),
       getActivities: vi.fn().mockReturnValue(of([])),
+      getActivitiesOnceByEvent: vi.fn().mockImplementation((...args: any[]) => mockEventService.getActivities(...args)),
       attachStreamsToEventWithActivities: vi.fn().mockImplementation((_user: unknown, event: any) => of(event))
     };
 
@@ -296,6 +297,7 @@ describe('TracksComponent', () => {
       const logger = TestBed.inject(LoggerService) as any;
       await (component as any).loadTracksMapForUserByDateRange(undefined, DateRanges.thisWeek, []);
 
+      expect(mockEventService.getEventsOnceBy).not.toHaveBeenCalled();
       expect(mockEventService.getEventsBy).not.toHaveBeenCalled();
       expect(logger.warn).toHaveBeenCalledWith('[TracksComponent] Skipping track load because user is undefined.');
     });

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { Firestore, doc, docData, collection, collectionData, deleteDoc, setDoc, updateDoc, writeBatch, query, where } from '@angular/fire/firestore';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc, setDoc, updateDoc, writeBatch, query, where, getDocs } from '@angular/fire/firestore';
 import { Storage } from '@angular/fire/storage';
 import { Auth } from '@angular/fire/auth';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -69,6 +69,7 @@ vi.mock('@angular/fire/firestore', async (importOriginal) => {
         collectionData: vi.fn(),
         query: vi.fn(),
         where: vi.fn(),
+        getDocs: vi.fn(),
         deleteDoc: vi.fn(),
         setDoc: vi.fn(),
         updateDoc: vi.fn(),
@@ -139,7 +140,7 @@ describe('AppEventService', () => {
         getSubscriptionRole: vi.fn().mockResolvedValue('pro'),
         uid: 'test-uid'
     };
-    const mockLogger = { log: vi.fn(), error: vi.fn(), warn: vi.fn(), captureMessage: vi.fn(), captureException: vi.fn() };
+    const mockLogger = { log: vi.fn(), info: vi.fn(), error: vi.fn(), warn: vi.fn(), captureMessage: vi.fn(), captureException: vi.fn() };
     const mockFileService = {};
     const mockCompatibility = { checkCompressionSupport: vi.fn().mockReturnValue(true) };
 
@@ -404,6 +405,53 @@ describe('AppEventService', () => {
                     issues
                 })
             })
+        );
+    });
+
+    it('should get activities once by event without subscribing to live updates', async () => {
+        const userId = 'user1';
+        const eventId = 'event-once-1';
+        const user = { uid: userId } as any;
+        const activityId = 'activity-once-1';
+        const mockActivityData = {
+            id: activityId,
+            eventID: eventId,
+            stats: {},
+            laps: [],
+            streams: [],
+            intensityZones: [],
+            events: []
+        };
+
+        (collection as Mock).mockReturnValue({});
+        (query as Mock).mockReturnValue({});
+        (getDocs as Mock).mockResolvedValue({
+            docs: [
+                {
+                    id: activityId,
+                    data: () => mockActivityData,
+                }
+            ],
+            size: 1,
+            metadata: {
+                fromCache: false,
+                hasPendingWrites: false,
+            },
+        });
+
+        const activities = await firstValueFrom(service.getActivitiesOnceByEvent(user, eventId));
+
+        expect(getDocs).toHaveBeenCalledTimes(1);
+        expect(collectionData).not.toHaveBeenCalled();
+        expect(activities.length).toBe(1);
+        expect(mocks.getActivityFromJSON).toHaveBeenCalledTimes(1);
+        expect(mockLogger.info).toHaveBeenCalledWith(
+            '[perf] app_event_service_get_activities_once_get_docs',
+            expect.objectContaining({
+                snapshots: 1,
+                userID: userId,
+                eventID: eventId,
+            }),
         );
     });
 

@@ -3,7 +3,7 @@ import { isPlatformBrowser } from '@angular/common';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import { AppEventService } from '../../services/app.event.service';
-import { take, debounceTime, filter } from 'rxjs/operators';
+import { take, filter } from 'rxjs/operators';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { Subject, Subscription, firstValueFrom } from 'rxjs';
@@ -428,23 +428,10 @@ export class TracksComponent implements OnInit, OnDestroy {
     where: { fieldPath: string | any, opStr: WhereFilterOp, value: any }[],
     promiseTime: number
   ): Promise<any[]> {
-    const eventServiceWithOnce = this.eventService as any;
-    if (typeof eventServiceWithOnce.getEventsOnceBy === 'function') {
-      const events = await firstValueFrom(
-        this.eventService.getEventsOnceBy(user, where, 'startDate', true, 0, { preferCache: false })
-      );
-      this.logger.log(`[TracksComponent] eventService.getEventsOnceBy returned ${events?.length || 0} events for promiseTime: ${promiseTime}`);
-      return events || [];
-    }
-
-    this.logger.warn('[TracksComponent] getEventsOnceBy is unavailable. Falling back to getEventsBy with take(1).');
     const events = await firstValueFrom(
-      this.eventService.getEventsBy(user, where, 'startDate', true, 0).pipe(
-        debounceTime(300),
-        take(1),
-      )
+      this.eventService.getEventsOnceBy(user, where, 'startDate', true, 0, { preferCache: false })
     );
-    this.logger.log(`[TracksComponent] eventService.getEventsBy fallback emitted ${events?.length || 0} events for promiseTime: ${promiseTime}`);
+    this.logger.log(`[TracksComponent] eventService.getEventsOnceBy returned ${events?.length || 0} events for promiseTime: ${promiseTime}`);
     return events || [];
   }
 
@@ -545,7 +532,7 @@ export class TracksComponent implements OnInit, OnDestroy {
           }
 
           this.logger.log(`[TracksComponent] Fetching activities for event: ${event.getID()}, promiseTime: ${promiseTime}`);
-          event.addActivities(await firstValueFrom(this.eventService.getActivities(user, event.getID()).pipe(take(1))));
+          event.addActivities(await firstValueFrom(this.eventService.getActivitiesOnceByEvent(user, event.getID())));
           let fullEvent = event;
           try {
             // Hydrate lat/long streams from original files without replacing activity objects.
