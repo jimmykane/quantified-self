@@ -75,6 +75,7 @@ export const processSportsLibReparseTask = onTaskDispatched({
         }
 
         const reparseResult = await reparseEventFromOriginalFiles(job.uid, job.eventId, {
+            mode: 'reimport',
             targetSportsLibVersion,
         });
 

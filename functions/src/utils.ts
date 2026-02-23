@@ -396,6 +396,18 @@ export async function hasProAccess(userID: string): Promise<boolean> {
   return hasAccess;
 }
 
+/**
+ * Checks if the user has Basic access (either 'basic' role or active grace period).
+ */
+export async function hasBasicAccess(userID: string): Promise<boolean> {
+  const { role, gracePeriodUntil } = await getUserRoleAndGracePeriod(userID);
+  const hasAccess = role === 'basic' || isGracePeriodActive(gracePeriodUntil);
+  if (!hasAccess) {
+    logger.warn(`[hasBasicAccess] Access Denied. User: ${userID}, Role: ${role}, GracePeriodUntil: ${gracePeriodUntil}, Active: ${isGracePeriodActive(gracePeriodUntil)}`);
+  }
+  return hasAccess;
+}
+
 // Re-export Cloud Tasks utilities from shared module for backward compatibility
 export {
   getCloudTaskQueueDepth,

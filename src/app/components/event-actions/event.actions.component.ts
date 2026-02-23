@@ -49,7 +49,7 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   @Input() user!: User;
   @Input() showDownloadOriginal = false;
 
-
+  public isReprocessing = false;
 
   public garminAPIServiceMetaData!: GarminAPIEventMetaData;
   private deleteConfirmationSubscription!: Subscription;
@@ -156,81 +156,93 @@ export class EventActionsComponent implements OnInit, OnDestroy {
   }
 
   async reGenerateStatistics() {
-    const confirmed = await this.confirmReprocessAction({
-      title: 'Regenerate activity statistics?',
-      message: 'This will re-calculate statistics like distance, ascent, descent etc...',
-      confirmLabel: 'Regenerate',
-      confirmColor: 'primary',
-    });
-    if (!confirmed) {
+    if (this.isReprocessing) {
       return;
     }
-
-    this.snackBar.open('Re-calculating activity statistics', undefined, {
-      duration: 2000,
-    });
-    const jobId = this.processingService.addJob('process', 'Re-calculating activity statistics...');
-    this.processingService.updateJob(jobId, { status: 'processing', progress: 5 });
-
     try {
-      await this.eventReprocessService.regenerateEventStatistics(this.user, this.event as any, {
-        onProgress: (progress) => this.updateReprocessJob(jobId, progress),
+      this.isReprocessing = true;
+      const confirmed = await this.confirmReprocessAction({
+        title: 'Regenerate activity statistics?',
+        message: 'This will re-calculate statistics like distance, ascent, descent etc...',
+        confirmLabel: 'Regenerate',
+        confirmColor: 'primary',
       });
+      if (!confirmed) {
+        return;
+      }
 
-      this.processingService.completeJob(jobId, 'Activity and event statistics recalculated');
-      this.snackBar.open('Activity and event statistics have been recalculated', undefined, {
+      this.snackBar.open('Re-calculating activity statistics', undefined, {
         duration: 2000,
       });
-      this.changeDetectorRef.detectChanges();
-    } catch (error) {
-      this.processingService.failJob(jobId, 'Re-calculation failed');
-      this.logger.error('[EventActionsComponent] Failed to re-calculate activity statistics', error);
-      this.snackBar.open(this.getReprocessErrorMessage(error, 'Could not recalculate statistics.'), undefined, {
-        duration: 4000,
-      });
+      const jobId = this.processingService.addJob('process', 'Re-calculating activity statistics...');
+      this.processingService.updateJob(jobId, { status: 'processing', progress: 5 });
+
+      try {
+        await this.eventReprocessService.regenerateEventStatistics(this.user, this.event as any, {
+          onProgress: (progress) => this.updateReprocessJob(jobId, progress),
+        });
+
+        this.processingService.completeJob(jobId, 'Activity and event statistics recalculated');
+        this.snackBar.open('Activity and event statistics have been recalculated', undefined, {
+          duration: 2000,
+        });
+        this.changeDetectorRef.detectChanges();
+      } catch (error) {
+        this.processingService.failJob(jobId, 'Re-calculation failed');
+        this.logger.error('[EventActionsComponent] Failed to re-calculate activity statistics', error);
+        this.snackBar.open(this.getReprocessErrorMessage(error, 'Could not recalculate statistics.'), undefined, {
+          duration: 4000,
+        });
+      }
+    } finally {
+      this.isReprocessing = false;
     }
   }
 
   async reImportActivityFromFile() {
-    if (!this.canReimportFromOriginalFile()) {
+    if (this.isReprocessing || !this.canReimportFromOriginalFile()) {
       return;
     }
-
-    const sourceFilesCount = this.getSourceFilesCount();
-    const confirmed = await this.confirmReprocessAction({
-      title: 'Reimport activity from file?',
-      message: sourceFilesCount > 1
-        ? `This will download and reparse ${sourceFilesCount} source files and replace current activity data.`
-        : 'This will download and reparse the original source file and replace current activity data.',
-      confirmLabel: 'Reimport',
-      confirmColor: 'primary',
-    });
-    if (!confirmed) {
-      return;
-    }
-
-    this.snackBar.open('Reimporting activity from source file', undefined, {
-      duration: 2000,
-    });
-    const jobId = this.processingService.addJob('process', 'Reimporting activity from source file...');
-    this.processingService.updateJob(jobId, { status: 'processing', progress: 5 });
-
     try {
-      await this.eventReprocessService.reimportEventFromOriginalFiles(this.user, this.event as any, {
-        onProgress: (progress) => this.updateReprocessJob(jobId, progress),
+      this.isReprocessing = true;
+      const sourceFilesCount = this.getSourceFilesCount();
+      const confirmed = await this.confirmReprocessAction({
+        title: 'Reimport activity from file?',
+        message: sourceFilesCount > 1
+          ? `This will download and reparse ${sourceFilesCount} source files and replace current activity data.`
+          : 'This will download and reparse the original source file and replace current activity data.',
+        confirmLabel: 'Reimport',
+        confirmColor: 'primary',
       });
+      if (!confirmed) {
+        return;
+      }
 
-      this.processingService.completeJob(jobId, 'Activity reimport completed');
-      this.snackBar.open('Activity reimported from source file', undefined, {
+      this.snackBar.open('Reimporting activity from source file', undefined, {
         duration: 2000,
       });
-      this.changeDetectorRef.detectChanges();
-    } catch (error) {
-      this.processingService.failJob(jobId, 'Reimport failed');
-      this.logger.error('[EventActionsComponent] Failed to reimport activity from source file', error);
-      this.snackBar.open(this.getReprocessErrorMessage(error, 'Could not reimport activity from file.'), undefined, {
-        duration: 4000,
-      });
+      const jobId = this.processingService.addJob('process', 'Reimporting activity from source file...');
+      this.processingService.updateJob(jobId, { status: 'processing', progress: 5 });
+
+      try {
+        await this.eventReprocessService.reimportEventFromOriginalFiles(this.user, this.event as any, {
+          onProgress: (progress) => this.updateReprocessJob(jobId, progress),
+        });
+
+        this.processingService.completeJob(jobId, 'Activity reimport completed');
+        this.snackBar.open('Activity reimported from source file', undefined, {
+          duration: 2000,
+        });
+        this.changeDetectorRef.detectChanges();
+      } catch (error) {
+        this.processingService.failJob(jobId, 'Reimport failed');
+        this.logger.error('[EventActionsComponent] Failed to reimport activity from source file', error);
+        this.snackBar.open(this.getReprocessErrorMessage(error, 'Could not reimport activity from file.'), undefined, {
+          duration: 4000,
+        });
+      }
+    } finally {
+      this.isReprocessing = false;
     }
   }
 

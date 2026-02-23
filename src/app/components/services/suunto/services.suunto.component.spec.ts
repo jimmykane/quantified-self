@@ -7,28 +7,34 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { RouterTestingModule } from '@angular/router/testing';
-import { ReactiveFormsModule } from '@angular/forms';
-import { AppFileService } from '../../../services/app.file.service';
 import { Analytics } from '@angular/fire/analytics';
 import { AppEventService } from '../../../services/app.event.service';
 import { AppAuthService } from '../../../authentication/app.auth.service';
 import { AppUserService } from '../../../services/app.user.service';
 import { AppWindowService } from '../../../services/app.window.service';
 import { LoggerService } from '../../../services/logger.service';
-import { AppFunctionsService } from '../../../services/app.functions.service';
 import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 
 describe('ServicesSuuntoComponent', () => {
     let component: ServicesSuuntoComponent;
     let fixture: ComponentFixture<ServicesSuuntoComponent>;
     let mockUserService: any;
+    let mockEventService: any;
+    let mockSnackBar: any;
 
     beforeEach(async () => {
         mockUserService = {
             isAdmin: vi.fn(),
             requestAndSetCurrentUserSuuntoAppAccessToken: vi.fn(),
             getCurrentUserServiceTokenAndRedirectURI: vi.fn(),
+        };
+        mockEventService = {
+            writeAllEventData: vi.fn(),
+        };
+        mockSnackBar = {
+            open: vi.fn(),
         };
 
         await TestBed.configureTestingModule({
@@ -38,18 +44,16 @@ describe('ServicesSuuntoComponent', () => {
                 MatIconModule,
                 HttpClientTestingModule,
                 MatSnackBarModule,
-                RouterTestingModule,
-                ReactiveFormsModule
+                RouterTestingModule
             ],
             providers: [
-                { provide: AppFileService, useValue: {} },
                 { provide: Analytics, useValue: {} },
-                { provide: AppEventService, useValue: {} },
+                { provide: AppEventService, useValue: mockEventService },
                 { provide: AppAuthService, useValue: { user$: { pipe: () => ({ subscribe: () => { } }) } } },
                 { provide: AppUserService, useValue: mockUserService },
                 { provide: AppWindowService, useValue: { currentDomain: 'http://localhost', windowRef: { location: { href: '' } } } },
                 { provide: LoggerService, useValue: { error: vi.fn(), log: vi.fn() } },
-                { provide: AppFunctionsService, useValue: { call: vi.fn().mockResolvedValue({ data: { file: '' } }) } }
+                { provide: MatSnackBar, useValue: mockSnackBar },
             ],
             schemas: [CUSTOM_ELEMENTS_SCHEMA]
         }).compileComponents();
@@ -58,7 +62,6 @@ describe('ServicesSuuntoComponent', () => {
     beforeEach(() => {
         fixture = TestBed.createComponent(ServicesSuuntoComponent);
         component = fixture.componentInstance;
-        component.suuntoAppLinkFormGroup = { get: () => ({ valid: true, touched: true }) } as any; // Mock form
         fixture.detectChanges();
     });
 

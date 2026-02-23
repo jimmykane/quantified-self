@@ -5,7 +5,7 @@ import {
   inject,
   input,
 } from '@angular/core';
-import { EventInterface, ActivityInterface, User } from '@sports-alliance/sports-lib';
+import { EventInterface, ActivityInterface } from '@sports-alliance/sports-lib';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { AppActivitySelectionService } from '../../../services/activity-selection-service/app-activity-selection.service';
 import { MatSlideToggleChange } from '@angular/material/slide-toggle';
@@ -22,10 +22,7 @@ export class ActivityToggleComponent {
   event = input.required<EventInterface>();
   activity = input.required<ActivityInterface>();
   selectedActivities = input.required<ActivityInterface[]>();
-  isOwner = input<boolean>();
-  user = input<User>();
   showToggle = input<boolean>(true);
-  showActions = input<boolean>();
   showDate = input<boolean>(true);
   showStats = input<boolean>(true);
 

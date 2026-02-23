@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import * as xmldom from 'xmldom';
 import semver from 'semver';
 import {
+    ActivityUtilities,
     EventImporterFIT,
     EventImporterGPX,
     EventImporterSuuntoJSON,
@@ -25,6 +26,7 @@ export const SPORTS_LIB_REPARSE_STATUS_DOC_ID = 'reparseStatus';
 export const SPORTS_LIB_REPARSE_SKIP_REASON_NO_ORIGINAL_FILES = 'NO_ORIGINAL_FILES';
 export const SPORTS_LIB_PRIMARY_BUCKET = 'quantified-self-io';
 export const SPORTS_LIB_LEGACY_APPSPOT_BUCKET = 'quantified-self-io.appspot.com';
+const MERGE_TYPE_VALUES = new Set(['benchmark', 'multi']);
 export {
     SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS,
     SPORTS_LIB_REPARSE_TARGET_VERSION,
@@ -107,6 +109,9 @@ export interface ReparseExecutionResult {
     parsedActivitiesCount: number;
     staleActivitiesDeleted: number;
 }
+
+type MergeType = 'benchmark' | 'multi';
+export type ReparseMode = 'reimport' | 'regenerate';
 
 function toDateOrUndefined(value: unknown): Date | undefined {
     if (!value) {
@@ -503,6 +508,16 @@ export function applyPreservedFields(parsedEvent: EventInterface, existingEventD
     const parsedAny = parsedEvent as any;
     const existingAny = existingEventDoc as any;
 
+    if (Object.prototype.hasOwnProperty.call(existingAny, 'isMerge') && typeof existingAny.isMerge === 'boolean') {
+        parsedAny.isMerge = existingAny.isMerge;
+    }
+    if (
+        Object.prototype.hasOwnProperty.call(existingAny, 'mergeType')
+        && typeof existingAny.mergeType === 'string'
+        && MERGE_TYPE_VALUES.has(existingAny.mergeType)
+    ) {
+        parsedAny.mergeType = existingAny.mergeType;
+    }
     if (Object.prototype.hasOwnProperty.call(existingAny, 'description')) {
         parsedAny.description = existingAny.description;
     }
@@ -591,6 +606,27 @@ async function deleteStaleActivities(
     return deleted;
 }
 
+function extractPreservedMergeMetadata(existingEventDoc: FirestoreEventJSON | Record<string, unknown>): {
+    isMerge?: boolean;
+    mergeType?: MergeType;
+} {
+    const existingAny = existingEventDoc as Record<string, unknown>;
+    const preserved: { isMerge?: boolean; mergeType?: MergeType } = {};
+
+    if (Object.prototype.hasOwnProperty.call(existingAny, 'isMerge') && typeof existingAny.isMerge === 'boolean') {
+        preserved.isMerge = existingAny.isMerge;
+    }
+    if (
+        Object.prototype.hasOwnProperty.call(existingAny, 'mergeType')
+        && typeof existingAny.mergeType === 'string'
+        && MERGE_TYPE_VALUES.has(existingAny.mergeType)
+    ) {
+        preserved.mergeType = existingAny.mergeType as MergeType;
+    }
+
+    return preserved;
+}
+
 export async function persistReparsedEvent(
     uid: string,
     eventId: string,
@@ -612,6 +648,11 @@ export async function persistReparsedEvent(
 
     const writer = new EventWriter(getFirestoreAdapter(), undefined, undefined, getWriterLogAdapter());
     await writer.writeAllEventData(uid, parsedEvent as any);
+
+    const mergeMetadata = extractPreservedMergeMetadata(existingEventDoc);
+    if (Object.keys(mergeMetadata).length > 0) {
+        await admin.firestore().doc(`users/${uid}/events/${eventId}`).set(mergeMetadata, { merge: true });
+    }
 
     const newActivityIDs = new Set<string>();
     parsedEvent.getActivities().forEach(activity => {
@@ -724,11 +765,13 @@ export async function reparseEventFromOriginalFiles(
     uid: string,
     eventId: string,
     options?: {
+        mode?: ReparseMode;
         targetSportsLibVersion?: string;
         eventData?: FirestoreEventJSON | Record<string, unknown>;
         activityDocs?: admin.firestore.QueryDocumentSnapshot[];
     },
 ): Promise<ReparseExecutionResult> {
+    const mode = options?.mode || 'reimport';
     const targetSportsLibVersion = options?.targetSportsLibVersion || resolveTargetSportsLibVersion();
     const eventAndActivities = options?.eventData && options?.activityDocs
         ? {
@@ -764,6 +807,28 @@ export async function reparseEventFromOriginalFiles(
     reparsedEvent.setID(eventId);
     applyPreservedFields(reparsedEvent, autoHealResult.eventData);
     mapActivityIdentity(reparsedEvent, eventAndActivities.activityDocs);
+    if (mode === 'regenerate') {
+        reparsedEvent.getActivities().forEach((activity) => {
+            const activityAny = activity as any;
+            if (
+                typeof activityAny.getStats !== 'function'
+                || typeof activityAny.clearStats !== 'function'
+                || typeof activityAny.addStat !== 'function'
+                || typeof activityAny.getStat !== 'function'
+            ) {
+                return;
+            }
+
+            const previousStats = new Map(activityAny.getStats());
+            activityAny.clearStats();
+            ActivityUtilities.generateMissingStreamsAndStatsForActivity(activity as any);
+            previousStats.forEach((stat, type) => {
+                if (!activityAny.getStat(type)) {
+                    activityAny.addStat(stat);
+                }
+            });
+        });
+    }
     EventUtilities.reGenerateStatsForEvent(reparsedEvent);
 
     const persistResult = await persistReparsedEvent(
