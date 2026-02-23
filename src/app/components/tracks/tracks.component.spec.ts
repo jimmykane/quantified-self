@@ -155,6 +155,7 @@ describe('TracksComponent', () => {
       loadMapbox: vi.fn().mockResolvedValue({
         FullscreenControl: class { },
         NavigationControl: class { },
+        ScaleControl: class { },
         LngLatBounds: class {
           extend = vi.fn();
         }
@@ -498,7 +499,7 @@ describe('TracksComponent', () => {
 
     it('should use simplified coordinates for track rendering when simplification service returns reduced output', async () => {
       const trackManager = (component as any).tracksMapManager;
-      const addTrackFromActivitySpy = vi.spyOn(trackManager, 'addTrackFromActivity');
+      const setTracksFromPreparedSpy = vi.spyOn(trackManager, 'setTracksFromPrepared');
       const eventId = 'simplify-render-event-1';
       const rawCoordinates: [number, number][] = [
         [22.94, 40.64],
@@ -543,7 +544,12 @@ describe('TracksComponent', () => {
       await waitForAsyncWork();
 
       expect(mockPolylineSimplificationService.simplifyVisvalingamWhyatt).toHaveBeenCalled();
-      expect(addTrackFromActivitySpy).toHaveBeenCalledWith(activity, simplifiedCoordinates);
+      expect(setTracksFromPreparedSpy).toHaveBeenCalledWith([
+        expect.objectContaining({
+          activity,
+          coordinates: simplifiedCoordinates,
+        })
+      ]);
     });
 
     it('should store simplified coordinates for event-based fit-bounds paths', async () => {
@@ -592,7 +598,7 @@ describe('TracksComponent', () => {
 
     it('should fall back to original coordinates when simplification result is unsimplified', async () => {
       const trackManager = (component as any).tracksMapManager;
-      const addTrackFromActivitySpy = vi.spyOn(trackManager, 'addTrackFromActivity');
+      const setTracksFromPreparedSpy = vi.spyOn(trackManager, 'setTracksFromPrepared');
       const eventId = 'simplify-fallback-event-1';
       const rawCoordinates: [number, number][] = [
         [22.96, 40.66],
@@ -628,7 +634,12 @@ describe('TracksComponent', () => {
       await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
       await waitForAsyncWork();
 
-      expect(addTrackFromActivitySpy).toHaveBeenCalledWith(activity, rawCoordinates);
+      expect(setTracksFromPreparedSpy).toHaveBeenCalledWith([
+        expect.objectContaining({
+          activity,
+          coordinates: rawCoordinates,
+        })
+      ]);
       expect((component as any).trackCoordinatesByEventId.get(eventId)).toEqual(rawCoordinates);
     });
 

@@ -56,6 +56,7 @@ describe('EventCardMapComponent', () => {
         },
         FullscreenControl: class { },
         NavigationControl: class { },
+        ScaleControl: class { },
         LngLatBounds: class {
           extend = vi.fn();
         }

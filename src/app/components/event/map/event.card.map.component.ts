@@ -497,6 +497,10 @@ export class EventCardMapComponent extends MapAbstractDirective implements OnCha
         showCompass: true,
         showZoom: true
       }), 'bottom-right');
+      map.addControl(new mapboxgl.ScaleControl({
+        maxWidth: 100,
+        unit: 'metric'
+      }), 'bottom-left');
 
       let styleReadyHandled = false;
       const applyInitialMapState = (source: 'style.load' | 'load') => {
