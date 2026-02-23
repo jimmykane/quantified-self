@@ -48,6 +48,10 @@ import { SpeedUnitsToGradeAdjustedSpeedUnits } from '@sports-alliance/sports-lib
   standalone: false
 })
 export class TileChartActionsComponent extends TileActionsAbstractDirective implements OnInit {
+  private static readonly excludedChartTypePatterns = [
+    /^bri.*dev/i
+  ];
+
   @Input() chartType: ChartTypes;
   @Input() chartDataType: string;
   @Input() chartDataValueType: ChartDataValueTypes;
@@ -56,6 +60,9 @@ export class TileChartActionsComponent extends TileActionsAbstractDirective impl
   @Input() chartOrder: number;
 
   public chartTypes = ChartTypes;
+  public chartTypeOptions = Object.values(ChartTypes).filter(chartType =>
+    !TileChartActionsComponent.excludedChartTypePatterns.some(pattern => pattern.test(`${chartType}`))
+  );
   public chartValueTypes = ChartDataValueTypes;
   public chartCategoryTypes = ChartDataCategoryTypes;
 

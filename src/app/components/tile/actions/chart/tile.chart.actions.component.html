@@ -24,9 +24,9 @@
         <mat-label>Chart type</mat-label>
         <mat-select placeholder="Looks" [value]="chartType" panelClass="qs-config-submenu"
           (selectionChange)="changeChartType($event)">
-          @for (chartType of chartTypes | keyvalue; track chartType) {
-          <mat-option [value]="chartType.value">
-            {{chartType.value}}
+          @for (chartTypeOption of chartTypeOptions; track chartTypeOption) {
+          <mat-option [value]="chartTypeOption">
+            {{chartTypeOption}}
           </mat-option>
           }
         </mat-select>

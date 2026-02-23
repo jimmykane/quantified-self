@@ -223,7 +223,7 @@ export class SummariesComponent extends LoadingAbstractDirective implements OnIn
         case TileTypes.Chart:
           const chartTile = <TileChartSettingsInterface>tile;
           chartTile.dataTimeInterval = chartTile.dataTimeInterval || TimeIntervals.Auto
-          // 2 Different processing here, one generic and one for Brian Devine
+          // Process chart data with specialized handling for intensity zones.
           switch (chartTile.chartType) {
 
             case ChartTypes.IntensityZones:
