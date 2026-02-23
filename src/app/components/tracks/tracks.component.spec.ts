@@ -16,6 +16,7 @@ import { BrowserCompatibilityService } from '../../services/browser.compatibilit
 import { LoggerService } from '../../services/logger.service';
 import { MapStyleService } from '../../services/map-style.service';
 import { AppUserSettingsQueryService } from '../../services/app.user-settings-query.service';
+import { PolylineSimplificationService } from '../../services/polyline-simplification.service';
 import { of, Subject } from 'rxjs';
 import { ActivityTypes, AppThemes, DataPaceAvg, DataSpeedAvg, DataStartPosition, DateRanges } from '@sports-alliance/sports-lib';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -96,6 +97,7 @@ describe('TracksComponent', () => {
   let mockUserSettingsQuery: any;
   let mockTripDetectionService: any;
   let mockTripLocationLabelService: any;
+  let mockPolylineSimplificationService: any;
 
   const mockUser = {
     uid: 'user-1',
@@ -210,6 +212,15 @@ describe('TracksComponent', () => {
       resolveCountryName: vi.fn().mockResolvedValue(null),
     };
 
+    mockPolylineSimplificationService = {
+      simplifyVisvalingamWhyatt: vi.fn().mockImplementation((coordinates: number[][]) => ({
+        coordinates,
+        inputPointCount: coordinates?.length || 0,
+        outputPointCount: coordinates?.length || 0,
+        simplified: false
+      }))
+    };
+
     await TestBed.configureTestingModule({
       declarations: [TracksComponent, PeekPanelComponent, MapLayersActionsComponent],
       imports: [MaterialModule],
@@ -235,6 +246,7 @@ describe('TracksComponent', () => {
         { provide: AppUserSettingsQueryService, useValue: mockUserSettingsQuery },
         { provide: MyTracksTripDetectionService, useValue: mockTripDetectionService },
         { provide: TripLocationLabelService, useValue: mockTripLocationLabelService },
+        { provide: PolylineSimplificationService, useValue: mockPolylineSimplificationService },
         { provide: MapboxAutoResizeService, useValue: { bind: vi.fn(), unbind: vi.fn() } },
       ],
       schemas: [NO_ERRORS_SCHEMA]
@@ -480,6 +492,142 @@ describe('TracksComponent', () => {
           lat: 40.64
         })
       ]);
+    });
+
+    it('should use simplified coordinates for track rendering when simplification service returns reduced output', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const addTrackFromActivitySpy = vi.spyOn(trackManager, 'addTrackFromActivity');
+      const eventId = 'simplify-render-event-1';
+      const rawCoordinates: [number, number][] = [
+        [22.94, 40.64],
+        [22.941, 40.641],
+        [22.942, 40.642],
+        [22.943, 40.643],
+        [22.944, 40.644],
+        [22.945, 40.645],
+      ];
+      const simplifiedCoordinates: [number, number][] = [
+        rawCoordinates[0],
+        rawCoordinates[2],
+        rawCoordinates[5],
+      ];
+
+      mockPolylineSimplificationService.simplifyVisvalingamWhyatt.mockReturnValue({
+        coordinates: simplifiedCoordinates,
+        inputPointCount: rawCoordinates.length,
+        outputPointCount: simplifiedCoordinates.length,
+        simplified: true
+      });
+
+      const activity = {
+        type: ActivityTypes.Running,
+        getID: () => 'activity-simplify-render-1',
+        hasPositionData: () => true,
+        getPositionData: () => rawCoordinates.map(([longitudeDegrees, latitudeDegrees]) => ({
+          longitudeDegrees,
+          latitudeDegrees,
+        })),
+        getDuration: () => ({ getDisplayValue: () => '00:30:00' }),
+        getDistance: () => ({ getDisplayValue: () => '5.0', getDisplayUnit: () => 'km' }),
+        getStat: () => null,
+        getAllEvents: () => []
+      };
+
+      const event = createMockEvent(eventId, '2024-11-08T08:00:00Z', 40.64, 22.94);
+      (event as any).getActivities = () => [activity];
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(mockPolylineSimplificationService.simplifyVisvalingamWhyatt).toHaveBeenCalled();
+      expect(addTrackFromActivitySpy).toHaveBeenCalledWith(activity, simplifiedCoordinates);
+    });
+
+    it('should store simplified coordinates for event-based fit-bounds paths', async () => {
+      const eventId = 'simplify-bounds-event-1';
+      const rawCoordinates: [number, number][] = [
+        [22.95, 40.65],
+        [22.951, 40.651],
+        [22.952, 40.652],
+        [22.953, 40.653],
+      ];
+      const simplifiedCoordinates: [number, number][] = [
+        rawCoordinates[0],
+        rawCoordinates[3],
+      ];
+
+      mockPolylineSimplificationService.simplifyVisvalingamWhyatt.mockReturnValue({
+        coordinates: simplifiedCoordinates,
+        inputPointCount: rawCoordinates.length,
+        outputPointCount: simplifiedCoordinates.length,
+        simplified: true
+      });
+
+      const activity = {
+        type: ActivityTypes.Running,
+        getID: () => 'activity-simplify-bounds-1',
+        hasPositionData: () => true,
+        getPositionData: () => rawCoordinates.map(([longitudeDegrees, latitudeDegrees]) => ({
+          longitudeDegrees,
+          latitudeDegrees,
+        })),
+        getDuration: () => ({ getDisplayValue: () => '00:30:00' }),
+        getDistance: () => ({ getDisplayValue: () => '5.0', getDisplayUnit: () => 'km' }),
+        getStat: () => null,
+        getAllEvents: () => []
+      };
+
+      const event = createMockEvent(eventId, '2024-11-09T08:00:00Z', 40.65, 22.95);
+      (event as any).getActivities = () => [activity];
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect((component as any).trackCoordinatesByEventId.get(eventId)).toEqual(simplifiedCoordinates);
+    });
+
+    it('should fall back to original coordinates when simplification result is unsimplified', async () => {
+      const trackManager = (component as any).tracksMapManager;
+      const addTrackFromActivitySpy = vi.spyOn(trackManager, 'addTrackFromActivity');
+      const eventId = 'simplify-fallback-event-1';
+      const rawCoordinates: [number, number][] = [
+        [22.96, 40.66],
+        [22.961, 40.661],
+        [22.962, 40.662],
+      ];
+
+      mockPolylineSimplificationService.simplifyVisvalingamWhyatt.mockReturnValue({
+        coordinates: rawCoordinates,
+        inputPointCount: rawCoordinates.length,
+        outputPointCount: rawCoordinates.length,
+        simplified: false
+      });
+
+      const activity = {
+        type: ActivityTypes.Running,
+        getID: () => 'activity-simplify-fallback-1',
+        hasPositionData: () => true,
+        getPositionData: () => rawCoordinates.map(([longitudeDegrees, latitudeDegrees]) => ({
+          longitudeDegrees,
+          latitudeDegrees,
+        })),
+        getDuration: () => ({ getDisplayValue: () => '00:30:00' }),
+        getDistance: () => ({ getDisplayValue: () => '5.0', getDisplayUnit: () => 'km' }),
+        getStat: () => null,
+        getAllEvents: () => []
+      };
+
+      const event = createMockEvent(eventId, '2024-11-10T08:00:00Z', 40.66, 22.96);
+      (event as any).getActivities = () => [activity];
+      mockEventService.getEventsBy.mockReturnValue(of([event]));
+
+      await (component as any).loadTracksMapForUserByDateRange(mockUser, DateRanges.thisMonth, [ActivityTypes.Running]);
+      await waitForAsyncWork();
+
+      expect(addTrackFromActivitySpy).toHaveBeenCalledWith(activity, rawCoordinates);
+      expect((component as any).trackCoordinatesByEventId.get(eventId)).toEqual(rawCoordinates);
     });
 
     it('should resolve pace metric for trail running start points', async () => {

@@ -41,6 +41,10 @@ import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-dete
 import { TripDetectionInput } from '../../services/my-tracks-trip-detection.service';
 import { DetectedTrip } from '../../services/my-tracks-trip-detection.service';
 import { TripLocationLabelService } from '../../services/trip-location-label.service';
+import {
+  PolylineSimplificationOptions,
+  PolylineSimplificationService
+} from '../../services/polyline-simplification.service';
 import { resolvePrimaryUnitAwareDisplayStat } from '../../helpers/summary-display.helper';
 import {
   resolvePreferredSpeedDerivedAverageTypeForActivity,
@@ -88,6 +92,11 @@ export class TracksComponent implements OnInit, OnDestroy {
   private static readonly START_POINT_POPUP_OFFSET_PX = 10;
   private static readonly START_POINT_POPUP_WIDTH_ESTIMATE_PX = 340;
   private static readonly START_POINT_POPUP_HEIGHT_ESTIMATE_PX = 240;
+  private static readonly MY_TRACKS_SIMPLIFICATION_OPTIONS: Readonly<PolylineSimplificationOptions> = Object.freeze({
+    keepRatio: 0.35,
+    minInputPoints: 160,
+    minPointsToKeep: 80,
+  });
 
   @ViewChild('mapDiv', { static: true }) mapDiv!: ElementRef;
   @ViewChild('trackStartPopupAnchor', { static: false }) trackStartPopupAnchor?: ElementRef<HTMLDivElement>;
@@ -163,6 +172,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     private jumpHeatmapWeightingService: JumpHeatmapWeightingService,
     private mapboxStartPointLayerService: MapboxStartPointLayerService,
     private mapboxAutoResizeService: MapboxAutoResizeService,
+    private polylineSimplificationService: PolylineSimplificationService,
     private popupContentService: MapEventPopupContentService,
   ) {
     this.tracksMapManager = new TracksMapManager(
@@ -518,6 +528,10 @@ export class TracksComponent implements OnInit, OnDestroy {
       const stagedEventsById = new Map<string, any>();
       let jumpsWithCoordinates = 0;
       let jumpsWithWeightMetrics = 0;
+      let tracksProcessed = 0;
+      let tracksSimplified = 0;
+      let inputPointsTotal = 0;
+      let outputPointsTotal = 0;
       const detectionCandidatesByEvent = new Map<string, TripDetectionInput>();
 
       for (const eventsChunk of chunkedEvents) {
@@ -590,19 +604,31 @@ export class TracksComponent implements OnInit, OnDestroy {
                 );
 
               if (coordinates.length > 1) {
+                const simplificationResult = this.polylineSimplificationService.simplifyVisvalingamWhyatt(
+                  coordinates,
+                  TracksComponent.MY_TRACKS_SIMPLIFICATION_OPTIONS
+                );
+                const simplifiedCoordinates = simplificationResult.coordinates;
+                tracksProcessed++;
+                inputPointsTotal += simplificationResult.inputPointCount;
+                outputPointsTotal += simplificationResult.outputPointCount;
+                if (simplificationResult.simplified) {
+                  tracksSimplified++;
+                }
+
                 const startPoint = this.buildTrackStartPoint(
                   activity,
                   eventId,
-                  coordinates[0],
+                  simplifiedCoordinates[0],
                   fullEvent?.startDate ?? event?.startDate
                 );
                 if (startPoint) {
                   trackStartPoints.push(startPoint);
                 }
-                preparedTracks.push({ activity, coordinates });
+                preparedTracks.push({ activity, coordinates: simplifiedCoordinates });
                 addedTrackCount++;
                 hasVisibleTrackForEvent = true;
-                coordinates.forEach((coordinate: number[]) => {
+                simplifiedCoordinates.forEach((coordinate: number[]) => {
                   allCoordinates.push(coordinate);
                   eventCoordinates.push(coordinate);
                 });
@@ -656,6 +682,17 @@ export class TracksComponent implements OnInit, OnDestroy {
         this.hasDetectedJumps.set(false);
         this.tracksMapManager.clearJumpHeatmap();
       }
+      const reductionPercent = inputPointsTotal > 0
+        ? Math.round((1 - (outputPointsTotal / inputPointsTotal)) * 1000) / 10
+        : 0;
+      this.logger.log('[TracksComponent] Track polyline simplification summary.', {
+        tracksProcessed,
+        tracksSimplified,
+        inputPointsTotal,
+        outputPointsTotal,
+        reductionPercent,
+        promiseTime
+      });
       this.logger.log('[TracksComponent] Jump heatmap collection summary.', {
         jumpsWithCoordinates,
         jumpsWithWeightMetrics,
