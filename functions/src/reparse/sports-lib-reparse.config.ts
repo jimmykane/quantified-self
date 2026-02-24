@@ -4,5 +4,5 @@ export const SPORTS_LIB_REPARSE_RUNTIME_DEFAULTS = {
     enabled: true,
     scanLimit: 1000,
     enqueueLimit: 800,
-    uidAllowlist: ["xcsAolLDDTWTgtRN9eYF3lW2YKL2"],
+    uidAllowlist: [],
 } as const;
