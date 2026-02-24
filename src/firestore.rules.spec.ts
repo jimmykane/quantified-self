@@ -337,6 +337,35 @@ describe('Firestore Security Rules', () => {
             }));
         });
 
+        it('should deny user from writing activity without eventID', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+            await assertFails(db.collection(`users/${userId}/activities`).doc('activity_no_event').set({
+                type: 'Walking',
+                distance: 1200
+            }));
+        });
+
+        it('should deny user from writing activity with nonexistent eventID', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+            await assertFails(db.collection(`users/${userId}/activities`).doc('activity_bad_event').set({
+                type: 'Running',
+                eventID: 'missing_event'
+            }));
+        });
+
+        it('should deny user from writing activity with another users eventID', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${otherId}/events`).doc('other_event').set({
+                    type: 'Ride'
+                });
+            });
+            await assertFails(db.collection(`users/${userId}/activities`).doc('activity_cross_owner').set({
+                type: 'Running',
+                eventID: 'other_event'
+            }));
+        });
+
         it('should deny user from deleting their own activity', async () => {
             const db = testEnv.authenticatedContext(userId).firestore();
             await testEnv.withSecurityRulesDisabled(async (context) => {
@@ -369,6 +398,24 @@ describe('Firestore Security Rules', () => {
 
             await assertSucceeds(db.collection(`users/${userId}/activities`).doc(activityId).update({
                 distance: 10000
+            }));
+        });
+
+        it('should deny updates when stored activity has invalid cross-user eventID', async () => {
+            const db = testEnv.authenticatedContext(userId).firestore();
+
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${otherId}/events`).doc('other_event').set({
+                    type: 'Run'
+                });
+                await context.firestore().collection(`users/${userId}/activities`).doc('activity_seeded_bad_ref').set({
+                    type: 'Running',
+                    eventID: 'other_event'
+                });
+            });
+
+            await assertFails(db.collection(`users/${userId}/activities`).doc('activity_seeded_bad_ref').update({
+                distance: 7000
             }));
         });
 
