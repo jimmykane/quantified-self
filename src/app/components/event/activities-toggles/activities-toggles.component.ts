@@ -8,10 +8,11 @@ import {
 } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { DataDeviceNames, EventInterface, ActivityInterface, User } from '@sports-alliance/sports-lib';
+import { EventInterface, ActivityInterface, User } from '@sports-alliance/sports-lib';
 import { AppActivitySelectionService } from '../../../services/activity-selection-service/app-activity-selection.service';
 import { AppEventColorService } from '../../../services/color/app.event.color.service';
 import { AppEventService } from '../../../services/app.event.service';
+import { LoggerService } from '../../../services/logger.service';
 import { DeviceNameEditDialogComponent } from './device-name-edit-dialog/device-name-edit-dialog.component';
 import { firstValueFrom } from 'rxjs';
 
@@ -34,6 +35,7 @@ export class ActivitiesTogglesComponent {
   private dialog = inject(MatDialog);
   private snackBar = inject(MatSnackBar);
   private eventService = inject(AppEventService);
+  private logger = inject(LoggerService);
   public activitySelectionService = inject(AppActivitySelectionService);
   public eventColorService = inject(AppEventColorService);
 
@@ -129,9 +131,8 @@ export class ActivitiesTogglesComponent {
       this.snackBar.open('Could not update device name', undefined, { duration: 3500 });
       return;
     }
-    const eventID = event.getID();
     const activityID = activity.getID();
-    if (!eventID || !activityID) {
+    if (!activityID) {
       this.snackBar.open('Could not update device name', undefined, { duration: 3500 });
       return;
     }
@@ -140,23 +141,23 @@ export class ActivitiesTogglesComponent {
     creator.name = newName;
 
     try {
-      event.addStat(new DataDeviceNames(event.getActivities().map((eventActivity) => eventActivity.creator?.name || '')));
-      const eventJSON = event.toJSON();
-      const eventPatch = eventJSON.stats === undefined ? {} : { stats: eventJSON.stats };
       const activityPatch = {
-        creator: { ...creator, name: newName },
+        'creator.name': newName,
       };
 
-      await this.eventService.updateActivityAndEventProperties(
+      await this.eventService.updateActivityProperties(
         user,
-        eventID,
         activityID,
         activityPatch,
-        eventPatch,
       );
       this.snackBar.open('Device name updated', undefined, { duration: 2500 });
-    } catch {
+    } catch (error: unknown) {
       creator.name = previousName;
+      this.logger.error('[ActivitiesTogglesComponent] Failed to persist renamed device', {
+        activityID,
+        eventID: event.getID?.() ?? null,
+        error,
+      });
       this.snackBar.open('Could not update device name', undefined, { duration: 3500 });
     } finally {
       this.changeDetectorRef.markForCheck();

@@ -9,6 +9,7 @@ import { AppEventColorService } from '../../../services/color/app.event.color.se
 import { MatDialog } from '@angular/material/dialog';
 import { AppEventService } from '../../../services/app.event.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { LoggerService } from '../../../services/logger.service';
 
 const createActivity = (id: string, creatorName: string, serialNumber: string, swInfo = ''): any => ({
   getID: () => id,
@@ -27,8 +28,9 @@ describe('ActivitiesTogglesComponent', () => {
   let fixture: ComponentFixture<ActivitiesTogglesComponent>;
 
   let mockDialog: { open: ReturnType<typeof vi.fn> };
-  let mockEventService: { updateActivityAndEventProperties: ReturnType<typeof vi.fn> };
+  let mockEventService: { updateActivityProperties: ReturnType<typeof vi.fn> };
   let mockSnackBar: { open: ReturnType<typeof vi.fn> };
+  let mockLogger: { error: ReturnType<typeof vi.fn> };
 
   const mockSelectionService = {
     selectedActivities: {
@@ -81,9 +83,10 @@ describe('ActivitiesTogglesComponent', () => {
   beforeEach(async () => {
     mockDialog = { open: vi.fn(() => ({ afterClosed: () => of(undefined) })) };
     mockEventService = {
-      updateActivityAndEventProperties: vi.fn().mockResolvedValue(undefined),
+      updateActivityProperties: vi.fn().mockResolvedValue(undefined),
     };
     mockSnackBar = { open: vi.fn() };
+    mockLogger = { error: vi.fn() };
 
     await TestBed.configureTestingModule({
       declarations: [ActivitiesTogglesComponent],
@@ -93,6 +96,7 @@ describe('ActivitiesTogglesComponent', () => {
         { provide: MatDialog, useValue: mockDialog },
         { provide: AppEventService, useValue: mockEventService },
         { provide: MatSnackBar, useValue: mockSnackBar },
+        { provide: LoggerService, useValue: mockLogger },
       ],
       schemas: [NO_ERRORS_SCHEMA],
     }).compileComponents();
@@ -110,11 +114,6 @@ describe('ActivitiesTogglesComponent', () => {
       isMerge: true,
       getActivities: () => [a1, a2],
       addStat: vi.fn(),
-      toJSON: vi.fn(() => ({
-        stats: {
-          deviceNames: ['Garmin', 'Wahoo'],
-        },
-      })),
     } as any;
 
     fixture.componentRef.setInput('event', event);
@@ -211,39 +210,33 @@ describe('ActivitiesTogglesComponent', () => {
     expect(component.isOnlySelectedActivity(noIdB)).toBe(false);
   });
 
-  it('renameDevice updates only clicked activity and persists event + activity', async () => {
+  it('renameDevice updates only clicked activity creator patch', async () => {
     const { event, a1 } = setupInputs(true);
     mockDialog.open.mockReturnValue({ afterClosed: () => of('Renamed Device') });
 
     await component.renameDevice(a1);
 
     expect(a1.creator.name).toBe('Renamed Device');
-    expect(mockEventService.updateActivityAndEventProperties).toHaveBeenCalledWith(
+    expect(mockEventService.updateActivityProperties).toHaveBeenCalledWith(
       user,
-      'event-1',
       'a1',
-      expect.objectContaining({
-        creator: expect.objectContaining({
-          name: 'Renamed Device',
-          serialNumber: '111',
-        }),
-      }),
-      expect.objectContaining({
-        stats: expect.anything(),
-      }),
+      {
+        'creator.name': 'Renamed Device',
+      },
     );
-    expect(event.addStat).toHaveBeenCalledTimes(1);
+    expect(event.addStat).not.toHaveBeenCalled();
   });
 
   it('rolls back renamed device name when transactional write fails', async () => {
     const { a1 } = setupInputs(true);
     mockDialog.open.mockReturnValue({ afterClosed: () => of('Renamed Device') });
-    mockEventService.updateActivityAndEventProperties.mockRejectedValueOnce(new Error('transaction write failed'));
+    mockEventService.updateActivityProperties.mockRejectedValueOnce(new Error('transaction write failed'));
 
     await component.renameDevice(a1);
 
     expect(a1.creator.name).toBe('Garmin');
-    expect(mockEventService.updateActivityAndEventProperties).toHaveBeenCalledTimes(1);
+    expect(mockEventService.updateActivityProperties).toHaveBeenCalledTimes(1);
+    expect(mockLogger.error).toHaveBeenCalledTimes(1);
     expect(mockSnackBar.open).toHaveBeenCalledWith('Could not update device name', undefined, { duration: 3500 });
   });
 
@@ -254,7 +247,7 @@ describe('ActivitiesTogglesComponent', () => {
 
     await component.renameDevice(a1);
 
-    expect(mockEventService.updateActivityAndEventProperties).not.toHaveBeenCalled();
+    expect(mockEventService.updateActivityProperties).not.toHaveBeenCalled();
     expect(event.addStat).not.toHaveBeenCalled();
     expect(mockSnackBar.open).toHaveBeenCalledWith('Could not update device name', undefined, { duration: 3500 });
   });
@@ -268,7 +261,7 @@ describe('ActivitiesTogglesComponent', () => {
     mockDialog.open.mockReturnValueOnce({ afterClosed: () => of('') });
     await component.renameDevice(a1);
 
-    expect(mockEventService.updateActivityAndEventProperties).not.toHaveBeenCalled();
+    expect(mockEventService.updateActivityProperties).not.toHaveBeenCalled();
     expect(event.addStat).not.toHaveBeenCalled();
   });
 });
