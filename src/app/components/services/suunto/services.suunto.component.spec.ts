@@ -31,7 +31,6 @@ describe('ServicesSuuntoComponent', () => {
             getCurrentUserServiceTokenAndRedirectURI: vi.fn(),
         };
         mockEventService = {
-            writeAllEventData: vi.fn(),
         };
         mockSnackBar = {
             open: vi.fn(),

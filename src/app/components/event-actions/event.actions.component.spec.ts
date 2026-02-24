@@ -42,7 +42,6 @@ describe('EventActionsComponent', () => {
             getEventMetaData: vi.fn(),
             getEventAsJSONBloB: vi.fn(),
             getEventAsGPXBloB: vi.fn(),
-            writeAllEventData: vi.fn().mockResolvedValue(true),
         };
         mockEventReprocessService = {
             regenerateEventStatistics: vi.fn().mockResolvedValue({ event: null }),

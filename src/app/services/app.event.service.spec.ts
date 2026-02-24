@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AppEventService } from './app.event.service';
-import { Firestore, doc, docData, collection, collectionData, deleteDoc, setDoc, updateDoc, writeBatch, query, where, getDocs } from '@angular/fire/firestore';
+import { Firestore, doc, docData, collection, collectionData, deleteDoc, updateDoc, writeBatch, query, where, getDocs } from '@angular/fire/firestore';
 import { Storage } from '@angular/fire/storage';
 import { Auth } from '@angular/fire/auth';
 import { AppAnalyticsService } from './app.analytics.service';
@@ -69,7 +69,6 @@ vi.mock('@angular/fire/firestore', async (importOriginal) => {
         where: vi.fn(),
         getDocs: vi.fn(),
         deleteDoc: vi.fn(),
-        setDoc: vi.fn(),
         updateDoc: vi.fn(),
         writeBatch: vi.fn(() => ({
             update: mocks.batchUpdate,
@@ -578,58 +577,6 @@ describe('AppEventService', () => {
         expect(doc).toHaveBeenCalledWith(expect.anything(), 'users', userId, 'events', eventId);
         expect(deleteDoc).toHaveBeenCalled();
         expect(result).toBe(true);
-    });
-
-    it('should strip streams before writing activity in setActivity', async () => {
-        const user = { uid: 'user1' } as any;
-        const event = { getID: () => 'event1', startDate: new Date('2026-01-01T00:00:00.000Z') } as any;
-        const activity = {
-            getID: () => 'activity1',
-            toJSON: () => ({
-                stats: {},
-                streams: [
-                    { type: 'Pace', values: [1, 2, 3] }
-                ]
-            })
-        } as any;
-
-        (doc as Mock).mockReturnValue({});
-        (setDoc as Mock).mockResolvedValue(undefined);
-
-        await service.setActivity(user, event, activity);
-
-        expect(setDoc).toHaveBeenCalledTimes(1);
-        const writtenPayload = (setDoc as Mock).mock.calls[0][1];
-        expect(writtenPayload).not.toHaveProperty('streams');
-        expect(writtenPayload.eventID).toBe('event1');
-        expect(writtenPayload.userID).toBe('user1');
-        expect(writtenPayload.eventStartDate).toEqual(event.startDate);
-    });
-
-    it('should strip original file metadata and merge on setEvent', async () => {
-        const user = { uid: 'user1' } as any;
-        const event = {
-            getID: () => 'event1',
-            toJSON: () => ({ name: 'My Event' }),
-            originalFiles: [{ path: 'users/user1/events/event1/original.fit', startDate: new Date('2026-01-01T00:00:00.000Z') }],
-            originalFile: { path: 'users/user1/events/event1/original.fit', startDate: new Date('2026-01-01T00:00:00.000Z') },
-        } as any;
-
-        (doc as Mock).mockReturnValue({});
-        (setDoc as Mock).mockResolvedValue(undefined);
-
-        await service.setEvent(user, event);
-
-        expect(setDoc).toHaveBeenCalledWith(
-            expect.anything(),
-            expect.objectContaining({
-                name: 'My Event',
-            }),
-            { merge: true }
-        );
-        const eventPayload = (setDoc as Mock).mock.calls[0][1];
-        expect(eventPayload.originalFiles).toBeUndefined();
-        expect(eventPayload.originalFile).toBeUndefined();
     });
 
     it('should sanitize updateEventProperties payload by stripping streams and top-level activities', async () => {

@@ -2,7 +2,7 @@ import { inject, Injectable, Injector, OnDestroy, runInInjectionContext } from '
 import { EventInterface } from '@sports-alliance/sports-lib';
 import { EventImporterJSON } from '@sports-alliance/sports-lib';
 import { combineLatest, from, Observable, of, throwError, zip } from 'rxjs';
-import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, setDoc, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer } from '@angular/fire/firestore';
+import { Firestore, collection, query, orderBy, where, limit, startAfter, endBefore, collectionData, onSnapshot, doc, docData, getDoc, getDocs, getDocsFromCache, updateDoc, deleteDoc, writeBatch, DocumentSnapshot, QueryDocumentSnapshot, Query, QuerySnapshot, DocumentData, getCountFromServer } from '@angular/fire/firestore';
 import { catchError, map, switchMap, take, distinctUntilChanged, tap } from 'rxjs/operators';
 import { EventJSONInterface } from '@sports-alliance/sports-lib';
 import { ActivityJSONInterface } from '@sports-alliance/sports-lib';
@@ -37,7 +37,6 @@ import { LoggerService } from './logger.service';
 import { AppFileService } from './app.file.service';
 import { AppCacheService } from './app.cache.service';
 import { BenchmarkEventAdapter } from './benchmark-event.adapter';
-import { buildActivityWriteData, buildEventWriteData } from '../utils/activity-edit.persistence';
 import { AppOriginalFileHydrationService, DownloadFileOptions } from './app.original-file-hydration.service';
 
 export interface GetEventsOnceOptions {
@@ -648,18 +647,6 @@ export class AppEventService implements OnDestroy {
     return from(runInInjectionContext(this.injector, () => getDocs(metaDataCollection))).pipe(
       map((querySnapshot) => querySnapshot.docs.map(doc => doc.id))
     );
-  }
-
-  public async setEvent(user: User, event: EventInterface) {
-    const eventData = this.stripServerOwnedEventFileMetadata(
-      buildEventWriteData(event)
-    );
-    return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, 'users', user.uid, 'events', event.getID()), eventData, { merge: true }));
-  }
-
-  public async setActivity(user: User, event: EventInterface, activity: ActivityInterface) {
-    const data = buildActivityWriteData(user.uid, event, activity);
-    return runInInjectionContext(this.injector, () => setDoc(doc(this.firestore, 'users', user.uid, 'activities', activity.getID()), data));
   }
 
   public async updateActivityProperties(user: User, activityID: string, propertiesToUpdate: any) {
