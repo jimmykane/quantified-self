@@ -9,7 +9,6 @@ import { Privacy } from '@sports-alliance/sports-lib';
 import { AppSharingService } from '../../services/app.sharing.service';
 import { User } from '@sports-alliance/sports-lib';
 import { ConfirmationDialogComponent, ConfirmationDialogData } from '../confirmation-dialog/confirmation-dialog.component';
-import { ActivityFormComponent } from '../activity-form/activity.form.component';
 import { take } from 'rxjs/operators';
 import { Subscription } from 'rxjs';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -102,21 +101,6 @@ export class EventActionsComponent implements OnInit, OnDestroy {
       duration: 20000,
     })
   }
-
-  editEventActivity() {
-    const dialogRef = this.dialog.open(ActivityFormComponent, {
-      width: '75vw',
-      disableClose: false,
-      data: {
-        event: this.event,
-        activity: this.event.getFirstActivity(),
-        user: this.user
-      },
-    });
-  }
-
-
-
   isHydrated() {
     const activities = this.event.getActivities();
     return activities.some(activity => activity.getAllStreams().length > 0);

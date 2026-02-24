@@ -184,6 +184,11 @@ export class AppEventService implements OnDestroy {
     );
   }
 
+  /**
+   * Firestore rules treat original source file location fields as server-owned.
+   * Frontend write paths must never send these keys, even if the in-memory event
+   * instance has them hydrated for download/reparse UX.
+   */
   private stripServerOwnedEventFileMetadata(
     payload: Record<string, unknown>,
   ): Record<string, unknown> {
@@ -193,6 +198,11 @@ export class AppEventService implements OnDestroy {
     return sanitizedPayload;
   }
 
+  /**
+   * Shared EventWriter writes both activity docs and the parent event doc through
+   * one adapter callback. We only strip server-owned file metadata for top-level
+   * event docs (`users/{uid}/events/{eventId}`), not for activity writes.
+   */
   private isTopLevelEventDocumentPath(path: string[]): boolean {
     return path.length === 4 && path[0] === 'users' && path[2] === 'events';
   }
@@ -695,6 +705,7 @@ export class AppEventService implements OnDestroy {
 
     const adapter: FirestoreAdapter = {
       setDoc: (path: string[], data: any) => {
+        // Frontend must not persist server-owned file metadata on event docs.
         const firestorePayload = this.isTopLevelEventDocumentPath(path)
           ? this.stripServerOwnedEventFileMetadata(data as Record<string, unknown>)
           : data;
