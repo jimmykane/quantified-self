@@ -263,6 +263,74 @@ describe('Firestore Security Rules', () => {
             });
         });
 
+        describe('Events (users/{uid}/events/{eventId})', () => {
+            it('should allow owner creating event without original file metadata', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertSucceeds(db.collection(`users/${userId}/events`).doc(eventId).set({
+                    name: 'Morning Run',
+                    privacy: 'private'
+                }));
+            });
+
+            it('should deny owner creating event with originalFile metadata', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection(`users/${userId}/events`).doc(eventId).set({
+                    name: 'Morning Run',
+                    originalFile: { path: 'users/someone/events/e1/original.fit' }
+                }));
+            });
+
+            it('should deny owner creating event with originalFiles metadata', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await assertFails(db.collection(`users/${userId}/events`).doc(eventId).set({
+                    name: 'Morning Run',
+                    originalFiles: [{ path: 'users/someone/events/e1/original.fit' }]
+                }));
+            });
+
+            it('should allow owner updating event when original file metadata is untouched', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Old Name',
+                        privacy: 'private'
+                    });
+                });
+
+                await assertSucceeds(db.collection(`users/${userId}/events`).doc(eventId).update({
+                    name: 'New Name'
+                }));
+            });
+
+            it('should deny owner updating originalFile metadata', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Morning Run',
+                        privacy: 'private'
+                    });
+                });
+
+                await assertFails(db.collection(`users/${userId}/events`).doc(eventId).update({
+                    originalFile: { path: 'users/attacker/events/e1/original.fit' }
+                }));
+            });
+
+            it('should deny owner updating originalFiles metadata', async () => {
+                const db = testEnv.authenticatedContext(userId).firestore();
+                await testEnv.withSecurityRulesDisabled(async (context) => {
+                    await context.firestore().doc(`users/${userId}/events/${eventId}`).set({
+                        name: 'Morning Run',
+                        privacy: 'private'
+                    });
+                });
+
+                await assertFails(db.collection(`users/${userId}/events`).doc(eventId).update({
+                    originalFiles: [{ path: 'users/attacker/events/e1/original.fit' }]
+                }));
+            });
+        });
+
         describe('System Status (users/{uid}/system/status)', () => {
             it('should allow user to read their own status', async () => {
                 const db = testEnv.authenticatedContext(userId).firestore();

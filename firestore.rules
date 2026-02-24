@@ -70,7 +70,12 @@ service cloud.firestore {
           // RESTRICTED ACCESS: Must be owner AND have a valid role (Free, Basic, or PRO)
           // TEMPORARILY DISABLED FOR TESTING - Re-enable when ready to enforce paywall
           // allow read, write: if request.auth.uid == userID && isSubscribed();
-          allow read, write: if request.auth.uid == userID;
+          allow read: if request.auth.uid == userID;
+          allow create: if request.auth.uid == userID
+            && !request.resource.data.keys().hasAny(['originalFile', 'originalFiles']);
+          allow update: if request.auth.uid == userID
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['originalFile', 'originalFiles']);
+          allow delete: if request.auth.uid == userID;
 
 
             // Restoring metaData inside events
