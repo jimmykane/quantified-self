@@ -149,6 +149,16 @@ describe('AdminDashboardComponent', () => {
         expect(component.isLoadingFinancials).toBe(false);
     });
 
+    it('should render financials section before queue stats section', () => {
+        const host: HTMLElement = fixture.nativeElement;
+        const financials = host.querySelector('app-admin-financials');
+        const queueStats = host.querySelector('app-admin-queue-stats');
+
+        expect(financials).toBeTruthy();
+        expect(queueStats).toBeTruthy();
+        expect(financials!.compareDocumentPosition(queueStats!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+
     describe('Queue Stats', () => {
         it('should call fetchQueueStats and update state', () => {
             vi.clearAllMocks();
