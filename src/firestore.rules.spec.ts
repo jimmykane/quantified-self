@@ -325,6 +325,11 @@ describe('Firestore Security Rules', () => {
 
         it('should allow user to write their own activity', async () => {
             const db = testEnv.authenticatedContext(userId).firestore();
+            await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/events`).doc('original_event').set({
+                    type: 'Run'
+                });
+            });
             await assertSucceeds(db.collection(`users/${userId}/activities`).doc(activityId).set({
                 type: 'Running',
                 distance: 5000,
@@ -348,6 +353,9 @@ describe('Firestore Security Rules', () => {
             const db = testEnv.authenticatedContext(userId).firestore();
 
             await testEnv.withSecurityRulesDisabled(async (context) => {
+                await context.firestore().collection(`users/${userId}/events`).doc('original_event').set({
+                    type: 'Run'
+                });
                 await context.firestore().collection(`users/${userId}/activities`).doc(activityId).set({
                     type: 'Running',
                     eventID: 'original_event'
