@@ -266,7 +266,7 @@ async function persistProcessingMetadata(userID: string, eventID: string): Promi
 
 export const uploadActivity = onRequest({
   region: FUNCTIONS_MANIFEST.uploadActivity.region,
-  memory: '1GiB',
+  memory: '512MiB',
   concurrency: 1,
   timeoutSeconds: 300,
   maxInstances: 20,

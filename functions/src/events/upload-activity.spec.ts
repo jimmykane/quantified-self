@@ -216,7 +216,7 @@ describe('uploadActivity', () => {
 
   it('should register with memory and concurrency limits to avoid upload OOM', () => {
     expect(hoisted.capturedOnRequestOptions.value).toEqual(expect.objectContaining({
-      memory: '1GiB',
+      memory: '512MiB',
       concurrency: 1,
       timeoutSeconds: 300,
     }));
