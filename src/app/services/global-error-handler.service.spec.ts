@@ -7,6 +7,7 @@ describe('GlobalErrorHandler', () => {
     let windowMock: any;
 
     beforeEach(() => {
+        const sessionStorageState: Record<string, string> = {};
         loggerMock = {
             error: vi.fn()
         };
@@ -14,6 +15,12 @@ describe('GlobalErrorHandler', () => {
             windowRef: {
                 location: {
                     reload: vi.fn()
+                },
+                sessionStorage: {
+                    getItem: vi.fn((key: string) => sessionStorageState[key] ?? null),
+                    setItem: vi.fn((key: string, value: string) => {
+                        sessionStorageState[key] = value;
+                    })
                 }
             }
         };
@@ -24,6 +31,7 @@ describe('GlobalErrorHandler', () => {
         const error = new TypeError('Failed to fetch dynamically imported module: https://example.com/chunk.js');
         handler.handleError(error);
         expect(windowMock.windowRef.location.reload).toHaveBeenCalled();
+        expect(windowMock.windowRef.sessionStorage.setItem).toHaveBeenCalledWith('app.chunk-load-reload-attempted', '1');
         expect(loggerMock.error).toHaveBeenCalledWith(error);
     });
 
@@ -31,6 +39,7 @@ describe('GlobalErrorHandler', () => {
         const error = new Error('Loading chunk 123 failed');
         handler.handleError(error);
         expect(windowMock.windowRef.location.reload).toHaveBeenCalled();
+        expect(windowMock.windowRef.sessionStorage.setItem).toHaveBeenCalledWith('app.chunk-load-reload-attempted', '1');
         expect(loggerMock.error).toHaveBeenCalledWith(error);
     });
 
@@ -39,7 +48,19 @@ describe('GlobalErrorHandler', () => {
         const error = { toString: () => 'Loading chunk 999 failed' };
         handler.handleError(error);
         expect(windowMock.windowRef.location.reload).toHaveBeenCalled();
+        expect(windowMock.windowRef.sessionStorage.setItem).toHaveBeenCalledWith('app.chunk-load-reload-attempted', '1');
         expect(loggerMock.error).toHaveBeenCalledWith(error);
+    });
+
+    it('should NOT reload more than once for repeated chunk load errors in the same session', () => {
+        const error = new Error('Loading chunk 123 failed');
+
+        handler.handleError(error);
+        handler.handleError(error);
+
+        expect(windowMock.windowRef.location.reload).toHaveBeenCalledTimes(1);
+        expect(windowMock.windowRef.sessionStorage.setItem).toHaveBeenCalledTimes(1);
+        expect(loggerMock.error).toHaveBeenCalledTimes(2);
     });
 
     it('should NOT reload for other errors', () => {
