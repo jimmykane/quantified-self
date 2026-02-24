@@ -9,6 +9,7 @@ import {
 
 const MISSING_PROCESSING_VERSION = '0.0.0';
 const MISSING_PROCESSING_VERSION_CODE = 0;
+const PROGRESS_LOG_EVERY = 25;
 
 interface BackfillOptions {
     execute: boolean;
@@ -26,6 +27,13 @@ export interface BackfillSummary {
     unchanged: number;
     skippedInvalid: number;
     failed: number;
+}
+
+function shouldLogProgress(scanned: number, total: number): boolean {
+    if (total <= 0) {
+        return false;
+    }
+    return scanned === 1 || scanned === total || scanned % PROGRESS_LOG_EVERY === 0;
 }
 
 function readArgValue(argv: string[], key: string): string | undefined {
@@ -135,6 +143,12 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
     }
 
     const eventDocs = await getEventsToInspect(options);
+    const totalEvents = eventDocs.length;
+    logger.info('[sports-lib-processing-backfill] Starting backfill run.', {
+        dryRun: !options.execute,
+        totalEvents,
+        progressLogEvery: PROGRESS_LOG_EVERY,
+    });
     for (const eventDoc of eventDocs) {
         summary.scanned++;
         const parsed = parseUidAndEventIdFromEventPath(eventDoc.ref.path);
@@ -203,6 +217,19 @@ export async function runBackfillSportsLibProcessingCode(argv: string[]): Promis
                 eventPath: eventDoc.ref.path,
                 error: `${error}`,
             });
+        } finally {
+            if (shouldLogProgress(summary.scanned, totalEvents)) {
+                logger.info('[sports-lib-processing-backfill] Progress', {
+                    scanned: summary.scanned,
+                    total: totalEvents,
+                    percentComplete: Math.round((summary.scanned / totalEvents) * 100),
+                    created: summary.created,
+                    patched: summary.patched,
+                    unchanged: summary.unchanged,
+                    skippedInvalid: summary.skippedInvalid,
+                    failed: summary.failed,
+                });
+            }
         }
     }
 
