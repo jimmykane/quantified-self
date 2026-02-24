@@ -66,6 +66,20 @@ describe('AdminQueueStatsComponent', () => {
         });
     });
 
+    describe('formatTimestamp', () => {
+        it('should format firestore-like objects with _seconds', () => {
+            const result = component.formatTimestamp({ _seconds: 1700000000, _nanoseconds: 0 });
+            expect(result).not.toBe('[object Object]');
+            expect(result).not.toBe('N/A');
+        });
+
+        it('should format timestamp objects with toMillis', () => {
+            const result = component.formatTimestamp({ toMillis: () => 1700000000000 });
+            expect(result).not.toBe('[object Object]');
+            expect(result).not.toBe('N/A');
+        });
+    });
+
     describe('getServiceLogo', () => {
         it('should return correct path for providers', () => {
             expect(component.getServiceLogo('Garmin')).toBe('assets/logos/garmin.svg');

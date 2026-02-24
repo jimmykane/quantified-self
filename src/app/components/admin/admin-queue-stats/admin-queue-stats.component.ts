@@ -265,13 +265,23 @@ export class AdminQueueStatsComponent implements OnInit, OnChanges, OnDestroy, A
             const tsDate = (value as { toDate: () => Date }).toDate();
             return tsDate.toLocaleString();
         }
+        if (typeof (value as { toMillis?: unknown }).toMillis === 'function') {
+            const tsMillis = (value as { toMillis: () => number }).toMillis();
+            if (!Number.isNaN(tsMillis)) {
+                return new Date(tsMillis).toLocaleString();
+            }
+        }
         if (value instanceof Date) {
             return value.toLocaleString();
         }
-        if (typeof value === 'object' && value !== null && 'seconds' in (value as Record<string, unknown>)) {
-            const tsSeconds = Number((value as { seconds: unknown }).seconds);
-            if (!Number.isNaN(tsSeconds)) {
-                return new Date(tsSeconds * 1000).toLocaleString();
+        if (typeof value === 'object' && value !== null) {
+            const obj = value as Record<string, unknown>;
+            const rawSeconds = obj.seconds ?? obj._seconds;
+            if (rawSeconds !== undefined && rawSeconds !== null) {
+                const tsSeconds = Number(rawSeconds);
+                if (!Number.isNaN(tsSeconds)) {
+                    return new Date(tsSeconds * 1000).toLocaleString();
+                }
             }
         }
         const date = new Date(`${value}`);
