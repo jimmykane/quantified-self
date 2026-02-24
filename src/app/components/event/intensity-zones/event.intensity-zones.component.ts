@@ -15,10 +15,10 @@ import { Subscription } from 'rxjs';
 import type { EChartsType } from 'echarts/core';
 
 import {
-  ActivityInterface,
   ChartThemes,
   DataDuration,
   DataHeartRate,
+  StatsClassInterface,
 } from '@sports-alliance/sports-lib';
 import { AppBreakpoints } from '../../../constants/breakpoints';
 import { AppDataColors } from '../../../services/color/app.data.colors';
@@ -41,9 +41,11 @@ type ChartOption = Parameters<EChartsType['setOption']>[0];
   standalone: false
 })
 export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, OnDestroy {
-  @Input() activities: ActivityInterface[] = [];
+  @Input() activities: StatsClassInterface[] = [];
   @Input() chartTheme: ChartThemes = ChartThemes.Material;
   @Input() useAnimations = false;
+  @Input() orientation: 'horizontal' | 'vertical' = 'horizontal';
+  @Input() showHeader = true;
 
   @ViewChild('chartDiv', { static: true }) chartDiv!: ElementRef<HTMLDivElement>;
 
@@ -80,7 +82,7 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     if (!this.chart) {
       return;
     }
-    if (changes.activities || changes.chartTheme || changes.useAnimations) {
+    if (changes.activities || changes.chartTheme || changes.useAnimations || changes.orientation) {
       this.refreshChart();
     }
   }
@@ -132,7 +134,8 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       return;
     }
 
-    const data = convertIntensityZonesStatsToEchartsData(this.activities, this.isMobile);
+    const statsClassInstances = Array.isArray(this.activities) ? this.activities : [];
+    const data = convertIntensityZonesStatsToEchartsData(statsClassInstances, this.isMobile);
     const option = this.buildChartOption(data);
     this.eChartsLoader.setOption(this.chart, option, { notMerge: true, lazyUpdate: true });
     this.scheduleResize();
@@ -154,6 +157,11 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
     );
     const series = data.series.map((seriesEntry, seriesIndex) => {
       const displayName = this.getLegendLabel(seriesEntry.type);
+      const borderRadius = this.orientation === 'vertical' ? [8, 8, 0, 0] : [0, 8, 8, 0];
+      const position = this.orientation === 'vertical' ? 'top' : 'right';
+      const align = this.orientation === 'vertical' ? 'center' : 'left';
+      const distance = this.orientation === 'vertical' ? 10 : 4;
+
       return {
         type: 'bar',
         name: displayName,
@@ -162,13 +170,13 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
         clip: false,
         itemStyle: {
           color: this.getSeriesColor(seriesEntry.type),
-          borderRadius: [0, 8, 8, 0]
+          borderRadius: borderRadius
         },
         label: {
           show: true,
-          position: 'right',
-          distance: 4,
-          align: 'left',
+          position: position,
+          distance: distance,
+          align: align,
           color: textColor,
           padding: [0, 2, 0, 2],
           formatter: (params: { dataIndex: number }) => {
@@ -192,6 +200,52 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       };
     });
 
+    const isHorizontal = this.orientation === 'horizontal';
+
+    const valueAxisConfig = {
+      type: 'value',
+      axisLabel: { show: false },
+      axisTick: { show: false },
+      splitLine: { show: false },
+      axisLine: { show: false }
+    };
+
+    const categoryAxisConfig = {
+      type: 'category',
+      data: data.zones,
+      boundaryGap: true,
+      axisTick: { show: false, alignWithLabel: false },
+      axisLine: { show: false },
+      splitArea: {
+        show: true,
+        interval: 0,
+        areaStyle: {
+          color: zoneBackgroundColors
+        }
+      },
+      splitLine: {
+        show: true,
+        interval: 0,
+        lineStyle: {
+          color: gridLineColor
+        }
+      },
+      axisLabel: {
+        interval: 0,
+        margin: isHorizontal ? 8 : 2,
+        color: textColor,
+        fontFamily: "'Barlow Condensed', sans-serif",
+        formatter: (value: string) => {
+          const zoneIndex = data.zones.indexOf(value);
+          if (zoneIndex === -1) {
+            return value;
+          }
+          return `{zone_${zoneIndex}|${value}}`;
+        },
+        rich: zoneAxisRichStyles
+      }
+    };
+
     const option: ChartOption = {
       animation: this.useAnimations === true,
       textStyle: {
@@ -200,9 +254,9 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
       },
       grid: {
         left: 0,
-        right: rightInset,
+        right: isHorizontal ? rightInset : 0,
         top: 0,
-        bottom: 0,
+        bottom: isHorizontal ? 0 : '0.25em',
         containLabel: true
       },
       legend: {
@@ -243,43 +297,8 @@ export class EventIntensityZonesComponent implements AfterViewInit, OnChanges, O
           return `${params.marker}<b>${zone}</b><br/>${currentSeries.type}: <b>${percent}%</b><br/>Time: <b>${duration}</b>`;
         }
       },
-      xAxis: {
-        type: 'value',
-        axisLabel: { show: false },
-        axisTick: { show: false },
-        splitLine: { show: false },
-        axisLine: { show: false }
-      },
-      yAxis: {
-        type: 'category',
-        data: data.zones,
-        axisTick: { show: false },
-        axisLine: { show: false },
-        splitArea: {
-          show: true,
-          areaStyle: {
-            color: zoneBackgroundColors
-          }
-        },
-        splitLine: {
-          show: true,
-          lineStyle: {
-            color: gridLineColor
-          }
-        },
-        axisLabel: {
-          color: textColor,
-          fontFamily: "'Barlow Condensed', sans-serif",
-          formatter: (value: string) => {
-            const zoneIndex = data.zones.indexOf(value);
-            if (zoneIndex === -1) {
-              return value;
-            }
-            return `{zone_${zoneIndex}|${value}}`;
-          },
-          rich: zoneAxisRichStyles
-        }
-      },
+      xAxis: isHorizontal ? valueAxisConfig : categoryAxisConfig,
+      yAxis: isHorizontal ? categoryAxisConfig : valueAxisConfig,
       series
     };
 

@@ -178,6 +178,15 @@ describe('EventIntensityZonesComponent', () => {
     expect(fixture.nativeElement.querySelector('.intensity-zones-helper-text')).toBeNull();
   });
 
+  it('should sanitize nullish activities input before conversion', async () => {
+    component.activities = undefined as unknown as any;
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(mockedConvert).toHaveBeenCalledWith([], false);
+  });
+
   it('should ignore ngOnChanges before chart initialization', () => {
     component.ngOnChanges({
       activities: new SimpleChange([], [{}], false),
@@ -238,6 +247,21 @@ describe('EventIntensityZonesComponent', () => {
       'rgba(22, 180, 234, 0.18)',
       'rgba(22, 180, 234, 0.18)',
     ]);
+  });
+
+  it('should enforce full zone split rendering in vertical orientation', async () => {
+    component.orientation = 'vertical';
+    component.showHeader = false;
+
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const option = getLastOption();
+    expect(option.xAxis.type).toBe('category');
+    expect(option.yAxis.type).toBe('value');
+    expect(option.xAxis.splitArea.interval).toBe(0);
+    expect(option.xAxis.splitLine.interval).toBe(0);
+    expect(option.xAxis.axisLabel.interval).toBe(0);
   });
 
   it('should apply dark theme styles from body class even with light chartTheme', async () => {

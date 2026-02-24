@@ -123,7 +123,7 @@ describe('convertIntensityZonesStatsToEchartsData', () => {
         vi.clearAllMocks();
     });
 
-    it('should keep deterministic zone ordering and include only active zones', () => {
+    it('should keep deterministic zone ordering and include full configured zone axis', () => {
         vi.mocked(ActivityUtilities.getIntensityZonesStatsAggregated).mockReturnValue([
             { getType: () => 'Zone1HR', getValue: () => 10 },
             { getType: () => 'Zone2HR', getValue: () => 0 },
@@ -135,10 +135,10 @@ describe('convertIntensityZonesStatsToEchartsData', () => {
 
         const result = convertIntensityZonesStatsToEchartsData([]);
 
-        expect(result.zones).toEqual(['Zone 1', 'Zone 2', 'Zone 3']);
+        expect(result.zones).toEqual(['Zone 1', 'Zone 2', 'Zone 3', 'Zone 4', 'Zone 5', 'Zone 6', 'Zone 7']);
         expect(result.series.map(series => series.type)).toEqual(['Heart Rate', 'Power']);
-        expect(result.series[0].values).toEqual([10, 0, 20]);
-        expect(result.series[1].values).toEqual([0, 5, 15]);
+        expect(result.series[0].values).toEqual([10, 0, 20, 0, 0, 0, 0]);
+        expect(result.series[1].values).toEqual([0, 5, 15, 0, 0, 0, 0]);
     });
 
     it('should support short labels for mobile mode', () => {
@@ -149,7 +149,7 @@ describe('convertIntensityZonesStatsToEchartsData', () => {
 
         const result = convertIntensityZonesStatsToEchartsData([], true);
 
-        expect(result.zones).toEqual(['Z1', 'Z2']);
+        expect(result.zones).toEqual(['Z1', 'Z2', 'Z3', 'Z4', 'Z5', 'Z6', 'Z7']);
     });
 
     it('should compute percentages per active type exactly', () => {
@@ -162,8 +162,8 @@ describe('convertIntensityZonesStatsToEchartsData', () => {
 
         const result = convertIntensityZonesStatsToEchartsData([]);
 
-        expect(result.series[0].percentages).toEqual([33.33333333333333, 66.66666666666666]);
-        expect(result.series[1].percentages).toEqual([25, 75]);
+        expect(result.series[0].percentages).toEqual([33.33333333333333, 66.66666666666666, 0, 0, 0, 0, 0]);
+        expect(result.series[1].percentages).toEqual([25, 75, 0, 0, 0, 0, 0]);
     });
 
     it('should exclude inactive data types', () => {
@@ -177,6 +177,14 @@ describe('convertIntensityZonesStatsToEchartsData', () => {
         const result = convertIntensityZonesStatsToEchartsData([]);
 
         expect(result.series.map(series => series.type)).toEqual(['Heart Rate']);
+    });
+
+    it('should handle nullish input safely', () => {
+        vi.mocked(ActivityUtilities.getIntensityZonesStatsAggregated).mockReturnValue([] as any);
+
+        const result = convertIntensityZonesStatsToEchartsData(undefined);
+
+        expect(result).toEqual({ zones: [], series: [] });
     });
 });
 
@@ -223,7 +231,7 @@ describe('shouldRenderIntensityZonesChart', () => {
         expect(shouldRenderIntensityZonesChart([])).toBe(false);
     });
 
-    it('should return false when all active data is in one zone only', () => {
+    it('should return true when all active data is in one zone only', () => {
         vi.mocked(ActivityUtilities.getIntensityZonesStatsAggregated).mockReturnValue([
             { getType: () => 'Zone1HR', getValue: () => 10 },
             { getType: () => 'Zone2HR', getValue: () => 0 },
@@ -231,7 +239,16 @@ describe('shouldRenderIntensityZonesChart', () => {
             { getType: () => 'Zone2Power', getValue: () => 0 },
         ] as any);
 
-        expect(shouldRenderIntensityZonesChart([])).toBe(false);
+        expect(shouldRenderIntensityZonesChart([])).toBe(true);
+    });
+
+    it('should return true when only a high zone index is active', () => {
+        vi.mocked(ActivityUtilities.getIntensityZonesStatsAggregated).mockReturnValue([
+            { getType: () => 'Zone7HR', getValue: () => 10 },
+            { getType: () => 'Zone7Power', getValue: () => 20 },
+        ] as any);
+
+        expect(shouldRenderIntensityZonesChart([])).toBe(true);
     });
 
     it('should return true when data spans multiple zones', () => {
@@ -243,5 +260,11 @@ describe('shouldRenderIntensityZonesChart', () => {
         ] as any);
 
         expect(shouldRenderIntensityZonesChart([])).toBe(true);
+    });
+
+    it('should return false for nullish input', () => {
+        vi.mocked(ActivityUtilities.getIntensityZonesStatsAggregated).mockReturnValue([] as any);
+
+        expect(shouldRenderIntensityZonesChart(undefined)).toBe(false);
     });
 });

@@ -1,4 +1,5 @@
 import { MapStyleState, MapStyleServiceInterface } from './map-style.types';
+import { isStyleReady } from './mapbox-style-ready.utils';
 
 export interface LoggerInterface {
     info(message: string, meta?: any): void;
@@ -77,6 +78,17 @@ export class MapboxStyleSynchronizer {
      */
     private clearTerrainForStyleSwap() {
         if (!this.map || typeof this.map.setTerrain !== 'function') {
+            return;
+        }
+
+        // Terrain operations are valid only when the style is fully ready.
+        if (!isStyleReady(this.map)) {
+            this.logger.info('[MapboxStyleSynchronizer] Skipping terrain clear; style not ready.');
+            return;
+        }
+
+        // Avoid unnecessary calls when terrain is not enabled.
+        if (typeof this.map.getTerrain === 'function' && !this.map.getTerrain()) {
             return;
         }
 

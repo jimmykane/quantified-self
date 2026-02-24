@@ -13,6 +13,7 @@ describe('MapboxStyleSynchronizer', () => {
 
         mockMap = {
             isStyleLoaded: vi.fn().mockReturnValue(true),
+            getTerrain: vi.fn().mockReturnValue({ source: 'mapbox-dem' }),
             setStyle: vi.fn(),
             setTerrain: vi.fn(),
             on: vi.fn(),
@@ -168,6 +169,27 @@ describe('MapboxStyleSynchronizer', () => {
             '[MapboxStyleSynchronizer] Failed to clear terrain before style swap.',
             expect.anything()
         );
+        expect(mockMap.setStyle).toHaveBeenCalledWith(state.styleUrl, { diff: false });
+    });
+
+    it('should skip terrain clear when style is not ready', () => {
+        const state: MapStyleState = { styleUrl: 'url-style-not-ready' };
+        mockMap.isStyleLoaded.mockReturnValue(false);
+
+        synchronizer.update(state);
+
+        expect(mockMap.setTerrain).not.toHaveBeenCalled();
+        expect(mockLogger.info).toHaveBeenCalledWith('[MapboxStyleSynchronizer] Skipping terrain clear; style not ready.');
+        expect(mockMap.setStyle).toHaveBeenCalledWith(state.styleUrl, { diff: false });
+    });
+
+    it('should skip terrain clear when terrain is not active', () => {
+        const state: MapStyleState = { styleUrl: 'url-no-terrain' };
+        mockMap.getTerrain.mockReturnValue(null);
+
+        synchronizer.update(state);
+
+        expect(mockMap.setTerrain).not.toHaveBeenCalled();
         expect(mockMap.setStyle).toHaveBeenCalledWith(state.styleUrl, { diff: false });
     });
 });

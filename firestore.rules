@@ -87,12 +87,21 @@ service cloud.firestore {
           
           match /activities/{activityID} {
             // New Flat Activities Collection
+            function isOwnEventRef(data) {
+              return data.keys().hasAll(['eventID']) && (
+                data.eventID is string &&
+                exists(/databases/$(database)/documents/users/$(userID)/events/$(data.eventID))
+              );
+            }
+
             allow read: if resource.data.privacy == 'public';
-            allow read, create: if request.auth.uid == userID;
+            allow read: if request.auth.uid == userID;
+            allow create: if request.auth.uid == userID
+              && isOwnEventRef(request.resource.data);
             allow delete: if false;
-            allow update: if request.auth.uid == userID 
-              && (!('eventID' in request.resource.data.diff(resource.data).affectedKeys()) 
-                  || request.resource.data.eventID == resource.data.eventID);
+            allow update: if request.auth.uid == userID
+              && !('eventID' in request.resource.data.diff(resource.data).affectedKeys())
+              && isOwnEventRef(request.resource.data);
           }
 
         match /meta/{document=**} {

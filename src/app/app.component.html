@@ -90,7 +90,7 @@
     }
 
     <mat-sidenav-content>
-      <div class="router-outlet-container" [@routeAnimations]="prepareRoute(outlet)">
+      <div class="router-outlet-container" [@routeAnimations]="routeAnimationState()">
         @if (maintenanceLoading()) {
         <div class="loading-overlay">
           <div class="logo-spinner">

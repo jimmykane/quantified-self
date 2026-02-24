@@ -3,9 +3,12 @@ app-pie-chart {
   height: 100%;
 }
 
-app-intensity-zones-chart {
+app-event-intensity-zones {
+  display: block;
   width: 100%;
   height: 100%;
+  --performance-chart-height: 100%;
+  --performance-chart-min-height: 100%;
 }
 
 app-xy-chart {

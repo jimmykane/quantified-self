@@ -3,7 +3,7 @@ import { isPlatformBrowser } from '@angular/common';
 import { AppAuthService } from '../../authentication/app.auth.service';
 import { Router } from '@angular/router';
 import { AppEventService } from '../../services/app.event.service';
-import { take, debounceTime, filter } from 'rxjs/operators';
+import { take, filter } from 'rxjs/operators';
 import { AppUserInterface } from '../../models/app-user.interface';
 import { AppEventColorService } from '../../services/color/app.event.color.service';
 import { Subject, Subscription, firstValueFrom } from 'rxjs';
@@ -41,6 +41,10 @@ import { MyTracksTripDetectionService } from '../../services/my-tracks-trip-dete
 import { TripDetectionInput } from '../../services/my-tracks-trip-detection.service';
 import { DetectedTrip } from '../../services/my-tracks-trip-detection.service';
 import { TripLocationLabelService } from '../../services/trip-location-label.service';
+import {
+  PolylineSimplificationOptions,
+  PolylineSimplificationService
+} from '../../services/polyline-simplification.service';
 import { resolvePrimaryUnitAwareDisplayStat } from '../../helpers/summary-display.helper';
 import {
   resolvePreferredSpeedDerivedAverageTypeForActivity,
@@ -88,6 +92,13 @@ export class TracksComponent implements OnInit, OnDestroy {
   private static readonly START_POINT_POPUP_OFFSET_PX = 10;
   private static readonly START_POINT_POPUP_WIDTH_ESTIMATE_PX = 340;
   private static readonly START_POINT_POPUP_HEIGHT_ESTIMATE_PX = 240;
+  private static readonly MY_TRACKS_SIMPLIFICATION_MIN_KEEP_RATIO = 0.08;
+  private static readonly MY_TRACKS_SIMPLIFICATION_MAX_POINTS_PER_TRACK = 900;
+  private static readonly MY_TRACKS_SIMPLIFICATION_OPTIONS: Readonly<PolylineSimplificationOptions> = Object.freeze({
+    keepRatio: 0.25,
+    minInputPoints: 120,
+    minPointsToKeep: 60,
+  });
 
   @ViewChild('mapDiv', { static: true }) mapDiv!: ElementRef;
   @ViewChild('trackStartPopupAnchor', { static: false }) trackStartPopupAnchor?: ElementRef<HTMLDivElement>;
@@ -122,6 +133,9 @@ export class TracksComponent implements OnInit, OnDestroy {
   private platformId!: object;
   private startPointPopupRepositionHandler: (() => void) | null = null;
   private pendingStartPointPopupCorrectionRaf: number | null = null;
+  private panPerformanceModeStartHandler: (() => void) | null = null;
+  private panPerformanceModeEndHandler: (() => void) | null = null;
+  private panPerformanceModeResetTimer: ReturnType<typeof setTimeout> | null = null;
 
   private promiseTime = 0;
   private analyticsService = inject(AppAnalyticsService);
@@ -163,6 +177,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     private jumpHeatmapWeightingService: JumpHeatmapWeightingService,
     private mapboxStartPointLayerService: MapboxStartPointLayerService,
     private mapboxAutoResizeService: MapboxAutoResizeService,
+    private polylineSimplificationService: PolylineSimplificationService,
     private popupContentService: MapEventPopupContentService,
   ) {
     this.tracksMapManager = new TracksMapManager(
@@ -287,6 +302,7 @@ export class TracksComponent implements OnInit, OnDestroy {
           });
         });
         this.bindStartPointPopupMapListeners(mapInstance);
+        this.bindPanPerformanceModeListeners(mapInstance);
         this.mapboxAutoResizeService.bind(mapInstance, {
           container: this.mapDiv?.nativeElement,
           onResize: () => {
@@ -367,6 +383,7 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.unsubscribeFromAll()
     this.bottomSheet.dismiss();
     this.tracksMapManager.setStartMarkerSelectionHandler(null);
+    this.unbindPanPerformanceModeListeners();
     this.unbindStartPointPopupMapListeners();
     if (this.pendingStartPointPopupCorrectionRaf !== null && typeof cancelAnimationFrame === 'function') {
       cancelAnimationFrame(this.pendingStartPointPopupCorrectionRaf);
@@ -418,23 +435,10 @@ export class TracksComponent implements OnInit, OnDestroy {
     where: { fieldPath: string | any, opStr: WhereFilterOp, value: any }[],
     promiseTime: number
   ): Promise<any[]> {
-    const eventServiceWithOnce = this.eventService as any;
-    if (typeof eventServiceWithOnce.getEventsOnceBy === 'function') {
-      const events = await firstValueFrom(
-        this.eventService.getEventsOnceBy(user, where, 'startDate', true, 0, { preferCache: false })
-      );
-      this.logger.log(`[TracksComponent] eventService.getEventsOnceBy returned ${events?.length || 0} events for promiseTime: ${promiseTime}`);
-      return events || [];
-    }
-
-    this.logger.warn('[TracksComponent] getEventsOnceBy is unavailable. Falling back to getEventsBy with take(1).');
     const events = await firstValueFrom(
-      this.eventService.getEventsBy(user, where, 'startDate', true, 0).pipe(
-        debounceTime(300),
-        take(1),
-      )
+      this.eventService.getEventsOnceBy(user, where, 'startDate', true, 0, { preferCache: false })
     );
-    this.logger.log(`[TracksComponent] eventService.getEventsBy fallback emitted ${events?.length || 0} events for promiseTime: ${promiseTime}`);
+    this.logger.log(`[TracksComponent] eventService.getEventsOnceBy returned ${events?.length || 0} events for promiseTime: ${promiseTime}`);
     return events || [];
   }
 
@@ -443,6 +447,28 @@ export class TracksComponent implements OnInit, OnDestroy {
       this.logger.warn('[TracksComponent] Skipping track load because user is undefined.');
       return;
     }
+    const loadStartedAt = performance.now();
+    const roundMs = (value: number): number => Number(value.toFixed(2));
+    let eventsFetchDurationMs = 0;
+    let activitiesFetchDurationMs = 0;
+    let streamsHydrationDurationMs = 0;
+    let coordinateExtractionDurationMs = 0;
+    let simplificationDurationMs = 0;
+    let mapCommitDurationMs = 0;
+    let tripDetectionDurationMs = 0;
+    const perEventPerformance: Array<{
+      eventId: string;
+      totalMs: number;
+      activitiesFetchMs: number;
+      hydrationMs: number;
+      coordinateExtractionMs: number;
+      simplificationMs: number;
+      activityCount: number;
+      visibleTrackCount: number;
+      inputPoints: number;
+      outputPoints: number;
+    }> = [];
+
     this.logger.log('[TracksComponent] Starting track load for trip detection.', {
       dateRange: DateRanges[dateRange],
       activityTypes: activityTypes || [],
@@ -480,7 +506,9 @@ export class TracksComponent implements OnInit, OnDestroy {
     this.logger.log(`[TracksComponent] Initializing fetch from event service for dateRange: ${DateRanges[dateRange]}, activityTypes: ${activityTypes?.[0] || 'all'}, promiseTime: ${promiseTime}`);
 
     try {
+      const eventsFetchStartedAt = performance.now();
       let events = await this.getEventsForTracksLoad(user, where, promiseTime);
+      eventsFetchDurationMs = performance.now() - eventsFetchStartedAt;
 
       if (!this.isCurrentLoad(promiseTime)) {
         return;
@@ -494,6 +522,21 @@ export class TracksComponent implements OnInit, OnDestroy {
         this.tracksMapManager.clearAllTracks();
         this.hasDetectedJumps.set(false);
         this.hasEvaluatedTripDetection.set(true);
+        const totalLoadDurationMs = performance.now() - loadStartedAt;
+        this.logger.info('[perf] my_tracks_load_pipeline', {
+          promiseTime,
+          dateRange: DateRanges[dateRange],
+          eventCount: 0,
+          chunkCount: 0,
+          totalLoadDurationMs: roundMs(totalLoadDurationMs),
+          eventsFetchDurationMs: roundMs(eventsFetchDurationMs),
+          activitiesFetchDurationMs: 0,
+          streamsHydrationDurationMs: 0,
+          coordinateExtractionDurationMs: 0,
+          simplificationDurationMs: 0,
+          mapCommitDurationMs: 0,
+          tripDetectionDurationMs: 0,
+        });
         return;
       }
 
@@ -518,6 +561,10 @@ export class TracksComponent implements OnInit, OnDestroy {
       const stagedEventsById = new Map<string, any>();
       let jumpsWithCoordinates = 0;
       let jumpsWithWeightMetrics = 0;
+      let tracksProcessed = 0;
+      let tracksSimplified = 0;
+      let inputPointsTotal = 0;
+      let outputPointsTotal = 0;
       const detectionCandidatesByEvent = new Map<string, TripDetectionInput>();
 
       for (const eventsChunk of chunkedEvents) {
@@ -530,9 +577,25 @@ export class TracksComponent implements OnInit, OnDestroy {
             return;
           }
 
+          const eventProcessingStartedAt = performance.now();
+          const sourceEventId = event?.getID?.() || 'unknown-event';
+          let eventActivitiesFetchDurationMs = 0;
+          let eventHydrationDurationMs = 0;
+          let eventCoordinateExtractionDurationMs = 0;
+          let eventSimplificationDurationMs = 0;
+          let eventInputPoints = 0;
+          let eventOutputPoints = 0;
+          let eventActivityCount = 0;
+          let eventVisibleTrackCount = 0;
+
           this.logger.log(`[TracksComponent] Fetching activities for event: ${event.getID()}, promiseTime: ${promiseTime}`);
-          event.addActivities(await firstValueFrom(this.eventService.getActivities(user, event.getID()).pipe(take(1))));
+          const eventActivitiesFetchStartedAt = performance.now();
+          event.addActivities(await firstValueFrom(this.eventService.getActivitiesOnceByEvent(user, event.getID())));
+          eventActivitiesFetchDurationMs = performance.now() - eventActivitiesFetchStartedAt;
+          activitiesFetchDurationMs += eventActivitiesFetchDurationMs;
+
           let fullEvent = event;
+          const eventHydrationStartedAt = performance.now();
           try {
             // Hydrate lat/long streams from original files without replacing activity objects.
             const hydratedEvent = await firstValueFrom(this.eventService.attachStreamsToEventWithActivities(
@@ -553,19 +616,23 @@ export class TracksComponent implements OnInit, OnDestroy {
               eventId: event.getID?.(),
               error
             });
+          } finally {
+            eventHydrationDurationMs = performance.now() - eventHydrationStartedAt;
+            streamsHydrationDurationMs += eventHydrationDurationMs;
           }
           this.logger.log(`[TracksComponent] Activities and streams ready for event: ${event.getID()}, promiseTime: ${promiseTime}`);
           if (!this.isCurrentLoad(promiseTime)) {
             return;
           }
 
-          const eventId = fullEvent?.getID?.() || event.getID();
+          const eventId = fullEvent?.getID?.() || sourceEventId;
           if (eventId) {
             stagedEventsById.set(eventId, fullEvent || event);
           }
           let hasVisibleTrackForEvent = false;
           const eventCoordinates: number[][] = [];
           const activities = typeof fullEvent?.getActivities === 'function' ? fullEvent.getActivities() : [];
+          eventActivityCount = activities.length;
           activities
             .filter((activity: any) => activity.hasPositionData())
             .filter((activity: any) => !activityTypes || activityTypes.length === 0 || activityTypes.includes(activity.type))
@@ -574,6 +641,7 @@ export class TracksComponent implements OnInit, OnDestroy {
               jumpsWithCoordinates += jumpStats.jumpsWithCoordinates;
               jumpsWithWeightMetrics += jumpStats.jumpsWithWeightMetrics;
 
+              const coordinateExtractionStartedAt = performance.now();
               const coordinates = activity.getPositionData()
                 .filter((position: any) => position)
                 .map((position: any) => {
@@ -588,21 +656,43 @@ export class TracksComponent implements OnInit, OnDestroy {
                   && Math.abs(coordinate[0]) <= 180
                   && Math.abs(coordinate[1]) <= 90
                 );
+              const coordinateExtractionMs = performance.now() - coordinateExtractionStartedAt;
+              coordinateExtractionDurationMs += coordinateExtractionMs;
+              eventCoordinateExtractionDurationMs += coordinateExtractionMs;
 
               if (coordinates.length > 1) {
+                const simplificationStartedAt = performance.now();
+                const simplificationResult = this.polylineSimplificationService.simplifyVisvalingamWhyatt(
+                  coordinates,
+                  this.resolveMyTracksSimplificationOptions(coordinates.length, events.length)
+                );
+                const simplificationMs = performance.now() - simplificationStartedAt;
+                simplificationDurationMs += simplificationMs;
+                eventSimplificationDurationMs += simplificationMs;
+                const simplifiedCoordinates = simplificationResult.coordinates;
+                tracksProcessed++;
+                inputPointsTotal += simplificationResult.inputPointCount;
+                outputPointsTotal += simplificationResult.outputPointCount;
+                eventInputPoints += simplificationResult.inputPointCount;
+                eventOutputPoints += simplificationResult.outputPointCount;
+                if (simplificationResult.simplified) {
+                  tracksSimplified++;
+                }
+
                 const startPoint = this.buildTrackStartPoint(
                   activity,
                   eventId,
-                  coordinates[0],
+                  simplifiedCoordinates[0],
                   fullEvent?.startDate ?? event?.startDate
                 );
                 if (startPoint) {
                   trackStartPoints.push(startPoint);
                 }
-                preparedTracks.push({ activity, coordinates });
+                preparedTracks.push({ activity, coordinates: simplifiedCoordinates });
                 addedTrackCount++;
+                eventVisibleTrackCount++;
                 hasVisibleTrackForEvent = true;
-                coordinates.forEach((coordinate: number[]) => {
+                simplifiedCoordinates.forEach((coordinate: number[]) => {
                   allCoordinates.push(coordinate);
                   eventCoordinates.push(coordinate);
                 });
@@ -616,6 +706,20 @@ export class TracksComponent implements OnInit, OnDestroy {
               detectionCandidatesByEvent.set(detectionInput.eventId, detectionInput);
             }
           }
+
+          const eventTotalMs = performance.now() - eventProcessingStartedAt;
+          perEventPerformance.push({
+            eventId,
+            totalMs: eventTotalMs,
+            activitiesFetchMs: eventActivitiesFetchDurationMs,
+            hydrationMs: eventHydrationDurationMs,
+            coordinateExtractionMs: eventCoordinateExtractionDurationMs,
+            simplificationMs: eventSimplificationDurationMs,
+            activityCount: eventActivityCount,
+            visibleTrackCount: eventVisibleTrackCount,
+            inputPoints: eventInputPoints,
+            outputPoints: eventOutputPoints,
+          });
 
           count++;
           this.updateTotalProgress(Math.ceil((count / events.length) * 100));
@@ -631,12 +735,13 @@ export class TracksComponent implements OnInit, OnDestroy {
         return;
       }
 
+      const mapCommitStartedAt = performance.now();
       this.trackCoordinatesByEventId = stagedTrackCoordinatesByEventId;
       this.eventsById = stagedEventsById;
 
       this.tracksMapManager.clearAllTracks();
       if (addedTrackCount > 0) {
-        preparedTracks.forEach((track) => this.tracksMapManager.addTrackFromActivity(track.activity, track.coordinates));
+        this.tracksMapManager.setTracksFromPrepared(preparedTracks);
         if (trackStartPoints.length > 0) {
           this.tracksMapManager.setActivityStartPoints(trackStartPoints);
           await this.waitForStartPointLayerReady();
@@ -656,6 +761,18 @@ export class TracksComponent implements OnInit, OnDestroy {
         this.hasDetectedJumps.set(false);
         this.tracksMapManager.clearJumpHeatmap();
       }
+      mapCommitDurationMs = performance.now() - mapCommitStartedAt;
+      const reductionPercent = inputPointsTotal > 0
+        ? Math.round((1 - (outputPointsTotal / inputPointsTotal)) * 1000) / 10
+        : 0;
+      this.logger.log('[TracksComponent] Track polyline simplification summary.', {
+        tracksProcessed,
+        tracksSimplified,
+        inputPointsTotal,
+        outputPointsTotal,
+        reductionPercent,
+        promiseTime
+      });
       this.logger.log('[TracksComponent] Jump heatmap collection summary.', {
         jumpsWithCoordinates,
         jumpsWithWeightMetrics,
@@ -666,7 +783,59 @@ export class TracksComponent implements OnInit, OnDestroy {
         candidateCount: detectionCandidatesByEvent.size,
         promiseTime
       });
+      const tripDetectionStartedAt = performance.now();
       await this.updateDetectedTripsForCurrentLoad(Array.from(detectionCandidatesByEvent.values()), promiseTime);
+      tripDetectionDurationMs = performance.now() - tripDetectionStartedAt;
+
+      const totalLoadDurationMs = performance.now() - loadStartedAt;
+      const topSlowEvents = perEventPerformance
+        .sort((a, b) => b.totalMs - a.totalMs)
+        .slice(0, 5)
+        .map((eventPerf) => ({
+          eventId: eventPerf.eventId,
+          totalMs: roundMs(eventPerf.totalMs),
+          activitiesFetchMs: roundMs(eventPerf.activitiesFetchMs),
+          hydrationMs: roundMs(eventPerf.hydrationMs),
+          coordinateExtractionMs: roundMs(eventPerf.coordinateExtractionMs),
+          simplificationMs: roundMs(eventPerf.simplificationMs),
+          activityCount: eventPerf.activityCount,
+          visibleTrackCount: eventPerf.visibleTrackCount,
+          inputPoints: eventPerf.inputPoints,
+          outputPoints: eventPerf.outputPoints,
+        }));
+      const avgEventDurationMs = perEventPerformance.length > 0
+        ? perEventPerformance.reduce((sum, eventPerf) => sum + eventPerf.totalMs, 0) / perEventPerformance.length
+        : 0;
+      this.logger.info('[perf] my_tracks_load_pipeline', {
+        promiseTime,
+        dateRange: DateRanges[dateRange],
+        eventCount: events.length,
+        chunkCount: chunkedEvents.length,
+        tracksProcessed,
+        tracksSimplified,
+        inputPointsTotal,
+        outputPointsTotal,
+        reductionPercent,
+        totalLoadDurationMs: roundMs(totalLoadDurationMs),
+        avgEventDurationMs: roundMs(avgEventDurationMs),
+        eventsFetchDurationMs: roundMs(eventsFetchDurationMs),
+        activitiesFetchDurationMs: roundMs(activitiesFetchDurationMs),
+        streamsHydrationDurationMs: roundMs(streamsHydrationDurationMs),
+        coordinateExtractionDurationMs: roundMs(coordinateExtractionDurationMs),
+        simplificationDurationMs: roundMs(simplificationDurationMs),
+        mapCommitDurationMs: roundMs(mapCommitDurationMs),
+        tripDetectionDurationMs: roundMs(tripDetectionDurationMs),
+        topSlowEvents,
+      });
+      if (totalLoadDurationMs > 3000) {
+        this.logger.warn('[TracksComponent] Slow my-tracks load detected.', {
+          promiseTime,
+          totalLoadDurationMs: roundMs(totalLoadDurationMs),
+          eventCount: events.length,
+          tracksProcessed,
+          topSlowEvents,
+        });
+      }
     } catch (e) {
       this.logger.error('Error loading tracks', e);
     } finally {
@@ -674,6 +843,50 @@ export class TracksComponent implements OnInit, OnDestroy {
         this.clearProgressAndCloseBottomSheet();
       }
     }
+  }
+
+  private resolveMyTracksSimplificationOptions(inputPointCount: number, eventCount: number): PolylineSimplificationOptions {
+    const baseOptions = TracksComponent.MY_TRACKS_SIMPLIFICATION_OPTIONS;
+    const baseKeepRatio = baseOptions.keepRatio ?? 1;
+    const baseMinPointsToKeep = baseOptions.minPointsToKeep ?? 2;
+    if (!Number.isFinite(inputPointCount) || inputPointCount <= 0) {
+      return baseOptions;
+    }
+
+    let maxPointsPerTrack = TracksComponent.MY_TRACKS_SIMPLIFICATION_MAX_POINTS_PER_TRACK;
+    let effectiveKeepRatio = baseKeepRatio;
+    let effectiveMinPointsToKeep = baseMinPointsToKeep;
+
+    // Load-specific profile tightening for very large track sets.
+    if (eventCount >= 300) {
+      maxPointsPerTrack = 350;
+      effectiveKeepRatio = Math.min(effectiveKeepRatio, 0.18);
+      effectiveMinPointsToKeep = Math.min(effectiveMinPointsToKeep, 45);
+    } else if (eventCount >= 180) {
+      maxPointsPerTrack = 500;
+      effectiveKeepRatio = Math.min(effectiveKeepRatio, 0.22);
+      effectiveMinPointsToKeep = Math.min(effectiveMinPointsToKeep, 55);
+    } else if (eventCount >= 120) {
+      maxPointsPerTrack = 650;
+      effectiveKeepRatio = Math.min(effectiveKeepRatio, 0.24);
+      effectiveMinPointsToKeep = Math.min(effectiveMinPointsToKeep, 60);
+    }
+
+    const capRatio = maxPointsPerTrack / inputPointCount;
+    const adaptiveKeepRatio = Math.max(
+      TracksComponent.MY_TRACKS_SIMPLIFICATION_MIN_KEEP_RATIO,
+      Math.min(effectiveKeepRatio, capRatio),
+    );
+
+    if (adaptiveKeepRatio >= baseKeepRatio && effectiveMinPointsToKeep >= baseMinPointsToKeep) {
+      return baseOptions;
+    }
+
+    return {
+      ...baseOptions,
+      keepRatio: adaptiveKeepRatio,
+      minPointsToKeep: effectiveMinPointsToKeep,
+    };
   }
 
   private clearAllPolylines() {
@@ -1013,6 +1226,36 @@ export class TracksComponent implements OnInit, OnDestroy {
     });
   }
 
+  private bindPanPerformanceModeListeners(map: any): void {
+    this.unbindPanPerformanceModeListeners();
+    if (!map?.on) return;
+
+    this.panPerformanceModeStartHandler = () => {
+      if (this.panPerformanceModeResetTimer !== null) {
+        clearTimeout(this.panPerformanceModeResetTimer);
+        this.panPerformanceModeResetTimer = null;
+      }
+      this.tracksMapManager.setPanPerformanceMode(true);
+    };
+
+    this.panPerformanceModeEndHandler = () => {
+      if (this.panPerformanceModeResetTimer !== null) {
+        clearTimeout(this.panPerformanceModeResetTimer);
+      }
+      this.panPerformanceModeResetTimer = setTimeout(() => {
+        this.panPerformanceModeResetTimer = null;
+        this.tracksMapManager.setPanPerformanceMode(false);
+      }, 90);
+    };
+
+    ['movestart', 'zoomstart', 'rotatestart', 'pitchstart'].forEach((eventName) => {
+      map.on(eventName, this.panPerformanceModeStartHandler);
+    });
+    ['moveend', 'zoomend', 'rotateend', 'pitchend'].forEach((eventName) => {
+      map.on(eventName, this.panPerformanceModeEndHandler);
+    });
+  }
+
   private unbindStartPointPopupMapListeners(): void {
     if (!this.startPointPopupRepositionHandler) return;
     const map = this.tracksMapManager.getMap();
@@ -1022,6 +1265,29 @@ export class TracksComponent implements OnInit, OnDestroy {
       });
     }
     this.startPointPopupRepositionHandler = null;
+  }
+
+  private unbindPanPerformanceModeListeners(): void {
+    if (this.panPerformanceModeResetTimer !== null) {
+      clearTimeout(this.panPerformanceModeResetTimer);
+      this.panPerformanceModeResetTimer = null;
+    }
+    const map = this.tracksMapManager.getMap();
+    if (map?.off) {
+      if (this.panPerformanceModeStartHandler) {
+        ['movestart', 'zoomstart', 'rotatestart', 'pitchstart'].forEach((eventName) => {
+          map.off(eventName, this.panPerformanceModeStartHandler);
+        });
+      }
+      if (this.panPerformanceModeEndHandler) {
+        ['moveend', 'zoomend', 'rotateend', 'pitchend'].forEach((eventName) => {
+          map.off(eventName, this.panPerformanceModeEndHandler);
+        });
+      }
+    }
+    this.panPerformanceModeStartHandler = null;
+    this.panPerformanceModeEndHandler = null;
+    this.tracksMapManager.setPanPerformanceMode(false);
   }
 
   private updateSelectedStartPointScreenPosition(): void {

@@ -96,4 +96,8 @@ describe('TileChartActionsComponent', () => {
         expect(userMock.settings.dashboardSettings.tiles.length).toBe(1);
         expect(userMock.updateUserProperties).toHaveBeenCalled();
     });
+
+    it('should exclude deprecated chart types from chart type options', () => {
+        expect(component.chartTypeOptions.some(option => /^bri.*dev/i.test(option))).toBe(false);
+    });
 });

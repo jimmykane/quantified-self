@@ -98,6 +98,26 @@ describe('processSportsLibReparseTask', () => {
         expect(hoisted.jobSet).not.toHaveBeenCalled();
     });
 
+    it('should throw when jobId is missing from task payload', async () => {
+        await expect((processSportsLibReparseTask as any)({ data: {} })).rejects.toThrow(
+            'Missing jobId in sports-lib reparse task payload.',
+        );
+        expect(hoisted.jobGet).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).not.toHaveBeenCalled();
+    });
+
+    it('should skip when job document does not exist', async () => {
+        hoisted.jobGet.mockResolvedValue({
+            exists: false,
+            data: () => ({}),
+        });
+
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'missing-job' } });
+
+        expect(hoisted.reparseEventFromOriginalFiles).not.toHaveBeenCalled();
+        expect(hoisted.jobSet).not.toHaveBeenCalled();
+    });
+
     it('should process and complete job successfully', async () => {
         hoisted.jobGet.mockResolvedValue({
             exists: true,
@@ -119,6 +139,57 @@ describe('processSportsLibReparseTask', () => {
         });
         expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
             status: 'completed',
+            targetSportsLibVersion: '9.0.99',
+        }));
+        expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'completed',
+        }), { merge: true });
+    });
+
+    it('should fallback to resolved target version when job targetSportsLibVersion is missing', async () => {
+        hoisted.resolveTargetSportsLibVersion.mockReturnValue('9.1.4');
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                status: 'pending',
+                attemptCount: 2,
+            }),
+        });
+
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+
+        expect(hoisted.reparseEventFromOriginalFiles).toHaveBeenCalledWith('u1', 'e1', {
+            mode: 'reimport',
+            targetSportsLibVersion: '9.1.4',
+        });
+    });
+
+    it('should persist skipped status when strict reparse returns NO_ORIGINAL_FILES', async () => {
+        hoisted.jobGet.mockResolvedValue({
+            exists: true,
+            data: () => ({
+                uid: 'u1',
+                eventId: 'e1',
+                status: 'pending',
+                attemptCount: 0,
+                targetSportsLibVersion: '9.0.99',
+            }),
+        });
+        hoisted.reparseEventFromOriginalFiles.mockResolvedValue({
+            status: 'skipped',
+            reason: 'NO_ORIGINAL_FILES',
+            sourceFilesCount: 0,
+            parsedActivitiesCount: 0,
+            staleActivitiesDeleted: 0,
+        });
+
+        await (processSportsLibReparseTask as any)({ data: { jobId: 'job-1' } });
+
+        expect(hoisted.writeReparseStatus).toHaveBeenCalledWith('u1', 'e1', expect.objectContaining({
+            status: 'skipped',
+            reason: 'NO_ORIGINAL_FILES',
             targetSportsLibVersion: '9.0.99',
         }));
         expect(hoisted.jobSet).toHaveBeenCalledWith(expect.objectContaining({

@@ -10,5 +10,8 @@
   },
   "files": [
     "main.ts"
+  ],
+  "include": [
+    "**/*.d.ts"
   ]
 }

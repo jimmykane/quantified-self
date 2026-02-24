@@ -444,6 +444,196 @@ describe('scheduleSportsLibReparseScan', () => {
         expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalledWith('u2');
     });
 
+    it('should skip override candidate when shouldEventBeReparsed returns false', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.shouldEventBeReparsed.mockResolvedValueOnce(false);
+        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+    });
+
+    it('should skip override candidate when shouldEventBeReparsed throws non-Error value', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.shouldEventBeReparsed.mockRejectedValueOnce('broken-metadata');
+        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Invalid processing metadata; skipping event candidate.',
+            expect.objectContaining({
+                eventPath: 'users/u1/events/e1',
+                error: 'broken-metadata',
+            }),
+        );
+    });
+
+    it('should skip override candidate when event path cannot be parsed', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.userEventsByUID.set('u1', [{
+            id: 'bad',
+            ref: { path: 'bad/path', collection: vi.fn(() => ({ doc: vi.fn(() => ({ get: vi.fn() })) })) },
+            data: () => ({ originalFile: { path: 'x.fit' } }),
+        }]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+    });
+
+    it('should skip override candidate when user has no paid access', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.hasPaidOrGraceAccess.mockResolvedValueOnce(false);
+        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+    });
+
+    it('should skip override candidate when reparseStatus already marked NO_ORIGINAL_FILES for current target', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.userEventsByUID.set('u1', [createEventDoc(
+            'u1',
+            'e1',
+            { originalFile: { path: 'x.fit' } },
+            {
+                status: 'skipped',
+                reason: 'NO_ORIGINAL_FILES',
+                targetSportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+            },
+        )]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+    });
+
+    it('should requeue failed existing jobs and preserve createdAt from existing record', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.existingJobsById.set('job-1', {
+            status: 'failed',
+            createdAt: 'EXISTING_CREATED_AT',
+            attemptCount: 5,
+        });
+        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        const pendingWriteCall = hoisted.jobSet.mock.calls.find((call: any[]) => call[0] === 'job-1');
+        expect(pendingWriteCall?.[1]).toEqual(expect.objectContaining({
+            createdAt: 'EXISTING_CREATED_AT',
+            attemptCount: 5,
+        }));
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
+    });
+
+    it('should keep previous override cursor when enqueue limit is already reached at UID loop start', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.runtimeDefaults.enqueueLimit = 0;
+        hoisted.checkpointGet.mockResolvedValue({
+            data: () => ({
+                overrideCursorByUid: {
+                    u1: 'existing-cursor',
+                },
+            }),
+        });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(finalCheckpointPayload.overrideCursorByUid).toEqual({ u1: 'existing-cursor' });
+    });
+
+    it('should keep previous override cursor when no remaining scan budget is left', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1', 'u2'];
+        hoisted.runtimeDefaults.scanLimit = 1;
+        hoisted.checkpointGet.mockResolvedValue({
+            data: () => ({
+                overrideCursorByUid: {
+                    u1: 'cursor-u1',
+                    u2: 'cursor-u2',
+                },
+            }),
+        });
+        hoisted.userEventsByUID.set('u1', [createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } })]);
+        hoisted.userEventsByUID.set('u2', [createEventDoc('u2', 'e2', { originalFile: { path: 'x.fit' } })]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(finalCheckpointPayload.overrideCursorByUid).toEqual({
+            u1: 'e1',
+            u2: 'cursor-u2',
+        });
+    });
+
+    it('should apply override per-UID startAfter cursor when present', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.checkpointGet.mockResolvedValue({
+            data: () => ({
+                overrideCursorByUid: {
+                    u1: 'e1',
+                },
+            }),
+        });
+        hoisted.userEventsByUID.set('u1', [
+            createEventDoc('u1', 'e1', { originalFile: { path: 'first.fit' } }),
+            createEventDoc('u1', 'e2', { originalFile: { path: 'second.fit' } }),
+        ]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.shouldEventBeReparsed).toHaveBeenCalledTimes(1);
+        expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
+    });
+
+    it('should set override cursor to null when user page is empty', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(finalCheckpointPayload.overrideCursorByUid).toEqual({ u1: null });
+    });
+
+    it('should store last processed override cursor when page is full and enqueue limit is not reached', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.runtimeDefaults.scanLimit = 2;
+        hoisted.userEventsByUID.set('u1', [
+            createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }),
+            createEventDoc('u1', 'e2', { originalFile: { path: 'x.fit' } }),
+        ]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(finalCheckpointPayload.overrideCursorByUid).toEqual({ u1: 'e2' });
+    });
+
+    it('should preserve previous override cursor when enqueue limit is hit before processing any event in a page', async () => {
+        hoisted.runtimeDefaults.uidAllowlist = ['u1'];
+        hoisted.runtimeDefaults.enqueueLimit = 0;
+        hoisted.checkpointGet.mockResolvedValue({
+            data: () => ({
+                overrideCursorByUid: {
+                    u1: 'cursor-before-page',
+                },
+            }),
+        });
+        hoisted.userEventsByUID.set('u1', [
+            createEventDoc('u1', 'e1', { originalFile: { path: 'x.fit' } }),
+        ]);
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(finalCheckpointPayload.overrideCursorByUid).toEqual({ u1: 'cursor-before-page' });
+    });
+
     it('should mark missing-source events as skipped', async () => {
         const eventRef = createEventRef('u1', 'e1', {});
         hoisted.processingDocs.push(createProcessingDoc(eventRef, {
@@ -487,6 +677,106 @@ describe('scheduleSportsLibReparseScan', () => {
 
         expect(hoisted.hasPaidOrGraceAccess).not.toHaveBeenCalled();
         expect(hoisted.enqueueSportsLibReparseTask).toHaveBeenCalledWith('job-1');
+    });
+
+    it('should skip defensively when returned processing doc has version code at-or-above target', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        const processingDoc = createProcessingDoc(eventRef, {
+            sportsLibVersion: TARGET_SPORTS_LIB_VERSION,
+            sportsLibVersionCode: TARGET_SPORTS_LIB_VERSION_CODE,
+        });
+
+        hoisted.collectionGroup.mockImplementationOnce((path: string) => {
+            if (path !== 'processing') {
+                throw new Error(`Unexpected collectionGroup path: ${path}`);
+            }
+            const q: any = {
+                where: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockReturnThis(),
+                startAfter: vi.fn().mockReturnThis(),
+                get: vi.fn(async () => ({
+                    empty: false,
+                    size: 1,
+                    docs: [processingDoc],
+                })),
+            };
+            return q;
+        });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+        const finalCheckpointPayload = hoisted.checkpointSet.mock.calls[hoisted.checkpointSet.mock.calls.length - 1][0];
+        expect(finalCheckpointPayload.lastScanCount).toBe(1);
+        expect(finalCheckpointPayload.lastEnqueuedCount).toBe(0);
+    });
+
+    it('should skip global processing docs when semver conversion throws', async () => {
+        const eventRef = createEventRef('u1', 'e1', { originalFile: { path: 'x.fit' } });
+        hoisted.processingDocs.push(createProcessingDoc(eventRef, {
+            sportsLibVersion: 'bad-version',
+            sportsLibVersionCode: 9_000_000,
+        }));
+        hoisted.sportsLibVersionToCode.mockImplementationOnce(() => {
+            throw new Error('bad semver');
+        });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Invalid processing metadata; skipping doc.',
+            expect.objectContaining({
+                sportsLibVersion: 'bad-version',
+                error: 'bad semver',
+            }),
+        );
+    });
+
+    it('should skip global processing docs when parent event reference is missing', async () => {
+        hoisted.processingDocs.push({
+            ref: {
+                path: 'users/u1/events/e1/metaData/processing',
+                parent: {
+                    parent: null,
+                },
+            },
+            data: () => ({
+                sportsLibVersion: '9.0.0',
+                sportsLibVersionCode: 9_000_000,
+            }),
+        });
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Could not resolve parent event from processing metadata path.',
+            expect.objectContaining({
+                processingDocPath: 'users/u1/events/e1/metaData/processing',
+            }),
+        );
+    });
+
+    it('should skip stale processing docs whose parent event no longer exists', async () => {
+        const staleEventRef = createEventRef('u1', 'deleted', { originalFile: { path: 'x.fit' } });
+        staleEventRef.get = vi.fn(async () => ({ exists: false, data: () => ({}) }));
+        hoisted.processingDocs.push(createProcessingDoc(staleEventRef, {
+            sportsLibVersion: '9.0.0',
+            sportsLibVersionCode: 9_000_000,
+        }));
+
+        await (scheduleSportsLibReparseScan as any)({});
+
+        expect(hoisted.enqueueSportsLibReparseTask).not.toHaveBeenCalled();
+        expect(hoisted.loggerWarn).toHaveBeenCalledWith(
+            '[sports-lib-reparse] Skipping stale processing metadata because parent event is missing.',
+            expect.objectContaining({
+                processingDocPath: `${staleEventRef.path}/metaData/processing`,
+                eventPath: staleEventRef.path,
+            }),
+        );
     });
 
     it('should mark job as failed when task enqueue fails', async () => {

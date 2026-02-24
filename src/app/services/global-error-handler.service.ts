@@ -6,6 +6,8 @@ import { LoggerService } from './logger.service';
     providedIn: 'root'
 })
 export class GlobalErrorHandler implements ErrorHandler {
+    private readonly chunkReloadGuardKey = 'app.chunk-load-reload-attempted';
+
     constructor(private logger: LoggerService, private windowService: AppWindowService) { }
 
     handleError(error: any) {
@@ -14,7 +16,11 @@ export class GlobalErrorHandler implements ErrorHandler {
         const errorMessage = error?.message || error?.toString() || '';
 
         if (chunkFailedMessage.test(errorMessage) || dynamicImportFailedMessage.test(errorMessage)) {
-            this.windowService.windowRef.location.reload();
+            const hasReloadedForChunkError = this.windowService.windowRef.sessionStorage?.getItem(this.chunkReloadGuardKey) === '1';
+            if (!hasReloadedForChunkError) {
+                this.windowService.windowRef.sessionStorage?.setItem(this.chunkReloadGuardKey, '1');
+                this.windowService.windowRef.location.reload();
+            }
         }
 
         this.logger.error(error);
