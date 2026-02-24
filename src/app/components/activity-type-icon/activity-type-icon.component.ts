@@ -61,6 +61,26 @@ export class ActivityTypeIconComponent {
     @Input() size?: string;
     @Input() vAlign?: string;
 
+    get activityTooltip(): string {
+        const value = this.activityType;
+        if (value === null || value === undefined) {
+            return '';
+        }
+
+        if (Array.isArray(value)) {
+            return value.map((entry) => String(entry ?? '')).filter(Boolean).join(', ');
+        }
+
+        if (typeof value === 'object') {
+            const withType = value as { type?: unknown };
+            if (withType.type !== undefined && withType.type !== null) {
+                return String(withType.type).trim();
+            }
+        }
+
+        return String(value).trim();
+    }
+
     private normalizeActivityTypeKey(activity: string): string {
         return activity
             .toLowerCase()
