@@ -46,7 +46,8 @@ describe('AppComponent', () => {
     };
 
     const mockAppSideNavService = {
-        setSidenav: vi.fn()
+        setSidenav: vi.fn(),
+        toggle: vi.fn()
     };
 
     const mockAppIconService = {
@@ -234,6 +235,98 @@ describe('AppComponent', () => {
         expect(component.isHomeRoute).toBe(false);
     });
 
+    it('should expose showUploadActivities only on dashboard with user', () => {
+        mockRouter.url = '/dashboard';
+        component['currentUser'] = { uid: 'u1' };
+        expect(component.showUploadActivities).toBe(true);
+
+        mockRouter.url = '/subscriptions';
+        expect(component.showUploadActivities).toBe(false);
+    });
+
+    it('should return unread whats-new count from service signal', () => {
+        expect(component.unreadWhatsNewCount).toBe(0);
+    });
+
+    it('should navigate to dashboard on logo click when authenticated', () => {
+        component.authState = true;
+        component.onLogoClick();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/dashboard']);
+    });
+
+    it('should navigate home on logo click when unauthenticated', () => {
+        component.authState = false;
+        component.onLogoClick();
+        expect(mockRouter.navigate).toHaveBeenCalledWith(['/']);
+    });
+
+    it('should toggle sidenav through side nav service', () => {
+        component.toggleSidenav();
+        expect(mockAppSideNavService.toggle).toHaveBeenCalled();
+    });
+
+    it('should no-op banner updates when height and state are unchanged', () => {
+        const detectSpy = vi.spyOn((component as any).changeDetectorRef, 'detectChanges');
+        component.onBannerHeightChanged(0);
+        expect(detectSpy).not.toHaveBeenCalled();
+    });
+
+    it('should reset banner fields when dismissing grace period banner', () => {
+        component.bannerHeight = 42;
+        component.hasBanner = true;
+        component.dismissGracePeriodBanner();
+        expect(component.bannerHeight).toBe(0);
+        expect(component.hasBanner).toBe(false);
+    });
+
+    it('should open whats new dialog with expected config', () => {
+        const dialog = TestBed.inject(MatDialog) as any;
+        component.openWhatsNew();
+        expect(dialog.open).toHaveBeenCalledWith(
+            expect.any(Function),
+            expect.objectContaining({
+                width: '860px',
+                maxWidth: '96vw',
+                autoFocus: false
+            })
+        );
+    });
+
+    it('should apply and clear circular theme overlay during reveal animation', () => {
+        vi.useFakeTimers();
+        const detectSpy = vi.spyOn((component as any).changeDetectorRef, 'detectChanges');
+        const addSpy = vi.spyOn(document.body.classList, 'add');
+        const removeSpy = vi.spyOn(document.body.classList, 'remove');
+
+        (component as any).triggerCircularReveal(10, 20, 'Dark');
+        expect(component.themeOverlayActive).toBe(true);
+        expect(component.themeOverlayClass).toBe('dark-theme');
+        expect(detectSpy).toHaveBeenCalled();
+
+        vi.advanceTimersByTime(300);
+        expect(addSpy).toHaveBeenCalledWith('dark-theme');
+
+        vi.advanceTimersByTime(300);
+        expect(component.themeOverlayActive).toBe(false);
+
+        (component as any).triggerCircularReveal(10, 20, 'Light');
+        vi.advanceTimersByTime(300);
+        expect(removeSpy).toHaveBeenCalledWith('dark-theme');
+
+        vi.useRealTimers();
+    });
+
+    it('should use fallback scroll call when scrollTo options throw', () => {
+        const scrollSpy = vi.spyOn(window, 'scrollTo' as any).mockImplementation((...args: any[]) => {
+            if (typeof args[0] === 'object') {
+                throw new Error('not supported');
+            }
+        });
+
+        (component as any).scrollToTopAfterNavigation();
+        expect(scrollSpy).toHaveBeenCalledWith(0, 0);
+    });
+
     it('should reset scroll to top on NavigationEnd', () => {
         const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => { });
         fixture.detectChanges();
@@ -251,5 +344,72 @@ describe('AppComponent', () => {
             expect(shellScroller.scrollLeft).toBe(0);
         }
         expect(scrollSpy).toHaveBeenCalled();
+    });
+
+    it('should persist hasSubscribedOnce and onboardingCompleted for paid users with accepted terms', () => {
+        const appUserService = TestBed.inject(AppUserService) as any;
+        appUserService.updateUserProperties.mockClear();
+
+        component['currentUser'] = {
+            uid: 'u1',
+            acceptedPrivacyPolicy: true,
+            acceptedDataPolicy: true,
+            acceptedTos: true,
+            stripeRole: 'pro',
+            hasSubscribedOnce: false,
+            onboardingCompleted: false
+        };
+        mockRouter.url = '/dashboard';
+
+        (component as any).updateOnboardingState();
+
+        expect(appUserService.updateUserProperties).toHaveBeenCalledWith(
+            component['currentUser'],
+            { hasSubscribedOnce: true, onboardingCompleted: true }
+        );
+    });
+
+    it('should not persist onboardingCompleted when terms are not accepted', () => {
+        const appUserService = TestBed.inject(AppUserService) as any;
+        appUserService.updateUserProperties.mockClear();
+
+        component['currentUser'] = {
+            uid: 'u1',
+            acceptedPrivacyPolicy: true,
+            acceptedDataPolicy: false,
+            acceptedTos: true,
+            stripeRole: 'pro',
+            hasSubscribedOnce: false,
+            onboardingCompleted: false
+        };
+        mockRouter.url = '/dashboard';
+
+        (component as any).updateOnboardingState();
+
+        expect(appUserService.updateUserProperties).toHaveBeenCalledWith(
+            component['currentUser'],
+            { hasSubscribedOnce: true }
+        );
+    });
+
+    it('should unsubscribe subscriptions on destroy', () => {
+        const routerEventSubscription = { unsubscribe: vi.fn() } as any;
+        const actionButtonsSubscription = { unsubscribe: vi.fn() } as any;
+        (component as any).routerEventSubscription = routerEventSubscription;
+        (component as any).actionButtonsSubscription = actionButtonsSubscription;
+
+        component.ngOnDestroy();
+
+        expect(routerEventSubscription.unsubscribe).toHaveBeenCalled();
+        expect(actionButtonsSubscription.unsubscribe).toHaveBeenCalled();
+    });
+
+    it('should handle missing actionButtonsSubscription on destroy', () => {
+        const routerEventSubscription = { unsubscribe: vi.fn() } as any;
+        (component as any).routerEventSubscription = routerEventSubscription;
+        (component as any).actionButtonsSubscription = undefined;
+
+        expect(() => component.ngOnDestroy()).not.toThrow();
+        expect(routerEventSubscription.unsubscribe).toHaveBeenCalled();
     });
 });
